@@ -21,6 +21,8 @@ services:
     image: redis:7.4.2-alpine
     container_name: honghuang-redis
     restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}"]
     ports:
       - "${REDIS_PORT:-6379}:6379"
@@ -36,7 +38,7 @@ services:
     image: nats:2.11.8-alpine
     container_name: honghuang-nats
     restart: unless-stopped
-    command: ["-js", "-m", "8222"]
+    command: ["-js", "-sd", "/data", "-m", "8222"]
     ports:
       - "${NATS_PORT:-4222}:4222"
       - "${NATS_MONITOR_PORT:-8222}:8222"
