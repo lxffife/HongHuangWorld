@@ -207,7 +207,9 @@ bool EnetServer::start() {
 void EnetServer::poll(std::uint32_t timeout_ms) {
     if (impl_->host == nullptr) return;
     ENetEvent event{};
-    while (enet_host_service(impl_->host, &event, timeout_ms) > 0) {
+    bool first_event = true;
+    while (enet_host_service(impl_->host, &event, first_event ? timeout_ms : 0) > 0) {
+        first_event = false;
         switch (event.type) {
         case ENET_EVENT_TYPE_CONNECT:
             std::cout << "ENet client connected; awaiting ClientHello\n";
