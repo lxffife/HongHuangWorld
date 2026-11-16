@@ -169,3 +169,14 @@ func TestWorldSessionCloseUnavailableWithoutDatabase(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, res.Code)
 	}
 }
+
+
+func TestWorldSessionSnapshotUnavailableWithoutDatabase(t *testing.T) {
+	handler := NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/servers/sessions/snapshot", strings.NewReader(`{}`))
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, res.Code)
+	}
+}
