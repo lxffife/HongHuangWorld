@@ -179,11 +179,13 @@ CREATE TABLE character_progression (
     system_id VARCHAR(64) NOT NULL REFERENCES cultivation_systems(id),
     experience BIGINT NOT NULL DEFAULT 0 CHECK (experience >= 0),
     cultivation BIGINT NOT NULL DEFAULT 0 CHECK (cultivation >= 0),
-    realm_id VARCHAR(96) NOT NULL REFERENCES cultivation_realms(id),
+    realm_id VARCHAR(96) NOT NULL,
     realm_stage SMALLINT NOT NULL DEFAULT 1 CHECK (realm_stage > 0),
     unspent_attribute_points INTEGER NOT NULL DEFAULT 0 CHECK (unspent_attribute_points >= 0),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    FOREIGN KEY (system_id, realm_id) REFERENCES cultivation_realms(system_id, id),
+    FOREIGN KEY (realm_id, realm_stage) REFERENCES cultivation_stages(realm_id, stage_order)
 );
 
 CREATE TABLE character_reward_events (
