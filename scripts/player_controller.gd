@@ -74,7 +74,11 @@ func _add_key_action(action: String, keycode: int) -> void:
 	InputMap.action_add_event(action, event)
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("jump"):
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		var world := get_parent()
+		if world != null and world.has_method("_request_nearest_monster_attack"):
+			world.call("_request_nearest_monster_attack")
+	elif event.is_action_pressed("jump"):
 		jump_pending = true
 	elif event.is_action_pressed("release_mouse"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
