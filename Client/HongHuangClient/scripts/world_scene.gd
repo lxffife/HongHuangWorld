@@ -24,6 +24,8 @@ var local_target_position := Vector3.ZERO
 var remote_players: Dictionary = {}
 var remote_targets: Dictionary = {}
 var remote_yaws: Dictionary = {}
+var monsters: Dictionary = {}
+var monster_targets: Dictionary = {}
 
 func _ready() -> void:
 	_build_environment()
@@ -302,16 +304,25 @@ func _update_hud() -> void:
 	var snapshot: Dictionary = HHSession.world_snapshot
 	var world_id := str(snapshot.get("world_id", "青云人界"))
 	var character_name := str(snapshot.get("name", "初入洪荒"))
-	hud_label.text = "洪荒 · " + world_id + "\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标\n服务器权威移动已启用 · 20Hz 实体快照 · 远端玩家同步"
+	hud_label.text = "洪荒 · " + world_id + "\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标\n服务器权威移动已启用 · 20Hz 实体快照 · 玩家与怪物同步"
 
 func _exit_tree() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func _on_entities_updated(entities: Array) -> void:
 	var seen: Dictionary = {}
+	var seen_monsters: Dictionary = {}
 	var own_id := str(HHSession.world_snapshot.get("character_id", ""))
 	for entity in entities:
 		if not (entity is Dictionary):
+			continue
+		var entity_type := str(entity.get("entity_type", "player"))
+		if entity_type == "monster":
+			var monster_id := str(entity.get("entity_id", ""))
+			if monster_id.is_empty():
+				continue
+			seen_monsters[monster_id] = true
+			_upsert_monster(entity)
 			continue
 		var character_id := str(entity.get("character_id", ""))
 		if character_id.is_empty():
@@ -328,6 +339,11 @@ func _on_entities_updated(entities: Array) -> void:
 			remote_players.erase(character_id)
 			remote_targets.erase(character_id)
 			remote_yaws.erase(character_id)
+	for monster_id in monsters.keys():
+		if not seen_monsters.has(monster_id):
+			monsters[monster_id].queue_free()
+			monsters.erase(monster_id)
+			monster_targets.erase(monster_id)
 
 func _upsert_remote_player(entity: Dictionary) -> void:
 	var character_id := str(entity.get("character_id", ""))
@@ -341,6 +357,40 @@ func _upsert_remote_player(entity: Dictionary) -> void:
 		float(entity.get("z", 0.0))
 	)
 	remote_yaws[character_id] = float(entity.get("yaw", 0.0))
+
+func _upsert_monster(entity: Dictionary) -> void:
+	var monster_id := str(entity.get("entity_id", ""))
+	if monster_id.is_empty():
+		return
+	if not monsters.has(monster_id):
+		monsters[monster_id] = _create_monster(str(entity.get("name", "野兽")), int(entity.get("level", 1)))
+	monster_targets[monster_id] = Vector3(
+		float(entity.get("x", 0.0)),
+		float(entity.get("y", 0.0)),
+		float(entity.get("z", 0.0))
+	)
+
+func _create_monster(monster_name: String, monster_level: int) -> Node3D:
+	var monster := Node3D.new()
+	var body := MeshInstance3D.new()
+	var capsule := CapsuleMesh.new()
+	capsule.radius = 0.52
+	capsule.height = 1.25
+	body.mesh = capsule
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#8b5140")
+	material.roughness = 0.9
+	body.material_override = material
+	body.position.y = 0.62
+	monster.add_child(body)
+	var label := Label3D.new()
+	label.text = monster_name + " · Lv." + str(monster_level)
+	label.position.y = 1.55
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.modulate = Color("#ffd0a8")
+	monster.add_child(label)
+	add_child(monster)
+	return monster
 
 func _on_player_joined(player: Dictionary) -> void:
 	_upsert_remote_player(player)
@@ -382,6 +432,10 @@ func _process(delta: float) -> void:
 		remote.position = remote.position.lerp(target, minf(delta * 14.0, 1.0))
 		var target_yaw := float(remote_yaws.get(character_id, remote.rotation.y))
 		remote.rotation.y = lerp_angle(remote.rotation.y, target_yaw, minf(delta * 12.0, 1.0))
+	for monster_id in monsters:
+		var monster: Node3D = monsters[monster_id]
+		var target: Vector3 = monster_targets.get(monster_id, monster.position)
+		monster.position = monster.position.lerp(target, minf(delta * 10.0, 1.0))
 
 
 func _on_world_disconnected() -> void:
@@ -486,6 +540,10 @@ func _on_reconnected_welcomed(snapshot: Dictionary) -> void:
 	remote_players.clear()
 	remote_targets.clear()
 	remote_yaws.clear()
+	for monster_id in monsters.keys():
+		monsters[monster_id].queue_free()
+	monsters.clear()
+	monster_targets.clear()
 	reconnect_button.visible = false
 	reconnect_button.disabled = false
 	hud_label.text = "已重新进入青云人界，角色已恢复到最近保存的位置。"
