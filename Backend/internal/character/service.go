@@ -182,14 +182,41 @@ func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward 
 
 	var serverID string
 	err = tx.QueryRowContext(ctx,
-		`SELECT sr.id::text
-		 FROM server_registry sr
-		 JOIN world_sessions ws ON ws.server_id = sr.id
-		 JOIN characters c ON c.id = ws.character_id
-		 WHERE sr.node_key = $1 AND c.id = $2::uuid
-		   AND c.status = 'alive' AND ws.session_state = 'active'
-		 FOR UPDATE OF ws, c`, nodeKey, reward.CharacterID,
+		`SELECT id::text FROM server_registry WHERE node_key = $1`, nodeKey,
 	).Scan(&serverID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return RewardResult{}, ErrRewardSession
+	}
+	if err != nil {
+		return RewardResult{}, fmt.Errorf("resolve world server for reward: %w", err)
+	}
+
+	// A previously committed event remains idempotent even if the player has
+	// disconnected before the node could retry after a lost response.
+	var alreadyApplied bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS (
+			SELECT 1 FROM character_reward_events WHERE server_id = $1 AND event_id = $2::uuid
+		)`, serverID, reward.EventID,
+	).Scan(&alreadyApplied); err != nil {
+		return RewardResult{}, fmt.Errorf("check duplicate character reward: %w", err)
+	}
+	if alreadyApplied {
+		if err := tx.Commit(); err != nil {
+			return RewardResult{}, fmt.Errorf("commit duplicate character reward: %w", err)
+		}
+		return RewardResult{Applied: false}, nil
+	}
+
+	var activeCharacterID string
+	err = tx.QueryRowContext(ctx,
+		`SELECT c.id::text
+		 FROM world_sessions ws
+		 JOIN characters c ON c.id = ws.character_id
+		 WHERE ws.server_id = $1 AND c.id = $2::uuid
+		   AND c.status = 'alive' AND ws.session_state = 'active'
+		 FOR UPDATE OF ws, c`, serverID, reward.CharacterID,
+	).Scan(&activeCharacterID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RewardResult{}, ErrRewardSession
 	}
