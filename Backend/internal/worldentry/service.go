@@ -59,7 +59,8 @@ func (s *Service) Issue(ctx context.Context, accountID string) (Entry, error) {
 		 JOIN world_instances wi ON wi.world_id = c.world_id AND wi.status = 'ready'
 		 JOIN server_registry sr ON sr.id = wi.server_id
 		 WHERE s.account_id = $1 AND c.status = 'alive' AND sr.status = 'ready'
-		   AND sr.current_players < sr.capacity
+		   AND GREATEST(sr.current_players, (SELECT COUNT(*) FROM world_sessions ws WHERE ws.server_id = sr.id AND ws.session_state IN ('connecting', 'active', 'saving')))
+		       + (SELECT COUNT(*) FROM world_entry_tickets pending WHERE pending.server_id = sr.id AND pending.expires_at > now() AND pending.consumed_at IS NULL) < sr.capacity
 		   AND sr.last_heartbeat_at > now() - INTERVAL '30 seconds'
 		 ORDER BY sr.current_players ASC, wi.created_at ASC
 		 LIMIT 1 FOR UPDATE OF sr SKIP LOCKED`, accountID,
@@ -69,6 +70,10 @@ func (s *Service) Issue(ctx context.Context, accountID string) (Entry, error) {
 	}
 	if err != nil {
 		return Entry{}, fmt.Errorf("select world server: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE world_entry_tickets SET consumed_at = now() WHERE character_id = $1 AND consumed_at IS NULL`, characterID); err != nil {
+		return Entry{}, fmt.Errorf("invalidate previous entry tickets: %w", err)
 	}
 
 	var raw [32]byte
@@ -108,9 +113,10 @@ func (s *Service) Redeem(ctx context.Context, nodeKey, ticket string) (PlayerSna
 		        c.world_id, c.name, c.position_x, c.position_y, c.position_z, c.rotation_y
 		 FROM world_entry_tickets t
 		 JOIN server_registry sr ON sr.id = t.server_id
+		 JOIN world_instances wi ON wi.id = t.instance_id AND wi.status = 'ready'
 		 JOIN characters c ON c.id = t.character_id
 		 WHERE t.token_hash = $1 AND t.expires_at > now() AND t.consumed_at IS NULL
-		   AND sr.node_key = $2 AND sr.status = 'ready'
+		   AND sr.node_key = $2 AND sr.status = 'ready' AND sr.last_heartbeat_at > now() - INTERVAL '30 seconds'
 		 FOR UPDATE OF t`, tokenHash[:], nodeKey,
 	).Scan(&ticketID, &characterID, &instanceID, &serverID, &snapshot.WorldID, &snapshot.Name,
 		&snapshot.PositionX, &snapshot.PositionY, &snapshot.PositionZ, &snapshot.RotationY)
