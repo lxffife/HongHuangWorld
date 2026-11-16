@@ -107,11 +107,17 @@ void EnetClient::_process(double) {
                 enet_packet_destroy(event.packet);
                 break;
             }
-            case ENET_EVENT_TYPE_DISCONNECT:
+            case ENET_EVENT_TYPE_DISCONNECT: {
+                const bool was_connected = connected_;
                 connected_ = false;
                 peer_ = nullptr;
-                emit_signal("disconnected");
+                if (was_connected) {
+                    emit_signal("disconnected");
+                } else {
+                    emit_signal("connection_failed");
+                }
                 break;
+            }
             case ENET_EVENT_TYPE_NONE:
                 break;
         }
