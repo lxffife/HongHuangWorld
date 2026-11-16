@@ -75,6 +75,9 @@ CREATE TABLE server_registry (
 );
 CREATE INDEX idx_server_registry_status ON server_registry(status, last_heartbeat_at);
 
+ALTER TABLE world_instances
+    ADD COLUMN server_id UUID REFERENCES server_registry(id);
+
 CREATE TABLE characters (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     soul_id UUID NOT NULL REFERENCES souls(id),
@@ -100,6 +103,18 @@ CREATE INDEX idx_characters_world ON characters(world_id, world_instance_id);
 ALTER TABLE souls
     ADD CONSTRAINT fk_souls_current_character
     FOREIGN KEY (id, current_character_id) REFERENCES characters(soul_id, id) DEFERRABLE INITIALLY DEFERRED;
+
+CREATE TABLE world_entry_tickets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    token_hash BYTEA NOT NULL UNIQUE,
+    character_id UUID NOT NULL REFERENCES characters(id),
+    instance_id UUID NOT NULL REFERENCES world_instances(id),
+    server_id UUID NOT NULL REFERENCES server_registry(id),
+    expires_at TIMESTAMPTZ NOT NULL,
+    consumed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_world_entry_tickets_expiry ON world_entry_tickets(expires_at);
 
 CREATE TABLE world_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
