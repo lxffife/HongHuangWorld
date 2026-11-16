@@ -113,7 +113,7 @@ func _on_progression_request_completed(result: int, response_code: int, _headers
 		threshold_text = "大境界突破修为：" + str(next_realm)
 	else:
 		threshold_text = "已达到当前体系最高配置境界"
-	progression_label.text = system_name + " · " + realm_name + stage_name + "\n累计修为：" + str(cultivation) + "  |  跨族参考：" + tier_name + "\n" + threshold_text
+	progression_label.text = system_name + " · " + realm_name + stage_name + "\n累计修为：" + str(cultivation) + "  |  跨族参考：" + tier_name + "\n主血脉：" + primary_bloodline + "（纯度 " + str(bloodline_purity) + "/10000）\n" + threshold_text
 	breakthrough_button.disabled = next_stage == null and next_realm == null
 
 func _build_environment() -> void:
