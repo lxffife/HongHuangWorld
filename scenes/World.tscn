@@ -11,7 +11,7 @@ script = ExtResource("1_world")
 offset_left = 18.0
 offset_top = 18.0
 offset_right = 560.0
-offset_bottom = 300.0
+offset_bottom = 420.0
 
 [node name="Margin" type="MarginContainer" parent="HUD/Panel"]
 theme_override_constants/margin_left = 16
@@ -40,6 +40,27 @@ disabled = true
 [node name="TrainTechnique" type="Button" parent="HUD/Panel/Margin/Content"]
 text = "修炼功法"
 disabled = true
+
+[node name="AttributePoints" type="Label" parent="HUD/Panel/Margin/Content"]
+text = "可分配属性点：0"
+autowrap_mode = 3
+
+[node name="AttributeButtons" type="HBoxContainer" parent="HUD/Panel/Margin/Content"]
+
+[node name="Strength" type="Button" parent="HUD/Panel/Margin/Content/AttributeButtons"]
+text = "力量 +1"
+
+[node name="Constitution" type="Button" parent="HUD/Panel/Margin/Content/AttributeButtons"]
+text = "体魄 +1"
+
+[node name="Agility" type="Button" parent="HUD/Panel/Margin/Content/AttributeButtons"]
+text = "敏捷 +1"
+
+[node name="Spirit" type="Button" parent="HUD/Panel/Margin/Content/AttributeButtons"]
+text = "灵识 +1"
+
+[node name="Vitality" type="Button" parent="HUD/Panel/Margin/Content/AttributeButtons"]
+text = "元气 +1"
 
 [node name="Reconnect" type="Button" parent="HUD/Panel/Margin/Content"]
 visible = false
