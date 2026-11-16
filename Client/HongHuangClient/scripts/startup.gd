@@ -48,7 +48,7 @@ func _build_ui() -> void:
 	add_child(center)
 
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(1120, 680)
+	panel.custom_minimum_size = Vector2(960, 600)
 	center.add_child(panel)
 
 	var main_layout := HBoxContainer.new()
@@ -56,7 +56,7 @@ func _build_ui() -> void:
 	panel.add_child(main_layout)
 
 	var left_scroll := ScrollContainer.new()
-	left_scroll.custom_minimum_size = Vector2(520, 0)
+	left_scroll.custom_minimum_size = Vector2(430, 0)
 	left_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	left_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
