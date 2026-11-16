@@ -26,6 +26,9 @@ var cultivation_preview: Label
 var action_button: Button
 var login_button: Button
 var content_box: VBoxContainer
+var character_title_label: Label
+var race_label_control: Label
+var world_label_control: Label
 
 func _ready() -> void:
 	_build_ui()
@@ -83,25 +86,35 @@ func _build_ui() -> void:
 	character_title.text = "首次进入：创建角色"
 	character_title.add_theme_font_size_override("font_size", 18)
 	content_box.add_child(character_title)
+	character_title_label = character_title
+	character_title_label.hide()
 
 	character_input = _add_line_edit("角色名（2–24 个字符）", "")
+	character_input.hide()
 	var race_label := Label.new()
 	race_label.text = "选择种族与修炼道路"
 	content_box.add_child(race_label)
+	race_label_control = race_label
+	race_label_control.hide()
 	race_select = OptionButton.new()
 	race_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	race_select.item_selected.connect(_on_race_selected)
 	content_box.add_child(race_select)
+	race_select.hide()
 	cultivation_preview = Label.new()
 	cultivation_preview.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	cultivation_preview.add_theme_color_override("font_color", Color("#aab6cc"))
 	content_box.add_child(cultivation_preview)
+	cultivation_preview.hide()
 	var world_label := Label.new()
 	world_label.text = "出生世界（当前联调阶段仅开放：青云人界）"
 	content_box.add_child(world_label)
+	world_label_control = world_label
+	world_label_control.hide()
 	world_select = OptionButton.new()
 	world_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content_box.add_child(world_select)
+	world_select.hide()
 
 	action_button = Button.new()
 	action_button.text = "创建角色并进入世界"
@@ -109,6 +122,7 @@ func _build_ui() -> void:
 	action_button.custom_minimum_size.y = 44
 	action_button.pressed.connect(_on_create_character_pressed)
 	content_box.add_child(action_button)
+	action_button.hide()
 
 	status_label = Label.new()
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -189,7 +203,10 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 		return
 
 	if response_code < 200 or response_code >= 300:
-		_set_status("请求失败 HTTP " + str(response_code) + "：" + body_text)
+		if context == "register" and response_code == 400:
+			_set_status("注册失败：账号必须为 3–32 位英文字母、数字或下划线；密码必须为 12–72 个字符。邮箱可以填写有效邮箱。")
+		else:
+			_set_status("请求失败 HTTP " + str(response_code) + "：" + body_text)
 		_process_queue()
 		return
 
@@ -213,6 +230,7 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 			_enqueue(HTTPClient.METHOD_GET, "/api/v1/cultivation/systems", {}, false, "cultivation_catalog")
 		"cultivation_catalog":
 			cultivation_races = data.get("races", [])
+			_show_character_setup()
 			_populate_cultivation_races()
 			_enqueue(HTTPClient.METHOD_GET, "/api/v1/characters/current", {}, true, "character_check")
 		"character_check":
@@ -258,6 +276,16 @@ func _on_login_pressed() -> void:
 		"username": username_input.text.strip_edges(),
 		"password": password_input.text
 	}, false, "login")
+
+func _show_character_setup() -> void:
+	character_title_label.show()
+	character_input.show()
+	race_label_control.show()
+	race_select.show()
+	cultivation_preview.show()
+	world_label_control.show()
+	world_select.show()
+	action_button.show()
 
 func _populate_worlds() -> void:
 	world_select.clear()
@@ -370,8 +398,17 @@ func _on_register_pressed() -> void:
 	if not api_base.begins_with("http://") and not api_base.begins_with("https://"):
 		_set_status("中心服地址必须以 http:// 或 https:// 开头。")
 		return
-	if username_input.text.strip_edges().is_empty() or email_input.text.strip_edges().is_empty() or password_input.text.is_empty():
-		_set_status("注册需要填写账号、邮箱和密码。")
+	var username := username_input.text.strip_edges()
+	var username_regex := RegEx.new()
+	username_regex.compile("^[A-Za-z0-9_]{3,32}$")
+	if username_regex.search(username) == null:
+		_set_status("账号格式不正确：请输入 3–32 位英文字母、数字或下划线。")
+		return
+	if password_input.text.length() < 12 or password_input.text.length() > 72:
+		_set_status("密码长度必须为 12–72 个字符。")
+		return
+	if not email_input.text.strip_edges().is_empty() and (not email_input.text.contains("@") or email_input.text.length() > 254):
+		_set_status("邮箱格式不正确，或留空。")
 		return
 	if request_busy:
 		return
