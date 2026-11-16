@@ -5,6 +5,7 @@ signal welcomed(snapshot: Dictionary)
 signal rejected(reason: String)
 signal disconnected
 signal connection_error(message: String)
+signal entities_updated(entities: Array)
 
 const BUILD := "0.1.0"
 const EXTENSION_PATH := "res://bin/honghuang_native_net.gdextension"
@@ -12,6 +13,7 @@ const EXTENSION_PATH := "res://bin/honghuang_native_net.gdextension"
 var transport: Node
 var expected_ticket := ""
 var hello_sent := false
+var world_ready := false
 var heartbeat_timer: Timer
 
 func _ready() -> void:
@@ -60,6 +62,22 @@ func _on_connected() -> void:
 		return
 	hello_sent = true
 
+func is_world_ready() -> bool:
+	return world_ready
+
+func send_input(move_x: float, move_z: float, sequence: int) -> Error:
+	if not world_ready or transport == null:
+		return ERR_UNCONFIGURED
+	var payload := JSON.stringify({
+		"sequence": sequence,
+		"move_x": clampf(move_x, -1.0, 1.0),
+		"move_z": clampf(move_z, -1.0, 1.0)
+	}).to_utf8_buffer()
+	var frame := HHProtocolCodec.encode_frame(HHProtocolCodec.MessageType.INPUT_COMMAND, payload)
+	if frame.is_empty():
+		return ERR_INVALID_DATA
+	return transport.send_frame(frame, false)
+
 func _on_frame_received(bytes: PackedByteArray) -> void:
 	var decoded := HHProtocolCodec.decode_frame(bytes)
 	if not decoded.get("ok", false):
@@ -76,6 +94,7 @@ func _on_frame_received(bytes: PackedByteArray) -> void:
 				return
 			var parsed: Variant = JSON.parse_string(payload.get_string_from_utf8())
 			if parsed is Dictionary and parsed.has("character_id") and parsed.has("world_id") and parsed.has("instance_id"):
+				world_ready = true
 				_start_heartbeat()
 				welcomed.emit(parsed)
 			else:
@@ -88,6 +107,10 @@ func _on_frame_received(bytes: PackedByteArray) -> void:
 			transport.disconnect_from_host()
 		HHProtocolCodec.MessageType.HEARTBEAT_ACK:
 			pass
+		HHProtocolCodec.MessageType.ENTITY_SNAPSHOT:
+			var snapshot: Variant = JSON.parse_string(payload.get_string_from_utf8())
+			if snapshot is Dictionary and snapshot.get("entities", []) is Array:
+				entities_updated.emit(snapshot.get("entities", []))
 		_:
 			rejected.emit("收到未知服务端消息类型：" + str(message_type))
 			transport.disconnect_from_host()
@@ -110,6 +133,7 @@ func _send_heartbeat() -> void:
 		connection_error.emit("发送心跳失败，错误码：" + str(error))
 
 func _on_disconnected() -> void:
+	world_ready = false
 	if heartbeat_timer != null:
 		heartbeat_timer.stop()
 	disconnected.emit()
