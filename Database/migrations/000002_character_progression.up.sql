@@ -54,6 +54,22 @@ CREATE TABLE character_progression (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Idempotent reward ledger: a trusted world node can only reward a character
+-- with an active session on that same node.
+CREATE TABLE character_reward_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    server_id UUID NOT NULL REFERENCES server_registry(id),
+    character_id UUID NOT NULL REFERENCES characters(id),
+    event_id UUID NOT NULL,
+    experience BIGINT NOT NULL DEFAULT 0 CHECK (experience >= 0),
+    cultivation BIGINT NOT NULL DEFAULT 0 CHECK (cultivation >= 0),
+    attribute_points INTEGER NOT NULL DEFAULT 0 CHECK (attribute_points >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (server_id, event_id),
+    CHECK (experience > 0 OR cultivation > 0 OR attribute_points > 0)
+);
+CREATE INDEX idx_character_reward_events_character ON character_reward_events(character_id, created_at DESC);
+
 -- Backfill any characters created before this migration.
 INSERT INTO character_attributes (character_id)
 SELECT id FROM characters
