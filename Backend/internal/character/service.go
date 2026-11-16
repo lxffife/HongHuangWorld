@@ -68,10 +68,21 @@ type Progression struct {
 	UnspentAttributePoints int    `json:"unspent_attribute_points"`
 }
 
+type CharacterBloodline struct {
+	ID string `json:"id"`
+	Name string `json:"name"`
+	RaceID string `json:"race_id"`
+	Grade int `json:"grade"`
+	Purity int `json:"purity"`
+	AwakeningStage int `json:"awakening_stage"`
+	IsPrimary bool `json:"is_primary"`
+}
+
 type Status struct {
 	Character   Character   `json:"character"`
 	Attributes  Attributes  `json:"attributes"`
 	Progression Progression `json:"progression"`
+	Bloodlines []CharacterBloodline `json:"bloodlines"`
 }
 
 type Service struct {
@@ -759,6 +770,30 @@ func (s *Service) CurrentStatus(ctx context.Context, accountID string) (Status, 
 	}
 	if comparisonNote.Valid {
 		result.Progression.PowerComparisonNote = comparisonNote.String
+	}
+	bloodlineRows, err := s.db.QueryContext(ctx,
+		`SELECT bloodline.id, bloodline.name, bloodline.race_id, bloodline.grade,
+		        character_bloodline.purity, character_bloodline.awakening_stage, character_bloodline.is_primary
+		 FROM character_bloodlines character_bloodline
+		 JOIN bloodline_definitions bloodline ON bloodline.id = character_bloodline.bloodline_id
+		 WHERE character_bloodline.character_id = $1
+		 ORDER BY character_bloodline.is_primary DESC, bloodline.grade DESC, bloodline.id`,
+		result.Character.ID)
+	if err != nil {
+		return Status{}, fmt.Errorf("load current character bloodlines: %w", err)
+	}
+	defer bloodlineRows.Close()
+	result.Bloodlines = make([]CharacterBloodline, 0, 2)
+	for bloodlineRows.Next() {
+		var bloodline CharacterBloodline
+		if err := bloodlineRows.Scan(&bloodline.ID, &bloodline.Name, &bloodline.RaceID, &bloodline.Grade,
+			&bloodline.Purity, &bloodline.AwakeningStage, &bloodline.IsPrimary); err != nil {
+			return Status{}, fmt.Errorf("scan current character bloodline: %w", err)
+		}
+		result.Bloodlines = append(result.Bloodlines, bloodline)
+	}
+	if err := bloodlineRows.Err(); err != nil {
+		return Status{}, fmt.Errorf("iterate current character bloodlines: %w", err)
 	}
 	return result, nil
 }
