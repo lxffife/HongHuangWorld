@@ -39,3 +39,37 @@ jobs:
         run: cmake -S GameServer/WorldServer -B build/world-server -DCMAKE_BUILD_TYPE=Release
       - name: Build
         run: cmake --build build/world-server --config Release --parallel
+
+  database-migration:
+    name: PostgreSQL migration up/down
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_USER: honghuang
+          POSTGRES_PASSWORD: ci-password
+          POSTGRES_DB: honghuang
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U honghuang -d honghuang"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Apply initial migration
+        env:
+          PGPASSWORD: ci-password
+        run: psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000001_initial_schema.up.sql
+      - name: Roll back initial migration
+        env:
+          PGPASSWORD: ci-password
+        run: psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000001_initial_schema.down.sql
+      - name: Apply migration again
+        env:
+          PGPASSWORD: ci-password
+        run: psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000001_initial_schema.up.sql
