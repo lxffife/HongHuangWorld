@@ -52,7 +52,68 @@
 
 部署脚本运行时会静默提示输入 Token，并通过临时 Git askpass 文件执行 clone/fetch。Token 不会写入 Git remote URL 或项目文件；临时认证文件在脚本退出时清理。
 
-## 4. 网络代理配置
+## 4. 模块化部署脚本
+
+部署流程已拆分为多个可独立重复执行的阶段，脚本目录为 `Deployment/raspberry-pi/`。总入口仍为 `Deployment/deploy-raspberry-pi.sh`。
+
+| 脚本 | 功能 | 依赖/说明 |
+|---|---|---|
+| `00-preflight.sh` | 检查 ARM64、权限和基础命令 | 不修改业务数据 |
+| `01-proxy.sh` | 配置当前默认代理、APT 和 Docker daemon 代理 | 默认 `192.168.124.16:17891` |
+| `02-install-deps.sh` | 安装编译依赖、Docker、Go 1.24.0 | APT 索引 6 小时内有效时跳过 update |
+| `03-fetch-code.sh` | 独立拉取/更新 GitHub 分支 | 运行时输入 Token |
+| `04-configure.sh` | 首次生成 `/etc/honghuang-world.env` | 已有配置不会覆盖 |
+| `05-infra.sh` | 启动 PostgreSQL、Redis、NATS | 需要先完成配置 |
+| `06-migrate.sh` | 执行尚未应用的 SQL migration | 有迁移账本，重复运行会跳过已完成版本 |
+| `07-build.sh` | 编译 Go API、C++ WorldServer 并运行 CTest | 编译失败只需重跑此阶段 |
+| `08-install-services.sh` | 安装并重启 systemd 服务 | 需要先完成构建 |
+| `09-status.sh` | 查看服务、API readiness 和容器状态 | 只检查，不修改业务数据 |
+| `lib/common.sh` | 公共路径、代理、日志、环境文件和 Compose 函数 | 由其他阶段自动加载 |
+
+### 一键部署
+
+首次使用仍按前文方式下载 `Deployment/deploy-raspberry-pi.sh` 到树莓派，然后执行：
+
+    chmod +x ~/deploy-raspberry-pi.sh
+    bash ~/deploy-raspberry-pi.sh
+
+总入口会安全拉取/更新代码，然后按依赖顺序执行阶段。GitHub Token 只在终端静默输入，不写入 Git URL。
+
+### 单独重跑失败阶段
+
+代码已经拉取后，可以直接进入仓库目录执行任意阶段，例如 C++ 编译失败：
+
+    cd ~/HongHuangWorld
+    bash Deployment/raspberry-pi/07-build.sh
+
+数据库迁移失败：
+
+    bash Deployment/raspberry-pi/06-migrate.sh
+
+基础设施未启动：
+
+    bash Deployment/raspberry-pi/05-infra.sh
+
+服务安装或启动失败：
+
+    bash Deployment/raspberry-pi/08-install-services.sh
+    bash Deployment/raspberry-pi/09-status.sh
+
+单独更新代码：
+
+    bash Deployment/raspberry-pi/03-fetch-code.sh
+
+单独修复代理：
+
+    bash Deployment/raspberry-pi/01-proxy.sh
+
+如果需要在非默认目录部署，可为阶段脚本设置 `HH_PROJECT_DIR`，例如：
+
+    HH_PROJECT_DIR="$HOME/apps/HongHuangWorld" bash Deployment/raspberry-pi/07-build.sh
+
+阶段脚本均使用 Bash，请使用 `bash 脚本名` 或 `./脚本名`，不要使用 `sh 脚本名`。脚本可重复运行；环境文件和数据库迁移账本会保护已有配置与已完成迁移。不要手动删除数据库卷来解决部署失败。
+
+## 5. 网络代理配置
 
 部署脚本默认使用你提供的局域网 HTTP 代理：
 
@@ -88,7 +149,7 @@
 
 注意：Docker 镜像拉取由 Docker daemon 执行，因此仅设置当前终端的代理变量不足以保证 Docker 拉取镜像走代理；脚本已单独配置 daemon。
 
-## 5. 获取并运行脚本
+## 6. 获取并运行脚本
 
 脚本已放入仓库：
 - Deployment/deploy-raspberry-pi.sh
@@ -124,7 +185,7 @@
 
 请将示例地址替换成树莓派实际 IP。
 
-## 6. 环境配置
+## 7. 环境配置
 
 密钥和运行配置保存在：
 
@@ -145,7 +206,7 @@
 
 修改世界 ID、节点标识或端口后，也应重启相应服务。默认 WORLD_ID 为 qingyun_human。
 
-## 7. 网络与 Windows 客户端
+## 8. 网络与 Windows 客户端
 
 局域网客户端至少需要访问：
 - TCP 8787：HTTP API。
@@ -169,7 +230,7 @@ Windows Godot 客户端 API Base URL 填写：
 
 PostgreSQL 5432、Redis 6379、NATS 4222/8222 在 Compose 中绑定到 127.0.0.1，不接受局域网远程连接。不要配置路由器公网端口转发。当前方案没有配置 TLS、反向代理和生产级密钥管理。
 
-## 8. 部署检查
+## 9. 部署检查
 
 查看服务：
 
@@ -205,7 +266,7 @@ PostgreSQL 5432、Redis 6379、NATS 4222/8222 在 Compose 中绑定到 127.0.0.1
 
 应能看到所有已应用的迁移版本。
 
-## 9. 日志、启停与更新
+## 10. 日志、启停与更新
 
 实时查看 API：
 
@@ -231,7 +292,7 @@ PostgreSQL 5432、Redis 6379、NATS 4222/8222 在 Compose 中绑定到 127.0.0.1
 
 再次运行部署脚本会询问是否拉取 feature/p0-foundation 最新代码，随后重新编译并重启服务。迁移账本会跳过已经成功执行的版本。更新前仍建议先备份数据库。
 
-## 10. 数据备份与恢复
+## 11. 数据备份与恢复
 
 备份：
 
@@ -252,7 +313,7 @@ PostgreSQL 5432、Redis 6379、NATS 4222/8222 在 Compose 中绑定到 127.0.0.1
 
 不要使用 docker compose down -v 清理重装，否则会删除数据库持久化卷。部署脚本不会执行该命令。
 
-## 11. 常见问题
+## 12. 常见问题
 
 ### Token 无法拉取仓库
 确认 Token 未过期、仓库范围选择正确、Contents: Read-only 权限已授予，并确认组织策略允许该 Token。
@@ -286,7 +347,7 @@ PostgreSQL 5432、Redis 6379、NATS 4222/8222 在 Compose 中绑定到 127.0.0.1
 ### 8787 可访问但游戏 UDP 连接失败
 HTTP 和 ENet 使用不同协议。确认防火墙放行 UDP 7777，而不只是 TCP 8787。
 
-## 12. 当前部署边界
+## 13. 当前部署边界
 
 - 这是单树莓派部署：中心 API、数据库和一个青云人界 WorldServer。
 - Pi 4B 8GB 适合基础联网闭环测试，不代表能够承载高并发或最终高品质 3D 场景。
