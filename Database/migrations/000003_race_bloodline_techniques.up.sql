@@ -16,10 +16,10 @@ CREATE TABLE race_attribute_growth_profiles (
 INSERT INTO race_attribute_growth_profiles
     (race_id, strength_weight, constitution_weight, agility_weight, spirit_weight, vitality_weight)
 VALUES
-    ('human', 1800, 1800, 1800, 2800, 1200),
-    ('demon', 2400, 1800, 2000, 1600, 1600),
-    ('witch', 3000, 2800, 1000, 800, 1800),
-    ('dragon', 2600, 2400, 1200, 1600, 1600)
+    ('human', 1800, 1800, 1800, 2800, 1800),
+    ('demon', 2400, 1800, 2000, 1600, 2200),
+    ('witch', 3000, 2800, 1000, 800, 2400),
+    ('dragon', 2600, 2400, 1200, 1600, 2200)
 ON CONFLICT (race_id) DO NOTHING;
 
 -- Bloodlines are independent of cultivation systems. A character may inherit
