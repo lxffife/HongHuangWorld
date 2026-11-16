@@ -60,6 +60,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/characters/first-life", characters.createFirstLife)
 		mux.HandleFunc("GET /api/v1/characters/current", characters.current)
 		mux.HandleFunc("GET /api/v1/characters/current/status", characters.currentStatus)
+		mux.HandleFunc("POST /api/v1/characters/current/breakthrough", characters.breakthrough)
 		mux.HandleFunc("POST /api/v1/characters/current/attributes/allocate", characters.allocateAttributePoints)
 		servers := &serverHandlers{service: serverregistry.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
 		mux.HandleFunc("POST /api/v1/servers/heartbeat", servers.heartbeat)
@@ -82,6 +83,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/characters/first-life", unavailable)
 		mux.HandleFunc("GET /api/v1/characters/current", unavailable)
 		mux.HandleFunc("GET /api/v1/characters/current/status", unavailable)
+		mux.HandleFunc("POST /api/v1/characters/current/breakthrough", unavailable)
 		mux.HandleFunc("POST /api/v1/characters/current/attributes/allocate", unavailable)
 		mux.HandleFunc("POST /api/v1/servers/heartbeat", unavailable)
 		mux.HandleFunc("POST /api/v1/servers/characters/rewards", unavailable)
