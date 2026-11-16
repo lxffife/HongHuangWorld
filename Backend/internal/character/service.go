@@ -387,6 +387,73 @@ func (s *Service) AllocateAttributePoints(ctx context.Context, accountID, attrib
 	return nil
 }
 
+type CultivationRealmOption struct {
+	ID                    string `json:"id"`
+	Name                  string `json:"name"`
+	Order                 int    `json:"order"`
+	MaxStage              int    `json:"max_stage"`
+	RequiredCultivation   int64  `json:"required_cultivation"`
+	PowerTierID           string `json:"power_tier_id"`
+	PowerTierName         string `json:"power_tier_name"`
+	PowerTierOrder        int    `json:"power_tier_order"`
+	PowerComparisonNote  string `json:"power_comparison_note"`
+}
+
+type CultivationOption struct {
+	RaceID    string                  `json:"race_id"`
+	RaceName  string                  `json:"race_name"`
+	SystemID  string                  `json:"system_id"`
+	SystemName string                 `json:"system_name"`
+	Realms    []CultivationRealmOption `json:"realms"`
+}
+
+func (s *Service) CultivationCatalog(ctx context.Context) ([]CultivationOption, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT race.id, race.name, system.id, system.name,
+			realm.id, realm.name, realm.realm_order, realm.max_stage, realm.required_cultivation,
+			tier.id, tier.name, tier.tier_order, mapping.comparison_note
+		 FROM race_cultivation_systems race_system
+		 JOIN race_definitions race ON race.id = race_system.race_id
+		 JOIN cultivation_systems system ON system.id = race_system.system_id
+		 JOIN cultivation_realms realm ON realm.system_id = system.id
+		 JOIN realm_power_mappings mapping ON mapping.realm_id = realm.id
+		 JOIN power_tiers tier ON tier.id = mapping.power_tier_id
+		 WHERE race_system.is_default
+		 ORDER BY race.id, realm.realm_order`)
+	if err != nil {
+		return nil, fmt.Errorf("query cultivation catalog: %w", err)
+	}
+	defer rows.Close()
+
+	catalog := make([]CultivationOption, 0, 4)
+	byRace := make(map[string]int)
+	for rows.Next() {
+		var raceID, raceName, systemID, systemName string
+		var realm CultivationRealmOption
+		if err := rows.Scan(
+			&raceID, &raceName, &systemID, &systemName,
+			&realm.ID, &realm.Name, &realm.Order, &realm.MaxStage, &realm.RequiredCultivation,
+			&realm.PowerTierID, &realm.PowerTierName, &realm.PowerTierOrder, &realm.PowerComparisonNote,
+		); err != nil {
+			return nil, fmt.Errorf("scan cultivation catalog: %w", err)
+		}
+		index, exists := byRace[raceID]
+		if !exists {
+			index = len(catalog)
+			byRace[raceID] = index
+			catalog = append(catalog, CultivationOption{
+				RaceID: raceID, RaceName: raceName, SystemID: systemID,
+				SystemName: systemName, Realms: make([]CultivationRealmOption, 0, 9),
+			})
+		}
+		catalog[index].Realms = append(catalog[index].Realms, realm)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate cultivation catalog: %w", err)
+	}
+	return catalog, nil
+}
+
 func (s *Service) CurrentStatus(ctx context.Context, accountID string) (Status, error) {
 	var result Status
 	var race sql.NullString
