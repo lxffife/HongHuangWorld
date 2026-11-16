@@ -24,6 +24,8 @@ using Json = nlohmann::json;
 using Clock = std::chrono::steady_clock;
 constexpr auto kSnapshotInterval = std::chrono::milliseconds(50);
 constexpr auto kInputTimeout = std::chrono::milliseconds(500);
+// The client sends at 20 Hz. Accept modest jitter, but cap command processing at 100 Hz.
+constexpr auto kMinimumInputInterval = std::chrono::milliseconds(10);
 
 struct PlayerState {
     std::string character_id;
@@ -31,12 +33,14 @@ struct PlayerState {
     float x{};
     float y{};
     float z{};
+    float yaw{};
     float move_x{};
     float move_z{};
     float vertical_velocity{};
     bool jump_requested{};
     std::uint64_t last_input_sequence{};
     Clock::time_point last_input_at{Clock::now()};
+    Clock::time_point last_input_received_at{};
 };
 
 std::size_t collect_response(char* data, std::size_t size, std::size_t count, void* user) {
@@ -124,6 +128,7 @@ struct EnetServer::Impl {
                 {"character_id", player.character_id},
                 {"name", player.name},
                 {"x", player.x}, {"y", player.y}, {"z", player.z},
+                {"yaw", player.yaw},
                 {"last_input_sequence", player.last_input_sequence}
             });
         }
@@ -259,13 +264,19 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                     if (!honghuang::simulation::normalize_direction(move_x, move_z)) {
                         throw std::runtime_error("movement input must be finite");
                     }
-                    if (sequence > impl_->players.at(event.peer).last_input_sequence) {
-                        auto& player = impl_->players.at(event.peer);
+                    auto& player = impl_->players.at(event.peer);
+                    const auto now = Clock::now();
+                    if (sequence > player.last_input_sequence &&
+                        now - player.last_input_received_at >= kMinimumInputInterval) {
                         player.move_x = move_x;
                         player.move_z = move_z;
                         player.jump_requested = command.value("jump", false);
+                        if (move_x != 0.0F || move_z != 0.0F) {
+                            player.yaw = std::atan2(-move_x, -move_z);
+                        }
                         player.last_input_sequence = sequence;
-                        player.last_input_at = Clock::now();
+                        player.last_input_at = now;
+                        player.last_input_received_at = now;
                     }
                 } catch (const std::exception&) {
                     send_json(event.peer, honghuang::protocol::MessageType::ServerReject,
