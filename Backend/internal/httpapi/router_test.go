@@ -158,3 +158,14 @@ func TestBloodlineAndTechniqueActionsUnavailableWithoutDatabase(t *testing.T) {
 		})
 	}
 }
+
+
+func TestWorldSessionCloseUnavailableWithoutDatabase(t *testing.T) {
+	handler := NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/servers/sessions/close", strings.NewReader(`{}`))
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, res.Code)
+	}
+}
