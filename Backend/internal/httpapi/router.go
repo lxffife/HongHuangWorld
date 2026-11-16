@@ -62,6 +62,8 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/characters/current/attributes/allocate", characters.allocateAttributePoints)
 		servers := &serverHandlers{service: serverregistry.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
 		mux.HandleFunc("POST /api/v1/servers/heartbeat", servers.heartbeat)
+		rewards := &characterRewardHandlers{characterService: character.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
+		mux.HandleFunc("POST /api/v1/servers/characters/rewards", rewards.apply)
 		entry := &worldEntryHandlers{authService: auth.NewService(db), entryService: worldentry.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
 		mux.HandleFunc("POST /api/v1/worlds/enter", entry.issue)
 		mux.HandleFunc("POST /api/v1/servers/tickets/redeem", entry.redeem)
@@ -80,6 +82,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("GET /api/v1/characters/current/status", unavailable)
 		mux.HandleFunc("POST /api/v1/characters/current/attributes/allocate", unavailable)
 		mux.HandleFunc("POST /api/v1/servers/heartbeat", unavailable)
+		mux.HandleFunc("POST /api/v1/servers/characters/rewards", unavailable)
 		mux.HandleFunc("POST /api/v1/worlds/enter", unavailable)
 		mux.HandleFunc("POST /api/v1/servers/tickets/redeem", unavailable)
 	}
