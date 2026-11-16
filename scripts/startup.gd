@@ -6,6 +6,7 @@ const CLIENT_BUILD := "0.1.0"
 var api_base := DEFAULT_API
 var access_token := ""
 var worlds: Array = []
+var cultivation_races: Array = []
 var current_character: Dictionary = {}
 var entry_data: Dictionary = {}
 var request_queue: Array[Dictionary] = []
@@ -20,6 +21,8 @@ var email_input: LineEdit
 var password_input: LineEdit
 var character_input: LineEdit
 var world_select: OptionButton
+var race_select: OptionButton
+var cultivation_preview: Label
 var action_button: Button
 var login_button: Button
 var content_box: VBoxContainer
@@ -39,7 +42,7 @@ func _build_ui() -> void:
 	add_child(center)
 
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(520, 560)
+	panel.custom_minimum_size = Vector2(560, 660)
 	center.add_child(panel)
 
 	content_box = VBoxContainer.new()
@@ -82,6 +85,17 @@ func _build_ui() -> void:
 	content_box.add_child(character_title)
 
 	character_input = _add_line_edit("角色名（2–24 个字符）", "")
+	var race_label := Label.new()
+	race_label.text = "选择种族与修炼道路"
+	content_box.add_child(race_label)
+	race_select = OptionButton.new()
+	race_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	race_select.item_selected.connect(_on_race_selected)
+	content_box.add_child(race_select)
+	cultivation_preview = Label.new()
+	cultivation_preview.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	cultivation_preview.add_theme_color_override("font_color", Color("#aab6cc"))
+	content_box.add_child(cultivation_preview)
 	world_select = OptionButton.new()
 	world_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content_box.add_child(world_select)
@@ -193,6 +207,10 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 		"worlds":
 			worlds = data.get("items", [])
 			_populate_worlds()
+			_enqueue(HTTPClient.METHOD_GET, "/api/v1/cultivation/systems", {}, false, "cultivation_catalog")
+		"cultivation_catalog":
+			cultivation_races = data.get("races", [])
+			_populate_cultivation_races()
 			_enqueue(HTTPClient.METHOD_GET, "/api/v1/characters/current", {}, true, "character_check")
 		"character_check":
 			current_character = data
@@ -241,6 +259,36 @@ func _populate_worlds() -> void:
 	if world_select.item_count > 0:
 		world_select.select(0)
 
+func _populate_cultivation_races() -> void:
+	race_select.clear()
+	for race in cultivation_races:
+		if race is Dictionary:
+			race_select.add_item(str(race.get("race_name", race.get("race_id", "未知种族"))))
+			race_select.set_item_metadata(race_select.item_count - 1, str(race.get("race_id", "")))
+	if race_select.item_count > 0:
+		var default_index := 0
+		for index in range(race_select.item_count):
+			if str(race_select.get_item_metadata(index)) == "human":
+				default_index = index
+				break
+		race_select.select(default_index)
+		_on_race_selected(default_index)
+	else:
+		cultivation_preview.text = "无法读取种族修炼体系目录，请检查中心服数据库迁移。"
+
+func _on_race_selected(index: int) -> void:
+	if index < 0 or index >= race_select.item_count:
+		return
+	var selected_race_id := str(race_select.get_item_metadata(index))
+	for race in cultivation_races:
+		if race is Dictionary and str(race.get("race_id", "")) == selected_race_id:
+			var realm_names: Array[String] = []
+			for realm in race.get("realms", []):
+				if realm is Dictionary:
+					realm_names.append(str(realm.get("name", "")))
+			cultivation_preview.text = str(race.get("system_name", "")) + "\n修炼境界：" + " → ".join(realm_names) + "\n实力层级仅供跨种族比较，不代表战斗力完全相等。"
+			return
+
 func _on_create_character_pressed() -> void:
 	if access_token.is_empty():
 		_set_status("请先登录。")
@@ -255,11 +303,15 @@ func _on_create_character_pressed() -> void:
 	if world_select.item_count == 0:
 		_set_status("当前没有可选世界。")
 		return
+	if race_select.item_count == 0:
+		_set_status("没有可用的种族修炼体系，请检查中心服数据库迁移。")
+		return
 	var world_id := str(world_select.get_item_metadata(world_select.selected))
+	var race_id := str(race_select.get_item_metadata(race_select.selected))
 	_enqueue(HTTPClient.METHOD_POST, "/api/v1/characters/first-life", {
 		"name": name,
 		"world_id": world_id,
-		"race_id": ""
+		"race_id": race_id
 	}, true, "character_create")
 
 func _start_world_connection(host: String, port: int, ticket: String) -> void:
