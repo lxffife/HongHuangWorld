@@ -1,5 +1,8 @@
 #include "protocol/frame.hpp"
 
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <cassert>
 #include <cstdint>
 #include <string>
