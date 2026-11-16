@@ -14,6 +14,7 @@ import (
 	"github.com/liflife/HongHuangWorld/Backend/internal/soul"
 	"github.com/liflife/HongHuangWorld/Backend/internal/serverregistry"
 	"github.com/liflife/HongHuangWorld/Backend/internal/world"
+	"github.com/liflife/HongHuangWorld/Backend/internal/worldentry"
 )
 
 type healthResponse struct {
@@ -59,6 +60,9 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("GET /api/v1/characters/current", characters.current)
 		servers := &serverHandlers{service: serverregistry.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
 		mux.HandleFunc("POST /api/v1/servers/heartbeat", servers.heartbeat)
+		entry := &worldEntryHandlers{authService: auth.NewService(db), entryService: worldentry.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
+		mux.HandleFunc("POST /api/v1/worlds/enter", entry.issue)
+		mux.HandleFunc("POST /api/v1/servers/tickets/redeem", entry.redeem)
 	} else {
 		unavailable := func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
@@ -72,6 +76,8 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/characters/first-life", unavailable)
 		mux.HandleFunc("GET /api/v1/characters/current", unavailable)
 		mux.HandleFunc("POST /api/v1/servers/heartbeat", unavailable)
+		mux.HandleFunc("POST /api/v1/worlds/enter", unavailable)
+		mux.HandleFunc("POST /api/v1/servers/tickets/redeem", unavailable)
 	}
 
 	return requestLogger(logger, mux)
