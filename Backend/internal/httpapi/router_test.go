@@ -66,6 +66,16 @@ func TestCharacterEndpointsUnavailableWithoutDatabase(t *testing.T) {
 	}
 }
 
+func TestCharacterStatusUnavailableWithoutDatabase(t *testing.T) {
+	handler := NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/characters/current/status", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, res.Code)
+	}
+}
+
 func TestServerHeartbeatUnavailableWithoutDatabase(t *testing.T) {
 	handler := NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/servers/heartbeat", strings.NewReader(`{}`))
