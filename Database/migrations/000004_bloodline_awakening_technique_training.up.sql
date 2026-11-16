@@ -25,6 +25,8 @@ ON CONFLICT (target_stage) DO NOTHING;
 
 -- Each new character starts with one race-native entry technique. Further
 -- techniques must be granted by trusted server-side quest/drop systems.
+ALTER TABLE character_techniques ADD COLUMN is_starter BOOLEAN NOT NULL DEFAULT FALSE;
+
 CREATE TABLE race_starter_techniques (
     race_id VARCHAR(64) PRIMARY KEY REFERENCES race_definitions(id),
     technique_id VARCHAR(96) NOT NULL REFERENCES cultivation_techniques(id)
@@ -38,8 +40,8 @@ VALUES
     ('dragon', 'dragon_breath')
 ON CONFLICT (race_id) DO NOTHING;
 
-INSERT INTO character_techniques (character_id, technique_id, proficiency, is_equipped)
-SELECT character.id, starter.technique_id, 0, TRUE
+INSERT INTO character_techniques (character_id, technique_id, proficiency, is_equipped, is_starter)
+SELECT character.id, starter.technique_id, 0, TRUE, TRUE
 FROM characters character
 JOIN race_starter_techniques starter ON starter.race_id = character.race_id
 ON CONFLICT (character_id, technique_id) DO NOTHING;
