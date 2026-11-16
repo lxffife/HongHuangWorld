@@ -29,6 +29,9 @@ var content_box: VBoxContainer
 var character_title_label: Label
 var race_label_control: Label
 var world_label_control: Label
+var auth_controls: Array[Control] = []
+var account_label: Label
+var right_info_label: Label
 
 func _ready() -> void:
 	_build_ui()
@@ -45,12 +48,47 @@ func _build_ui() -> void:
 	add_child(center)
 
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(560, 660)
+	panel.custom_minimum_size = Vector2(1120, 680)
 	center.add_child(panel)
 
+	var main_layout := HBoxContainer.new()
+	main_layout.add_theme_constant_override("separation", 18)
+	panel.add_child(main_layout)
+
+	var left_scroll := ScrollContainer.new()
+	left_scroll.custom_minimum_size = Vector2(520, 0)
+	left_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	main_layout.add_child(left_scroll)
+
 	content_box = VBoxContainer.new()
-	content_box.add_theme_constant_override("separation", 14)
-	panel.add_child(content_box)
+	content_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content_box.add_theme_constant_override("separation", 12)
+	left_scroll.add_child(content_box)
+
+	var right_panel := PanelContainer.new()
+	right_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	main_layout.add_child(right_panel)
+	var right_content := VBoxContainer.new()
+	right_content.add_theme_constant_override("separation", 16)
+	right_panel.add_child(right_content)
+	var right_title := Label.new()
+	right_title.text = "轮回之门"
+	right_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	right_title.add_theme_font_size_override("font_size", 26)
+	right_content.add_child(right_title)
+	right_info_label = Label.new()
+	right_info_label.text = "登录中心服后，这里将显示灵魂档案、角色信息与世界入口。"
+	right_info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	right_info_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right_info_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	right_info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	right_content.add_child(right_info_label)
+	account_label = Label.new()
+	account_label.hide()
+	content_box.add_child(account_label)
 
 	var title := Label.new()
 	title.text = "洪荒：诸天轮回"
@@ -69,18 +107,22 @@ func _build_ui() -> void:
 	email_input = _add_line_edit("邮箱（注册时填写）", "")
 	password_input = _add_line_edit("密码", "")
 	password_input.secret = true
+	auth_controls.append_array([api_input, username_input, email_input, password_input])
 
 	login_button = Button.new()
 	login_button.text = "登录"
 	login_button.custom_minimum_size.y = 44
 	login_button.pressed.connect(_on_login_pressed)
 	content_box.add_child(login_button)
+	auth_controls.append(login_button)
 	var register_button := Button.new()
 	register_button.text = "注册新账号并登录"
 	register_button.pressed.connect(_on_register_pressed)
 	content_box.add_child(register_button)
-
-	content_box.add_child(HSeparator.new())
+	auth_controls.append(register_button)
+	var auth_separator := HSeparator.new()
+	content_box.add_child(auth_separator)
+	auth_controls.append(auth_separator)
 
 	var character_title := Label.new()
 	character_title.text = "首次进入：创建角色"
@@ -216,6 +258,11 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 			if access_token.is_empty():
 				_set_status("认证响应缺少 access_token。")
 			else:
+				for control in auth_controls:
+					control.hide()
+				account_label.text = "已登录账号：" + username_input.text.strip_edges()
+				account_label.show()
+				right_info_label.text = "身份验证成功。正在读取灵魂档案与世界目录……"
 				_set_status("账号认证成功，正在读取灵魂档案……")
 				_enqueue(HTTPClient.METHOD_GET, "/api/v1/souls/current", {}, true, "soul_check")
 		"soul_check":
@@ -278,6 +325,7 @@ func _on_login_pressed() -> void:
 	}, false, "login")
 
 func _show_character_setup() -> void:
+	right_info_label.text = "灵魂档案已载入。请在左侧完成角色名、种族修炼体系与出生世界的选择。"
 	character_title_label.show()
 	character_input.show()
 	race_label_control.show()
