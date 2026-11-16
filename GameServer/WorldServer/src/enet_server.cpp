@@ -179,10 +179,10 @@ struct EnetServer::Impl {
         std::string error;
         if (send_heartbeat(config, players.size(), "ready", error)) {
             next_heartbeat_at = now + kHeartbeatInterval;
-            std::cout << "WorldServer heartbeat accepted; players=" << players.size() << '\\n';
+            std::cout << "WorldServer heartbeat accepted; players=" << players.size() << '\n';
         } else {
             next_heartbeat_at = now + kHeartbeatRetryInterval;
-            std::cerr << "WorldServer heartbeat failed: " << error << '\\n';
+            std::cerr << "WorldServer heartbeat failed: " << error << '\n';
         }
     }
 
@@ -237,8 +237,12 @@ EnetServer::EnetServer(ServerConfig config) : impl_(new Impl(std::move(config)))
 EnetServer::~EnetServer() { stop(); delete impl_; }
 
 bool EnetServer::start() {
-    if (impl_->config.backend_url.empty() || impl_->config.node_key.empty() || impl_->config.api_key.empty()) {
-        std::cerr << "BACKEND_URL, WORLD_SERVER_NODE_KEY and WORLD_SERVER_API_KEY are required\n";
+    if (impl_->config.backend_url.empty() || impl_->config.node_key.empty() || impl_->config.api_key.empty() ||
+        impl_->config.advertise_host.empty() || impl_->config.world_id.empty() ||
+        impl_->config.instance_key.empty() || impl_->config.capacity < 1) {
+        std::cerr << "BACKEND_URL, WORLD_SERVER_NODE_KEY, WORLD_SERVER_API_KEY, "
+                     "WORLD_SERVER_ADVERTISE_HOST, WORLD_ID, WORLD_SERVER_INSTANCE_KEY and "
+                     "WORLD_SERVER_CAPACITY are required\n";
         return false;
     }
     if (enet_initialize() != 0) {
@@ -260,6 +264,7 @@ bool EnetServer::start() {
         return false;
     }
     address.port = impl_->config.port;
+    impl_->config.max_clients = static_cast<std::size_t>(impl_->config.capacity);
     impl_->host = enet_host_create(&address, impl_->config.max_clients, 2, 0, 0);
     if (impl_->host == nullptr) {
         std::cerr << "Could not create ENet host on UDP port " << impl_->config.port << '\n';
@@ -267,6 +272,8 @@ bool EnetServer::start() {
         enet_deinitialize();
         return false;
     }
+    impl_->next_heartbeat_at = Clock::time_point{};
+    impl_->update_heartbeat();
     std::cout << "WorldServer ENet listening on UDP " << impl_->config.port << '\n';
     return true;
 }
@@ -378,7 +385,7 @@ void EnetServer::stop() {
     if (impl_ != nullptr && impl_->host != nullptr) {
         std::string heartbeat_error;
         if (!send_heartbeat(impl_->config, impl_->players.size(), "draining", heartbeat_error)) {
-            std::cerr << "WorldServer draining heartbeat failed: " << heartbeat_error << '\\n';
+            std::cerr << "WorldServer draining heartbeat failed: " << heartbeat_error << '\n';
         }
         enet_host_destroy(impl_->host);
         impl_->host = nullptr;
