@@ -8,6 +8,7 @@
 - `000002_character_progression` 创建角色属性、种族目录、种族专属修炼体系、境界阶段、跨种族实力参考映射和幂等奖励流水，并为已有角色补齐默认成长记录。
 - `000003_race_bloodline_techniques` 创建种族属性成长权重、血脉定义/修正/角色继承记录、功法目录/跨族适配矩阵/角色熟练度记录，并为已有角色补齐默认血脉。
 - `000004_bloodline_awakening_technique_training` 创建数据驱动的血脉觉醒门槛、种族入门功法映射，并为已有角色补齐一项种族入门功法。
+- `000005_items_inventory_drops` 创建物品目录、怪物掉落配置、地面掉落实体、角色背包和幂等拾取流水；初始配置荒原狼掉落荒狼獠牙与荒狼皮。
 
 ## 当前迁移顺序
 
@@ -18,6 +19,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000001_initial_sc
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000002_character_progression.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000003_race_bloodline_techniques.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000004_bloodline_awakening_technique_training.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000005_items_inventory_drops.up.sql
 ```
 
 回滚时按相反顺序执行对应的 `.down.sql`。不要在已运行的生产库上重复执行非幂等迁移；后续接入迁移工具后，应由工具记录每个已应用版本，避免人工重复执行。
