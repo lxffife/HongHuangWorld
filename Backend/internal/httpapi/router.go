@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -12,19 +14,35 @@ type healthResponse struct {
 	Time   string `json:"time"`
 }
 
-func NewRouter(logger *slog.Logger) http.Handler {
+func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(healthResponse{
+		writeJSON(w, http.StatusOK, healthResponse{
 			Status: "ok",
 			Time:   time.Now().UTC().Format(time.RFC3339),
-		}); err != nil {
-			logger.Error("write health response failed", "error", err)
+		})
+	})
+	mux.HandleFunc("GET /ready", func(w http.ResponseWriter, r *http.Request) {
+		if db == nil {
+			http.Error(w, "database is not configured", http.StatusServiceUnavailable)
+			return
 		}
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if err := db.PingContext(ctx); err != nil {
+			logger.Warn("readiness check failed", "error", err)
+			http.Error(w, "database unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		writeJSON(w, http.StatusOK, healthResponse{Status: "ready", Time: time.Now().UTC().Format(time.RFC3339)})
 	})
 	return requestLogger(logger, mux)
+}
+
+func writeJSON(w http.ResponseWriter, status int, value any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(value)
 }
 
 func requestLogger(logger *slog.Logger, next http.Handler) http.Handler {
