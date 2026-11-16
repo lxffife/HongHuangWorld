@@ -1,6 +1,11 @@
 extends Node3D
 
 @onready var hud_label: Label = $HUD/Panel/Margin/Content/Status
+@onready var progression_label: Label = $HUD/Panel/Margin/Content/Progression
+@onready var breakthrough_button: Button = $HUD/Panel/Margin/Content/Breakthrough
+
+var progression_http: HTTPRequest
+var progression_request_context := ""
 
 var local_player: HHPlayerController
 var local_target_position := Vector3.ZERO
@@ -18,6 +23,90 @@ func _ready() -> void:
 		local_target_position = Vector3(float(spawn.get("position_x", 0.0)), float(spawn.get("position_y", 0.15)), float(spawn.get("position_z", 0.0)))
 		local_player.position = local_target_position
 	_update_hud()
+	progression_http = HTTPRequest.new()
+	progression_http.timeout = 10.0
+	add_child(progression_http)
+	progression_http.request_completed.connect(_on_progression_request_completed)
+	breakthrough_button.pressed.connect(_on_breakthrough_pressed)
+	_refresh_character_status()
+
+func _refresh_character_status() -> void:
+	if HHSession.access_token.is_empty():
+		progression_label.text = "角色修炼信息暂不可用：缺少登录凭证"
+		breakthrough_button.disabled = true
+		return
+	progression_request_context = "status"
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token])
+	var error := progression_http.request(
+		HHSession.api_base + "/api/v1/characters/current/status",
+		headers,
+		HTTPClient.METHOD_GET
+	)
+	if error != OK:
+		progression_label.text = "读取修炼状态失败，错误码：" + str(error)
+
+func _on_breakthrough_pressed() -> void:
+	if progression_request_context != "":
+		return
+	breakthrough_button.disabled = true
+	progression_label.text = "正在向中心服申请突破……"
+	progression_request_context = "breakthrough"
+	var headers := PackedStringArray([
+		"Authorization: Bearer " + HHSession.access_token,
+		"Content-Type: application/json"
+	])
+	var error := progression_http.request(
+		HHSession.api_base + "/api/v1/characters/current/breakthrough",
+		headers,
+		HTTPClient.METHOD_POST,
+		"{}"
+	)
+	if error != OK:
+		progression_request_context = ""
+		progression_label.text = "提交突破失败，错误码：" + str(error)
+		breakthrough_button.disabled = false
+
+func _on_progression_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	var context := progression_request_context
+	progression_request_context = ""
+	if result != HTTPRequest.RESULT_SUCCESS:
+		progression_label.text = "修炼服务连接失败，请检查中心服。"
+		breakthrough_button.disabled = false
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	var data: Dictionary = parsed if parsed is Dictionary else {}
+	if context == "breakthrough":
+		if response_code >= 200 and response_code < 300:
+			if bool(data.get("advanced_realm", false)):
+				progression_label.text = "大境界突破成功！正在刷新修炼状态……"
+			else:
+				progression_label.text = "小境界突破成功！正在刷新修炼状态……"
+			_refresh_character_status()
+			return
+		progression_label.text = "突破未成功：" + body.get_string_from_utf8()
+		breakthrough_button.disabled = false
+		return
+	if response_code < 200 or response_code >= 300:
+		progression_label.text = "读取修炼状态失败：" + body.get_string_from_utf8()
+		breakthrough_button.disabled = true
+		return
+	var progression: Dictionary = data.get("progression", {})
+	var system_name := str(progression.get("system_name", "未知体系"))
+	var realm_name := str(progression.get("realm_name", "未知境界"))
+	var stage_name := str(progression.get("realm_stage_name", ""))
+	var cultivation := int(progression.get("cultivation", 0))
+	var tier_name := str(progression.get("power_tier_name", "未映射"))
+	var next_stage: Variant = progression.get("required_for_next_stage", null)
+	var next_realm: Variant = progression.get("required_for_next_realm", null)
+	var threshold_text := ""
+	if next_stage != null:
+		threshold_text = "下一阶段修为：" + str(next_stage)
+	elif next_realm != null:
+		threshold_text = "大境界突破修为：" + str(next_realm)
+	else:
+		threshold_text = "已达到当前体系最高配置境界"
+	progression_label.text = system_name + " · " + realm_name + stage_name + "\n累计修为：" + str(cultivation) + "  |  跨族参考：" + tier_name + "\n" + threshold_text
+	breakthrough_button.disabled = next_stage == null and next_realm == null
 
 func _build_environment() -> void:
 	var world_environment := WorldEnvironment.new()
