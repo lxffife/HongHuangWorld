@@ -29,7 +29,9 @@ int main() {
 
     const CombatantStats heavily_armored{attack: 1, defense: 1000, current_health: 25, max_health: 25};
     assert(calculate_damage(attacker, heavily_armored, AttackProfile{}, result));
-    assert(result.damage == 25); // damage is capped at remaining health
+    assert(result.damage == 1); // minimum damage applies even against heavy armor
+    assert(result.remaining_health == 24);
+    assert(!result.defeated);
 
     const CombatantStats invalid_defender{attack: 1, defense: -1, current_health: 10, max_health: 10};
     assert(!calculate_damage(attacker, invalid_defender, AttackProfile{}, result));
