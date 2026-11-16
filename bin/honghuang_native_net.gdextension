@@ -1,0 +1,9 @@
+[configuration]
+entry_symbol = "honghuang_native_net_library_init"
+compatibility_minimum = "4.3"
+
+[libraries]
+linux.debug.x86_64 = "res://bin/libhonghuang_native_net.so"
+linux.release.x86_64 = "res://bin/libhonghuang_native_net.so"
+windows.debug.x86_64 = "res://bin/honghuang_native_net.dll"
+windows.release.x86_64 = "res://bin/honghuang_native_net.dll"
