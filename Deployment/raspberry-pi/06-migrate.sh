@@ -1,4 +1,12 @@
-#!/usr/bin/env bash
+#!/bin/sh
+# Re-launch with Bash when invoked as: sh script.sh
+if [ -z "${BASH_VERSION:-}" ]; then
+  if command -v bash >/dev/null 2>&1; then
+    exec bash "$0" "$@"
+  fi
+  echo "[ERROR] 本脚本需要 Bash，请先安装 bash。" >&2
+  exit 1
+fi
 set -Eeuo pipefail
 source "$(dirname "$0")/lib/common.sh"
 load_env
