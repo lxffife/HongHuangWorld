@@ -126,6 +126,8 @@ func _on_progression_request_completed(result: int, response_code: int, _headers
 	if result != HTTPRequest.RESULT_SUCCESS:
 		progression_label.text = "修炼服务连接失败，请检查中心服。"
 		breakthrough_button.disabled = false
+		awaken_bloodline_button.disabled = false
+		train_technique_button.disabled = false
 		return
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
 	var data: Dictionary = parsed if parsed is Dictionary else {}
@@ -153,6 +155,7 @@ func _on_progression_request_completed(result: int, response_code: int, _headers
 		breakthrough_button.disabled = true
 		return
 	var progression: Dictionary = data.get("progression", {})
+	var cultivation := int(progression.get("cultivation", 0))
 	var bloodlines: Array = data.get("bloodlines", [])
 	var primary_bloodline := "未觉醒"
 	var bloodline_purity := 0
@@ -186,7 +189,6 @@ func _on_progression_request_completed(result: int, response_code: int, _headers
 	var system_name := str(progression.get("system_name", "未知体系"))
 	var realm_name := str(progression.get("realm_name", "未知境界"))
 	var stage_name := str(progression.get("realm_stage_name", ""))
-	var cultivation := int(progression.get("cultivation", 0))
 	var tier_name := str(progression.get("power_tier_name", "未映射"))
 	var next_stage: Variant = progression.get("required_for_next_stage", null)
 	var next_realm: Variant = progression.get("required_for_next_realm", null)
