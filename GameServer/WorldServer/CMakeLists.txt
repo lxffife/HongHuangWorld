@@ -52,6 +52,10 @@ if(BUILD_TESTING)
     add_executable(combat_test tests/combat_test.cpp)
     target_include_directories(combat_test PRIVATE include)
     add_test(NAME combat_test COMMAND combat_test)
+
+    add_executable(monster_test tests/monster_test.cpp)
+    target_include_directories(monster_test PRIVATE include)
+    add_test(NAME monster_test COMMAND monster_test)
 endif()
 
 if(MSVC)
