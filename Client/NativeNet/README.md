@@ -31,7 +31,7 @@ bash Client/NativeNet/build_linux.sh
 扩展注册 `EnetClient` Node：
 
 - `connect_to_host(host: String, port: int) -> Error`
-- `send_frame(frame: PackedByteArray) -> Error`
+- `send_frame(frame: PackedByteArray, reliable: bool = true) -> Error`（可靠消息使用 channel 0；移动输入等高频消息使用不可靠有序 channel 1）
 - `disconnect_from_host()`
 - `is_connected_to_server() -> bool`
 
