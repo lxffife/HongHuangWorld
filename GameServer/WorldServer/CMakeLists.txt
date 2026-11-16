@@ -48,6 +48,10 @@ if(BUILD_TESTING)
     add_executable(movement_test tests/movement_test.cpp)
     target_include_directories(movement_test PRIVATE include)
     add_test(NAME movement_test COMMAND movement_test)
+
+    add_executable(combat_test tests/combat_test.cpp)
+    target_include_directories(combat_test PRIVATE include)
+    add_test(NAME combat_test COMMAND combat_test)
 endif()
 
 if(MSVC)
