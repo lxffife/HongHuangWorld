@@ -17,6 +17,7 @@ var (
 	ErrInsufficientPoints = errors.New("insufficient unspent attribute points")
 	ErrInvalidReward = errors.New("invalid character reward")
 	ErrRewardSession = errors.New("character has no active session on this server")
+	ErrInvalidRace = errors.New("race has no configured default cultivation system")
 )
 
 type Character struct {
@@ -48,12 +49,19 @@ type Attributes struct {
 type Progression struct {
 	Experience             int64  `json:"experience"`
 	Cultivation            int64  `json:"cultivation"`
+	SystemID               string `json:"system_id"`
+	SystemName             string `json:"system_name"`
 	RealmID                string `json:"realm_id"`
 	RealmName              string `json:"realm_name"`
 	RealmOrder             int    `json:"realm_order"`
 	RealmStage             int    `json:"realm_stage"`
+	RealmStageName         string `json:"realm_stage_name"`
 	MaxRealmStage          int    `json:"max_realm_stage"`
 	RequiredForNextRealm   *int64 `json:"required_for_next_realm,omitempty"`
+	PowerTierID            string `json:"power_tier_id,omitempty"`
+	PowerTierName          string `json:"power_tier_name,omitempty"`
+	PowerTierOrder         int    `json:"power_tier_order,omitempty"`
+	PowerComparisonNote    string `json:"power_comparison_note,omitempty"`
 	UnspentAttributePoints int    `json:"unspent_attribute_points"`
 }
 
@@ -75,6 +83,9 @@ func (s *Service) CreateFirstLife(ctx context.Context, accountID, name, worldID,
 	name = strings.TrimSpace(name)
 	worldID = strings.TrimSpace(worldID)
 	raceID = strings.TrimSpace(raceID)
+	if raceID == "" {
+		raceID = "human"
+	}
 	if len([]rune(name)) < 2 || len([]rune(name)) > 24 || worldID == "" || len(raceID) > 64 {
 		return Character{}, ErrInvalid
 	}
@@ -105,6 +116,20 @@ func (s *Service) CreateFirstLife(ctx context.Context, accountID, name, worldID,
 		return Character{}, ErrWorldInvalid
 	}
 
+	var systemID, firstRealmID string
+	err = tx.QueryRowContext(ctx,
+		`SELECT mapping.system_id, realm.id
+		 FROM race_cultivation_systems mapping
+		 JOIN cultivation_realms realm ON realm.system_id = mapping.system_id AND realm.realm_order = 1
+		 WHERE mapping.race_id = $1 AND mapping.is_default`, raceID,
+	).Scan(&systemID, &firstRealmID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Character{}, ErrInvalidRace
+	}
+	if err != nil {
+		return Character{}, fmt.Errorf("resolve race cultivation system: %w", err)
+	}
+
 	var result Character
 	var race sql.NullString
 	err = tx.QueryRowContext(ctx,
@@ -123,7 +148,7 @@ func (s *Service) CreateFirstLife(ctx context.Context, accountID, name, worldID,
 	if _, err := tx.ExecContext(ctx, `INSERT INTO character_attributes (character_id) VALUES ($1)`, result.ID); err != nil {
 		return Character{}, fmt.Errorf("initialize character attributes: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO character_progression (character_id) VALUES ($1)`, result.ID); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO character_progression (character_id, system_id, realm_id) VALUES ($1, $2, $3)`, result.ID, systemID, firstRealmID); err != nil {
 		return Character{}, fmt.Errorf("initialize character progression: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE souls SET current_character_id = $1, updated_at = now() WHERE id = $2`, result.ID, soulID); err != nil {
@@ -366,19 +391,26 @@ func (s *Service) CurrentStatus(ctx context.Context, accountID string) (Status, 
 	var result Status
 	var race sql.NullString
 	var required sql.NullInt64
+	var stageName, powerTierID, powerTierName, comparisonNote sql.NullString
+	var powerTierOrder sql.NullInt64
 	err := s.db.QueryRowContext(ctx,
 		`SELECT
 			c.id::text, c.soul_id::text, c.life_index, c.world_id, c.name, c.race_id, c.level, c.status,
 			a.strength, a.constitution, a.agility, a.spirit, a.vitality,
 			a.health, a.max_health, a.mana, a.max_mana, a.attack, a.defense, a.movement_speed,
-			p.experience, p.cultivation, p.realm_id, rd.name, rd.realm_order, p.realm_stage,
-			rd.max_stage, next_realm.required_cultivation, p.unspent_attribute_points
+			p.experience, p.cultivation, p.system_id, cs.name, p.realm_id, rd.name, rd.realm_order,
+			p.realm_stage, current_stage.name, rd.max_stage, next_realm.required_cultivation,
+			pt.id, pt.name, pt.tier_order, rpm.comparison_note, p.unspent_attribute_points
 		 FROM souls s
 		 JOIN characters c ON c.id = s.current_character_id
 		 JOIN character_attributes a ON a.character_id = c.id
 		 JOIN character_progression p ON p.character_id = c.id
-		 JOIN realm_definitions rd ON rd.id = p.realm_id
-		 LEFT JOIN realm_definitions next_realm ON next_realm.realm_order = rd.realm_order + 1
+		 JOIN cultivation_systems cs ON cs.id = p.system_id
+		 JOIN cultivation_realms rd ON rd.id = p.realm_id AND rd.system_id = p.system_id
+		 LEFT JOIN cultivation_stages current_stage ON current_stage.realm_id = rd.id AND current_stage.stage_order = p.realm_stage
+		 LEFT JOIN cultivation_realms next_realm ON next_realm.system_id = p.system_id AND next_realm.realm_order = rd.realm_order + 1
+		 LEFT JOIN realm_power_mappings rpm ON rpm.realm_id = rd.id
+		 LEFT JOIN power_tiers pt ON pt.id = rpm.power_tier_id
 		 WHERE s.account_id = $1`, accountID,
 	).Scan(
 		&result.Character.ID, &result.Character.SoulID, &result.Character.LifeIndex,
@@ -387,9 +419,12 @@ func (s *Service) CurrentStatus(ctx context.Context, accountID string) (Status, 
 		&result.Attributes.Spirit, &result.Attributes.Vitality, &result.Attributes.Health,
 		&result.Attributes.MaxHealth, &result.Attributes.Mana, &result.Attributes.MaxMana,
 		&result.Attributes.Attack, &result.Attributes.Defense, &result.Attributes.MovementSpeed,
-		&result.Progression.Experience, &result.Progression.Cultivation, &result.Progression.RealmID,
-		&result.Progression.RealmName, &result.Progression.RealmOrder, &result.Progression.RealmStage,
-		&result.Progression.MaxRealmStage, &required, &result.Progression.UnspentAttributePoints,
+		&result.Progression.Experience, &result.Progression.Cultivation,
+		&result.Progression.SystemID, &result.Progression.SystemName,
+		&result.Progression.RealmID, &result.Progression.RealmName, &result.Progression.RealmOrder,
+		&result.Progression.RealmStage, &stageName, &result.Progression.MaxRealmStage, &required,
+		&powerTierID, &powerTierName, &powerTierOrder, &comparisonNote,
+		&result.Progression.UnspentAttributePoints,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Status{}, sql.ErrNoRows
@@ -400,8 +435,23 @@ func (s *Service) CurrentStatus(ctx context.Context, accountID string) (Status, 
 	if race.Valid {
 		result.Character.RaceID = &race.String
 	}
+	if stageName.Valid {
+		result.Progression.RealmStageName = stageName.String
+	}
 	if required.Valid {
 		result.Progression.RequiredForNextRealm = &required.Int64
+	}
+	if powerTierID.Valid {
+		result.Progression.PowerTierID = powerTierID.String
+	}
+	if powerTierName.Valid {
+		result.Progression.PowerTierName = powerTierName.String
+	}
+	if powerTierOrder.Valid {
+		result.Progression.PowerTierOrder = int(powerTierOrder.Int64)
+	}
+	if comparisonNote.Valid {
+		result.Progression.PowerComparisonNote = comparisonNote.String
 	}
 	return result, nil
 }
