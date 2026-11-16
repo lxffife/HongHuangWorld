@@ -11,6 +11,7 @@ import (
 
 	"github.com/liflife/HongHuangWorld/Backend/internal/auth"
 	"github.com/liflife/HongHuangWorld/Backend/internal/character"
+	"github.com/liflife/HongHuangWorld/Backend/internal/inventory"
 	"github.com/liflife/HongHuangWorld/Backend/internal/soul"
 	"github.com/liflife/HongHuangWorld/Backend/internal/serverregistry"
 	"github.com/liflife/HongHuangWorld/Backend/internal/world"
@@ -25,16 +26,10 @@ type healthResponse struct {
 func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, healthResponse{
-			Status: "ok",
-			Time:   time.Now().UTC().Format(time.RFC3339),
-		})
+		writeJSON(w, http.StatusOK, healthResponse{Status: "ok", Time: time.Now().UTC().Format(time.RFC3339)})
 	})
 	mux.HandleFunc("GET /ready", func(w http.ResponseWriter, r *http.Request) {
-		if db == nil {
-			http.Error(w, "database is not configured", http.StatusServiceUnavailable)
-			return
-		}
+		if db == nil { http.Error(w, "database is not configured", http.StatusServiceUnavailable); return }
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
 		if err := db.PingContext(ctx); err != nil {
@@ -46,16 +41,17 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 	})
 
 	if db != nil {
-		handlers := &authHandlers{service: auth.NewService(db), logger: logger}
+		authService := auth.NewService(db)
+		handlers := &authHandlers{service: authService, logger: logger}
 		mux.HandleFunc("POST /api/v1/auth/register", handlers.register)
 		mux.HandleFunc("POST /api/v1/auth/login", handlers.login)
 		mux.HandleFunc("GET /api/v1/account/me", handlers.me)
-		souls := &soulHandlers{authService: auth.NewService(db), soulService: soul.NewService(db), logger: logger}
+		souls := &soulHandlers{authService: authService, soulService: soul.NewService(db), logger: logger}
 		mux.HandleFunc("POST /api/v1/souls", souls.create)
 		mux.HandleFunc("GET /api/v1/souls/current", souls.current)
 		worlds := &worldHandlers{service: world.NewService(db), logger: logger}
 		mux.HandleFunc("GET /api/v1/worlds", worlds.list)
-		characters := &characterHandlers{authService: auth.NewService(db), characterService: character.NewService(db), logger: logger}
+		characters := &characterHandlers{authService: authService, characterService: character.NewService(db), logger: logger}
 		mux.HandleFunc("GET /api/v1/cultivation/systems", characters.catalog)
 		mux.HandleFunc("GET /api/v1/cultivation/race-growth", characters.growthProfiles)
 		mux.HandleFunc("GET /api/v1/cultivation/bloodlines", characters.bloodlines)
@@ -67,44 +63,38 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/characters/current/bloodlines/awaken", characters.awakenBloodline)
 		mux.HandleFunc("POST /api/v1/characters/current/techniques/train", characters.trainTechnique)
 		mux.HandleFunc("POST /api/v1/characters/current/attributes/allocate", characters.allocateAttributePoints)
+		items := &inventoryHandlers{authService: authService, service: inventory.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
+		mux.HandleFunc("GET /api/v1/items", items.catalog)
+		mux.HandleFunc("GET /api/v1/characters/current/inventory", items.current)
+		mux.HandleFunc("POST /api/v1/servers/drops", items.createDrop)
+		mux.HandleFunc("POST /api/v1/servers/drops/pickup", items.pickupDrop)
 		servers := &serverHandlers{service: serverregistry.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
 		mux.HandleFunc("POST /api/v1/servers/heartbeat", servers.heartbeat)
 		rewards := &characterRewardHandlers{characterService: character.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
 		mux.HandleFunc("POST /api/v1/servers/characters/rewards", rewards.apply)
-		entry := &worldEntryHandlers{authService: auth.NewService(db), entryService: worldentry.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
+		entry := &worldEntryHandlers{authService: authService, entryService: worldentry.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
 		mux.HandleFunc("POST /api/v1/worlds/enter", entry.issue)
 		mux.HandleFunc("POST /api/v1/servers/tickets/redeem", entry.redeem)
 		mux.HandleFunc("POST /api/v1/servers/sessions/snapshot", entry.saveSnapshot)
 		mux.HandleFunc("POST /api/v1/servers/sessions/close", entry.closeSession)
 	} else {
-		unavailable := func(w http.ResponseWriter, _ *http.Request) {
-			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
-		}
-		mux.HandleFunc("POST /api/v1/auth/register", unavailable)
-		mux.HandleFunc("POST /api/v1/auth/login", unavailable)
-		mux.HandleFunc("GET /api/v1/account/me", unavailable)
-		mux.HandleFunc("POST /api/v1/souls", unavailable)
-		mux.HandleFunc("GET /api/v1/souls/current", unavailable)
-		mux.HandleFunc("GET /api/v1/worlds", unavailable)
-		mux.HandleFunc("GET /api/v1/cultivation/systems", unavailable)
-		mux.HandleFunc("GET /api/v1/cultivation/race-growth", unavailable)
-		mux.HandleFunc("GET /api/v1/cultivation/bloodlines", unavailable)
-		mux.HandleFunc("GET /api/v1/cultivation/techniques", unavailable)
-		mux.HandleFunc("POST /api/v1/characters/first-life", unavailable)
-		mux.HandleFunc("GET /api/v1/characters/current", unavailable)
-		mux.HandleFunc("GET /api/v1/characters/current/status", unavailable)
-		mux.HandleFunc("POST /api/v1/characters/current/breakthrough", unavailable)
-		mux.HandleFunc("POST /api/v1/characters/current/bloodlines/awaken", unavailable)
-		mux.HandleFunc("POST /api/v1/characters/current/techniques/train", unavailable)
-		mux.HandleFunc("POST /api/v1/characters/current/attributes/allocate", unavailable)
-		mux.HandleFunc("POST /api/v1/servers/heartbeat", unavailable)
-		mux.HandleFunc("POST /api/v1/servers/characters/rewards", unavailable)
-		mux.HandleFunc("POST /api/v1/worlds/enter", unavailable)
-		mux.HandleFunc("POST /api/v1/servers/tickets/redeem", unavailable)
-		mux.HandleFunc("POST /api/v1/servers/sessions/snapshot", unavailable)
-		mux.HandleFunc("POST /api/v1/servers/sessions/close", unavailable)
+		unavailable := func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "service unavailable", http.StatusServiceUnavailable) }
+		for _, route := range []string{
+			"POST /api/v1/auth/register", "POST /api/v1/auth/login", "GET /api/v1/account/me",
+			"POST /api/v1/souls", "GET /api/v1/souls/current", "GET /api/v1/worlds",
+			"GET /api/v1/cultivation/systems", "GET /api/v1/cultivation/race-growth",
+			"GET /api/v1/cultivation/bloodlines", "GET /api/v1/cultivation/techniques",
+			"POST /api/v1/characters/first-life", "GET /api/v1/characters/current",
+			"GET /api/v1/characters/current/status", "POST /api/v1/characters/current/breakthrough",
+			"POST /api/v1/characters/current/bloodlines/awaken", "POST /api/v1/characters/current/techniques/train",
+			"POST /api/v1/characters/current/attributes/allocate", "GET /api/v1/items",
+			"GET /api/v1/characters/current/inventory", "POST /api/v1/servers/drops",
+			"POST /api/v1/servers/drops/pickup", "POST /api/v1/servers/heartbeat",
+			"POST /api/v1/servers/characters/rewards", "POST /api/v1/worlds/enter",
+			"POST /api/v1/servers/tickets/redeem", "POST /api/v1/servers/sessions/snapshot",
+			"POST /api/v1/servers/sessions/close",
+		} { mux.HandleFunc(route, unavailable) }
 	}
-
 	return requestLogger(logger, mux)
 }
 
