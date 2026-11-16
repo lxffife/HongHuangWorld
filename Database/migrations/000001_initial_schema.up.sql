@@ -115,6 +115,8 @@ CREATE TABLE world_entry_tickets (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_world_entry_tickets_expiry ON world_entry_tickets(expires_at);
+CREATE UNIQUE INDEX uq_world_entry_ticket_pending_character ON world_entry_tickets(character_id)
+    WHERE consumed_at IS NULL;
 
 CREATE TABLE world_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
