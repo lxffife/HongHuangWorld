@@ -166,6 +166,69 @@ func (s *Service) Redeem(ctx context.Context, nodeKey, ticket string) (PlayerSna
 }
 
 
+// SavePosition periodically persists an authoritative position without ending the session.
+// The node/session/character tuple is verified against the trusted server registry.
+func (s *Service) SavePosition(ctx context.Context, input SessionSnapshot) error {
+	if input.NodeKey == "" || len(input.NodeKey) > 96 ||
+		input.SessionID == "" || input.CharacterID == "" ||
+		math.IsNaN(input.PositionX) || math.IsInf(input.PositionX, 0) ||
+		math.IsNaN(input.PositionY) || math.IsInf(input.PositionY, 0) ||
+		math.IsNaN(input.PositionZ) || math.IsInf(input.PositionZ, 0) ||
+		math.IsNaN(input.RotationY) || math.IsInf(input.RotationY, 0) ||
+		input.PositionX < -100 || input.PositionX > 100 ||
+		input.PositionZ < -100 || input.PositionZ > 100 ||
+		input.PositionY < 0 || input.PositionY > 100 {
+		return ErrInvalidSessionSnapshot
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin periodic world snapshot: %w", err)
+	}
+	defer tx.Rollback()
+
+	var state string
+	err = tx.QueryRowContext(ctx,
+		`SELECT ws.session_state
+		 FROM world_sessions ws
+		 JOIN server_registry sr ON sr.id = ws.server_id
+		 WHERE ws.id = $1 AND ws.character_id = $2 AND sr.node_key = $3
+		 FOR UPDATE OF ws`,
+		input.SessionID, input.CharacterID, input.NodeKey,
+	).Scan(&state)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrInvalidSessionSnapshot
+	}
+	if err != nil {
+		return fmt.Errorf("lock periodic world snapshot session: %w", err)
+	}
+	if state != "active" {
+		return ErrInvalidSessionSnapshot
+	}
+
+	result, err := tx.ExecContext(ctx,
+		`UPDATE characters
+		 SET position_x = $2, position_y = $3, position_z = $4, rotation_y = $5, updated_at = now()
+		 WHERE id = $1 AND status = 'alive'`,
+		input.CharacterID, input.PositionX, input.PositionY, input.PositionZ, input.RotationY,
+	)
+	if err != nil {
+		return fmt.Errorf("save periodic character position: %w", err)
+	}
+	if rows, rowsErr := result.RowsAffected(); rowsErr != nil {
+		return fmt.Errorf("check periodic character rows: %w", rowsErr)
+	} else if rows != 1 {
+		return ErrInvalidSessionSnapshot
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE world_sessions SET updated_at = now() WHERE id = $1`, input.SessionID); err != nil {
+		return fmt.Errorf("touch periodic world session: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit periodic world snapshot: %w", err)
+	}
+	return nil
+}
+
 // SaveAndClose persists the authoritative final position and closes the world session.
 // The node/session/character tuple is verified against the trusted server registry.
 func (s *Service) SaveAndClose(ctx context.Context, input SessionSnapshot) error {
