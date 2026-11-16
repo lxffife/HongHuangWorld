@@ -62,3 +62,5 @@
 3. 客户端连接返回的 UDP 地址，在 ClientHello 携带票据与构建版本。
 4. C++ 世界服务器使用自身 node_key 与服务器 API Key 调用 `POST /api/v1/servers/tickets/redeem`。
 5. 兑换成功后，世界服务器发送 ServerWelcome。断线后必须重新申请票据，不得复用旧票据。
+
+- 客户端通过 `AttackCommand` 提交目标实体 ID；服务端通过 `CombatEvent` 返回命中、伤害、击败或拒绝原因。攻击冷却/距离等正常拒绝不会关闭连接。
