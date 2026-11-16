@@ -3,9 +3,13 @@ extends Node3D
 @onready var hud_label: Label = $HUD/Panel/Margin/Content/Status
 @onready var progression_label: Label = $HUD/Panel/Margin/Content/Progression
 @onready var breakthrough_button: Button = $HUD/Panel/Margin/Content/Breakthrough
+@onready var reconnect_button: Button = $HUD/Panel/Margin/Content/Reconnect
 
 var progression_http: HTTPRequest
 var progression_request_context := ""
+var reconnect_http: HTTPRequest
+var reconnect_network: HHWorldNetwork
+var reconnect_request_busy := false
 
 var local_player: HHPlayerController
 var local_target_position := Vector3.ZERO
@@ -19,6 +23,7 @@ func _ready() -> void:
 	_build_player()
 	if HHSession.world_network != null:
 		HHSession.world_network.entities_updated.connect(_on_entities_updated)
+		HHSession.world_network.disconnected.connect(_on_world_disconnected)
 		var spawn: Dictionary = HHSession.world_snapshot
 		local_target_position = Vector3(float(spawn.get("position_x", 0.0)), float(spawn.get("position_y", 0.15)), float(spawn.get("position_z", 0.0)))
 		local_player.position = local_target_position
@@ -28,6 +33,11 @@ func _ready() -> void:
 	add_child(progression_http)
 	progression_http.request_completed.connect(_on_progression_request_completed)
 	breakthrough_button.pressed.connect(_on_breakthrough_pressed)
+	reconnect_button.pressed.connect(_on_reconnect_pressed)
+	reconnect_http = HTTPRequest.new()
+	reconnect_http.timeout = 12.0
+	add_child(reconnect_http)
+	reconnect_http.request_completed.connect(_on_reconnect_request_completed)
 	_refresh_character_status()
 
 func _refresh_character_status() -> void:
@@ -246,3 +256,107 @@ func _process(delta: float) -> void:
 		remote.position = remote.position.lerp(target, minf(delta * 14.0, 1.0))
 		var target_yaw := float(remote_yaws.get(character_id, remote.rotation.y))
 		remote.rotation.y = lerp_angle(remote.rotation.y, target_yaw, minf(delta * 12.0, 1.0))
+
+
+func _on_world_disconnected() -> void:
+	hud_label.text = "与世界服务器的连接已断开。角色位置已由中心服周期保存，可重新连接继续游戏。"
+	reconnect_button.visible = true
+	reconnect_button.disabled = false
+
+func _on_reconnect_pressed() -> void:
+	if reconnect_request_busy:
+		return
+	if HHSession.access_token.is_empty():
+		hud_label.text = "登录状态已失效，请返回登录界面重新登录。"
+		return
+	reconnect_request_busy = true
+	reconnect_button.disabled = true
+	hud_label.text = "正在向中心服申请新的世界入口……"
+	var headers := PackedStringArray([
+		"Authorization: Bearer " + HHSession.access_token,
+		"Content-Type: application/json"
+	])
+	var error := reconnect_http.request(
+		HHSession.api_base + "/api/v1/worlds/enter",
+		headers,
+		HTTPClient.METHOD_POST,
+		"{}"
+	)
+	if error != OK:
+		reconnect_request_busy = false
+		reconnect_button.disabled = false
+		hud_label.text = "申请重连失败，错误码：" + str(error)
+
+func _on_reconnect_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	reconnect_request_busy = false
+	if result != HTTPRequest.RESULT_SUCCESS:
+		reconnect_button.disabled = false
+		hud_label.text = "无法连接中心服，请检查网络后重试。"
+		return
+	if response_code < 200 or response_code >= 300:
+		reconnect_button.disabled = false
+		hud_label.text = "暂时无法重新进入世界（HTTP " + str(response_code) + "）：" + body.get_string_from_utf8()
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if not (parsed is Dictionary):
+		reconnect_button.disabled = false
+		hud_label.text = "中心服返回了无效的世界入口信息。"
+		return
+	var host := str(parsed.get("host", ""))
+	var port := int(parsed.get("udp_port", 0))
+	var ticket := str(parsed.get("ticket", ""))
+	if host.is_empty() or port < 1 or ticket.is_empty():
+		reconnect_button.disabled = false
+		hud_label.text = "中心服返回的重连信息不完整。"
+		return
+
+	if reconnect_network != null and is_instance_valid(reconnect_network):
+		reconnect_network.close()
+		reconnect_network.queue_free()
+	reconnect_network = HHWorldNetwork.new()
+	HHSession.add_child(reconnect_network)
+	reconnect_network.welcomed.connect(_on_reconnected_welcomed)
+	reconnect_network.rejected.connect(func(reason: String):
+		hud_label.text = "世界服务器拒绝重连：" + reason
+		reconnect_button.disabled = false
+	)
+	reconnect_network.connection_error.connect(func(message: String):
+		hud_label.text = message
+		reconnect_button.disabled = false
+	)
+	reconnect_network.disconnected.connect(func():
+		reconnect_button.visible = true
+		reconnect_button.disabled = false
+	)
+	hud_label.text = "正在重新连接世界服务器 " + host + ":" + str(port) + "……"
+	var connect_error := reconnect_network.connect_with_ticket(host, port, ticket)
+	if connect_error != OK:
+		reconnect_button.disabled = false
+		hud_label.text = "初始化重连失败，错误码：" + str(connect_error)
+
+func _on_reconnected_welcomed(snapshot: Dictionary) -> void:
+	var previous: HHWorldNetwork = HHSession.world_network
+	HHSession.world_network = reconnect_network
+	HHSession.world_snapshot = snapshot
+	if previous != null and is_instance_valid(previous):
+		if previous.disconnected.is_connected(_on_world_disconnected):
+			previous.disconnected.disconnect(_on_world_disconnected)
+		previous.close()
+		previous.queue_free()
+	if not reconnect_network.entities_updated.is_connected(_on_entities_updated):
+		reconnect_network.entities_updated.connect(_on_entities_updated)
+	local_target_position = Vector3(
+		float(snapshot.get("position_x", 0.0)),
+		float(snapshot.get("position_y", 0.15)),
+		float(snapshot.get("position_z", 0.0))
+	)
+	local_player.position = local_target_position
+	for character_id in remote_players.keys():
+		remote_players[character_id].queue_free()
+	remote_players.clear()
+	remote_targets.clear()
+	remote_yaws.clear()
+	reconnect_button.visible = false
+	reconnect_button.disabled = false
+	hud_label.text = "已重新进入青云人界，角色已恢复到最近保存的位置。"
+	_update_hud()
