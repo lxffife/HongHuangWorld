@@ -8,12 +8,14 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 )
 
 var (
 	ErrNoAvailableServer = errors.New("no available world server")
 	ErrInvalidTicket    = errors.New("invalid or expired world entry ticket")
+	ErrInvalidSessionSnapshot = errors.New("invalid or unauthorized world session snapshot")
 )
 
 type Entry struct {
@@ -25,6 +27,7 @@ type Entry struct {
 }
 
 type PlayerSnapshot struct {
+	SessionID   string  `json:"session_id"`
 	CharacterID string  `json:"character_id"`
 	WorldID     string  `json:"world_id"`
 	InstanceID  string  `json:"instance_id"`
@@ -33,6 +36,16 @@ type PlayerSnapshot struct {
 	PositionY   float64 `json:"position_y"`
 	PositionZ   float64 `json:"position_z"`
 	RotationY   float64 `json:"rotation_y"`
+}
+
+type SessionSnapshot struct {
+	NodeKey     string
+	SessionID   string
+	CharacterID string
+	PositionX   float64
+	PositionY   float64
+	PositionZ   float64
+	RotationY   float64
 }
 
 type Service struct {
@@ -139,14 +152,87 @@ func (s *Service) Redeem(ctx context.Context, nodeKey, ticket string) (PlayerSna
 	); err != nil {
 		return PlayerSnapshot{}, fmt.Errorf("close previous world session: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx,
+	if err := tx.QueryRowContext(ctx,
 		`INSERT INTO world_sessions (character_id, instance_id, server_id, session_state, connected_at)
-		 VALUES ($1, $2, $3, 'active', now())`, characterID, instanceID, serverID,
-	); err != nil {
+		 VALUES ($1, $2, $3, 'active', now())
+		 RETURNING id::text`, characterID, instanceID, serverID,
+	).Scan(&snapshot.SessionID); err != nil {
 		return PlayerSnapshot{}, fmt.Errorf("create world session: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return PlayerSnapshot{}, fmt.Errorf("commit world ticket redemption: %w", err)
 	}
 	return snapshot, nil
+}
+
+
+// SaveAndClose persists the authoritative final position and closes the world session.
+// The node/session/character tuple is verified against the trusted server registry.
+func (s *Service) SaveAndClose(ctx context.Context, input SessionSnapshot) error {
+	if input.NodeKey == "" || len(input.NodeKey) > 96 ||
+		input.SessionID == "" || input.CharacterID == "" ||
+		math.IsNaN(input.PositionX) || math.IsInf(input.PositionX, 0) ||
+		math.IsNaN(input.PositionY) || math.IsInf(input.PositionY, 0) ||
+		math.IsNaN(input.PositionZ) || math.IsInf(input.PositionZ, 0) ||
+		math.IsNaN(input.RotationY) || math.IsInf(input.RotationY, 0) ||
+		input.PositionX < -100 || input.PositionX > 100 ||
+		input.PositionZ < -100 || input.PositionZ > 100 ||
+		input.PositionY < 0 || input.PositionY > 100 {
+		return ErrInvalidSessionSnapshot
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin world session snapshot: %w", err)
+	}
+	defer tx.Rollback()
+
+	var state string
+	err = tx.QueryRowContext(ctx,
+		`SELECT ws.session_state
+		 FROM world_sessions ws
+		 JOIN server_registry sr ON sr.id = ws.server_id
+		 WHERE ws.id = $1 AND ws.character_id = $2 AND sr.node_key = $3
+		 FOR UPDATE OF ws`,
+		input.SessionID, input.CharacterID, input.NodeKey,
+	).Scan(&state)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrInvalidSessionSnapshot
+	}
+	if err != nil {
+		return fmt.Errorf("lock world session snapshot: %w", err)
+	}
+	if state == "closed" {
+		return tx.Commit()
+	}
+	if state != "active" && state != "saving" {
+		return ErrInvalidSessionSnapshot
+	}
+
+	result, err := tx.ExecContext(ctx,
+		`UPDATE characters
+		 SET position_x = $2, position_y = $3, position_z = $4, rotation_y = $5, updated_at = now()
+		 WHERE id = $1 AND status = 'alive'`,
+		input.CharacterID, input.PositionX, input.PositionY, input.PositionZ, input.RotationY,
+	)
+	if err != nil {
+		return fmt.Errorf("save character world position: %w", err)
+	}
+	if rows, rowsErr := result.RowsAffected(); rowsErr != nil {
+		return fmt.Errorf("check saved character rows: %w", rowsErr)
+	} else if rows != 1 {
+		return ErrInvalidSessionSnapshot
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE world_sessions
+		 SET session_state = 'closed', disconnected_at = now(), updated_at = now()
+		 WHERE id = $1`, input.SessionID,
+	); err != nil {
+		return fmt.Errorf("close world session: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit world session snapshot: %w", err)
+	}
+	return nil
 }
