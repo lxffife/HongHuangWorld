@@ -143,3 +143,18 @@ func TestRaceGrowthBloodlineAndTechniqueCatalogsUnavailableWithoutDatabase(t *te
 		})
 	}
 }
+
+func TestBloodlineAndTechniqueActionsUnavailableWithoutDatabase(t *testing.T) {
+	handler := NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	for _, path := range []string{
+		"/api/v1/characters/current/bloodlines/awaken",
+		"/api/v1/characters/current/techniques/train",
+	} {
+		t.Run(path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
+			res := httptest.NewRecorder()
+			handler.ServeHTTP(res, req)
+			if res.Code != http.StatusServiceUnavailable { t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, res.Code) }
+		})
+	}
+}
