@@ -31,6 +31,10 @@ if(BUILD_TESTING)
     )
     target_include_directories(protocol_frame_test PRIVATE include)
     add_test(NAME protocol_frame_test COMMAND protocol_frame_test)
+
+    add_executable(movement_test tests/movement_test.cpp)
+    target_include_directories(movement_test PRIVATE include)
+    add_test(NAME movement_test COMMAND movement_test)
 endif()
 
 if(MSVC)
