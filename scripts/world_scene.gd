@@ -413,6 +413,9 @@ func _request_nearest_monster_attack() -> void:
 		hud_label.text = "攻击指令发送失败：" + str(error)
 
 func _on_combat_event(event: Dictionary) -> void:
+	if not bool(event.get("accepted", true)):
+		hud_label.text = str(event.get("reason", "攻击未命中。"))
+		return
 	var monster_name := str(event.get("target_name", "目标"))
 	var damage := int(event.get("damage", 0))
 	if bool(event.get("defeated", false)):
