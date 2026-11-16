@@ -78,11 +78,21 @@ type CharacterBloodline struct {
 	IsPrimary bool `json:"is_primary"`
 }
 
+type CharacterTechnique struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Grade       int    `json:"grade"`
+	Proficiency int64  `json:"proficiency"`
+	IsEquipped  bool   `json:"is_equipped"`
+}
+
 type Status struct {
 	Character   Character   `json:"character"`
 	Attributes  Attributes  `json:"attributes"`
 	Progression Progression `json:"progression"`
-	Bloodlines []CharacterBloodline `json:"bloodlines"`
+	Bloodlines  []CharacterBloodline `json:"bloodlines"`
+	Techniques  []CharacterTechnique `json:"techniques"`
 }
 
 type Service struct {
@@ -800,6 +810,31 @@ func (s *Service) CurrentStatus(ctx context.Context, accountID string) (Status, 
 	}
 	if err := bloodlineRows.Err(); err != nil {
 		return Status{}, fmt.Errorf("iterate current character bloodlines: %w", err)
+	}
+
+	techniqueRows, err := s.db.QueryContext(ctx,
+		`SELECT technique.id, technique.name, technique.technique_type, technique.grade,
+		        character_technique.proficiency, character_technique.is_equipped
+		 FROM character_techniques character_technique
+		 JOIN cultivation_techniques technique ON technique.id = character_technique.technique_id
+		 WHERE character_technique.character_id = $1
+		 ORDER BY character_technique.is_equipped DESC, technique.grade, technique.id`,
+		result.Character.ID)
+	if err != nil {
+		return Status{}, fmt.Errorf("load current character techniques: %w", err)
+	}
+	defer techniqueRows.Close()
+	result.Techniques = make([]CharacterTechnique, 0, 4)
+	for techniqueRows.Next() {
+		var technique CharacterTechnique
+		if err := techniqueRows.Scan(&technique.ID, &technique.Name, &technique.Type,
+			&technique.Grade, &technique.Proficiency, &technique.IsEquipped); err != nil {
+			return Status{}, fmt.Errorf("scan current character technique: %w", err)
+		}
+		result.Techniques = append(result.Techniques, technique)
+	}
+	if err := techniqueRows.Err(); err != nil {
+		return Status{}, fmt.Errorf("iterate current character techniques: %w", err)
 	}
 	return result, nil
 }
