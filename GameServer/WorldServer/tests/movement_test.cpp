@@ -25,6 +25,12 @@ int main() {
     assert(normalize_direction(x, z));
     assert(std::abs(std::hypot(x, z) - 1.0F) < 0.0001F);
 
+    assert(within_interest_radius(0.0F, 0.0F, 80.0F, 0.0F, 80.0F));
+    assert(!within_interest_radius(0.0F, 0.0F, 80.01F, 0.0F, 80.0F));
+    assert(within_interest_radius(0.0F, 0.0F, 48.0F, 64.0F, 80.0F));
+    assert(!within_interest_radius(0.0F, 0.0F, 0.0F, 0.0F, -1.0F));
+    assert(!within_interest_radius(std::numeric_limits<float>::infinity(), 0.0F, 0.0F, 0.0F, 80.0F));
+
     float world_x = 99.9F;
     float world_z = 0.0F;
     integrate_horizontal(world_x, world_z, 1.0F, 0.0F, 0.1F);
