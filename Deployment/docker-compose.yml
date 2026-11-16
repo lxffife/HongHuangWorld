@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-honghuang}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - honghuang-postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -25,7 +25,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}"]
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - honghuang-redis-data:/data
     healthcheck:
@@ -40,8 +40,8 @@ services:
     restart: unless-stopped
     command: ["-js", "-sd", "/data", "-m", "8222"]
     ports:
-      - "${NATS_PORT:-4222}:4222"
-      - "${NATS_MONITOR_PORT:-8222}:8222"
+      - "127.0.0.1:${NATS_PORT:-4222}:4222"
+      - "127.0.0.1:${NATS_MONITOR_PORT:-8222}:8222"
     volumes:
       - honghuang-nats-data:/data
 
