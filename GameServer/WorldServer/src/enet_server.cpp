@@ -9,14 +9,18 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <deque>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cmath>
 #include <iostream>
+#include <iomanip>
 #include <memory>
 #include <limits>
 #include <mutex>
+#include <random>
+#include <sstream>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -65,6 +69,35 @@ struct MonsterRuntime {
     std::string runtime_id;
     Clock::time_point respawn_at{};
 };
+
+
+struct CharacterRewardEvent {
+    std::string event_id;
+    std::string character_id;
+    std::int64_t experience{};
+    std::int64_t cultivation{};
+    unsigned int attempts{};
+};
+
+std::string make_event_uuid() {
+    static thread_local std::mt19937_64 generator(std::random_device{}());
+    std::array<std::uint8_t, 16> bytes{};
+    for (std::size_t i = 0; i < bytes.size(); i += 8) {
+        const auto value = generator();
+        for (std::size_t j = 0; j < 8; ++j) {
+            bytes[i + j] = static_cast<std::uint8_t>((value >> (j * 8)) & 0xffU);
+        }
+    }
+    bytes[6] = static_cast<std::uint8_t>((bytes[6] & 0x0fU) | 0x40U);
+    bytes[8] = static_cast<std::uint8_t>((bytes[8] & 0x3fU) | 0x80U);
+    std::ostringstream output;
+    output << std::hex << std::setfill('0');
+    for (std::size_t i = 0; i < bytes.size(); ++i) {
+        output << std::setw(2) << static_cast<unsigned int>(bytes[i]);
+        if (i == 3 || i == 5 || i == 7 || i == 9) output << '-';
+    }
+    return output.str();
+}
 
 std::size_t collect_response(char* data, std::size_t size, std::size_t count, void* user) {
     const auto bytes = size * count;
@@ -285,6 +318,51 @@ bool save_periodic_position(const ServerConfig& config, const PlayerState& playe
     return true;
 }
 
+
+bool deliver_character_reward(const ServerConfig& config, const CharacterRewardEvent& reward,
+                              long& http_status, std::string& error) {
+    CURL* curl = curl_easy_init();
+    if (curl == nullptr) { error = "could not initialize character reward HTTP client"; return false; }
+    const std::string url = config.backend_url + "/api/v1/servers/characters/rewards";
+    const std::string body = Json{
+        {"event_id", reward.event_id},
+        {"character_id", reward.character_id},
+        {"experience", reward.experience},
+        {"cultivation", reward.cultivation}
+    }.dump();
+    std::string response;
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    const std::string auth_header = "X-World-Server-Key: " + config.api_key;
+    const std::string node_header = "X-World-Server-Node: " + config.node_key;
+    headers = curl_slist_append(headers, auth_header.c_str());
+    headers = curl_slist_append(headers, node_header.c_str());
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_POST, 1L);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body.size()));
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, collect_response);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 1500L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 4000L);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+    const auto result = curl_easy_perform(curl);
+    http_status = 0;
+    if (result == CURLE_OK) curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+    if (result != CURLE_OK) {
+        error = std::string("character reward request failed: ") + curl_easy_strerror(result);
+        return false;
+    }
+    if (http_status != 200) {
+        error = "character reward rejected by backend (HTTP " + std::to_string(http_status) + ")";
+        return false;
+    }
+    return true;
+}
+
 void send_json(ENetPeer* peer, honghuang::protocol::MessageType type, const Json& value) {
     const auto payload_text = value.dump();
     const auto* begin = reinterpret_cast<const std::uint8_t*>(payload_text.data());
@@ -314,6 +392,11 @@ struct EnetServer::Impl {
     bool persistence_stop_requested{false};
     std::thread persistence_thread;
     Clock::time_point last_persistence{Clock::now()};
+    std::mutex reward_mutex;
+    std::condition_variable reward_cv;
+    std::deque<CharacterRewardEvent> pending_rewards;
+    bool reward_stop_requested{false};
+    std::thread reward_thread;
 
     explicit Impl(ServerConfig value) : config(std::move(value)) {
         const auto add_monster = [this](std::string runtime_id, std::string definition_id,
@@ -334,6 +417,72 @@ struct EnetServer::Impl {
                     2.8F, 10.0F, 24.0F, 13.0F, -7.0F);
         add_monster("wolf-003", "wilderness_wolf", "荒原狼", 3, 80.0F, 12.0F, 4.0F,
                     2.8F, 10.0F, 24.0F, 0.0F, 17.0F);
+    }
+
+
+    void start_reward_worker() {
+        reward_stop_requested = false;
+        reward_thread = std::thread([this] {
+            while (true) {
+                CharacterRewardEvent reward;
+                {
+                    std::unique_lock lock(reward_mutex);
+                    reward_cv.wait(lock, [this] {
+                        return reward_stop_requested || !pending_rewards.empty();
+                    });
+                    if (reward_stop_requested && pending_rewards.empty()) return;
+                    reward = std::move(pending_rewards.front());
+                    pending_rewards.pop_front();
+                }
+                long status = 0;
+                std::string error;
+                if (deliver_character_reward(config, reward, status, error)) {
+                    std::cout << "Character reward persisted: character=" << reward.character_id
+                              << " experience=" << reward.experience
+                              << " cultivation=" << reward.cultivation << '\\n';
+                    continue;
+                }
+                const bool retryable = status == 0 || status >= 500;
+                if (retryable && reward.attempts < 6) {
+                    ++reward.attempts;
+                    const auto delay = std::chrono::seconds(
+                        std::min<unsigned int>(1U << std::min(reward.attempts, 4U), 10U));
+                    std::cerr << "Character reward delivery will retry in " << delay.count()
+                              << "s: " << error << '\\n';
+                    std::this_thread::sleep_for(delay);
+                    {
+                        std::lock_guard lock(reward_mutex);
+                        pending_rewards.push_front(std::move(reward));
+                    }
+                    reward_cv.notify_one();
+                } else {
+                    std::cerr << "Character reward was not persisted and will not be retried: "
+                              << error << '\\n';
+                }
+            }
+        });
+    }
+
+    void enqueue_character_reward(CharacterRewardEvent reward) {
+        {
+            std::lock_guard lock(reward_mutex);
+            if (reward_stop_requested || pending_rewards.size() >= 4096) {
+                std::cerr << "Character reward queue unavailable/full; event " << reward.event_id
+                          << " could not be queued\\n";
+                return;
+            }
+            pending_rewards.push_back(std::move(reward));
+        }
+        reward_cv.notify_one();
+    }
+
+    void stop_reward_worker() {
+        {
+            std::lock_guard lock(reward_mutex);
+            reward_stop_requested = true;
+        }
+        reward_cv.notify_all();
+        if (reward_thread.joinable()) reward_thread.join();
     }
 
     void start_persistence_worker() {
@@ -512,10 +661,17 @@ struct EnetServer::Impl {
             return;
         }
         target->state.health = static_cast<float>(damage.remaining_health);
+        std::int64_t experience_reward = 0;
+        std::int64_t cultivation_reward = 0;
         if (damage.defeated) {
             target->state.mode = honghuang::simulation::MonsterMode::Dead;
             target->state.target_id.clear();
             target->respawn_at = now + kMonsterRespawnDelay;
+            experience_reward = 20 + static_cast<std::int64_t>(target->definition.level) * 10;
+            cultivation_reward = 10 + static_cast<std::int64_t>(target->definition.level) * 5;
+            enqueue_character_reward(CharacterRewardEvent{
+                make_event_uuid(), player.character_id, experience_reward, cultivation_reward, 0
+            });
         }
         const Json event{
             {"attacker_character_id", player.character_id},
@@ -524,7 +680,9 @@ struct EnetServer::Impl {
             {"damage", damage.damage},
             {"remaining_health", damage.remaining_health},
             {"max_health", target->definition.max_health},
-            {"defeated", damage.defeated}
+            {"defeated", damage.defeated},
+            {"experience_reward", experience_reward},
+            {"cultivation_reward", cultivation_reward}
         };
         send_json(peer, honghuang::protocol::MessageType::CombatEvent, event);
     }
@@ -684,6 +842,7 @@ bool EnetServer::start() {
     impl_->heartbeat_stop_requested = false;
     impl_->start_heartbeat_worker(heartbeat_ok);
     impl_->start_persistence_worker();
+    impl_->start_reward_worker();
     impl_->last_persistence = Clock::now();
     std::cout << "WorldServer ENet listening on UDP " << impl_->config.port << '\n';
     return true;
@@ -846,6 +1005,7 @@ void EnetServer::stop() {
         impl_->heartbeat_cv.notify_all();
         if (impl_->heartbeat_thread.joinable()) impl_->heartbeat_thread.join();
 
+        impl_->stop_reward_worker();
         impl_->stop_persistence_worker();
 
         std::string heartbeat_error;
