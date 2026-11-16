@@ -51,3 +51,6 @@ bash Client/NativeNet/build_linux.sh
 - 心跳定时器和认证后的青云人界场景切换已接入。
 - 当前移动仍是客户端本地原型；服务器权威移动输入、实体快照、AOI、重连和断线状态持久化尚未实现。
 - 首次配置时 CMake 需要联网拉取 godot-cpp 与 ENet 源码。
+
+
+CI 会缓存 Godot C++ binding 的 CMake 构建目录，避免每次提交都从头编译完整的 Godot 4.3 绑定。功能分支只通过 PR 工作流运行检查，避免 push 与 pull_request 同时重复启动同一套原生编译。
