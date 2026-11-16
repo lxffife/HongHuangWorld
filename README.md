@@ -37,8 +37,9 @@ powershell -ExecutionPolicy Bypass -File .\Client\NativeNet\build_windows.ps1
 
 - 已实现：登录、灵魂档案初始化、世界列表、第一世角色创建、入口票据申请。
 - 已实现：Godot 原生 ENet 连接、ClientHello、ServerWelcome / ServerReject 解析和心跳。
-- 尚未实现：玩家实体场景、服务器权威移动、EntitySnapshot、AOI、断线持久化与重连。
-- 当前收到 ServerWelcome 只代表网络身份握手成功，尚未进入可操作的游戏地图。
+- 已实现：青云人界第三人称测试场景、服务器权威水平移动、基础跳跃/重力、20Hz EntitySnapshot 和远端玩家占位实体。
+- 尚未实现：服务端地形碰撞/寻路、AOI、断线持久化与重连。
+- 当前收到 ServerWelcome 后进入可操作的程序化测试地图；这不是最终游戏地图或角色美术。
 - 不要使用 Godot 内置 MultiplayerAPI 直接连接当前 C++ 世界服；它的 RPC wire protocol 与项目自定义帧协议不同。
 
 
@@ -52,7 +53,7 @@ powershell -ExecutionPolicy Bypass -File .\Client\NativeNet\build_windows.ps1
 - 鼠标：旋转第三人称视角
 - ESC：释放鼠标；点击窗口重新捕获
 
-当前角色是用于验证镜头、场景和输入的程序化占位模型，不代表最终角色美术。移动暂时在客户端本地执行，下一阶段将改为发送输入意图，由 WorldServer 计算位置并广播实体快照。
+当前角色是用于验证镜头、场景和输入的程序化占位模型，不代表最终角色美术。移动和跳跃由客户端发送意图，WorldServer 计算权威位置并广播实体快照。
 
 
 ## 青云人界联机移动原型
@@ -63,4 +64,4 @@ powershell -ExecutionPolicy Bypass -File .\Client\NativeNet\build_windows.ps1
 - WorldServer 对输入做有限值检查、方向归一化、速度限制和地图边界限制；跳跃、重力和地面高度由服务器计算，并以 20Hz 广播权威实体快照。
 - 客户端根据快照插值本地角色和其他在线角色。
 
-当前仍是验证网络与移动闭环的原型：尚未实现地形碰撞/寻路、跳跃与重力、技能战斗、AOI 分区、掉线重连和角色位置持久化。不要将其视为最终战斗或物理系统。
+当前仍是验证网络与移动闭环的原型：尚未实现服务端地形碰撞/寻路、技能战斗、AOI 分区、掉线重连和角色位置持久化。不要将其视为最终战斗或物理系统。
