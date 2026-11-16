@@ -96,6 +96,9 @@ func _build_ui() -> void:
 	cultivation_preview.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	cultivation_preview.add_theme_color_override("font_color", Color("#aab6cc"))
 	content_box.add_child(cultivation_preview)
+	var world_label := Label.new()
+	world_label.text = "出生世界（当前联调阶段仅开放：青云人界）"
+	content_box.add_child(world_label)
 	world_select = OptionButton.new()
 	world_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content_box.add_child(world_select)
@@ -259,11 +262,19 @@ func _on_login_pressed() -> void:
 func _populate_worlds() -> void:
 	world_select.clear()
 	for world in worlds:
-		if world is Dictionary:
-			world_select.add_item(str(world.get("name", world.get("id", "未知世界"))))
-			world_select.set_item_metadata(world_select.item_count - 1, str(world.get("id", "")))
+		if not world is Dictionary:
+			continue
+		var world_id := str(world.get("id", ""))
+		# P0 currently deploys one authoritative instance; do not offer worlds
+		# that have no matching live WorldServer yet.
+		if world_id != "qingyun_human":
+			continue
+		world_select.add_item(str(world.get("name", world_id)))
+		world_select.set_item_metadata(world_select.item_count - 1, world_id)
 	if world_select.item_count > 0:
 		world_select.select(0)
+	else:
+		_set_status("当前没有已部署的可进入世界服务器，请先启动青云人界 WorldServer 并确认心跳成功。")
 
 func _populate_cultivation_races() -> void:
 	race_select.clear()
