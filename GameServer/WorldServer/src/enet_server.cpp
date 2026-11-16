@@ -26,6 +26,8 @@ constexpr auto kSnapshotInterval = std::chrono::milliseconds(50);
 constexpr auto kInputTimeout = std::chrono::milliseconds(500);
 // The client sends at 20 Hz. Accept modest jitter, but cap command processing at 100 Hz.
 constexpr auto kMinimumInputInterval = std::chrono::milliseconds(10);
+constexpr auto kHeartbeatInterval = std::chrono::seconds(10);
+constexpr auto kHeartbeatRetryInterval = std::chrono::seconds(5);
 
 struct PlayerState {
     std::string character_id;
@@ -47,6 +49,57 @@ std::size_t collect_response(char* data, std::size_t size, std::size_t count, vo
     const auto bytes = size * count;
     static_cast<std::string*>(user)->append(data, bytes);
     return bytes;
+}
+
+bool send_heartbeat(const ServerConfig& config, std::size_t current_players,
+                    const std::string& status, std::string& error) {
+    CURL* curl = curl_easy_init();
+    if (curl == nullptr) { error = "could not initialize heartbeat HTTP client"; return false; }
+
+    const std::string url = config.backend_url + "/api/v1/servers/heartbeat";
+    const std::string body = Json{
+        {"node_key", config.node_key},
+        {"host", config.advertise_host},
+        {"udp_port", config.port},
+        {"region", config.region},
+        {"capacity", config.capacity},
+        {"current_players", current_players},
+        {"world_id", config.world_id},
+        {"instance_key", config.instance_key},
+        {"status", status}
+    }.dump();
+    std::string response;
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    const std::string auth_header = "X-World-Server-Key: " + config.api_key;
+    headers = curl_slist_append(headers, auth_header.c_str());
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_POST, 1L);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body.size()));
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, collect_response);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 3000L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 5000L);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+
+    const auto result = curl_easy_perform(curl);
+    long http_status = 0;
+    if (result == CURLE_OK) curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+
+    if (result != CURLE_OK) {
+        error = std::string("backend heartbeat request failed: ") + curl_easy_strerror(result);
+        return false;
+    }
+    if (http_status != 200) {
+        error = "backend heartbeat rejected (HTTP " + std::to_string(http_status) + ")";
+        return false;
+    }
+    return true;
 }
 
 bool redeem_ticket(const ServerConfig& config, const std::string& ticket, Json& snapshot, std::string& error) {
@@ -116,8 +169,22 @@ struct EnetServer::Impl {
     ENetHost* host{};
     std::unordered_map<ENetPeer*, PlayerState> players;
     Clock::time_point last_snapshot{Clock::now()};
+    Clock::time_point next_heartbeat_at{};
 
     explicit Impl(ServerConfig value) : config(std::move(value)) {}
+
+    void update_heartbeat() {
+        const auto now = Clock::now();
+        if (now < next_heartbeat_at) return;
+        std::string error;
+        if (send_heartbeat(config, players.size(), "ready", error)) {
+            next_heartbeat_at = now + kHeartbeatInterval;
+            std::cout << "WorldServer heartbeat accepted; players=" << players.size() << '\\n';
+        } else {
+            next_heartbeat_at = now + kHeartbeatRetryInterval;
+            std::cerr << "WorldServer heartbeat failed: " << error << '\\n';
+        }
+    }
 
     void broadcast_snapshot() {
         if (players.empty()) return;
@@ -304,10 +371,15 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
         }
     }
     impl_->tick_world();
+    impl_->update_heartbeat();
 }
 
 void EnetServer::stop() {
     if (impl_ != nullptr && impl_->host != nullptr) {
+        std::string heartbeat_error;
+        if (!send_heartbeat(impl_->config, impl_->players.size(), "draining", heartbeat_error)) {
+            std::cerr << "WorldServer draining heartbeat failed: " << heartbeat_error << '\\n';
+        }
         enet_host_destroy(impl_->host);
         impl_->host = nullptr;
         curl_global_cleanup();
