@@ -30,6 +30,8 @@ constexpr auto kSnapshotInterval = std::chrono::milliseconds(50);
 constexpr auto kInputTimeout = std::chrono::milliseconds(500);
 // The client sends at 20 Hz. Accept modest jitter, but cap command processing at 100 Hz.
 constexpr auto kMinimumInputInterval = std::chrono::milliseconds(10);
+constexpr float kInterestRadius = 80.0F;
+constexpr float kInterestRadiusSquared = kInterestRadius * kInterestRadius;
 constexpr auto kHeartbeatInterval = std::chrono::seconds(10);
 constexpr auto kHeartbeatRetryInterval = std::chrono::seconds(5);
 
@@ -260,27 +262,38 @@ struct EnetServer::Impl {
 
     void broadcast_snapshot() {
         if (players.empty()) return;
-        Json entities = Json::array();
-        for (const auto& [peer, player] : players) {
-            (void)peer;
-            entities.push_back({
-                {"character_id", player.character_id},
-                {"name", player.name},
-                {"x", player.x}, {"y", player.y}, {"z", player.z},
-                {"yaw", player.yaw},
-                {"last_input_sequence", player.last_input_sequence}
-            });
-        }
-        const auto payload_text = Json{{"entities", std::move(entities)}}.dump();
-        const auto* begin = reinterpret_cast<const std::uint8_t*>(payload_text.data());
-        const auto frame = honghuang::protocol::encode_frame(
-            honghuang::protocol::MessageType::EntitySnapshot,
-            std::span<const std::uint8_t>(begin, payload_text.size()));
-        if (frame.empty()) return;
-        for (const auto& [peer, player] : players) {
-            (void)player;
+
+        // Build a per-player interest snapshot. Each player always receives their own
+        // authoritative entity plus nearby players; distant entities are omitted and
+        // naturally disappear from the client's next snapshot.
+        for (const auto& [recipient_peer, recipient] : players) {
+            Json entities = Json::array();
+            for (const auto& [entity_peer, entity] : players) {
+                (void)entity_peer;
+                const float dx = entity.x - recipient.x;
+                const float dz = entity.z - recipient.z;
+                if (entity.character_id != recipient.character_id &&
+                    dx * dx + dz * dz > kInterestRadiusSquared) {
+                    continue;
+                }
+                entities.push_back({
+                    {"character_id", entity.character_id},
+                    {"name", entity.name},
+                    {"x", entity.x}, {"y", entity.y}, {"z", entity.z},
+                    {"yaw", entity.yaw},
+                    {"last_input_sequence", entity.last_input_sequence}
+                });
+            }
+            const auto payload_text = Json{{"entities", std::move(entities)}}.dump();
+            const auto* begin = reinterpret_cast<const std::uint8_t*>(payload_text.data());
+            const auto frame = honghuang::protocol::encode_frame(
+                honghuang::protocol::MessageType::EntitySnapshot,
+                std::span<const std::uint8_t>(begin, payload_text.size()));
+            if (frame.empty()) continue;
             auto* packet = enet_packet_create(frame.data(), frame.size(), 0);
-            if (packet != nullptr && enet_peer_send(peer, 1, packet) != 0) enet_packet_destroy(packet);
+            if (packet != nullptr && enet_peer_send(recipient_peer, 1, packet) != 0) {
+                enet_packet_destroy(packet);
+            }
         }
     }
 
