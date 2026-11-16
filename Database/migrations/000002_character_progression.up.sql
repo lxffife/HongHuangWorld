@@ -81,6 +81,33 @@ INSERT INTO race_cultivation_systems (race_id, system_id, is_default) VALUES
     ('dragon', 'dragon_blood_path', TRUE)
 ON CONFLICT (race_id, system_id) DO NOTHING;
 
+-- Preserve any legacy race identifiers. Unknown legacy races temporarily
+-- use the human cultivation path until their dedicated system is designed.
+INSERT INTO race_definitions (id, name, description)
+SELECT DISTINCT c.race_id, LEFT(c.race_id, 48), 'Legacy race; cultivation path defaults to the human path'
+FROM characters c
+WHERE c.race_id IS NOT NULL AND c.race_id <> ''
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO race_cultivation_systems (race_id, system_id, is_default)
+SELECT race.id, 'human_immortal_path', TRUE
+FROM race_definitions race
+WHERE NOT EXISTS (
+    SELECT 1 FROM race_cultivation_systems existing
+    WHERE existing.race_id = race.id AND existing.is_default
+)
+ON CONFLICT (race_id, system_id) DO NOTHING;
+
+UPDATE characters
+SET race_id = 'human'
+WHERE race_id IS NULL OR race_id = '';
+
+ALTER TABLE characters
+    ALTER COLUMN race_id SET NOT NULL;
+ALTER TABLE characters
+    ADD CONSTRAINT fk_characters_race_definition
+    FOREIGN KEY (race_id) REFERENCES race_definitions(id);
+
 INSERT INTO power_tiers (id, tier_order, name, description) VALUES
     ('tier_1', 1, '初入修行', '开始超越凡俗的综合实力参考层级'),
     ('tier_2', 2, '脱凡立基', '形成稳定的超凡力量体系'),
