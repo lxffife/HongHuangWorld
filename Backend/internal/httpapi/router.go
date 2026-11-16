@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/liflife/HongHuangWorld/Backend/internal/auth"
+	"github.com/liflife/HongHuangWorld/Backend/internal/character"
 	"github.com/liflife/HongHuangWorld/Backend/internal/soul"
 	"github.com/liflife/HongHuangWorld/Backend/internal/world"
 )
@@ -51,6 +52,9 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("GET /api/v1/souls/current", souls.current)
 		worlds := &worldHandlers{service: world.NewService(db), logger: logger}
 		mux.HandleFunc("GET /api/v1/worlds", worlds.list)
+		characters := &characterHandlers{authService: auth.NewService(db), characterService: character.NewService(db), logger: logger}
+		mux.HandleFunc("POST /api/v1/characters/first-life", characters.createFirstLife)
+		mux.HandleFunc("GET /api/v1/characters/current", characters.current)
 	} else {
 		unavailable := func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
@@ -61,6 +65,8 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/souls", unavailable)
 		mux.HandleFunc("GET /api/v1/souls/current", unavailable)
 		mux.HandleFunc("GET /api/v1/worlds", unavailable)
+		mux.HandleFunc("POST /api/v1/characters/first-life", unavailable)
+		mux.HandleFunc("GET /api/v1/characters/current", unavailable)
 	}
 
 	return requestLogger(logger, mux)
