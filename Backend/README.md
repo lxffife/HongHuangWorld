@@ -19,6 +19,8 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 - `POST /api/v1/characters/first-life`：为当前灵魂创建第一世肉身；根据 race_id 选择种族默认修炼体系，并在同一事务中初始化属性和修炼进度。未传种族时默认人族。
 - `GET /api/v1/characters/current`：读取当前肉身角色。
 - `GET /api/v1/characters/current/status`：读取当前角色属性、经验、修为、种族修炼体系、境界阶段、下一阶段/境界修为门槛、跨种族实力参考层级和角色血脉（品阶、纯度、觉醒阶段、主血脉标记）。
+- `POST /api/v1/characters/current/bloodlines/awaken`：请求当前角色已拥有的一条血脉觉醒；服务端按数据表校验下一阶段的境界和修为消耗，原子提升觉醒阶段/纯度并扣除修为。
+- `POST /api/v1/characters/current/techniques/train`：修炼角色已拥有的功法；按功法品阶和训练点数消耗修为、增加熟练度，服务端校验持有关系、境界和余额。
 - `POST /api/v1/characters/current/breakthrough`：服务端根据累计修为推进一个小境界；达到当前境界圆满并满足下一境界门槛后，进入该修炼体系的下一境界。事务锁定当前角色和成长记录，客户端不能直接提交境界或阶段数值。
 - `POST /api/v1/characters/current/attributes/allocate`：将已获得的属性点分配到力量、体质、敏捷、灵力或根骨；在事务中锁定当前角色和成长记录、校验点数余额并更新衍生属性。
 - `POST /api/v1/servers/characters/rewards`：可信世界节点使用服务端密钥和节点标识提交经验、修为及属性点奖励；要求角色当前有该节点上的活跃会话，并使用事件 ID 防止重试重复发奖。
@@ -48,7 +50,7 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 ## 尚待完成
 
 - 属性点获取节奏、经验/修为曲线和各体系独立突破规则。
-- 种族成长权重、血脉与功法目录及 API 已建立；实际属性升级结算、血脉觉醒/融合、功法学习/修炼/装备和战斗效果仍待实现。
+- 种族成长权重、血脉与功法目录及 API 已建立；实际属性升级结算、血脉融合、额外功法传承/学习、功法装备和战斗效果仍待实现。角色创建时会自动获得本种族的一项入门功法；更多功法必须由后续可信任务/掉落系统授予。
 - 各种族独立的突破仪式、突破失败/成功效果、瓶颈条件和境界压制规则。
 - 怪物/NPC、战斗、掉落、背包装备与角色位置持久化。
 - 服务器心跳过期后的自动摘除与后台监控。
@@ -59,7 +61,7 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 ## 本地运行
 
 1. 按 `Deployment/README.md` 启动 PostgreSQL。
-2. 按编号执行 `Database/migrations/` 中全部 `.up.sql` 迁移；当前需要依次执行 `000001` 和 `000002`。
+2. 按编号执行 `Database/migrations/` 中全部 `.up.sql` 迁移；当前需要依次执行 `000001`、`000002`、`000003` 和 `000004`。
 3. 在 `Deployment/.env` 配置 `DATABASE_URL` 和 `HTTP_ADDR`。
 4. Windows PowerShell 执行 `../Deployment/start-backend.ps1`；或在本目录执行 `go test ./...`、`go run ./cmd/api`（需先设置环境变量）。
 
