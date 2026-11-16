@@ -10,7 +10,7 @@ import (
 )
 
 func TestHealth(t *testing.T) {
-	handler := NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	handler := NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -23,5 +23,15 @@ func TestHealth(t *testing.T) {
 	}
 	if !strings.Contains(res.Body.String(), `"status":"ok"`) {
 		t.Fatalf("unexpected health response: %s", res.Body.String())
+	}
+}
+
+func TestReadyWithoutDatabase(t *testing.T) {
+	handler := NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, res.Code)
 	}
 }
