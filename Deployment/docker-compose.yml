@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    container_name: honghuang-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-honghuang}
+      POSTGRES_USER: ${POSTGRES_USER:-honghuang}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - honghuang-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-honghuang} -d ${POSTGRES_DB:-honghuang}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4.2-alpine
+    container_name: honghuang-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - honghuang-redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  nats:
+    image: nats:2.11.8-alpine
+    container_name: honghuang-nats
+    restart: unless-stopped
+    command: ["-js", "-m", "8222"]
+    ports:
+      - "${NATS_PORT:-4222}:4222"
+      - "${NATS_MONITOR_PORT:-8222}:8222"
+    volumes:
+      - honghuang-nats-data:/data
+
+volumes:
+  honghuang-postgres-data:
+  honghuang-redis-data:
+  honghuang-nats-data:
