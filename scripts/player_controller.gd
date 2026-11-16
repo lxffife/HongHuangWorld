@@ -12,6 +12,8 @@ var camera: Camera3D
 var visual: MeshInstance3D
 var yaw := 0.0
 var pitch := -0.18
+var input_send_accumulator := 0.0
+var input_sequence := 0
 
 func _ready() -> void:
 	_build_player()
@@ -60,7 +62,6 @@ func _ensure_input_actions() -> void:
 	_add_key_action("move_back", KEY_S)
 	_add_key_action("move_left", KEY_A)
 	_add_key_action("move_right", KEY_D)
-	_add_key_action("jump", KEY_SPACE)
 	_add_key_action("release_mouse", KEY_ESCAPE)
 
 func _add_key_action(action: String, keycode: int) -> void:
@@ -86,16 +87,16 @@ func _physics_process(delta: float) -> void:
 	var direction := camera_basis.x * input_2d.x + camera_basis.z * input_2d.y
 	direction.y = 0.0
 	direction = direction.normalized()
-	var target_velocity := direction * move_speed
-	velocity.x = move_toward(velocity.x, target_velocity.x, acceleration * delta)
-	velocity.z = move_toward(velocity.z, target_velocity.z, acceleration * delta)
-	if not is_on_floor():
-		velocity.y -= gravity * delta
-	elif Input.is_action_just_pressed("jump"):
-		velocity.y = jump_velocity
-	else:
-		velocity.y = 0.0
-	move_and_slide()
 	if direction.length_squared() > 0.001:
 		var target_yaw := atan2(-direction.x, -direction.z)
 		visual.rotation.y = lerp_angle(visual.rotation.y, target_yaw, 12.0 * delta)
+
+	input_send_accumulator += delta
+	if input_send_accumulator >= 0.05:
+		input_send_accumulator = 0.0
+		var network := HHSession.world_network
+		if network != null and network.is_world_ready():
+			input_sequence += 1
+			var send_error: Error = network.send_input(direction.x, direction.z, input_sequence)
+			if send_error != OK:
+				push_warning("World movement input send failed: " + str(send_error))
