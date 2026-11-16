@@ -414,7 +414,9 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                             }
                         }
                         impl_->players.emplace(event.peer, std::move(player));
-                        send_json(event.peer, honghuang::protocol::MessageType::ServerWelcome, snapshot);
+                        Json client_welcome = snapshot;
+                        client_welcome.erase("session_id");
+                        send_json(event.peer, honghuang::protocol::MessageType::ServerWelcome, client_welcome);
                         std::cout << "Authenticated character entered world: "
                                   << snapshot.value("character_id", std::string{}) << '\n';
                     }
