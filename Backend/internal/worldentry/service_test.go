@@ -33,3 +33,30 @@ func TestSaveAndCloseRejectsInvalidSnapshots(t *testing.T) {
 		})
 	}
 }
+
+
+func TestSavePositionRejectsInvalidSnapshots(t *testing.T) {
+	service := NewService(nil)
+	valid := SessionSnapshot{
+		NodeKey: "node-1", SessionID: "00000000-0000-4000-8000-000000000001",
+		CharacterID: "00000000-0000-4000-8000-000000000002",
+		PositionX: 1, PositionY: 0, PositionZ: -1, RotationY: 0,
+	}
+	cases := []struct {
+		name  string
+		input SessionSnapshot
+	}{
+		{name: "missing session", input: func() SessionSnapshot { v := valid; v.SessionID = ""; return v }()},
+		{name: "non-finite z", input: func() SessionSnapshot { v := valid; v.PositionZ = math.Inf(1); return v }()},
+		{name: "outside horizontal bounds", input: func() SessionSnapshot { v := valid; v.PositionZ = -101; return v }()},
+		{name: "height exceeds world bounds", input: func() SessionSnapshot { v := valid; v.PositionY = 101; return v }()},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			err := service.SavePosition(context.Background(), test.input)
+			if !errors.Is(err, ErrInvalidSessionSnapshot) {
+				t.Fatalf("expected ErrInvalidSessionSnapshot, got %v", err)
+			}
+		})
+	}
+}
