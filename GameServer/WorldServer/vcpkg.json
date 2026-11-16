@@ -1,0 +1,9 @@
+{
+  "name": "honghuang-world-server",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "enet",
+    "curl",
+    "nlohmann-json"
+  ]
+}
