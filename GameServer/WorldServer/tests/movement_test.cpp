@@ -17,6 +17,11 @@ int main() {
     z = 0.0F;
     assert(!normalize_direction(x, z));
 
+    x = 3.0e38F;
+    z = 3.0e38F;
+    assert(normalize_direction(x, z));
+    assert(std::abs(std::hypot(x, z) - 1.0F) < 0.0001F);
+
     float world_x = 99.9F;
     float world_z = 0.0F;
     integrate_horizontal(world_x, world_z, 1.0F, 0.0F, 0.1F);
