@@ -543,6 +543,140 @@ func (s *Service) CultivationCatalog(ctx context.Context) ([]CultivationOption, 
 	return catalog, nil
 }
 
+
+type RaceGrowthProfile struct {
+	RaceID string `json:"race_id"`
+	StrengthWeight int `json:"strength_weight"`
+	ConstitutionWeight int `json:"constitution_weight"`
+	AgilityWeight int `json:"agility_weight"`
+	SpiritWeight int `json:"spirit_weight"`
+	VitalityWeight int `json:"vitality_weight"`
+}
+
+type BloodlineModifier struct {
+	Attribute string `json:"attribute"`
+	ModifierBasisPoints int `json:"modifier_basis_points"`
+}
+
+type BloodlineOption struct {
+	ID string `json:"id"`
+	RaceID string `json:"race_id"`
+	Name string `json:"name"`
+	Grade int `json:"grade"`
+	BasePurity int `json:"base_purity"`
+	IsDefault bool `json:"is_default"`
+	Description string `json:"description"`
+	Modifiers []BloodlineModifier `json:"modifiers"`
+}
+
+type TechniqueCompatibility struct {
+	RaceID string `json:"race_id"`
+	Compatibility string `json:"compatibility"`
+	EfficiencyBasisPoints int `json:"efficiency_basis_points"`
+	UnlockCondition string `json:"unlock_condition"`
+}
+
+type TechniqueOption struct {
+	ID string `json:"id"`
+	SystemID string `json:"system_id"`
+	SystemName string `json:"system_name"`
+	Name string `json:"name"`
+	Type string `json:"type"`
+	Grade int `json:"grade"`
+	MinRealmOrder int `json:"min_realm_order"`
+	CrossRace bool `json:"cross_race"`
+	Description string `json:"description"`
+	Compatibility []TechniqueCompatibility `json:"compatibility"`
+}
+
+func (s *Service) RaceGrowthCatalog(ctx context.Context) ([]RaceGrowthProfile, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT race_id, strength_weight, constitution_weight, agility_weight, spirit_weight, vitality_weight
+		 FROM race_attribute_growth_profiles ORDER BY race_id`)
+	if err != nil { return nil, fmt.Errorf("query race growth profiles: %w", err) }
+	defer rows.Close()
+	result := make([]RaceGrowthProfile, 0, 4)
+	for rows.Next() {
+		var item RaceGrowthProfile
+		if err := rows.Scan(&item.RaceID, &item.StrengthWeight, &item.ConstitutionWeight, &item.AgilityWeight, &item.SpiritWeight, &item.VitalityWeight); err != nil {
+			return nil, fmt.Errorf("scan race growth profile: %w", err)
+		}
+		result = append(result, item)
+	}
+	if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate race growth profiles: %w", err) }
+	return result, nil
+}
+
+func (s *Service) BloodlineCatalog(ctx context.Context) ([]BloodlineOption, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT bloodline.id, bloodline.race_id, bloodline.name, bloodline.grade,
+		        bloodline.base_purity, bloodline.is_default, bloodline.description,
+		        modifier.attribute_key, modifier.modifier_basis_points
+		 FROM bloodline_definitions bloodline
+		 LEFT JOIN bloodline_attribute_modifiers modifier ON modifier.bloodline_id = bloodline.id
+		 ORDER BY bloodline.race_id, bloodline.grade, bloodline.id, modifier.attribute_key`)
+	if err != nil { return nil, fmt.Errorf("query bloodline catalog: %w", err) }
+	defer rows.Close()
+	result := make([]BloodlineOption, 0, 4)
+	indexes := make(map[string]int)
+	for rows.Next() {
+		var item BloodlineOption
+		var attribute sql.NullString
+		var modifier sql.NullInt64
+		if err := rows.Scan(&item.ID, &item.RaceID, &item.Name, &item.Grade, &item.BasePurity, &item.IsDefault, &item.Description, &attribute, &modifier); err != nil {
+			return nil, fmt.Errorf("scan bloodline catalog: %w", err)
+		}
+		index, exists := indexes[item.ID]
+		if !exists {
+			index = len(result)
+			indexes[item.ID] = index
+			item.Modifiers = make([]BloodlineModifier, 0, 3)
+			result = append(result, item)
+		}
+		if attribute.Valid && modifier.Valid {
+			result[index].Modifiers = append(result[index].Modifiers, BloodlineModifier{Attribute: attribute.String, ModifierBasisPoints: int(modifier.Int64)})
+		}
+	}
+	if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate bloodline catalog: %w", err) }
+	return result, nil
+}
+
+func (s *Service) TechniqueCatalog(ctx context.Context) ([]TechniqueOption, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT technique.id, technique.system_id, system.name, technique.name,
+		        technique.technique_type, technique.grade, technique.min_realm_order,
+		        technique.is_cross_race, technique.description,
+		        compatibility.race_id, compatibility.compatibility,
+		        compatibility.efficiency_basis_points, compatibility.unlock_condition
+		 FROM cultivation_techniques technique
+		 JOIN cultivation_systems system ON system.id = technique.system_id
+		 JOIN technique_race_compatibility compatibility ON compatibility.technique_id = technique.id
+		 ORDER BY technique.system_id, technique.grade, technique.id, compatibility.race_id`)
+	if err != nil { return nil, fmt.Errorf("query technique catalog: %w", err) }
+	defer rows.Close()
+	result := make([]TechniqueOption, 0, 12)
+	indexes := make(map[string]int)
+	for rows.Next() {
+		var item TechniqueOption
+		var compatibility TechniqueCompatibility
+		if err := rows.Scan(&item.ID, &item.SystemID, &item.SystemName, &item.Name, &item.Type,
+			&item.Grade, &item.MinRealmOrder, &item.CrossRace, &item.Description,
+			&compatibility.RaceID, &compatibility.Compatibility, &compatibility.EfficiencyBasisPoints, &compatibility.UnlockCondition); err != nil {
+			return nil, fmt.Errorf("scan technique catalog: %w", err)
+		}
+		index, exists := indexes[item.ID]
+		if !exists {
+			index = len(result)
+			indexes[item.ID] = index
+			item.Compatibility = make([]TechniqueCompatibility, 0, 4)
+			result = append(result, item)
+		}
+		result[index].Compatibility = append(result[index].Compatibility, compatibility)
+	}
+	if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate technique catalog: %w", err) }
+	return result, nil
+}
+
 func (s *Service) CurrentStatus(ctx context.Context, accountID string) (Status, error) {
 	var result Status
 	var race sql.NullString
