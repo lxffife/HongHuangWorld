@@ -329,7 +329,7 @@ struct EnetServer::Impl {
                         revoked_sessions.insert(session_id);
                         continue;
                     }
-                    std::cerr << "Periodic player snapshot failed: " << error << '\\n';
+                    std::cerr << "Periodic player snapshot failed: " << error << '\n';
                     std::lock_guard lock(persistence_mutex);
                     if (!persistence_stop_requested && !pending_snapshots.contains(session_id)) {
                         pending_snapshots.emplace(session_id, player);
@@ -371,7 +371,7 @@ struct EnetServer::Impl {
         for (auto it = players.begin(); it != players.end();) {
             if (revoked.contains(it->second.session_id)) {
                 std::cout << "Closing stale world session for character: "
-                          << it->second.character_id << '\\n';
+                          << it->second.character_id << '\n';
                 enet_peer_disconnect_later(it->first, 7);
                 it = players.erase(it);
             } else {
