@@ -26,7 +26,7 @@ CREATE INDEX idx_account_sessions_expiry ON account_sessions(expires_at);
 
 CREATE TABLE souls (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    account_id UUID NOT NULL UNIQUE REFERENCES accounts(id) ON DELETE CASCADE,
     soul_name VARCHAR(48) NOT NULL,
     soul_origin VARCHAR(64),
     karma BIGINT NOT NULL DEFAULT 0,
