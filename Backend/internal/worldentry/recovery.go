@@ -2,7 +2,6 @@ package worldentry
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 )
 
@@ -48,6 +47,3 @@ func (s *Service) RecoverOrphanedSessions(ctx context.Context) (int64, error) {
 	return closed, nil
 }
 
-// Keep the database/sql import explicit in this file's API contract; the
-// service owns the shared database connection pool.
-var _ *sql.DB
