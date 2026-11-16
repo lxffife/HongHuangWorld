@@ -177,6 +177,12 @@ func (s *Service) CreateFirstLife(ctx context.Context, accountID, name, worldID,
 	if rows, err := bloodlineResult.RowsAffected(); err != nil || rows != 1 {
 		return Character{}, fmt.Errorf("initialize character bloodline: expected one default bloodline, inserted %d: %v", rows, err)
 	}
+	starterResult, err := tx.ExecContext(ctx, `INSERT INTO character_techniques (character_id, technique_id, proficiency, is_equipped)
+		 SELECT $1, technique_id, 0, TRUE FROM race_starter_techniques WHERE race_id=$2`, result.ID, raceID)
+	if err != nil { return Character{}, fmt.Errorf("initialize starter technique: %w", err) }
+	if rows, err := starterResult.RowsAffected(); err != nil || rows != 1 {
+		return Character{}, fmt.Errorf("initialize starter technique: expected one starter technique, inserted %d: %v", rows, err)
+	}
 	if _, err := tx.ExecContext(ctx, `UPDATE souls SET current_character_id = $1, updated_at = now() WHERE id = $2`, result.ID, soulID); err != nil {
 		return Character{}, fmt.Errorf("set current character: %w", err)
 	}
@@ -796,4 +802,99 @@ func (s *Service) CurrentStatus(ctx context.Context, accountID string) (Status, 
 		return Status{}, fmt.Errorf("iterate current character bloodlines: %w", err)
 	}
 	return result, nil
+}
+
+type BloodlineAwakeningResult struct {
+	BloodlineID string `json:"bloodline_id"`
+	AwakeningStage int `json:"awakening_stage"`
+	Purity int `json:"purity"`
+	CultivationRemaining int64 `json:"cultivation_remaining"`
+}
+
+var (
+	ErrBloodlineNotOwned = errors.New("bloodline is not owned by current character")
+	ErrBloodlineMaxAwakening = errors.New("bloodline has reached maximum awakening")
+	ErrAwakeningRequirement = errors.New("bloodline awakening requirements are not met")
+	ErrInvalidTechniqueTraining = errors.New("invalid technique training points")
+	ErrTechniqueNotOwned = errors.New("technique is not owned by current character")
+)
+
+func (s *Service) AwakenBloodline(ctx context.Context, accountID, bloodlineID string) (BloodlineAwakeningResult, error) {
+	bloodlineID = strings.TrimSpace(bloodlineID)
+	if bloodlineID == "" || len(bloodlineID) > 96 {
+		return BloodlineAwakeningResult{}, ErrBloodlineNotOwned
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil { return BloodlineAwakeningResult{}, fmt.Errorf("begin bloodline awakening: %w", err) }
+	defer tx.Rollback()
+	var characterID string
+	var stage, purity, realmOrder int
+	var cultivation int64
+	err = tx.QueryRowContext(ctx, `SELECT c.id::text, cb.awakening_stage, cb.purity, p.realm_order, p.cultivation
+		FROM souls s JOIN characters c ON c.id=s.current_character_id
+		JOIN character_bloodlines cb ON cb.character_id=c.id
+		JOIN character_progression cp ON cp.character_id=c.id
+		JOIN cultivation_realms p ON p.id=cp.realm_id AND p.system_id=cp.system_id
+		WHERE s.account_id=$1 AND c.status='alive' AND cb.bloodline_id=$2
+		FOR UPDATE OF c, cb, cp`, accountID, bloodlineID).Scan(&characterID, &stage, &purity, &realmOrder, &cultivation)
+	if errors.Is(err, sql.ErrNoRows) { return BloodlineAwakeningResult{}, ErrBloodlineNotOwned }
+	if err != nil { return BloodlineAwakeningResult{}, fmt.Errorf("load bloodline awakening state: %w", err) }
+	if stage >= 9 { return BloodlineAwakeningResult{}, ErrBloodlineMaxAwakening }
+	var minRealm int
+	var cost int64
+	var gain int
+	err = tx.QueryRowContext(ctx, `SELECT min_realm_order, cultivation_cost, purity_gain FROM bloodline_awakening_rules WHERE target_stage=$1`, stage+1).Scan(&minRealm, &cost, &gain)
+	if err != nil { return BloodlineAwakeningResult{}, fmt.Errorf("load bloodline awakening rule: %w", err) }
+	if realmOrder < minRealm || cultivation < cost { return BloodlineAwakeningResult{}, ErrAwakeningRequirement }
+	newPurity := purity + gain
+	if newPurity > 10000 { newPurity = 10000 }
+	_, err = tx.ExecContext(ctx, `UPDATE character_bloodlines SET awakening_stage=$1, purity=$2 WHERE character_id=$3 AND bloodline_id=$4`, stage+1, newPurity, characterID, bloodlineID)
+	if err != nil { return BloodlineAwakeningResult{}, fmt.Errorf("update bloodline awakening: %w", err) }
+	remaining := cultivation - cost
+	_, err = tx.ExecContext(ctx, `UPDATE character_progression SET cultivation=$1, updated_at=now() WHERE character_id=$2`, remaining, characterID)
+	if err != nil { return BloodlineAwakeningResult{}, fmt.Errorf("consume awakening cultivation: %w", err) }
+	if err := tx.Commit(); err != nil { return BloodlineAwakeningResult{}, fmt.Errorf("commit bloodline awakening: %w", err) }
+	return BloodlineAwakeningResult{BloodlineID:bloodlineID, AwakeningStage:stage+1, Purity:newPurity, CultivationRemaining:remaining}, nil
+}
+
+type TechniqueTrainingResult struct {
+	TechniqueID string `json:"technique_id"`
+	Proficiency int64 `json:"proficiency"`
+	CultivationRemaining int64 `json:"cultivation_remaining"`
+}
+
+func (s *Service) TrainTechnique(ctx context.Context, accountID, techniqueID string, points int) (TechniqueTrainingResult, error) {
+	techniqueID = strings.TrimSpace(techniqueID)
+	if techniqueID == "" || len(techniqueID) > 96 || points < 1 || points > 100 {
+		return TechniqueTrainingResult{}, ErrInvalidTechniqueTraining
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil { return TechniqueTrainingResult{}, fmt.Errorf("begin technique training: %w", err) }
+	defer tx.Rollback()
+	var characterID string
+	var grade, minRealm, currentRealm int
+	var proficiency, cultivation int64
+	err = tx.QueryRowContext(ctx, `SELECT c.id::text, t.grade, t.min_realm_order, r.realm_order, ct.proficiency, p.cultivation
+		FROM souls s JOIN characters c ON c.id=s.current_character_id
+		JOIN character_progression p ON p.character_id=c.id
+		JOIN cultivation_realms r ON r.id=p.realm_id AND r.system_id=p.system_id
+		JOIN character_techniques ct ON ct.character_id=c.id AND ct.technique_id=$2
+		JOIN cultivation_techniques t ON t.id=ct.technique_id
+		WHERE s.account_id=$1 AND c.status='alive'
+		FOR UPDATE OF c, p, ct`, accountID, techniqueID).Scan(&characterID, &grade, &minRealm, &currentRealm, &proficiency, &cultivation)
+	if errors.Is(err, sql.ErrNoRows) { return TechniqueTrainingResult{}, ErrTechniqueNotOwned }
+	if err != nil { return TechniqueTrainingResult{}, fmt.Errorf("load technique training state: %w", err) }
+	if currentRealm < minRealm { return TechniqueTrainingResult{}, ErrAwakeningRequirement }
+	cost := int64(points) * int64(grade) * 100
+	if cultivation < cost { return TechniqueTrainingResult{}, ErrInsufficientCultivation }
+	newProficiency := proficiency + int64(points)*100
+	remaining := cultivation - cost
+	if _, err := tx.ExecContext(ctx, `UPDATE character_techniques SET proficiency=$1 WHERE character_id=$2 AND technique_id=$3`, newProficiency, characterID, techniqueID); err != nil {
+		return TechniqueTrainingResult{}, fmt.Errorf("update technique proficiency: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE character_progression SET cultivation=$1, updated_at=now() WHERE character_id=$2`, remaining, characterID); err != nil {
+		return TechniqueTrainingResult{}, fmt.Errorf("consume technique training cultivation: %w", err)
+	}
+	if err := tx.Commit(); err != nil { return TechniqueTrainingResult{}, fmt.Errorf("commit technique training: %w", err) }
+	return TechniqueTrainingResult{TechniqueID:techniqueID, Proficiency:newProficiency, CultivationRemaining:remaining}, nil
 }
