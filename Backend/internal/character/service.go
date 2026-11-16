@@ -224,6 +224,7 @@ func (s *Service) Current(ctx context.Context, accountID string) (Character, err
 
 type Reward struct {
 	EventID        string `json:"event_id"`
+	SessionID      string `json:"session_id"`
 	CharacterID    string `json:"character_id"`
 	Experience     int64  `json:"experience"`
 	Cultivation    int64  `json:"cultivation"`
@@ -234,8 +235,9 @@ type RewardResult struct {
 	Applied bool `json:"applied"`
 }
 
-// ApplyServerReward accepts rewards only from the node hosting the character's
-// active session. A per-node event ID makes retries safe and prevents double grants.
+// ApplyServerReward accepts rewards from the node that hosted the exact session.
+ // A recently closed session is accepted so an asynchronous reward can finish
+ // after a player disconnects. A per-node event ID prevents duplicate grants.
 func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward Reward) (RewardResult, error) {
 	if !validReward(nodeKey, reward) {
 		return RewardResult{}, ErrInvalidReward
@@ -280,9 +282,11 @@ func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward 
 		`SELECT c.id::text
 		 FROM world_sessions ws
 		 JOIN characters c ON c.id = ws.character_id
-		 WHERE ws.server_id = $1 AND c.id = $2::uuid
-		   AND c.status = 'alive' AND ws.session_state = 'active'
-		 FOR UPDATE OF ws, c`, serverID, reward.CharacterID,
+		 WHERE ws.id = $1::uuid AND ws.server_id = $2 AND c.id = $3::uuid
+		   AND c.status = 'alive'
+		   AND (ws.session_state = 'active' OR
+		        (ws.session_state = 'closed' AND ws.updated_at >= now() - INTERVAL '10 minutes'))
+		 FOR UPDATE OF ws, c`, reward.SessionID, serverID, reward.CharacterID,
 	).Scan(&activeCharacterID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RewardResult{}, ErrRewardSession
@@ -333,7 +337,7 @@ func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward 
 }
 
 func validReward(nodeKey string, reward Reward) bool {
-	return nodeKey != "" && validUUID(reward.EventID) && validUUID(reward.CharacterID) &&
+	return nodeKey != "" && validUUID(reward.EventID) && validUUID(reward.SessionID) && validUUID(reward.CharacterID) &&
 		reward.Experience >= 0 && reward.Experience <= 1000000 &&
 		reward.Cultivation >= 0 && reward.Cultivation <= 1000000000 &&
 		reward.AttributePoints >= 0 && reward.AttributePoints <= 1000 &&
