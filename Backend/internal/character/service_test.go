@@ -26,6 +26,7 @@ func TestValidUUID(t *testing.T) {
 func TestValidReward(t *testing.T) {
 	const node = "qingyun-node-01"
 	const eventID = "00000000-0000-4000-8000-000000000001"
+	const sessionID = "00000000-0000-4000-8000-000000000003"
 	const characterID = "00000000-0000-4000-8000-000000000002"
 
 	tests := []struct {
@@ -35,12 +36,12 @@ func TestValidReward(t *testing.T) {
 	}{
 		{
 			name: "experience and cultivation",
-			reward: Reward{EventID: eventID, CharacterID: characterID, Experience: 100, Cultivation: 50},
+			reward: Reward{EventID: eventID, SessionID: sessionID, CharacterID: characterID, Experience: 100, Cultivation: 50},
 			want: true,
 		},
 		{
 			name: "attribute points only",
-			reward: Reward{EventID: eventID, CharacterID: characterID, AttributePoints: 1},
+			reward: Reward{EventID: eventID, SessionID: sessionID, CharacterID: characterID, AttributePoints: 1},
 			want: true,
 		},
 		{
@@ -50,17 +51,17 @@ func TestValidReward(t *testing.T) {
 		},
 		{
 			name: "negative experience",
-			reward: Reward{EventID: eventID, CharacterID: characterID, Experience: -1},
+			reward: Reward{EventID: eventID, SessionID: sessionID, CharacterID: characterID, Experience: -1},
 			want: false,
 		},
 		{
 			name: "experience over cap",
-			reward: Reward{EventID: eventID, CharacterID: characterID, Experience: 1000001},
+			reward: Reward{EventID: eventID, SessionID: sessionID, CharacterID: characterID, Experience: 1000001},
 			want: false,
 		},
 		{
 			name: "too many attribute points",
-			reward: Reward{EventID: eventID, CharacterID: characterID, AttributePoints: 1001},
+			reward: Reward{EventID: eventID, SessionID: sessionID, CharacterID: characterID, AttributePoints: 1001},
 			want: false,
 		},
 		{
@@ -76,7 +77,7 @@ func TestValidReward(t *testing.T) {
 			}
 		})
 	}
-	if validReward("", Reward{EventID: eventID, CharacterID: characterID, Experience: 1}) {
+	if validReward("", Reward{EventID: eventID, SessionID: sessionID, CharacterID: characterID, Experience: 1}) {
 		t.Fatal("validReward accepted an empty node key")
 	}
 }
