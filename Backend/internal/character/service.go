@@ -13,6 +13,8 @@ var (
 	ErrWorldInvalid = errors.New("world is unavailable")
 	ErrExists       = errors.New("first-life character already exists")
 	ErrInvalid      = errors.New("invalid character name")
+	ErrInvalidAllocation = errors.New("invalid attribute allocation")
+	ErrInsufficientPoints = errors.New("insufficient unspent attribute points")
 )
 
 type Character struct {
@@ -149,6 +151,69 @@ func (s *Service) Current(ctx context.Context, accountID string) (Character, err
 		result.RaceID = &race.String
 	}
 	return result, nil
+}
+
+// AllocateAttributePoints atomically spends server-issued points on one primary attribute.
+func (s *Service) AllocateAttributePoints(ctx context.Context, accountID, attribute string, points int) error {
+	if points < 1 || points > 100 {
+		return ErrInvalidAllocation
+	}
+
+	var updateSQL string
+	switch attribute {
+	case "strength":
+		updateSQL = `UPDATE character_attributes SET strength = strength + $1, attack = attack + ($1 * 2), updated_at = now() WHERE character_id = $2`
+	case "constitution":
+		updateSQL = `UPDATE character_attributes SET constitution = constitution + $1, max_health = max_health + ($1 * 10), health = LEAST(health + ($1 * 10), max_health + ($1 * 10)), updated_at = now() WHERE character_id = $2`
+	case "agility":
+		updateSQL = `UPDATE character_attributes SET agility = agility + $1, movement_speed = movement_speed + ($1 * 0.05), updated_at = now() WHERE character_id = $2`
+	case "spirit":
+		updateSQL = `UPDATE character_attributes SET spirit = spirit + $1, max_mana = max_mana + ($1 * 10), mana = LEAST(mana + ($1 * 10), max_mana + ($1 * 10)), updated_at = now() WHERE character_id = $2`
+	case "vitality":
+		updateSQL = `UPDATE character_attributes SET vitality = vitality + $1, defense = defense + $1, updated_at = now() WHERE character_id = $2`
+	default:
+		return ErrInvalidAllocation
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin attribute allocation: %w", err)
+	}
+	defer tx.Rollback()
+
+	var characterID string
+	var available int
+	err = tx.QueryRowContext(ctx,
+		`SELECT c.id::text, p.unspent_attribute_points
+		 FROM souls s
+		 JOIN characters c ON c.id = s.current_character_id
+		 JOIN character_progression p ON p.character_id = c.id
+		 WHERE s.account_id = $1 AND c.status = 'alive'
+		 FOR UPDATE OF c, p`, accountID,
+	).Scan(&characterID, &available)
+	if errors.Is(err, sql.ErrNoRows) {
+		return sql.ErrNoRows
+	}
+	if err != nil {
+		return fmt.Errorf("load character attribute points: %w", err)
+	}
+	if available < points {
+		return ErrInsufficientPoints
+	}
+	if _, err := tx.ExecContext(ctx, updateSQL, points, characterID); err != nil {
+		return fmt.Errorf("apply character attribute allocation: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE character_progression
+		 SET unspent_attribute_points = unspent_attribute_points - $1, updated_at = now()
+		 WHERE character_id = $2`, points, characterID,
+	); err != nil {
+		return fmt.Errorf("spend character attribute points: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit character attribute allocation: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) CurrentStatus(ctx context.Context, accountID string) (Status, error) {
