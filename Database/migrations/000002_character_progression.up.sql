@@ -69,14 +69,14 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO cultivation_systems (id, name, description) VALUES
     ('human_immortal_path', '人族仙道', '重悟性、灵根、功法与元神，擅长法术、阵法和多样化道统'),
-    ('demon_y妖_path', '妖族妖修', '重血脉、妖躯、妖丹与天赋神通，种族差异会显著影响成长路线'),
+    ('demon_yxiu_path', '妖族妖修', '重血脉、妖躯、妖丹与天赋神通，种族差异会显著影响成长路线'),
     ('witch_body_path', '巫族炼体', '重肉身、血脉、图腾与煞气，不以传统元神修炼作为核心'),
     ('dragon_blood_path', '龙族血脉', '重龙族血脉纯度、龙躯、龙珠和法则传承，成长伴随形态与天赋变化')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO race_cultivation_systems (race_id, system_id, is_default) VALUES
     ('human', 'human_immortal_path', TRUE),
-    ('demon', 'demon_y妖_path', TRUE),
+    ('demon', 'demon_yxiu_path', TRUE),
     ('witch', 'witch_body_path', TRUE),
     ('dragon', 'dragon_blood_path', TRUE)
 ON CONFLICT (race_id, system_id) DO NOTHING;
@@ -106,15 +106,15 @@ INSERT INTO cultivation_realms (id, system_id, name, realm_order, max_stage, req
     ('human_mahayana', 'human_immortal_path', '大乘期', 8, 9, 10000000000, '道行圆融，准备渡劫'),
     ('human_tribulation', 'human_immortal_path', '渡劫期', 9, 9, 100000000000, '经历天劫，冲击更高生命层次'),
 
-    ('demon_open_spirit', 'demon_y妖_path', '开灵境', 1, 9, 0, '开启灵智，感应天地灵气'),
-    ('demon_transformation', 'demon_y妖_path', '化形境', 2, 9, 10000, '凝练妖躯，初步化形'),
-    ('demon_core', 'demon_y妖_path', '妖丹境', 3, 9, 100000, '凝聚妖丹，形成妖力核心'),
-    ('demon_soul', 'demon_y妖_path', '妖魂境', 4, 9, 1000000, '妖丹孕魂，神识大幅成长'),
-    ('demon_divinity', 'demon_y妖_path', '妖神境', 5, 9, 10000000, '血脉与妖魂蜕变，觉醒强大神通'),
-    ('demon_domain', 'demon_y妖_path', '妖域境', 6, 9, 100000000, '以妖力构筑自身领域'),
-    ('demon_heaven', 'demon_y妖_path', '通天境', 7, 9, 1000000000, '妖道通天，掌握天地伟力'),
-    ('demon_sacred', 'demon_y妖_path', '妖圣境', 8, 9, 10000000000, '妖道大成，成为一方妖圣'),
-    ('demon_tribulation', 'demon_y妖_path', '渡劫境', 9, 9, 100000000000, '渡过妖族大劫，冲击更高层次'),
+    ('demon_open_spirit', 'demon_yxiu_path', '开灵境', 1, 9, 0, '开启灵智，感应天地灵气'),
+    ('demon_transformation', 'demon_yxiu_path', '化形境', 2, 9, 10000, '凝练妖躯，初步化形'),
+    ('demon_core', 'demon_yxiu_path', '妖丹境', 3, 9, 100000, '凝聚妖丹，形成妖力核心'),
+    ('demon_soul', 'demon_yxiu_path', '妖魂境', 4, 9, 1000000, '妖丹孕魂，神识大幅成长'),
+    ('demon_divinity', 'demon_yxiu_path', '妖神境', 5, 9, 10000000, '血脉与妖魂蜕变，觉醒强大神通'),
+    ('demon_domain', 'demon_yxiu_path', '妖域境', 6, 9, 100000000, '以妖力构筑自身领域'),
+    ('demon_heaven', 'demon_yxiu_path', '通天境', 7, 9, 1000000000, '妖道通天，掌握天地伟力'),
+    ('demon_sacred', 'demon_yxiu_path', '妖圣境', 8, 9, 10000000000, '妖道大成，成为一方妖圣'),
+    ('demon_tribulation', 'demon_yxiu_path', '渡劫境', 9, 9, 100000000000, '渡过妖族大劫，冲击更高层次'),
 
     ('witch_tempering', 'witch_body_path', '淬体境', 1, 9, 0, '以气血和天地煞气淬炼肉身'),
     ('witch_bronze', 'witch_body_path', '铜身境', 2, 9, 10000, '筋骨如铜，肉身强度大幅提升'),
