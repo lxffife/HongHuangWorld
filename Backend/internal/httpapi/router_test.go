@@ -125,3 +125,21 @@ func TestCharacterBreakthroughUnavailableWithoutDatabase(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, res.Code)
 	}
 }
+
+func TestRaceGrowthBloodlineAndTechniqueCatalogsUnavailableWithoutDatabase(t *testing.T) {
+	handler := NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	for _, path := range []string{
+		"/api/v1/cultivation/race-growth",
+		"/api/v1/cultivation/bloodlines",
+		"/api/v1/cultivation/techniques",
+	} {
+		t.Run(path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			res := httptest.NewRecorder()
+			handler.ServeHTTP(res, req)
+			if res.Code != http.StatusServiceUnavailable {
+				t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, res.Code)
+			}
+		})
+	}
+}
