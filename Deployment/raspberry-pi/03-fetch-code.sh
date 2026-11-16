@@ -11,7 +11,12 @@ set -Eeuo pipefail
 source "$(dirname "$0")/lib/common.sh"
 cleanup() { [[ -z "${ASKPASS:-}" ]] || rm -f "$ASKPASS"; [[ -z "${ASKDIR:-}" ]] || rmdir "$ASKDIR" 2>/dev/null || true; }
 trap cleanup EXIT
-read -r -s -p "GitHub Token（仅需仓库 Contents: Read）： " TOKEN; echo
+if [[ -n "${HH_GITHUB_TOKEN:-}" ]]; then
+  TOKEN="$HH_GITHUB_TOKEN"
+  log "已读取环境变量 HH_GITHUB_TOKEN，跳过手动输入"
+else
+  read -r -s -p "GitHub Token（仅需仓库 Contents: Read）： " TOKEN; echo
+fi
 [[ -n "$TOKEN" ]] || die "GitHub Token 不能为空"
 ASKDIR="$(mktemp -d)"; ASKPASS="$ASKDIR/askpass"
 cat > "$ASKPASS" <<'EOF'
