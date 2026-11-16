@@ -26,6 +26,39 @@ type Character struct {
 	Status    string  `json:"status"`
 }
 
+type Attributes struct {
+	Strength      int     `json:"strength"`
+	Constitution  int     `json:"constitution"`
+	Agility       int     `json:"agility"`
+	Spirit        int     `json:"spirit"`
+	Vitality      int     `json:"vitality"`
+	Health        int     `json:"health"`
+	MaxHealth     int     `json:"max_health"`
+	Mana          int     `json:"mana"`
+	MaxMana       int     `json:"max_mana"`
+	Attack        int     `json:"attack"`
+	Defense       int     `json:"defense"`
+	MovementSpeed float64 `json:"movement_speed"`
+}
+
+type Progression struct {
+	Experience             int64  `json:"experience"`
+	Cultivation            int64  `json:"cultivation"`
+	RealmID                string `json:"realm_id"`
+	RealmName              string `json:"realm_name"`
+	RealmOrder             int    `json:"realm_order"`
+	RealmStage             int    `json:"realm_stage"`
+	MaxRealmStage          int    `json:"max_realm_stage"`
+	RequiredForNextRealm   *int64 `json:"required_for_next_realm,omitempty"`
+	UnspentAttributePoints int    `json:"unspent_attribute_points"`
+}
+
+type Status struct {
+	Character   Character   `json:"character"`
+	Attributes  Attributes  `json:"attributes"`
+	Progression Progression `json:"progression"`
+}
+
 type Service struct {
 	db *sql.DB
 }
@@ -82,6 +115,13 @@ func (s *Service) CreateFirstLife(ctx context.Context, accountID, name, worldID,
 	if race.Valid {
 		result.RaceID = &race.String
 	}
+
+	if _, err := tx.ExecContext(ctx, `INSERT INTO character_attributes (character_id) VALUES ($1)`, result.ID); err != nil {
+		return Character{}, fmt.Errorf("initialize character attributes: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO character_progression (character_id) VALUES ($1)`, result.ID); err != nil {
+		return Character{}, fmt.Errorf("initialize character progression: %w", err)
+	}
 	if _, err := tx.ExecContext(ctx, `UPDATE souls SET current_character_id = $1, updated_at = now() WHERE id = $2`, result.ID, soulID); err != nil {
 		return Character{}, fmt.Errorf("set current character: %w", err)
 	}
@@ -107,6 +147,50 @@ func (s *Service) Current(ctx context.Context, accountID string) (Character, err
 	}
 	if race.Valid {
 		result.RaceID = &race.String
+	}
+	return result, nil
+}
+
+func (s *Service) CurrentStatus(ctx context.Context, accountID string) (Status, error) {
+	var result Status
+	var race sql.NullString
+	var required sql.NullInt64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT
+			c.id::text, c.soul_id::text, c.life_index, c.world_id, c.name, c.race_id, c.level, c.status,
+			a.strength, a.constitution, a.agility, a.spirit, a.vitality,
+			a.health, a.max_health, a.mana, a.max_mana, a.attack, a.defense, a.movement_speed,
+			p.experience, p.cultivation, p.realm_id, rd.name, rd.realm_order, p.realm_stage,
+			rd.max_stage, next_realm.required_cultivation, p.unspent_attribute_points
+		 FROM souls s
+		 JOIN characters c ON c.id = s.current_character_id
+		 JOIN character_attributes a ON a.character_id = c.id
+		 JOIN character_progression p ON p.character_id = c.id
+		 JOIN realm_definitions rd ON rd.id = p.realm_id
+		 LEFT JOIN realm_definitions next_realm ON next_realm.realm_order = rd.realm_order + 1
+		 WHERE s.account_id = $1`, accountID,
+	).Scan(
+		&result.Character.ID, &result.Character.SoulID, &result.Character.LifeIndex,
+		&result.Character.WorldID, &result.Character.Name, &race, &result.Character.Level, &result.Character.Status,
+		&result.Attributes.Strength, &result.Attributes.Constitution, &result.Attributes.Agility,
+		&result.Attributes.Spirit, &result.Attributes.Vitality, &result.Attributes.Health,
+		&result.Attributes.MaxHealth, &result.Attributes.Mana, &result.Attributes.MaxMana,
+		&result.Attributes.Attack, &result.Attributes.Defense, &result.Attributes.MovementSpeed,
+		&result.Progression.Experience, &result.Progression.Cultivation, &result.Progression.RealmID,
+		&result.Progression.RealmName, &result.Progression.RealmOrder, &result.Progression.RealmStage,
+		&result.Progression.MaxRealmStage, &required, &result.Progression.UnspentAttributePoints,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Status{}, sql.ErrNoRows
+	}
+	if err != nil {
+		return Status{}, fmt.Errorf("load current character status: %w", err)
+	}
+	if race.Valid {
+		result.Character.RaceID = &race.String
+	}
+	if required.Valid {
+		result.Progression.RequiredForNextRealm = &required.Int64
 	}
 	return result, nil
 }
