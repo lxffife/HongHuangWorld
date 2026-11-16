@@ -5,6 +5,12 @@ extends Node3D
 @onready var breakthrough_button: Button = $HUD/Panel/Margin/Content/Breakthrough
 @onready var awaken_bloodline_button: Button = $HUD/Panel/Margin/Content/AwakenBloodline
 @onready var train_technique_button: Button = $HUD/Panel/Margin/Content/TrainTechnique
+@onready var attribute_points_label: Label = $HUD/Panel/Margin/Content/AttributePoints
+@onready var strength_button: Button = $HUD/Panel/Margin/Content/AttributeButtons/Strength
+@onready var constitution_button: Button = $HUD/Panel/Margin/Content/AttributeButtons/Constitution
+@onready var agility_button: Button = $HUD/Panel/Margin/Content/AttributeButtons/Agility
+@onready var spirit_button: Button = $HUD/Panel/Margin/Content/AttributeButtons/Spirit
+@onready var vitality_button: Button = $HUD/Panel/Margin/Content/AttributeButtons/Vitality
 @onready var reconnect_button: Button = $HUD/Panel/Margin/Content/Reconnect
 
 var progression_http: HTTPRequest
@@ -39,6 +45,11 @@ func _ready() -> void:
 	breakthrough_button.pressed.connect(_on_breakthrough_pressed)
 	awaken_bloodline_button.pressed.connect(_on_awaken_bloodline_pressed)
 	train_technique_button.pressed.connect(_on_train_technique_pressed)
+	strength_button.pressed.connect(_on_allocate_attribute_pressed.bind("strength"))
+	constitution_button.pressed.connect(_on_allocate_attribute_pressed.bind("constitution"))
+	agility_button.pressed.connect(_on_allocate_attribute_pressed.bind("agility"))
+	spirit_button.pressed.connect(_on_allocate_attribute_pressed.bind("spirit"))
+	vitality_button.pressed.connect(_on_allocate_attribute_pressed.bind("vitality"))
 	reconnect_button.pressed.connect(_on_reconnect_pressed)
 	reconnect_http = HTTPRequest.new()
 	reconnect_http.timeout = 12.0
@@ -98,6 +109,12 @@ func _on_train_technique_pressed() -> void:
 		return
 	_submit_growth_action("techniques/train", {"technique_id": technique_id, "points": 1}, "train")
 
+func _on_allocate_attribute_pressed(attribute: String) -> void:
+	if progression_request_context != "":
+		return
+	_submit_growth_action("attributes/allocate", {"attribute": attribute, "points": 1}, "attribute")
+
+
 func _submit_growth_action(path: String, payload: Dictionary, context: String) -> void:
 	if progression_request_context != "":
 		return
@@ -142,9 +159,14 @@ func _on_progression_request_completed(result: int, response_code: int, _headers
 		progression_label.text = "突破未成功：" + body.get_string_from_utf8()
 		breakthrough_button.disabled = false
 		return
-	if context == "awaken" or context == "train":
+	if context == "awaken" or context == "train" or context == "attribute":
 		if response_code >= 200 and response_code < 300:
-			progression_label.text = "血脉觉醒成功，正在刷新状态……" if context == "awaken" else "功法修炼成功，正在刷新状态……"
+			if context == "awaken":
+				progression_label.text = "血脉觉醒成功，正在刷新状态……"
+			elif context == "train":
+				progression_label.text = "功法修炼成功，正在刷新状态……"
+			else:
+				progression_label.text = "属性分配成功，正在刷新状态……"
 			_refresh_character_status()
 			return
 		progression_label.text = "成长操作未完成：" + body.get_string_from_utf8()
@@ -186,6 +208,11 @@ func _on_progression_request_completed(result: int, response_code: int, _headers
 	awaken_bloodline_button.disabled = primary_bloodline_id.is_empty() or awakening_stage >= 9
 	train_technique_button.text = "修炼功法 · " + starter_technique_name + "（熟练度 " + str(starter_technique_proficiency) + "）"
 	train_technique_button.disabled = starter_technique_id.is_empty() or cultivation < starter_technique_grade * 100
+	var attributes: Dictionary = data.get("attributes", {})
+	var unspent_points := int(progression.get("unspent_attribute_points", 0))
+	attribute_points_label.text = "可分配属性点：" + str(unspent_points) + "  |  力量 " + str(attributes.get("strength", 0)) + " · 体魄 " + str(attributes.get("constitution", 0)) + " · 敏捷 " + str(attributes.get("agility", 0)) + " · 灵识 " + str(attributes.get("spirit", 0)) + " · 元气 " + str(attributes.get("vitality", 0))
+	for button in [strength_button, constitution_button, agility_button, spirit_button, vitality_button]:
+		button.disabled = unspent_points <= 0
 	var system_name := str(progression.get("system_name", "未知体系"))
 	var realm_name := str(progression.get("realm_name", "未知境界"))
 	var stage_name := str(progression.get("realm_stage_name", ""))
