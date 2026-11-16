@@ -17,6 +17,16 @@ add_executable(world_server
 target_include_directories(world_server PRIVATE include)
 target_link_libraries(world_server PRIVATE PkgConfig::ENET)
 
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(protocol_frame_test
+        tests/protocol_frame_test.cpp
+        src/frame.cpp
+    )
+    target_include_directories(protocol_frame_test PRIVATE include)
+    add_test(NAME protocol_frame_test COMMAND protocol_frame_test)
+endif()
+
 if(MSVC)
     target_compile_options(world_server PRIVATE /W4 /permissive-)
 else()
