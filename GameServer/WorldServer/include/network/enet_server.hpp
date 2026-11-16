@@ -1,15 +1,23 @@
 #pragma once
 
 #include <cstddef>
-
 #include <cstdint>
 #include <string>
 
 namespace honghuang::network {
 
+struct ServerConfig {
+    std::string bind_host{"0.0.0.0"};
+    std::uint16_t port{7777};
+    std::size_t max_clients{512};
+    std::string backend_url;
+    std::string node_key;
+    std::string api_key;
+};
+
 class EnetServer {
 public:
-    EnetServer(std::string bind_host, std::uint16_t port, std::size_t max_clients);
+    explicit EnetServer(ServerConfig config);
     ~EnetServer();
     EnetServer(const EnetServer&) = delete;
     EnetServer& operator=(const EnetServer&) = delete;
