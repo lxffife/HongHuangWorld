@@ -23,6 +23,8 @@ func _ready() -> void:
 	_build_player()
 	if HHSession.world_network != null:
 		HHSession.world_network.entities_updated.connect(_on_entities_updated)
+		HHSession.world_network.player_joined.connect(_on_player_joined)
+		HHSession.world_network.player_left.connect(_on_player_left)
 		HHSession.world_network.disconnected.connect(_on_world_disconnected)
 		var spawn: Dictionary = HHSession.world_snapshot
 		local_target_position = Vector3(float(spawn.get("position_x", 0.0)), float(spawn.get("position_y", 0.15)), float(spawn.get("position_z", 0.0)))
@@ -216,16 +218,37 @@ func _on_entities_updated(entities: Array) -> void:
 			local_target_position = target
 			continue
 		seen[character_id] = true
-		if not remote_players.has(character_id):
-			remote_players[character_id] = _create_remote_player(str(entity.get("name", "修士")))
-		remote_targets[character_id] = target
-		remote_yaws[character_id] = float(entity.get("yaw", 0.0))
+		_upsert_remote_player(entity)
 	for character_id in remote_players.keys():
 		if not seen.has(character_id):
 			remote_players[character_id].queue_free()
 			remote_players.erase(character_id)
 			remote_targets.erase(character_id)
 			remote_yaws.erase(character_id)
+
+func _upsert_remote_player(entity: Dictionary) -> void:
+	var character_id := str(entity.get("character_id", ""))
+	if character_id.is_empty() or character_id == str(HHSession.world_snapshot.get("character_id", "")):
+		return
+	if not remote_players.has(character_id):
+		remote_players[character_id] = _create_remote_player(str(entity.get("name", "修士")))
+	remote_targets[character_id] = Vector3(
+		float(entity.get("x", 0.0)),
+		float(entity.get("y", 0.0)),
+		float(entity.get("z", 0.0))
+	)
+	remote_yaws[character_id] = float(entity.get("yaw", 0.0))
+
+func _on_player_joined(player: Dictionary) -> void:
+	_upsert_remote_player(player)
+
+func _on_player_left(character_id: String) -> void:
+	if not remote_players.has(character_id):
+		return
+	remote_players[character_id].queue_free()
+	remote_players.erase(character_id)
+	remote_targets.erase(character_id)
+	remote_yaws.erase(character_id)
 
 func _create_remote_player(character_name: String) -> Node3D:
 	var remote := Node3D.new()
@@ -345,6 +368,10 @@ func _on_reconnected_welcomed(snapshot: Dictionary) -> void:
 		previous.queue_free()
 	if not reconnect_network.entities_updated.is_connected(_on_entities_updated):
 		reconnect_network.entities_updated.connect(_on_entities_updated)
+	if not reconnect_network.player_joined.is_connected(_on_player_joined):
+		reconnect_network.player_joined.connect(_on_player_joined)
+	if not reconnect_network.player_left.is_connected(_on_player_left):
+		reconnect_network.player_left.connect(_on_player_left)
 	local_target_position = Vector3(
 		float(snapshot.get("position_x", 0.0)),
 		float(snapshot.get("position_y", 0.15)),
