@@ -121,6 +121,8 @@ func _submit_growth_action(path: String, payload: Dictionary, context: String) -
 	progression_request_context = context
 	awaken_bloodline_button.disabled = true
 	train_technique_button.disabled = true
+	for button in [strength_button, constitution_button, agility_button, spirit_button, vitality_button]:
+		button.disabled = true
 	progression_label.text = "正在向中心服提交成长请求……"
 	var headers := PackedStringArray([
 		"Authorization: Bearer " + HHSession.access_token,
