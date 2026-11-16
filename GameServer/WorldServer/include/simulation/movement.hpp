@@ -25,7 +25,7 @@ inline void integrate_horizontal(float& x, float& z, float move_x, float move_z,
 inline void integrate_vertical(float& y, float& velocity, bool& jump_requested,
                                float delta, float gravity = 18.0F, float jump_velocity = 6.5F) {
     const float dt = std::clamp(delta, 0.0F, 0.1F);
-    if (jump_requested && y <= 0.001F) velocity = jump_velocity;
+    if (jump_requested && y <= 0.2F && velocity <= 0.0F) velocity = jump_velocity;
     jump_requested = false;
     velocity -= gravity * dt;
     y += velocity * dt;
