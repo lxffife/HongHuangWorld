@@ -9,6 +9,8 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <array>
+#include <cstdint>
 #include <deque>
 #include <atomic>
 #include <chrono>
@@ -73,6 +75,7 @@ struct MonsterRuntime {
 
 struct CharacterRewardEvent {
     std::string event_id;
+    std::string session_id;
     std::string character_id;
     std::int64_t experience{};
     std::int64_t cultivation{};
@@ -326,6 +329,7 @@ bool deliver_character_reward(const ServerConfig& config, const CharacterRewardE
     const std::string url = config.backend_url + "/api/v1/servers/characters/rewards";
     const std::string body = Json{
         {"event_id", reward.event_id},
+        {"session_id", reward.session_id},
         {"character_id", reward.character_id},
         {"experience", reward.experience},
         {"cultivation", reward.cultivation}
@@ -670,7 +674,7 @@ struct EnetServer::Impl {
             experience_reward = 20 + static_cast<std::int64_t>(target->definition.level) * 10;
             cultivation_reward = 10 + static_cast<std::int64_t>(target->definition.level) * 5;
             enqueue_character_reward(CharacterRewardEvent{
-                make_event_uuid(), player.character_id, experience_reward, cultivation_reward, 0
+                make_event_uuid(), player.session_id, player.character_id, experience_reward, cultivation_reward, 0
             });
         }
         const Json event{
