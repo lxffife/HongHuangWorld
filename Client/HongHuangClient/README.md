@@ -36,7 +36,7 @@ powershell -ExecutionPolicy Bypass -File .\Client\NativeNet\build_windows.ps1
 ## 当前边界
 
 - 已实现：登录、灵魂档案初始化、世界列表、第一世角色创建、入口票据申请。
-- 已实现：Godot 原生 ENet 连接、ClientHello、ServerWelcome / ServerReject 解析和心跳。
+- 已实现：Godot 原生 ENet 连接、ClientHello、ServerWelcome / ServerReject 解析和心跳；PlayerJoined / PlayerLeft 可靠事件用于及时更新远端玩家。
 - 已实现：青云人界第三人称测试场景、服务器权威水平移动、基础跳跃/重力、20Hz EntitySnapshot 和远端玩家占位实体。
 - 已实现：80 米玩家 AOI 快照过滤、WorldServer 每秒异步位置快照持久化、中心服孤儿会话回收，以及客户端断线后的手动重新连接。
 - 当前收到 ServerWelcome 后进入可操作的程序化测试地图；这不是最终游戏地图或角色美术。
@@ -72,3 +72,8 @@ powershell -ExecutionPolicy Bypass -File .\Client\NativeNet\build_windows.ps1
 世界场景检测到 ENet 连接断开后，会显示“重新连接世界”按钮。点击后客户端使用当前登录令牌重新向中心服申请一次性入口票据，再连接当前可用的 WorldServer。新连接通过 ServerWelcome 后替换旧网络节点，并从服务端快照恢复角色位置。
 
 如果中心服或所有世界节点暂时不可用，界面会显示 HTTP/连接错误，用户可在服务恢复后再次点击重试。当前采用用户触发的手动重连，不会在后台无限自动重试。
+
+
+## 多人玩家生命周期
+
+WorldServer 在玩家完成认证后广播可靠 `PlayerJoined`，在断线或同角色重连替换旧连接时广播 `PlayerLeft`。客户端即时创建或移除远端玩家占位实体；后续仍以 20Hz AOI `EntitySnapshot` 作为位置校正和可见范围的权威来源。事件丢失或客户端刚进入场景时，下一帧快照也会补齐当前可见玩家集合。
