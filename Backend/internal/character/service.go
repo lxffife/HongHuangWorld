@@ -154,6 +154,18 @@ func (s *Service) CreateFirstLife(ctx context.Context, accountID, name, worldID,
 	if _, err := tx.ExecContext(ctx, `INSERT INTO character_progression (character_id, system_id, realm_id) VALUES ($1, $2, $3)`, result.ID, systemID, firstRealmID); err != nil {
 		return Character{}, fmt.Errorf("initialize character progression: %w", err)
 	}
+
+	bloodlineResult, err := tx.ExecContext(ctx,
+		`INSERT INTO character_bloodlines (character_id, bloodline_id, purity, awakening_stage, is_primary)
+		 SELECT $1, id, base_purity, 0, TRUE
+		 FROM bloodline_definitions
+		 WHERE race_id = $2 AND is_default`, result.ID, raceID)
+	if err != nil {
+		return Character{}, fmt.Errorf("initialize character bloodline: %w", err)
+	}
+	if rows, err := bloodlineResult.RowsAffected(); err != nil || rows != 1 {
+		return Character{}, fmt.Errorf("initialize character bloodline: expected one default bloodline, inserted %d: %v", rows, err)
+	}
 	if _, err := tx.ExecContext(ctx, `UPDATE souls SET current_character_id = $1, updated_at = now() WHERE id = $2`, result.ID, soulID); err != nil {
 		return Character{}, fmt.Errorf("set current character: %w", err)
 	}
