@@ -84,6 +84,9 @@ jobs:
           test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM cultivation_realms")" = "36"
           test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM power_tiers")" = "9"
           test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM realm_power_mappings")" = "36"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM race_definitions")" = "4"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM cultivation_stages")" = "324"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM race_cultivation_systems WHERE is_default")" = "4"
       - name: Roll back all migrations
         env:
           PGPASSWORD: ci-password
