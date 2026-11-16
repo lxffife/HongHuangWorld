@@ -24,6 +24,11 @@ int main() {
     config.backend_url = env_or("BACKEND_URL", "");
     config.node_key = env_or("WORLD_SERVER_NODE_KEY", "");
     config.api_key = env_or("WORLD_SERVER_API_KEY", "");
+    config.advertise_host = env_or("WORLD_SERVER_ADVERTISE_HOST", "");
+    config.region = env_or("WORLD_SERVER_REGION", "local");
+    config.world_id = env_or("WORLD_ID", "qingyun_human");
+    config.instance_key = env_or("WORLD_SERVER_INSTANCE_KEY", "qingyun-local-1");
+    config.capacity = std::stoi(env_or("WORLD_SERVER_CAPACITY", "100"));
     config.port = static_cast<std::uint16_t>(std::stoi(env_or("WORLD_SERVER_UDP_PORT", "7777")));
 
     honghuang::network::EnetServer server(std::move(config));
