@@ -95,7 +95,8 @@ CREATE TABLE characters (
     snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (soul_id, life_index)
+    UNIQUE (soul_id, life_index),
+    UNIQUE (soul_id, id)
 );
 CREATE INDEX idx_characters_soul ON characters(soul_id, life_index DESC);
 CREATE INDEX idx_characters_world ON characters(world_id, world_instance_id);
