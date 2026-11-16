@@ -214,6 +214,7 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 			_enqueue(HTTPClient.METHOD_GET, "/api/v1/characters/current", {}, true, "character_check")
 		"character_check":
 			current_character = data
+			race_select.disabled = true
 			character_input.text = str(data.get("name", ""))
 			action_button.disabled = false
 			action_button.text = "进入世界"
@@ -282,11 +283,13 @@ func _on_race_selected(index: int) -> void:
 	var selected_race_id := str(race_select.get_item_metadata(index))
 	for race in cultivation_races:
 		if race is Dictionary and str(race.get("race_id", "")) == selected_race_id:
-			var realm_names: Array[String] = []
+			var realm_path := ""
 			for realm in race.get("realms", []):
 				if realm is Dictionary:
-					realm_names.append(str(realm.get("name", "")))
-			cultivation_preview.text = str(race.get("system_name", "")) + "\n修炼境界：" + " → ".join(realm_names) + "\n实力层级仅供跨种族比较，不代表战斗力完全相等。"
+					if not realm_path.is_empty():
+						realm_path += " → "
+					realm_path += str(realm.get("name", ""))
+			cultivation_preview.text = str(race.get("system_name", "")) + "\n修炼境界：" + realm_path + "\n实力层级仅供跨种族比较，不代表战斗力完全相等。"
 			return
 
 func _on_create_character_pressed() -> void:
