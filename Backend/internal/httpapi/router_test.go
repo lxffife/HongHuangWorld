@@ -55,3 +55,13 @@ func TestSoulEndpointsUnavailableWithoutDatabase(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, res.Code)
 	}
 }
+
+func TestCharacterEndpointsUnavailableWithoutDatabase(t *testing.T) {
+	handler := NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/characters/first-life", strings.NewReader(`{"name":"测试角色","world_id":"qingyun_human"}`))
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, res.Code)
+	}
+}
