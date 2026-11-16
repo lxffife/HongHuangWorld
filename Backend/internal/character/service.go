@@ -170,11 +170,7 @@ type RewardResult struct {
 // ApplyServerReward accepts rewards only from the node hosting the character's
 // active session. A per-node event ID makes retries safe and prevents double grants.
 func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward Reward) (RewardResult, error) {
-	if nodeKey == "" || !validUUID(reward.EventID) || !validUUID(reward.CharacterID) ||
-		reward.Experience < 0 || reward.Experience > 1000000 ||
-		reward.Cultivation < 0 || reward.Cultivation > 1000000000 ||
-		reward.AttributePoints < 0 || reward.AttributePoints > 1000 ||
-		(reward.Experience == 0 && reward.Cultivation == 0 && reward.AttributePoints == 0) {
+	if !validReward(nodeKey, reward) {
 		return RewardResult{}, ErrInvalidReward
 	}
 
@@ -236,6 +232,14 @@ func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward 
 		return RewardResult{}, fmt.Errorf("commit character reward: %w", err)
 	}
 	return RewardResult{Applied: true}, nil
+}
+
+func validReward(nodeKey string, reward Reward) bool {
+	return nodeKey != "" && validUUID(reward.EventID) && validUUID(reward.CharacterID) &&
+		reward.Experience >= 0 && reward.Experience <= 1000000 &&
+		reward.Cultivation >= 0 && reward.Cultivation <= 1000000000 &&
+		reward.AttributePoints >= 0 && reward.AttributePoints <= 1000 &&
+		(reward.Experience > 0 || reward.Cultivation > 0 || reward.AttributePoints > 0)
 }
 
 func validUUID(value string) bool {
