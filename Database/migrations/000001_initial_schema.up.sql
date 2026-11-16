@@ -99,7 +99,7 @@ CREATE INDEX idx_characters_world ON characters(world_id, world_instance_id);
 
 ALTER TABLE souls
     ADD CONSTRAINT fk_souls_current_character
-    FOREIGN KEY (current_character_id) REFERENCES characters(id) DEFERRABLE INITIALLY DEFERRED;
+    FOREIGN KEY (id, current_character_id) REFERENCES characters(soul_id, id) DEFERRABLE INITIALLY DEFERRED;
 
 CREATE TABLE world_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
