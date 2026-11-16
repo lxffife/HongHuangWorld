@@ -79,8 +79,11 @@ jobs:
         env:
           PGPASSWORD: ci-password
         run: |
-          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('character_attributes','character_progression','realm_definitions','character_reward_events')")" = "4"
-          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM realm_definitions")" = "9"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('character_attributes','character_progression','cultivation_systems','cultivation_realms','cultivation_stages','power_tiers','realm_power_mappings','race_definitions','race_cultivation_systems','character_reward_events')")" = "10"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM cultivation_systems")" = "4"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM cultivation_realms")" = "36"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM power_tiers")" = "9"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM realm_power_mappings")" = "36"
       - name: Roll back all migrations
         env:
           PGPASSWORD: ci-password
