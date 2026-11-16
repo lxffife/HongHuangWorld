@@ -82,6 +82,36 @@ func (h *worldEntryHandlers) redeem(w http.ResponseWriter, r *http.Request) {
 }
 
 
+func (h *worldEntryHandlers) saveSnapshot(w http.ResponseWriter, r *http.Request) {
+	provided := r.Header.Get("X-World-Server-Key")
+	if h.apiKey == "" || len(provided) != len(h.apiKey) ||
+		subtle.ConstantTimeCompare([]byte(provided), []byte(h.apiKey)) != 1 {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var request closeWorldSessionRequest
+	if err := decodeJSON(w, r, &request); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	err := h.entryService.SavePosition(r.Context(), worldentry.SessionSnapshot{
+		NodeKey: request.NodeKey, SessionID: request.SessionID, CharacterID: request.CharacterID,
+		PositionX: request.PositionX, PositionY: request.PositionY, PositionZ: request.PositionZ,
+		RotationY: request.RotationY,
+	})
+	if err != nil {
+		if errors.Is(err, worldentry.ErrInvalidSessionSnapshot) {
+			http.Error(w, "invalid or inactive world session snapshot", http.StatusConflict)
+			return
+		}
+		h.logger.Error("save periodic world snapshot failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+}
+
 func (h *worldEntryHandlers) closeSession(w http.ResponseWriter, r *http.Request) {
 	provided := r.Header.Get("X-World-Server-Key")
 	if h.apiKey == "" || len(provided) != len(h.apiKey) ||
