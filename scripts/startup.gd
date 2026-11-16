@@ -281,12 +281,16 @@ func _start_world_connection(host: String, port: int, ticket: String) -> void:
 		_set_status("世界网络连接初始化失败，错误码：" + str(error))
 
 func _on_world_welcomed(snapshot: Dictionary) -> void:
-	_set_status("世界服务器验证成功！\n角色：" + str(snapshot.get("name", "")) +
-		"\n世界：" + str(snapshot.get("world_id", "")) +
-		"\n角色 ID：" + str(snapshot.get("character_id", "")) +
-		"\n初始位置：" + str(snapshot.get("position_x", 0.0)) + ", " +
-		str(snapshot.get("position_y", 0.0)) + ", " + str(snapshot.get("position_z", 0.0)) +
-		"\n\n网络握手已完成；游戏场景、移动同步和 AOI 尚在开发。")
+	_set_status("世界服务器验证成功，正在进入青云人界……")
+	HHSession.world_snapshot = snapshot
+	if world_network != null and is_instance_valid(world_network):
+		remove_child(world_network)
+		HHSession.add_child(world_network)
+		HHSession.world_network = world_network
+	var error := get_tree().change_scene_to_file("res://scenes/World.tscn")
+	if error != OK:
+		_set_status("游戏场景加载失败，错误码：" + str(error))
+		push_error("Failed to load Qingyun world scene: " + str(error))
 
 func _on_register_pressed() -> void:
 	api_base = api_input.text.strip_edges().trim_suffix("/")
