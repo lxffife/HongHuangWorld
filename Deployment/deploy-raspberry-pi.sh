@@ -3,7 +3,7 @@ set -Eeuo pipefail
 # Raspberry Pi ARM64 deployment for HongHuangWorld P0.
 REPO="https://github.com/liflife/HongHuangWorld.git"
 BRANCH="feature/p0-foundation"
-DEST="\${HH_INSTALL_DIR:-$HOME/HongHuangWorld}"
+DEST="${HH_INSTALL_DIR:-$HOME/HongHuangWorld}"
 ENV_FILE=/etc/honghuang-world.env
 GO_VERSION=1.24.0
 [[ "$(uname -m)" == aarch64 ]] || { echo "需要 64 位 ARM64 系统 (aarch64)"; exit 1; }
@@ -18,11 +18,11 @@ if ! command -v docker >/dev/null || ! docker compose version >/dev/null 2>&1; t
 fi
 sudo systemctl enable --now docker
 if docker info >/dev/null 2>&1; then DOCKER=(docker); else DOCKER=(sudo docker); fi
-"\${DOCKER[@]}" compose version >/dev/null
+"${DOCKER[@]}" compose version >/dev/null
 
 if ! command -v go >/dev/null || [[ "$(go version | awk '{print $3}')" != "go$GO_VERSION" ]]; then
   tmp="$(mktemp -d)"
-  curl -fL --retry 3 "https://go.dev/dl/go\${GO_VERSION}.linux-arm64.tar.gz" -o "$tmp/go.tgz"
+  curl -fL --retry 3 "https://go.dev/dl/go${GO_VERSION}.linux-arm64.tar.gz" -o "$tmp/go.tgz"
   sudo rm -rf /usr/local/go
   sudo tar -C /usr/local -xzf "$tmp/go.tgz"
   rm -rf "$tmp"
@@ -30,7 +30,7 @@ fi
 export PATH="/usr/local/go/bin:$HOME/go/bin:$PATH"
 grep -q '/usr/local/go/bin' "$HOME/.profile" 2>/dev/null || echo 'export PATH=/usr/local/go/bin:$HOME/go/bin:$PATH' >> "$HOME/.profile"
 
-cleanup() { [[ -z "\${ASKPASS:-}" ]] || rm -f "$ASKPASS"; [[ -z "\${ASKDIR:-}" ]] || rmdir "$ASKDIR" 2>/dev/null || true; }
+cleanup() { [[ -z "${ASKPASS:-}" ]] || rm -f "$ASKPASS"; [[ -z "${ASKDIR:-}" ]] || rmdir "$ASKDIR" 2>/dev/null || true; }
 trap cleanup EXIT
 if [[ -d "$DEST/.git" ]]; then
   read -r -p "更新现有仓库到 origin/$BRANCH？[Y/n] " ans
@@ -67,7 +67,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
   DBPASS="$(openssl rand -hex 24)"
   REDISPASS="$(openssl rand -hex 24)"
   APIKEY="$(openssl rand -hex 32)"
-  HOST="\${HH_ADVERTISE_HOST:-$(hostname -I | awk '{print $1}')}"
+  HOST="${HH_ADVERTISE_HOST:-$(hostname -I | awk '{print $1}')}"
   [[ -n "$HOST" ]] || { echo "无法识别树莓派 IP，请设置 HH_ADVERTISE_HOST"; exit 1; }
   sudo install -m 600 /dev/null "$ENV_FILE"
   sudo tee "$ENV_FILE" >/dev/null <<EOF
@@ -96,32 +96,35 @@ WORLD_SERVER_CAPACITY=30
 EOF
   sudo chmod 600 "$ENV_FILE"
 fi
+# The invoking account runs Compose and sources this file; keep it private to that account.
+sudo chown "$USER:$USER" "$ENV_FILE"
+sudo chmod 600 "$ENV_FILE"
 set -a
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 set +a
-[[ -n "\${POSTGRES_PASSWORD:-}" && -n "\${WORLD_SERVER_API_KEY:-}" && -n "\${WORLD_SERVER_ADVERTISE_HOST:-}" ]] || { echo "$ENV_FILE 配置不完整"; exit 1; }
+[[ -n "${POSTGRES_PASSWORD:-}" && -n "${WORLD_SERVER_API_KEY:-}" && -n "${WORLD_SERVER_ADVERTISE_HOST:-}" ]] || { echo "$ENV_FILE 配置不完整"; exit 1; }
 
-COMPOSE=("\${DOCKER[@]}" compose --env-file "$ENV_FILE" -f "$DEST/Deployment/docker-compose.yml")
-"\${COMPOSE[@]}" up -d
+COMPOSE=("${DOCKER[@]}" compose --env-file "$ENV_FILE" -f "$DEST/Deployment/docker-compose.yml")
+"${COMPOSE[@]}" up -d
 for n in $(seq 1 60); do
-  "\${COMPOSE[@]}" exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1 && break
+  "${COMPOSE[@]}" exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1 && break
   [[ $n -lt 60 ]] || { echo "PostgreSQL 等待超时"; exit 1; }
   sleep 2
 done
 
 # Migration ledger: prevents duplicate application on subsequent deployments.
-"\${COMPOSE[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "CREATE TABLE IF NOT EXISTS schema_migrations(version VARCHAR(16) PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now());"
-count="$("\${COMPOSE[@]}" exec -T postgres psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c 'SELECT count(*) FROM schema_migrations;')"
-has="$("\${COMPOSE[@]}" exec -T postgres psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT to_regclass('public.accounts') IS NOT NULL;")"
+"${COMPOSE[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "CREATE TABLE IF NOT EXISTS schema_migrations(version VARCHAR(16) PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now());"
+count="$("${COMPOSE[@]}" exec -T postgres psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c 'SELECT count(*) FROM schema_migrations;')"
+has="$("${COMPOSE[@]}" exec -T postgres psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT to_regclass('public.accounts') IS NOT NULL;")"
 if [[ "$count" == 0 && "$has" == t ]]; then echo "数据库已有 accounts 但无迁移账本，拒绝重复迁移"; exit 1; fi
 for f in "$DEST"/Database/migrations/*.up.sql; do
   v="$(basename "$f" | cut -d_ -f1)"
-  done_already="$("\${COMPOSE[@]}" exec -T postgres psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='$v');")"
+  done_already="$("${COMPOSE[@]}" exec -T postgres psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='$v');")"
   [[ "$done_already" == t ]] && continue
   echo "Apply migration $v"
-  "\${COMPOSE[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" < "$f"
-  "\${COMPOSE[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "INSERT INTO schema_migrations(version) VALUES ('$v');"
+  "${COMPOSE[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" < "$f"
+  "${COMPOSE[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "INSERT INTO schema_migrations(version) VALUES ('$v');"
 done
 
 mkdir -p "$DEST/bin"
