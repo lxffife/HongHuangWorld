@@ -74,7 +74,9 @@ func _add_key_action(action: String, keycode: int) -> void:
 	InputMap.action_add_event(action, event)
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("release_mouse"):
+	if event.is_action_pressed("jump"):
+		jump_pending = true
+	elif event.is_action_pressed("release_mouse"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	elif event is InputEventMouseButton and event.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
