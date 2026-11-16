@@ -56,6 +56,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		worlds := &worldHandlers{service: world.NewService(db), logger: logger}
 		mux.HandleFunc("GET /api/v1/worlds", worlds.list)
 		characters := &characterHandlers{authService: auth.NewService(db), characterService: character.NewService(db), logger: logger}
+		mux.HandleFunc("GET /api/v1/cultivation/systems", characters.catalog)
 		mux.HandleFunc("POST /api/v1/characters/first-life", characters.createFirstLife)
 		mux.HandleFunc("GET /api/v1/characters/current", characters.current)
 		mux.HandleFunc("GET /api/v1/characters/current/status", characters.currentStatus)
@@ -77,6 +78,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/souls", unavailable)
 		mux.HandleFunc("GET /api/v1/souls/current", unavailable)
 		mux.HandleFunc("GET /api/v1/worlds", unavailable)
+		mux.HandleFunc("GET /api/v1/cultivation/systems", unavailable)
 		mux.HandleFunc("POST /api/v1/characters/first-life", unavailable)
 		mux.HandleFunc("GET /api/v1/characters/current", unavailable)
 		mux.HandleFunc("GET /api/v1/characters/current/status", unavailable)
