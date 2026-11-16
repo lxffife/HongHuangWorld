@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+find_package(Threads REQUIRED)
+
 if(WIN32)
     find_package(unofficial-enet CONFIG REQUIRED)
     find_package(CURL REQUIRED)
@@ -31,6 +33,7 @@ target_link_libraries(world_server PRIVATE
     ${HH_ENET_TARGET}
     ${HH_CURL_TARGET}
     nlohmann_json::nlohmann_json
+    Threads::Threads
 )
 
 include(CTest)
