@@ -3,6 +3,8 @@ extends Node3D
 @onready var hud_label: Label = $HUD/Panel/Margin/Content/Status
 @onready var progression_label: Label = $HUD/Panel/Margin/Content/Progression
 @onready var breakthrough_button: Button = $HUD/Panel/Margin/Content/Breakthrough
+@onready var awaken_bloodline_button: Button = $HUD/Panel/Margin/Content/AwakenBloodline
+@onready var train_technique_button: Button = $HUD/Panel/Margin/Content/TrainTechnique
 @onready var reconnect_button: Button = $HUD/Panel/Margin/Content/Reconnect
 
 var progression_http: HTTPRequest
@@ -35,6 +37,8 @@ func _ready() -> void:
 	add_child(progression_http)
 	progression_http.request_completed.connect(_on_progression_request_completed)
 	breakthrough_button.pressed.connect(_on_breakthrough_pressed)
+	awaken_bloodline_button.pressed.connect(_on_awaken_bloodline_pressed)
+	train_technique_button.pressed.connect(_on_train_technique_pressed)
 	reconnect_button.pressed.connect(_on_reconnect_pressed)
 	reconnect_http = HTTPRequest.new()
 	reconnect_http.timeout = 12.0
@@ -78,6 +82,44 @@ func _on_breakthrough_pressed() -> void:
 		progression_label.text = "提交突破失败，错误码：" + str(error)
 		breakthrough_button.disabled = false
 
+func _on_awaken_bloodline_pressed() -> void:
+	var primary_id := str(HHSession.world_snapshot.get("primary_bloodline_id", ""))
+	if primary_id.is_empty():
+		primary_id = str(get_meta("primary_bloodline_id", ""))
+	if primary_id.is_empty():
+		progression_label.text = "当前角色没有可觉醒的血脉。"
+		return
+	_submit_growth_action("bloodlines/awaken", {"bloodline_id": primary_id}, "awaken")
+
+func _on_train_technique_pressed() -> void:
+	var technique_id := str(get_meta("starter_technique_id", ""))
+	if technique_id.is_empty():
+		progression_label.text = "当前角色没有已拥有的功法。"
+		return
+	_submit_growth_action("techniques/train", {"technique_id": technique_id, "points": 1}, "train")
+
+func _submit_growth_action(path: String, payload: Dictionary, context: String) -> void:
+	if progression_request_context != "":
+		return
+	progression_request_context = context
+	awaken_bloodline_button.disabled = true
+	train_technique_button.disabled = true
+	progression_label.text = "正在向中心服提交成长请求……"
+	var headers := PackedStringArray([
+		"Authorization: Bearer " + HHSession.access_token,
+		"Content-Type: application/json"
+	])
+	var error := progression_http.request(
+		HHSession.api_base + "/api/v1/characters/current/" + path,
+		headers,
+		HTTPClient.METHOD_POST,
+		JSON.stringify(payload)
+	)
+	if error != OK:
+		progression_request_context = ""
+		progression_label.text = "提交成长请求失败，错误码：" + str(error)
+		_refresh_character_status()
+
 func _on_progression_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	var context := progression_request_context
 	progression_request_context = ""
@@ -98,6 +140,14 @@ func _on_progression_request_completed(result: int, response_code: int, _headers
 		progression_label.text = "突破未成功：" + body.get_string_from_utf8()
 		breakthrough_button.disabled = false
 		return
+	if context == "awaken" or context == "train":
+		if response_code >= 200 and response_code < 300:
+			progression_label.text = "血脉觉醒成功，正在刷新状态……" if context == "awaken" else "功法修炼成功，正在刷新状态……"
+			_refresh_character_status()
+			return
+		progression_label.text = "成长操作未完成：" + body.get_string_from_utf8()
+		_refresh_character_status()
+		return
 	if response_code < 200 or response_code >= 300:
 		progression_label.text = "读取修炼状态失败：" + body.get_string_from_utf8()
 		breakthrough_button.disabled = true
@@ -106,11 +156,33 @@ func _on_progression_request_completed(result: int, response_code: int, _headers
 	var bloodlines: Array = data.get("bloodlines", [])
 	var primary_bloodline := "未觉醒"
 	var bloodline_purity := 0
+	var primary_bloodline_id := ""
+	var awakening_stage := 0
 	for bloodline_variant in bloodlines:
 		if bloodline_variant is Dictionary and bool(bloodline_variant.get("is_primary", false)):
 			primary_bloodline = str(bloodline_variant.get("name", "未知血脉"))
 			bloodline_purity = int(bloodline_variant.get("purity", 0))
+			primary_bloodline_id = str(bloodline_variant.get("id", ""))
+			awakening_stage = int(bloodline_variant.get("awakening_stage", 0))
 			break
+	set_meta("primary_bloodline_id", primary_bloodline_id)
+	var techniques: Array = data.get("techniques", [])
+	var starter_technique_id := ""
+	var starter_technique_name := "暂无已拥有功法"
+	var starter_technique_grade := 0
+	var starter_technique_proficiency := 0
+	for technique_variant in techniques:
+		if technique_variant is Dictionary:
+			starter_technique_id = str(technique_variant.get("id", ""))
+			starter_technique_name = str(technique_variant.get("name", "未知功法"))
+			starter_technique_grade = int(technique_variant.get("grade", 0))
+			starter_technique_proficiency = int(technique_variant.get("proficiency", 0))
+			break
+	set_meta("starter_technique_id", starter_technique_id)
+	awaken_bloodline_button.text = "觉醒血脉 · " + primary_bloodline + "（" + str(awakening_stage) + "/9）"
+	awaken_bloodline_button.disabled = primary_bloodline_id.is_empty() or awakening_stage >= 9
+	train_technique_button.text = "修炼功法 · " + starter_technique_name + "（熟练度 " + str(starter_technique_proficiency) + "）"
+	train_technique_button.disabled = starter_technique_id.is_empty() or cultivation < starter_technique_grade * 100
 	var system_name := str(progression.get("system_name", "未知体系"))
 	var realm_name := str(progression.get("realm_name", "未知境界"))
 	var stage_name := str(progression.get("realm_stage_name", ""))
