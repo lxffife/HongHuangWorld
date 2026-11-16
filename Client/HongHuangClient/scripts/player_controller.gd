@@ -63,7 +63,7 @@ func _ensure_input_actions() -> void:
 	_add_key_action("jump", KEY_SPACE)
 	_add_key_action("release_mouse", KEY_ESCAPE)
 
-func _add_key_action(action: String, keycode: Key) -> void:
+func _add_key_action(action: String, keycode: int) -> void:
 	if not InputMap.has_action(action):
 		InputMap.add_action(action)
 	var event := InputEventKey.new()
@@ -83,7 +83,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(delta: float) -> void:
 	var input_2d := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var camera_basis := camera_pivot.global_transform.basis
-	var direction := camera_basis.x * input_2d.x + -camera_basis.z * input_2d.y
+	var direction := camera_basis.x * input_2d.x + camera_basis.z * input_2d.y
 	direction.y = 0.0
 	direction = direction.normalized()
 	var target_velocity := direction * move_speed
