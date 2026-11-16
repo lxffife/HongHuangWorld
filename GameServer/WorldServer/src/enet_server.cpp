@@ -470,29 +470,29 @@ struct EnetServer::Impl {
         const auto now = Clock::now();
         if (player.last_attack_at.time_since_epoch().count() != 0 &&
             now - player.last_attack_at < kAttackCooldown) {
-            send_json(peer, honghuang::protocol::MessageType::ServerReject,
-                      Json{{"reason", "attack cooldown"}});
+            send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                      Json{{"accepted", false}, {"reason", "攻击间隔中，请稍后再试。"}});
             return;
         }
         const auto target_id = command.value("target_entity_id", std::string{});
         if (target_id.empty() || target_id.size() > 96) {
-            send_json(peer, honghuang::protocol::MessageType::ServerReject,
-                      Json{{"reason", "invalid attack target"}});
+            send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                      Json{{"accepted", false}, {"reason", "攻击目标无效。"}});
             return;
         }
         auto target = std::find_if(monsters.begin(), monsters.end(), [&](const MonsterRuntime& monster) {
             return monster.runtime_id == target_id;
         });
         if (target == monsters.end() || target->state.mode == honghuang::simulation::MonsterMode::Dead) {
-            send_json(peer, honghuang::protocol::MessageType::ServerReject,
-                      Json{{"reason", "target unavailable"}});
+            send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                      Json{{"accepted", false}, {"reason", "目标已消失或已被击败。"}});
             return;
         }
         const double dx = static_cast<double>(target->state.x) - player.x;
         const double dz = static_cast<double>(target->state.z) - player.z;
         if (dx * dx + dz * dz > static_cast<double>(kAttackRange) * kAttackRange) {
-            send_json(peer, honghuang::protocol::MessageType::ServerReject,
-                      Json{{"reason", "target out of range"}});
+            send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                      Json{{"accepted", false}, {"reason", "距离目标太远。"}});
             return;
         }
         const honghuang::simulation::CombatantStats attacker{20, 0, 100, 100};
@@ -505,8 +505,8 @@ struct EnetServer::Impl {
         honghuang::simulation::DamageResult damage{};
         if (!honghuang::simulation::calculate_damage(
                 attacker, defender, honghuang::simulation::AttackProfile{}, damage)) {
-            send_json(peer, honghuang::protocol::MessageType::ServerReject,
-                      Json{{"reason", "combat calculation rejected"}});
+            send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                      Json{{"accepted", false}, {"reason", "伤害计算未通过校验。"}});
             return;
         }
         player.last_attack_at = now;
