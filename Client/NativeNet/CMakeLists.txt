@@ -27,7 +27,7 @@ add_library(honghuang_native_net SHARED
     src/register_types.cpp
     src/enet_client.cpp
 )
-target_include_directories(honghuang_native_net PRIVATE include)
+target_include_directories(honghuang_native_net PRIVATE include "${enet_SOURCE_DIR}/include")
 target_link_libraries(honghuang_native_net PRIVATE godot-cpp enet)
 
 if(MSVC)
