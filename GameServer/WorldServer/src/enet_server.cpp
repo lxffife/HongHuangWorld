@@ -380,6 +380,22 @@ struct EnetServer::Impl {
         }
     }
 
+    void broadcast_player_event(honghuang::protocol::MessageType type,
+                                const PlayerState& player,
+                                ENetPeer* excluded_peer = nullptr) {
+        const Json event{
+            {"character_id", player.character_id},
+            {"name", player.name},
+            {"x", player.x}, {"y", player.y}, {"z", player.z},
+            {"yaw", player.yaw}
+        };
+        for (const auto& [peer, recipient] : players) {
+            (void)recipient;
+            if (peer == excluded_peer) continue;
+            send_json(peer, type, event);
+        }
+    }
+
     void stop_persistence_worker() {
         {
             std::lock_guard lock(persistence_mutex);
@@ -574,6 +590,8 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                             if (existing->second.character_id == player.character_id) {
                                 std::cout << "Replacing previous connection for character: "
                                           << player.character_id << '\n';
+                                impl_->broadcast_player_event(
+                                    honghuang::protocol::MessageType::PlayerLeft, existing->second, existing->first);
                                 enet_peer_disconnect_later(existing->first, 6);
                                 existing = impl_->players.erase(existing);
                             } else {
@@ -581,6 +599,8 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                             }
                         }
                         impl_->players.emplace(event.peer, std::move(player));
+                        impl_->broadcast_player_event(
+                            honghuang::protocol::MessageType::PlayerJoined, impl_->players.at(event.peer));
                         Json client_welcome = snapshot;
                         client_welcome.erase("session_id");
                         send_json(event.peer, honghuang::protocol::MessageType::ServerWelcome, client_welcome);
@@ -637,6 +657,8 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
         case ENET_EVENT_TYPE_DISCONNECT: {
             const auto player = impl_->players.find(event.peer);
             if (player != impl_->players.end()) {
+                impl_->broadcast_player_event(
+                    honghuang::protocol::MessageType::PlayerLeft, player->second, event.peer);
                 std::string snapshot_error;
                 if (!save_and_close_session(impl_->config, player->second, snapshot_error)) {
                     std::cerr << "Could not persist disconnected player session: "
