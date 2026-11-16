@@ -6,6 +6,8 @@ signal rejected(reason: String)
 signal disconnected
 signal connection_error(message: String)
 signal entities_updated(entities: Array)
+signal player_joined(player: Dictionary)
+signal player_left(character_id: String)
 
 const BUILD := "0.1.0"
 const EXTENSION_PATH := "res://bin/honghuang_native_net.gdextension"
@@ -112,6 +114,18 @@ func _on_frame_received(bytes: PackedByteArray) -> void:
 			var snapshot: Variant = JSON.parse_string(payload.get_string_from_utf8())
 			if snapshot is Dictionary and snapshot.get("entities", []) is Array:
 				entities_updated.emit(snapshot.get("entities", []))
+		HHProtocolCodec.MessageType.PLAYER_JOINED:
+			var joined: Variant = JSON.parse_string(payload.get_string_from_utf8())
+			if joined is Dictionary and not str(joined.get("character_id", "")).is_empty():
+				player_joined.emit(joined)
+			else:
+				rejected.emit("收到无效的 PlayerJoined 事件。")
+		HHProtocolCodec.MessageType.PLAYER_LEFT:
+			var left: Variant = JSON.parse_string(payload.get_string_from_utf8())
+			if left is Dictionary and not str(left.get("character_id", "")).is_empty():
+				player_left.emit(str(left.get("character_id", "")))
+			else:
+				rejected.emit("收到无效的 PlayerLeft 事件。")
 		_:
 			rejected.emit("收到未知服务端消息类型：" + str(message_type))
 			transport.disconnect_from_host()
