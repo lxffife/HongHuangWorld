@@ -1,6 +1,7 @@
 #include "network/enet_server.hpp"
 #include "protocol/frame.hpp"
 #include "simulation/movement.hpp"
+#include "simulation/monster.hpp"
 
 #include <enet/enet.h>
 #include <curl/curl.h>
@@ -13,6 +14,7 @@
 #include <cmath>
 #include <iostream>
 #include <memory>
+#include <limits>
 #include <mutex>
 #include <span>
 #include <stdexcept>
@@ -50,6 +52,12 @@ struct PlayerState {
     std::uint64_t last_input_sequence{};
     Clock::time_point last_input_at{Clock::now()};
     Clock::time_point last_input_received_at{};
+};
+
+struct MonsterRuntime {
+    honghuang::simulation::MonsterDefinition definition;
+    honghuang::simulation::MonsterState state;
+    std::string runtime_id;
 };
 
 std::size_t collect_response(char* data, std::size_t size, std::size_t count, void* user) {
@@ -286,6 +294,7 @@ struct EnetServer::Impl {
     ServerConfig config;
     ENetHost* host{};
     std::unordered_map<ENetPeer*, PlayerState> players;
+    std::vector<MonsterRuntime> monsters;
     Clock::time_point last_snapshot{Clock::now()};
     std::atomic_size_t online_players{0};
     std::mutex heartbeat_mutex;
@@ -300,7 +309,26 @@ struct EnetServer::Impl {
     std::thread persistence_thread;
     Clock::time_point last_persistence{Clock::now()};
 
-    explicit Impl(ServerConfig value) : config(std::move(value)) {}
+    explicit Impl(ServerConfig value) : config(std::move(value)) {
+        const auto add_monster = [this](std::string runtime_id, std::string definition_id,
+                                        std::string name, int level, float health,
+                                        float attack, float defense, float speed,
+                                        float aggro, float leash, float x, float z) {
+            honghuang::simulation::MonsterDefinition definition{
+                std::move(definition_id), std::move(name), level, health, attack, defense,
+                speed, aggro, leash, x, z
+            };
+            if (!honghuang::simulation::valid_monster_definition(definition)) return;
+            honghuang::simulation::MonsterState state{x, z, health};
+            monsters.push_back({std::move(definition), std::move(state), std::move(runtime_id)});
+        };
+        add_monster("wolf-001", "wilderness_wolf", "荒原狼", 3, 80.0F, 12.0F, 4.0F,
+                    2.8F, 10.0F, 24.0F, -12.0F, -8.0F);
+        add_monster("wolf-002", "wilderness_wolf", "荒原狼", 3, 80.0F, 12.0F, 4.0F,
+                    2.8F, 10.0F, 24.0F, 13.0F, -7.0F);
+        add_monster("wolf-003", "wilderness_wolf", "荒原狼", 3, 80.0F, 12.0F, 4.0F,
+                    2.8F, 10.0F, 24.0F, 0.0F, 17.0F);
+    }
 
     void start_persistence_worker() {
         persistence_stop_requested = false;
@@ -445,11 +473,30 @@ struct EnetServer::Impl {
                     continue;
                 }
                 entities.push_back({
+                    {"entity_type", "player"},
                     {"character_id", entity.character_id},
                     {"name", entity.name},
                     {"x", entity.x}, {"y", entity.y}, {"z", entity.z},
                     {"yaw", entity.yaw},
                     {"last_input_sequence", entity.last_input_sequence}
+                });
+            }
+            for (const auto& monster : monsters) {
+                if (monster.state.mode == honghuang::simulation::MonsterMode::Dead ||
+                    !honghuang::simulation::within_interest_radius(
+                        monster.state.x, monster.state.z, recipient.x, recipient.z, kInterestRadius)) {
+                    continue;
+                }
+                entities.push_back({
+                    {"entity_type", "monster"},
+                    {"entity_id", monster.runtime_id},
+                    {"monster_id", monster.definition.id},
+                    {"name", monster.definition.name},
+                    {"level", monster.definition.level},
+                    {"health", monster.state.health},
+                    {"max_health", monster.definition.max_health},
+                    {"mode", static_cast<int>(monster.state.mode)},
+                    {"x", monster.state.x}, {"y", 0.0F}, {"z", monster.state.z}
                 });
             }
             const auto payload_text = Json{{"entities", std::move(entities)}}.dump();
@@ -480,6 +527,27 @@ struct EnetServer::Impl {
                 player.x, player.z, player.move_x, player.move_z, delta);
             honghuang::simulation::integrate_vertical(
                 player.y, player.vertical_velocity, player.jump_requested, delta);
+        }
+        for (auto& monster : monsters) {
+            honghuang::simulation::MonsterTarget target_storage;
+            const honghuang::simulation::MonsterTarget* nearest_target = nullptr;
+            double nearest_distance_squared = std::numeric_limits<double>::max();
+            for (const auto& [peer, player] : players) {
+                (void)peer;
+                const double dx = static_cast<double>(player.x) - monster.state.x;
+                const double dz = static_cast<double>(player.z) - monster.state.z;
+                const double distance_squared = dx * dx + dz * dz;
+                if (distance_squared < nearest_distance_squared) {
+                    nearest_distance_squared = distance_squared;
+                    target_storage = {player.character_id, player.x, player.z, true};
+                    nearest_target = &target_storage;
+                }
+            }
+            if (!honghuang::simulation::tick_monster(
+                    monster.definition, monster.state, nearest_target, delta)) {
+                std::cerr << "Skipping invalid monster simulation state: "
+                          << monster.runtime_id << '\n';
+            }
         }
         last_snapshot = now;
         broadcast_snapshot();
