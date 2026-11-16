@@ -77,3 +77,15 @@ jobs:
         env:
           PGPASSWORD: ci-password
         run: psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000001_initial_schema.up.sql
+
+  godot-native-network:
+    name: Godot native ENet extension build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure native extension
+        run: cmake -S Client/NativeNet -B build/godot-native-net -DCMAKE_BUILD_TYPE=Release
+      - name: Build native extension
+        run: cmake --build build/godot-native-net --config Release --parallel
+      - name: Verify extension artifact
+        run: test -s Client/HongHuangClient/bin/libhonghuang_native_net.so
