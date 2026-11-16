@@ -76,6 +76,8 @@ jobs:
           psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000001_initial_schema.up.sql
           psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000002_character_progression.up.sql
           psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000003_race_bloodline_techniques.up.sql
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000004_bloodline_awakening_technique_training.up.sql
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000004_bloodline_awakening_technique_training.up.sql
       - name: Verify character progression schema and realm seeds
         env:
           PGPASSWORD: ci-password
@@ -98,10 +100,14 @@ jobs:
           test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM cultivation_techniques")" = "12"
           test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM technique_race_compatibility")" = "48"
           test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM race_attribute_growth_profiles WHERE strength_weight + constitution_weight + agility_weight + spirit_weight + vitality_weight <> 10000")" = "0"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM bloodline_awakening_rules")" = "9"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM race_starter_techniques")" = "4"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM character_techniques")" = "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM characters")"
       - name: Roll back all migrations
         env:
           PGPASSWORD: ci-password
         run: |
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000004_bloodline_awakening_technique_training.down.sql
           psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000003_race_bloodline_techniques.down.sql
           psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000002_character_progression.down.sql
           psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000001_initial_schema.down.sql
