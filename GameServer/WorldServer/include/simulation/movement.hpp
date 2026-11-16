@@ -15,6 +15,18 @@ inline bool normalize_direction(float& x, float& z) {
     return true;
 }
 
+inline bool within_interest_radius(float ax, float az, float bx, float bz, float radius) {
+    if (!std::isfinite(ax) || !std::isfinite(az) ||
+        !std::isfinite(bx) || !std::isfinite(bz) ||
+        !std::isfinite(radius) || radius < 0.0F) {
+        return false;
+    }
+    const double dx = static_cast<double>(ax) - static_cast<double>(bx);
+    const double dz = static_cast<double>(az) - static_cast<double>(bz);
+    const double r = static_cast<double>(radius);
+    return dx * dx + dz * dz <= r * r;
+}
+
 inline void integrate_horizontal(float& x, float& z, float move_x, float move_z,
                                  float delta, float speed = 5.0F, float bound = 100.0F) {
     const float dt = std::clamp(delta, 0.0F, 0.1F);
