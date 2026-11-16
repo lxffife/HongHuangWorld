@@ -8,5 +8,4 @@ config/name="HongHuangClient"
 run/main_scene="res://scenes/Startup.tscn"
 
 [rendering]
-renderer/rendering_method="gl_compatibility"
-renderer/rendering_method.mobile="gl_compatibility"
+renderer/rendering_method="forward_plus"
