@@ -43,6 +43,8 @@ func (h *characterHandlers) createFirstLife(w http.ResponseWriter, r *http.Reque
 		switch {
 		case errors.Is(err, character.ErrInvalid):
 			http.Error(w, "character name or world id is invalid", http.StatusBadRequest)
+		case errors.Is(err, character.ErrInvalidRace):
+			http.Error(w, "unsupported race or cultivation system", http.StatusBadRequest)
 		case errors.Is(err, character.ErrSoulRequired):
 			http.Error(w, "create a soul profile first", http.StatusConflict)
 		case errors.Is(err, character.ErrWorldInvalid):
