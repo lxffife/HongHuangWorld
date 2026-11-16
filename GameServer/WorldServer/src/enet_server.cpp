@@ -7,13 +7,17 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cmath>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -169,21 +173,35 @@ struct EnetServer::Impl {
     ENetHost* host{};
     std::unordered_map<ENetPeer*, PlayerState> players;
     Clock::time_point last_snapshot{Clock::now()};
-    Clock::time_point next_heartbeat_at{};
+    std::atomic_size_t online_players{0};
+    std::mutex heartbeat_mutex;
+    std::condition_variable heartbeat_cv;
+    bool heartbeat_stop_requested{false};
+    std::thread heartbeat_thread;
 
     explicit Impl(ServerConfig value) : config(std::move(value)) {}
 
-    void update_heartbeat() {
-        const auto now = Clock::now();
-        if (now < next_heartbeat_at) return;
-        std::string error;
-        if (send_heartbeat(config, players.size(), "ready", error)) {
-            next_heartbeat_at = now + kHeartbeatInterval;
-            std::cout << "WorldServer heartbeat accepted; players=" << players.size() << '\n';
-        } else {
-            next_heartbeat_at = now + kHeartbeatRetryInterval;
-            std::cerr << "WorldServer heartbeat failed: " << error << '\n';
-        }
+    void start_heartbeat_worker(bool initial_heartbeat_succeeded) {
+        heartbeat_thread = std::thread([this, initial_heartbeat_succeeded] {
+            auto interval = initial_heartbeat_succeeded ? kHeartbeatInterval : kHeartbeatRetryInterval;
+            while (true) {
+                std::unique_lock lock(heartbeat_mutex);
+                if (heartbeat_cv.wait_for(lock, interval, [this] { return heartbeat_stop_requested; })) {
+                    return;
+                }
+                lock.unlock();
+
+                std::string error;
+                if (send_heartbeat(config, online_players.load(std::memory_order_relaxed), "ready", error)) {
+                    std::cout << "WorldServer heartbeat accepted; players="
+                              << online_players.load(std::memory_order_relaxed) << '\n';
+                    interval = kHeartbeatInterval;
+                } else {
+                    std::cerr << "WorldServer heartbeat failed: " << error << '\n';
+                    interval = kHeartbeatRetryInterval;
+                }
+            }
+        });
     }
 
     void broadcast_snapshot() {
@@ -272,8 +290,16 @@ bool EnetServer::start() {
         enet_deinitialize();
         return false;
     }
-    impl_->next_heartbeat_at = Clock::time_point{};
-    impl_->update_heartbeat();
+    std::string heartbeat_error;
+    const bool heartbeat_ok = send_heartbeat(impl_->config, 0, "ready", heartbeat_error);
+    if (heartbeat_ok) {
+        std::cout << "WorldServer initial heartbeat accepted\n";
+    } else {
+        std::cerr << "WorldServer initial heartbeat failed; background retries enabled: "
+                  << heartbeat_error << '\n';
+    }
+    impl_->heartbeat_stop_requested = false;
+    impl_->start_heartbeat_worker(heartbeat_ok);
     std::cout << "WorldServer ENet listening on UDP " << impl_->config.port << '\n';
     return true;
 }
@@ -377,14 +403,22 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
             break;
         }
     }
+    impl_->online_players.store(impl_->players.size(), std::memory_order_relaxed);
     impl_->tick_world();
-    impl_->update_heartbeat();
 }
 
 void EnetServer::stop() {
     if (impl_ != nullptr && impl_->host != nullptr) {
+        {
+            std::lock_guard lock(impl_->heartbeat_mutex);
+            impl_->heartbeat_stop_requested = true;
+        }
+        impl_->heartbeat_cv.notify_all();
+        if (impl_->heartbeat_thread.joinable()) impl_->heartbeat_thread.join();
+
         std::string heartbeat_error;
-        if (!send_heartbeat(impl_->config, impl_->players.size(), "draining", heartbeat_error)) {
+        if (!send_heartbeat(impl_->config, impl_->online_players.load(std::memory_order_relaxed),
+                             "draining", heartbeat_error)) {
             std::cerr << "WorldServer draining heartbeat failed: " << heartbeat_error << '\n';
         }
         enet_host_destroy(impl_->host);
