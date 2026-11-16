@@ -94,7 +94,7 @@
 
     /etc/honghuang-world.env
 
-文件权限为 root-only（600）。查看：
+文件由运行部署脚本的 Linux 用户持有，权限为 600（仅该用户可读写）；systemd 由系统管理器读取。查看：
 
     sudo less /etc/honghuang-world.env
 
@@ -131,7 +131,7 @@ Windows Godot 客户端 API Base URL 填写：
 
 不要填写 127.0.0.1（它指向 Windows 自己），也不要填写 0.0.0.0。WorldServer 返回给客户端的地址同样由 WORLD_SERVER_ADVERTISE_HOST 决定。
 
-不要将 PostgreSQL 5432、Redis 6379、NATS 4222/8222 暴露到公网。不要配置路由器公网端口转发。当前方案没有配置 TLS、反向代理和生产级密钥管理。
+PostgreSQL 5432、Redis 6379、NATS 4222/8222 在 Compose 中绑定到 127.0.0.1，不接受局域网远程连接。不要配置路由器公网端口转发。当前方案没有配置 TLS、反向代理和生产级密钥管理。
 
 ## 7. 部署检查
 
