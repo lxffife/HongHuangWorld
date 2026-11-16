@@ -259,7 +259,7 @@ func _process(delta: float) -> void:
 
 
 func _on_world_disconnected() -> void:
-	hud_label.text = "与世界服务器的连接已断开。角色位置已由中心服周期保存，可重新连接继续游戏。"
+	hud_label.text = "与世界服务器的连接已断开。角色位置会周期保存，重连后将恢复到最近一次成功保存的位置。"
 	reconnect_button.visible = true
 	reconnect_button.disabled = false
 
