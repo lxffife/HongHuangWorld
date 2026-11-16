@@ -29,6 +29,15 @@ int main() {
     assert(hello.ticket == "abc");
     assert(hello.client_build == "test");
 
+    const std::vector<std::uint8_t> lifecycle_payload{'{', '}'};
+    for (const auto event_type : {MessageType::PlayerJoined, MessageType::PlayerLeft}) {
+        const auto event_frame = encode_frame(event_type, lifecycle_payload);
+        Frame event_decoded{};
+        assert(decode_frame(event_frame, event_decoded, error));
+        assert(event_decoded.type == event_type);
+        assert(event_decoded.payload == lifecycle_payload);
+    }
+
     auto truncated = encoded;
     truncated.pop_back();
     assert(!decode_frame(truncated, decoded, error));
