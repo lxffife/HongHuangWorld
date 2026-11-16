@@ -6,6 +6,7 @@ var local_player: HHPlayerController
 var local_target_position := Vector3.ZERO
 var remote_players: Dictionary = {}
 var remote_targets: Dictionary = {}
+var remote_yaws: Dictionary = {}
 
 func _ready() -> void:
 	_build_environment()
@@ -111,11 +112,13 @@ func _on_entities_updated(entities: Array) -> void:
 		if not remote_players.has(character_id):
 			remote_players[character_id] = _create_remote_player(str(entity.get("name", "修士")))
 		remote_targets[character_id] = target
+		remote_yaws[character_id] = float(entity.get("yaw", 0.0))
 	for character_id in remote_players.keys():
 		if not seen.has(character_id):
 			remote_players[character_id].queue_free()
 			remote_players.erase(character_id)
 			remote_targets.erase(character_id)
+			remote_yaws.erase(character_id)
 
 func _create_remote_player(character_name: String) -> Node3D:
 	var remote := Node3D.new()
@@ -144,3 +147,5 @@ func _process(delta: float) -> void:
 		var remote: Node3D = remote_players[character_id]
 		var target: Vector3 = remote_targets.get(character_id, remote.position)
 		remote.position = remote.position.lerp(target, minf(delta * 14.0, 1.0))
+		var target_yaw := float(remote_yaws.get(character_id, remote.rotation.y))
+		remote.rotation.y = lerp_angle(remote.rotation.y, target_yaw, minf(delta * 12.0, 1.0))
