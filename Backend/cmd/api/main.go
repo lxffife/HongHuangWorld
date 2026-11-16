@@ -12,6 +12,7 @@ import (
 
 	"github.com/liflife/HongHuangWorld/Backend/internal/database"
 	"github.com/liflife/HongHuangWorld/Backend/internal/httpapi"
+	"github.com/liflife/HongHuangWorld/Backend/internal/worldentry"
 )
 
 func main() {
@@ -39,6 +40,8 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	go runSessionRecovery(ctx, worldentry.NewService(db), logger)
+
 	go func() {
 		logger.Info("backend starting", "addr", addr)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -54,4 +57,33 @@ func main() {
 		logger.Error("graceful shutdown failed", "error", err)
 	}
 	logger.Info("backend stopped")
+}
+
+
+func runSessionRecovery(ctx context.Context, service *worldentry.Service, logger *slog.Logger) {
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
+	recoverOnce := func() {
+		recoveryCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		closed, err := service.RecoverOrphanedSessions(recoveryCtx)
+		if err != nil {
+			logger.Error("orphan world session recovery failed", "error", err)
+			return
+		}
+		if closed > 0 {
+			logger.Info("orphan world sessions recovered", "closed_sessions", closed)
+		}
+	}
+
+	recoverOnce()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			recoverOnce()
+		}
+	}
 }
