@@ -33,6 +33,14 @@ autowrap_mode = 3
 text = "尝试突破"
 disabled = true
 
+[node name="AwakenBloodline" type="Button" parent="HUD/Panel/Margin/Content"]
+text = "觉醒血脉"
+disabled = true
+
+[node name="TrainTechnique" type="Button" parent="HUD/Panel/Margin/Content"]
+text = "修炼功法"
+disabled = true
+
 [node name="Reconnect" type="Button" parent="HUD/Panel/Margin/Content"]
 visible = false
 text = "重新连接世界"
