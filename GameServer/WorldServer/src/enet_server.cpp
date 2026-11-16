@@ -343,6 +343,20 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                         player.y = snapshot.value("position_y", 0.0F);
                         player.z = snapshot.value("position_z", 0.0F);
                         player.last_input_at = Clock::now();
+                        // A successful ticket redemption replaces the character's previous
+                        // backend session. Close any older peer on this node before adding
+                        // the new authenticated connection, so one character cannot control
+                        // two simultaneous ENet peers.
+                        for (auto existing = impl_->players.begin(); existing != impl_->players.end();) {
+                            if (existing->second.character_id == player.character_id) {
+                                std::cout << "Replacing previous connection for character: "
+                                          << player.character_id << '\n';
+                                enet_peer_disconnect_later(existing->first, 6);
+                                existing = impl_->players.erase(existing);
+                            } else {
+                                ++existing;
+                            }
+                        }
                         impl_->players.emplace(event.peer, std::move(player));
                         send_json(event.peer, honghuang::protocol::MessageType::ServerWelcome, snapshot);
                         std::cout << "Authenticated character entered world: "
