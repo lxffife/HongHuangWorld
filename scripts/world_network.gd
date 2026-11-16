@@ -26,7 +26,7 @@ func _ready() -> void:
 		connection_error.emit("扩展已加载但没有注册 EnetClient 类。")
 		return
 	var instance: Variant = ClassDB.instantiate("EnetClient")
-	if not instance is Node:
+	if not (instance is Node):
 		connection_error.emit("无法创建 EnetClient 原生节点。")
 		return
 	transport = instance
