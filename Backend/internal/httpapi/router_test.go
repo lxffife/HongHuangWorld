@@ -45,3 +45,13 @@ func TestAuthEndpointsUnavailableWithoutDatabase(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, res.Code)
 	}
 }
+
+func TestSoulEndpointsUnavailableWithoutDatabase(t *testing.T) {
+	handler := NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/souls/current", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, res.Code)
+	}
+}
