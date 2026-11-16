@@ -419,7 +419,9 @@ func _on_combat_event(event: Dictionary) -> void:
 	var monster_name := str(event.get("target_name", "目标"))
 	var damage := int(event.get("damage", 0))
 	if bool(event.get("defeated", false)):
-		hud_label.text = monster_name + " 已被击败！造成 " + str(damage) + " 点伤害，稍后重生。"
+		var experience := int(event.get("experience_reward", 0))
+		var cultivation := int(event.get("cultivation_reward", 0))
+		hud_label.text = monster_name + " 已被击败！伤害 " + str(damage) + "，经验 +" + str(experience) + "，修为 +" + str(cultivation) + "。"
 	else:
 		hud_label.text = "命中 " + monster_name + "，造成 " + str(damage) + " 点伤害。"
 
