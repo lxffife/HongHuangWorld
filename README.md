@@ -10,7 +10,7 @@
 4. 读取世界列表；首次进入时创建第一世角色。
 5. 调用中心服申请 60 秒有效的一次性世界入口票据。
 6. 通过原生 ENet 扩展连接世界服，发送 ClientHello。
-7. 校验 ServerWelcome / ServerReject；成功后每 10 秒发送一次心跳。
+7. 校验 ServerWelcome / ServerReject；成功后每 10 秒发送一次心跳，并要求服务端返回心跳应答；连续 30 秒未收到应答时，客户端主动断开并显示重连入口。
 
 ## 构建原生网络扩展
 
@@ -77,3 +77,8 @@ powershell -ExecutionPolicy Bypass -File .\Client\NativeNet\build_windows.ps1
 ## 多人玩家生命周期
 
 WorldServer 在玩家完成认证后广播可靠 `PlayerJoined`，在断线或同角色重连替换旧连接时广播 `PlayerLeft`。客户端即时创建或移除远端玩家占位实体；后续仍以 20Hz AOI `EntitySnapshot` 作为位置校正和可见范围的权威来源。事件丢失或客户端刚进入场景时，下一帧快照也会补齐当前可见玩家集合。
+
+
+## 网络失联检测
+
+客户端每 10 秒发送一次可靠心跳，收到 `HeartbeatAck` 后刷新最后应答时间。5 秒检查一次超时状态；超过 30 秒没有任何心跳应答时，客户端将当前连接标记为不可用并主动断开，复用世界场景的手动重连入口。该检测用于发现半开连接，不替代 ENet 自身的连接超时和服务端会话回收。
