@@ -14,6 +14,7 @@ var yaw := 0.0
 var pitch := -0.18
 var input_send_accumulator := 0.0
 var input_sequence := 0
+var jump_pending := false
 
 func _ready() -> void:
 	_build_player()
@@ -62,6 +63,7 @@ func _ensure_input_actions() -> void:
 	_add_key_action("move_back", KEY_S)
 	_add_key_action("move_left", KEY_A)
 	_add_key_action("move_right", KEY_D)
+	_add_key_action("jump", KEY_SPACE)
 	_add_key_action("release_mouse", KEY_ESCAPE)
 
 func _add_key_action(action: String, keycode: int) -> void:
@@ -97,6 +99,8 @@ func _physics_process(delta: float) -> void:
 		var network := HHSession.world_network
 		if network != null and network.is_world_ready():
 			input_sequence += 1
-			var send_error: Error = network.send_input(direction.x, direction.z, input_sequence)
+			var send_error: Error = network.send_input(direction.x, direction.z, input_sequence, jump_pending)
+			if send_error == OK:
+				jump_pending = false
 			if send_error != OK:
 				push_warning("World movement input send failed: " + str(send_error))
