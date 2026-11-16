@@ -129,6 +129,8 @@ CREATE TABLE world_sessions (
 );
 CREATE INDEX idx_world_sessions_character_state ON world_sessions(character_id, session_state);
 CREATE INDEX idx_world_sessions_server_state ON world_sessions(server_id, session_state);
+CREATE UNIQUE INDEX uq_world_sessions_active_character ON world_sessions(character_id)
+    WHERE session_state IN ('connecting', 'active', 'saving');
 
 INSERT INTO world_definitions (id, name, world_type, world_level, config)
 VALUES
