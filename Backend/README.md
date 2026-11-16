@@ -18,7 +18,7 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 - `GET /api/v1/cultivation/techniques`：读取功法目录及各族适配度；跨族修炼必须有明确兼容记录，不从境界映射推断。
 - `POST /api/v1/characters/first-life`：为当前灵魂创建第一世肉身；根据 race_id 选择种族默认修炼体系，并在同一事务中初始化属性和修炼进度。未传种族时默认人族。
 - `GET /api/v1/characters/current`：读取当前肉身角色。
-- `GET /api/v1/characters/current/status`：读取当前角色属性、经验、修为、种族修炼体系、境界阶段、下一阶段/境界修为门槛和跨种族实力参考层级。
+- `GET /api/v1/characters/current/status`：读取当前角色属性、经验、修为、种族修炼体系、境界阶段、下一阶段/境界修为门槛、跨种族实力参考层级和角色血脉（品阶、纯度、觉醒阶段、主血脉标记）。
 - `POST /api/v1/characters/current/breakthrough`：服务端根据累计修为推进一个小境界；达到当前境界圆满并满足下一境界门槛后，进入该修炼体系的下一境界。事务锁定当前角色和成长记录，客户端不能直接提交境界或阶段数值。
 - `POST /api/v1/characters/current/attributes/allocate`：将已获得的属性点分配到力量、体质、敏捷、灵力或根骨；在事务中锁定当前角色和成长记录、校验点数余额并更新衍生属性。
 - `POST /api/v1/servers/characters/rewards`：可信世界节点使用服务端密钥和节点标识提交经验、修为及属性点奖励；要求角色当前有该节点上的活跃会话，并使用事件 ID 防止重试重复发奖。
