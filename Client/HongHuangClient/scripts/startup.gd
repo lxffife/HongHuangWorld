@@ -218,7 +218,12 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 			character_input.text = str(data.get("name", ""))
 			action_button.disabled = false
 			action_button.text = "进入世界"
-			_set_status("角色已存在：" + character_input.text + "。可以进入世界。")
+			_enqueue(HTTPClient.METHOD_GET, "/api/v1/characters/current/status", {}, true, "character_status")
+		"character_status":
+			var progression: Dictionary = data.get("progression", {})
+			var tier_text := str(progression.get("power_tier_name", "未知层级"))
+			var realm_text := str(progression.get("system_name", "")) + " · " + str(progression.get("realm_name", "")) + str(progression.get("realm_stage_name", ""))
+			_set_status("角色已存在：" + character_input.text + "\n修炼体系：" + realm_text + "\n跨族参考：" + tier_text + "。可以进入世界。")
 		"character_create":
 			current_character = data
 			_set_status("角色创建成功，正在申请世界入口……")
