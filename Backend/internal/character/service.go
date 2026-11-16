@@ -217,7 +217,7 @@ func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward 
 		return RewardResult{}, fmt.Errorf("record character reward event: %w", err)
 	}
 
-	if _, err := tx.ExecContext(ctx,
+	updated, err := tx.ExecContext(ctx,
 		`UPDATE character_progression
 		 SET experience = experience + $1,
 		     cultivation = cultivation + $2,
@@ -225,8 +225,12 @@ func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward 
 		     updated_at = now()
 		 WHERE character_id = $4`,
 		reward.Experience, reward.Cultivation, reward.AttributePoints, reward.CharacterID,
-	); err != nil {
+	)
+	if err != nil {
 		return RewardResult{}, fmt.Errorf("apply character reward values: %w", err)
+	}
+	if rows, err := updated.RowsAffected(); err != nil || rows != 1 {
+		return RewardResult{}, fmt.Errorf("apply character reward values: expected one progression row, updated %d: %v", rows, err)
 	}
 	if err := tx.Commit(); err != nil {
 		return RewardResult{}, fmt.Errorf("commit character reward: %w", err)
@@ -273,7 +277,7 @@ func (s *Service) AllocateAttributePoints(ctx context.Context, accountID, attrib
 	case "constitution":
 		updateSQL = `UPDATE character_attributes SET constitution = constitution + $1, max_health = max_health + ($1 * 10), health = LEAST(health + ($1 * 10), max_health + ($1 * 10)), updated_at = now() WHERE character_id = $2`
 	case "agility":
-		updateSQL = `UPDATE character_attributes SET agility = agility + $1, movement_speed = movement_speed + ($1 * 0.05), updated_at = now() WHERE character_id = $2`
+		updateSQL = `UPDATE character_attributes SET agility = agility + $1, movement_speed = movement_speed + ($1::real * 0.05::real), updated_at = now() WHERE character_id = $2`
 	case "spirit":
 		updateSQL = `UPDATE character_attributes SET spirit = spirit + $1, max_mana = max_mana + ($1 * 10), mana = LEAST(mana + ($1 * 10), max_mana + ($1 * 10)), updated_at = now() WHERE character_id = $2`
 	case "vitality":
@@ -307,15 +311,23 @@ func (s *Service) AllocateAttributePoints(ctx context.Context, accountID, attrib
 	if available < points {
 		return ErrInsufficientPoints
 	}
-	if _, err := tx.ExecContext(ctx, updateSQL, points, characterID); err != nil {
+	updated, err := tx.ExecContext(ctx, updateSQL, points, characterID)
+	if err != nil {
 		return fmt.Errorf("apply character attribute allocation: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx,
+	if rows, err := updated.RowsAffected(); err != nil || rows != 1 {
+		return fmt.Errorf("apply character attribute allocation: expected one attribute row, updated %d: %v", rows, err)
+	}
+	spent, err := tx.ExecContext(ctx,
 		`UPDATE character_progression
 		 SET unspent_attribute_points = unspent_attribute_points - $1, updated_at = now()
 		 WHERE character_id = $2`, points, characterID,
-	); err != nil {
+	)
+	if err != nil {
 		return fmt.Errorf("spend character attribute points: %w", err)
+	}
+	if rows, err := spent.RowsAffected(); err != nil || rows != 1 {
+		return fmt.Errorf("spend character attribute points: expected one progression row, updated %d: %v", rows, err)
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit character attribute allocation: %w", err)
