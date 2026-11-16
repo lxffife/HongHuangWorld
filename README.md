@@ -58,3 +58,9 @@ Docs/                     Architecture and development documents
 ## Project status
 
 This repository is being initialized. See `Docs/Development/ROADMAP.md` for staged delivery and `Docs/Architecture/OVERVIEW.md` for the initial architecture.
+
+## 树莓派 ARM64 部署
+
+- 一键部署脚本：Deployment/deploy-raspberry-pi.sh
+- 详细部署说明：[Docs/Deployment/RASPBERRY_PI.md](Docs/Deployment/RASPBERRY_PI.md)
+- 当前支持 64 位 Raspberry Pi OS / Debian（aarch64），用于 P0 局域网联网测试。
