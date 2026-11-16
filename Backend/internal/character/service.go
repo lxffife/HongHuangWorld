@@ -865,7 +865,7 @@ func (s *Service) AwakenBloodline(ctx context.Context, accountID, bloodlineID st
 	var characterID string
 	var stage, purity, realmOrder int
 	var cultivation int64
-	err = tx.QueryRowContext(ctx, `SELECT c.id::text, cb.awakening_stage, cb.purity, p.realm_order, p.cultivation
+	err = tx.QueryRowContext(ctx, `SELECT c.id::text, cb.awakening_stage, cb.purity, p.realm_order, cp.cultivation
 		FROM souls s JOIN characters c ON c.id=s.current_character_id
 		JOIN character_bloodlines cb ON cb.character_id=c.id
 		JOIN character_progression cp ON cp.character_id=c.id
