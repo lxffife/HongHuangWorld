@@ -421,9 +421,15 @@ func _on_combat_event(event: Dictionary) -> void:
 	if bool(event.get("defeated", false)):
 		var experience := int(event.get("experience_reward", 0))
 		var cultivation := int(event.get("cultivation_reward", 0))
-		hud_label.text = monster_name + " 已被击败！伤害 " + str(damage) + "，经验 +" + str(experience) + "，修为 +" + str(cultivation) + "。"
+		hud_label.text = monster_name + " 已被击败！伤害 " + str(damage) + "，奖励结算中：经验 +" + str(experience) + "，修为 +" + str(cultivation) + "。"
+		_refresh_reward_status_later()
 	else:
 		hud_label.text = "命中 " + monster_name + "，造成 " + str(damage) + " 点伤害。"
+
+func _refresh_reward_status_later() -> void:
+	await get_tree().create_timer(1.5).timeout
+	if progression_request_context.is_empty():
+		_refresh_character_status()
 
 func _on_player_joined(player: Dictionary) -> void:
 	_upsert_remote_player(player)
