@@ -40,3 +40,16 @@ powershell -ExecutionPolicy Bypass -File .\Client\NativeNet\build_windows.ps1
 - 尚未实现：玩家实体场景、服务器权威移动、EntitySnapshot、AOI、断线持久化与重连。
 - 当前收到 ServerWelcome 只代表网络身份握手成功，尚未进入可操作的游戏地图。
 - 不要使用 Godot 内置 MultiplayerAPI 直接连接当前 C++ 世界服；它的 RPC wire protocol 与项目自定义帧协议不同。
+
+
+## 青云人界客户端原型
+
+通过中心服认证并收到世界服务器的 `ServerWelcome` 后，客户端会切换到 `scenes/World.tscn`。网络节点和角色快照保存在 `HHSession` Autoload 中，不会因登录场景释放而断开连接。
+
+操作：
+- WASD：移动
+- 空格：跳跃
+- 鼠标：旋转第三人称视角
+- ESC：释放鼠标；点击窗口重新捕获
+
+当前角色是用于验证镜头、场景和输入的程序化占位模型，不代表最终角色美术。移动暂时在客户端本地执行，下一阶段将改为发送输入意图，由 WorldServer 计算位置并广播实体快照。
