@@ -10,11 +10,21 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/liflife/HongHuangWorld/Backend/internal/database"
 	"github.com/liflife/HongHuangWorld/Backend/internal/httpapi"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	startupCtx, startupCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	db, err := database.OpenPostgres(startupCtx, os.Getenv("DATABASE_URL"))
+	startupCancel()
+	if err != nil {
+		logger.Error("database startup failed", "error", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+
 	addr := os.Getenv("HTTP_ADDR")
 	if addr == "" {
 		addr = ":8787"
@@ -22,7 +32,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           httpapi.NewRouter(logger),
+		Handler:           httpapi.NewRouter(logger, db),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
