@@ -15,6 +15,8 @@ enum MessageType {
 	ENTITY_SNAPSHOT = 11,
 	PLAYER_JOINED = 12,
 	PLAYER_LEFT = 13,
+	ATTACK_COMMAND = 14,
+	COMBAT_EVENT = 15,
 }
 
 static func _u16(value: int) -> PackedByteArray:
