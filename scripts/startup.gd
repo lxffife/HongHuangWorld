@@ -16,6 +16,7 @@ var http: HTTPRequest
 var status_label: Label
 var api_input: LineEdit
 var username_input: LineEdit
+var email_input: LineEdit
 var password_input: LineEdit
 var character_input: LineEdit
 var world_select: OptionButton
@@ -59,6 +60,7 @@ func _build_ui() -> void:
 
 	api_input = _add_line_edit("中心服 API 地址", DEFAULT_API)
 	username_input = _add_line_edit("账号", "")
+	email_input = _add_line_edit("邮箱（注册时填写）", "")
 	password_input = _add_line_edit("密码", "")
 	password_input.secret = true
 
@@ -67,6 +69,10 @@ func _build_ui() -> void:
 	login_button.custom_minimum_size.y = 44
 	login_button.pressed.connect(_on_login_pressed)
 	content_box.add_child(login_button)
+	var register_button := Button.new()
+	register_button.text = "注册新账号并登录"
+	register_button.pressed.connect(_on_register_pressed)
+	content_box.add_child(register_button)
 
 	content_box.add_child(HSeparator.new())
 
@@ -171,12 +177,12 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 		return
 
 	match context:
-		"login":
+		"login", "register":
 			access_token = str(data.get("access_token", ""))
 			if access_token.is_empty():
-				_set_status("登录响应缺少 access_token。")
+				_set_status("认证响应缺少 access_token。")
 			else:
-				_set_status("登录成功，正在读取灵魂档案……")
+				_set_status("账号认证成功，正在读取灵魂档案……")
 				_enqueue(HTTPClient.METHOD_GET, "/api/v1/souls/current", {}, true, "soul_check")
 		"soul_check":
 			_set_status("灵魂档案已存在，正在读取世界列表……")
@@ -281,3 +287,23 @@ func _on_world_welcomed(snapshot: Dictionary) -> void:
 		"\n初始位置：" + str(snapshot.get("position_x", 0.0)) + ", " +
 		str(snapshot.get("position_y", 0.0)) + ", " + str(snapshot.get("position_z", 0.0)) +
 		"\n\n网络握手已完成；游戏场景、移动同步和 AOI 尚在开发。")
+
+func _on_register_pressed() -> void:
+	api_base = api_input.text.strip_edges().trim_suffix("/")
+	if not api_base.begins_with("http://") and not api_base.begins_with("https://"):
+		_set_status("中心服地址必须以 http:// 或 https:// 开头。")
+		return
+	if username_input.text.strip_edges().is_empty() or email_input.text.strip_edges().is_empty() or password_input.text.is_empty():
+		_set_status("注册需要填写账号、邮箱和密码。")
+		return
+	if request_busy:
+		return
+	access_token = ""
+	current_character = {}
+	worlds.clear()
+	_set_status("正在注册账号……")
+	_enqueue(HTTPClient.METHOD_POST, "/api/v1/auth/register", {
+		"username": username_input.text.strip_edges(),
+		"email": email_input.text.strip_edges(),
+		"password": password_input.text
+	}, false, "register")
