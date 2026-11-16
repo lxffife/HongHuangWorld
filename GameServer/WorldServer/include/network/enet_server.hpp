@@ -13,6 +13,11 @@ struct ServerConfig {
     std::string backend_url;
     std::string node_key;
     std::string api_key;
+    std::string advertise_host;
+    std::string region{"local"};
+    std::string world_id{"qingyun_human"};
+    std::string instance_key{"qingyun-local-1"};
+    int capacity{100};
 };
 
 class EnetServer {
