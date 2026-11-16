@@ -196,7 +196,7 @@ func _on_entities_updated(entities: Array) -> void:
 	var seen: Dictionary = {}
 	var own_id := str(HHSession.world_snapshot.get("character_id", ""))
 	for entity in entities:
-		if not entity is Dictionary:
+		if not (entity is Dictionary):
 			continue
 		var character_id := str(entity.get("character_id", ""))
 		if character_id.is_empty():
