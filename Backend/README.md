@@ -11,6 +11,7 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 - `GET /api/v1/account/me`：通过 Bearer 令牌读取当前账号。
 - `POST /api/v1/souls`：为当前账号创建唯一灵魂档案。
 - `GET /api/v1/souls/current`：读取当前账号的灵魂档案。
+- `GET /api/v1/worlds`：读取已启用的世界目录。
 - PostgreSQL 连接池通过 `DATABASE_URL` 配置，启动时执行 Ping；连接失败则拒绝启动。
 - JSON 结构化日志和优雅关闭。
 
