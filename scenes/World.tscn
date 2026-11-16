@@ -11,7 +11,7 @@ script = ExtResource("1_world")
 offset_left = 18.0
 offset_top = 18.0
 offset_right = 560.0
-offset_bottom = 230.0
+offset_bottom = 300.0
 
 [node name="Margin" type="MarginContainer" parent="HUD/Panel"]
 theme_override_constants/margin_left = 16
