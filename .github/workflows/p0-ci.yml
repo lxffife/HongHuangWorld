@@ -69,18 +69,30 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
-      - name: Apply initial migration
+      - name: Apply all migrations
         env:
           PGPASSWORD: ci-password
-        run: psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000001_initial_schema.up.sql
-      - name: Roll back initial migration
+        run: |
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000001_initial_schema.up.sql
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000002_character_progression.up.sql
+      - name: Verify character progression schema and realm seeds
         env:
           PGPASSWORD: ci-password
-        run: psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000001_initial_schema.down.sql
-      - name: Apply migration again
+        run: |
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('character_attributes','character_progression','realm_definitions')")" = "3"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM realm_definitions")" = "9"
+      - name: Roll back all migrations
         env:
           PGPASSWORD: ci-password
-        run: psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000001_initial_schema.up.sql
+        run: |
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000002_character_progression.down.sql
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000001_initial_schema.down.sql
+      - name: Reapply all migrations
+        env:
+          PGPASSWORD: ci-password
+        run: |
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000001_initial_schema.up.sql
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000002_character_progression.up.sql
 
   godot-native-network:
     name: Godot native ENet extension build
