@@ -2,10 +2,20 @@ extends Node3D
 
 @onready var hud_label: Label = $HUD/Panel/Margin/Content/Status
 
+var local_player: HHPlayerController
+var local_target_position := Vector3.ZERO
+var remote_players: Dictionary = {}
+var remote_targets: Dictionary = {}
+
 func _ready() -> void:
 	_build_environment()
 	_build_terrain()
 	_build_player()
+	if HHSession.world_network != null:
+		HHSession.world_network.entities_updated.connect(_on_entities_updated)
+		var spawn: Dictionary = HHSession.world_snapshot
+		local_target_position = Vector3(float(spawn.get("position_x", 0.0)), float(spawn.get("position_y", 0.15)), float(spawn.get("position_z", 0.0)))
+		local_player.position = local_target_position
 	_update_hud()
 
 func _build_environment() -> void:
@@ -70,16 +80,67 @@ func _build_terrain() -> void:
 		add_child(rock)
 
 func _build_player() -> void:
-	var player := HHPlayerController.new()
-	player.name = "LocalPlayer"
-	player.position = Vector3(0.0, 0.15, 0.0)
-	add_child(player)
+	local_player = HHPlayerController.new()
+	local_player.name = "LocalPlayer"
+	local_player.position = Vector3(0.0, 0.15, 0.0)
+	add_child(local_player)
 
 func _update_hud() -> void:
 	var snapshot: Dictionary = HHSession.world_snapshot
 	var world_id := str(snapshot.get("world_id", "青云人界"))
 	var character_name := str(snapshot.get("name", "初入洪荒"))
-	hud_label.text = "洪荒 · " + world_id + "\n" + character_name + "  |  WASD 移动 · 空格跳跃 · 鼠标转向 · ESC 释放鼠标\n当前为本地角色控制原型，服务器权威移动同步正在接入。"
+	hud_label.text = "洪荒 · " + world_id + "\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标\n服务器权威移动已启用 · 20Hz 实体快照 · 远端玩家同步"
 
 func _exit_tree() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+func _on_entities_updated(entities: Array) -> void:
+	var seen: Dictionary = {}
+	var own_id := str(HHSession.world_snapshot.get("character_id", ""))
+	for entity in entities:
+		if not entity is Dictionary:
+			continue
+		var character_id := str(entity.get("character_id", ""))
+		if character_id.is_empty():
+			continue
+		var target := Vector3(float(entity.get("x", 0.0)), float(entity.get("y", 0.0)), float(entity.get("z", 0.0)))
+		if character_id == own_id:
+			local_target_position = target
+			continue
+		seen[character_id] = true
+		if not remote_players.has(character_id):
+			remote_players[character_id] = _create_remote_player(str(entity.get("name", "修士")))
+		remote_targets[character_id] = target
+	for character_id in remote_players.keys():
+		if not seen.has(character_id):
+			remote_players[character_id].queue_free()
+			remote_players.erase(character_id)
+			remote_targets.erase(character_id)
+
+func _create_remote_player(character_name: String) -> Node3D:
+	var remote := Node3D.new()
+	var body := MeshInstance3D.new()
+	var capsule := CapsuleMesh.new()
+	capsule.radius = 0.4
+	capsule.height = 1.75
+	body.mesh = capsule
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#79a9c9")
+	body.material_override = material
+	body.position.y = 0.88
+	remote.add_child(body)
+	var label := Label3D.new()
+	label.text = character_name
+	label.position.y = 2.0
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	remote.add_child(label)
+	add_child(remote)
+	return remote
+
+func _process(delta: float) -> void:
+	if is_instance_valid(local_player):
+		local_player.position = local_player.position.lerp(local_target_position, minf(delta * 14.0, 1.0))
+	for character_id in remote_players:
+		var remote: Node3D = remote_players[character_id]
+		var target: Vector3 = remote_targets.get(character_id, remote.position)
+		remote.position = remote.position.lerp(target, minf(delta * 14.0, 1.0))
