@@ -97,6 +97,27 @@ func (h *characterHandlers) allocateAttributePoints(w http.ResponseWriter, r *ht
 	}
 }
 
+func (h *characterHandlers) breakthrough(w http.ResponseWriter, r *http.Request) {
+	account, ok := h.currentAccount(w, r)
+	if !ok {
+		return
+	}
+	result, err := h.characterService.Breakthrough(r.Context(), account.ID)
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusOK, result)
+	case errors.Is(err, character.ErrInsufficientCultivation):
+		http.Error(w, "not enough cultivation for the next stage or realm", http.StatusConflict)
+	case errors.Is(err, character.ErrMaxRealm):
+		http.Error(w, "highest configured realm reached", http.StatusConflict)
+	case errors.Is(err, sql.ErrNoRows):
+		http.Error(w, "living character not found", http.StatusNotFound)
+	default:
+		h.logger.Error("character breakthrough failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
+}
+
 func (h *characterHandlers) currentStatus(w http.ResponseWriter, r *http.Request) {
 	account, ok := h.currentAccount(w, r)
 	if !ok {
