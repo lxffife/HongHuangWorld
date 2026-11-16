@@ -19,6 +19,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -212,6 +213,64 @@ bool save_and_close_session(const ServerConfig& config, const PlayerState& playe
     return true;
 }
 
+bool save_periodic_position(const ServerConfig& config, const PlayerState& player,
+                            bool& session_inactive, std::string& error) {
+    session_inactive = false;
+    if (player.session_id.empty() || player.character_id.empty()) {
+        error = "player session identity is missing";
+        return false;
+    }
+    CURL* curl = curl_easy_init();
+    if (curl == nullptr) { error = "could not initialize periodic snapshot HTTP client"; return false; }
+
+    const std::string url = config.backend_url + "/api/v1/servers/sessions/snapshot";
+    const std::string body = Json{
+        {"node_key", config.node_key},
+        {"session_id", player.session_id},
+        {"character_id", player.character_id},
+        {"position_x", player.x},
+        {"position_y", player.y},
+        {"position_z", player.z},
+        {"rotation_y", player.yaw}
+    }.dump();
+    std::string response;
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    const std::string auth_header = "X-World-Server-Key: " + config.api_key;
+    headers = curl_slist_append(headers, auth_header.c_str());
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_POST, 1L);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body.size()));
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, collect_response);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 1000L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 2500L);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+
+    const auto result = curl_easy_perform(curl);
+    long http_status = 0;
+    if (result == CURLE_OK) curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+
+    if (result != CURLE_OK) {
+        error = std::string("periodic world snapshot request failed: ") + curl_easy_strerror(result);
+        return false;
+    }
+    if (http_status == 409) {
+        session_inactive = true;
+        return false;
+    }
+    if (http_status != 200) {
+        error = "periodic world snapshot rejected by backend (HTTP " + std::to_string(http_status) + ")";
+        return false;
+    }
+    return true;
+}
+
 void send_json(ENetPeer* peer, honghuang::protocol::MessageType type, const Json& value) {
     const auto payload_text = value.dump();
     const auto* begin = reinterpret_cast<const std::uint8_t*>(payload_text.data());
@@ -233,8 +292,99 @@ struct EnetServer::Impl {
     std::condition_variable heartbeat_cv;
     bool heartbeat_stop_requested{false};
     std::thread heartbeat_thread;
+    std::mutex persistence_mutex;
+    std::condition_variable persistence_cv;
+    std::unordered_map<std::string, PlayerState> pending_snapshots;
+    std::unordered_set<std::string> revoked_sessions;
+    bool persistence_stop_requested{false};
+    std::thread persistence_thread;
+    Clock::time_point last_persistence{Clock::now()};
 
     explicit Impl(ServerConfig value) : config(std::move(value)) {}
+
+    void start_persistence_worker() {
+        persistence_stop_requested = false;
+        persistence_thread = std::thread([this] {
+            while (true) {
+                std::unordered_map<std::string, PlayerState> batch;
+                {
+                    std::unique_lock lock(persistence_mutex);
+                    persistence_cv.wait(lock, [this] {
+                        return persistence_stop_requested || !pending_snapshots.empty();
+                    });
+                    if (persistence_stop_requested) return;
+                    batch.swap(pending_snapshots);
+                }
+
+                for (const auto& [session_id, player] : batch) {
+                    bool inactive = false;
+                    std::string error;
+                    if (save_periodic_position(config, player, inactive, error)) continue;
+                    if (inactive) {
+                        std::lock_guard lock(persistence_mutex);
+                        revoked_sessions.insert(session_id);
+                        continue;
+                    }
+                    std::cerr << "Periodic player snapshot failed: " << error << '\\n';
+                    std::lock_guard lock(persistence_mutex);
+                    if (!persistence_stop_requested && !pending_snapshots.contains(session_id)) {
+                        pending_snapshots.emplace(session_id, player);
+                    }
+                }
+
+                std::unique_lock lock(persistence_mutex);
+                if (!persistence_stop_requested && !pending_snapshots.empty()) {
+                    persistence_cv.wait_for(lock, std::chrono::seconds(1), [this] {
+                        return persistence_stop_requested;
+                    });
+                }
+                if (persistence_stop_requested) return;
+            }
+        });
+    }
+
+    void enqueue_periodic_snapshots() {
+        const auto now = Clock::now();
+        if (now - last_persistence < std::chrono::seconds(1)) return;
+        last_persistence = now;
+        {
+            std::lock_guard lock(persistence_mutex);
+            for (const auto& [peer, player] : players) {
+                (void)peer;
+                pending_snapshots[player.session_id] = player;
+            }
+        }
+        persistence_cv.notify_one();
+    }
+
+    void disconnect_revoked_sessions() {
+        std::unordered_set<std::string> revoked;
+        {
+            std::lock_guard lock(persistence_mutex);
+            revoked.swap(revoked_sessions);
+        }
+        if (revoked.empty()) return;
+        for (auto it = players.begin(); it != players.end();) {
+            if (revoked.contains(it->second.session_id)) {
+                std::cout << "Closing stale world session for character: "
+                          << it->second.character_id << '\\n';
+                enet_peer_disconnect_later(it->first, 7);
+                it = players.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    void stop_persistence_worker() {
+        {
+            std::lock_guard lock(persistence_mutex);
+            persistence_stop_requested = true;
+            pending_snapshots.clear();
+        }
+        persistence_cv.notify_all();
+        if (persistence_thread.joinable()) persistence_thread.join();
+    }
 
     void start_heartbeat_worker(bool initial_heartbeat_succeeded) {
         heartbeat_thread = std::thread([this, initial_heartbeat_succeeded] {
@@ -365,6 +515,8 @@ bool EnetServer::start() {
     }
     impl_->heartbeat_stop_requested = false;
     impl_->start_heartbeat_worker(heartbeat_ok);
+    impl_->start_persistence_worker();
+    impl_->last_persistence = Clock::now();
     std::cout << "WorldServer ENet listening on UDP " << impl_->config.port << '\n';
     return true;
 }
@@ -495,8 +647,10 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
             break;
         }
     }
+    impl_->disconnect_revoked_sessions();
     impl_->online_players.store(impl_->players.size(), std::memory_order_relaxed);
     impl_->tick_world();
+    impl_->enqueue_periodic_snapshots();
 }
 
 void EnetServer::stop() {
@@ -507,6 +661,8 @@ void EnetServer::stop() {
         }
         impl_->heartbeat_cv.notify_all();
         if (impl_->heartbeat_thread.joinable()) impl_->heartbeat_thread.join();
+
+        impl_->stop_persistence_worker();
 
         std::string heartbeat_error;
         if (!send_heartbeat(impl_->config, impl_->online_players.load(std::memory_order_relaxed),
