@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/liflife/HongHuangWorld/Backend/internal/auth"
 	"github.com/liflife/HongHuangWorld/Backend/internal/character"
 	"github.com/liflife/HongHuangWorld/Backend/internal/soul"
+	"github.com/liflife/HongHuangWorld/Backend/internal/serverregistry"
 	"github.com/liflife/HongHuangWorld/Backend/internal/world"
 )
 
@@ -55,6 +57,8 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		characters := &characterHandlers{authService: auth.NewService(db), characterService: character.NewService(db), logger: logger}
 		mux.HandleFunc("POST /api/v1/characters/first-life", characters.createFirstLife)
 		mux.HandleFunc("GET /api/v1/characters/current", characters.current)
+		servers := &serverHandlers{service: serverregistry.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
+		mux.HandleFunc("POST /api/v1/servers/heartbeat", servers.heartbeat)
 	} else {
 		unavailable := func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
@@ -67,6 +71,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("GET /api/v1/worlds", unavailable)
 		mux.HandleFunc("POST /api/v1/characters/first-life", unavailable)
 		mux.HandleFunc("GET /api/v1/characters/current", unavailable)
+		mux.HandleFunc("POST /api/v1/servers/heartbeat", unavailable)
 	}
 
 	return requestLogger(logger, mux)
