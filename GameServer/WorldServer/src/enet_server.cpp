@@ -474,6 +474,8 @@ struct EnetServer::Impl {
                       Json{{"accepted", false}, {"reason", "攻击间隔中，请稍后再试。"}});
             return;
         }
+        // Consume the cooldown even for misses to prevent invalid-target packet spam.
+        player.last_attack_at = now;
         const auto target_id = command.value("target_entity_id", std::string{});
         if (target_id.empty() || target_id.size() > 96) {
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
@@ -509,7 +511,6 @@ struct EnetServer::Impl {
                       Json{{"accepted", false}, {"reason", "伤害计算未通过校验。"}});
             return;
         }
-        player.last_attack_at = now;
         target->state.health = static_cast<float>(damage.remaining_health);
         if (damage.defeated) {
             target->state.mode = honghuang::simulation::MonsterMode::Dead;
