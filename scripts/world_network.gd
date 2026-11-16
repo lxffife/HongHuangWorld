@@ -17,6 +17,8 @@ var expected_ticket := ""
 var hello_sent := false
 var world_ready := false
 var heartbeat_timer: Timer
+var heartbeat_watchdog_timer: Timer
+var last_heartbeat_ack_msec := 0
 
 func _ready() -> void:
 	if not ClassDB.class_exists("EnetClient"):
@@ -98,6 +100,7 @@ func _on_frame_received(bytes: PackedByteArray) -> void:
 			var parsed: Variant = JSON.parse_string(payload.get_string_from_utf8())
 			if parsed is Dictionary and parsed.has("character_id") and parsed.has("world_id") and parsed.has("instance_id"):
 				world_ready = true
+				last_heartbeat_ack_msec = Time.get_ticks_msec()
 				_start_heartbeat()
 				welcomed.emit(parsed)
 			else:
@@ -109,7 +112,7 @@ func _on_frame_received(bytes: PackedByteArray) -> void:
 			rejected.emit(reason)
 			transport.disconnect_from_host()
 		HHProtocolCodec.MessageType.HEARTBEAT_ACK:
-			pass
+			last_heartbeat_ack_msec = Time.get_ticks_msec()
 		HHProtocolCodec.MessageType.ENTITY_SNAPSHOT:
 			var snapshot: Variant = JSON.parse_string(payload.get_string_from_utf8())
 			if snapshot is Dictionary and snapshot.get("entities", []) is Array:
@@ -137,7 +140,24 @@ func _start_heartbeat() -> void:
 		heartbeat_timer.one_shot = false
 		heartbeat_timer.timeout.connect(_send_heartbeat)
 		add_child(heartbeat_timer)
+	if heartbeat_watchdog_timer == null:
+		heartbeat_watchdog_timer = Timer.new()
+		heartbeat_watchdog_timer.wait_time = 5.0
+		heartbeat_watchdog_timer.one_shot = false
+		heartbeat_watchdog_timer.timeout.connect(_check_heartbeat_timeout)
+		add_child(heartbeat_watchdog_timer)
 	heartbeat_timer.start()
+	heartbeat_watchdog_timer.start()
+
+func _check_heartbeat_timeout() -> void:
+	if not world_ready or last_heartbeat_ack_msec <= 0:
+		return
+	if Time.get_ticks_msec() - last_heartbeat_ack_msec <= 30000:
+		return
+	world_ready = false
+	connection_error.emit("世界服务器超过 30 秒未响应心跳，正在断开连接以便重新连接。")
+	if transport != null:
+		transport.disconnect_from_host()
 
 func _send_heartbeat() -> void:
 	if transport == null or not transport.is_connected_to_server():
@@ -151,10 +171,14 @@ func _on_disconnected() -> void:
 	world_ready = false
 	if heartbeat_timer != null:
 		heartbeat_timer.stop()
+	if heartbeat_watchdog_timer != null:
+		heartbeat_watchdog_timer.stop()
 	disconnected.emit()
 
 func close() -> void:
 	if heartbeat_timer != null:
 		heartbeat_timer.stop()
+	if heartbeat_watchdog_timer != null:
+		heartbeat_watchdog_timer.stop()
 	if transport != null:
 		transport.disconnect_from_host()
