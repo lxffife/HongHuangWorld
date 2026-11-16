@@ -66,7 +66,12 @@ func TestValidReward(t *testing.T) {
 		},
 		{
 			name: "invalid event id",
-			reward: Reward{EventID: "not-a-uuid", CharacterID: characterID, Experience: 1},
+			reward: Reward{EventID: "not-a-uuid", SessionID: sessionID, CharacterID: characterID, Experience: 1},
+			want: false,
+		},
+		{
+			name: "invalid session id",
+			reward: Reward{EventID: eventID, SessionID: "not-a-uuid", CharacterID: characterID, Experience: 1},
 			want: false,
 		},
 	}
