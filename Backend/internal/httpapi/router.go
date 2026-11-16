@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/liflife/HongHuangWorld/Backend/internal/auth"
 )
 
 type healthResponse struct {
@@ -36,6 +38,21 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		}
 		writeJSON(w, http.StatusOK, healthResponse{Status: "ready", Time: time.Now().UTC().Format(time.RFC3339)})
 	})
+
+	if db != nil {
+		handlers := &authHandlers{service: auth.NewService(db), logger: logger}
+		mux.HandleFunc("POST /api/v1/auth/register", handlers.register)
+		mux.HandleFunc("POST /api/v1/auth/login", handlers.login)
+		mux.HandleFunc("GET /api/v1/account/me", handlers.me)
+	} else {
+		unavailable := func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+		}
+		mux.HandleFunc("POST /api/v1/auth/register", unavailable)
+		mux.HandleFunc("POST /api/v1/auth/login", unavailable)
+		mux.HandleFunc("GET /api/v1/account/me", unavailable)
+	}
+
 	return requestLogger(logger, mux)
 }
 
