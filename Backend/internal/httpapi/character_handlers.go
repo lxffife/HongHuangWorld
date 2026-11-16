@@ -53,6 +53,24 @@ func (h *characterHandlers) createFirstLife(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusCreated, created)
 }
 
+func (h *characterHandlers) currentStatus(w http.ResponseWriter, r *http.Request) {
+	account, ok := h.currentAccount(w, r)
+	if !ok {
+		return
+	}
+	status, err := h.characterService.CurrentStatus(r.Context(), account.ID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "character status not found", http.StatusNotFound)
+			return
+		}
+		h.logger.Error("load current character status failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+
 func (h *characterHandlers) current(w http.ResponseWriter, r *http.Request) {
 	account, ok := h.currentAccount(w, r)
 	if !ok {
