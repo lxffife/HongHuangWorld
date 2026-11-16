@@ -20,16 +20,12 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 - PostgreSQL 连接池通过 `DATABASE_URL` 配置，启动时执行 Ping；连接失败则拒绝启动。
 - JSON 结构化日志和优雅关闭。
 
-## 计划中的首批 API
+## 尚待完成
 
-- `POST /api/v1/auth/register`
-- `POST /api/v1/auth/login`
-- `GET /api/v1/account/me`
-- `POST /api/v1/souls`
-- `GET /api/v1/souls/current`
-- `GET /api/v1/worlds`
-- `POST /api/v1/worlds/enter`
-- `POST /api/v1/servers/heartbeat`
+- 服务器心跳过期后的自动摘除与后台监控。
+- 服务器票据兑换后的断线清理、快照保存与重连恢复。
+- 登录限流、邮箱验证、密码重置和主动注销。
+- Redis/NATS 实际业务接入与服务端 API Key 轮换。
 
 ## 本地运行
 
