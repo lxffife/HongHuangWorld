@@ -8,7 +8,7 @@
 - Network：ENetServer、Session、PacketDispatcher、ProtocolCodec。
 - World：WorldManager、WorldInstance、AOI。
 - Entity：Entity、PlayerEntity、EntityManager。
-- Gameplay：MovementValidator、Combat（后续）、Inventory（后续）。
+- Gameplay：MovementValidator、Combat、Inventory/Drop（后续接入 ENet 实时流程）。
 - Persistence：CharacterSnapshot、SaveQueue。
 
 服务器必须权威计算玩家位置并广播快照。P0 先实现单进程单测试世界，后续再扩展多实例与分区。
@@ -22,7 +22,7 @@ include/simulation/combat.hpp 提供无随机数、无网络依赖的确定性�
 - 输入属性与倍率有上限校验，避免负数、异常状态和整数溢出。
 - combat_test 覆盖基础伤害、倍率、防御穿透、最低伤害、生命值上限和非法参数。
 
-当前已接入 ENet 攻击指令与 CombatEvent：客户端左键请求攻击附近怪物，服务端执行目标、距离和冷却校验，并调用该伤害计算模块。奖励结算仍未接入。
+当前已接入 ENet 攻击指令与 CombatEvent：客户端左键请求攻击附近怪物，服务端执行目标、距离和冷却校验，并调用该伤害计算模块。奖励结算已接入中心服。中心服已新增物品目录、荒原狼掉落配置、地面掉落持久化、角色背包和幂等拾取 API；WorldServer 尚未调用这些 API，尚未向客户端广播掉落实体或处理拾取指令。
 
 ## 怪物仿真基础
 
@@ -33,7 +33,7 @@ include/simulation/combat.hpp 提供无随机数、无网络依赖的确定性�
 - 生命归零后进入死亡状态；该模块不负责奖励、掉落、刷新计时或网络广播。
 - `monster_test` 覆盖定义校验、索敌追击、离巢返回与死亡状态。
 
-当前已接入 WorldServer 服务端实体集合与 20Hz 世界 Tick：世界启动时生成 3 只荒原狼，服务端选择最近玩家作为索敌目标并执行追击/返回；AOI 快照向 80 米范围内客户端发送怪物实体，Godot 客户端显示简易占位模型并平滑同步位置。当前已接入左键攻击、服务端距离与冷却校验、统一伤害结算和 12 秒定时重生；玩家基础攻击暂为配置常量 20。击杀奖励通过后台队列调用中心服 `/api/v1/servers/characters/rewards`，按怪物等级发放经验与修为，携带原始世界会话 ID，并使用 UUID 事件 ID 幂等去重；奖励队列允许会话关闭后 10 分钟内完成补交；掉落拾取尚未接入。模型仍是联调占位体。
+当前已接入 WorldServer 服务端实体集合与 20Hz 世界 Tick：世界启动时生成 3 只荒原狼，服务端选择最近玩家作为索敌目标并执行追击/返回；AOI 快照向 80 米范围内客户端发送怪物实体，Godot 客户端显示简易占位模型并平滑同步位置。当前已接入左键攻击、服务端距离与冷却校验、统一伤害结算和 12 秒定时重生；玩家基础攻击暂为配置常量 20。击杀奖励通过后台队列调用中心服 `/api/v1/servers/characters/rewards`，按怪物等级发放经验与修为，携带原始世界会话 ID，并使用 UUID 事件 ID 幂等去重；奖励队列允许会话关闭后 10 分钟内完成补交；掉落与背包的中心服/数据库基础已建立：荒原狼预置荒狼獠牙（65%）与荒狼皮（30%）掉落配置，地面掉落 15 分钟过期，拾取在单个数据库事务中消费掉落并增加背包堆叠，事件 ID 防重复。WorldServer 实时生成/广播/距离校验和客户端背包 UI 尚未接入。模型仍是联调占位体。
 
 ## 中心服节点注册
 
