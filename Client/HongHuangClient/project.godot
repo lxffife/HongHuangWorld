@@ -1,0 +1,12 @@
+; Engine configuration file.
+; Pin and verify the exact Godot 4.x editor version in the development setup guide.
+
+config_version=5
+
+[application]
+config/name="HongHuangClient"
+run/main_scene="res://scenes/Startup.tscn"
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
