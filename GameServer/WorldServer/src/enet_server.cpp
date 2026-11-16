@@ -255,33 +255,35 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                 if (packet != nullptr && enet_peer_send(event.peer, 0, packet) != 0) enet_packet_destroy(packet);
             } else if (frame.type == honghuang::protocol::MessageType::InputCommand &&
                        impl_->players.contains(event.peer)) {
-                try {
-                    const std::string payload(frame.payload.begin(), frame.payload.end());
-                    const auto command = Json::parse(payload);
-                    const auto sequence = command.at("sequence").get<std::uint64_t>();
-                    float move_x = command.at("move_x").get<float>();
-                    float move_z = command.at("move_z").get<float>();
-                    if (!honghuang::simulation::normalize_direction(move_x, move_z)) {
-                        throw std::runtime_error("movement input must be finite");
-                    }
-                    auto& player = impl_->players.at(event.peer);
-                    const auto now = Clock::now();
-                    if (sequence > player.last_input_sequence &&
-                        now - player.last_input_received_at >= kMinimumInputInterval) {
-                        player.move_x = move_x;
-                        player.move_z = move_z;
-                        player.jump_requested = command.value("jump", false);
-                        if (move_x != 0.0F || move_z != 0.0F) {
-                            player.yaw = std::atan2(-move_x, -move_z);
+                auto& player = impl_->players.at(event.peer);
+                const auto received_at = Clock::now();
+                // Drop excess packets before JSON parsing so the limiter also protects CPU time.
+                if (received_at - player.last_input_received_at >= kMinimumInputInterval) {
+                    player.last_input_received_at = received_at;
+                    try {
+                        const std::string payload(frame.payload.begin(), frame.payload.end());
+                        const auto command = Json::parse(payload);
+                        const auto sequence = command.at("sequence").get<std::uint64_t>();
+                        float move_x = command.at("move_x").get<float>();
+                        float move_z = command.at("move_z").get<float>();
+                        if (!honghuang::simulation::normalize_direction(move_x, move_z)) {
+                            throw std::runtime_error("movement input must be finite");
                         }
-                        player.last_input_sequence = sequence;
-                        player.last_input_at = now;
-                        player.last_input_received_at = now;
+                        if (sequence > player.last_input_sequence) {
+                            player.move_x = move_x;
+                            player.move_z = move_z;
+                            player.jump_requested = command.value("jump", false);
+                            if (move_x != 0.0F || move_z != 0.0F) {
+                                player.yaw = std::atan2(-move_x, -move_z);
+                            }
+                            player.last_input_sequence = sequence;
+                            player.last_input_at = received_at;
+                        }
+                    } catch (const std::exception&) {
+                        send_json(event.peer, honghuang::protocol::MessageType::ServerReject,
+                                  Json{{"reason", "invalid movement input"}});
+                        enet_peer_disconnect_later(event.peer, 5);
                     }
-                } catch (const std::exception&) {
-                    send_json(event.peer, honghuang::protocol::MessageType::ServerReject,
-                              Json{{"reason", "invalid movement input"}});
-                    enet_peer_disconnect_later(event.peer, 5);
                 }
             } else {
                 send_json(event.peer, honghuang::protocol::MessageType::ServerReject,
