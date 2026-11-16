@@ -28,16 +28,10 @@ try {
     )
 
     Write-Host '[HongHuang] Applying the four initial migrations to the local development database.'
-    foreach ($file in $files) {
-        $source = Join-Path (Join-Path $PSScriptRoot '..\Database\migrations') $file
-        if (-not (Test-Path $source)) { throw "Migration file not found: $source" }
-
-        $existing = docker compose --env-file .env exec -T postgres psql -U $env:POSTGRES_USER -d $env:POSTGRES_DB -At -c "SELECT to_regclass('public.accounts') IS NOT NULL;"
-        if ($LASTEXITCODE -ne 0) { throw 'Could not connect to PostgreSQL. Start infrastructure first.' }
-        if (($existing | Out-String).Trim() -eq 't') {
-            throw 'The accounts table already exists. Refusing to re-run non-idempotent initial migrations.'
-        }
-        break
+    $existing = docker compose --env-file .env exec -T postgres psql -U $env:POSTGRES_USER -d $env:POSTGRES_DB -At -c "SELECT to_regclass('public.accounts') IS NOT NULL;"
+    if ($LASTEXITCODE -ne 0) { throw 'Could not connect to PostgreSQL. Start infrastructure first.' }
+    if (($existing | Out-String).Trim() -eq 't') {
+        throw 'The accounts table already exists. Refusing to re-run non-idempotent initial migrations.'
     }
 
     foreach ($file in $files) {
