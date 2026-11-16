@@ -34,6 +34,7 @@ constexpr auto kHeartbeatInterval = std::chrono::seconds(10);
 constexpr auto kHeartbeatRetryInterval = std::chrono::seconds(5);
 
 struct PlayerState {
+    std::string session_id;
     std::string character_id;
     std::string name;
     float x{};
@@ -145,13 +146,66 @@ bool redeem_ticket(const ServerConfig& config, const std::string& ticket, Json& 
     }
     try {
         snapshot = Json::parse(response);
-        if (!snapshot.contains("character_id") || !snapshot.contains("world_id") ||
-            !snapshot.contains("instance_id") || !snapshot.contains("name")) {
+        if (!snapshot.contains("session_id") || !snapshot.contains("character_id") ||
+            !snapshot.contains("world_id") || !snapshot.contains("instance_id") ||
+            !snapshot.contains("name")) {
             error = "backend snapshot is missing required fields";
             return false;
         }
     } catch (const std::exception& ex) {
         error = std::string("invalid backend JSON response: ") + ex.what();
+        return false;
+    }
+    return true;
+}
+
+bool save_and_close_session(const ServerConfig& config, const PlayerState& player, std::string& error) {
+    if (player.session_id.empty() || player.character_id.empty()) {
+        error = "player session identity is missing";
+        return false;
+    }
+    CURL* curl = curl_easy_init();
+    if (curl == nullptr) { error = "could not initialize session snapshot HTTP client"; return false; }
+
+    const std::string url = config.backend_url + "/api/v1/servers/sessions/close";
+    const std::string body = Json{
+        {"node_key", config.node_key},
+        {"session_id", player.session_id},
+        {"character_id", player.character_id},
+        {"position_x", player.x},
+        {"position_y", player.y},
+        {"position_z", player.z},
+        {"rotation_y", player.yaw}
+    }.dump();
+    std::string response;
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    const std::string auth_header = "X-World-Server-Key: " + config.api_key;
+    headers = curl_slist_append(headers, auth_header.c_str());
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_POST, 1L);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body.size()));
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, collect_response);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 1000L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 3000L);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+
+    const auto result = curl_easy_perform(curl);
+    long http_status = 0;
+    if (result == CURLE_OK) curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+
+    if (result != CURLE_OK) {
+        error = std::string("world session snapshot request failed: ") + curl_easy_strerror(result);
+        return false;
+    }
+    if (http_status != 200) {
+        error = "world session snapshot rejected by backend (HTTP " + std::to_string(http_status) + ")";
         return false;
     }
     return true;
@@ -337,11 +391,13 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                         enet_peer_disconnect_later(event.peer, 3);
                     } else {
                         PlayerState player;
+                        player.session_id = snapshot.value("session_id", std::string{});
                         player.character_id = snapshot.value("character_id", std::string{});
                         player.name = snapshot.value("name", std::string{});
                         player.x = snapshot.value("position_x", 0.0F);
                         player.y = snapshot.value("position_y", 0.0F);
                         player.z = snapshot.value("position_z", 0.0F);
+                        player.yaw = snapshot.value("rotation_y", 0.0F);
                         player.last_input_at = Clock::now();
                         // A successful ticket redemption replaces the character's previous
                         // backend session. Close any older peer on this node before adding
@@ -409,10 +465,19 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
             enet_packet_destroy(event.packet);
             break;
         }
-        case ENET_EVENT_TYPE_DISCONNECT:
-            impl_->players.erase(event.peer);
+        case ENET_EVENT_TYPE_DISCONNECT: {
+            const auto player = impl_->players.find(event.peer);
+            if (player != impl_->players.end()) {
+                std::string snapshot_error;
+                if (!save_and_close_session(impl_->config, player->second, snapshot_error)) {
+                    std::cerr << "Could not persist disconnected player session: "
+                              << snapshot_error << '\n';
+                }
+                impl_->players.erase(player);
+            }
             std::cout << "ENet client disconnected\n";
             break;
+        }
         case ENET_EVENT_TYPE_NONE:
             break;
         }
@@ -429,6 +494,15 @@ void EnetServer::stop() {
         }
         impl_->heartbeat_cv.notify_all();
         if (impl_->heartbeat_thread.joinable()) impl_->heartbeat_thread.join();
+
+        for (const auto& [peer, player] : impl_->players) {
+            (void)peer;
+            std::string snapshot_error;
+            if (!save_and_close_session(impl_->config, player, snapshot_error)) {
+                std::cerr << "Could not persist player during WorldServer shutdown: "
+                          << snapshot_error << '\n';
+            }
+        }
 
         std::string heartbeat_error;
         if (!send_heartbeat(impl_->config, impl_->online_players.load(std::memory_order_relaxed),
