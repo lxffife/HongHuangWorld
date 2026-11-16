@@ -23,6 +23,11 @@ type createCharacterRequest struct {
 	RaceID  string `json:"race_id"`
 }
 
+type allocateAttributePointsRequest struct {
+	Attribute string `json:"attribute"`
+	Points    int    `json:"points"`
+}
+
 func (h *characterHandlers) createFirstLife(w http.ResponseWriter, r *http.Request) {
 	account, ok := h.currentAccount(w, r)
 	if !ok {
@@ -51,6 +56,32 @@ func (h *characterHandlers) createFirstLife(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
+}
+
+func (h *characterHandlers) allocateAttributePoints(w http.ResponseWriter, r *http.Request) {
+	account, ok := h.currentAccount(w, r)
+	if !ok {
+		return
+	}
+	var request allocateAttributePointsRequest
+	if err := decodeJSON(w, r, &request); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	err := h.characterService.AllocateAttributePoints(r.Context(), account.ID, request.Attribute, request.Points)
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusOK, map[string]any{"allocated": request.Points, "attribute": request.Attribute})
+	case errors.Is(err, character.ErrInvalidAllocation):
+		http.Error(w, "attribute must be strength, constitution, agility, spirit or vitality; points must be 1-100", http.StatusBadRequest)
+	case errors.Is(err, character.ErrInsufficientPoints):
+		http.Error(w, "not enough unspent attribute points", http.StatusConflict)
+	case errors.Is(err, sql.ErrNoRows):
+		http.Error(w, "living character not found", http.StatusNotFound)
+	default:
+		h.logger.Error("allocate character attribute points failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
 }
 
 func (h *characterHandlers) currentStatus(w http.ResponseWriter, r *http.Request) {
