@@ -1,3 +1,5 @@
+#include "network/enet_server.hpp"
+
 #include <chrono>
 #include <csignal>
 #include <iostream>
@@ -15,13 +17,19 @@ int main() {
     std::signal(SIGINT, handle_signal);
     std::signal(SIGTERM, handle_signal);
 
-    std::cout << "HongHuang WorldServer bootstrap (ENet transport is the next milestone)\n";
-    std::cout << "Process is running. Press Ctrl+C to stop.\n";
-
-    while (running != 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    honghuang::network::EnetServer server("0.0.0.0", 7777, 512);
+    if (!server.start()) {
+        std::cerr << "WorldServer startup failed.\n";
+        return 1;
     }
 
+    std::cout << "HongHuang WorldServer transport is running. UDP port: 7777\n";
+    std::cout << "Gameplay ticket redemption is not enabled yet. Press Ctrl+C to stop.\n";
+    while (running != 0) {
+        server.poll(50);
+    }
+
+    server.stop();
     std::cout << "WorldServer stopped.\n";
     return 0;
 }
