@@ -80,3 +80,27 @@ func TestValidReward(t *testing.T) {
 		t.Fatal("validReward accepted an empty node key")
 	}
 }
+
+func TestCultivationStageThreshold(t *testing.T) {
+	tests := []struct {
+		name string
+		current int64
+		next int64
+		targetStage int
+		maxStage int
+		want int64
+	}{
+		{name: "first stage threshold", current: 0, next: 10000, targetStage: 2, maxStage: 9, want: 2000},
+		{name: "middle realm threshold rounds up", current: 10000, next: 100000, targetStage: 5, maxStage: 9, want: 55000},
+		{name: "last stage leaves final step for realm breakthrough", current: 0, next: 10000, targetStage: 9, maxStage: 9, want: 9000},
+		{name: "invalid stage", current: 100, next: 1000, targetStage: 10, maxStage: 9, want: 100},
+		{name: "invalid range", current: 1000, next: 100, targetStage: 2, maxStage: 9, want: 1000},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := cultivationStageThreshold(test.current, test.next, test.targetStage, test.maxStage); got != test.want {
+				t.Fatalf("cultivationStageThreshold() = %d, want %d", got, test.want)
+			}
+		})
+	}
+}
