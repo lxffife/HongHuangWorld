@@ -8,6 +8,7 @@ signal connection_error(message: String)
 signal entities_updated(entities: Array)
 signal player_joined(player: Dictionary)
 signal player_left(character_id: String)
+signal combat_event(event: Dictionary)
 
 const BUILD := "0.1.0"
 const EXTENSION_PATH := "res://bin/honghuang_native_net.gdextension"
@@ -83,6 +84,15 @@ func send_input(move_x: float, move_z: float, sequence: int, jump: bool = false)
 		return ERR_INVALID_DATA
 	return transport.send_frame(frame, false)
 
+func send_attack(target_entity_id: String) -> Error:
+	if not world_ready or transport == null or target_entity_id.is_empty() or target_entity_id.length() > 96:
+		return ERR_INVALID_PARAMETER
+	var payload := JSON.stringify({"target_entity_id": target_entity_id}).to_utf8_buffer()
+	var frame := HHProtocolCodec.encode_frame(HHProtocolCodec.MessageType.ATTACK_COMMAND, payload)
+	if frame.is_empty():
+		return ERR_INVALID_DATA
+	return transport.send_frame(frame)
+
 func _on_frame_received(bytes: PackedByteArray) -> void:
 	var decoded := HHProtocolCodec.decode_frame(bytes)
 	if not decoded.get("ok", false):
@@ -129,6 +139,12 @@ func _on_frame_received(bytes: PackedByteArray) -> void:
 				player_left.emit(str(left.get("character_id", "")))
 			else:
 				rejected.emit("收到无效的 PlayerLeft 事件。")
+		HHProtocolCodec.MessageType.COMBAT_EVENT:
+			var combat: Variant = JSON.parse_string(payload.get_string_from_utf8())
+			if combat is Dictionary:
+				combat_event.emit(combat)
+			else:
+				rejected.emit("收到无效的 CombatEvent。")
 		_:
 			rejected.emit("收到未知服务端消息类型：" + str(message_type))
 			transport.disconnect_from_host()
