@@ -7,10 +7,10 @@ namespace honghuang::simulation {
 
 inline bool normalize_direction(float& x, float& z) {
     if (!std::isfinite(x) || !std::isfinite(z)) return false;
-    const float magnitude = std::hypot(x, z);
-    if (magnitude > 1.0F) {
-        x /= magnitude;
-        z /= magnitude;
+    const double magnitude = std::hypot(static_cast<double>(x), static_cast<double>(z));
+    if (magnitude > 1.0) {
+        x = static_cast<float>(static_cast<double>(x) / magnitude);
+        z = static_cast<float>(static_cast<double>(z) / magnitude);
     }
     return true;
 }
