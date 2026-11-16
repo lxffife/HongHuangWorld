@@ -41,6 +41,8 @@ jobs:
         run: cmake -S GameServer/WorldServer -B build/world-server -DCMAKE_BUILD_TYPE=Release
       - name: Build
         run: cmake --build build/world-server --config Release --parallel
+      - name: Test protocol codec
+        run: ctest --test-dir build/world-server --output-on-failure
 
   database-migration:
     name: PostgreSQL migration up/down
