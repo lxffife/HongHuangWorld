@@ -1,5 +1,6 @@
 #include "network/enet_server.hpp"
 #include "protocol/frame.hpp"
+#include "simulation/movement.hpp"
 
 #include <enet/enet.h>
 #include <curl/curl.h>
@@ -21,10 +22,6 @@ namespace honghuang::network {
 namespace {
 using Json = nlohmann::json;
 using Clock = std::chrono::steady_clock;
-constexpr float kWorldMoveSpeed = 5.0F;
-constexpr float kWorldBound = 100.0F;
-constexpr float kGravity = 18.0F;
-constexpr float kJumpVelocity = 6.5F;
 constexpr auto kSnapshotInterval = std::chrono::milliseconds(50);
 constexpr auto kInputTimeout = std::chrono::milliseconds(500);
 
@@ -154,16 +151,10 @@ struct EnetServer::Impl {
                 player.move_x = 0.0F;
                 player.move_z = 0.0F;
             }
-            player.x = std::clamp(player.x + player.move_x * kWorldMoveSpeed * delta, -kWorldBound, kWorldBound);
-            player.z = std::clamp(player.z + player.move_z * kWorldMoveSpeed * delta, -kWorldBound, kWorldBound);
-            if (player.jump_requested && player.y <= 0.001F) player.vertical_velocity = kJumpVelocity;
-            player.jump_requested = false;
-            player.vertical_velocity -= kGravity * delta;
-            player.y += player.vertical_velocity * delta;
-            if (player.y < 0.0F) {
-                player.y = 0.0F;
-                player.vertical_velocity = 0.0F;
-            }
+            honghuang::simulation::integrate_horizontal(
+                player.x, player.z, player.move_x, player.move_z, delta);
+            honghuang::simulation::integrate_vertical(
+                player.y, player.vertical_velocity, player.jump_requested, delta);
         }
         last_snapshot = now;
         broadcast_snapshot();
@@ -263,19 +254,15 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                     const std::string payload(frame.payload.begin(), frame.payload.end());
                     const auto command = Json::parse(payload);
                     const auto sequence = command.at("sequence").get<std::uint64_t>();
-                    const float move_x = command.at("move_x").get<float>();
-                    const float move_z = command.at("move_z").get<float>();
-                    if (!std::isfinite(move_x) || !std::isfinite(move_z)) {
+                    float move_x = command.at("move_x").get<float>();
+                    float move_z = command.at("move_z").get<float>();
+                    if (!honghuang::simulation::normalize_direction(move_x, move_z)) {
                         throw std::runtime_error("movement input must be finite");
                     }
                     if (sequence > impl_->players.at(event.peer).last_input_sequence) {
                         auto& player = impl_->players.at(event.peer);
-                        float x = std::clamp(move_x, -1.0F, 1.0F);
-                        float z = std::clamp(move_z, -1.0F, 1.0F);
-                        const float magnitude = std::sqrt(x * x + z * z);
-                        if (magnitude > 1.0F) { x /= magnitude; z /= magnitude; }
-                        player.move_x = x;
-                        player.move_z = z;
+                        player.move_x = move_x;
+                        player.move_z = move_z;
                         player.jump_requested = command.value("jump", false);
                         player.last_input_sequence = sequence;
                         player.last_input_at = Clock::now();
