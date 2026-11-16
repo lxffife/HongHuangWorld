@@ -15,6 +15,8 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 - `POST /api/v1/characters/first-life`：为当前灵魂创建第一世肉身角色。
 - `GET /api/v1/characters/current`：读取当前肉身角色。
 - `POST /api/v1/servers/heartbeat`：可信世界服务器通过 `X-World-Server-Key` 注册/更新节点和世界实例状态。
+- `POST /api/v1/worlds/enter`：当前角色申请世界入口，返回服务器地址和 60 秒一次性票据。
+- `POST /api/v1/servers/tickets/redeem`：世界服务器校验并兑换一次性票据，获取角色初始快照并创建世界会话。
 - PostgreSQL 连接池通过 `DATABASE_URL` 配置，启动时执行 Ping；连接失败则拒绝启动。
 - JSON 结构化日志和优雅关闭。
 
