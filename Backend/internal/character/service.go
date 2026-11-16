@@ -18,6 +18,8 @@ var (
 	ErrInvalidReward = errors.New("invalid character reward")
 	ErrRewardSession = errors.New("character has no active session on this server")
 	ErrInvalidRace = errors.New("race has no configured default cultivation system")
+	ErrInsufficientCultivation = errors.New("not enough cultivation for breakthrough")
+	ErrMaxRealm = errors.New("character has reached the highest configured realm")
 )
 
 type Character struct {
@@ -57,6 +59,7 @@ type Progression struct {
 	RealmStage             int    `json:"realm_stage"`
 	RealmStageName         string `json:"realm_stage_name"`
 	MaxRealmStage          int    `json:"max_realm_stage"`
+	RequiredForNextStage   *int64 `json:"required_for_next_stage,omitempty"`
 	RequiredForNextRealm   *int64 `json:"required_for_next_realm,omitempty"`
 	PowerTierID            string `json:"power_tier_id,omitempty"`
 	PowerTierName          string `json:"power_tier_name,omitempty"`
@@ -316,6 +319,92 @@ func validUUID(value string) bool {
 	return true
 }
 
+type BreakthroughResult struct {
+	RealmID      string `json:"realm_id"`
+	RealmStage   int    `json:"realm_stage"`
+	AdvancedRealm bool  `json:"advanced_realm"`
+}
+
+// Breakthrough advances one stage, or enters the next realm after the final
+// stage. Cultivation thresholds are cumulative and derived from adjacent
+// realm thresholds, keeping the realm catalogue data-driven.
+func (s *Service) Breakthrough(ctx context.Context, accountID string) (BreakthroughResult, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return BreakthroughResult{}, fmt.Errorf("begin breakthrough: %w", err)
+	}
+	defer tx.Rollback()
+
+	var characterID, realmID string
+	var stage, maxStage int
+	var cultivation, currentRequired int64
+	var nextRealmID sql.NullString
+	var nextRequired sql.NullInt64
+	err = tx.QueryRowContext(ctx,
+		`SELECT c.id::text, p.realm_id, p.realm_stage, p.cultivation,
+		        rd.max_stage, rd.required_cultivation,
+		        next_realm.id, next_realm.required_cultivation
+		 FROM souls s
+		 JOIN characters c ON c.id = s.current_character_id
+		 JOIN character_progression p ON p.character_id = c.id
+		 JOIN cultivation_realms rd ON rd.id = p.realm_id AND rd.system_id = p.system_id
+		 LEFT JOIN cultivation_realms next_realm
+		   ON next_realm.system_id = p.system_id AND next_realm.realm_order = rd.realm_order + 1
+		 WHERE s.account_id = $1 AND c.status = 'alive'
+		 FOR UPDATE OF c, p`, accountID,
+	).Scan(&characterID, &realmID, &stage, &cultivation, &maxStage, &currentRequired, &nextRealmID, &nextRequired)
+	if errors.Is(err, sql.ErrNoRows) {
+		return BreakthroughResult{}, sql.ErrNoRows
+	}
+	if err != nil {
+		return BreakthroughResult{}, fmt.Errorf("load character breakthrough state: %w", err)
+	}
+	if !nextRealmID.Valid || !nextRequired.Valid {
+		return BreakthroughResult{}, ErrMaxRealm
+	}
+
+	result := BreakthroughResult{RealmID: realmID, RealmStage: stage}
+	if stage < maxStage {
+		threshold := cultivationStageThreshold(currentRequired, nextRequired.Int64, stage+1, maxStage)
+		if cultivation < threshold {
+			return BreakthroughResult{}, ErrInsufficientCultivation
+		}
+		result.RealmStage = stage + 1
+		_, err = tx.ExecContext(ctx,
+			`UPDATE character_progression SET realm_stage = $1, updated_at = now() WHERE character_id = $2`,
+			result.RealmStage, characterID)
+	} else {
+		if cultivation < nextRequired.Int64 {
+			return BreakthroughResult{}, ErrInsufficientCultivation
+		}
+		result.RealmID = nextRealmID.String
+		result.RealmStage = 1
+		result.AdvancedRealm = true
+		_, err = tx.ExecContext(ctx,
+			`UPDATE character_progression SET realm_id = $1, realm_stage = 1, updated_at = now() WHERE character_id = $2`,
+			result.RealmID, characterID)
+	}
+	if err != nil {
+		return BreakthroughResult{}, fmt.Errorf("apply character breakthrough: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return BreakthroughResult{}, fmt.Errorf("commit character breakthrough: %w", err)
+	}
+	return result, nil
+}
+
+// Stage thresholds divide the cultivation gap to the next realm into
+// maxStage+1 steps. The final step is the realm breakthrough itself.
+func cultivationStageThreshold(currentRealmRequired, nextRealmRequired int64, targetStage, maxStage int) int64 {
+	if maxStage < 1 || targetStage < 1 || targetStage > maxStage || nextRealmRequired <= currentRealmRequired {
+		return currentRealmRequired
+	}
+	delta := nextRealmRequired - currentRealmRequired
+	denominator := int64(maxStage + 1)
+	numerator := delta * int64(targetStage)
+	return currentRealmRequired + (numerator+denominator-1)/denominator
+}
+
 // AllocateAttributePoints atomically spends server-issued points on one primary attribute.
 func (s *Service) AllocateAttributePoints(ctx context.Context, accountID, attribute string, points int) error {
 	if points < 1 || points > 100 {
@@ -458,6 +547,7 @@ func (s *Service) CurrentStatus(ctx context.Context, accountID string) (Status, 
 	var result Status
 	var race sql.NullString
 	var required sql.NullInt64
+	var currentRealmRequired int64
 	var stageName, powerTierID, powerTierName, comparisonNote sql.NullString
 	var powerTierOrder sql.NullInt64
 	err := s.db.QueryRowContext(ctx,
@@ -466,7 +556,7 @@ func (s *Service) CurrentStatus(ctx context.Context, accountID string) (Status, 
 			a.strength, a.constitution, a.agility, a.spirit, a.vitality,
 			a.health, a.max_health, a.mana, a.max_mana, a.attack, a.defense, a.movement_speed,
 			p.experience, p.cultivation, p.system_id, cs.name, p.realm_id, rd.name, rd.realm_order,
-			p.realm_stage, current_stage.name, rd.max_stage, next_realm.required_cultivation,
+			p.realm_stage, current_stage.name, rd.max_stage, rd.required_cultivation, next_realm.required_cultivation,
 			pt.id, pt.name, pt.tier_order, rpm.comparison_note, p.unspent_attribute_points
 		 FROM souls s
 		 JOIN characters c ON c.id = s.current_character_id
@@ -489,7 +579,7 @@ func (s *Service) CurrentStatus(ctx context.Context, accountID string) (Status, 
 		&result.Progression.Experience, &result.Progression.Cultivation,
 		&result.Progression.SystemID, &result.Progression.SystemName,
 		&result.Progression.RealmID, &result.Progression.RealmName, &result.Progression.RealmOrder,
-		&result.Progression.RealmStage, &stageName, &result.Progression.MaxRealmStage, &required,
+		&result.Progression.RealmStage, &stageName, &result.Progression.MaxRealmStage, &currentRealmRequired, &required,
 		&powerTierID, &powerTierName, &powerTierOrder, &comparisonNote,
 		&result.Progression.UnspentAttributePoints,
 	)
@@ -507,6 +597,10 @@ func (s *Service) CurrentStatus(ctx context.Context, accountID string) (Status, 
 	}
 	if required.Valid {
 		result.Progression.RequiredForNextRealm = &required.Int64
+		if result.Progression.RealmStage < result.Progression.MaxRealmStage {
+			threshold := cultivationStageThreshold(currentRealmRequired, required.Int64, result.Progression.RealmStage+1, result.Progression.MaxRealmStage)
+			result.Progression.RequiredForNextStage = &threshold
+		}
 	}
 	if powerTierID.Valid {
 		result.Progression.PowerTierID = powerTierID.String
