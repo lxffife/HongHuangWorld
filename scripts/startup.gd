@@ -262,7 +262,7 @@ func _on_login_pressed() -> void:
 func _populate_worlds() -> void:
 	world_select.clear()
 	for world in worlds:
-		if not world is Dictionary:
+		if not (world is Dictionary):
 			continue
 		var world_id := str(world.get("id", ""))
 		# P0 currently deploys one authoritative instance; do not offer worlds
