@@ -1,6 +1,7 @@
 extends Control
 
-const DEFAULT_API := "http://127.0.0.1:8787"
+const DEFAULT_API := "http://192.168.124.13:8787"
+const CLIENT_CONFIG_PATH := "user://honghuang_client.cfg"
 const CLIENT_BUILD := "0.1.0"
 
 var api_base := DEFAULT_API
@@ -35,7 +36,8 @@ var right_info_label: Label
 
 func _ready() -> void:
 	_build_ui()
-	_set_status("请输入中心服地址并登录。默认本机地址：" + DEFAULT_API)
+	_load_client_config()
+	_set_status("已读取本机登录配置，请登录中心服。")
 
 func _build_ui() -> void:
 	var background := ColorRect.new()
@@ -176,6 +178,36 @@ func _build_ui() -> void:
 	add_child(http)
 	http.request_completed.connect(_on_http_completed)
 
+func _load_client_config() -> void:
+	var config := ConfigFile.new()
+	var error := config.load(CLIENT_CONFIG_PATH)
+	if error != OK and error != ERR_FILE_NOT_FOUND:
+		push_warning("无法读取本机客户端配置，将使用默认值。")
+	api_input.text = str(config.get_value("connection", "api_base", DEFAULT_API))
+	username_input.text = str(config.get_value("login", "username", "test_player"))
+	email_input.text = str(config.get_value("login", "email", ""))
+	password_input.text = str(config.get_value("login", "password", ""))
+	# Create the local config on first launch. The password remains blank until
+	# the user successfully logs in and explicitly saves a working credential.
+	if error == ERR_FILE_NOT_FOUND:
+		config.set_value("connection", "api_base", DEFAULT_API)
+		config.set_value("login", "username", "test_player")
+		config.set_value("login", "email", "")
+		config.set_value("login", "password", "")
+		var save_error := config.save(CLIENT_CONFIG_PATH)
+		if save_error != OK:
+			push_warning("无法创建本机客户端配置文件。")
+
+func _save_client_config() -> void:
+	var config := ConfigFile.new()
+	config.set_value("connection", "api_base", api_input.text.strip_edges().trim_suffix("/"))
+	config.set_value("login", "username", username_input.text.strip_edges())
+	config.set_value("login", "email", email_input.text.strip_edges())
+	config.set_value("login", "password", password_input.text)
+	var error := config.save(CLIENT_CONFIG_PATH)
+	if error != OK:
+		push_warning("登录成功，但无法保存本机登录配置。")
+
 func _add_line_edit(placeholder: String, value: String) -> LineEdit:
 	var field := LineEdit.new()
 	field.placeholder_text = placeholder
@@ -258,6 +290,7 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 			if access_token.is_empty():
 				_set_status("认证响应缺少 access_token。")
 			else:
+				_save_client_config()
 				for control in auth_controls:
 					control.hide()
 				account_label.text = "已登录账号：" + username_input.text.strip_edges()
