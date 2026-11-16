@@ -15,6 +15,8 @@ var (
 	ErrInvalid      = errors.New("invalid character name")
 	ErrInvalidAllocation = errors.New("invalid attribute allocation")
 	ErrInsufficientPoints = errors.New("insufficient unspent attribute points")
+	ErrInvalidReward = errors.New("invalid character reward")
+	ErrRewardSession = errors.New("character has no active session on this server")
 )
 
 type Character struct {
@@ -151,6 +153,107 @@ func (s *Service) Current(ctx context.Context, accountID string) (Character, err
 		result.RaceID = &race.String
 	}
 	return result, nil
+}
+
+type Reward struct {
+	EventID        string `json:"event_id"`
+	CharacterID    string `json:"character_id"`
+	Experience     int64  `json:"experience"`
+	Cultivation    int64  `json:"cultivation"`
+	AttributePoints int   `json:"attribute_points"`
+}
+
+type RewardResult struct {
+	Applied bool `json:"applied"`
+}
+
+// ApplyServerReward accepts rewards only from the node hosting the character's
+// active session. A per-node event ID makes retries safe and prevents double grants.
+func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward Reward) (RewardResult, error) {
+	if nodeKey == "" || !validUUID(reward.EventID) || !validUUID(reward.CharacterID) ||
+		reward.Experience < 0 || reward.Experience > 1000000 ||
+		reward.Cultivation < 0 || reward.Cultivation > 1000000000 ||
+		reward.AttributePoints < 0 || reward.AttributePoints > 1000 ||
+		(reward.Experience == 0 && reward.Cultivation == 0 && reward.AttributePoints == 0) {
+		return RewardResult{}, ErrInvalidReward
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return RewardResult{}, fmt.Errorf("begin character reward: %w", err)
+	}
+	defer tx.Rollback()
+
+	var serverID string
+	err = tx.QueryRowContext(ctx,
+		`SELECT sr.id::text
+		 FROM server_registry sr
+		 JOIN world_sessions ws ON ws.server_id = sr.id
+		 JOIN characters c ON c.id = ws.character_id
+		 WHERE sr.node_key = $1 AND c.id = $2::uuid
+		   AND c.status = 'alive' AND ws.session_state = 'active'
+		 FOR UPDATE OF ws, c`, nodeKey, reward.CharacterID,
+	).Scan(&serverID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return RewardResult{}, ErrRewardSession
+	}
+	if err != nil {
+		return RewardResult{}, fmt.Errorf("verify active character session for reward: %w", err)
+	}
+
+	var eventRecordID string
+	err = tx.QueryRowContext(ctx,
+		`INSERT INTO character_reward_events
+		 (server_id, character_id, event_id, experience, cultivation, attribute_points)
+		 VALUES ($1, $2, $3::uuid, $4, $5, $6)
+		 ON CONFLICT (server_id, event_id) DO NOTHING
+		 RETURNING id::text`,
+		serverID, reward.CharacterID, reward.EventID,
+		reward.Experience, reward.Cultivation, reward.AttributePoints,
+	).Scan(&eventRecordID)
+	if errors.Is(err, sql.ErrNoRows) {
+		if err := tx.Commit(); err != nil {
+			return RewardResult{}, fmt.Errorf("commit duplicate character reward: %w", err)
+		}
+		return RewardResult{Applied: false}, nil
+	}
+	if err != nil {
+		return RewardResult{}, fmt.Errorf("record character reward event: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE character_progression
+		 SET experience = experience + $1,
+		     cultivation = cultivation + $2,
+		     unspent_attribute_points = unspent_attribute_points + $3,
+		     updated_at = now()
+		 WHERE character_id = $4`,
+		reward.Experience, reward.Cultivation, reward.AttributePoints, reward.CharacterID,
+	); err != nil {
+		return RewardResult{}, fmt.Errorf("apply character reward values: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return RewardResult{}, fmt.Errorf("commit character reward: %w", err)
+	}
+	return RewardResult{Applied: true}, nil
+}
+
+func validUUID(value string) bool {
+	if len(value) != 36 {
+		return false
+	}
+	for i, char := range value {
+		if i == 8 || i == 13 || i == 18 || i == 23 {
+			if char != '-' {
+				return false
+			}
+			continue
+		}
+		if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f') || (char >= 'A' && char <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
 
 // AllocateAttributePoints atomically spends server-issued points on one primary attribute.
