@@ -1,13 +1,7 @@
 name: Godot NativeNet Builds
 
 on:
-  pull_request:
-    branches:
-      - develop
   workflow_dispatch:
-  push:
-    tags:
-      - "native-net-v*"
 
 permissions:
   contents: read
