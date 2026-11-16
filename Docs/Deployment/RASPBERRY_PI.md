@@ -52,7 +52,43 @@
 
 部署脚本运行时会静默提示输入 Token，并通过临时 Git askpass 文件执行 clone/fetch。Token 不会写入 Git remote URL 或项目文件；临时认证文件在脚本退出时清理。
 
-## 4. 获取并运行脚本
+## 4. 网络代理配置
+
+部署脚本默认使用你提供的局域网 HTTP 代理：
+
+    http://192.168.124.16:17891
+
+脚本会在安装依赖前完成以下配置：
+- 当前部署进程的 HTTP_PROXY / HTTPS_PROXY / ALL_PROXY，供 Git、curl 和 Go 下载使用。
+- APT 持久配置 `/etc/apt/apt.conf.d/99honghuang-proxy`，确保 `sudo apt-get update/install` 走代理。
+- Docker systemd drop-in：`/etc/systemd/system/docker.service.d/http-proxy.conf`，使 Docker 守护进程拉取镜像时也使用代理。
+
+代理配置会保留在树莓派上，后续 APT 和 Docker 操作也会继续使用。树莓派必须能够访问代理主机的 IP 和端口；可先测试：
+
+    curl -I -x http://192.168.124.16:17891 https://github.com
+
+如需临时改用其他代理：
+
+    HH_PROXY_URL=http://代理IP:端口 ~/deploy-raspberry-pi.sh
+
+如不使用代理：
+
+    HH_PROXY_URL= ~/deploy-raspberry-pi.sh
+
+脚本默认只有在 APT 软件包索引不存在或超过 6 小时时才执行 `apt-get update`，避免每次部署重复下载索引。需要强制刷新时：
+
+    HH_FORCE_APT_UPDATE=1 ~/deploy-raspberry-pi.sh
+
+如果以后要移除持久代理配置：
+
+    sudo rm -f /etc/apt/apt.conf.d/99honghuang-proxy
+    sudo rm -f /etc/systemd/system/docker.service.d/http-proxy.conf
+    sudo systemctl daemon-reload
+    sudo systemctl restart docker
+
+注意：Docker 镜像拉取由 Docker daemon 执行，因此仅设置当前终端的代理变量不足以保证 Docker 拉取镜像走代理；脚本已单独配置 daemon。
+
+## 5. 获取并运行脚本
 
 脚本已放入仓库：
 - Deployment/deploy-raspberry-pi.sh
@@ -88,7 +124,7 @@
 
 请将示例地址替换成树莓派实际 IP。
 
-## 5. 环境配置
+## 6. 环境配置
 
 密钥和运行配置保存在：
 
@@ -109,7 +145,7 @@
 
 修改世界 ID、节点标识或端口后，也应重启相应服务。默认 WORLD_ID 为 qingyun_human。
 
-## 6. 网络与 Windows 客户端
+## 7. 网络与 Windows 客户端
 
 局域网客户端至少需要访问：
 - TCP 8787：HTTP API。
@@ -133,7 +169,7 @@ Windows Godot 客户端 API Base URL 填写：
 
 PostgreSQL 5432、Redis 6379、NATS 4222/8222 在 Compose 中绑定到 127.0.0.1，不接受局域网远程连接。不要配置路由器公网端口转发。当前方案没有配置 TLS、反向代理和生产级密钥管理。
 
-## 7. 部署检查
+## 8. 部署检查
 
 查看服务：
 
@@ -169,7 +205,7 @@ PostgreSQL 5432、Redis 6379、NATS 4222/8222 在 Compose 中绑定到 127.0.0.1
 
 应能看到所有已应用的迁移版本。
 
-## 8. 日志、启停与更新
+## 9. 日志、启停与更新
 
 实时查看 API：
 
@@ -195,7 +231,7 @@ PostgreSQL 5432、Redis 6379、NATS 4222/8222 在 Compose 中绑定到 127.0.0.1
 
 再次运行部署脚本会询问是否拉取 feature/p0-foundation 最新代码，随后重新编译并重启服务。迁移账本会跳过已经成功执行的版本。更新前仍建议先备份数据库。
 
-## 9. 数据备份与恢复
+## 10. 数据备份与恢复
 
 备份：
 
@@ -216,7 +252,7 @@ PostgreSQL 5432、Redis 6379、NATS 4222/8222 在 Compose 中绑定到 127.0.0.1
 
 不要使用 docker compose down -v 清理重装，否则会删除数据库持久化卷。部署脚本不会执行该命令。
 
-## 10. 常见问题
+## 11. 常见问题
 
 ### Token 无法拉取仓库
 确认 Token 未过期、仓库范围选择正确、Contents: Read-only 权限已授予，并确认组织策略允许该 Token。
@@ -250,7 +286,7 @@ PostgreSQL 5432、Redis 6379、NATS 4222/8222 在 Compose 中绑定到 127.0.0.1
 ### 8787 可访问但游戏 UDP 连接失败
 HTTP 和 ENet 使用不同协议。确认防火墙放行 UDP 7777，而不只是 TCP 8787。
 
-## 11. 当前部署边界
+## 12. 当前部署边界
 
 - 这是单树莓派部署：中心 API、数据库和一个青云人界 WorldServer。
 - Pi 4B 8GB 适合基础联网闭环测试，不代表能够承载高并发或最终高品质 3D 场景。
