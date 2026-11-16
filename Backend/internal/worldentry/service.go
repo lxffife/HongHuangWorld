@@ -63,7 +63,7 @@ func (s *Service) Issue(ctx context.Context, accountID string) (Entry, error) {
 		       + (SELECT COUNT(*) FROM world_entry_tickets pending WHERE pending.server_id = sr.id AND pending.expires_at > now() AND pending.consumed_at IS NULL) < sr.capacity
 		   AND sr.last_heartbeat_at > now() - INTERVAL '30 seconds'
 		 ORDER BY sr.current_players ASC, wi.created_at ASC
-		 LIMIT 1 FOR UPDATE OF sr SKIP LOCKED`, accountID,
+		 LIMIT 1 FOR UPDATE OF sr, c SKIP LOCKED`, accountID,
 	).Scan(&characterID, &entry.WorldID, &instanceID, &serverID, &entry.Host, &entry.UDPPort)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Entry{}, ErrNoAvailableServer
@@ -117,6 +117,7 @@ func (s *Service) Redeem(ctx context.Context, nodeKey, ticket string) (PlayerSna
 		 JOIN characters c ON c.id = t.character_id
 		 WHERE t.token_hash = $1 AND t.expires_at > now() AND t.consumed_at IS NULL
 		   AND sr.node_key = $2 AND sr.status = 'ready' AND sr.last_heartbeat_at > now() - INTERVAL '30 seconds'
+		   AND c.status = 'alive'
 		 FOR UPDATE OF t`, tokenHash[:], nodeKey,
 	).Scan(&ticketID, &characterID, &instanceID, &serverID, &snapshot.WorldID, &snapshot.Name,
 		&snapshot.PositionX, &snapshot.PositionY, &snapshot.PositionZ, &snapshot.RotationY)
