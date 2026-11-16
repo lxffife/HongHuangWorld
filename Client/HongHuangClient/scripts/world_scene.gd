@@ -91,6 +91,14 @@ func _on_progression_request_completed(result: int, response_code: int, _headers
 		breakthrough_button.disabled = true
 		return
 	var progression: Dictionary = data.get("progression", {})
+	var bloodlines: Array = data.get("bloodlines", [])
+	var primary_bloodline := "未觉醒"
+	var bloodline_purity := 0
+	for bloodline_variant in bloodlines:
+		if bloodline_variant is Dictionary and bool(bloodline_variant.get("is_primary", false)):
+			primary_bloodline = str(bloodline_variant.get("name", "未知血脉"))
+			bloodline_purity = int(bloodline_variant.get("purity", 0))
+			break
 	var system_name := str(progression.get("system_name", "未知体系"))
 	var realm_name := str(progression.get("realm_name", "未知境界"))
 	var stage_name := str(progression.get("realm_stage_name", ""))
