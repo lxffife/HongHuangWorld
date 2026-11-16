@@ -35,6 +35,7 @@ func _ready() -> void:
 		HHSession.world_network.entities_updated.connect(_on_entities_updated)
 		HHSession.world_network.player_joined.connect(_on_player_joined)
 		HHSession.world_network.player_left.connect(_on_player_left)
+		HHSession.world_network.combat_event.connect(_on_combat_event)
 		HHSession.world_network.disconnected.connect(_on_world_disconnected)
 		var spawn: Dictionary = HHSession.world_snapshot
 		local_target_position = Vector3(float(spawn.get("position_x", 0.0)), float(spawn.get("position_y", 0.15)), float(spawn.get("position_z", 0.0)))
@@ -304,7 +305,7 @@ func _update_hud() -> void:
 	var snapshot: Dictionary = HHSession.world_snapshot
 	var world_id := str(snapshot.get("world_id", "青云人界"))
 	var character_name := str(snapshot.get("name", "初入洪荒"))
-	hud_label.text = "洪荒 · " + world_id + "\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标\n服务器权威移动已启用 · 20Hz 实体快照 · 玩家与怪物同步"
+	hud_label.text = "洪荒 · " + world_id + "\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标\n服务器权威移动已启用 · 左键攻击附近怪物 · 20Hz 实体快照"
 
 func _exit_tree() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -391,6 +392,33 @@ func _create_monster(monster_name: String, monster_level: int) -> Node3D:
 	monster.add_child(label)
 	add_child(monster)
 	return monster
+
+func _request_nearest_monster_attack() -> void:
+	var network := HHSession.world_network
+	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
+		return
+	var nearest_id := ""
+	var nearest_distance := 4.5
+	for monster_id in monster_targets:
+		var target: Vector3 = monster_targets[monster_id]
+		var distance := Vector2(local_player.global_position.x, local_player.global_position.z).distance_to(Vector2(target.x, target.z))
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest_id = str(monster_id)
+	if nearest_id.is_empty():
+		hud_label.text = "附近没有可攻击的怪物。"
+		return
+	var error: Error = network.send_attack(nearest_id)
+	if error != OK:
+		hud_label.text = "攻击指令发送失败：" + str(error)
+
+func _on_combat_event(event: Dictionary) -> void:
+	var monster_name := str(event.get("target_name", "目标"))
+	var damage := int(event.get("damage", 0))
+	if bool(event.get("defeated", false)):
+		hud_label.text = monster_name + " 已被击败！造成 " + str(damage) + " 点伤害，稍后重生。"
+	else:
+		hud_label.text = "命中 " + monster_name + "，造成 " + str(damage) + " 点伤害。"
 
 func _on_player_joined(player: Dictionary) -> void:
 	_upsert_remote_player(player)
