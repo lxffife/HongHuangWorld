@@ -21,7 +21,7 @@ type ItemStack struct {
 	Name string `json:"name"`
 	Category string `json:"category"`
 	Quality int `json:"quality"`
-	Quantity int `json:"quantity"`
+	Quantity int `json:"quantity,omitempty"`
 	MaxStack int `json:"max_stack"`
 	IconKey string `json:"icon_key"`
 	Description string `json:"description"`
@@ -137,8 +137,20 @@ func (s *Service) CreateDrop(ctx context.Context, nodeKey string, request DropRe
 		RETURNING id::text, item_id, quantity, position_x, position_z, expires_at::text`,
 		request.DropID, serverID, request.SessionID, request.CharacterID, request.ItemID, request.Quantity, request.PositionX, request.PositionZ).
 		Scan(&result.ID, &result.ItemID, &result.Quantity, &result.PositionX, &result.PositionZ, &result.ExpiresAt)
-	if errors.Is(err, sql.ErrNoRows) { return GroundDrop{}, ErrDropUnavailable }
-	if err != nil { return GroundDrop{}, fmt.Errorf("create ground drop: %w", err) }
+	if errors.Is(err, sql.ErrNoRows) {
+		// A retry after a lost HTTP response must return the same persisted drop,
+		// but reusing an ID with different contents must never mutate it.
+		err = tx.QueryRowContext(ctx, `SELECT id::text, item_id, quantity, position_x, position_z, expires_at::text
+			FROM ground_drops
+			WHERE id = $1::uuid AND server_id = $2 AND session_id = $3::uuid
+			  AND owner_character_id = $4::uuid AND item_id = $5 AND quantity = $6
+			  AND position_x = $7 AND position_z = $8 AND status = 'available' AND expires_at > now()`,
+			request.DropID, serverID, request.SessionID, request.CharacterID, request.ItemID,
+			request.Quantity, request.PositionX, request.PositionZ).
+			Scan(&result.ID, &result.ItemID, &result.Quantity, &result.PositionX, &result.PositionZ, &result.ExpiresAt)
+		if errors.Is(err, sql.ErrNoRows) { return GroundDrop{}, ErrDropUnavailable }
+	}
+	if err != nil { return GroundDrop{}, fmt.Errorf("create or recover ground drop: %w", err) }
 	if err := tx.Commit(); err != nil { return GroundDrop{}, fmt.Errorf("commit ground drop: %w", err) }
 	return result, nil
 }
