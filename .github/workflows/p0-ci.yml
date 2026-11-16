@@ -79,7 +79,7 @@ jobs:
         env:
           PGPASSWORD: ci-password
         run: |
-          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('character_attributes','character_progression','realm_definitions')")" = "3"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('character_attributes','character_progression','realm_definitions','character_reward_events')")" = "4"
           test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM realm_definitions")" = "9"
       - name: Roll back all migrations
         env:
