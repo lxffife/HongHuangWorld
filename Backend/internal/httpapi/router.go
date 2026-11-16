@@ -74,6 +74,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		entry := &worldEntryHandlers{authService: auth.NewService(db), entryService: worldentry.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
 		mux.HandleFunc("POST /api/v1/worlds/enter", entry.issue)
 		mux.HandleFunc("POST /api/v1/servers/tickets/redeem", entry.redeem)
+		mux.HandleFunc("POST /api/v1/servers/sessions/snapshot", entry.saveSnapshot)
 		mux.HandleFunc("POST /api/v1/servers/sessions/close", entry.closeSession)
 	} else {
 		unavailable := func(w http.ResponseWriter, _ *http.Request) {
@@ -100,6 +101,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/servers/characters/rewards", unavailable)
 		mux.HandleFunc("POST /api/v1/worlds/enter", unavailable)
 		mux.HandleFunc("POST /api/v1/servers/tickets/redeem", unavailable)
+		mux.HandleFunc("POST /api/v1/servers/sessions/snapshot", unavailable)
 		mux.HandleFunc("POST /api/v1/servers/sessions/close", unavailable)
 	}
 
