@@ -2,6 +2,7 @@
 #include "protocol/frame.hpp"
 #include "simulation/movement.hpp"
 #include "simulation/monster.hpp"
+#include "simulation/combat.hpp"
 
 #include <enet/enet.h>
 #include <curl/curl.h>
@@ -35,6 +36,9 @@ constexpr auto kInputTimeout = std::chrono::milliseconds(500);
 constexpr auto kMinimumInputInterval = std::chrono::milliseconds(10);
 constexpr float kInterestRadius = 80.0F;
 constexpr auto kHeartbeatInterval = std::chrono::seconds(10);
+constexpr auto kAttackCooldown = std::chrono::milliseconds(650);
+constexpr auto kMonsterRespawnDelay = std::chrono::seconds(12);
+constexpr float kAttackRange = 3.5F;
 constexpr auto kHeartbeatRetryInterval = std::chrono::seconds(5);
 
 struct PlayerState {
@@ -52,12 +56,14 @@ struct PlayerState {
     std::uint64_t last_input_sequence{};
     Clock::time_point last_input_at{Clock::now()};
     Clock::time_point last_input_received_at{};
+    Clock::time_point last_attack_at{};
 };
 
 struct MonsterRuntime {
     honghuang::simulation::MonsterDefinition definition;
     honghuang::simulation::MonsterState state;
     std::string runtime_id;
+    Clock::time_point respawn_at{};
 };
 
 std::size_t collect_response(char* data, std::size_t size, std::size_t count, void* user) {
@@ -320,7 +326,7 @@ struct EnetServer::Impl {
             };
             if (!honghuang::simulation::valid_monster_definition(definition)) return;
             honghuang::simulation::MonsterState state{x, z, health};
-            monsters.push_back({std::move(definition), std::move(state), std::move(runtime_id)});
+            monsters.push_back({std::move(definition), std::move(state), std::move(runtime_id), Clock::time_point{}});
         };
         add_monster("wolf-001", "wilderness_wolf", "荒原狼", 3, 80.0F, 12.0F, 4.0F,
                     2.8F, 10.0F, 24.0F, -12.0F, -8.0F);
@@ -457,6 +463,71 @@ struct EnetServer::Impl {
         });
     }
 
+    void handle_attack(ENetPeer* peer, const Json& command) {
+        auto player_it = players.find(peer);
+        if (player_it == players.end()) return;
+        auto& player = player_it->second;
+        const auto now = Clock::now();
+        if (player.last_attack_at.time_since_epoch().count() != 0 &&
+            now - player.last_attack_at < kAttackCooldown) {
+            send_json(peer, honghuang::protocol::MessageType::ServerReject,
+                      Json{{"reason", "attack cooldown"}});
+            return;
+        }
+        const auto target_id = command.value("target_entity_id", std::string{});
+        if (target_id.empty() || target_id.size() > 96) {
+            send_json(peer, honghuang::protocol::MessageType::ServerReject,
+                      Json{{"reason", "invalid attack target"}});
+            return;
+        }
+        auto target = std::find_if(monsters.begin(), monsters.end(), [&](const MonsterRuntime& monster) {
+            return monster.runtime_id == target_id;
+        });
+        if (target == monsters.end() || target->state.mode == honghuang::simulation::MonsterMode::Dead) {
+            send_json(peer, honghuang::protocol::MessageType::ServerReject,
+                      Json{{"reason", "target unavailable"}});
+            return;
+        }
+        const double dx = static_cast<double>(target->state.x) - player.x;
+        const double dz = static_cast<double>(target->state.z) - player.z;
+        if (dx * dx + dz * dz > static_cast<double>(kAttackRange) * kAttackRange) {
+            send_json(peer, honghuang::protocol::MessageType::ServerReject,
+                      Json{{"reason", "target out of range"}});
+            return;
+        }
+        const honghuang::simulation::CombatantStats attacker{20, 0, 100, 100};
+        const honghuang::simulation::CombatantStats defender{
+            static_cast<std::int64_t>(target->definition.attack),
+            static_cast<std::int64_t>(target->definition.defense),
+            static_cast<std::int64_t>(target->state.health),
+            static_cast<std::int64_t>(target->definition.max_health)
+        };
+        honghuang::simulation::DamageResult damage{};
+        if (!honghuang::simulation::calculate_damage(
+                attacker, defender, honghuang::simulation::AttackProfile{}, damage)) {
+            send_json(peer, honghuang::protocol::MessageType::ServerReject,
+                      Json{{"reason", "combat calculation rejected"}});
+            return;
+        }
+        player.last_attack_at = now;
+        target->state.health = static_cast<float>(damage.remaining_health);
+        if (damage.defeated) {
+            target->state.mode = honghuang::simulation::MonsterMode::Dead;
+            target->state.target_id.clear();
+            target->respawn_at = now + kMonsterRespawnDelay;
+        }
+        const Json event{
+            {"attacker_character_id", player.character_id},
+            {"target_entity_id", target->runtime_id},
+            {"target_name", target->definition.name},
+            {"damage", damage.damage},
+            {"remaining_health", damage.remaining_health},
+            {"max_health", target->definition.max_health},
+            {"defeated", damage.defeated}
+        };
+        send_json(peer, honghuang::protocol::MessageType::CombatEvent, event);
+    }
+
     void broadcast_snapshot() {
         if (players.empty()) return;
 
@@ -529,6 +600,14 @@ struct EnetServer::Impl {
                 player.y, player.vertical_velocity, player.jump_requested, delta);
         }
         for (auto& monster : monsters) {
+            if (monster.state.mode == honghuang::simulation::MonsterMode::Dead) {
+                if (monster.respawn_at.time_since_epoch().count() != 0 && now >= monster.respawn_at) {
+                    monster.state = {monster.definition.spawn_x, monster.definition.spawn_z,
+                                     monster.definition.max_health};
+                    monster.respawn_at = Clock::time_point{};
+                }
+                continue;
+            }
             honghuang::simulation::MonsterTarget target_storage;
             const honghuang::simulation::MonsterTarget* nearest_target = nullptr;
             double nearest_distance_squared = std::numeric_limits<double>::max();
@@ -682,6 +761,16 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                     honghuang::protocol::MessageType::HeartbeatAck, {});
                 auto* packet = enet_packet_create(response.data(), response.size(), ENET_PACKET_FLAG_RELIABLE);
                 if (packet != nullptr && enet_peer_send(event.peer, 0, packet) != 0) enet_packet_destroy(packet);
+            } else if (frame.type == honghuang::protocol::MessageType::AttackCommand &&
+                       impl_->players.contains(event.peer)) {
+                try {
+                    const std::string payload(frame.payload.begin(), frame.payload.end());
+                    const auto command = Json::parse(payload);
+                    impl_->handle_attack(event.peer, command);
+                } catch (const std::exception&) {
+                    send_json(event.peer, honghuang::protocol::MessageType::ServerReject,
+                              Json{{"reason", "invalid attack command"}});
+                }
             } else if (frame.type == honghuang::protocol::MessageType::InputCommand &&
                        impl_->players.contains(event.peer)) {
                 auto& player = impl_->players.at(event.peer);
