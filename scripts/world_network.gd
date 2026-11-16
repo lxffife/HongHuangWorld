@@ -65,13 +65,14 @@ func _on_connected() -> void:
 func is_world_ready() -> bool:
 	return world_ready
 
-func send_input(move_x: float, move_z: float, sequence: int) -> Error:
+func send_input(move_x: float, move_z: float, sequence: int, jump: bool = false) -> Error:
 	if not world_ready or transport == null:
 		return ERR_UNCONFIGURED
 	var payload := JSON.stringify({
 		"sequence": sequence,
 		"move_x": clampf(move_x, -1.0, 1.0),
-		"move_z": clampf(move_z, -1.0, 1.0)
+		"move_z": clampf(move_z, -1.0, 1.0),
+		"jump": jump
 	}).to_utf8_buffer()
 	var frame := HHProtocolCodec.encode_frame(HHProtocolCodec.MessageType.INPUT_COMMAND, payload)
 	if frame.is_empty():
