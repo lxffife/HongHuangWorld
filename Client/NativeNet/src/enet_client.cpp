@@ -12,7 +12,7 @@ EnetClient::~EnetClient() {
 void EnetClient::_bind_methods() {
     using namespace godot;
     ClassDB::bind_method(D_METHOD("connect_to_host", "host", "port"), &EnetClient::connect_to_host);
-    ClassDB::bind_method(D_METHOD("send_frame", "frame"), &EnetClient::send_frame);
+    ClassDB::bind_method(D_METHOD("send_frame", "frame", "reliable"), &EnetClient::send_frame, DEFVAL(true));
     ClassDB::bind_method(D_METHOD("disconnect_from_host"), &EnetClient::disconnect_from_host);
     ClassDB::bind_method(D_METHOD("is_connected_to_server"), &EnetClient::is_connected_to_server);
 
@@ -56,16 +56,17 @@ godot::Error EnetClient::connect_to_host(const godot::String& host, int port) {
     return godot::OK;
 }
 
-godot::Error EnetClient::send_frame(const godot::PackedByteArray& frame) {
+godot::Error EnetClient::send_frame(const godot::PackedByteArray& frame, bool reliable) {
     if (!connected_ || peer_ == nullptr || frame.is_empty()) {
         return godot::ERR_UNCONFIGURED;
     }
-    ENetPacket* packet = enet_packet_create(frame.ptr(), static_cast<std::size_t>(frame.size()),
-                                            ENET_PACKET_FLAG_RELIABLE);
+    const enet_uint32 flags = reliable ? ENET_PACKET_FLAG_RELIABLE : 0;
+    const enet_uint8 channel = reliable ? 0 : 1;
+    ENetPacket* packet = enet_packet_create(frame.ptr(), static_cast<std::size_t>(frame.size()), flags);
     if (packet == nullptr) {
         return godot::ERR_OUT_OF_MEMORY;
     }
-    if (enet_peer_send(peer_, 0, packet) != 0) {
+    if (enet_peer_send(peer_, channel, packet) != 0) {
         enet_packet_destroy(packet);
         return godot::ERR_CANT_SEND;
     }
