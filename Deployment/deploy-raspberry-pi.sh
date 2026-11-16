@@ -6,17 +6,56 @@ BRANCH="feature/p0-foundation"
 DEST="${HH_INSTALL_DIR:-$HOME/HongHuangWorld}"
 ENV_FILE=/etc/honghuang-world.env
 GO_VERSION=1.24.0
+
+# Network proxy (override with HH_PROXY_URL=...; set empty to disable).
+PROXY_URL="${HH_PROXY_URL-http://192.168.124.16:17891}"
+if [[ -n "$PROXY_URL" ]]; then
+  export HTTP_PROXY="$PROXY_URL" HTTPS_PROXY="$PROXY_URL" ALL_PROXY="$PROXY_URL"
+  export http_proxy="$PROXY_URL" https_proxy="$PROXY_URL" all_proxy="$PROXY_URL"
+  export NO_PROXY="localhost,127.0.0.1,::1"
+  export no_proxy="$NO_PROXY"
+  echo "[INFO] 网络代理已启用：$PROXY_URL"
+
+  # APT does not reliably inherit shell proxy variables; configure it explicitly.
+  sudo install -d -m 755 /etc/apt/apt.conf.d
+  sudo tee /etc/apt/apt.conf.d/99honghuang-proxy >/dev/null <<EOF
+Acquire::http::Proxy "$PROXY_URL";
+Acquire::https::Proxy "$PROXY_URL";
+EOF
+
+  # Docker image pulls are performed by dockerd, not by this shell.
+  sudo install -d -m 755 /etc/systemd/system/docker.service.d
+  sudo tee /etc/systemd/system/docker.service.d/http-proxy.conf >/dev/null <<EOF
+[Service]
+Environment="HTTP_PROXY=$PROXY_URL"
+Environment="HTTPS_PROXY=$PROXY_URL"
+Environment="NO_PROXY=localhost,127.0.0.1,::1"
+EOF
+  sudo systemctl daemon-reload
+else
+  echo "[INFO] 未启用网络代理"
+fi
 [[ "$(uname -m)" == aarch64 ]] || { echo "需要 64 位 ARM64 系统 (aarch64)"; exit 1; }
 [[ $EUID -ne 0 ]] || { echo "请用普通用户运行，不要 sudo 整个脚本"; exit 1; }
 command -v sudo >/dev/null
 command -v apt-get >/dev/null
 
-sudo apt-get update
+# Avoid downloading package indexes on every rerun; refresh after 6 hours,
+# or force it with HH_FORCE_APT_UPDATE=1.
+if [[ "${HH_FORCE_APT_UPDATE:-0}" == "1" ]] || ! find /var/lib/apt/lists -maxdepth 1 -type f -name '*InRelease' -mmin -360 -print -quit 2>/dev/null | grep -q .; then
+  echo "[INFO] 更新 APT 软件包索引..."
+  sudo apt-get update
+else
+  echo "[INFO] APT 软件包索引在 6 小时内更新过，跳过 apt-get update"
+fi
 sudo apt-get install -y ca-certificates curl git build-essential cmake pkg-config libenet-dev libcurl4-openssl-dev nlohmann-json3-dev postgresql-client openssl
 if ! command -v docker >/dev/null || ! docker compose version >/dev/null 2>&1; then
   sudo apt-get install -y docker.io docker-compose-v2
 fi
 sudo systemctl enable --now docker
+if [[ -n "$PROXY_URL" ]]; then
+  sudo systemctl restart docker
+fi
 if docker info >/dev/null 2>&1; then DOCKER=(docker); else DOCKER=(sudo docker); fi
 "${DOCKER[@]}" compose version >/dev/null
 
