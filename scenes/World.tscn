@@ -11,7 +11,7 @@ script = ExtResource("1_world")
 offset_left = 18.0
 offset_top = 18.0
 offset_right = 560.0
-offset_bottom = 112.0
+offset_bottom = 230.0
 
 [node name="Margin" type="MarginContainer" parent="HUD/Panel"]
 theme_override_constants/margin_left = 16
@@ -24,3 +24,11 @@ theme_override_constants/margin_bottom = 12
 [node name="Status" type="Label" parent="HUD/Panel/Margin/Content"]
 text = "正在载入青云人界……"
 autowrap_mode = 3
+
+[node name="Progression" type="Label" parent="HUD/Panel/Margin/Content"]
+text = "正在读取修炼状态……"
+autowrap_mode = 3
+
+[node name="Breakthrough" type="Button" parent="HUD/Panel/Margin/Content"]
+text = "尝试突破"
+disabled = true
