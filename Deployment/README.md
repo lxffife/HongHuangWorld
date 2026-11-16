@@ -16,10 +16,11 @@
 
 ## 数据库迁移
 
-迁移脚本按文件名前缀顺序执行。P0 初始结构位于 `../Database/migrations/000001_initial_schema.up.sql`。首次开发可在基础设施健康后手动执行：
+迁移脚本按文件名前缀顺序执行。首次开发可在基础设施健康后按顺序执行：
 
 ```bash
 docker compose --env-file .env exec -T postgres psql -U honghuang -d honghuang < ../Database/migrations/000001_initial_schema.up.sql
+docker compose --env-file .env exec -T postgres psql -U honghuang -d honghuang < ../Database/migrations/000002_character_progression.up.sql
 ```
 
 生产环境必须使用专门的迁移执行器记录已应用版本，不要重复执行初始迁移。
