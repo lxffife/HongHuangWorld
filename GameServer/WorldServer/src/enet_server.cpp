@@ -495,6 +495,12 @@ void EnetServer::stop() {
         impl_->heartbeat_cv.notify_all();
         if (impl_->heartbeat_thread.joinable()) impl_->heartbeat_thread.join();
 
+        std::string heartbeat_error;
+        if (!send_heartbeat(impl_->config, impl_->online_players.load(std::memory_order_relaxed),
+                             "draining", heartbeat_error)) {
+            std::cerr << "WorldServer draining heartbeat failed: " << heartbeat_error << '\n';
+        }
+
         for (const auto& [peer, player] : impl_->players) {
             (void)peer;
             std::string snapshot_error;
@@ -502,12 +508,6 @@ void EnetServer::stop() {
                 std::cerr << "Could not persist player during WorldServer shutdown: "
                           << snapshot_error << '\n';
             }
-        }
-
-        std::string heartbeat_error;
-        if (!send_heartbeat(impl_->config, impl_->online_players.load(std::memory_order_relaxed),
-                             "draining", heartbeat_error)) {
-            std::cerr << "WorldServer draining heartbeat failed: " << heartbeat_error << '\n';
         }
         enet_host_destroy(impl_->host);
         impl_->host = nullptr;
