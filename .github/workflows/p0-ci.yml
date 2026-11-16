@@ -75,6 +75,8 @@ jobs:
         run: |
           psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000001_initial_schema.up.sql
           psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000002_character_progression.up.sql
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000003_race_bloodline_techniques.up.sql
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000003_race_bloodline_techniques.up.sql
       - name: Verify character progression schema and realm seeds
         env:
           PGPASSWORD: ci-password
@@ -87,10 +89,21 @@ jobs:
           test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM race_definitions")" = "4"
           test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM cultivation_stages")" = "324"
           test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM race_cultivation_systems WHERE is_default")" = "4"
+      - name: Verify race growth, bloodline and technique schema
+        env:
+          PGPASSWORD: ci-password
+        run: |
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('race_attribute_growth_profiles','bloodline_definitions','bloodline_attribute_modifiers','character_bloodlines','cultivation_techniques','technique_race_compatibility','character_techniques')")" = "7"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM race_attribute_growth_profiles")" = "4"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM bloodline_definitions WHERE is_default")" = "4"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM cultivation_techniques")" = "12"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM technique_race_compatibility")" = "48"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM race_attribute_growth_profiles WHERE strength_weight + constitution_weight + agility_weight + spirit_weight + vitality_weight <> 10000")" = "0"
       - name: Roll back all migrations
         env:
           PGPASSWORD: ci-password
         run: |
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000003_race_bloodline_techniques.down.sql
           psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000002_character_progression.down.sql
           psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000001_initial_schema.down.sql
       - name: Reapply all migrations
