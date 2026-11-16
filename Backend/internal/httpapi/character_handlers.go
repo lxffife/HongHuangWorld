@@ -198,3 +198,35 @@ func (h *characterHandlers) currentAccount(w http.ResponseWriter, r *http.Reques
 	}
 	return account, true
 }
+
+type awakenBloodlineRequest struct { BloodlineID string `json:"bloodline_id"` }
+type trainTechniqueRequest struct { TechniqueID string `json:"technique_id"`; Points int `json:"points"` }
+
+func (h *characterHandlers) awakenBloodline(w http.ResponseWriter, r *http.Request) {
+	account, ok := h.currentAccount(w, r); if !ok { return }
+	var request awakenBloodlineRequest
+	if err := decodeJSON(w, r, &request); err != nil { http.Error(w, "invalid request body", http.StatusBadRequest); return }
+	result, err := h.characterService.AwakenBloodline(r.Context(), account.ID, request.BloodlineID)
+	switch {
+	case err == nil: writeJSON(w, http.StatusOK, result)
+	case errors.Is(err, character.ErrBloodlineNotOwned): http.Error(w, "bloodline not owned by current character", http.StatusNotFound)
+	case errors.Is(err, character.ErrBloodlineMaxAwakening): http.Error(w, "bloodline has reached maximum awakening", http.StatusConflict)
+	case errors.Is(err, character.ErrAwakeningRequirement): http.Error(w, "realm or cultivation requirement not met", http.StatusConflict)
+	default: h.logger.Error("awaken bloodline failed", "error", err); http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
+}
+
+func (h *characterHandlers) trainTechnique(w http.ResponseWriter, r *http.Request) {
+	account, ok := h.currentAccount(w, r); if !ok { return }
+	var request trainTechniqueRequest
+	if err := decodeJSON(w, r, &request); err != nil { http.Error(w, "invalid request body", http.StatusBadRequest); return }
+	result, err := h.characterService.TrainTechnique(r.Context(), account.ID, request.TechniqueID, request.Points)
+	switch {
+	case err == nil: writeJSON(w, http.StatusOK, result)
+	case errors.Is(err, character.ErrInvalidTechniqueTraining): http.Error(w, "technique_id is required and points must be 1-100", http.StatusBadRequest)
+	case errors.Is(err, character.ErrTechniqueNotOwned): http.Error(w, "technique not owned by current character", http.StatusNotFound)
+	case errors.Is(err, character.ErrAwakeningRequirement): http.Error(w, "realm requirement not met", http.StatusConflict)
+	case errors.Is(err, character.ErrInsufficientCultivation): http.Error(w, "not enough cultivation for technique training", http.StatusConflict)
+	default: h.logger.Error("train technique failed", "error", err); http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
+}
