@@ -2,52 +2,131 @@
 #include "protocol/frame.hpp"
 
 #include <enet/enet.h>
+#include <curl/curl.h>
+#include <nlohmann/json.hpp>
 
 #include <iostream>
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
 namespace honghuang::network {
-struct EnetServer::Impl {
-    std::string bind_host;
-    std::uint16_t port;
-    std::size_t max_clients;
-    ENetHost* host{};
+namespace {
+using Json = nlohmann::json;
 
-    Impl(std::string host_name, std::uint16_t listen_port, std::size_t clients)
-        : bind_host(std::move(host_name)), port(listen_port), max_clients(clients) {}
-};
-
-EnetServer::EnetServer(std::string bind_host, std::uint16_t port, std::size_t max_clients)
-    : impl_(new Impl(std::move(bind_host), port, max_clients)) {}
-
-EnetServer::~EnetServer() {
-    stop();
-    delete impl_;
+std::size_t collect_response(char* data, std::size_t size, std::size_t count, void* user) {
+    const auto bytes = size * count;
+    static_cast<std::string*>(user)->append(data, bytes);
+    return bytes;
 }
 
+bool redeem_ticket(const ServerConfig& config, const std::string& ticket, Json& snapshot, std::string& error) {
+    CURL* curl = curl_easy_init();
+    if (curl == nullptr) { error = "could not initialize HTTPS client"; return false; }
+
+    const std::string url = config.backend_url + "/api/v1/servers/tickets/redeem";
+    const std::string body = Json{{"node_key", config.node_key}, {"ticket", ticket}}.dump();
+    std::string response;
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    const std::string auth_header = "X-World-Server-Key: " + config.api_key;
+    headers = curl_slist_append(headers, auth_header.c_str());
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_POST, 1L);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body.size()));
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, collect_response);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 3000L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 5000L);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+
+    const auto result = curl_easy_perform(curl);
+    long status = 0;
+    if (result == CURLE_OK) curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+
+    if (result != CURLE_OK) {
+        error = std::string("backend request failed: ") + curl_easy_strerror(result);
+        return false;
+    }
+    if (status != 200) {
+        error = "ticket redemption rejected by backend (HTTP " + std::to_string(status) + ")";
+        return false;
+    }
+    try {
+        snapshot = Json::parse(response);
+        if (!snapshot.contains("character_id") || !snapshot.contains("world_id") ||
+            !snapshot.contains("instance_id") || !snapshot.contains("name")) {
+            error = "backend snapshot is missing required fields";
+            return false;
+        }
+    } catch (const std::exception& ex) {
+        error = std::string("invalid backend JSON response: ") + ex.what();
+        return false;
+    }
+    return true;
+}
+
+void send_json(ENetPeer* peer, honghuang::protocol::MessageType type, const Json& value) {
+    const auto payload_text = value.dump();
+    const auto* begin = reinterpret_cast<const std::uint8_t*>(payload_text.data());
+    const auto frame = honghuang::protocol::encode_frame(
+        type, std::span<const std::uint8_t>(begin, payload_text.size()));
+    if (frame.empty()) return;
+    auto* packet = enet_packet_create(frame.data(), frame.size(), ENET_PACKET_FLAG_RELIABLE);
+    if (packet != nullptr && enet_peer_send(peer, 0, packet) != 0) enet_packet_destroy(packet);
+}
+} // namespace
+
+struct EnetServer::Impl {
+    ServerConfig config;
+    ENetHost* host{};
+    std::unordered_set<ENetPeer*> authenticated;
+
+    explicit Impl(ServerConfig value) : config(std::move(value)) {}
+};
+
+EnetServer::EnetServer(ServerConfig config) : impl_(new Impl(std::move(config))) {}
+EnetServer::~EnetServer() { stop(); delete impl_; }
+
 bool EnetServer::start() {
+    if (impl_->config.backend_url.empty() || impl_->config.node_key.empty() || impl_->config.api_key.empty()) {
+        std::cerr << "BACKEND_URL, WORLD_SERVER_NODE_KEY and WORLD_SERVER_API_KEY are required\n";
+        return false;
+    }
     if (enet_initialize() != 0) {
         std::cerr << "ENet initialization failed\n";
         return false;
     }
+    if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
+        std::cerr << "libcurl initialization failed\n";
+        enet_deinitialize();
+        return false;
+    }
     ENetAddress address{};
     address.host = ENET_HOST_ANY;
-    if (impl_->bind_host != "0.0.0.0" && enet_address_set_host(&address, impl_->bind_host.c_str()) != 0) {
-        std::cerr << "Invalid bind host: " << impl_->bind_host << '\n';
+    if (impl_->config.bind_host != "0.0.0.0" &&
+        enet_address_set_host(&address, impl_->config.bind_host.c_str()) != 0) {
+        std::cerr << "Invalid bind host: " << impl_->config.bind_host << '\n';
+        curl_global_cleanup();
         enet_deinitialize();
         return false;
     }
-    address.port = impl_->port;
-    impl_->host = enet_host_create(&address, impl_->max_clients, 2, 0, 0);
+    address.port = impl_->config.port;
+    impl_->host = enet_host_create(&address, impl_->config.max_clients, 2, 0, 0);
     if (impl_->host == nullptr) {
-        std::cerr << "Could not create ENet host on UDP port " << impl_->port << '\n';
+        std::cerr << "Could not create ENet host on UDP port " << impl_->config.port << '\n';
+        curl_global_cleanup();
         enet_deinitialize();
         return false;
     }
-    std::cout << "ENet listening on " << impl_->bind_host << ':' << impl_->port << '\n';
+    std::cout << "WorldServer ENet listening on UDP " << impl_->config.port << '\n';
     return true;
 }
 
@@ -57,7 +136,7 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
     while (enet_host_service(impl_->host, &event, timeout_ms) > 0) {
         switch (event.type) {
         case ENET_EVENT_TYPE_CONNECT:
-            std::cout << "Client connected (transport only)\n";
+            std::cout << "ENet client connected; awaiting ClientHello\n";
             break;
         case ENET_EVENT_TYPE_RECEIVE: {
             const auto bytes = std::span<const std::uint8_t>(
@@ -65,24 +144,45 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
             honghuang::protocol::Frame frame{};
             std::string error;
             if (!honghuang::protocol::decode_frame(bytes, frame, error)) {
-                std::cerr << "Rejected malformed protocol frame: " << error << '\n';
-                enet_peer_disconnect(event.peer, 1);
-            } else if (frame.type == honghuang::protocol::MessageType::Heartbeat) {
+                send_json(event.peer, honghuang::protocol::MessageType::ServerReject, Json{{"reason", error}});
+                enet_peer_disconnect_later(event.peer, 1);
+            } else if (frame.type == honghuang::protocol::MessageType::ClientHello &&
+                       !impl_->authenticated.contains(event.peer)) {
+                honghuang::protocol::ClientHello hello{};
+                if (!honghuang::protocol::decode_client_hello(frame.payload, hello, error)) {
+                    send_json(event.peer, honghuang::protocol::MessageType::ServerReject, Json{{"reason", error}});
+                    enet_peer_disconnect_later(event.peer, 2);
+                } else {
+                    Json snapshot;
+                    if (!redeem_ticket(impl_->config, hello.ticket, snapshot, error)) {
+                        std::cerr << "World entry rejected: " << error << '\n';
+                        send_json(event.peer, honghuang::protocol::MessageType::ServerReject,
+                                  Json{{"reason", "world entry ticket rejected"}});
+                        enet_peer_disconnect_later(event.peer, 3);
+                    } else {
+                        impl_->authenticated.insert(event.peer);
+                        send_json(event.peer, honghuang::protocol::MessageType::ServerWelcome, snapshot);
+                        std::cout << "Authenticated character entered world: "
+                                  << snapshot.value("character_id", std::string{}) << '\n';
+                    }
+                }
+            } else if (frame.type == honghuang::protocol::MessageType::Heartbeat &&
+                       impl_->authenticated.contains(event.peer)) {
                 const auto response = honghuang::protocol::encode_frame(
                     honghuang::protocol::MessageType::HeartbeatAck, {});
                 auto* packet = enet_packet_create(response.data(), response.size(), ENET_PACKET_FLAG_RELIABLE);
                 if (packet != nullptr && enet_peer_send(event.peer, 0, packet) != 0) enet_packet_destroy(packet);
             } else {
-                // Ticket redemption and authoritative player creation are intentionally not
-                // enabled until the backend HTTPS client is configured.
-                std::cerr << "Protocol frame received; gameplay handshake is not enabled yet\n";
-                enet_peer_disconnect(event.peer, 2);
+                send_json(event.peer, honghuang::protocol::MessageType::ServerReject,
+                          Json{{"reason", "message not allowed before authentication"}});
+                enet_peer_disconnect_later(event.peer, 4);
             }
             enet_packet_destroy(event.packet);
             break;
         }
         case ENET_EVENT_TYPE_DISCONNECT:
-            std::cout << "Client disconnected\n";
+            impl_->authenticated.erase(event.peer);
+            std::cout << "ENet client disconnected\n";
             break;
         case ENET_EVENT_TYPE_NONE:
             break;
@@ -94,8 +194,10 @@ void EnetServer::stop() {
     if (impl_ != nullptr && impl_->host != nullptr) {
         enet_host_destroy(impl_->host);
         impl_->host = nullptr;
+        curl_global_cleanup();
         enet_deinitialize();
-        std::cout << "ENet stopped\n";
+        impl_->authenticated.clear();
+        std::cout << "WorldServer stopped\n";
     }
 }
 } // namespace honghuang::network
