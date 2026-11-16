@@ -236,7 +236,7 @@ type RewardResult struct {
 }
 
 // ApplyServerReward accepts rewards from the node that hosted the exact session.
- // A recently closed session is accepted so an asynchronous reward can finish
+// A recently closed session is accepted so an asynchronous reward can finish
  // after a player disconnects. A per-node event ID prevents duplicate grants.
 func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward Reward) (RewardResult, error) {
 	if !validReward(nodeKey, reward) {
