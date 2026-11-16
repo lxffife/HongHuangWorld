@@ -443,7 +443,7 @@ struct EnetServer::Impl {
                 if (deliver_character_reward(config, reward, status, error)) {
                     std::cout << "Character reward persisted: character=" << reward.character_id
                               << " experience=" << reward.experience
-                              << " cultivation=" << reward.cultivation << '\\n';
+                              << " cultivation=" << reward.cultivation << '\n';
                     continue;
                 }
                 const bool retryable = status == 0 || status >= 500;
@@ -452,7 +452,7 @@ struct EnetServer::Impl {
                     const auto delay = std::chrono::seconds(
                         std::min<unsigned int>(1U << std::min(reward.attempts, 4U), 10U));
                     std::cerr << "Character reward delivery will retry in " << delay.count()
-                              << "s: " << error << '\\n';
+                              << "s: " << error << '\n';
                     std::this_thread::sleep_for(delay);
                     {
                         std::lock_guard lock(reward_mutex);
@@ -461,7 +461,7 @@ struct EnetServer::Impl {
                     reward_cv.notify_one();
                 } else {
                     std::cerr << "Character reward was not persisted and will not be retried: "
-                              << error << '\\n';
+                              << error << '\n';
                 }
             }
         });
