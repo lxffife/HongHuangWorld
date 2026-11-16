@@ -177,8 +177,8 @@ func (s *Service) CreateFirstLife(ctx context.Context, accountID, name, worldID,
 	if rows, err := bloodlineResult.RowsAffected(); err != nil || rows != 1 {
 		return Character{}, fmt.Errorf("initialize character bloodline: expected one default bloodline, inserted %d: %v", rows, err)
 	}
-	starterResult, err := tx.ExecContext(ctx, `INSERT INTO character_techniques (character_id, technique_id, proficiency, is_equipped)
-		 SELECT $1, technique_id, 0, TRUE FROM race_starter_techniques WHERE race_id=$2`, result.ID, raceID)
+	starterResult, err := tx.ExecContext(ctx, `INSERT INTO character_techniques (character_id, technique_id, proficiency, is_equipped, is_starter)
+		 SELECT $1, technique_id, 0, TRUE, TRUE FROM race_starter_techniques WHERE race_id=$2`, result.ID, raceID)
 	if err != nil { return Character{}, fmt.Errorf("initialize starter technique: %w", err) }
 	if rows, err := starterResult.RowsAffected(); err != nil || rows != 1 {
 		return Character{}, fmt.Errorf("initialize starter technique: expected one starter technique, inserted %d: %v", rows, err)
