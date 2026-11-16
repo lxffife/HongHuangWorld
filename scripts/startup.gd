@@ -341,6 +341,8 @@ func _start_world_connection(host: String, port: int, ticket: String) -> void:
 		_set_status("世界网络连接初始化失败，错误码：" + str(error))
 
 func _on_world_welcomed(snapshot: Dictionary) -> void:
+	HHSession.api_base = api_base
+	HHSession.access_token = access_token
 	_set_status("世界服务器验证成功，正在进入青云人界……")
 	HHSession.world_snapshot = snapshot
 	if world_network != null and is_instance_valid(world_network):
