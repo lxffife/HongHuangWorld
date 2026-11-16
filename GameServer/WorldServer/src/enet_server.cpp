@@ -23,6 +23,8 @@ using Json = nlohmann::json;
 using Clock = std::chrono::steady_clock;
 constexpr float kWorldMoveSpeed = 5.0F;
 constexpr float kWorldBound = 100.0F;
+constexpr float kGravity = 18.0F;
+constexpr float kJumpVelocity = 6.5F;
 constexpr auto kSnapshotInterval = std::chrono::milliseconds(50);
 constexpr auto kInputTimeout = std::chrono::milliseconds(500);
 
@@ -34,6 +36,8 @@ struct PlayerState {
     float z{};
     float move_x{};
     float move_z{};
+    float vertical_velocity{};
+    bool jump_requested{};
     std::uint64_t last_input_sequence{};
     Clock::time_point last_input_at{Clock::now()};
 };
@@ -152,6 +156,14 @@ struct EnetServer::Impl {
             }
             player.x = std::clamp(player.x + player.move_x * kWorldMoveSpeed * delta, -kWorldBound, kWorldBound);
             player.z = std::clamp(player.z + player.move_z * kWorldMoveSpeed * delta, -kWorldBound, kWorldBound);
+            if (player.jump_requested && player.y <= 0.001F) player.vertical_velocity = kJumpVelocity;
+            player.jump_requested = false;
+            player.vertical_velocity -= kGravity * delta;
+            player.y += player.vertical_velocity * delta;
+            if (player.y < 0.0F) {
+                player.y = 0.0F;
+                player.vertical_velocity = 0.0F;
+            }
         }
         last_snapshot = now;
         broadcast_snapshot();
@@ -264,6 +276,7 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                         if (magnitude > 1.0F) { x /= magnitude; z /= magnitude; }
                         player.move_x = x;
                         player.move_z = z;
+                        player.jump_requested = command.value("jump", false);
                         player.last_input_sequence = sequence;
                         player.last_input_at = Clock::now();
                     }
