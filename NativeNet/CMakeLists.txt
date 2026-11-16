@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(HongHuangNativeNet LANGUAGES CXX)
+project(HongHuangNativeNet LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -15,15 +15,20 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(godot_cpp)
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(ENET REQUIRED IMPORTED_TARGET libenet)
+FetchContent_Declare(
+    enet
+    GIT_REPOSITORY https://github.com/lsalzman/enet.git
+    GIT_TAG v1.3.18
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(enet)
 
 add_library(honghuang_native_net SHARED
     src/register_types.cpp
     src/enet_client.cpp
 )
 target_include_directories(honghuang_native_net PRIVATE include)
-target_link_libraries(honghuang_native_net PRIVATE godot-cpp PkgConfig::ENET)
+target_link_libraries(honghuang_native_net PRIVATE godot-cpp enet)
 
 if(MSVC)
     target_compile_options(honghuang_native_net PRIVATE /W4 /permissive-)
@@ -31,7 +36,14 @@ else()
     target_compile_options(honghuang_native_net PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+set(_client_bin "${CMAKE_CURRENT_SOURCE_DIR}/../HongHuangClient/bin")
 set_target_properties(honghuang_native_net PROPERTIES
     PREFIX ""
     OUTPUT_NAME "honghuang_native_net"
+    LIBRARY_OUTPUT_DIRECTORY "${_client_bin}"
+    RUNTIME_OUTPUT_DIRECTORY "${_client_bin}"
+    LIBRARY_OUTPUT_DIRECTORY_DEBUG "${_client_bin}"
+    LIBRARY_OUTPUT_DIRECTORY_RELEASE "${_client_bin}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${_client_bin}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${_client_bin}"
 )
