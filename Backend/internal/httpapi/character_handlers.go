@@ -28,6 +28,17 @@ type allocateAttributePointsRequest struct {
 	Points    int    `json:"points"`
 }
 
+// catalog is public game configuration; it contains no account-specific data.
+func (h *characterHandlers) catalog(w http.ResponseWriter, r *http.Request) {
+	catalog, err := h.characterService.CultivationCatalog(r.Context())
+	if err != nil {
+		h.logger.Error("load cultivation catalog failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"races": catalog})
+}
+
 func (h *characterHandlers) createFirstLife(w http.ResponseWriter, r *http.Request) {
 	account, ok := h.currentAccount(w, r)
 	if !ok {
