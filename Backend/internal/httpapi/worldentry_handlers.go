@@ -23,6 +23,16 @@ type redeemTicketRequest struct {
 	Ticket  string `json:"ticket"`
 }
 
+type closeWorldSessionRequest struct {
+	NodeKey     string  `json:"node_key"`
+	SessionID   string  `json:"session_id"`
+	CharacterID string  `json:"character_id"`
+	PositionX   float64 `json:"position_x"`
+	PositionY   float64 `json:"position_y"`
+	PositionZ   float64 `json:"position_z"`
+	RotationY   float64 `json:"rotation_y"`
+}
+
 func (h *worldEntryHandlers) issue(w http.ResponseWriter, r *http.Request) {
 	header := r.Header.Get("Authorization")
 	if !strings.HasPrefix(header, "Bearer ") {
@@ -69,4 +79,35 @@ func (h *worldEntryHandlers) redeem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, snapshot)
+}
+
+
+func (h *worldEntryHandlers) closeSession(w http.ResponseWriter, r *http.Request) {
+	provided := r.Header.Get("X-World-Server-Key")
+	if h.apiKey == "" || len(provided) != len(h.apiKey) ||
+		subtle.ConstantTimeCompare([]byte(provided), []byte(h.apiKey)) != 1 {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var request closeWorldSessionRequest
+	if err := decodeJSON(w, r, &request); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	err := h.entryService.SaveAndClose(r.Context(), worldentry.SessionSnapshot{
+		NodeKey: request.NodeKey, SessionID: request.SessionID, CharacterID: request.CharacterID,
+		PositionX: request.PositionX, PositionY: request.PositionY, PositionZ: request.PositionZ,
+		RotationY: request.RotationY,
+	})
+	if err != nil {
+		if errors.Is(err, worldentry.ErrInvalidSessionSnapshot) {
+			http.Error(w, "invalid or unauthorized world session snapshot", http.StatusBadRequest)
+			return
+		}
+		h.logger.Error("save and close world session failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "closed"})
 }
