@@ -317,6 +317,10 @@ struct EnetServer::Impl {
                 }
 
                 for (const auto& [session_id, player] : batch) {
+                    {
+                        std::lock_guard lock(persistence_mutex);
+                        if (persistence_stop_requested) break;
+                    }
                     bool inactive = false;
                     std::string error;
                     if (save_periodic_position(config, player, inactive, error)) continue;
