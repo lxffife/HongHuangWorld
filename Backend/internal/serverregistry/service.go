@@ -2,7 +2,9 @@ package serverregistry
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -78,7 +80,9 @@ func (s *Service) Heartbeat(ctx context.Context, input Heartbeat) (Result, error
 		return Result{}, fmt.Errorf("upsert server registry: %w", err)
 	}
 
-	instanceKey := input.NodeKey + "/" + input.WorldID + "/" + input.InstanceKey
+	instanceIdentity := input.NodeKey + "\x00" + input.WorldID + "\x00" + input.InstanceKey
+	instanceDigest := sha256.Sum256([]byte(instanceIdentity))
+	instanceKey := "node/" + hex.EncodeToString(instanceDigest[:])
 	err = tx.QueryRowContext(ctx,
 		`INSERT INTO world_instances (world_id, instance_key, status, server_id)
 		 VALUES ($1, $2, $3, $4)
