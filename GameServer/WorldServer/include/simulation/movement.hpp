@@ -7,9 +7,7 @@ namespace honghuang::simulation {
 
 inline bool normalize_direction(float& x, float& z) {
     if (!std::isfinite(x) || !std::isfinite(z)) return false;
-    x = std::clamp(x, -1.0F, 1.0F);
-    z = std::clamp(z, -1.0F, 1.0F);
-    const float magnitude = std::sqrt(x * x + z * z);
+    const float magnitude = std::hypot(x, z);
     if (magnitude > 1.0F) {
         x /= magnitude;
         z /= magnitude;
