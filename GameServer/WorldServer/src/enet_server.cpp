@@ -31,7 +31,6 @@ constexpr auto kInputTimeout = std::chrono::milliseconds(500);
 // The client sends at 20 Hz. Accept modest jitter, but cap command processing at 100 Hz.
 constexpr auto kMinimumInputInterval = std::chrono::milliseconds(10);
 constexpr float kInterestRadius = 80.0F;
-constexpr float kInterestRadiusSquared = kInterestRadius * kInterestRadius;
 constexpr auto kHeartbeatInterval = std::chrono::seconds(10);
 constexpr auto kHeartbeatRetryInterval = std::chrono::seconds(5);
 
@@ -270,10 +269,9 @@ struct EnetServer::Impl {
             Json entities = Json::array();
             for (const auto& [entity_peer, entity] : players) {
                 (void)entity_peer;
-                const float dx = entity.x - recipient.x;
-                const float dz = entity.z - recipient.z;
                 if (entity.character_id != recipient.character_id &&
-                    dx * dx + dz * dz > kInterestRadiusSquared) {
+                    !honghuang::simulation::within_interest_radius(
+                        entity.x, entity.z, recipient.x, recipient.z, kInterestRadius)) {
                     continue;
                 }
                 entities.push_back({
