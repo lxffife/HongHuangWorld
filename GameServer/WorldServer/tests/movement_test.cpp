@@ -22,7 +22,7 @@ int main() {
     integrate_horizontal(world_x, world_z, 1.0F, 0.0F, 0.1F);
     assert(std::abs(world_x - 100.0F) < 0.0001F);
 
-    float y = 0.0F;
+    float y = 0.15F;
     float velocity = 0.0F;
     bool jump = true;
     integrate_vertical(y, velocity, jump, 0.05F);
