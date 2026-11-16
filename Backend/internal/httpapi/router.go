@@ -10,6 +10,7 @@ import (
 
 	"github.com/liflife/HongHuangWorld/Backend/internal/auth"
 	"github.com/liflife/HongHuangWorld/Backend/internal/soul"
+	"github.com/liflife/HongHuangWorld/Backend/internal/world"
 )
 
 type healthResponse struct {
@@ -48,6 +49,8 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		souls := &soulHandlers{authService: auth.NewService(db), soulService: soul.NewService(db), logger: logger}
 		mux.HandleFunc("POST /api/v1/souls", souls.create)
 		mux.HandleFunc("GET /api/v1/souls/current", souls.current)
+		worlds := &worldHandlers{service: world.NewService(db), logger: logger}
+		mux.HandleFunc("GET /api/v1/worlds", worlds.list)
 	} else {
 		unavailable := func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
@@ -57,6 +60,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("GET /api/v1/account/me", unavailable)
 		mux.HandleFunc("POST /api/v1/souls", unavailable)
 		mux.HandleFunc("GET /api/v1/souls/current", unavailable)
+		mux.HandleFunc("GET /api/v1/worlds", unavailable)
 	}
 
 	return requestLogger(logger, mux)
