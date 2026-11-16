@@ -14,7 +14,7 @@ public:
     ~EnetClient() override;
 
     godot::Error connect_to_host(const godot::String& host, int port);
-    godot::Error send_frame(const godot::PackedByteArray& frame);
+    godot::Error send_frame(const godot::PackedByteArray& frame, bool reliable = true);
     void disconnect_from_host();
     bool is_connected_to_server() const;
 
