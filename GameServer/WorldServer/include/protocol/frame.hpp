@@ -23,6 +23,8 @@ enum class MessageType : std::uint16_t {
     EntitySnapshot = 11,
     PlayerJoined = 12,
     PlayerLeft = 13,
+    AttackCommand = 14,
+    CombatEvent = 15,
 };
 
 struct Frame {
