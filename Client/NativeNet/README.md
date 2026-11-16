@@ -48,5 +48,6 @@ bash Client/NativeNet/build_linux.sh
 
 - 当前扩展只处理可靠 channel 0 的单帧消息；服务端每个 ENet packet 对应一个 HHW1 frame。
 - 连接成功不代表已通过身份验证；必须收到 ServerWelcome 才算进入世界。
-- 当前尚未实现心跳定时器、移动输入、实体快照、AOI、重连和游戏场景切换。
+- 心跳定时器和认证后的青云人界场景切换已接入。
+- 当前移动仍是客户端本地原型；服务器权威移动输入、实体快照、AOI、重连和断线状态持久化尚未实现。
 - 首次配置时 CMake 需要联网拉取 godot-cpp 与 ENet 源码。
