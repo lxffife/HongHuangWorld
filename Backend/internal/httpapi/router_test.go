@@ -66,6 +66,16 @@ func TestCharacterEndpointsUnavailableWithoutDatabase(t *testing.T) {
 	}
 }
 
+func TestAttributeAllocationUnavailableWithoutDatabase(t *testing.T) {
+	handler := NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/characters/current/attributes/allocate", strings.NewReader(`{"attribute":"strength","points":1}`))
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, res.Code)
+	}
+}
+
 func TestCharacterStatusUnavailableWithoutDatabase(t *testing.T) {
 	handler := NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/characters/current/status", nil)
