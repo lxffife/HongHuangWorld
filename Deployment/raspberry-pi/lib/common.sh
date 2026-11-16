@@ -17,7 +17,8 @@ need_cmd() { command -v "$1" >/dev/null 2>&1 || die "缺少命令：$1"; }
 if [[ -n "$HH_PROXY_URL" ]]; then
   export HTTP_PROXY="$HH_PROXY_URL" HTTPS_PROXY="$HH_PROXY_URL" ALL_PROXY="$HH_PROXY_URL"
   export http_proxy="$HH_PROXY_URL" https_proxy="$HH_PROXY_URL" all_proxy="$HH_PROXY_URL"
-  export NO_PROXY="localhost,127.0.0.1,::1" no_proxy="$NO_PROXY"
+  NO_PROXY="localhost,127.0.0.1,::1"
+  export NO_PROXY no_proxy="$NO_PROXY"
 fi
 
 load_env() {
