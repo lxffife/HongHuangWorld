@@ -2,6 +2,7 @@ BEGIN;
 
 DROP INDEX IF EXISTS uq_world_sessions_active_character;
 DROP TABLE IF EXISTS world_sessions;
+DROP INDEX IF EXISTS uq_world_entry_ticket_pending_character;
 DROP TABLE IF EXISTS world_entry_tickets;
 ALTER TABLE IF EXISTS souls DROP CONSTRAINT IF EXISTS fk_souls_current_character;
 DROP TABLE IF EXISTS characters;
