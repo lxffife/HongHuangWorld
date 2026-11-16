@@ -44,7 +44,7 @@ if [[ -d "$DEST/.git" ]]; then
     ASKDIR="$(mktemp -d)"; ASKPASS="$ASKDIR/askpass"
     cat > "$ASKPASS" <<'EOF'
 #!/bin/sh
-case "$1" in *Username*) echo x-access-token;; *Password*) printf '%s\\n' "$HH_GITHUB_TOKEN";; *) exit 1;; esac
+case "$1" in *Username*) echo x-access-token;; *Password*) printf '%s\n' "$HH_GITHUB_TOKEN";; *) exit 1;; esac
 EOF
     chmod 700 "$ASKPASS"
     export HH_GITHUB_TOKEN="$TOKEN" GIT_ASKPASS="$ASKPASS" GIT_TERMINAL_PROMPT=0
@@ -61,7 +61,7 @@ else
   ASKDIR="$(mktemp -d)"; ASKPASS="$ASKDIR/askpass"
   cat > "$ASKPASS" <<'EOF'
 #!/bin/sh
-case "$1" in *Username*) echo x-access-token;; *Password*) printf '%s\\n' "$HH_GITHUB_TOKEN";; *) exit 1;; esac
+case "$1" in *Username*) echo x-access-token;; *Password*) printf '%s\n' "$HH_GITHUB_TOKEN";; *) exit 1;; esac
 EOF
   chmod 700 "$ASKPASS"
   export HH_GITHUB_TOKEN="$TOKEN" GIT_ASKPASS="$ASKPASS" GIT_TERMINAL_PROMPT=0
