@@ -77,7 +77,6 @@ jobs:
           psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000002_character_progression.up.sql
           psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000003_race_bloodline_techniques.up.sql
           psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000004_bloodline_awakening_technique_training.up.sql
-          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000004_bloodline_awakening_technique_training.up.sql
       - name: Verify character progression schema and realm seeds
         env:
           PGPASSWORD: ci-password
@@ -118,6 +117,7 @@ jobs:
           psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000001_initial_schema.up.sql
           psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000002_character_progression.up.sql
           psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000003_race_bloodline_techniques.up.sql
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000004_bloodline_awakening_technique_training.up.sql
 
   godot-native-network:
     name: Godot native ENet extension build
