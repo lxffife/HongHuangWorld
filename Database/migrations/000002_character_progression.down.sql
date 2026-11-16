@@ -1,5 +1,8 @@
 BEGIN;
 
+ALTER TABLE characters DROP CONSTRAINT IF EXISTS fk_characters_race_definition;
+ALTER TABLE characters ALTER COLUMN race_id DROP NOT NULL;
+
 DROP TABLE IF EXISTS character_reward_events;
 DROP TABLE IF EXISTS character_progression;
 DROP TABLE IF EXISTS character_attributes;
