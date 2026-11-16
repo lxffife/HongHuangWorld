@@ -5,16 +5,37 @@
 #include <curl/curl.h>
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <iostream>
 #include <memory>
+#include <span>
 #include <string>
-#include <unordered_set>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 namespace honghuang::network {
 namespace {
 using Json = nlohmann::json;
+using Clock = std::chrono::steady_clock;
+constexpr float kWorldMoveSpeed = 5.0F;
+constexpr float kWorldBound = 100.0F;
+constexpr auto kSnapshotInterval = std::chrono::milliseconds(50);
+constexpr auto kInputTimeout = std::chrono::milliseconds(500);
+
+struct PlayerState {
+    std::string character_id;
+    std::string name;
+    float x{};
+    float y{};
+    float z{};
+    float move_x{};
+    float move_z{};
+    std::uint64_t last_input_sequence{};
+    Clock::time_point last_input_at{Clock::now()};
+};
 
 std::size_t collect_response(char* data, std::size_t size, std::size_t count, void* user) {
     const auto bytes = size * count;
@@ -87,9 +108,53 @@ void send_json(ENetPeer* peer, honghuang::protocol::MessageType type, const Json
 struct EnetServer::Impl {
     ServerConfig config;
     ENetHost* host{};
-    std::unordered_set<ENetPeer*> authenticated;
+    std::unordered_map<ENetPeer*, PlayerState> players;
+    Clock::time_point last_snapshot{Clock::now()};
 
     explicit Impl(ServerConfig value) : config(std::move(value)) {}
+
+    void broadcast_snapshot() {
+        if (players.empty()) return;
+        Json entities = Json::array();
+        for (const auto& [peer, player] : players) {
+            (void)peer;
+            entities.push_back({
+                {"character_id", player.character_id},
+                {"name", player.name},
+                {"x", player.x}, {"y", player.y}, {"z", player.z},
+                {"last_input_sequence", player.last_input_sequence}
+            });
+        }
+        const auto payload_text = Json{{"entities", std::move(entities)}}.dump();
+        const auto* begin = reinterpret_cast<const std::uint8_t*>(payload_text.data());
+        const auto frame = honghuang::protocol::encode_frame(
+            honghuang::protocol::MessageType::EntitySnapshot,
+            std::span<const std::uint8_t>(begin, payload_text.size()));
+        if (frame.empty()) return;
+        for (const auto& [peer, player] : players) {
+            (void)player;
+            auto* packet = enet_packet_create(frame.data(), frame.size(), 0);
+            if (packet != nullptr && enet_peer_send(peer, 1, packet) != 0) enet_packet_destroy(packet);
+        }
+    }
+
+    void tick_world() {
+        const auto now = Clock::now();
+        const auto elapsed = now - last_snapshot;
+        if (elapsed < kSnapshotInterval) return;
+        const float delta = std::clamp(std::chrono::duration<float>(elapsed).count(), 0.0F, 0.1F);
+        for (auto& [peer, player] : players) {
+            (void)peer;
+            if (now - player.last_input_at > kInputTimeout) {
+                player.move_x = 0.0F;
+                player.move_z = 0.0F;
+            }
+            player.x = std::clamp(player.x + player.move_x * kWorldMoveSpeed * delta, -kWorldBound, kWorldBound);
+            player.z = std::clamp(player.z + player.move_z * kWorldMoveSpeed * delta, -kWorldBound, kWorldBound);
+        }
+        last_snapshot = now;
+        broadcast_snapshot();
+    }
 };
 
 EnetServer::EnetServer(ServerConfig config) : impl_(new Impl(std::move(config))) {}
@@ -147,7 +212,7 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                 send_json(event.peer, honghuang::protocol::MessageType::ServerReject, Json{{"reason", error}});
                 enet_peer_disconnect_later(event.peer, 1);
             } else if (frame.type == honghuang::protocol::MessageType::ClientHello &&
-                       !impl_->authenticated.contains(event.peer)) {
+                       !impl_->players.contains(event.peer)) {
                 honghuang::protocol::ClientHello hello{};
                 if (!honghuang::protocol::decode_client_hello(frame.payload, hello, error)) {
                     send_json(event.peer, honghuang::protocol::MessageType::ServerReject, Json{{"reason", error}});
@@ -160,18 +225,52 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                                   Json{{"reason", "world entry ticket rejected"}});
                         enet_peer_disconnect_later(event.peer, 3);
                     } else {
-                        impl_->authenticated.insert(event.peer);
+                        PlayerState player;
+                        player.character_id = snapshot.value("character_id", std::string{});
+                        player.name = snapshot.value("name", std::string{});
+                        player.x = snapshot.value("position_x", 0.0F);
+                        player.y = snapshot.value("position_y", 0.0F);
+                        player.z = snapshot.value("position_z", 0.0F);
+                        player.last_input_at = Clock::now();
+                        impl_->players.emplace(event.peer, std::move(player));
                         send_json(event.peer, honghuang::protocol::MessageType::ServerWelcome, snapshot);
                         std::cout << "Authenticated character entered world: "
                                   << snapshot.value("character_id", std::string{}) << '\n';
                     }
                 }
             } else if (frame.type == honghuang::protocol::MessageType::Heartbeat &&
-                       impl_->authenticated.contains(event.peer)) {
+                       impl_->players.contains(event.peer)) {
                 const auto response = honghuang::protocol::encode_frame(
                     honghuang::protocol::MessageType::HeartbeatAck, {});
                 auto* packet = enet_packet_create(response.data(), response.size(), ENET_PACKET_FLAG_RELIABLE);
                 if (packet != nullptr && enet_peer_send(event.peer, 0, packet) != 0) enet_packet_destroy(packet);
+            } else if (frame.type == honghuang::protocol::MessageType::InputCommand &&
+                       impl_->players.contains(event.peer)) {
+                try {
+                    const std::string payload(frame.payload.begin(), frame.payload.end());
+                    const auto command = Json::parse(payload);
+                    const auto sequence = command.at("sequence").get<std::uint64_t>();
+                    const float move_x = command.at("move_x").get<float>();
+                    const float move_z = command.at("move_z").get<float>();
+                    if (!std::isfinite(move_x) || !std::isfinite(move_z)) {
+                        throw std::runtime_error("movement input must be finite");
+                    }
+                    if (sequence > impl_->players.at(event.peer).last_input_sequence) {
+                        auto& player = impl_->players.at(event.peer);
+                        float x = std::clamp(move_x, -1.0F, 1.0F);
+                        float z = std::clamp(move_z, -1.0F, 1.0F);
+                        const float magnitude = std::sqrt(x * x + z * z);
+                        if (magnitude > 1.0F) { x /= magnitude; z /= magnitude; }
+                        player.move_x = x;
+                        player.move_z = z;
+                        player.last_input_sequence = sequence;
+                        player.last_input_at = Clock::now();
+                    }
+                } catch (const std::exception&) {
+                    send_json(event.peer, honghuang::protocol::MessageType::ServerReject,
+                              Json{{"reason", "invalid movement input"}});
+                    enet_peer_disconnect_later(event.peer, 5);
+                }
             } else {
                 send_json(event.peer, honghuang::protocol::MessageType::ServerReject,
                           Json{{"reason", "message not allowed before authentication"}});
@@ -181,13 +280,14 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
             break;
         }
         case ENET_EVENT_TYPE_DISCONNECT:
-            impl_->authenticated.erase(event.peer);
+            impl_->players.erase(event.peer);
             std::cout << "ENet client disconnected\n";
             break;
         case ENET_EVENT_TYPE_NONE:
             break;
         }
     }
+    impl_->tick_world();
 }
 
 void EnetServer::stop() {
@@ -196,7 +296,7 @@ void EnetServer::stop() {
         impl_->host = nullptr;
         curl_global_cleanup();
         enet_deinitialize();
-        impl_->authenticated.clear();
+        impl_->players.clear();
         std::cout << "WorldServer stopped\n";
     }
 }
