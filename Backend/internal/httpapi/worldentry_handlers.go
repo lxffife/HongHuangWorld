@@ -1,0 +1,71 @@
+package httpapi
+
+import (
+	"crypto/subtle"
+	"errors"
+	"log/slog"
+	"net/http"
+	"strings"
+
+	"github.com/liflife/HongHuangWorld/Backend/internal/auth"
+	"github.com/liflife/HongHuangWorld/Backend/internal/worldentry"
+)
+
+type worldEntryHandlers struct {
+	authService  *auth.Service
+	entryService *worldentry.Service
+	logger       *slog.Logger
+}
+
+type redeemTicketRequest struct {
+	NodeKey string `json:"node_key"`
+	Ticket  string `json:"ticket"`
+}
+
+func (h *worldEntryHandlers) issue(w http.ResponseWriter, r *http.Request) {
+	header := r.Header.Get("Authorization")
+	if !strings.HasPrefix(header, "Bearer ") {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	account, err := h.authService.Authenticate(r.Context(), strings.TrimSpace(strings.TrimPrefix(header, "Bearer ")))
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	entry, err := h.entryService.Issue(r.Context(), account.ID)
+	if err != nil {
+		if errors.Is(err, worldentry.ErrNoAvailableServer) {
+			http.Error(w, "no available world server for current character", http.StatusServiceUnavailable)
+			return
+		}
+		h.logger.Error("issue world entry ticket failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, entry)
+}
+
+func (h *worldEntryHandlers) redeem(w http.ResponseWriter, r *http.Request) {
+	provided := r.Header.Get("X-World-Server-Key")
+	if h.apiKey == "" || len(provided) != len(h.apiKey) || subtle.ConstantTimeCompare([]byte(provided), []byte(h.apiKey)) != 1 {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var request redeemTicketRequest
+	if err := decodeJSON(w, r, &request); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	snapshot, err := h.entryService.Redeem(r.Context(), request.NodeKey, request.Ticket)
+	if err != nil {
+		if errors.Is(err, worldentry.ErrInvalidTicket) {
+			http.Error(w, "invalid or expired ticket", http.StatusUnauthorized)
+			return
+		}
+		h.logger.Error("redeem world entry ticket failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, snapshot)
+}
