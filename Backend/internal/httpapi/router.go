@@ -59,7 +59,8 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		worlds := &worldHandlers{service: world.NewService(db), logger: logger}
 		npcs := &npcHandlers{authService: authService, service: npc.NewService(db), logger: logger}
 		mux.HandleFunc("GET /api/v1/worlds/current/npcs", npcs.list)
-		mux.HandleFunc("POST /api/v1/worlds/current/npcs/interact", npcs.interact)
+		mux.HandleFunc("POST /api/v1/worlds/current/npcs/interact", "POST /api/v1/worlds/current/npcs/choose", npcs.interact)
+		mux.HandleFunc("POST /api/v1/worlds/current/npcs/choose", npcs.chooseFate)
 		mux.HandleFunc("GET /api/v1/worlds", worlds.list)
 		characters := &characterHandlers{authService: authService, characterService: character.NewService(db), logger: logger}
 		mux.HandleFunc("GET /api/v1/cultivation/systems", characters.catalog)
