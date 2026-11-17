@@ -351,3 +351,46 @@ func (s *Service) Trials(ctx context.Context, accountID string) ([]Trial,error) 
  }
  return result,nil
 }
+
+ 
+type ReincarnationEligibility struct {
+ Eligible bool `json:"eligible"`
+ CurrentRealmID string `json:"current_realm_id"`
+ CurrentRealmName string `json:"current_realm_name"`
+ CurrentRealmOrder int `json:"current_realm_order"`
+ RequiredRealmID string `json:"required_realm_id"`
+ RequiredRealmName string `json:"required_realm_name"`
+ RequiredRealmOrder int `json:"required_realm_order"`
+ TrialID string `json:"trial_id"`
+ TrialName string `json:"trial_name"`
+ TrialCompleted bool `json:"trial_completed"`
+ Reasons []string `json:"reasons"`
+}
+
+// ReincarnationEligibility is a preview only; the character transaction repeats
+// these checks while holding the soul lock before creating a new body.
+func (s *Service) ReincarnationEligibility(ctx context.Context, accountID string) (ReincarnationEligibility,error) {
+ var result ReincarnationEligibility
+ err:=s.db.QueryRowContext(ctx,
+  `SELECT current_realm.id,current_realm.name,current_realm.realm_order,
+          required_realm.id,required_realm.name,required_realm.realm_order,
+          trial.id,trial.name,
+          COALESCE(progress.completed_at IS NOT NULL,FALSE)
+   FROM souls soul
+   JOIN soul_progression progression ON progression.soul_id=soul.id
+   JOIN soul_realm_definitions current_realm ON current_realm.id=progression.realm_id
+   JOIN soul_realm_definitions required_realm ON required_realm.realm_order=3
+   JOIN soul_trial_definitions trial ON trial.id='fengdu_first_exorcism'
+   LEFT JOIN soul_trial_progress progress ON progress.soul_id=soul.id AND progress.trial_id=trial.id
+   WHERE soul.account_id=$1`,accountID).Scan(
+  &result.CurrentRealmID,&result.CurrentRealmName,&result.CurrentRealmOrder,
+  &result.RequiredRealmID,&result.RequiredRealmName,&result.RequiredRealmOrder,
+  &result.TrialID,&result.TrialName,&result.TrialCompleted)
+ if errors.Is(err,sql.ErrNoRows) { return ReincarnationEligibility{},ErrNotFound }
+ if err!=nil { return ReincarnationEligibility{},fmt.Errorf("load reincarnation eligibility: %w",err) }
+ result.Reasons=make([]string,0,2)
+ if result.CurrentRealmOrder<result.RequiredRealmOrder { result.Reasons=append(result.Reasons,"soul_realm_required") }
+ if !result.TrialCompleted { result.Reasons=append(result.Reasons,"fengdu_trial_required") }
+ result.Eligible=len(result.Reasons)==0
+ return result,nil
+}
