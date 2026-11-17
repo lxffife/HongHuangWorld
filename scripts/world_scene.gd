@@ -60,6 +60,8 @@ var npc_status_label: Label
 var npc_interact_button: Button
 var npc_trial_button: Button
 var npc_eligibility_button: Button
+var npc_soul_button: Button
+var npc_soul_breakthrough_button: Button
 var npc_selected_id := ""
 var npc_request_busy := false
 
@@ -1123,6 +1125,15 @@ func _build_npc_ui() -> void:
 	npc_eligibility_button.text = "查看投胎资格"
 	npc_eligibility_button.pressed.connect(_request_reincarnation_eligibility)
 	layout.add_child(npc_eligibility_button)
+	npc_soul_button = Button.new()
+	npc_soul_button.text = "查看灵魂境界"
+	npc_soul_button.pressed.connect(_request_soul_progression)
+	layout.add_child(npc_soul_button)
+	npc_soul_breakthrough_button = Button.new()
+	npc_soul_breakthrough_button.text = "主动突破灵魂境界"
+	npc_soul_breakthrough_button.visible = false
+	npc_soul_breakthrough_button.pressed.connect(_request_soul_breakthrough)
+	layout.add_child(npc_soul_breakthrough_button)
 	var close_button := Button.new()
 	close_button.text = "关闭"
 	close_button.pressed.connect(func(): npc_panel.visible = false)
@@ -1187,6 +1198,8 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_status_label.text = "交互已由中心服验证。"
 			npc_trial_button.visible = str(npc_data.get("interaction_type", "")) == "soul_trials"
 			npc_eligibility_button.visible = str(npc_data.get("interaction_type", "")) == "reincarnation_guidance"
+			npc_soul_button.visible = true
+			npc_soul_breakthrough_button.visible = false
 			npc_panel.visible = true
 		"trials":
 			var trials: Array = data.get("trials", [])
@@ -1199,8 +1212,31 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 					if bool(trial.get("reward_granted", false)):
 						lines.append("奖励已入账：" + str(trial.get("reward_experience", 0)) + " 灵魂经验")
 			npc_dialogue_label.text = "\n".join(PackedStringArray(lines))
-			npc_status_label.text = "任务进度来自中心服，不使用客户端本地计数。"
+			npc_soul_button.visible = true
+			npc_soul_breakthrough_button.visible = false
 			npc_panel.visible = true
+		"soul_progression":
+			var experience := int(data.get("experience", 0))
+			var realm_name := str(data.get("realm_name", "未知"))
+			var next_name := str(data.get("next_realm_name", ""))
+			var next_required: Variant = data.get("next_required_experience", null)
+			npc_title_label.text = "灵魂修炼 · " + realm_name
+			if next_required == null:
+				npc_dialogue_label.text = "当前灵魂经验：" + str(experience) + "\n已达到当前配置的最高灵魂境界。"
+				npc_soul_breakthrough_button.visible = false
+			else:
+				npc_dialogue_label.text = "当前灵魂经验：" + str(experience) + "\n下一境界：" + next_name + "\n突破所需累计经验：" + str(next_required)
+				npc_soul_breakthrough_button.visible = experience >= int(next_required)
+			npc_status_label.text = "灵魂经验跨越轮回保留；达到门槛后仍需主动突破。"
+			npc_soul_button.visible = true
+			npc_panel.visible = true
+		"soul_breakthrough":
+			npc_title_label.text = "灵魂境界突破"
+			npc_dialogue_label.text = "灵魂境界突破成功：" + str(data.get("realm_name", "新境界")) + "\n当前灵魂经验：" + str(data.get("experience", 0))
+			npc_status_label.text = "境界已由中心服更新。"
+			npc_soul_breakthrough_button.visible = false
+			npc_panel.visible = true
+			_request_soul_progression()
 		"eligibility":
 			var realm := str(data.get("current_realm_name", "未知"))
 			var required := str(data.get("required_realm_name", "聚灵境"))
@@ -1299,3 +1335,16 @@ func _request_reincarnation_eligibility() -> void:
 		return
 	npc_status_label.text = "正在核验灵魂境界与试炼记录……"
 	_send_npc_request("GET", "/api/v1/souls/current/reincarnation-eligibility", "eligibility")
+
+
+func _request_soul_progression() -> void:
+	if npc_request_busy:
+		return
+	npc_status_label.text = "正在读取跨世保留的灵魂经验……"
+	_send_npc_request("GET", "/api/v1/souls/current/progression", "soul_progression")
+
+func _request_soul_breakthrough() -> void:
+	if npc_request_busy:
+		return
+	npc_status_label.text = "正在向中心服申请灵魂境界突破……"
+	_send_npc_request("POST", "/api/v1/souls/current/breakthrough", "soul_breakthrough", {})
