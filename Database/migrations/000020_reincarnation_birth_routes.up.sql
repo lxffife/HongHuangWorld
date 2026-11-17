@@ -1,5 +1,7 @@
 BEGIN;
 
+-- initial_boon is reserved descriptive configuration in this slice; the
+-- current implementation does not grant route-specific inventory/resources.
 CREATE TABLE reincarnation_birth_routes (
     id VARCHAR(96) PRIMARY KEY,
     world_id VARCHAR(64) NOT NULL REFERENCES world_definitions(id),
