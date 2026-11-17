@@ -1,0 +1,43 @@
+name: NativeNet - Windows x64
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-x64:
+    name: Windows x64 DLL (primary client platform)
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache CMake build
+        uses: actions/cache@v4
+        with:
+          path: build/godot-native-net
+          key: native-net-windows-x64-v2
+          restore-keys: |
+            native-net-windows-x64-
+
+      - name: Build GDExtension
+        shell: pwsh
+        run: |
+          cmake --version
+          cmake -S Client/NativeNet -B build/godot-native-net -A x64 -DCMAKE_BUILD_TYPE=Release
+          if ($LASTEXITCODE -ne 0) { throw "CMake configure failed: $LASTEXITCODE" }
+          cmake --build build/godot-native-net --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { throw "NativeNet build failed: $LASTEXITCODE" }
+          if (!(Test-Path "Client/HongHuangClient/bin/honghuang_native_net.dll")) {
+            throw "Windows DLL was not generated"
+          }
+
+      - name: Report build output (no artifact upload)
+        shell: pwsh
+        run: |
+          Get-Item "Client/HongHuangClient/bin/honghuang_native_net.dll" |
+            Select-Object Name, Length, LastWriteTime
+          Write-Host "Build verified. The DLL remains on the temporary runner and is not uploaded or committed."
