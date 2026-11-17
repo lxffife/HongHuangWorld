@@ -110,10 +110,17 @@ func (h *characterHandlers) createFirstLife(w http.ResponseWriter, r *http.Reque
 
 
 func (h *characterHandlers) reincarnationRoutes(w http.ResponseWriter, r *http.Request) {
- account, ok := h.currentAccount(w, r); if !ok { return }; _ = account
- routes, err := h.characterService.ReincarnationRoutes(r.Context())
- if err != nil { h.logger.Error("load reincarnation routes failed", "error", err); http.Error(w, "internal server error", http.StatusInternalServerError); return }
- writeJSON(w, http.StatusOK, map[string]any{"routes": routes})
+	account, ok := h.currentAccount(w, r)
+	if !ok {
+		return
+	}
+	routes, err := h.characterService.ReincarnationRoutes(r.Context(), account.ID)
+	if err != nil {
+		h.logger.Error("load reincarnation routes failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"routes": routes})
 }
 
 func (h *characterHandlers) reincarnate(w http.ResponseWriter, r *http.Request) {
