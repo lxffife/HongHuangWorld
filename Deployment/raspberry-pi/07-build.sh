@@ -10,7 +10,13 @@ fi
 set -Eeuo pipefail
 source "$(dirname "$0")/lib/common.sh"
 export PATH="/usr/local/go/bin:$HOME/go/bin:$PATH"
-need_cmd go; need_cmd cmake
+need_cmd go; need_cmd cmake; need_cmd pkg-config
+if ! pkg-config --exists sqlite3; then
+  echo "[ERROR] 缺少 SQLite3 开发文件（头文件/库）。请先执行：" >&2
+  echo "  sudo apt-get update && sudo apt-get install -y libsqlite3-dev" >&2
+  echo "安装后重新运行：bash Deployment/raspberry-pi/07-build.sh" >&2
+  exit 1
+fi
 mkdir -p "$HH_PROJECT_DIR/bin"
 (cd "$HH_PROJECT_DIR/Backend" && go mod tidy && go mod download && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o "$HH_PROJECT_DIR/bin/honghuang-api" ./cmd/api)
 cmake -S "$HH_PROJECT_DIR/GameServer/WorldServer" -B "$HH_PROJECT_DIR/build/world-server" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
