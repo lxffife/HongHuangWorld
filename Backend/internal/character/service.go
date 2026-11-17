@@ -1137,35 +1137,69 @@ func (s *Service) TrainTechnique(ctx context.Context, accountID, techniqueID str
 }
 
 
-// ReincarnationRoutes returns enabled, data-driven routes. Final race, fate and
-// world validation is repeated inside Reincarnate's transaction.
-func (s *Service) ReincarnationRoutes(ctx context.Context) ([]ReincarnationRoute, error) {
- rows, err := s.db.QueryContext(ctx,
-  `SELECT route.id, route.world_id, world.name, route.race_id, route.fate_trait_id,
-          route.name, route.description, route.spawn_x, route.spawn_y, route.spawn_z,
-          route.initial_boon
-   FROM reincarnation_birth_routes route
-   JOIN world_definitions world ON world.id = route.world_id
-   WHERE route.enabled AND world.enabled
-   ORDER BY world.world_level, route.sort_order, route.name`)
- if err != nil { return nil, fmt.Errorf("query reincarnation birth routes: %w", err) }
- defer rows.Close()
- routes := make([]ReincarnationRoute, 0)
- for rows.Next() {
-  var item ReincarnationRoute
-  var raceID, fateTraitID sql.NullString
-  var boon []byte
-  if err := rows.Scan(&item.ID, &item.WorldID, &item.WorldName, &raceID, &fateTraitID,
-   &item.Name, &item.Description, &item.SpawnX, &item.SpawnY, &item.SpawnZ, &boon); err != nil {
-   return nil, fmt.Errorf("scan reincarnation birth route: %w", err)
-  }
-  if raceID.Valid { item.RaceID = &raceID.String }
-  if fateTraitID.Valid { item.FateTraitID = &fateTraitID.String }
-  item.InitialBoon = append(json.RawMessage(nil), boon...)
-  routes = append(routes, item)
- }
- if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate reincarnation birth routes: %w", err) }
- return routes, nil
+// currentFateTraitID mirrors the server-side reincarnation imprint thresholds.
+func currentFateTraitID(merit, karma int64) string {
+	switch {
+	case merit >= 5 && karma >= 5:
+		return "entangled_fate"
+	case merit >= 5:
+		return "blessed_fate"
+	case karma >= 5:
+		return "karmic_shadow"
+	default:
+		return "unmarked_fate"
+	}
+}
+
+// ReincarnationRoutes returns enabled routes compatible with the soul's
+// predicted next-life fate. Reincarnate repeats the same check transactionally.
+func (s *Service) ReincarnationRoutes(ctx context.Context, accountID string) ([]ReincarnationRoute, error) {
+	var merit, karma int64
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT merit, karma FROM souls WHERE account_id = $1`, accountID,
+	).Scan(&merit, &karma); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrSoulRequired
+		}
+		return nil, fmt.Errorf("load soul fate for reincarnation routes: %w", err)
+	}
+	predictedTrait := currentFateTraitID(merit, karma)
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT route.id, route.world_id, world.name, route.race_id, route.fate_trait_id,
+		        route.name, route.description, route.spawn_x, route.spawn_y, route.spawn_z,
+		        route.initial_boon
+	 FROM reincarnation_birth_routes route
+	 JOIN world_definitions world ON world.id = route.world_id
+	 WHERE route.enabled AND world.enabled
+	   AND (route.fate_trait_id IS NULL OR route.fate_trait_id = $1)
+	 ORDER BY world.world_level, route.sort_order, route.name`, predictedTrait)
+	if err != nil {
+		return nil, fmt.Errorf("query reincarnation birth routes: %w", err)
+	}
+	defer rows.Close()
+	routes := make([]ReincarnationRoute, 0)
+	for rows.Next() {
+		var item ReincarnationRoute
+		var raceID, fateTraitID sql.NullString
+		var boon []byte
+		if err := rows.Scan(&item.ID, &item.WorldID, &item.WorldName, &raceID, &fateTraitID,
+			&item.Name, &item.Description, &item.SpawnX, &item.SpawnY, &item.SpawnZ, &boon); err != nil {
+			return nil, fmt.Errorf("scan reincarnation birth route: %w", err)
+		}
+		if raceID.Valid {
+			item.RaceID = &raceID.String
+		}
+		if fateTraitID.Valid {
+			item.FateTraitID = &fateTraitID.String
+		}
+		item.InitialBoon = append(json.RawMessage(nil), boon...)
+		routes = append(routes, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate reincarnation birth routes: %w", err)
+	}
+	return routes, nil
 }
 
 // Reincarnate creates a new physical life while retaining the soul record.
