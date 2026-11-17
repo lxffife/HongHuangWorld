@@ -112,7 +112,7 @@ type FateChoice struct {
 	ID string `json:"id"`
 	Text string `json:"text"`
 	Description string `json:"description"`
-	EffectKey string `json:"-"`
+	EffectKey string `json:"effect_key"`
 	Result string `json:"result"`
 }
 
