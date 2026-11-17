@@ -201,7 +201,7 @@ func (s *Service) ChooseFate(ctx context.Context, accountID, npcID, choiceID str
 	if _, err = tx.ExecContext(ctx,
 		`INSERT INTO soul_fate_events (soul_id,event_id,source,world_id,karma_delta,merit_delta)
 		 VALUES ($1,$2::uuid,$3,$4,$5,$6)`,
-		soulID, fateEventID, "npc_choice:"+npcID+":"+choiceID, worldID, karmaDelta, meritDelta); err != nil {
+		soulID, fateEventID, "npc_choice", worldID, karmaDelta, meritDelta); err != nil {
 		return FateChoiceResult{}, fmt.Errorf("record NPC fate event: %w", err)
 	}
 	var result FateChoiceResult
