@@ -2011,8 +2011,8 @@ func _render_world_npcs() -> void:
 func _update_nearest_npc_prompt() -> void:
 	if npc_interact_button == null or not is_instance_valid(local_player):
 		return
-	var nearest_distance := INF
-	var nearest_name := ""
+	var nearest_npc_distance := INF
+	var nearest_npc_name := ""
 	for npc_variant in npc_definitions:
 		if not (npc_variant is Dictionary):
 			continue
@@ -2020,32 +2020,69 @@ func _update_nearest_npc_prompt() -> void:
 		var target := Vector3(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_y", 0.0)), float(npc_data.get("position_z", 0.0)))
 		var distance := Vector2(target.x - local_player.position.x, target.z - local_player.position.z).length()
 		var radius := float(npc_data.get("interaction_radius", 3.0))
-		if distance <= radius and distance < nearest_distance:
-			nearest_distance = distance
-			nearest_name = str(npc_data.get("name", "NPC"))
-	npc_interact_button.visible = not nearest_name.is_empty()
+		if distance <= radius and distance < nearest_npc_distance:
+			nearest_npc_distance = distance
+			nearest_npc_name = str(npc_data.get("name", "NPC"))
+	if not nearest_npc_name.is_empty():
+		npc_interact_button.visible = true
+		npc_interact_button.text = "F · 与 " + nearest_npc_name + " 交互"
+		return
+
+	var nearest_point_id := ""
+	var nearest_point_name := ""
+	var nearest_point_distance := INF
+	var nearest_point_radius := 4.0
+	for point_id in exploration_point_data.keys():
+		var point: Dictionary = exploration_point_data.get(point_id, {})
+		if bool(point.get("discovered", false)):
+			continue
+		var target := Vector3(float(point.get("position_x", 0.0)), float(point.get("position_y", 0.0)), float(point.get("position_z", 0.0)))
+		var distance := Vector2(target.x - local_player.position.x, target.z - local_player.position.z).length()
+		if distance < nearest_point_distance:
+			nearest_point_distance = distance
+			nearest_point_id = str(point_id)
+			nearest_point_name = str(point.get("name", "未知地点"))
+			nearest_point_radius = float(point.get("interaction_radius", 4.0))
+	npc_interact_button.visible = not nearest_point_id.is_empty() and nearest_point_distance <= 32.0
 	if npc_interact_button.visible:
-		npc_interact_button.text = "F · 与 " + nearest_name + " 交互"
+		if nearest_point_distance <= nearest_point_radius:
+			npc_interact_button.text = "F · 发现：" + nearest_point_name
+		else:
+			npc_interact_button.text = "探索点：" + nearest_point_name + " · " + str(roundi(nearest_point_distance)) + "m"
 
 func _try_interact_nearest_npc() -> void:
 	if npc_request_busy or not is_instance_valid(local_player):
 		return
-	var nearest_id := ""
-	var nearest_distance := INF
+	var nearest_npc_id := ""
+	var nearest_npc_distance := INF
 	for npc_variant in npc_definitions:
 		if not (npc_variant is Dictionary):
 			continue
 		var npc_data: Dictionary = npc_variant
 		var target := Vector3(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_y", 0.0)), float(npc_data.get("position_z", 0.0)))
 		var distance := Vector2(target.x - local_player.position.x, target.z - local_player.position.z).length()
-		if distance <= float(npc_data.get("interaction_radius", 3.0)) and distance < nearest_distance:
-			nearest_distance = distance
-			nearest_id = str(npc_data.get("id", ""))
-	if nearest_id.is_empty():
+		if distance <= float(npc_data.get("interaction_radius", 3.0)) and distance < nearest_npc_distance:
+			nearest_npc_distance = distance
+			nearest_npc_id = str(npc_data.get("id", ""))
+	if not nearest_npc_id.is_empty():
+		npc_selected_id = nearest_npc_id
+		npc_status_label.text = "正在与 NPC 建立交互……"
+		_send_npc_request("POST", "/api/v1/worlds/current/npcs/interact", "interact", {"npc_id": nearest_npc_id})
 		return
-	npc_selected_id = nearest_id
-	npc_status_label.text = "正在与 NPC 建立交互……"
-	_send_npc_request("POST", "/api/v1/worlds/current/npcs/interact", "interact", {"npc_id": nearest_id})
+
+	var nearest_point_id := ""
+	var nearest_point_distance := INF
+	for point_id in exploration_point_data.keys():
+		var point: Dictionary = exploration_point_data.get(point_id, {})
+		if bool(point.get("discovered", false)):
+			continue
+		var target := Vector3(float(point.get("position_x", 0.0)), float(point.get("position_y", 0.0)), float(point.get("position_z", 0.0)))
+		var distance := Vector2(target.x - local_player.position.x, target.z - local_player.position.z).length()
+		if distance <= float(point.get("interaction_radius", 4.0)) and distance < nearest_point_distance:
+			nearest_point_distance = distance
+			nearest_point_id = str(point_id)
+	if not nearest_point_id.is_empty():
+		_discover_exploration_point(nearest_point_id)
 
 func _request_soul_trials() -> void:
 	if npc_request_busy:
