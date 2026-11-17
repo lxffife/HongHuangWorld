@@ -185,6 +185,7 @@ func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward 
   if err := tx.Commit(); err != nil { return RewardResult{}, fmt.Errorf("commit duplicate soul reward: %w", err) }
   return RewardResult{Applied:false}, nil
  }
+ if currentExperience > 9223372036854775807-reward.Experience { return RewardResult{}, ErrInvalidReward }
  newExperience := currentExperience + reward.Experience
  var realmID, realmName string
  err = tx.QueryRowContext(ctx,
@@ -229,12 +230,12 @@ func (s *Service) Breakthrough(ctx context.Context, accountID string) (Breakthro
  var nextID, nextName sql.NullString
  var nextRequired sql.NullInt64
  err = tx.QueryRowContext(ctx,
-  `SELECT current.id, current.realm_order, progression.experience,
+  `SELECT current_realm.id, current_realm.realm_order, progression.experience,
           next_realm.id, next_realm.name, next_realm.required_experience
    FROM souls soul
    JOIN soul_progression progression ON progression.soul_id = soul.id
-   JOIN soul_realm_definitions current ON current.id = progression.realm_id
-   LEFT JOIN soul_realm_definitions next_realm ON next_realm.realm_order = current.realm_order + 1
+   JOIN soul_realm_definitions current_realm ON current_realm.id = progression.realm_id
+   LEFT JOIN soul_realm_definitions next_realm ON next_realm.realm_order = current_realm.realm_order + 1
    WHERE soul.account_id = $1
    FOR UPDATE OF soul, progression`, accountID,
  ).Scan(&currentID, &currentOrder, &experience, &nextID, &nextName, &nextRequired)
