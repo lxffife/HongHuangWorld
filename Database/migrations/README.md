@@ -23,6 +23,7 @@
 - `000017_character_fate_traits` 为新肉身写入不可变命格特性，供 NPC 态度、隐藏遭遇与出生路线规则读取。
 - `000018_npc_fate_reactions` 为冥府判官与孟婆配置四种命格专属对白，由中心服读取当前肉身命格并返回反应文本。
 - `000019_hidden_fate_encounters` 增加灵魂级一次性命格奇遇领取记录，并为孟婆配置四种命格对应的隐藏奇遇。奖励在同一事务中写入因果簿。
+- `000020_reincarnation_birth_routes` 增加数据驱动的轮回出生路线；路线限定种族/命格、目标世界与服务端出生坐标，并将路线描述和出生快照写入不可变轮回档案。
 
 ## 当前迁移顺序
 
@@ -48,6 +49,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000016_reincarnat
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000017_character_fate_traits.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000018_npc_fate_reactions.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000019_hidden_fate_encounters.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000020_reincarnation_birth_routes.up.sql
 ```
 
 回滚时按相反顺序执行对应的 `.down.sql`。不要在已运行的生产库上重复执行非幂等迁移；后续接入迁移工具后，应由工具记录每个已应用版本，避免人工重复执行。
