@@ -477,6 +477,14 @@ func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessio
 		if err:=rows.Scan(&raw); err!=nil { return CombatStats{},fmt.Errorf("scan equipped combat bonuses: %w",err) }
 		bonuses:=map[string]int{}
 		if len(raw)>0 { if err:=json.Unmarshal(raw,&bonuses); err!=nil { return CombatStats{},fmt.Errorf("decode equipped combat bonuses: %w",err) } }
+		for key,value:=range bonuses {
+			if value < -100000 || value > 100000 { return CombatStats{},ErrInvalidRequest }
+			switch key {
+			case "attack","defense","strength","constitution","agility","spirit","vitality","max_health","max_mana":
+			default:
+				return CombatStats{},ErrInvalidRequest
+			}
+		}
 		result.Attack+=bonuses["attack"]
 		result.Defense+=bonuses["defense"]
 		result.Strength+=bonuses["strength"]
