@@ -37,6 +37,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000010_soul_progr
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000011_soul_trials.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000012_world_npcs.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000013_soul_memories.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000014_soul_fate_ledger.up.sql
 ```
 
 回滚时按相反顺序执行对应的 `.down.sql`。不要在已运行的生产库上重复执行非幂等迁移；后续接入迁移工具后，应由工具记录每个已应用版本，避免人工重复执行。
