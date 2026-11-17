@@ -21,6 +21,7 @@
 - `000015_npc_fate_choices` 增加每个灵魂对每名 NPC 只能作出一次的因果抉择记录，并为冥府判官配置善恶分支；选项效果由中心服规则计算。
 - `000016_reincarnation_fate_imprint` 在轮回事件中保存轮回当刻的功德、业力与命格快照，供后续出生路线和世界反应使用。
 - `000017_character_fate_traits` 为新肉身写入不可变命格特性，供 NPC 态度、隐藏遭遇与出生路线规则读取。
+- `000018_npc_fate_reactions` 为冥府判官与孟婆配置四种命格专属对白，由中心服读取当前肉身命格并返回反应文本。
 
 ## 当前迁移顺序
 
@@ -44,6 +45,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000014_soul_fate_
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000015_npc_fate_choices.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000016_reincarnation_fate_imprint.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000017_character_fate_traits.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000018_npc_fate_reactions.up.sql
 ```
 
 回滚时按相反顺序执行对应的 `.down.sql`。不要在已运行的生产库上重复执行非幂等迁移；后续接入迁移工具后，应由工具记录每个已应用版本，避免人工重复执行。
