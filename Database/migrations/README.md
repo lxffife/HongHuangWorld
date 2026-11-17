@@ -11,6 +11,9 @@
 - `000005_items_inventory_drops` 创建物品目录、怪物掉落配置、地面掉落实体、角色背包和幂等拾取流水；初始配置荒原狼掉落荒狼獠牙与荒狼皮。
 - `000006_character_equipment` 增加物品类型/装备部位/基础属性/使用效果元数据，以及角色装备槽；兼容同步现有 category 与 item_type。
 - `000007_item_use_and_starter_catalog` 增加消耗品幂等流水、初始装备/丹药目录，并为已有角色发放一次性新手物品。
+- `000008_character_death_and_respawn` 增加角色死亡事件与复活记录。
+- `000009_reincarnation_history` 增加肉身轮回历史。
+- `000010_soul_progression` 增加跨世保留的灵魂境界、灵魂经验与幂等奖励事件。
 
 ## 当前迁移顺序
 
@@ -24,6 +27,9 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000004_bloodline_
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000005_items_inventory_drops.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000006_character_equipment.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000007_item_use_and_starter_catalog.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000008_character_death_and_respawn.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000009_reincarnation_history.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000010_soul_progression.up.sql
 ```
 
 回滚时按相反顺序执行对应的 `.down.sql`。不要在已运行的生产库上重复执行非幂等迁移；后续接入迁移工具后，应由工具记录每个已应用版本，避免人工重复执行。
