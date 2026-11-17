@@ -33,11 +33,30 @@ var world_label_control: Label
 var auth_controls: Array[Control] = []
 var account_label: Label
 var right_info_label: Label
+var reincarnation_name_input: LineEdit
+var reincarnation_race_select: OptionButton
+var reincarnation_status_label: Label
+var reincarnation_check_button: Button
+var reincarnation_submit_button: Button
+var reincarnation_confirm: ConfirmationDialog
+var reincarnation_eligible := false
 
 func _ready() -> void:
 	_build_ui()
 	_load_client_config()
-	_set_status("已读取本机登录配置，请登录中心服。")
+	_build_reincarnation_ui()
+	if not HHSession.access_token.is_empty():
+		api_base = HHSession.api_base
+		access_token = HHSession.access_token
+		api_input.text = api_base
+		for control in auth_controls:
+			control.hide()
+		account_label.text = "已登录账号：" + username_input.text.strip_edges()
+		account_label.show()
+		_set_status("已恢复登录会话，正在重新读取灵魂与角色数据……")
+		_enqueue(HTTPClient.METHOD_GET, "/api/v1/souls/current", {}, true, "soul_check")
+	else:
+		_set_status("已读取本机登录配置，请登录中心服。")
 
 func _build_ui() -> void:
 	var background := ColorRect.new()
@@ -177,6 +196,65 @@ func _build_ui() -> void:
 	http.timeout = 12.0
 	add_child(http)
 	http.request_completed.connect(_on_http_completed)
+
+func _build_reincarnation_ui() -> void:
+	var separator := HSeparator.new()
+	content_box.add_child(separator)
+	var title := Label.new()
+	title.text = "主动轮回 · 创建下一世肉身"
+	title.add_theme_font_size_override("font_size", 18)
+	content_box.add_child(title)
+	reincarnation_status_label = Label.new()
+	reincarnation_status_label.text = "完成冥界试炼并达到聚灵境后，可在轮回殿申请投胎。"
+	reincarnation_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	content_box.add_child(reincarnation_status_label)
+	reincarnation_name_input = LineEdit.new()
+	reincarnation_name_input.placeholder_text = "新肉身名称（2–24 个字符）"
+	reincarnation_name_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content_box.add_child(reincarnation_name_input)
+	reincarnation_race_select = OptionButton.new()
+	reincarnation_race_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content_box.add_child(reincarnation_race_select)
+	reincarnation_check_button = Button.new()
+	reincarnation_check_button.text = "查询投胎资格"
+	reincarnation_check_button.pressed.connect(_check_reincarnation_eligibility)
+	content_box.add_child(reincarnation_check_button)
+	reincarnation_submit_button = Button.new()
+	reincarnation_submit_button.text = "确认创建新肉身"
+	reincarnation_submit_button.disabled = true
+	reincarnation_submit_button.pressed.connect(func(): reincarnation_confirm.popup_centered())
+	content_box.add_child(reincarnation_submit_button)
+	reincarnation_confirm = ConfirmationDialog.new()
+	reincarnation_confirm.title = "确认主动轮回"
+	reincarnation_confirm.dialog_text = "此操作不可撤销：当前肉身将归档为前世，并为同一灵魂创建新的肉身。灵魂经验、功德、业力会保留。是否继续？"
+	reincarnation_confirm.confirmed.connect(_submit_reincarnation)
+	add_child(reincarnation_confirm)
+	for control in [title, reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_check_button, reincarnation_submit_button]:
+		control.hide()
+
+func _check_reincarnation_eligibility() -> void:
+	if access_token.is_empty() or current_character.is_empty():
+		reincarnation_status_label.text = "请先登录并载入当前肉身。"
+		return
+	reincarnation_check_button.disabled = true
+	reincarnation_status_label.text = "正在向中心服查询灵魂境界与冥界试炼……"
+	_enqueue(HTTPClient.METHOD_GET, "/api/v1/souls/current/reincarnation-eligibility", {}, true, "reincarnation_eligibility")
+
+func _submit_reincarnation() -> void:
+	if not reincarnation_eligible or request_busy:
+		return
+	var name := reincarnation_name_input.text.strip_edges()
+	if name.length() < 2 or name.length() > 24:
+		reincarnation_status_label.text = "新肉身名称长度必须为 2–24 个字符。"
+		return
+	if reincarnation_race_select.item_count == 0:
+		reincarnation_status_label.text = "种族目录为空，暂时无法创建新肉身。"
+		return
+	var race_id := str(reincarnation_race_select.get_item_metadata(reincarnation_race_select.selected))
+	reincarnation_submit_button.disabled = true
+	reincarnation_check_button.disabled = true
+	reincarnation_status_label.text = "正在由中心服事务创建新肉身……"
+	_enqueue(HTTPClient.METHOD_POST, "/api/v1/characters/current/reincarnate", {"name": name, "race_id": race_id}, true, "reincarnate")
 
 func _load_client_config() -> void:
 	var config := ConfigFile.new()
@@ -325,6 +403,25 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 			var tier_text := str(progression.get("power_tier_name", "未知层级"))
 			var realm_text := str(progression.get("system_name", "")) + " · " + str(progression.get("realm_name", "")) + str(progression.get("realm_stage_name", ""))
 			_set_status("角色已存在：" + character_input.text + "\n修炼体系：" + realm_text + "\n跨族参考：" + tier_text + "。可以进入世界。")
+			_show_reincarnation_controls()
+		"reincarnation_eligibility":
+			reincarnation_check_button.disabled = false
+			reincarnation_eligible = bool(data.get("eligible", false))
+			var reasons: Array = data.get("reasons", [])
+			var realm_name := str(data.get("current_realm_name", "未知"))
+			var required_name := str(data.get("required_realm_name", "聚灵境"))
+			var trial_done := bool(data.get("trial_completed", false))
+			if reincarnation_eligible:
+				reincarnation_status_label.text = "投胎资格已满足。灵魂境界：" + realm_name + "；引魂试炼：已完成。选择新肉身名称与种族后确认即可。"
+				reincarnation_submit_button.disabled = false
+			else:
+				reincarnation_status_label.text = "暂不具备投胎资格。当前境界：" + realm_name + "；要求：" + required_name + "；引魂试炼：" + ("已完成" if trial_done else "未完成") + "。\n待完成：" + ", ".join(PackedStringArray(reasons))
+				reincarnation_submit_button.disabled = true
+		"reincarnate":
+			current_character = data
+			reincarnation_eligible = false
+			reincarnation_status_label.text = "新肉身创建成功，前世肉身已归档。正在申请冥界入口……"
+			_enqueue(HTTPClient.METHOD_POST, "/api/v1/worlds/enter", {}, true, "enter")
 		"character_create":
 			current_character = data
 			_set_status("角色创建成功，正在申请世界入口……")
@@ -356,6 +453,23 @@ func _on_login_pressed() -> void:
 		"username": username_input.text.strip_edges(),
 		"password": password_input.text
 	}, false, "login")
+
+func _show_reincarnation_controls() -> void:
+	for control in [reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_check_button, reincarnation_submit_button]:
+		control.show()
+	reincarnation_name_input.text = ""
+	reincarnation_eligible = false
+	reincarnation_submit_button.disabled = true
+	reincarnation_check_button.disabled = false
+	reincarnation_race_select.clear()
+	for race in cultivation_races:
+		if race is Dictionary:
+			reincarnation_race_select.add_item(str(race.get("race_name", race.get("race_id", "未知种族"))))
+			reincarnation_race_select.set_item_metadata(reincarnation_race_select.item_count - 1, str(race.get("race_id", "")))
+	for index in range(reincarnation_race_select.item_count):
+		if str(reincarnation_race_select.get_item_metadata(index)) == "human":
+			reincarnation_race_select.select(index)
+			break
 
 func _show_character_setup() -> void:
 	right_info_label.text = "灵魂档案已载入。请在左侧完成角色名、种族修炼体系与出生世界的选择。"
