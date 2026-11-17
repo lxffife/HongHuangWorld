@@ -30,6 +30,13 @@ var compact_hud_panel: PanelContainer
 var compact_hud_label: Label
 var details_toggle_button: Button
 var details_visible := false
+var vitals_panel: PanelContainer
+var health_label: Label
+var health_bar: ProgressBar
+var notification_panel: PanelContainer
+var notification_label: Label
+var notification_timer: Timer
+var vitals_known := false
 var local_target_position := Vector3.ZERO
 var remote_players: Dictionary = {}
 var remote_targets: Dictionary = {}
@@ -90,6 +97,7 @@ func _ready() -> void:
 	_build_terrain()
 	_build_player()
 	_build_compact_hud()
+	_build_combat_hud()
 	if HHSession.world_network != null:
 		HHSession.world_network.entities_updated.connect(_on_entities_updated)
 		HHSession.world_network.player_joined.connect(_on_player_joined)
@@ -394,6 +402,60 @@ func _build_compact_hud() -> void:
 	details_toggle_button.pressed.connect(_toggle_details_panel)
 	hud.add_child(details_toggle_button)
 
+func _build_combat_hud() -> void:
+	var hud := get_node_or_null("HUD") as CanvasLayer
+	if hud == null:
+		return
+	vitals_panel = PanelContainer.new()
+	vitals_panel.position = Vector2(18.0, -104.0)
+	vitals_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	vitals_panel.custom_minimum_size = Vector2(300.0, 82.0)
+	hud.add_child(vitals_panel)
+	var vitals_layout := VBoxContainer.new()
+	vitals_layout.add_theme_constant_override("separation", 6)
+	vitals_panel.add_child(vitals_layout)
+	health_label = Label.new()
+	health_label.text = "生命：等待服务端战斗状态"
+	vitals_layout.add_child(health_label)
+	health_bar = ProgressBar.new()
+	health_bar.custom_minimum_size = Vector2(270.0, 16.0)
+	health_bar.min_value = 0.0
+	health_bar.max_value = 1.0
+	health_bar.value = 0.0
+	health_bar.show_percentage = false
+	vitals_layout.add_child(health_bar)
+	notification_panel = PanelContainer.new()
+	notification_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	notification_panel.position = Vector2(-220.0, 112.0)
+	notification_panel.custom_minimum_size = Vector2(440.0, 48.0)
+	notification_panel.visible = false
+	hud.add_child(notification_panel)
+	notification_label = Label.new()
+	notification_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	notification_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	notification_panel.add_child(notification_label)
+	notification_timer = Timer.new()
+	notification_timer.one_shot = true
+	notification_timer.wait_time = 3.2
+	notification_timer.timeout.connect(func(): notification_panel.visible = false)
+	add_child(notification_timer)
+
+func _show_notification(message: String, duration: float = 3.2) -> void:
+	if not is_instance_valid(notification_panel) or not is_instance_valid(notification_label):
+		return
+	notification_label.text = message
+	notification_panel.visible = true
+	if is_instance_valid(notification_timer):
+		notification_timer.start(duration)
+
+func _update_vitals(current_health: int, max_health: int) -> void:
+	if max_health <= 0 or current_health < 0:
+		return
+	vitals_known = true
+	health_label.text = "生命  " + str(current_health) + " / " + str(max_health)
+	health_bar.max_value = max_health
+	health_bar.value = clampi(current_health, 0, max_health)
+
 func _toggle_details_panel() -> void:
 	details_visible = not details_visible
 	$HUD/Panel.visible = hud_visible and details_visible
@@ -592,13 +654,13 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _on_pickup_event(event: Dictionary) -> void:
 	if bool(event.get("pending", false)):
-		hud_label.text = str(event.get("reason", "正在结算拾取……"))
+		_show_notification(str(event.get("reason", "正在结算拾取……")))
 		return
 	if bool(event.get("accepted", false)):
-		hud_label.text = "拾取成功：" + str(event.get("item_id", "物品")) + " ×" + str(event.get("quantity", 1))
+		_show_notification("拾取成功：" + str(event.get("item_id", "物品")) + " ×" + str(event.get("quantity", 1)))
 		_refresh_inventory()
 	else:
-		hud_label.text = str(event.get("reason", "拾取失败。"))
+		_show_notification(str(event.get("reason", "拾取失败。")))
 
 func _build_inventory_ui() -> void:
 	var hud := get_node_or_null("HUD") as CanvasLayer
@@ -829,6 +891,7 @@ func _on_combat_event(event: Dictionary) -> void:
 		var incoming_damage := int(event.get("damage", 0))
 		var current_health := int(event.get("health", 0))
 		var max_health := int(event.get("max_health", 0))
+		_update_vitals(current_health, max_health)
 		if bool(event.get("defeated", false)):
 			local_player.is_dead = true
 			local_target_position = local_player.position
@@ -836,17 +899,17 @@ func _on_combat_event(event: Dictionary) -> void:
 			death_message_label.text = "角色已倒地，无法继续行动。\n受到 " + str(incoming_damage) + " 点伤害，生命 " + str(current_health) + "/" + str(max_health) + "。\n确认后将结算复活并返回角色界面。"
 			death_panel.visible = true
 		else:
-			hud_label.text = "受到怪物攻击，损失 " + str(incoming_damage) + " 点生命。当前生命 " + str(current_health) + "/" + str(max_health)
+			_show_notification("受到怪物攻击 -" + str(incoming_damage) + " 生命")
 		return
 	var monster_name := str(event.get("target_name", "目标"))
 	var damage := int(event.get("damage", 0))
 	if bool(event.get("defeated", false)):
 		var experience := int(event.get("experience_reward", 0))
 		var cultivation := int(event.get("cultivation_reward", 0))
-		hud_label.text = monster_name + " 已被击败！伤害 " + str(damage) + "，奖励结算中：经验 +" + str(experience) + "，修为 +" + str(cultivation) + "。"
+		_show_notification(monster_name + " 已被击败！伤害 " + str(damage) + " · 经验 +" + str(experience) + " · 修为 +" + str(cultivation), 4.5)
 		_refresh_reward_status_later()
 	else:
-		hud_label.text = "命中 " + monster_name + "，造成 " + str(damage) + " 点伤害。"
+		_show_notification("命中 " + monster_name + " · 造成 " + str(damage) + " 点伤害")
 
 func _refresh_reward_status_later() -> void:
 	await get_tree().create_timer(1.5).timeout
