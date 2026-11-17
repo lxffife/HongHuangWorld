@@ -60,3 +60,39 @@ func TestSavePositionRejectsInvalidSnapshots(t *testing.T) {
 		})
 	}
 }
+
+func TestWorldSnapshotsRejectInvalidHealth(t *testing.T) {
+	service := NewService(nil)
+	valid := SessionSnapshot{
+		NodeKey: "node-1", SessionID: "00000000-0000-4000-8000-000000000001",
+		CharacterID: "00000000-0000-4000-8000-000000000002",
+		PositionX: 1, PositionY: 0, PositionZ: -1, RotationY: 0,
+	}
+	negative := -1
+	tooLarge := 100001
+	for _, test := range []struct {
+		name string
+		health *int
+	}{
+		{name: "negative health", health: &negative},
+		{name: "health above server bound", health: &tooLarge},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			input := valid
+			input.Health = test.health
+			if err := service.SavePosition(context.Background(), input); !errors.Is(err, ErrInvalidSessionSnapshot) {
+				t.Fatalf("SavePosition error = %v, want ErrInvalidSessionSnapshot", err)
+			}
+			if err := service.SaveAndClose(context.Background(), input); !errors.Is(err, ErrInvalidSessionSnapshot) {
+				t.Fatalf("SaveAndClose error = %v, want ErrInvalidSessionSnapshot", err)
+			}
+		})
+	}
+}
+
+func TestWorldSnapshotAllowsOmittedHealth(t *testing.T) {
+	var input SessionSnapshot
+	if input.Health != nil {
+		t.Fatal("omitted health must remain nil for backward-compatible position-only snapshots")
+	}
+}
