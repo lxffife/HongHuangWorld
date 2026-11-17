@@ -1425,8 +1425,6 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 	var context := npc_request_context
 	npc_request_context = ""
 	var raw := body.get_string_from_utf8()
-	var parsed: Variant = JSON.parse_string(raw)
-	var data: Dictionary = parsed if parsed is Dictionary else {}
 	if context != "eligibility" and npc_reincarnation_leave_button != null:
 		npc_reincarnation_leave_button.visible = false
 	if result != HTTPRequest.RESULT_SUCCESS:
@@ -1435,12 +1433,29 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 		if context == "list":
 			_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_bootstrap")
 		return
+	# Go 的 http.Error 会返回纯文本，必须先判断 HTTP 状态，不能把错误文本交给 JSON 解析器。
 	if response_code < 200 or response_code >= 300:
+		var error_text := raw.strip_edges()
+		if error_text.length() > 240:
+			error_text = error_text.substr(0, 240) + "……"
 		if npc_status_label != null:
-			npc_status_label.text = "请求未完成（HTTP " + str(response_code) + "）：" + raw
+			npc_status_label.text = "请求未完成（HTTP " + str(response_code) + "）：" + error_text
 		if context == "list":
 			_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_bootstrap")
 		return
+	var json_parser := JSON.new()
+	var parse_error := json_parser.parse(raw)
+	if parse_error != OK:
+		if npc_status_label != null:
+			npc_status_label.text = "服务器返回的数据格式异常（HTTP " + str(response_code) + "）：第 " + str(json_parser.get_error_line()) + " 行，" + json_parser.get_error_message()
+		push_warning("NPC API returned invalid JSON: " + raw.substr(0, 500))
+		return
+	var parsed: Variant = json_parser.data
+	if not parsed is Dictionary:
+		if npc_status_label != null:
+			npc_status_label.text = "服务器返回的数据不是 JSON 对象。"
+		return
+	var data: Dictionary = parsed
 	match context:
 		"list":
 			npc_definitions = data.get("npcs", [])
