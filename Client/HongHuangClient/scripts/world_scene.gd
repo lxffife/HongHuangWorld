@@ -57,6 +57,7 @@ var npc_panel: PanelContainer
 var npc_title_label: Label
 var npc_dialogue_label: Label
 var npc_status_label: Label
+var npc_choice_container: VBoxContainer
 var npc_interact_button: Button
 var npc_trial_button: Button
 var npc_eligibility_button: Button
@@ -1119,6 +1120,9 @@ func _build_npc_ui() -> void:
 	npc_status_label = Label.new()
 	npc_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	layout.add_child(npc_status_label)
+	npc_choice_container = VBoxContainer.new()
+	npc_choice_container.add_theme_constant_override("separation", 6)
+	layout.add_child(npc_choice_container)
 	npc_trial_button = Button.new()
 	npc_trial_button.text = "查看冥界试炼"
 	npc_trial_button.pressed.connect(_request_soul_trials)
@@ -1194,6 +1198,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_definitions = data.get("npcs", [])
 			_render_world_npcs()
 		"interact":
+			_clear_npc_choice_buttons()
 			var npc_data: Dictionary = data.get("npc", {})
 			var dialogue: Dictionary = data.get("dialogue", {})
 			npc_title_label.text = str(npc_data.get("name", "冥界来者")) + " · " + str(npc_data.get("title", ""))
@@ -1204,9 +1209,29 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 				for topic in topics:
 					lines.append("· " + str(topic))
 			npc_dialogue_label.text = "\n".join(PackedStringArray(lines))
-			npc_status_label.text = "交互已由中心服验证。"
+			var choices: Variant = dialogue.get("choices", [])
+			if choices is Array:
+				for choice_variant in choices:
+					if choice_variant is Dictionary:
+						var choice: Dictionary = choice_variant
+						var choice_button := Button.new()
+						choice_button.text = str(choice.get("text", "选择"))
+						choice_button.tooltip_text = str(choice.get("description", ""))
+						choice_button.pressed.connect(_submit_npc_fate_choice.bind(str(npc_data.get("id", "")), str(choice.get("id", ""))))
+						npc_choice_container.add_child(choice_button)
+			npc_status_label.text = "交互已由中心服验证。选择会影响功德与业力，且每个选项只能作出一次。"
 			npc_trial_button.visible = str(npc_data.get("interaction_type", "")) == "soul_trials"
 			npc_eligibility_button.visible = str(npc_data.get("interaction_type", "")) == "reincarnation_guidance"
+			npc_soul_button.visible = true
+			npc_soul_breakthrough_button.visible = false
+			npc_panel.visible = true
+		"fate_choice":
+			npc_title_label.text = "因果已记入 · " + str(data.get("npc_id", "NPC"))
+			npc_dialogue_label.text = str(data.get("result", "此事已记入因果簿。")) + "\n功德：" + str(data.get("merit", 0)) + "（" + ("+" if int(data.get("merit_delta", 0)) >= 0 else "") + str(data.get("merit_delta", 0)) + "）" + "\n业力：" + str(data.get("karma", 0)) + "（" + ("+" if int(data.get("karma_delta", 0)) >= 0 else "") + str(data.get("karma_delta", 0)) + "）"
+			npc_status_label.text = "该选择已永久记录；重复提交不会再次改变数值。"
+			_clear_npc_choice_buttons()
+			npc_trial_button.visible = false
+			npc_eligibility_button.visible = false
 			npc_soul_button.visible = true
 			npc_soul_breakthrough_button.visible = false
 			npc_panel.visible = true
@@ -1271,6 +1296,23 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_reincarnation_leave_button.visible = eligible
 			npc_reincarnation_leave_button.disabled = false
 			npc_panel.visible = true
+
+func _clear_npc_choice_buttons() -> void:
+	if npc_choice_container == null:
+		return
+	for child in npc_choice_container.get_children():
+		child.queue_free()
+
+
+func _submit_npc_fate_choice(npc_id: String, choice_id: String) -> void:
+	if npc_request_busy or npc_id.is_empty() or choice_id.is_empty():
+		return
+	npc_status_label.text = "正在向中心服提交因果选择……"
+	_send_npc_request("POST", "/api/v1/worlds/current/npcs/choose", "fate_choice", {
+		"npc_id": npc_id,
+		"choice_id": choice_id
+	})
+
 
 func _leave_world_for_reincarnation() -> void:
 	if leaving_for_reincarnation:
