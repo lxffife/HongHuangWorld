@@ -203,6 +203,20 @@ func (h *characterHandlers) currentStatus(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, status)
 }
 
+func (h *characterHandlers) history(w http.ResponseWriter, r *http.Request) {
+	account, ok := h.currentAccount(w, r)
+	if !ok {
+		return
+	}
+	items, err := h.characterService.History(r.Context(), account.ID)
+	if err != nil {
+		h.logger.Error("load soul life history failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
 func (h *characterHandlers) current(w http.ResponseWriter, r *http.Request) {
 	account, ok := h.currentAccount(w, r)
 	if !ok {
