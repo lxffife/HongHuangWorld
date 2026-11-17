@@ -102,4 +102,5 @@ WorldServer 在玩家完成认证后广播可靠 `PlayerJoined`，在断线或�
 - 交互请求使用 `POST /api/v1/worlds/current/npcs/interact`，中心服验证当前活跃会话、世界归属和已保存角色坐标后才返回 NPC 对白与功能类型。
 - 镇祟校尉的交互窗口可读取 `GET /api/v1/souls/current/trials`，显示服务端试炼进度、目标数量和奖励入账状态。
 - 轮回殿守卫的交互窗口可读取 `GET /api/v1/souls/current/reincarnation-eligibility`，显示当前灵魂境界、聚灵境要求和首个冥界试炼是否完成。
+- NPC 对话面板可读取 `GET /api/v1/souls/current/progression` 显示跨世灵魂经验与下一境界门槛；满足经验要求时开放“主动突破灵魂境界”，调用 `POST /api/v1/souls/current/breakthrough`，突破成功后自动刷新状态。
 - 当前 NPC 美术为程序化占位模型；完整角色模型、动画、对话树、任务接取交互、轮回确认与种族选择 UI 尚未接入。投胎创建仍要求先退出当前世界会话，再通过中心服轮回接口办理。
