@@ -1209,7 +1209,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			var npc_data: Dictionary = data.get("npc", {})
 			var dialogue: Dictionary = data.get("dialogue", {})
 			npc_current_interaction_id = str(npc_data.get("id", ""))
-			npc_fate_encounter_button.visible = npc_current_interaction_id == "fengdu_mengpo" and not str(npc_data.get("fate_trait_id", "")).is_empty()
+			npc_fate_encounter_button.visible = bool(npc_data.get("fate_encounter_available", false))
 			npc_title_label.text = str(npc_data.get("name", "冥界来者")) + " · " + str(npc_data.get("title", ""))
 			var lines: Array[String] = []
 			lines.append(str(dialogue.get("greeting", "这位道友，有何事？")))
