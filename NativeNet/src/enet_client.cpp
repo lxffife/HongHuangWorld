@@ -1,8 +1,3 @@
-#include "enet_client.hpp"
-
-#include <godot_cpp/core/class_db.hpp>
-#include <godot_cpp/variant/utility_functions.hpp>
-
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -11,6 +6,11 @@
 #define NOMINMAX
 #endif
 #endif
+
+#include "enet_client.hpp"
+
+#include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/variant/utility_functions.hpp>
 
 #include <enet/enet.h>
 
