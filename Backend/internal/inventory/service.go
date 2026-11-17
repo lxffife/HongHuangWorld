@@ -546,13 +546,16 @@ func (s *Service) UseConsumable(ctx context.Context, accountID string, request I
 	if err!=nil { return ItemUseResult{},fmt.Errorf("apply consumable effects: %w",err) }
 	result.HealthRestored=result.Health-oldHealth
 	result.ManaRestored=result.Mana-oldMana
-	res,err:=tx.ExecContext(ctx,`UPDATE character_inventory SET quantity=quantity-$3,updated_at=now()
-		WHERE character_id=$1::uuid AND item_id=$2 AND quantity >= $3`,characterID,request.ItemID,request.Quantity)
-	if err!=nil { return ItemUseResult{},fmt.Errorf("consume inventory items: %w",err) }
-	affected,err:=res.RowsAffected()
-	if err!=nil || affected!=1 { return ItemUseResult{},ErrInvalidRequest }
-	if _,err:=tx.ExecContext(ctx,`DELETE FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2 AND quantity<=0`,characterID,request.ItemID); err!=nil {
-		return ItemUseResult{},fmt.Errorf("remove empty consumable stack: %w",err)
+	if owned==request.Quantity {
+		if _,err:=tx.ExecContext(ctx,`DELETE FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2`,characterID,request.ItemID); err!=nil {
+			return ItemUseResult{},fmt.Errorf("remove consumed inventory stack: %w",err)
+		}
+	} else {
+		res,err:=tx.ExecContext(ctx,`UPDATE character_inventory SET quantity=quantity-$3,updated_at=now()
+			WHERE character_id=$1::uuid AND item_id=$2 AND quantity > $3`,characterID,request.ItemID,request.Quantity)
+		if err!=nil { return ItemUseResult{},fmt.Errorf("consume inventory items: %w",err) }
+		affected,err:=res.RowsAffected()
+		if err!=nil || affected!=1 { return ItemUseResult{},ErrInvalidRequest }
 	}
 	effectJSON,_:=json.Marshal(effect)
 	if _,err:=tx.ExecContext(ctx,`INSERT INTO item_use_events(character_id,request_id,item_id,quantity,effect_applied)
