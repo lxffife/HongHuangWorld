@@ -19,6 +19,7 @@ var is_dead := false
 var current_move_input := Vector2.ZERO
 var last_send_error: int = OK
 var movement_network_ready := false
+var move_key_states := {"forward": false, "back": false, "left": false, "right": false}
 
 func _ready() -> void:
 	_build_player()
@@ -81,6 +82,33 @@ func _add_key_action(action: String, keycode: int) -> void:
 	logical_event.keycode = keycode
 	InputMap.action_add_event(action, logical_event)
 
+func _input(event: InputEvent) -> void:
+	# 直接采集物理键盘事件，避免 InputMap/键盘布局或 UI 焦点导致 WASD 状态丢失。
+	if event is InputEventKey:
+		var key_event := event as InputEventKey
+		if key_event.physical_keycode == KEY_W or key_event.keycode == KEY_W:
+			move_key_states["forward"] = key_event.pressed
+		elif key_event.physical_keycode == KEY_S or key_event.keycode == KEY_S:
+			move_key_states["back"] = key_event.pressed
+		elif key_event.physical_keycode == KEY_A or key_event.keycode == KEY_A:
+			move_key_states["left"] = key_event.pressed
+		elif key_event.physical_keycode == KEY_D or key_event.keycode == KEY_D:
+			move_key_states["right"] = key_event.pressed
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		for key_name in move_key_states.keys():
+			move_key_states[key_name] = false
+
+func is_move_key_pressed(direction: String) -> bool:
+	return bool(move_key_states.get(direction, false))
+
+func _get_move_input() -> Vector2:
+	var x := float(move_key_states["right"]) - float(move_key_states["left"])
+	var y := float(move_key_states["back"]) - float(move_key_states["forward"])
+	var input_vector := Vector2(x, y)
+	return input_vector.normalized() if input_vector.length_squared() > 1.0 else input_vector
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("release_mouse"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -106,7 +134,7 @@ func _physics_process(delta: float) -> void:
 	if is_dead:
 		velocity = Vector3.ZERO
 		return
-	var input_2d := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	var input_2d := _get_move_input()
 	current_move_input = input_2d
 	var camera_basis := camera_pivot.global_transform.basis
 	var direction := camera_basis.x * input_2d.x + camera_basis.z * input_2d.y
