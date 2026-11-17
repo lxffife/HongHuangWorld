@@ -44,6 +44,10 @@ var life_history_box: VBoxContainer
 var life_history_status: Label
 var life_history_title: Label
 var life_history_refresh_button: Button
+var soul_memory_title: Label
+var soul_memory_status: Label
+var soul_memory_box: VBoxContainer
+var soul_memory_refresh_button: Button
 
 func _ready() -> void:
 	_build_ui()
@@ -252,6 +256,67 @@ func _build_reincarnation_ui() -> void:
 	content_box.add_child(life_history_refresh_button)
 	for control in [life_history_title, life_history_status, life_history_box, life_history_refresh_button]:
 		control.hide()
+	soul_memory_title = Label.new()
+	soul_memory_title.text = "前世记忆 · 灵魂深处"
+	soul_memory_title.add_theme_font_size_override("font_size", 18)
+	content_box.add_child(soul_memory_title)
+	soul_memory_status = Label.new()
+	soul_memory_status.text = "部分前世记忆需要更高的灵魂境界才能稳定显现。"
+	soul_memory_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	content_box.add_child(soul_memory_status)
+	soul_memory_box = VBoxContainer.new()
+	soul_memory_box.add_theme_constant_override("separation", 8)
+	content_box.add_child(soul_memory_box)
+	soul_memory_refresh_button = Button.new()
+	soul_memory_refresh_button.text = "感知前世记忆"
+	soul_memory_refresh_button.pressed.connect(_request_soul_memories)
+	content_box.add_child(soul_memory_refresh_button)
+	for control in [soul_memory_title, soul_memory_status, soul_memory_box, soul_memory_refresh_button]:
+		control.hide()
+
+func _request_soul_memories() -> void:
+	if access_token.is_empty():
+		soul_memory_status.text = "请先登录后感知前世记忆。"
+		return
+	soul_memory_status.text = "正在感知灵魂深处的记忆……"
+	_enqueue(HTTPClient.METHOD_GET, "/api/v1/souls/current/memories", {}, true, "soul_memories")
+
+func _render_soul_memories(items: Array) -> void:
+	for child in soul_memory_box.get_children():
+		child.queue_free()
+	if items.is_empty():
+		soul_memory_status.text = "尚无可供回忆的前世片段。每次主动轮回后，灵魂都会留下记忆印记。"
+		return
+	var unlocked_count := 0
+	for item_variant in items:
+		if item_variant is Dictionary and bool(item_variant.get("unlocked", false)):
+			unlocked_count += 1
+	soul_memory_status.text = "记忆印记 " + str(items.size()) + " 条 · 已显现 " + str(unlocked_count) + " 条。灵魂境界越高，可稳定回忆的前世越多。"
+	for item_variant in items:
+		if not (item_variant is Dictionary):
+			continue
+		var item: Dictionary = item_variant
+		var card := PanelContainer.new()
+		var layout := VBoxContainer.new()
+		layout.add_theme_constant_override("separation", 4)
+		card.add_child(layout)
+		var heading := Label.new()
+		heading.text = str(item.get("title", "无名记忆"))
+		heading.add_theme_font_size_override("font_size", 16)
+		layout.add_child(heading)
+		var body := Label.new()
+		body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		if bool(item.get("unlocked", false)):
+			body.text = str(item.get("summary", "记忆片段已显现。"))
+			var details: Variant = item.get("details", {})
+			if details is Dictionary:
+				body.text += "\n种族：" + str(details.get("race_name", "未知")) + "    世界：" + str(details.get("world_name", "未知"))
+				body.text += "\n境界：" + str(details.get("realm_name", "未知")) + " · " + str(details.get("realm_stage", 1)) + "阶    等级：" + str(details.get("level", 1))
+				body.text += "\n修为：" + str(details.get("cultivation_value", 0)) + "    肉身经验：" + str(details.get("cultivation_experience", 0))
+		else:
+			body.text = "记忆尚未解封。需要灵魂达到 " + str(item.get("required_realm_name", "更高境界")) + "（境界序号 " + str(item.get("min_realm_order", 5)) + "）后，才能稳定读取。"
+		layout.add_child(body)
+		soul_memory_box.add_child(card)
 
 func _request_life_history() -> void:
 	if access_token.is_empty():
@@ -427,6 +492,8 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 			_set_status("登录会话已过期，请重新登录后继续办理轮回。")
 		elif context == "life_history":
 			life_history_status.text = "历世档案读取失败（HTTP " + str(response_code) + "）：" + body_text
+		elif context == "soul_memories":
+			soul_memory_status.text = "前世记忆读取失败（HTTP " + str(response_code) + "）：" + body_text
 		elif context == "reincarnation_eligibility":
 			reincarnation_check_button.disabled = false
 			reincarnation_eligible = false
@@ -485,6 +552,8 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 			_show_reincarnation_controls()
 		"life_history":
 			_render_life_history(data.get("items", []))
+		"soul_memories":
+			_render_soul_memories(data.get("items", []))
 		"reincarnation_eligibility":
 			reincarnation_check_button.disabled = false
 			reincarnation_eligible = bool(data.get("eligible", false))
@@ -536,7 +605,7 @@ func _on_login_pressed() -> void:
 	}, false, "login")
 
 func _show_reincarnation_controls() -> void:
-	for control in [reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_check_button, reincarnation_submit_button, life_history_title, life_history_status, life_history_box, life_history_refresh_button]:
+	for control in [reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_check_button, reincarnation_submit_button, life_history_title, life_history_status, life_history_box, life_history_refresh_button, soul_memory_title, soul_memory_status, soul_memory_box, soul_memory_refresh_button]:
 		control.show()
 	reincarnation_name_input.text = ""
 	reincarnation_eligible = false
@@ -552,6 +621,7 @@ func _show_reincarnation_controls() -> void:
 			reincarnation_race_select.select(index)
 			break
 	_request_life_history()
+	_request_soul_memories()
 
 func _show_character_setup() -> void:
 	right_info_label.text = "灵魂档案已载入。请在左侧完成角色名、种族修炼体系与出生世界的选择。"
