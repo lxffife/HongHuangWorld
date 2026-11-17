@@ -279,16 +279,18 @@ func (s *Service) PickupDrop(ctx context.Context, nodeKey string, request Pickup
 	if err := tx.QueryRowContext(ctx, `SELECT max_stack FROM item_definitions WHERE id = $1 AND enabled`, itemID).Scan(&maxStack); err != nil {
 		return Result{}, fmt.Errorf("load pickup item definition: %w", err)
 	}
-	var current int
-	err = tx.QueryRowContext(ctx, `SELECT quantity FROM character_inventory WHERE character_id = $1::uuid AND item_id = $2 FOR UPDATE`, request.CharacterID, itemID).Scan(&current)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) { return Result{}, fmt.Errorf("lock inventory stack: %w", err) }
-	if current + quantity > maxStack { return Result{}, ErrInventoryFull }
-	if _, err := tx.ExecContext(ctx, `INSERT INTO character_inventory (character_id, item_id, quantity)
+	// The conditional upsert enforces max_stack atomically, including the
+	// first-insert race where SELECT FOR UPDATE cannot lock a missing row.
+	stackResult, err := tx.ExecContext(ctx, `INSERT INTO character_inventory (character_id, item_id, quantity)
 		VALUES ($1::uuid, $2, $3)
-		ON CONFLICT (character_id, item_id) DO UPDATE SET quantity = character_inventory.quantity + EXCLUDED.quantity, updated_at = now()`,
-		request.CharacterID, itemID, quantity); err != nil {
-		return Result{}, fmt.Errorf("apply inventory stack: %w", err)
-	}
+		ON CONFLICT (character_id, item_id) DO UPDATE
+		SET quantity = character_inventory.quantity + EXCLUDED.quantity, updated_at = now()
+		WHERE character_inventory.quantity + EXCLUDED.quantity <= $4`,
+		request.CharacterID, itemID, quantity, maxStack)
+	if err != nil { return Result{}, fmt.Errorf("apply inventory stack: %w", err) }
+	affected, err := stackResult.RowsAffected()
+	if err != nil { return Result{}, fmt.Errorf("check inventory stack update: %w", err) }
+	if affected == 0 { return Result{}, ErrInventoryFull }
 	if _, err := tx.ExecContext(ctx, `UPDATE ground_drops SET status = 'picked', picked_by_character_id = $1::uuid, picked_at = now(), updated_at = now()
 		WHERE id = $2::uuid AND server_id = $3 AND status = 'available'`, request.CharacterID, request.DropID, serverID); err != nil {
 		return Result{}, fmt.Errorf("consume ground drop: %w", err)
