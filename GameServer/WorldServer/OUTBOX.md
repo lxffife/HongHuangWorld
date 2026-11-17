@@ -1,6 +1,6 @@
 # WorldServer Durable Outbox
 
-WorldServer persists gameplay events to a node-local SQLite database **before** attempting delivery to the center service. Character rewards and ground-drop creation use this path. Pickup settlement still uses its existing worker and center-service transaction; durable pickup replay is not yet implemented.
+WorldServer persists gameplay events to a node-local SQLite database **before** attempting delivery to the center service. Character rewards and ground-drop creation use this path. Pickup settlement is also written to the outbox before the request is acknowledged. It is replayed with the same event ID after restart; the center-service pickup endpoint must preserve event-ID idempotency.
 
 ## Configuration
 
@@ -18,6 +18,7 @@ Supported event types:
 
 - `character_reward`: session ID, character ID, experience and cultivation.
 - `ground_drop_create`: stable drop ID, owner/session, item, quantity, position and absolute expiry time.
+- `ground_drop_pickup`: stable pickup event ID, drop ID, original drop session, requesting session, character and item snapshot.
 
 Each event has a stable UUID/ID and exact serialized JSON payload. Re-enqueuing the same ID and identical payload is idempotent; reusing an ID with a different type or payload is rejected.
 
@@ -30,5 +31,5 @@ The outbox retains delivered and dead-letter rows for diagnosis; they do not cou
 - This protects events after their SQLite transaction commits, including process crashes and host restarts when the data directory survives.
 - It does not protect against disk/device loss without backups.
 - A failure to write the event (disk full, permissions, database error, or capacity reached) is logged; it cannot be described as durable acceptance.
-- Pickup requests remain in the in-memory worker queue. Their center-service transaction prevents duplicate consumption for requests that reach the backend, but an unsubmitted pickup is not yet recovered by this outbox.
-- Normal shutdown stops the outbox worker after its current delivery attempt. Pending and delayed-retry records remain on disk for the next start.
+- A pickup event is durable once enqueued, but replay still carries the requesting session ID captured at pickup time. If that session is no longer accepted by the center service after a restart/logout, the event can enter dead-letter and needs an operator/reconciliation path.
+- Normal shutdown stops the outbox worker after its current delivery attempt. Pending and delayed-retry records remain on disk for the next start. A pending pickup tied to a session that the backend has since closed can be rejected on replay; the current session-recovery policy is still a boundary to address.
