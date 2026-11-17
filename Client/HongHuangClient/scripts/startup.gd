@@ -496,7 +496,7 @@ func _update_reincarnation_route_description(_index: int) -> void:
 			description_lines.append("区域概况：" + str(route.get("region_description", "")))
 			description_lines.append("资源：" + (", ".join(PackedStringArray(tags)) if not tags.is_empty() else "暂无资料"))
 			description_lines.append("种族适应性：" + race_note)
-		description_lines.append("探索点：")
+			description_lines.append("探索点：")
 			for point_line in point_lines:
 				description_lines.append(point_line)
 			if point_lines.is_empty():
