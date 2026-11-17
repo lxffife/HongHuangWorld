@@ -1,6 +1,6 @@
 BEGIN;
 
--- A soul may resolve each authored NPC moral choice only once. This prevents
+-- A soul may resolve only one branch per NPC encounter. This prevents
 -- clients from farming fate by replaying the request with fresh event IDs.
 CREATE TABLE soul_fate_choice_claims (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
