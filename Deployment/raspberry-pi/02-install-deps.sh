@@ -15,7 +15,7 @@ if [[ "${HH_FORCE_APT_UPDATE:-0}" == "1" ]] || ! find /var/lib/apt/lists -maxdep
 else
   log "APT 索引在 6 小时内更新过，跳过 apt-get update"
 fi
-sudo apt-get install -y ca-certificates curl git build-essential cmake pkg-config libenet-dev libcurl4-openssl-dev nlohmann-json3-dev postgresql-client openssl
+sudo apt-get install -y ca-certificates curl git build-essential cmake pkg-config libenet-dev libcurl4-openssl-dev libsqlite3-dev nlohmann-json3-dev postgresql-client openssl
 if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
   sudo apt-get install -y docker.io docker-compose-v2
 fi
