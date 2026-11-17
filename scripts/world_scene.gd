@@ -1403,7 +1403,15 @@ func _request_world_npcs() -> void:
 	_send_npc_request("GET", "/api/v1/worlds/current/npcs", "list")
 
 func _send_npc_request(method: String, path: String, context: String, payload: Dictionary = {}) -> void:
-	if npc_http == null or npc_request_busy or HHSession.access_token.is_empty():
+	if npc_http == null:
+		push_warning("[NPC API] 请求未发送：HTTPRequest 节点为空，context=" + context)
+		return
+	if npc_request_busy:
+		push_warning("[NPC API] 请求未发送：上一个请求仍在处理中，context=" + context)
+		return
+	if HHSession.access_token.is_empty():
+		push_warning("[NPC API] 请求未发送：登录令牌为空，context=" + context)
+		if npc_status_label != null: npc_status_label.text = "未登录或登录令牌已失效，请重新登录。"
 		return
 	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token])
 	var http_method := HTTPClient.METHOD_GET
@@ -1413,18 +1421,22 @@ func _send_npc_request(method: String, path: String, context: String, payload: D
 		headers.append("Content-Type: application/json")
 		body = JSON.stringify(payload)
 	npc_request_context = context
-	var error := npc_http.request(HHSession.api_base + path, headers, http_method, body)
+	var request_url := HHSession.api_base + path
+	print("[NPC API] -> ", method, " ", request_url, " context=", context)
+	var error := npc_http.request(request_url, headers, http_method, body)
 	if error != OK:
 		npc_request_context = ""
 		npc_status_label.text = "无法向中心服发送 NPC 请求，错误码：" + str(error)
 	else:
 		npc_request_busy = true
+		print("[NPC API] request queued context=", context)
 
 func _on_npc_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	npc_request_busy = false
 	var context := npc_request_context
 	npc_request_context = ""
 	var raw := body.get_string_from_utf8()
+	print("[NPC API] <- context=", context, " result=", result, " HTTP=", response_code, " body=", raw.substr(0, 800))
 	if context != "eligibility" and npc_reincarnation_leave_button != null:
 		npc_reincarnation_leave_button.visible = false
 	if result != HTTPRequest.RESULT_SUCCESS:
