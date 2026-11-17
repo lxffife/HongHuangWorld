@@ -1495,7 +1495,7 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                             !combat_stats.contains("defense") || !combat_stats["attack"].is_number_integer() ||
                             !combat_stats["defense"].is_number_integer()) {
                             std::cerr << "Could not synchronize authoritative character combat stats: "
-                                      << stats_error << '\\n';
+                                      << stats_error << std::endl;
                             send_json(event.peer, honghuang::protocol::MessageType::ServerReject,
                                       Json{{"reason", "character combat stats could not be synchronized"}});
                             enet_peer_disconnect_later(event.peer, 7);
