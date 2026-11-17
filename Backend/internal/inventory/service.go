@@ -522,11 +522,14 @@ func (s *Service) UseConsumable(ctx context.Context, accountID string, request I
 		WHERE soul.account_id=$1 AND c.status='alive' FOR UPDATE OF c`,accountID).Scan(&characterID); err!=nil {
 		if errors.Is(err,sql.ErrNoRows) { return ItemUseResult{},ErrInvalidRequest }; return ItemUseResult{},fmt.Errorf("resolve current character for consumable: %w",err)
 	}
-	var duplicate bool
-	if err:=tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM item_use_events WHERE character_id=$1::uuid AND request_id=$2::uuid)`,characterID,request.RequestID).Scan(&duplicate); err!=nil {
-		return ItemUseResult{},fmt.Errorf("check consumable idempotency: %w",err)
+	var previousItemID string
+	var previousQuantity int
+	err=tx.QueryRowContext(ctx,`SELECT item_id,quantity FROM item_use_events WHERE character_id=$1::uuid AND request_id=$2::uuid`,characterID,request.RequestID).Scan(&previousItemID,&previousQuantity)
+	if err==nil {
+		if previousItemID!=request.ItemID || previousQuantity!=request.Quantity { return ItemUseResult{},ErrInvalidRequest }
+		return ItemUseResult{Applied:false,ItemID:request.ItemID,Quantity:request.Quantity},tx.Commit()
 	}
-	if duplicate { return ItemUseResult{Applied:false,ItemID:request.ItemID,Quantity:request.Quantity},tx.Commit() }
+	if !errors.Is(err,sql.ErrNoRows) { return ItemUseResult{},fmt.Errorf("check consumable idempotency: %w",err) }
 	var itemType string
 	var raw []byte
 	if err:=tx.QueryRowContext(ctx,`SELECT item_type,use_effect FROM item_definitions WHERE id=$1 AND enabled`,request.ItemID).Scan(&itemType,&raw); err!=nil {
