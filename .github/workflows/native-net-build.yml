@@ -54,6 +54,7 @@ jobs:
           }
 
       - name: Package Windows client native library
+        id: package
         shell: pwsh
         run: |
           $version = "${{ inputs.version }}"
@@ -70,13 +71,14 @@ jobs:
             "This package contains the native DLL only; it is not a complete game client."
           ) | Set-Content -Encoding UTF8 "release-package/README.txt"
           Compress-Archive -Path "release-package/*" -DestinationPath "$package.zip" -Force
-          "PACKAGE_NAME=$package.zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "package_name=$package.zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           Get-Item "$package.zip" | Select-Object Name, Length
 
       - name: Publish Windows Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: client-windows-v${{ inputs.version }}
+          target_commitish: ${{ github.sha }}
           name: HongHuangWorld Windows Client v${{ inputs.version }}
           body: |
             Windows x64 NativeNet build.
@@ -87,7 +89,7 @@ jobs:
             - Package: NativeNet DLL only, not a complete game client.
 
             Place \`honghuang_native_net.dll\` in \`Client/HongHuangClient/bin/\` for the matching source version.
-          files: ${{ env.PACKAGE_NAME }}
+          files: ${{ steps.package.outputs.package_name }}
           draft: false
           prerelease: ${{ inputs.prerelease }}
           fail_on_unmatched_files: true
