@@ -925,7 +925,7 @@ struct EnetServer::Impl {
         };
         std::string error;
         if (!enqueue_durable_event(event_id, "soul_reward", payload, error))
-            std::cerr << "Could not persist soul reward: " << error << '\\n';
+            std::cerr << "Could not persist soul reward: " << error << '\n';
     }
 
     void stop_reward_worker() {
