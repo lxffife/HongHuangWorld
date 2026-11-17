@@ -483,3 +483,78 @@ func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessio
 	}
 	return result,nil
 }
+
+type ItemUseRequest struct {
+	RequestID string
+	ItemID string
+	Quantity int
+}
+type ItemUseResult struct {
+	Applied bool `json:"applied"`
+	ItemID string `json:"item_id"`
+	Quantity int `json:"quantity"`
+	HealthRestored int `json:"health_restored"`
+	ManaRestored int `json:"mana_restored"`
+	Health int `json:"health"`
+	MaxHealth int `json:"max_health"`
+	Mana int `json:"mana"`
+	MaxMana int `json:"max_mana"`
+}
+
+func (s *Service) UseConsumable(ctx context.Context, accountID string, request ItemUseRequest) (ItemUseResult,error) {
+	if strings.TrimSpace(accountID)=="" || !validUUID(request.RequestID) || strings.TrimSpace(request.ItemID)=="" || request.Quantity<1 || request.Quantity>20 {
+		return ItemUseResult{},ErrInvalidRequest
+	}
+	tx,err:=s.db.BeginTx(ctx,nil); if err!=nil { return ItemUseResult{},fmt.Errorf("begin consumable use: %w",err) }; defer tx.Rollback()
+	var characterID string
+	if err:=tx.QueryRowContext(ctx,`SELECT c.id::text FROM souls soul JOIN characters c ON c.id=soul.current_character_id
+		WHERE soul.account_id=$1 AND c.status='alive' FOR UPDATE OF c`,accountID).Scan(&characterID); err!=nil {
+		if errors.Is(err,sql.ErrNoRows) { return ItemUseResult{},ErrInvalidRequest }; return ItemUseResult{},fmt.Errorf("resolve current character for consumable: %w",err)
+	}
+	var duplicate bool
+	if err:=tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM item_use_events WHERE character_id=$1::uuid AND request_id=$2::uuid)`,characterID,request.RequestID).Scan(&duplicate); err!=nil {
+		return ItemUseResult{},fmt.Errorf("check consumable idempotency: %w",err)
+	}
+	if duplicate { return ItemUseResult{Applied:false,ItemID:request.ItemID,Quantity:request.Quantity},tx.Commit() }
+	var itemType string
+	var raw []byte
+	if err:=tx.QueryRowContext(ctx,`SELECT item_type,use_effect FROM item_definitions WHERE id=$1 AND enabled`,request.ItemID).Scan(&itemType,&raw); err!=nil {
+		if errors.Is(err,sql.ErrNoRows) { return ItemUseResult{},ErrInvalidRequest }; return ItemUseResult{},fmt.Errorf("load consumable definition: %w",err)
+	}
+	if itemType!="consumable" { return ItemUseResult{},ErrInvalidRequest }
+	effect:=map[string]int{}
+	if len(raw)==0 || json.Unmarshal(raw,&effect)!=nil || len(effect)==0 || len(effect)>2 { return ItemUseResult{},ErrInvalidRequest }
+	heal:=effect["heal_health"]; restore:=effect["restore_mana"]
+	if heal<0 || restore<0 || heal>10000 || restore>10000 || (heal==0 && restore==0) { return ItemUseResult{},ErrInvalidRequest }
+	if len(effect)>0 { for key:=range effect { if key!="heal_health" && key!="restore_mana" { return ItemUseResult{},ErrInvalidRequest } } }
+	var owned int
+	if err:=tx.QueryRowContext(ctx,`SELECT quantity FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2 FOR UPDATE`,characterID,request.ItemID).Scan(&owned); err!=nil {
+		if errors.Is(err,sql.ErrNoRows) { return ItemUseResult{},ErrInvalidRequest }; return ItemUseResult{},fmt.Errorf("lock consumable inventory stack: %w",err)
+	}
+	if owned<request.Quantity { return ItemUseResult{},ErrInvalidRequest }
+	var result ItemUseResult
+	result.ItemID=request.ItemID; result.Quantity=request.Quantity
+	err=tx.QueryRowContext(ctx,`UPDATE character_attributes
+		SET health=LEAST(max_health,health+$2), mana=LEAST(max_mana,mana+$3)
+		WHERE character_id=$1::uuid
+		RETURNING health,max_health,mana,max_mana`,characterID,heal*request.Quantity,restore*request.Quantity).
+		Scan(&result.Health,&result.MaxHealth,&result.Mana,&result.MaxMana)
+	if err!=nil { return ItemUseResult{},fmt.Errorf("apply consumable effects: %w",err) }
+	result.HealthRestored=result.Health // overwritten below with actual delta
+	result.ManaRestored=result.Mana
+	if _,err:=tx.ExecContext(ctx,`UPDATE character_inventory SET quantity=quantity-$3,updated_at=now()
+		WHERE character_id=$1::uuid AND item_id=$2 AND quantity=$3`,characterID,request.ItemID,request.Quantity); err!=nil {
+		return ItemUseResult{},fmt.Errorf("consume inventory items: %w",err)
+	}
+	if _,err:=tx.ExecContext(ctx,`DELETE FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2 AND quantity<=0`,characterID,request.ItemID); err!=nil {
+		return ItemUseResult{},fmt.Errorf("remove empty consumable stack: %w",err)
+	}
+	effectJSON,_:=json.Marshal(effect)
+	if _,err:=tx.ExecContext(ctx,`INSERT INTO item_use_events(character_id,request_id,item_id,quantity,effect_applied)
+		VALUES($1::uuid,$2::uuid,$3,$4,$5::jsonb)`,characterID,request.RequestID,request.ItemID,request.Quantity,string(effectJSON)); err!=nil {
+		return ItemUseResult{},fmt.Errorf("record consumable use: %w",err)
+	}
+	result.Applied=true
+	if err:=tx.Commit(); err!=nil { return ItemUseResult{},fmt.Errorf("commit consumable use: %w",err) }
+	return result,nil
+}
