@@ -26,6 +26,9 @@ type ItemStack struct {
 	MaxStack int `json:"max_stack"`
 	IconKey string `json:"icon_key"`
 	Description string `json:"description"`
+	ItemType string `json:"item_type"`
+	EquipmentSlot string `json:"equipment_slot,omitempty"`
+	BaseStats map[string]int `json:"base_stats,omitempty"`
 }
 
 
@@ -88,16 +91,19 @@ type Service struct { db *sql.DB }
 func NewService(db *sql.DB) *Service { return &Service{db: db} }
 
 func (s *Service) ListItems(ctx context.Context) ([]ItemStack, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, category, quality, max_stack, icon_key, description
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, category, quality, max_stack, icon_key, description, item_type, COALESCE(equipment_slot, ''), base_stats
 		FROM item_definitions WHERE enabled ORDER BY quality DESC, category, id`)
 	if err != nil { return nil, fmt.Errorf("list item definitions: %w", err) }
 	defer rows.Close()
 	items := make([]ItemStack, 0)
 	for rows.Next() {
 		var item ItemStack
-		if err := rows.Scan(&item.ItemID, &item.Name, &item.Category, &item.Quality, &item.MaxStack, &item.IconKey, &item.Description); err != nil {
+		var stats []byte
+		if err := rows.Scan(&item.ItemID, &item.Name, &item.Category, &item.Quality, &item.MaxStack, &item.IconKey, &item.Description, &item.ItemType, &item.EquipmentSlot, &stats); err != nil {
 			return nil, fmt.Errorf("scan item definition: %w", err)
 		}
+		item.BaseStats = map[string]int{}
+		if len(stats) > 0 { if err := json.Unmarshal(stats, &item.BaseStats); err != nil { return nil, fmt.Errorf("decode item stats: %w", err) } }
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate item definitions: %w", err) }
@@ -128,7 +134,7 @@ func (s *Service) ListLootTable(ctx context.Context) ([]LootEntry, error) {
 }
 
 func (s *Service) CurrentInventory(ctx context.Context, accountID string) ([]ItemStack, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT i.id, i.name, i.category, i.quality, ci.quantity, i.max_stack, i.icon_key, i.description
+	rows, err := s.db.QueryContext(ctx, `SELECT i.id, i.name, i.category, i.quality, ci.quantity, i.max_stack, i.icon_key, i.description, i.item_type, COALESCE(i.equipment_slot, ''), i.base_stats
 		FROM souls soul
 		JOIN characters c ON c.id = soul.current_character_id
 		JOIN character_inventory ci ON ci.character_id = c.id
@@ -140,9 +146,12 @@ func (s *Service) CurrentInventory(ctx context.Context, accountID string) ([]Ite
 	items := make([]ItemStack, 0)
 	for rows.Next() {
 		var item ItemStack
-		if err := rows.Scan(&item.ItemID, &item.Name, &item.Category, &item.Quality, &item.Quantity, &item.MaxStack, &item.IconKey, &item.Description); err != nil {
+		var stats []byte
+		if err := rows.Scan(&item.ItemID, &item.Name, &item.Category, &item.Quality, &item.Quantity, &item.MaxStack, &item.IconKey, &item.Description, &item.ItemType, &item.EquipmentSlot, &stats); err != nil {
 			return nil, fmt.Errorf("scan inventory stack: %w", err)
 		}
+		item.BaseStats = map[string]int{}
+		if len(stats) > 0 { if err := json.Unmarshal(stats, &item.BaseStats); err != nil { return nil, fmt.Errorf("decode inventory item stats: %w", err) } }
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate inventory: %w", err) }
