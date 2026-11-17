@@ -139,6 +139,7 @@ func _ready() -> void:
 	_build_npc_ui()
 	_build_death_ui()
 	_request_world_npcs()
+	_show_notification("已进入「" + _world_display_name(str(HHSession.world_snapshot.get("world_id", ""))) + "」", 5.0)
 
 func _refresh_character_status() -> void:
 	if HHSession.access_token.is_empty():
@@ -465,23 +466,36 @@ func _toggle_details_panel() -> void:
 	$HUD/Panel.visible = hud_visible and details_visible
 	details_toggle_button.text = "收起角色面板" if details_visible else "角色 · 修炼"
 
+func _world_display_name(world_id: String) -> String:
+	match world_id:
+		"underworld_fengdu":
+			return "冥界 · 酆都"
+		"qingyun_human":
+			return "青云界 · 人界"
+		"myriad_demon":
+			return "万妖界"
+		_:
+			return "未知世界（" + world_id + "）"
+
 func _update_compact_hud(progression: Dictionary = {}) -> void:
 	if compact_hud_label == null:
 		return
 	var snapshot: Dictionary = HHSession.world_snapshot
-	var world_id := str(snapshot.get("world_id", "青云人界"))
+	var world_id := str(snapshot.get("world_id", ""))
+	var world_name := _world_display_name(world_id)
 	var character_name := str(snapshot.get("name", "初入洪荒"))
 	var system_name := str(progression.get("system_name", "修炼信息加载中"))
 	var realm_name := str(progression.get("realm_name", ""))
 	var stage_name := str(progression.get("realm_stage_name", ""))
 	var cultivation := int(progression.get("cultivation", 0))
-	compact_hud_label.text = "洪荒 · " + world_id + "\\n" + character_name + "  |  " + system_name + " · " + realm_name + stage_name + "  |  修为 " + str(cultivation)
+	compact_hud_label.text = "当前世界 · " + world_name + "\\n" + character_name + "  |  " + system_name + " · " + realm_name + stage_name + "  |  修为 " + str(cultivation)
 
 func _update_hud() -> void:
 	var snapshot: Dictionary = HHSession.world_snapshot
-	var world_id := str(snapshot.get("world_id", "青云人界"))
+	var world_id := str(snapshot.get("world_id", ""))
+	var world_name := _world_display_name(world_id)
 	var character_name := str(snapshot.get("name", "初入洪荒"))
-	hud_label.text = "洪荒 · " + world_id + "\\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\\nF NPC交互 · E 拾取 · 鼠标左键攻击附近怪物 · 首次点击画面锁定鼠标"
+	hud_label.text = "当前世界 · " + world_name + "\\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\\nF NPC交互 · E 拾取 · 鼠标左键攻击附近怪物 · 首次点击画面锁定鼠标"
 	_update_compact_hud()
 
 func _exit_tree() -> void:
