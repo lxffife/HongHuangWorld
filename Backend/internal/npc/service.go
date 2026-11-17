@@ -300,3 +300,144 @@ func (s *Service) DiscoverFateEncounter(ctx context.Context, accountID, npcID st
 	if err:=tx.Commit();err!=nil { return FateEncounterResult{},fmt.Errorf("commit fate encounter: %w",err) }
 	return result,nil
 }
+
+
+var (
+	ErrExplorationUnavailable = errors.New("exploration point is unavailable")
+	ErrExplorationResolved = errors.New("exploration point was already discovered by this soul")
+)
+
+type ExplorationPoint struct {
+	ID string `json:"id"`
+	WorldID string `json:"world_id"`
+	RegionID string `json:"region_id"`
+	Name string `json:"name"`
+	Description string `json:"description"`
+	PositionX float64 `json:"position_x"`
+	PositionY float64 `json:"position_y"`
+	PositionZ float64 `json:"position_z"`
+	InteractionRadius float64 `json:"interaction_radius"`
+	DangerLevel int `json:"danger_level"`
+	Discovered bool `json:"discovered"`
+}
+
+type ExplorationResult struct {
+	PointID string `json:"point_id"`
+	Name string `json:"name"`
+	Description string `json:"description"`
+	Merit int64 `json:"merit"`
+	Karma int64 `json:"karma"`
+	MeritDelta int64 `json:"merit_delta"`
+	KarmaDelta int64 `json:"karma_delta"`
+}
+
+// ListExplorationPoints returns the current world's authored points and the
+// soul-level discovery state. The soul identity is resolved from the bearer account.
+func (s *Service) ListExplorationPoints(ctx context.Context, accountID string) ([]ExplorationPoint, error) {
+	var soulID, worldID string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT soul.id::text, wi.world_id
+		 FROM souls soul
+		 JOIN characters c ON c.id=soul.current_character_id AND c.status='alive'
+		 JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
+		 JOIN world_instances wi ON wi.id=ws.instance_id AND wi.world_id=c.world_id
+		 WHERE soul.account_id=$1
+		 ORDER BY ws.connected_at DESC NULLS LAST LIMIT 1`, accountID).Scan(&soulID, &worldID)
+	if errors.Is(err, sql.ErrNoRows) { return nil, ErrNoActiveSession }
+	if err != nil { return nil, fmt.Errorf("resolve exploration session: %w", err) }
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT p.id,p.world_id,p.region_id,p.name,p.description,
+		        p.position_x,p.position_y,p.position_z,p.interaction_radius,p.danger_level,
+		        (d.point_id IS NOT NULL)
+		 FROM world_exploration_points p
+		 LEFT JOIN soul_exploration_discoveries d ON d.point_id=p.id AND d.soul_id=$1::uuid
+		 WHERE p.world_id=$2 AND p.enabled=TRUE
+		 ORDER BY p.region_id,p.id`, soulID, worldID)
+	if err != nil { return nil, fmt.Errorf("query exploration points: %w", err) }
+	defer rows.Close()
+	points := make([]ExplorationPoint, 0)
+	for rows.Next() {
+		var point ExplorationPoint
+		if err := rows.Scan(&point.ID,&point.WorldID,&point.RegionID,&point.Name,&point.Description,
+			&point.PositionX,&point.PositionY,&point.PositionZ,&point.InteractionRadius,&point.DangerLevel,&point.Discovered); err != nil {
+			return nil, fmt.Errorf("scan exploration point: %w", err)
+		}
+		points = append(points, point)
+	}
+	if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate exploration points: %w", err) }
+	return points, nil
+}
+
+// DiscoverExplorationPoint checks the character's last server-saved position,
+// then atomically records a soul-wide discovery and its fate-ledger reward.
+func (s *Service) DiscoverExplorationPoint(ctx context.Context, accountID, pointID string) (ExplorationResult, error) {
+	if pointID == "" || len(pointID) > 96 { return ExplorationResult{}, ErrExplorationUnavailable }
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil { return ExplorationResult{}, fmt.Errorf("begin exploration discovery: %w", err) }
+	defer tx.Rollback()
+
+	var soulID, worldID string
+	var point ExplorationPoint
+	var meritDelta, karmaDelta int64
+	err = tx.QueryRowContext(ctx,
+		`SELECT soul.id::text,wi.world_id,p.id,p.world_id,p.region_id,p.name,p.description,
+		        p.position_x,p.position_y,p.position_z,p.interaction_radius,p.danger_level,
+		        p.merit_reward,p.karma_delta
+		 FROM souls soul
+		 JOIN characters c ON c.id=soul.current_character_id AND c.status='alive'
+		 JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
+		 JOIN world_instances wi ON wi.id=ws.instance_id AND wi.world_id=c.world_id
+		 JOIN world_exploration_points p ON p.world_id=wi.world_id AND p.id=$2 AND p.enabled=TRUE
+		 WHERE soul.account_id=$1
+		   AND SQRT(POWER(c.position_x-p.position_x,2)+POWER(c.position_y-p.position_y,2)+POWER(c.position_z-p.position_z,2)) <= p.interaction_radius
+		 ORDER BY ws.connected_at DESC NULLS LAST LIMIT 1
+		 FOR UPDATE OF soul,c,ws`, accountID, pointID).Scan(
+		&soulID,&worldID,&point.ID,&point.WorldID,&point.RegionID,&point.Name,&point.Description,
+		&point.PositionX,&point.PositionY,&point.PositionZ,&point.InteractionRadius,&point.DangerLevel,
+		&meritDelta,&karmaDelta)
+	if errors.Is(err, sql.ErrNoRows) {
+		var active bool
+		checkErr := tx.QueryRowContext(ctx,
+			`SELECT EXISTS(SELECT 1 FROM souls soul
+			 JOIN characters c ON c.id=soul.current_character_id AND c.status='alive'
+			 JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
+			 WHERE soul.account_id=$1)`, accountID).Scan(&active)
+		if checkErr != nil { return ExplorationResult{}, fmt.Errorf("check exploration session: %w", checkErr) }
+		if !active { return ExplorationResult{}, ErrNoActiveSession }
+		var exists bool
+		checkErr = tx.QueryRowContext(ctx,
+			`SELECT EXISTS(SELECT 1 FROM souls soul JOIN characters c ON c.id=soul.current_character_id
+			 JOIN world_exploration_points p ON p.world_id=c.world_id AND p.id=$2 AND p.enabled=TRUE
+			 WHERE soul.account_id=$1)`, accountID, pointID).Scan(&exists)
+		if checkErr != nil { return ExplorationResult{}, fmt.Errorf("check exploration point: %w", checkErr) }
+		if !exists { return ExplorationResult{}, ErrExplorationUnavailable }
+		return ExplorationResult{}, ErrTooFar
+	}
+	if err != nil { return ExplorationResult{}, fmt.Errorf("validate exploration distance: %w", err) }
+
+	var eventID string
+	err = tx.QueryRowContext(ctx,
+		`INSERT INTO soul_exploration_discoveries(soul_id,point_id)
+		 VALUES($1,$2) ON CONFLICT(soul_id,point_id) DO NOTHING
+		 RETURNING fate_event_id::text`, soulID, point.ID).Scan(&eventID)
+	if errors.Is(err, sql.ErrNoRows) { return ExplorationResult{}, ErrExplorationResolved }
+	if err != nil { return ExplorationResult{}, fmt.Errorf("claim exploration point: %w", err) }
+
+	if meritDelta != 0 || karmaDelta != 0 {
+		if _, err = tx.ExecContext(ctx,
+			`INSERT INTO soul_fate_events(soul_id,event_id,source,world_id,karma_delta,merit_delta)
+			 VALUES($1,$2::uuid,'world_exploration',$3,$4,$5)`,
+			soulID,eventID,worldID,karmaDelta,meritDelta); err != nil {
+			return ExplorationResult{}, fmt.Errorf("record exploration fate event: %w", err)
+		}
+	}
+	result := ExplorationResult{PointID:point.ID,Name:point.Name,Description:point.Description,
+		MeritDelta:meritDelta,KarmaDelta:karmaDelta}
+	err = tx.QueryRowContext(ctx,
+		`UPDATE souls SET merit=merit+$1,karma=karma+$2,updated_at=now()
+		 WHERE id=$3 RETURNING merit,karma`, meritDelta,karmaDelta,soulID).Scan(&result.Merit,&result.Karma)
+	if err != nil { return ExplorationResult{}, fmt.Errorf("apply exploration reward: %w", err) }
+	if err := tx.Commit(); err != nil { return ExplorationResult{}, fmt.Errorf("commit exploration discovery: %w", err) }
+	return result,nil
+}
