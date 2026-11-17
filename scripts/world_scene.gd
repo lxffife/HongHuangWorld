@@ -34,6 +34,7 @@ var inventory_panel: PanelContainer
 var inventory_status: Label
 var inventory_items: VBoxContainer
 var inventory_visible := false
+var inventory_request_busy := false
 
 func _ready() -> void:
 	_build_environment()
@@ -544,7 +545,7 @@ func _on_inventory_button_pressed() -> void:
 		_refresh_inventory()
 
 func _refresh_inventory() -> void:
-	if inventory_http == null or HHSession.access_token.is_empty():
+	if inventory_http == null or inventory_request_busy or HHSession.access_token.is_empty():
 		if inventory_status != null:
 			inventory_status.text = "请先登录后查看背包。"
 		return
@@ -556,8 +557,11 @@ func _refresh_inventory() -> void:
 	)
 	if error != OK:
 		inventory_status.text = "读取背包请求失败，错误码：" + str(error)
+	else:
+		inventory_request_busy = true
 
 func _on_inventory_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	inventory_request_busy = false
 	for child in inventory_items.get_children():
 		child.queue_free()
 	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
