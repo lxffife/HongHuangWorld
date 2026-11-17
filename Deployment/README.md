@@ -56,3 +56,24 @@ WorldServer 启动后会立即调用中心服 `POST /api/v1/servers/heartbeat`�
 本机测试时 `WORLD_SERVER_ADVERTISE_HOST=127.0.0.1`；跨设备联机时改为运行 WorldServer 的局域网 IP，并在 Windows 防火墙放行 `WORLD_SERVER_UDP_PORT` 对应的 UDP 入站端口。中心服 API 地址和游戏服务器广告地址是两回事：前者是 HTTP，后者是 ENet UDP。
 
 如果客户端显示“没有可用世界服务器”，先检查 WorldServer 窗口是否持续打印心跳成功、`WORLD_SERVER_API_KEY` 是否与中心服一致、`WORLD_ID` 是否为 `qingyun_human`，以及 PostgreSQL 中节点心跳是否在最近 30 秒内。
+
+
+## 冥界·酆都世界服（与青云人界并行）
+
+复活会把当前肉身的世界归属切换为 `underworld_fengdu`。如果只运行默认的青云人界节点（`WORLD_ID=qingyun_human`），复活后会因没有冥界实例而得到 HTTP 503。需要在同一台 WorldServer 主机上再启动一个独立进程；不要停止青云人界节点。
+
+先确保 `Deployment/.env` 中的 `BACKEND_URL`、`WORLD_SERVER_API_KEY` 和 `WORLD_SERVER_ADVERTISE_HOST` 正确。广告地址必须是客户端可访问的主机 IP。两个节点必须使用不同的节点标识、实例标识、UDP 端口和 Outbox 数据库文件。
+
+Linux（在仓库根目录，单独终端运行）：
+
+```bash
+bash Deployment/start-underworld-server.sh
+```
+
+Windows（在仓库根目录，单独 PowerShell 窗口运行）：
+
+```powershell
+.\\Deployment\\start-underworld-server.ps1
+```
+
+冥界节点使用 UDP 7778，青云节点继续使用 UDP 7777。请在 WorldServer 主机防火墙/云安全组放行 UDP 7778。启动日志应出现心跳成功（`WorldServer heartbeat accepted`）；中心服收到心跳后才会把酆都实例标记为 ready。Linux 构建产物路径为 `build/world-server/world_server`，Windows 构建产物路径为 `build\\world-server\\Release\\world_server.exe`。
