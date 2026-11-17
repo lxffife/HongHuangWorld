@@ -204,6 +204,23 @@ func (s *Service) CreateDrop(ctx context.Context, nodeKey string, request DropRe
 		return GroundDrop{}, fmt.Errorf("load drop item: %w", err)
 	}
 	if request.Quantity > maxStack { return GroundDrop{}, ErrInvalidRequest }
+	// Recover a previously committed drop before checking whether its original
+	// session is still active. This covers a lost HTTP response followed by a
+	// player disconnect; the stable drop ID makes the retry safe.
+	var existing GroundDrop
+	err = tx.QueryRowContext(ctx, `SELECT id::text, item_id, quantity, position_x, position_z, expires_at::text
+		FROM ground_drops
+		WHERE id = $1::uuid AND server_id = $2 AND session_id = $3::uuid
+		  AND owner_character_id = $4::uuid AND item_id = $5 AND quantity = $6
+		  AND position_x = $7 AND position_z = $8 AND status = 'available' AND expires_at > now()`,
+		request.DropID, serverID, request.SessionID, request.CharacterID, request.ItemID,
+		request.Quantity, request.PositionX, request.PositionZ).
+		Scan(&existing.ID, &existing.ItemID, &existing.Quantity, &existing.PositionX, &existing.PositionZ, &existing.ExpiresAt)
+	if err == nil {
+		if err := tx.Commit(); err != nil { return GroundDrop{}, fmt.Errorf("commit recovered ground drop: %w", err) }
+		return existing, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) { return GroundDrop{}, fmt.Errorf("recover existing ground drop: %w", err) }
 	var valid bool
 	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (
 		SELECT 1 FROM world_sessions WHERE id = $1::uuid AND server_id = $2 AND character_id = $3::uuid AND session_state = 'active'
