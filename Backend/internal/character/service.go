@@ -35,10 +35,10 @@ type ReincarnationRoute struct {
 	FateTraitID *string `json:"fate_trait_id,omitempty"`
 	Name string `json:"name"`
 	Description string `json:"description"`
-	SpawnX float64 `json:"spawn_x"`
-	SpawnY float64 `json:"spawn_y"`
-	SpawnZ float64 `json:"spawn_z"`
-	InitialBoon json.RawMessage `json:"initial_boon"`
+	SpawnX float64 `json:"-"`
+	SpawnY float64 `json:"-"`
+	SpawnZ float64 `json:"-"`
+	InitialBoon json.RawMessage `json:"-"`
 }
 
 type Character struct {
