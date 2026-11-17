@@ -26,6 +26,10 @@ var local_player: HHPlayerController
 var hud_visible := true
 var death_panel: PanelContainer
 var death_message_label: Label
+var compact_hud_panel: PanelContainer
+var compact_hud_label: Label
+var details_toggle_button: Button
+var details_visible := false
 var local_target_position := Vector3.ZERO
 var remote_players: Dictionary = {}
 var remote_targets: Dictionary = {}
@@ -85,6 +89,7 @@ func _ready() -> void:
 	_build_environment()
 	_build_terrain()
 	_build_player()
+	_build_compact_hud()
 	if HHSession.world_network != null:
 		HHSession.world_network.entities_updated.connect(_on_entities_updated)
 		HHSession.world_network.player_joined.connect(_on_player_joined)
@@ -294,6 +299,7 @@ func _on_progression_request_completed(result: int, response_code: int, _headers
 		threshold_text = "大境界突破修为：" + str(next_realm)
 	else:
 		threshold_text = "已达到当前体系最高配置境界"
+	_update_compact_hud(progression)
 	progression_label.text = system_name + " · " + realm_name + stage_name + "\n累计修为：" + str(cultivation) + "  |  跨族参考：" + tier_name + "\n主血脉：" + primary_bloodline + "（纯度 " + str(bloodline_purity) + "/10000）\n" + threshold_text
 	breakthrough_button.disabled = next_stage == null and next_realm == null
 
@@ -364,11 +370,51 @@ func _build_player() -> void:
 	local_player.position = Vector3(0.0, 0.15, 0.0)
 	add_child(local_player)
 
+func _build_compact_hud() -> void:
+	var hud := get_node_or_null("HUD") as CanvasLayer
+	if hud == null:
+		return
+	# 完整修炼面板保留原有功能，默认收起，减少对 3D 画面的遮挡。
+	$HUD/Panel.visible = false
+	compact_hud_panel = PanelContainer.new()
+	compact_hud_panel.position = Vector2(18.0, 18.0)
+	compact_hud_panel.custom_minimum_size = Vector2(330.0, 72.0)
+	hud.add_child(compact_hud_panel)
+	compact_hud_label = Label.new()
+	compact_hud_label.text = "洪荒 · 正在载入角色状态……"
+	compact_hud_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	compact_hud_label.custom_minimum_size = Vector2(310.0, 54.0)
+	compact_hud_panel.add_child(compact_hud_label)
+	details_toggle_button = Button.new()
+	details_toggle_button.text = "角色 · 修炼"
+	details_toggle_button.position = Vector2(18.0, 98.0)
+	details_toggle_button.custom_minimum_size = Vector2(112.0, 36.0)
+	details_toggle_button.pressed.connect(_toggle_details_panel)
+	hud.add_child(details_toggle_button)
+
+func _toggle_details_panel() -> void:
+	details_visible = not details_visible
+	$HUD/Panel.visible = hud_visible and details_visible
+	details_toggle_button.text = "收起角色面板" if details_visible else "角色 · 修炼"
+
+func _update_compact_hud(progression: Dictionary = {}) -> void:
+	if compact_hud_label == null:
+		return
+	var snapshot: Dictionary = HHSession.world_snapshot
+	var world_id := str(snapshot.get("world_id", "青云人界"))
+	var character_name := str(snapshot.get("name", "初入洪荒"))
+	var system_name := str(progression.get("system_name", "修炼信息加载中"))
+	var realm_name := str(progression.get("realm_name", ""))
+	var stage_name := str(progression.get("realm_stage_name", ""))
+	var cultivation := int(progression.get("cultivation", 0))
+	compact_hud_label.text = "洪荒 · " + world_id + "\\n" + character_name + "  |  " + system_name + " · " + realm_name + stage_name + "  |  修为 " + str(cultivation)
+
 func _update_hud() -> void:
 	var snapshot: Dictionary = HHSession.world_snapshot
 	var world_id := str(snapshot.get("world_id", "青云人界"))
 	var character_name := str(snapshot.get("name", "初入洪荒"))
-	hud_label.text = "洪荒 · " + world_id + "\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F NPC交互 · E 拾取\n服务器权威移动已启用 · 左键攻击附近怪物 · 20Hz 实体快照"
+	hud_label.text = "洪荒 · " + world_id + "\\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\\nF NPC交互 · E 拾取 · 鼠标左键攻击附近怪物 · 首次点击画面锁定鼠标"
+	_update_compact_hud()
 
 func _exit_tree() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -509,7 +555,11 @@ func _create_drop(item_name: String, quality: int, quantity: int) -> Node3D:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F1:
 		hud_visible = not hud_visible
-		$HUD/Panel.visible = hud_visible
+		$HUD/Panel.visible = hud_visible and details_visible
+		if is_instance_valid(compact_hud_panel):
+			compact_hud_panel.visible = hud_visible
+		if is_instance_valid(details_toggle_button):
+			details_toggle_button.visible = hud_visible
 		get_viewport().set_input_as_handled()
 		return
 	if not (event is InputEventKey) or not event.pressed or event.echo:
