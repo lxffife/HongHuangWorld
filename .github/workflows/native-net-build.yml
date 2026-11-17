@@ -1,4 +1,4 @@
-name: Godot NativeNet Builds
+name: NativeNet - Windows x64
 
 on:
   workflow_dispatch:
@@ -8,8 +8,9 @@ permissions:
 
 jobs:
   windows-x64:
-    name: Windows x64 DLL
+    name: Windows x64 DLL (primary client platform)
     runs-on: windows-2022
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -18,7 +19,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/godot-native-net
-          key: native-net-windows-x64-v1
+          key: native-net-windows-x64-v2
           restore-keys: |
             native-net-windows-x64-
 
@@ -34,115 +35,9 @@ jobs:
             throw "Windows DLL was not generated"
           }
 
-      - name: Upload Windows DLL
-        uses: actions/upload-artifact@v4
-        with:
-          name: honghuang-native-net-windows-x86_64
-          path: Client/HongHuangClient/bin/honghuang_native_net.dll
-          if-no-files-found: error
-          retention-days: 30
-
-  linux-x64:
-    name: Linux x86_64 SO
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install build dependencies
+      - name: Report build output (no artifact upload)
+        shell: pwsh
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential git python3 python3-pip
-          python3 -m pip install --user "cmake>=3.24,<4"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-      - name: Cache CMake build
-        uses: actions/cache@v4
-        with:
-          path: build/godot-native-net
-          key: native-net-linux-x64-v1
-          restore-keys: |
-            native-net-linux-x64-
-
-      - name: Build GDExtension
-        run: |
-          cmake --version
-          cmake -S Client/NativeNet -B build/godot-native-net -DCMAKE_BUILD_TYPE=Release
-          cmake --build build/godot-native-net --config Release --parallel
-          test -s Client/HongHuangClient/bin/libhonghuang_native_net.so
-
-      - name: Upload Linux x86_64 library
-        uses: actions/upload-artifact@v4
-        with:
-          name: honghuang-native-net-linux-x86_64
-          path: Client/HongHuangClient/bin/libhonghuang_native_net.so
-          if-no-files-found: error
-          retention-days: 30
-
-  linux-arm64:
-    name: Linux ARM64 SO (Raspberry Pi)
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Cache CMake build
-        uses: actions/cache@v4
-        with:
-          path: build/godot-native-net-arm64
-          key: native-net-linux-arm64-ubuntu2204-v1
-          restore-keys: |
-            native-net-linux-arm64-ubuntu2204-
-
-      - name: Build for Raspberry Pi OS compatible baseline
-        shell: bash
-        run: |
-          docker run --rm --platform linux/arm64 \
-            -v "$GITHUB_WORKSPACE:/workspace" \
-            -w /workspace \
-            ubuntu:22.04 bash -euxo pipefail -c '
-              apt-get update
-              DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential git python3 python3-pip
-              python3 -m pip install "cmake>=3.24,<4"
-              cmake --version
-              cmake -S Client/NativeNet -B build/godot-native-net-arm64 -DCMAKE_BUILD_TYPE=Release
-              cmake --build build/godot-native-net-arm64 --config Release --parallel 2
-              test -s Client/HongHuangClient/bin/libhonghuang_native_net.so
-            '
-
-      - name: Upload Linux ARM64 library
-        uses: actions/upload-artifact@v4
-        with:
-          name: honghuang-native-net-linux-arm64
-          path: Client/HongHuangClient/bin/libhonghuang_native_net.so
-          if-no-files-found: error
-          retention-days: 30
-
-  publish-release:
-    name: Publish versioned native libraries
-    if: startsWith(github.ref, 'refs/tags/native-net-v')
-    needs:
-      - windows-x64
-      - linux-x64
-      - linux-arm64
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-    steps:
-      - name: Download all platform artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: release-assets
-
-      - name: Package platform libraries
-        run: |
-          mkdir -p release-zips
-          zip -j release-zips/honghuang-native-net-windows-x86_64.zip release-assets/honghuang-native-net-windows-x86_64/honghuang_native_net.dll
-          zip -j release-zips/honghuang-native-net-linux-x86_64.zip release-assets/honghuang-native-net-linux-x86_64/libhonghuang_native_net.so
-          zip -j release-zips/honghuang-native-net-linux-arm64.zip release-assets/honghuang-native-net-linux-arm64/libhonghuang_native_net.so
-
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: release-zips/*.zip
-          generate_release_notes: true
+          Get-Item "Client/HongHuangClient/bin/honghuang_native_net.dll" |
+            Select-Object Name, Length, LastWriteTime
+          Write-Host "Build verified. The DLL remains on the temporary runner and is not uploaded or committed."
