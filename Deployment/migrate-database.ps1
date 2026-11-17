@@ -23,7 +23,15 @@ try {
         '000002_character_progression.up.sql',
         '000003_race_bloodline_techniques.up.sql',
         '000004_bloodline_awakening_technique_training.up.sql',
-        '000005_items_inventory_drops.up.sql'
+        '000005_items_inventory_drops.up.sql',
+        '000006_character_equipment.up.sql',
+        '000007_item_use_and_starter_catalog.up.sql',
+        '000008_character_death_and_respawn.up.sql',
+        '000009_reincarnation_history.up.sql',
+        '000010_soul_progression.up.sql',
+        '000011_soul_trials.up.sql',
+        '000012_world_npcs.up.sql',
+        '000013_soul_memories.up.sql'
     )
 
     $existing = docker compose --env-file .env exec -T postgres psql -U $env:POSTGRES_USER -d $env:POSTGRES_DB -At -c "SELECT to_regclass('public.accounts') IS NOT NULL;"
