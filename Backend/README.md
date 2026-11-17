@@ -13,6 +13,7 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 - `GET /api/v1/souls/current`：读取当前账号的灵魂档案。
 - `GET /api/v1/souls/current/progression`：读取跨世保留的灵魂经验与灵魂境界。
 - `POST /api/v1/souls/current/breakthrough`：达到下一灵魂境界经验门槛后主动突破；灵魂经验奖励不会自动提升境界。
+- `GET /api/v1/souls/current/trials`：读取当前灵魂可见的冥界试炼目标、进度和奖励状态。
 - `POST /api/v1/servers/souls/rewards`：可信世界节点提交灵魂经验奖励；校验节点密钥、节点标识、角色世界会话和事件幂等性。单次奖励限制为 1–100000 灵魂经验。
 - `GET /api/v1/worlds`：读取已启用的世界目录。
 - `GET /api/v1/cultivation/systems`：读取种族、默认修炼体系、各自境界和跨种族实力参考层级。
@@ -72,7 +73,7 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 ## 本地运行
 
 1. 按 `Deployment/README.md` 启动 PostgreSQL。
-2. 按编号执行 `Database/migrations/` 中全部 `.up.sql` 迁移；当前需依次执行 `000001` 至 `000010`（每个编号只执行 `.up.sql` 一次）。
+2. 按编号执行 `Database/migrations/` 中全部 `.up.sql` 迁移；当前需依次执行 `000001` 至 `000011`（每个编号只执行 `.up.sql` 一次）。
 3. 在 `Deployment/.env` 配置 `DATABASE_URL` 和 `HTTP_ADDR`。
 4. Windows PowerShell 执行 `../Deployment/start-backend.ps1`；或在本目录执行 `go test ./...`、`go run ./cmd/api`（需先设置环境变量）。
 
@@ -122,3 +123,6 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 世界节点使用 `X-World-Server-Key` 和 `X-World-Server-Node` 调用 `POST /api/v1/servers/souls/rewards`。请求字段为 `event_id`、`session_id`、`character_id`、`experience`、`source`。中心服确认该角色属于节点对应的在线/近期关闭会话后，才会写入灵魂经验；同一灵魂的 event_id 唯一，网络重试不会重复发奖。奖励来源使用小写字母、数字、下划线、短横线或冒号。
 
 经验增加后只更新经验值，不自动突破境界。玩家达到下一境界累计经验门槛后，通过 `POST /api/v1/souls/current/breakthrough` 完成境界晋升。当前接口尚未接入冥界 NPC、试炼任务、功德/业力条件和首次投胎门槛；这些条件会在任务系统接入后由中心服统一检查。
+
+
+冥界首个数据驱动试炼为“引魂试炼·初除游祟”：在酆都击败 20 只怪物，获得一次性 100 点灵魂经验奖励。酆都 WorldServer 每次击败怪物会通过 Durable Outbox 发送 5 点基础灵魂经验；中心服在同一奖励事务中推进试炼计数，第 20 次完成时额外发放 100 点奖励。重复事件不会重复增加经验或任务进度。试炼奖励只增加经验，境界仍需玩家主动突破。
