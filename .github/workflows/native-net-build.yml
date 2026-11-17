@@ -2,16 +2,34 @@ name: NativeNet - Windows x64
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, for example 0.1.0 or 0.1.1"
+        required: true
+        default: "0.1.0"
+        type: string
+      prerelease:
+        description: "Mark this release as a pre-release"
+        required: true
+        default: true
+        type: boolean
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   windows-x64:
-    name: Windows x64 DLL (primary client platform)
+    name: Build and publish Windows x64 DLL
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
+      - name: Validate release version
+        shell: pwsh
+        run: |
+          if ("${{ inputs.version }}" -notmatch '^\d+\.\d+\.\d+([-.][0-9A-Za-z.-]+)?$') {
+            throw "Invalid version. Use semantic version format such as 0.1.0 or 0.1.1-rc.1"
+          }
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -19,7 +37,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/godot-native-net
-          key: native-net-windows-x64-v2
+          key: native-net-windows-x64-v3
           restore-keys: |
             native-net-windows-x64-
 
@@ -35,9 +53,41 @@ jobs:
             throw "Windows DLL was not generated"
           }
 
-      - name: Report build output (no artifact upload)
+      - name: Package Windows client native library
         shell: pwsh
         run: |
-          Get-Item "Client/HongHuangClient/bin/honghuang_native_net.dll" |
-            Select-Object Name, Length, LastWriteTime
-          Write-Host "Build verified. The DLL remains on the temporary runner and is not uploaded or committed."
+          $version = "${{ inputs.version }}"
+          $package = "HongHuangClient-Windows-x64-v$version"
+          New-Item -ItemType Directory -Force -Path release-package | Out-Null
+          Copy-Item "Client/HongHuangClient/bin/honghuang_native_net.dll" "release-package/"
+          @(
+            "HongHuangWorld NativeNet"
+            "Platform: Windows x64"
+            "Version: $version"
+            "Build: ${{ github.sha }}"
+            ""
+            "Copy honghuang_native_net.dll into the Client/HongHuangClient/bin directory of the matching client source version."
+            "This package contains the native DLL only; it is not a complete game client."
+          ) | Set-Content -Encoding UTF8 "release-package/README.txt"
+          Compress-Archive -Path "release-package/*" -DestinationPath "$package.zip" -Force
+          "PACKAGE_NAME=$package.zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Get-Item "$package.zip" | Select-Object Name, Length
+
+      - name: Publish Windows Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: client-windows-v${{ inputs.version }}
+          name: HongHuangWorld Windows Client v${{ inputs.version }}
+          body: |
+            Windows x64 NativeNet build.
+
+            - Platform: Windows x64
+            - Version: ${{ inputs.version }}
+            - Source commit: ${{ github.sha }}
+            - Package: NativeNet DLL only, not a complete game client.
+
+            Place \`honghuang_native_net.dll\` in \`Client/HongHuangClient/bin/\` for the matching source version.
+          files: \${{ env.PACKAGE_NAME }}
+          draft: false
+          prerelease: \${{ inputs.prerelease }}
+          fail_on_unmatched_files: true
