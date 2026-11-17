@@ -142,3 +142,17 @@ func (h *soulHandlers) breakthrough(w http.ResponseWriter, r *http.Request) {
   http.Error(w, "internal server error", http.StatusInternalServerError)
  }
 }
+
+ 
+func (h *soulHandlers) trials(w http.ResponseWriter, r *http.Request) {
+ account, ok := h.currentAccount(w, r)
+ if !ok { return }
+ trials, err := h.soulService.Trials(r.Context(), account.ID)
+ if err != nil {
+  if errors.Is(err, soul.ErrNotFound) { http.Error(w, "soul not found", http.StatusNotFound); return }
+  h.logger.Error("load soul trials failed", "error", err)
+  http.Error(w, "internal server error", http.StatusInternalServerError)
+  return
+ }
+ writeJSON(w, http.StatusOK, map[string]any{"trials":trials})
+}
