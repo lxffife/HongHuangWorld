@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Threads REQUIRED)
+find_package(SQLite3 REQUIRED)
 
 if(WIN32)
     find_package(unofficial-enet CONFIG REQUIRED)
@@ -26,6 +27,7 @@ add_executable(world_server
     src/main.cpp
     src/enet_server.cpp
     src/frame.cpp
+    src/durable_outbox.cpp
 )
 
 target_include_directories(world_server PRIVATE include)
@@ -34,6 +36,7 @@ target_link_libraries(world_server PRIVATE
     ${HH_CURL_TARGET}
     nlohmann_json::nlohmann_json
     Threads::Threads
+    SQLite::SQLite3
 )
 
 include(CTest)
@@ -56,6 +59,11 @@ if(BUILD_TESTING)
     add_executable(monster_test tests/monster_test.cpp)
     target_include_directories(monster_test PRIVATE include)
     add_test(NAME monster_test COMMAND monster_test)
+
+    add_executable(durable_outbox_test tests/durable_outbox_test.cpp src/durable_outbox.cpp)
+    target_include_directories(durable_outbox_test PRIVATE include)
+    target_link_libraries(durable_outbox_test PRIVATE SQLite::SQLite3 Threads::Threads)
+    add_test(NAME durable_outbox_test COMMAND durable_outbox_test)
 endif()
 
 if(MSVC)
