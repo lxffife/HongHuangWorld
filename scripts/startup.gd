@@ -40,6 +40,8 @@ var reincarnation_check_button: Button
 var reincarnation_submit_button: Button
 var reincarnation_confirm: ConfirmationDialog
 var reincarnation_eligible := false
+var life_history_box: VBoxContainer
+var life_history_status: Label
 
 func _ready() -> void:
 	_build_ui()
@@ -231,6 +233,63 @@ func _build_reincarnation_ui() -> void:
 	add_child(reincarnation_confirm)
 	for control in [title, reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_check_button, reincarnation_submit_button]:
 		control.hide()
+	var history_title := Label.new()
+	history_title.text = "灵魂历世档案"
+	history_title.add_theme_font_size_override("font_size", 18)
+	content_box.add_child(history_title)
+	life_history_status = Label.new()
+	life_history_status.text = "登录后读取同一灵魂的历世记录。"
+	life_history_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	content_box.add_child(life_history_status)
+	life_history_box = VBoxContainer.new()
+	life_history_box.add_theme_constant_override("separation", 8)
+	content_box.add_child(life_history_box)
+	var refresh_history_button := Button.new()
+	refresh_history_button.text = "刷新历世档案"
+	refresh_history_button.pressed.connect(_request_life_history)
+	content_box.add_child(refresh_history_button)
+	for control in [history_title, life_history_status, life_history_box, refresh_history_button]:
+		control.hide()
+
+func _request_life_history() -> void:
+	if access_token.is_empty():
+		life_history_status.text = "请先登录后查看历世档案。"
+		return
+	life_history_status.text = "正在读取灵魂历世记录……"
+	_enqueue(HTTPClient.METHOD_GET, "/api/v1/souls/current/lives", {}, true, "life_history")
+
+func _render_life_history(items: Array) -> void:
+	for child in life_history_box.get_children():
+		child.queue_free()
+	if items.is_empty():
+		life_history_status.text = "当前灵魂尚无肉身记录。"
+		return
+	life_history_status.text = "共 " + str(items.size()) + " 世。历世肉身分别保存，灵魂身份持续延续。"
+	for item_variant in items:
+		if not (item_variant is Dictionary):
+			continue
+		var item: Dictionary = item_variant
+		var card := PanelContainer.new()
+		var layout := VBoxContainer.new()
+		layout.add_theme_constant_override("separation", 4)
+		card.add_child(layout)
+		var heading := Label.new()
+		var life_number := int(item.get("life_index", 0))
+		heading.text = "第 " + str(life_number) + " 世 · " + str(item.get("name", "无名"))
+		if bool(item.get("is_current", false)):
+			heading.text += "  【当前肉身】"
+		heading.add_theme_font_size_override("font_size", 16)
+		layout.add_child(heading)
+		var details := Label.new()
+		details.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		details.text = "种族：" + str(item.get("race_name", "未知")) + "    世界：" + str(item.get("world_name", item.get("world_id", "未知"))) + "\n境界：" + str(item.get("realm_name", "尚未记录")) + " · " + str(item.get("realm_stage", 1)) + "阶    等级：" + str(item.get("level", 1)) + "\n状态：" + str(item.get("status", "未知")) + "    初生：" + str(item.get("created_at", "未知"))
+		layout.add_child(details)
+		if not str(item.get("reincarnated_at", "")).is_empty():
+			var transition := Label.new()
+			transition.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			transition.text = "此世轮回记录：" + str(item.get("reincarnated_at", "")) + "\n前世出生世界：" + str(item.get("previous_world_id", "未知")) + " → 今世出生世界：" + str(item.get("next_world_id", "未知"))
+			layout.add_child(transition)
+		life_history_box.add_child(card)
 
 func _check_reincarnation_eligibility() -> void:
 	if access_token.is_empty() or current_character.is_empty():
@@ -364,6 +423,8 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 				control.show()
 			account_label.hide()
 			_set_status("登录会话已过期，请重新登录后继续办理轮回。")
+		elif context == "life_history":
+			life_history_status.text = "历世档案读取失败（HTTP " + str(response_code) + "）：" + body_text
 		elif context == "reincarnation_eligibility":
 			reincarnation_check_button.disabled = false
 			reincarnation_eligible = false
@@ -420,6 +481,8 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 			var realm_text := str(progression.get("system_name", "")) + " · " + str(progression.get("realm_name", "")) + str(progression.get("realm_stage_name", ""))
 			_set_status("角色已存在：" + character_input.text + "\n修炼体系：" + realm_text + "\n跨族参考：" + tier_text + "。可以进入世界。")
 			_show_reincarnation_controls()
+		"life_history":
+			_render_life_history(data.get("items", []))
 		"reincarnation_eligibility":
 			reincarnation_check_button.disabled = false
 			reincarnation_eligible = bool(data.get("eligible", false))
@@ -471,7 +534,7 @@ func _on_login_pressed() -> void:
 	}, false, "login")
 
 func _show_reincarnation_controls() -> void:
-	for control in [reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_check_button, reincarnation_submit_button]:
+	for control in [reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_check_button, reincarnation_submit_button, life_history_status, life_history_box]:
 		control.show()
 	reincarnation_name_input.text = ""
 	reincarnation_eligible = false
@@ -486,6 +549,7 @@ func _show_reincarnation_controls() -> void:
 		if str(reincarnation_race_select.get_item_metadata(index)) == "human":
 			reincarnation_race_select.select(index)
 			break
+	_request_life_history()
 
 func _show_character_setup() -> void:
 	right_info_label.text = "灵魂档案已载入。请在左侧完成角色名、种族修炼体系与出生世界的选择。"
