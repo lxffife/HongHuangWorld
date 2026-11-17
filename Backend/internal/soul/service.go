@@ -14,6 +14,8 @@ var (
 	ErrNotFound = errors.New("soul not found")
 	ErrConflict = errors.New("soul already exists")
 	ErrInvalid  = errors.New("invalid soul name")
+	ErrInvalidReward = errors.New("invalid soul reward")
+	ErrRewardSession = errors.New("soul reward session is not valid for this node")
 )
 
 type Soul struct {
@@ -114,4 +116,100 @@ func (s *Service) CurrentProgression(ctx context.Context, accountID string) (Pro
  if nextName.Valid { result.NextRealmName = nextName.String }
  if nextRequired.Valid { value := nextRequired.Int64; result.NextRequiredExperience = &value }
  return result, nil
+}
+
+type Reward struct {
+ EventID string `json:"event_id"`
+ SessionID string `json:"session_id"`
+ CharacterID string `json:"character_id"`
+ Experience int64 `json:"experience"`
+ Source string `json:"source"`
+}
+type RewardResult struct {
+ Applied bool `json:"applied"`
+ Experience int64 `json:"experience"`
+ RealmID string `json:"realm_id"`
+ RealmName string `json:"realm_name"`
+}
+
+// ApplyServerReward only accepts rewards from the node that hosted the character session.
+func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward Reward) (RewardResult, error) {
+ if nodeKey == "" || !validUUID(reward.EventID) || !validUUID(reward.SessionID) || !validUUID(reward.CharacterID) ||
+    reward.Experience < 1 || reward.Experience > 100000 || !validSource(reward.Source) {
+  return RewardResult{}, ErrInvalidReward
+ }
+ tx, err := s.db.BeginTx(ctx, nil)
+ if err != nil { return RewardResult{}, fmt.Errorf("begin soul reward: %w", err) }
+ defer tx.Rollback()
+ var serverID string
+ err = tx.QueryRowContext(ctx, `SELECT id::text FROM server_registry WHERE node_key = $1`, nodeKey).Scan(&serverID)
+ if errors.Is(err, sql.ErrNoRows) { return RewardResult{}, ErrRewardSession }
+ if err != nil { return RewardResult{}, fmt.Errorf("resolve soul reward node: %w", err) }
+ var soulID string
+ var currentExperience int64
+ err = tx.QueryRowContext(ctx,
+  `SELECT soul.id::text, progression.experience
+   FROM world_sessions ws
+   JOIN characters character ON character.id = ws.character_id
+   JOIN souls soul ON soul.id = character.soul_id
+   JOIN soul_progression progression ON progression.soul_id = soul.id
+   WHERE ws.id = $1::uuid AND ws.server_id = $2 AND character.id = $3::uuid
+     AND character.status = 'alive'
+     AND (ws.session_state = 'active' OR (ws.session_state = 'closed' AND ws.updated_at >= now() - INTERVAL '10 minutes'))
+   FOR UPDATE OF ws, soul, progression`, reward.SessionID, serverID, reward.CharacterID,
+ ).Scan(&soulID, &currentExperience)
+ if errors.Is(err, sql.ErrNoRows) {
+  var duplicate bool
+  checkErr := tx.QueryRowContext(ctx,
+   `SELECT EXISTS (SELECT 1 FROM soul_reward_events WHERE soul_id =
+      (SELECT soul_id FROM characters WHERE id = $1::uuid) AND event_id = $2::uuid)`,
+   reward.CharacterID, reward.EventID).Scan(&duplicate)
+  if checkErr != nil { return RewardResult{}, fmt.Errorf("check duplicate soul reward: %w", checkErr) }
+  if duplicate {
+   if err := tx.Commit(); err != nil { return RewardResult{}, fmt.Errorf("commit duplicate soul reward: %w", err) }
+   return RewardResult{Applied:false}, nil
+  }
+  return RewardResult{}, ErrRewardSession
+ }
+ if err != nil { return RewardResult{}, fmt.Errorf("verify soul reward session: %w", err) }
+ inserted, err := tx.ExecContext(ctx,
+  `INSERT INTO soul_reward_events (soul_id,event_id,experience,source)
+   VALUES ($1,$2::uuid,$3,$4) ON CONFLICT (soul_id,event_id) DO NOTHING`,
+  soulID, reward.EventID, reward.Experience, reward.Source)
+ if err != nil { return RewardResult{}, fmt.Errorf("record soul reward: %w", err) }
+ rows, err := inserted.RowsAffected()
+ if err != nil { return RewardResult{}, fmt.Errorf("read soul reward insert result: %w", err) }
+ if rows == 0 {
+  if err := tx.Commit(); err != nil { return RewardResult{}, fmt.Errorf("commit duplicate soul reward: %w", err) }
+  return RewardResult{Applied:false}, nil
+ }
+ newExperience := currentExperience + reward.Experience
+ var realmID, realmName string
+ err = tx.QueryRowContext(ctx,
+  `UPDATE soul_progression
+   SET experience = $1,
+       realm_id = (SELECT id FROM soul_realm_definitions WHERE required_experience <= $1 ORDER BY realm_order DESC LIMIT 1),
+       updated_at = now()
+   WHERE soul_id = $2 RETURNING realm_id`, newExperience, soulID).Scan(&realmID)
+ if err != nil { return RewardResult{}, fmt.Errorf("apply soul experience: %w", err) }
+ if err := tx.QueryRowContext(ctx, `SELECT name FROM soul_realm_definitions WHERE id=$1`, realmID).Scan(&realmName); err != nil {
+  return RewardResult{}, fmt.Errorf("load soul realm after reward: %w", err)
+ }
+ if err := tx.Commit(); err != nil { return RewardResult{}, fmt.Errorf("commit soul reward: %w", err) }
+ return RewardResult{Applied:true, Experience:newExperience, RealmID:realmID, RealmName:realmName}, nil
+}
+func validSource(source string) bool {
+ if len(source) < 2 || len(source) > 48 { return false }
+ for _, r := range source {
+  if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '-' || r == ':') { return false }
+ }
+ return true
+}
+func validUUID(value string) bool {
+ if len(value) != 36 { return false }
+ for i, r := range value {
+  if i == 8 || i == 13 || i == 18 || i == 23 { if r != '-' { return false }; continue }
+  if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) { return false }
+ }
+ return true
 }
