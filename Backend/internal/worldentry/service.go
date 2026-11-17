@@ -46,6 +46,7 @@ type SessionSnapshot struct {
 	PositionY   float64
 	PositionZ   float64
 	RotationY   float64
+	Health      *int
 }
 
 type Service struct {
@@ -177,7 +178,8 @@ func (s *Service) SavePosition(ctx context.Context, input SessionSnapshot) error
 		math.IsNaN(input.RotationY) || math.IsInf(input.RotationY, 0) ||
 		input.PositionX < -100 || input.PositionX > 100 ||
 		input.PositionZ < -100 || input.PositionZ > 100 ||
-		input.PositionY < 0 || input.PositionY > 100 {
+		input.PositionY < 0 || input.PositionY > 100 ||
+		(input.Health != nil && (*input.Health < 0 || *input.Health > 100000)) {
 		return ErrInvalidSessionSnapshot
 	}
 
@@ -220,6 +222,15 @@ func (s *Service) SavePosition(ctx context.Context, input SessionSnapshot) error
 	} else if rows != 1 {
 		return ErrInvalidSessionSnapshot
 	}
+	if input.Health != nil {
+		result, err := tx.ExecContext(ctx,
+			`UPDATE character_attributes SET health = LEAST($2, max_health), updated_at = now()
+			 WHERE character_id = $1 AND max_health >= 1`,
+			input.CharacterID, *input.Health,
+		)
+		if err != nil { return fmt.Errorf("save periodic character health: %w", err) }
+		if rows, rowsErr := result.RowsAffected(); rowsErr != nil { return fmt.Errorf("check periodic health rows: %w", rowsErr) } else if rows != 1 { return ErrInvalidSessionSnapshot }
+	}
 	if _, err := tx.ExecContext(ctx, `UPDATE world_sessions SET updated_at = now() WHERE id = $1`, input.SessionID); err != nil {
 		return fmt.Errorf("touch periodic world session: %w", err)
 	}
@@ -240,7 +251,8 @@ func (s *Service) SaveAndClose(ctx context.Context, input SessionSnapshot) error
 		math.IsNaN(input.RotationY) || math.IsInf(input.RotationY, 0) ||
 		input.PositionX < -100 || input.PositionX > 100 ||
 		input.PositionZ < -100 || input.PositionZ > 100 ||
-		input.PositionY < 0 || input.PositionY > 100 {
+		input.PositionY < 0 || input.PositionY > 100 ||
+		(input.Health != nil && (*input.Health < 0 || *input.Health > 100000)) {
 		return ErrInvalidSessionSnapshot
 	}
 
@@ -287,6 +299,15 @@ func (s *Service) SaveAndClose(ctx context.Context, input SessionSnapshot) error
 		return ErrInvalidSessionSnapshot
 	}
 
+	if input.Health != nil {
+		result, err := tx.ExecContext(ctx,
+			`UPDATE character_attributes SET health = LEAST($2, max_health), updated_at = now()
+			 WHERE character_id = $1 AND max_health >= 1`,
+			input.CharacterID, *input.Health,
+		)
+		if err != nil { return fmt.Errorf("save final character health: %w", err) }
+		if rows, rowsErr := result.RowsAffected(); rowsErr != nil { return fmt.Errorf("check final health rows: %w", rowsErr) } else if rows != 1 { return ErrInvalidSessionSnapshot }
+	}
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE world_sessions
 		 SET session_state = 'closed', disconnected_at = now(), updated_at = now()
