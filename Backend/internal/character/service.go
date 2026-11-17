@@ -345,10 +345,10 @@ func (s *Service) Memories(ctx context.Context, accountID string) ([]SoulMemory,
 		 JOIN soul_progression progression ON progression.soul_id = soul.id
 		 JOIN soul_realm_definitions current_realm ON current_realm.id = progression.realm_id
 		 JOIN soul_memory_entries memory ON memory.soul_id = soul.id
-		 JOIN characters character ON character.id = memory.source_character_id
+		 JOIN characters life ON life.id = memory.source_character_id
 		 JOIN soul_realm_definitions required ON required.realm_order = memory.min_realm_order
 		 WHERE soul.account_id = $1
-		 ORDER BY character.life_index DESC, memory.created_at DESC`, accountID)
+		 ORDER BY life.life_index DESC, memory.created_at DESC`, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("query soul memories: %w", err)
 	}
