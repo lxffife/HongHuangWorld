@@ -1556,7 +1556,7 @@ func _render_exploration_points(points: Variant) -> void:
 		var distance := local_player.global_position.distance_to(target) if is_instance_valid(local_player) else INF
 		var radius := float(point.get("interaction_radius", 4.0))
 		var state_text := "已发现" if discovered else ("调查" if distance <= radius else "未抵达 · " + str(roundi(distance)) + "m")
-		point_button.text = str(point.get("region_name", "未知区域")) + " · " + state_text + " · " + str(point.get("name", "未知地点")) + "  | 危险 " + str(danger) + "/10
+		point_button.text = str(point.get("region_name", "未知区域")) + " · " + state_text + " · " + str(point.get("name", "未知地点")) + "  | 危险 " + str(danger) + "/10"
 		point_button.disabled = discovered or distance > radius or npc_request_busy
 		point_button.tooltip_text = str(point.get("description", ""))
 		point_button.pressed.connect(_discover_exploration_point.bind(point_id))
