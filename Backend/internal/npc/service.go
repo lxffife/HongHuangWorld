@@ -443,3 +443,139 @@ func (s *Service) DiscoverExplorationPoint(ctx context.Context, accountID, point
 	if err := tx.Commit(); err != nil { return ExplorationResult{}, fmt.Errorf("commit exploration discovery: %w", err) }
 	return result,nil
 }
+
+
+var (
+	ErrExplorationEventUnavailable = errors.New("exploration event is unavailable")
+	ErrExplorationEventResolved = errors.New("exploration event was already resolved by this soul")
+)
+
+type ExplorationEvent struct {
+	ID string `json:"id"`
+	PointID string `json:"point_id"`
+	PointName string `json:"point_name"`
+	Title string `json:"title"`
+	Description string `json:"description"`
+	EventType string `json:"event_type"`
+	PositionX float64 `json:"position_x"`
+	PositionY float64 `json:"position_y"`
+	PositionZ float64 `json:"position_z"`
+	InteractionRadius float64 `json:"interaction_radius"`
+	DangerLevel int `json:"danger_level"`
+}
+
+type ExplorationEventResult struct {
+	EventID string `json:"event_id"`
+	Title string `json:"title"`
+	Description string `json:"description"`
+	Merit int64 `json:"merit"`
+	Karma int64 `json:"karma"`
+	MeritDelta int64 `json:"merit_delta"`
+	KarmaDelta int64 `json:"karma_delta"`
+}
+
+// ListAvailableExplorationEvents deliberately reveals an event only after its
+// associated point has been discovered by this soul.
+func (s *Service) ListAvailableExplorationEvents(ctx context.Context, accountID string) ([]ExplorationEvent, error) {
+	var soulID, worldID string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT soul.id::text,wi.world_id
+		 FROM souls soul
+		 JOIN characters c ON c.id=soul.current_character_id AND c.status='alive'
+		 JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
+		 JOIN world_instances wi ON wi.id=ws.instance_id AND wi.world_id=c.world_id
+		 WHERE soul.account_id=$1
+		 ORDER BY ws.connected_at DESC NULLS LAST LIMIT 1`, accountID).Scan(&soulID,&worldID)
+	if errors.Is(err,sql.ErrNoRows) { return nil,ErrNoActiveSession }
+	if err!=nil { return nil,fmt.Errorf("resolve exploration event session: %w",err) }
+	rows,err:=s.db.QueryContext(ctx,
+		`SELECT e.id,e.point_id,p.name,e.title,e.description,e.event_type,
+		        p.position_x,p.position_y,p.position_z,p.interaction_radius,p.danger_level
+		 FROM world_exploration_events e
+		 JOIN world_exploration_points p ON p.id=e.point_id AND p.world_id=$2 AND p.enabled=TRUE
+		 JOIN soul_exploration_discoveries d ON d.point_id=p.id AND d.soul_id=$1::uuid
+		 LEFT JOIN soul_exploration_event_claims claim ON claim.soul_id=$1::uuid AND claim.event_id=e.id
+		 WHERE e.enabled=TRUE AND claim.event_id IS NULL
+		 ORDER BY p.region_id,e.id`,soulID,worldID)
+	if err!=nil { return nil,fmt.Errorf("query available exploration events: %w",err) }
+	defer rows.Close()
+	items:=make([]ExplorationEvent,0)
+	for rows.Next() {
+		var item ExplorationEvent
+		if err:=rows.Scan(&item.ID,&item.PointID,&item.PointName,&item.Title,&item.Description,&item.EventType,
+			&item.PositionX,&item.PositionY,&item.PositionZ,&item.InteractionRadius,&item.DangerLevel);err!=nil {
+			return nil,fmt.Errorf("scan exploration event: %w",err)
+		}
+		items=append(items,item)
+	}
+	if err:=rows.Err();err!=nil { return nil,fmt.Errorf("iterate exploration events: %w",err) }
+	return items,nil
+}
+
+// TriggerExplorationEvent accepts only an event identifier. Position, unlock
+// state, one-time claim, and reward values are all checked inside this transaction.
+func (s *Service) TriggerExplorationEvent(ctx context.Context, accountID,eventID string) (ExplorationEventResult,error) {
+	if eventID=="" || len(eventID)>96 { return ExplorationEventResult{},ErrExplorationEventUnavailable }
+	tx,err:=s.db.BeginTx(ctx,nil)
+	if err!=nil { return ExplorationEventResult{},fmt.Errorf("begin exploration event: %w",err) }
+	defer tx.Rollback()
+	var soulID,worldID string
+	var event ExplorationEvent
+	var meritDelta,karmaDelta int64
+	err=tx.QueryRowContext(ctx,
+		`SELECT soul.id::text,wi.world_id,e.id,e.point_id,p.name,e.title,e.description,e.event_type,
+		        p.position_x,p.position_y,p.position_z,p.interaction_radius,p.danger_level,
+		        e.merit_reward,e.karma_delta
+		 FROM souls soul
+		 JOIN characters c ON c.id=soul.current_character_id AND c.status='alive'
+		 JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
+		 JOIN world_instances wi ON wi.id=ws.instance_id AND wi.world_id=c.world_id
+		 JOIN world_exploration_events e ON e.id=$2 AND e.enabled=TRUE
+		 JOIN world_exploration_points p ON p.id=e.point_id AND p.world_id=wi.world_id AND p.enabled=TRUE
+		 JOIN soul_exploration_discoveries d ON d.point_id=p.id AND d.soul_id=soul.id
+		 WHERE soul.account_id=$1
+		   AND SQRT(POWER(c.position_x-p.position_x,2)+POWER(c.position_y-p.position_y,2)+POWER(c.position_z-p.position_z,2))<=p.interaction_radius
+		 ORDER BY ws.connected_at DESC NULLS LAST LIMIT 1
+		 FOR UPDATE OF soul,c,ws`,accountID,eventID).Scan(
+		&soulID,&worldID,&event.ID,&event.PointID,&event.PointName,&event.Title,&event.Description,&event.EventType,
+		&event.PositionX,&event.PositionY,&event.PositionZ,&event.InteractionRadius,&event.DangerLevel,&meritDelta,&karmaDelta)
+	if errors.Is(err,sql.ErrNoRows) {
+		var active bool
+		checkErr:=tx.QueryRowContext(ctx,
+			`SELECT EXISTS(SELECT 1 FROM souls soul JOIN characters c ON c.id=soul.current_character_id AND c.status='alive'
+			 JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active' WHERE soul.account_id=$1)`,accountID).Scan(&active)
+		if checkErr!=nil { return ExplorationEventResult{},fmt.Errorf("check exploration event session: %w",checkErr) }
+		if !active { return ExplorationEventResult{},ErrNoActiveSession }
+		var known bool
+		checkErr=tx.QueryRowContext(ctx,
+			`SELECT EXISTS(SELECT 1 FROM souls soul JOIN characters c ON c.id=soul.current_character_id
+			 JOIN world_exploration_events e ON e.id=$2 AND e.enabled=TRUE
+			 JOIN world_exploration_points p ON p.id=e.point_id AND p.world_id=c.world_id AND p.enabled=TRUE
+			 JOIN soul_exploration_discoveries d ON d.point_id=p.id AND d.soul_id=soul.id
+			 WHERE soul.account_id=$1)`,accountID,eventID).Scan(&known)
+		if checkErr!=nil { return ExplorationEventResult{},fmt.Errorf("check exploration event unlock: %w",checkErr) }
+		if !known { return ExplorationEventResult{},ErrExplorationEventUnavailable }
+		return ExplorationEventResult{},ErrTooFar
+	}
+	if err!=nil { return ExplorationEventResult{},fmt.Errorf("validate exploration event: %w",err) }
+	var fateEventID string
+	err=tx.QueryRowContext(ctx,
+		`INSERT INTO soul_exploration_event_claims(soul_id,event_id)
+		 VALUES($1,$2) ON CONFLICT(soul_id,event_id) DO NOTHING RETURNING fate_event_id::text`,soulID,event.ID).Scan(&fateEventID)
+	if errors.Is(err,sql.ErrNoRows) { return ExplorationEventResult{},ErrExplorationEventResolved }
+	if err!=nil { return ExplorationEventResult{},fmt.Errorf("claim exploration event: %w",err) }
+	if meritDelta!=0 || karmaDelta!=0 {
+		if _,err=tx.ExecContext(ctx,
+			`INSERT INTO soul_fate_events(soul_id,event_id,source,world_id,karma_delta,merit_delta)
+			 VALUES($1,$2::uuid,'exploration_event',$3,$4,$5)`,soulID,fateEventID,worldID,karmaDelta,meritDelta);err!=nil {
+			return ExplorationEventResult{},fmt.Errorf("record exploration event fate: %w",err)
+		}
+	}
+	result:=ExplorationEventResult{EventID:event.ID,Title:event.Title,Description:event.Description,MeritDelta:meritDelta,KarmaDelta:karmaDelta}
+	err=tx.QueryRowContext(ctx,
+		`UPDATE souls SET merit=merit+$1,karma=karma+$2,updated_at=now() WHERE id=$3 RETURNING merit,karma`,
+		meritDelta,karmaDelta,soulID).Scan(&result.Merit,&result.Karma)
+	if err!=nil { return ExplorationEventResult{},fmt.Errorf("apply exploration event reward: %w",err) }
+	if err:=tx.Commit();err!=nil { return ExplorationEventResult{},fmt.Errorf("commit exploration event: %w",err) }
+	return result,nil
+}
