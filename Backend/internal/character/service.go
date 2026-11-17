@@ -176,6 +176,21 @@ func (s *Service) CreateFirstLife(ctx context.Context, accountID, name, worldID,
 		return Character{}, fmt.Errorf("initialize character progression: %w", err)
 	}
 
+	// Every new life starts with a small, non-tradable-by-default starter kit.
+	// Equipment is placed in inventory and must be equipped by the player.
+	if _, err := tx.ExecContext(ctx, `INSERT INTO character_inventory (character_id, item_id, quantity)
+		VALUES
+			($1, 'starter_iron_sword', 1),
+			($1, 'starter_cloth_cap', 1),
+			($1, 'starter_leather_vest', 1),
+			($1, 'starter_trousers', 1),
+			($1, 'starter_travel_boots', 1),
+			($1, 'starter_wooden_charm', 1),
+			($1, 'minor_health_pill', 3),
+			($1, 'minor_mana_pill', 3)`, result.ID); err != nil {
+		return Character{}, fmt.Errorf("grant starter inventory: %w", err)
+	}
+
 	bloodlineResult, err := tx.ExecContext(ctx,
 		`INSERT INTO character_bloodlines (character_id, bloodline_id, purity, awakening_stage, is_primary)
 		 SELECT $1, id, base_purity, 0, TRUE
