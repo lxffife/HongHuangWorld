@@ -490,13 +490,19 @@ func _update_reincarnation_route_description(_index: int) -> void:
 			for point_value in points:
 				if point_value is Dictionary:
 					point_lines.append("· " + str(point_value.get("name", "未命名探索点")) + "：" + str(point_value.get("description", "")))
-			reincarnation_route_description.text = str(route.get("description", "")) \
-				+ "\n区域：" + str(route.get("region_name", "未知区域")) + " · 危险等级：" + danger_text + "（" + str(danger) + "/10）" \
-				+ "\n区域概况：" + str(route.get("region_description", "")) \
-				+ "\n资源：" + (", ".join(PackedStringArray(tags)) if not tags.is_empty() else "暂无资料") \
-				+ "\n种族适应性：" + race_note \
-				+ "\n探索点：\n" + ("\n".join(point_lines) if not point_lines.is_empty() else "暂无探索点资料") \
-				+ "\n出生坐标由中心服分配，客户端不能修改。"
+			var description_lines := PackedStringArray()
+			description_lines.append(str(route.get("description", "")))
+			description_lines.append("区域：" + str(route.get("region_name", "未知区域")) + " · 危险等级：" + danger_text + "（" + str(danger) + "/10）")
+			description_lines.append("区域概况：" + str(route.get("region_description", "")))
+			description_lines.append("资源：" + (", ".join(PackedStringArray(tags)) if not tags.is_empty() else "暂无资料"))
+			description_lines.append("种族适应性：" + race_note)
+		description_lines.append("探索点：")
+			for point_line in point_lines:
+				description_lines.append(point_line)
+			if point_lines.is_empty():
+				description_lines.append("暂无探索点资料")
+			description_lines.append("出生坐标由中心服分配，客户端不能修改。")
+			reincarnation_route_description.text = "\n".join(description_lines)
 			return
 
 func _check_reincarnation_eligibility() -> void:
