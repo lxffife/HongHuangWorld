@@ -827,6 +827,7 @@ func _process(delta: float) -> void:
 		var drop: Node3D = drops[drop_id]
 		var target: Vector3 = drop_targets.get(drop_id, drop.position)
 		drop.position = drop.position.lerp(target, minf(delta * 12.0, 1.0))
+	_update_nearest_npc_prompt()
 
 
 func _on_world_disconnected() -> void:
@@ -1182,7 +1183,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			if topics is Array:
 				for topic in topics:
 					lines.append("· " + str(topic))
-			npc_dialogue_label.text = "\n".join(lines)
+			npc_dialogue_label.text = PackedStringArray(lines).join("\n")
 			npc_status_label.text = "交互已由中心服验证。"
 			npc_trial_button.visible = str(npc_data.get("interaction_type", "")) == "soul_trials"
 			npc_eligibility_button.visible = str(npc_data.get("interaction_type", "")) == "reincarnation_guidance"
