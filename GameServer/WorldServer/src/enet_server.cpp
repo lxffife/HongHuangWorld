@@ -66,8 +66,10 @@ struct PlayerState {
     float vertical_velocity{};
     bool jump_requested{};
     std::uint64_t last_input_sequence{};
+    std::uint64_t accepted_inputs_since_diagnostic{};
     Clock::time_point last_input_at{Clock::now()};
     Clock::time_point last_input_received_at{};
+    Clock::time_point last_movement_diagnostic_at{Clock::now()};
     Clock::time_point last_attack_at{};
     Clock::time_point last_pickup_at{};
 };
@@ -1428,6 +1430,25 @@ struct EnetServer::Impl {
                 player.x, player.z, player.move_x, player.move_z, delta);
             honghuang::simulation::integrate_vertical(
                 player.y, player.vertical_velocity, player.jump_requested, delta);
+
+            // Rate-limited diagnostics make it possible to distinguish packet loss,
+            // rejected/stale input, and a world-tick movement problem without flooding logs.
+            if (now - player.last_movement_diagnostic_at >= std::chrono::seconds(1)) {
+                const auto input_age_ms =
+                    std::chrono::duration_cast<std::chrono::milliseconds>(now - player.last_input_at).count();
+                std::ostringstream diagnostic;
+                diagnostic << std::fixed << std::setprecision(2)
+                           << "[MovementDiag] character=" << player.character_id
+                           << " accepted_inputs=" << player.accepted_inputs_since_diagnostic
+                           << " input_seq=" << player.last_input_sequence
+                           << " move=(" << player.move_x << ',' << player.move_z << ')'
+                           << " position=(" << player.x << ',' << player.y << ',' << player.z << ')'
+                           << " health=" << player.health
+                           << " input_age_ms=" << input_age_ms;
+                std::cout << diagnostic.str() << '\\n';
+                player.accepted_inputs_since_diagnostic = 0;
+                player.last_movement_diagnostic_at = now;
+            }
         }
         for (auto& monster : monsters) {
             if (monster.state.mode == honghuang::simulation::MonsterMode::Dead) {
@@ -1740,6 +1761,7 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                             }
                             player.last_input_sequence = sequence;
                             player.last_input_at = received_at;
+                            ++player.accepted_inputs_since_diagnostic;
                         }
                     } catch (const std::exception&) {
                         send_json(event.peer, honghuang::protocol::MessageType::ServerReject,
