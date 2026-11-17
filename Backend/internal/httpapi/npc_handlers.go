@@ -180,3 +180,19 @@ func (h *npcHandlers) triggerExplorationEvent(w http.ResponseWriter,r *http.Requ
 	default: h.logger.Error("trigger exploration event failed","error",err); http.Error(w,"internal server error",http.StatusInternalServerError)
 	}
 }
+
+
+func (h *npcHandlers) explorationProgress(w http.ResponseWriter, r *http.Request) {
+	account, ok := h.currentAccount(w, r)
+	if !ok { return }
+	result, err := h.service.GetExplorationProgress(r.Context(), account.ID)
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusOK, result)
+	case errors.Is(err, npc.ErrNoActiveSession):
+		http.Error(w, "active world session required", http.StatusConflict)
+	default:
+		h.logger.Error("get exploration progress failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
+}
