@@ -317,34 +317,62 @@ func _on_progression_request_completed(result: int, response_code: int, _headers
 	breakthrough_button.disabled = next_stage == null and next_realm == null
 
 func _build_environment() -> void:
+	var world_id := str(HHSession.world_snapshot.get("world_id", "qingyun_human"))
+	var is_underworld := world_id == "underworld_fengdu"
 	var world_environment := WorldEnvironment.new()
 	var environment := Environment.new()
 	environment.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
 	var sky_material := ProceduralSkyMaterial.new()
-	sky_material.sky_top_color = Color("#142b49")
-	sky_material.sky_horizon_color = Color("#d3a878")
-	sky_material.ground_bottom_color = Color("#182333")
-	sky_material.ground_horizon_color = Color("#a58b6b")
+	if is_underworld:
+		sky_material.sky_top_color = Color("#080d20")
+		sky_material.sky_horizon_color = Color("#382b4d")
+		sky_material.ground_bottom_color = Color("#080b14")
+		sky_material.ground_horizon_color = Color("#241d32")
+	else:
+		sky_material.sky_top_color = Color("#142b49")
+		sky_material.sky_horizon_color = Color("#d3a878")
+		sky_material.ground_bottom_color = Color("#182333")
+		sky_material.ground_horizon_color = Color("#a58b6b")
 	sky.sky_material = sky_material
 	environment.sky = sky
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color("#9fb4d0")
-	environment.ambient_light_energy = 0.65
+	environment.ambient_light_color = Color("#66708f") if is_underworld else Color("#9fb4d0")
+	environment.ambient_light_energy = 0.32 if is_underworld else 0.65
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	environment.fog_enabled = true
-	environment.fog_light_color = Color("#9ba9b8")
-	environment.fog_density = 0.0018
+	environment.fog_light_color = Color("#51445f") if is_underworld else Color("#9ba9b8")
+	environment.fog_density = 0.012 if is_underworld else 0.0018
 	world_environment.environment = environment
 	add_child(world_environment)
 
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-48.0, -32.0, 0.0)
-	sun.light_energy = 1.35
+	sun.light_energy = 0.42 if is_underworld else 1.35
+	sun.light_color = Color("#9a8abf") if is_underworld else Color("#fff0d2")
 	sun.shadow_enabled = true
 	add_child(sun)
 
+func _add_world_box(node_name: String, size: Vector3, world_position: Vector3, color: Color, emissive: bool = false) -> void:
+	var instance := MeshInstance3D.new()
+	instance.name = node_name
+	var box := BoxMesh.new()
+	box.size = size
+	instance.mesh = box
+	instance.position = world_position
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = 0.88
+	if emissive:
+		material.emission_enabled = true
+		material.emission = color
+		material.emission_energy_multiplier = 1.8
+	instance.material_override = material
+	add_child(instance)
+
 func _build_terrain() -> void:
+	var world_id := str(HHSession.world_snapshot.get("world_id", "qingyun_human"))
+	var is_underworld := world_id == "underworld_fengdu"
 	var ground := StaticBody3D.new()
 	ground.name = "Ground"
 	var mesh_instance := MeshInstance3D.new()
@@ -352,7 +380,7 @@ func _build_terrain() -> void:
 	mesh.size = Vector2(240.0, 240.0)
 	mesh_instance.mesh = mesh
 	var material := StandardMaterial3D.new()
-	material.albedo_color = Color("#354c43")
+	material.albedo_color = Color("#211f30") if is_underworld else Color("#354c43")
 	material.roughness = 0.94
 	mesh_instance.material_override = material
 	ground.add_child(mesh_instance)
@@ -364,18 +392,48 @@ func _build_terrain() -> void:
 	ground.add_child(collision)
 	add_child(ground)
 
-	for i in range(12):
-		var rock := MeshInstance3D.new()
-		var rock_mesh := SphereMesh.new()
-		rock_mesh.radius = randf_range(0.7, 2.0)
-		rock_mesh.height = rock_mesh.radius * 1.5
-		rock.mesh = rock_mesh
-		rock.position = Vector3(randf_range(-28.0, 28.0), rock_mesh.radius * 0.35, randf_range(-28.0, 28.0))
-		var rock_material := StandardMaterial3D.new()
-		rock_material.albedo_color = Color("#53645d")
-		rock_material.roughness = 1.0
-		rock.material_override = rock_material
-		add_child(rock)
+	if is_underworld:
+		# Fengdu gate: paired stone pillars, lintel and cold soul lanterns.
+		var stone := Color("#494354")
+		_add_world_box("FengduGateLeft", Vector3(1.5, 8.0, 1.5), Vector3(-5.0, 4.0, -18.0), stone)
+		_add_world_box("FengduGateRight", Vector3(1.5, 8.0, 1.5), Vector3(5.0, 4.0, -18.0), stone)
+		_add_world_box("FengduGateLintel", Vector3(12.0, 1.6, 2.0), Vector3(0.0, 8.2, -18.0), Color("#62566d"))
+		_add_world_box("FengduGateTablet", Vector3(4.0, 2.0, 0.7), Vector3(0.0, 6.5, -16.8), Color("#30283d"))
+		for side in [-1.0, 1.0]:
+			var lantern_position := Vector3(side * 7.0, 2.1, -14.0)
+			_add_world_box("SoulLanternStone_" + str(side), Vector3(0.8, 2.2, 0.8), lantern_position, Color("#393344"))
+			var flame := MeshInstance3D.new()
+			flame.name = "SoulLanternFlame_" + str(side)
+			var flame_mesh := SphereMesh.new()
+			flame_mesh.radius = 0.34
+			flame_mesh.height = 0.9
+			flame.mesh = flame_mesh
+			flame.position = lantern_position + Vector3(0.0, 1.45, 0.0)
+			var flame_material := StandardMaterial3D.new()
+			flame_material.albedo_color = Color("#82a8d8")
+			flame_material.emission_enabled = true
+			flame_material.emission = Color("#537fc4")
+			flame_material.emission_energy_multiplier = 2.4
+			flame.material_override = flame_material
+			add_child(flame)
+		# Broken boundary steles give the surrounding plain a recognizable underworld silhouette.
+		for i in range(8):
+			var x := -24.0 + float(i) * 7.0
+			var height := 2.8 + float(i % 3) * 0.8
+			_add_world_box("UnderworldStele_" + str(i), Vector3(0.9, height, 0.8), Vector3(x, height * 0.5, -31.0), Color("#373342"))
+	else:
+		for i in range(12):
+			var rock := MeshInstance3D.new()
+			var rock_mesh := SphereMesh.new()
+			rock_mesh.radius = randf_range(0.7, 2.0)
+			rock_mesh.height = rock_mesh.radius * 1.5
+			rock.mesh = rock_mesh
+			rock.position = Vector3(randf_range(-28.0, 28.0), rock_mesh.radius * 0.35, randf_range(-28.0, 28.0))
+			var rock_material := StandardMaterial3D.new()
+			rock_material.albedo_color = Color("#53645d")
+			rock_material.roughness = 1.0
+			rock.material_override = rock_material
+			add_child(rock)
 
 func _build_player() -> void:
 	local_player = HHPlayerController.new()
