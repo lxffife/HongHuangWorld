@@ -16,6 +16,8 @@ var (
 	ErrInvalid  = errors.New("invalid soul name")
 	ErrInvalidReward = errors.New("invalid soul reward")
 	ErrRewardSession = errors.New("soul reward session is not valid for this node")
+	ErrInsufficientExperience = errors.New("not enough soul experience for breakthrough")
+	ErrMaxRealm = errors.New("soul has reached the highest configured realm")
 )
 
 type Soul struct {
@@ -186,10 +188,7 @@ func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward 
  newExperience := currentExperience + reward.Experience
  var realmID, realmName string
  err = tx.QueryRowContext(ctx,
-  `UPDATE soul_progression
-   SET experience = $1,
-       realm_id = (SELECT id FROM soul_realm_definitions WHERE required_experience <= $1 ORDER BY realm_order DESC LIMIT 1),
-       updated_at = now()
+  `UPDATE soul_progression SET experience = $1, updated_at = now()
    WHERE soul_id = $2 RETURNING realm_id`, newExperience, soulID).Scan(&realmID)
  if err != nil { return RewardResult{}, fmt.Errorf("apply soul experience: %w", err) }
  if err := tx.QueryRowContext(ctx, `SELECT name FROM soul_realm_definitions WHERE id=$1`, realmID).Scan(&realmName); err != nil {
@@ -212,4 +211,39 @@ func validUUID(value string) bool {
   if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) { return false }
  }
  return true
+}
+
+ 
+type BreakthroughResult struct {
+ RealmID string `json:"realm_id"`
+ RealmName string `json:"realm_name"`
+ RealmOrder int `json:"realm_order"`
+}
+func (s *Service) Breakthrough(ctx context.Context, accountID string) (BreakthroughResult, error) {
+ tx, err := s.db.BeginTx(ctx, nil)
+ if err != nil { return BreakthroughResult{}, fmt.Errorf("begin soul breakthrough: %w", err) }
+ defer tx.Rollback()
+ var currentID string
+ var currentOrder int
+ var experience, nextRequired int64
+ var nextID, nextName string
+ err = tx.QueryRowContext(ctx,
+  `SELECT current.id, current.realm_order, progression.experience,
+          next_realm.id, next_realm.name, next_realm.required_experience
+   FROM souls soul
+   JOIN soul_progression progression ON progression.soul_id = soul.id
+   JOIN soul_realm_definitions current ON current.id = progression.realm_id
+   LEFT JOIN soul_realm_definitions next_realm ON next_realm.realm_order = current.realm_order + 1
+   WHERE soul.account_id = $1
+   FOR UPDATE OF soul, progression`, accountID,
+ ).Scan(&currentID, &currentOrder, &experience, &nextID, &nextName, &nextRequired)
+ if errors.Is(err, sql.ErrNoRows) { return BreakthroughResult{}, ErrNotFound }
+ if err != nil { return BreakthroughResult{}, fmt.Errorf("load soul breakthrough state: %w", err) }
+ if nextID == "" { return BreakthroughResult{}, ErrMaxRealm }
+ if experience < nextRequired { return BreakthroughResult{}, ErrInsufficientExperience }
+ if _, err := tx.ExecContext(ctx, `UPDATE soul_progression SET realm_id=$1, updated_at=now() WHERE soul_id=(SELECT id FROM souls WHERE account_id=$2)`, nextID, accountID); err != nil {
+  return BreakthroughResult{}, fmt.Errorf("advance soul realm: %w", err)
+ }
+ if err := tx.Commit(); err != nil { return BreakthroughResult{}, fmt.Errorf("commit soul breakthrough: %w", err) }
+ return BreakthroughResult{RealmID:nextID, RealmName:nextName, RealmOrder:currentOrder+1}, nil
 }
