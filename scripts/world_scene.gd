@@ -1212,6 +1212,9 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 					if bool(trial.get("reward_granted", false)):
 						lines.append("奖励已入账：" + str(trial.get("reward_experience", 0)) + " 灵魂经验")
 			npc_dialogue_label.text = "\n".join(PackedStringArray(lines))
+			npc_status_label.text = "任务进度来自中心服；击败怪物后会自动更新。"
+			npc_trial_button.visible = true
+			npc_eligibility_button.visible = false
 			npc_soul_button.visible = true
 			npc_soul_breakthrough_button.visible = false
 			npc_panel.visible = true
@@ -1228,6 +1231,8 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 				npc_dialogue_label.text = "当前灵魂经验：" + str(experience) + "\n下一境界：" + next_name + "\n突破所需累计经验：" + str(next_required)
 				npc_soul_breakthrough_button.visible = experience >= int(next_required)
 			npc_status_label.text = "灵魂经验跨越轮回保留；达到门槛后仍需主动突破。"
+			npc_trial_button.visible = false
+			npc_eligibility_button.visible = false
 			npc_soul_button.visible = true
 			npc_panel.visible = true
 		"soul_breakthrough":
@@ -1235,6 +1240,8 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_dialogue_label.text = "灵魂境界突破成功：" + str(data.get("realm_name", "新境界"))
 			npc_status_label.text = "境界已由中心服更新，正在刷新灵魂经验。"
 			npc_soul_breakthrough_button.visible = false
+			npc_trial_button.visible = false
+			npc_eligibility_button.visible = false
 			npc_panel.visible = true
 			_request_soul_progression()
 		"eligibility":
@@ -1245,6 +1252,10 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_title_label.text = "轮回殿 · 投胎资格"
 			npc_dialogue_label.text = "当前灵魂境界：" + realm + "\n要求灵魂境界：" + required + "\n引魂试炼：" + ("已完成" if completed else "尚未完成")
 			npc_status_label.text = "已满足首次投胎条件，可以申请创建新肉身。" if bool(data.get("eligible", false)) else "尚未满足条件：" + ", ".join(PackedStringArray(reasons))
+			npc_trial_button.visible = false
+			npc_eligibility_button.visible = true
+			npc_soul_button.visible = true
+			npc_soul_breakthrough_button.visible = false
 			npc_panel.visible = true
 
 func _render_world_npcs() -> void:
