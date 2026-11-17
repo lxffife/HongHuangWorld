@@ -628,6 +628,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			compact_hud_panel.visible = hud_visible
 		if is_instance_valid(details_toggle_button):
 			details_toggle_button.visible = hud_visible
+		if is_instance_valid(vitals_panel):
+			vitals_panel.visible = hud_visible
+		if is_instance_valid(input_debug_panel):
+			input_debug_panel.visible = hud_visible
+		if is_instance_valid(notification_panel) and not hud_visible:
+			notification_panel.visible = false
 		get_viewport().set_input_as_handled()
 		return
 	if not (event is InputEventKey) or not event.pressed or event.echo:
