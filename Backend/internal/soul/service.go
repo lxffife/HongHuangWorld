@@ -132,6 +132,10 @@ type RewardResult struct {
  Experience int64 `json:"experience"`
  RealmID string `json:"realm_id"`
  RealmName string `json:"realm_name"`
+ TrialProgress int `json:"trial_progress,omitempty"`
+ TrialTarget int `json:"trial_target,omitempty"`
+ TrialCompleted bool `json:"trial_completed,omitempty"`
+ TrialBonusExperience int64 `json:"trial_bonus_experience,omitempty"`
 }
 
 // ApplyServerReward only accepts rewards from the node that hosted the character session.
@@ -192,11 +196,64 @@ func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward 
   `UPDATE soul_progression SET experience = $1, updated_at = now()
    WHERE soul_id = $2 RETURNING realm_id`, newExperience, soulID).Scan(&realmID)
  if err != nil { return RewardResult{}, fmt.Errorf("apply soul experience: %w", err) }
+ result := RewardResult{Applied:true, Experience:newExperience, RealmID:realmID}
+ if reward.Source == "underworld_trial:monster_hunt" {
+  if _, err := tx.ExecContext(ctx,
+   `INSERT INTO soul_trial_progress (soul_id,trial_id)
+    SELECT $1,id FROM soul_trial_definitions WHERE id='fengdu_first_exorcism' AND enabled
+    ON CONFLICT (soul_id,trial_id) DO NOTHING`, soulID); err != nil {
+   return RewardResult{}, fmt.Errorf("initialize underworld trial progress: %w", err)
+  }
+  var completed bool
+  var progress, target int
+  var bonus int64
+  trialErr := tx.QueryRowContext(ctx,
+   `UPDATE soul_trial_progress p
+    SET progress_count = LEAST(p.progress_count + 1, definition.target_count),
+        completed_at = CASE WHEN p.progress_count + 1 >= definition.target_count THEN now() ELSE NULL END,
+        updated_at = now()
+    FROM soul_trial_definitions definition
+    WHERE p.soul_id=$1 AND p.trial_id=definition.id
+      AND definition.id='fengdu_first_exorcism' AND definition.enabled
+      AND p.completed_at IS NULL
+    RETURNING p.progress_count, definition.target_count, definition.reward_experience,
+              (p.completed_at IS NOT NULL)`, soulID,
+  ).Scan(&progress,&target,&bonus,&completed)
+  if trialErr != nil && !errors.Is(trialErr,sql.ErrNoRows) {
+   return RewardResult{}, fmt.Errorf("advance underworld trial: %w",trialErr)
+  }
+  if trialErr == nil {
+   result.TrialProgress=progress
+   result.TrialTarget=target
+   result.TrialCompleted=completed
+   if completed {
+    if newExperience > 9223372036854775807-bonus { return RewardResult{}, ErrInvalidReward }
+    if _,err:=tx.ExecContext(ctx,
+     `INSERT INTO soul_reward_events (soul_id,event_id,experience,source)
+      VALUES ($1,gen_random_uuid(),$2,'trial_completion')`,soulID,bonus); err!=nil {
+     return RewardResult{},fmt.Errorf("record soul trial bonus: %w",err)
+    }
+    if _,err:=tx.ExecContext(ctx,
+     `UPDATE soul_progression SET experience=experience+$1,updated_at=now() WHERE soul_id=$2`,bonus,soulID);err!=nil{
+     return RewardResult{},fmt.Errorf("grant soul trial bonus: %w",err)
+    }
+    if _,err:=tx.ExecContext(ctx,
+     `UPDATE soul_trial_progress SET reward_granted_at=now(),updated_at=now()
+      WHERE soul_id=$1 AND trial_id='fengdu_first_exorcism' AND reward_granted_at IS NULL`,soulID);err!=nil{
+     return RewardResult{},fmt.Errorf("mark soul trial reward: %w",err)
+    }
+    newExperience += bonus
+    result.Experience = newExperience
+    result.TrialBonusExperience = bonus
+   }
+  }
+ }
  if err := tx.QueryRowContext(ctx, `SELECT name FROM soul_realm_definitions WHERE id=$1`, realmID).Scan(&realmName); err != nil {
   return RewardResult{}, fmt.Errorf("load soul realm after reward: %w", err)
  }
  if err := tx.Commit(); err != nil { return RewardResult{}, fmt.Errorf("commit soul reward: %w", err) }
- return RewardResult{Applied:true, Experience:newExperience, RealmID:realmID, RealmName:realmName}, nil
+ result.RealmName = realmName
+ return result, nil
 }
 func validSource(source string) bool {
  if len(source) < 2 || len(source) > 48 { return false }
@@ -248,4 +305,49 @@ func (s *Service) Breakthrough(ctx context.Context, accountID string) (Breakthro
  }
  if err := tx.Commit(); err != nil { return BreakthroughResult{}, fmt.Errorf("commit soul breakthrough: %w", err) }
  return BreakthroughResult{RealmID:nextID.String, RealmName:nextName.String, RealmOrder:currentOrder+1}, nil
+}
+
+ 
+type Trial struct {
+ ID string `json:"id"`
+ Name string `json:"name"`
+ Description string `json:"description"`
+ Progress int `json:"progress"`
+ Target int `json:"target"`
+ RewardExperience int64 `json:"reward_experience"`
+ Completed bool `json:"completed"`
+ RewardGranted bool `json:"reward_granted"`
+}
+func (s *Service) Trials(ctx context.Context, accountID string) ([]Trial,error) {
+ rows,err:=s.db.QueryContext(ctx,
+  `SELECT definition.id,definition.name,definition.description,
+          COALESCE(progress.progress_count,0),definition.target_count,
+          definition.reward_experience,
+          COALESCE(progress.completed_at IS NOT NULL,FALSE),
+          COALESCE(progress.reward_granted_at IS NOT NULL,FALSE)
+   FROM souls soul CROSS JOIN soul_trial_definitions definition
+   LEFT JOIN soul_trial_progress progress
+     ON progress.soul_id=soul.id AND progress.trial_id=definition.id
+   WHERE soul.account_id=$1 AND definition.enabled
+   ORDER BY definition.id`,accountID)
+ if err!=nil{return nil,fmt.Errorf("query soul trials: %w",err)}
+ defer rows.Close()
+ result:=make([]Trial,0)
+ for rows.Next(){
+  var item Trial
+  if err:=rows.Scan(&item.ID,&item.Name,&item.Description,&item.Progress,&item.Target,
+    &item.RewardExperience,&item.Completed,&item.RewardGranted);err!=nil{
+   return nil,fmt.Errorf("scan soul trial: %w",err)
+  }
+  result=append(result,item)
+ }
+ if err:=rows.Err();err!=nil{return nil,fmt.Errorf("iterate soul trials: %w",err)}
+ if len(result)==0 {
+  var exists bool
+  if err:=s.db.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM souls WHERE account_id=$1)`,accountID).Scan(&exists);err!=nil{
+   return nil,fmt.Errorf("check soul for trials: %w",err)
+  }
+  if !exists{return nil,ErrNotFound}
+ }
+ return result,nil
 }
