@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"errors"
+	"crypto/subtle"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -14,6 +15,7 @@ type soulHandlers struct {
 	authService *auth.Service
 	soulService *soul.Service
 	logger      *slog.Logger
+	apiKey      string
 }
 
 type createSoulRequest struct {
@@ -91,4 +93,32 @@ func (h *soulHandlers) progression(w http.ResponseWriter, r *http.Request) {
   return
  }
  writeJSON(w, http.StatusOK, progression)
+}
+
+ 
+func (h *soulHandlers) applyReward(w http.ResponseWriter, r *http.Request) {
+ providedKey := r.Header.Get("X-World-Server-Key")
+ if h.apiKey == "" || len(providedKey) != len(h.apiKey) ||
+  subtle.ConstantTimeCompare([]byte(providedKey), []byte(h.apiKey)) != 1 {
+  http.Error(w, "unauthorized", http.StatusUnauthorized)
+  return
+ }
+ nodeKey := strings.TrimSpace(r.Header.Get("X-World-Server-Node"))
+ var reward soul.Reward
+ if err := decodeJSON(w, r, &reward); err != nil {
+  http.Error(w, "invalid request body", http.StatusBadRequest)
+  return
+ }
+ result, err := h.soulService.ApplyServerReward(r.Context(), nodeKey, reward)
+ switch {
+ case err == nil:
+  writeJSON(w, http.StatusOK, result)
+ case errors.Is(err, soul.ErrInvalidReward):
+  http.Error(w, "invalid soul reward payload", http.StatusBadRequest)
+ case errors.Is(err, soul.ErrRewardSession):
+  http.Error(w, "soul reward session is not valid for this node", http.StatusConflict)
+ default:
+  h.logger.Error("apply soul reward failed", "error", err)
+  http.Error(w, "internal server error", http.StatusInternalServerError)
+ }
 }
