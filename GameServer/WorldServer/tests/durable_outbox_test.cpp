@@ -3,6 +3,9 @@
 #include <cassert>
 #include <cstdio>
 #include <string>
+#include <atomic>
+#include <thread>
+#include <vector>
 
 namespace {
 void remove_database(const std::string& path) {
@@ -57,5 +60,31 @@ int main() {
     }
 
     remove_database(path);
+
+    // Two independent connections must still respect one shared capacity limit.
+    const std::string concurrent_path = "world_outbox_concurrent_test.sqlite";
+    remove_database(concurrent_path);
+    {
+        honghuang::persistence::DurableOutbox first_box(concurrent_path, 2);
+        honghuang::persistence::DurableOutbox second_box(concurrent_path, 2);
+        std::atomic<int> accepted{0};
+        std::vector<std::thread> writers;
+        for (int i = 0; i < 8; ++i) {
+            writers.emplace_back([&, i] {
+                std::string error;
+                auto& box = (i % 2 == 0) ? first_box : second_box;
+                const bool stored = box.enqueue({
+                    "parallel-" + std::to_string(i), "character_reward",
+                    "{\\"xp\\":1}", 0, 0, 400 + i, {}
+                }, error);
+                if (stored) ++accepted;
+            });
+        }
+        for (auto& writer : writers) writer.join();
+        std::string error;
+        assert(accepted == 2);
+        assert(first_box.pending_count(error) == 2);
+    }
+    remove_database(concurrent_path);
     return 0;
 }
