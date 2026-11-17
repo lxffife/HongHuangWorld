@@ -193,7 +193,7 @@ func (s *Service) ChooseFate(ctx context.Context, accountID, npcID, choiceID str
 	err = tx.QueryRowContext(ctx,
 		`INSERT INTO soul_fate_choice_claims (soul_id,npc_id,choice_id,fate_event_id)
 		 VALUES ($1,$2,$3,gen_random_uuid())
-		 ON CONFLICT (soul_id,npc_id,choice_id) DO NOTHING
+		 ON CONFLICT (soul_id,npc_id) DO NOTHING
 		 RETURNING fate_event_id::text`, soulID, npcID, choiceID).Scan(&fateEventID)
 	if errors.Is(err, sql.ErrNoRows) { return FateChoiceResult{}, ErrChoiceResolved }
 	if err != nil { return FateChoiceResult{}, fmt.Errorf("claim NPC fate choice: %w", err) }
