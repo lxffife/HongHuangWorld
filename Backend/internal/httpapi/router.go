@@ -68,6 +68,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/characters/first-life", characters.createFirstLife)
 		mux.HandleFunc("POST /api/v1/characters/current/reincarnate", characters.reincarnate)
 		mux.HandleFunc("GET /api/v1/characters/current", characters.current)
+		mux.HandleFunc("GET /api/v1/souls/current/lives", characters.history)
 		mux.HandleFunc("GET /api/v1/characters/current/status", characters.currentStatus)
 		mux.HandleFunc("POST /api/v1/characters/current/breakthrough", characters.breakthrough)
 		mux.HandleFunc("POST /api/v1/characters/current/bloodlines/awaken", characters.awakenBloodline)
