@@ -69,7 +69,7 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 ## 本地运行
 
 1. 按 `Deployment/README.md` 启动 PostgreSQL。
-2. 按编号执行 `Database/migrations/` 中全部 `.up.sql` 迁移；当前需要依次执行 `000001`、`000002`、`000003` 和 `000004`。
+2. 按编号执行 `Database/migrations/` 中全部 `.up.sql` 迁移；当前需依次执行 `000001` 至 `000009`（每个编号只执行 `.up.sql` 一次）。
 3. 在 `Deployment/.env` 配置 `DATABASE_URL` 和 `HTTP_ADDR`。
 4. Windows PowerShell 执行 `../Deployment/start-backend.ps1`；或在本目录执行 `go test ./...`、`go run ./cmd/api`（需先设置环境变量）。
 
