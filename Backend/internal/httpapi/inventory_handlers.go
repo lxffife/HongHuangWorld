@@ -99,6 +99,7 @@ func (h *inventoryHandlers) pickupDrop(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, inventory.ErrInventoryFull): http.Error(w, "inventory stack is full", http.StatusConflict)
 	case errors.Is(err, inventory.ErrCharacterInWorld): http.Error(w, "leave the world before changing equipment; re-enter to apply the new combat stats", http.StatusConflict)
 	case errors.Is(err, inventory.ErrCharacterInWorld): http.Error(w, "leave the world before changing equipment; re-enter to apply the new combat stats", http.StatusConflict)
+	case errors.Is(err, inventory.ErrCharacterInWorld): http.Error(w, "leave the world before changing equipment; re-enter to apply the new combat stats", http.StatusConflict)
 	default: h.logger.Error("pickup ground drop failed", "error", err); http.Error(w, "internal server error", http.StatusInternalServerError)
 	}
 }
