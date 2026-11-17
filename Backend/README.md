@@ -19,6 +19,7 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 - `GET /api/v1/worlds`：读取已启用的世界目录。
 - `GET /api/v1/worlds/current/npcs`：按当前角色活跃世界会话读取该世界启用的 NPC 目录和交互配置。
 - `POST /api/v1/worlds/current/npcs/interact`：与当前世界 NPC 交互；中心服根据当前活跃会话和已保存角色坐标校验世界归属及交互半径，不接受客户端自报坐标。
+- `POST /api/v1/worlds/current/npcs/choose`：提交 NPC 因果分支 ID；中心服重新校验会话、世界和交互距离，从 NPC 数据配置读取选项，并由可信规则计算功德/业力。每个灵魂对同一 NPC 只能作出一次选择，幂等与数值更新在同一事务完成。
 - `GET /api/v1/cultivation/systems`：读取种族、默认修炼体系、各自境界和跨种族实力参考层级。
 - `GET /api/v1/cultivation/race-growth`：读取种族五维成长权重（基点总和 10000），用于后续服务端属性成长计算。
 - `GET /api/v1/cultivation/bloodlines`：读取种族血脉、品阶、基础纯度和属性修正；角色可持有多条血脉，最多一条主血脉。
@@ -79,7 +80,7 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 ## 本地运行
 
 1. 按 `Deployment/README.md` 启动 PostgreSQL。
-2. 按编号执行 `Database/migrations/` 中全部 `.up.sql` 迁移；当前需依次执行 `000001` 至 `000014`（每个编号只执行 `.up.sql` 一次）。
+2. 按编号执行 `Database/migrations/` 中全部 `.up.sql` 迁移；当前需依次执行 `000001` 至 `000015`（每个编号只执行 `.up.sql` 一次）。
 3. 在 `Deployment/.env` 配置 `DATABASE_URL` 和 `HTTP_ADDR`。
 4. Windows PowerShell 执行 `../Deployment/start-backend.ps1`；或在本目录执行 `go test ./...`、`go run ./cmd/api`（需先设置环境变量）。
 
