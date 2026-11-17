@@ -226,22 +226,15 @@ func (s *Service) SavePosition(ctx context.Context, input SessionSnapshot) error
 	if input.Health != nil && *input.Health == 0 {
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO character_death_events (character_id, session_id, world_id, death_reason)
-			 SELECT ws.character_id, ws.id, ws.world_id, 'combat'
+			 SELECT ws.character_id, ws.id, c.world_id, 'combat'
 			 FROM world_sessions ws
+			 JOIN characters c ON c.id = ws.character_id
 			 WHERE ws.id = $1 AND ws.character_id = $2
 			 ON CONFLICT (session_id, character_id) DO NOTHING`,
 			input.SessionID, input.CharacterID,
-		); err != nil { return fmt.Errorf("record character death: %w", err) }
-	}
-	if input.Health != nil && *input.Health == 0 {
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO character_death_events (character_id, session_id, world_id, death_reason)
-			 SELECT ws.character_id, ws.id, ws.world_id, 'combat'
-			 FROM world_sessions ws
-			 WHERE ws.id = $1 AND ws.character_id = $2
-			 ON CONFLICT (session_id, character_id) DO NOTHING`,
-			input.SessionID, input.CharacterID,
-		); err != nil { return fmt.Errorf("record character death: %w", err) }
+		); err != nil {
+			return fmt.Errorf("record character death: %w", err)
+		}
 	}
 	if input.Health != nil {
 		result, err := tx.ExecContext(ctx,
@@ -320,6 +313,19 @@ func (s *Service) SaveAndClose(ctx context.Context, input SessionSnapshot) error
 		return ErrInvalidSessionSnapshot
 	}
 
+	if input.Health != nil && *input.Health == 0 {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO character_death_events (character_id, session_id, world_id, death_reason)
+			 SELECT ws.character_id, ws.id, c.world_id, 'combat'
+			 FROM world_sessions ws
+			 JOIN characters c ON c.id = ws.character_id
+			 WHERE ws.id = $1 AND ws.character_id = $2
+			 ON CONFLICT (session_id, character_id) DO NOTHING`,
+			input.SessionID, input.CharacterID,
+		); err != nil {
+			return fmt.Errorf("record final character death: %w", err)
+		}
+	}
 	if input.Health != nil {
 		result, err := tx.ExecContext(ctx,
 			`UPDATE character_attributes SET health = LEAST($2, max_health), updated_at = now()
