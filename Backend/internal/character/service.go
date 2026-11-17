@@ -41,9 +41,6 @@ type Character struct {
 	FateTraitID string `json:"fate_trait_id,omitempty"`
 	FateTraitName string `json:"fate_trait_name,omitempty"`
 	FateTraitDescription string `json:"fate_trait_description,omitempty"`
-	FateTraitID string `json:"fate_trait_id,omitempty"`
-	FateTraitName string `json:"fate_trait_name,omitempty"`
-	FateTraitDescription string `json:"fate_trait_description,omitempty"`
 }
 
 type Attributes struct {
@@ -237,10 +234,13 @@ func (s *Service) Current(ctx context.Context, accountID string) (Character, err
 	var result Character
 	var race sql.NullString
 	err := s.db.QueryRowContext(ctx,
-		`SELECT c.id::text, c.soul_id::text, c.life_index, c.world_id, c.name, c.race_id, c.level, c.status
+		`SELECT c.id::text, c.soul_id::text, c.life_index, c.world_id, c.name, c.race_id, c.level, c.status,
+		        COALESCE(trait.trait_id, ''), COALESCE(trait.trait_name, ''), COALESCE(trait.description, '')
 		 FROM souls s JOIN characters c ON c.id = s.current_character_id
+		 LEFT JOIN character_fate_traits trait ON trait.character_id = c.id
 		 WHERE s.account_id = $1`, accountID,
-	).Scan(&result.ID, &result.SoulID, &result.LifeIndex, &result.WorldID, &result.Name, &race, &result.Level, &result.Status)
+	).Scan(&result.ID, &result.SoulID, &result.LifeIndex, &result.WorldID, &result.Name, &race, &result.Level, &result.Status,
+		&result.FateTraitID, &result.FateTraitName, &result.FateTraitDescription)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Character{}, sql.ErrNoRows
 	}
@@ -273,6 +273,9 @@ type LifeRecord struct {
 	FateAspect string `json:"fate_aspect,omitempty"`
 	FateKarma int64 `json:"fate_karma,omitempty"`
 	FateMerit int64 `json:"fate_merit,omitempty"`
+	FateTraitID string `json:"fate_trait_id,omitempty"`
+	FateTraitName string `json:"fate_trait_name,omitempty"`
+	FateTraitDescription string `json:"fate_trait_description,omitempty"`
 }
 
 // History returns every physical life belonging to the authenticated soul.
