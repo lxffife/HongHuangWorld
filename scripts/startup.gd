@@ -36,6 +36,7 @@ var right_info_label: Label
 var reincarnation_name_input: LineEdit
 var reincarnation_race_select: OptionButton
 var reincarnation_route_select: OptionButton
+var reincarnation_route_label: Label
 var reincarnation_routes: Array = []
 var reincarnation_status_label: Label
 var reincarnation_check_button: Button
@@ -230,9 +231,9 @@ func _build_reincarnation_ui() -> void:
 	reincarnation_race_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	reincarnation_race_select.item_selected.connect(_on_reincarnation_race_selected)
 	content_box.add_child(reincarnation_race_select)
-	var route_label := Label.new()
-	route_label.text = "选择出生路线（由中心服配置）"
-	content_box.add_child(route_label)
+	reincarnation_route_label = Label.new()
+	reincarnation_route_label.text = "选择出生路线（由中心服配置）"
+	content_box.add_child(reincarnation_route_label)
 	reincarnation_route_select = OptionButton.new()
 	reincarnation_route_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content_box.add_child(reincarnation_route_select)
@@ -250,7 +251,7 @@ func _build_reincarnation_ui() -> void:
 	reincarnation_confirm.dialog_text = "此操作不可撤销：当前肉身将归档为前世，并为同一灵魂创建新的肉身。灵魂经验、功德、业力会保留。是否继续？"
 	reincarnation_confirm.confirmed.connect(_submit_reincarnation)
 	add_child(reincarnation_confirm)
-	for control in [title, reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, route_label, reincarnation_route_select, reincarnation_check_button, reincarnation_submit_button]:
+	for control in [title, reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_route_label, reincarnation_route_select, reincarnation_check_button, reincarnation_submit_button]:
 		control.hide()
 	life_history_title = Label.new()
 	life_history_title.text = "灵魂历世档案"
@@ -717,7 +718,7 @@ func _on_login_pressed() -> void:
 	}, false, "login")
 
 func _show_reincarnation_controls() -> void:
-	for control in [reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_route_select, reincarnation_check_button, reincarnation_submit_button, life_history_title, life_history_status, life_history_box, life_history_refresh_button, soul_memory_title, soul_memory_status, soul_memory_box, soul_memory_refresh_button, soul_fate_title, soul_fate_status, soul_fate_box, soul_fate_refresh_button]:
+	for control in [reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_route_label, reincarnation_route_select, reincarnation_check_button, reincarnation_submit_button, life_history_title, life_history_status, life_history_box, life_history_refresh_button, soul_memory_title, soul_memory_status, soul_memory_box, soul_memory_refresh_button, soul_fate_title, soul_fate_status, soul_fate_box, soul_fate_refresh_button]:
 		control.show()
 	reincarnation_name_input.text = ""
 	reincarnation_eligible = false
