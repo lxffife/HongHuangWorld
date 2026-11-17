@@ -687,12 +687,21 @@ struct EnetServer::Impl {
             honghuang::simulation::MonsterState state{x, z, health};
             monsters.push_back({std::move(definition), std::move(state), std::move(runtime_id), Clock::time_point{}});
         };
-        add_monster("wolf-001", "wilderness_wolf", "荒原狼", 3, 80.0F, 12.0F, 4.0F,
-                    2.8F, 10.0F, 24.0F, -12.0F, -8.0F);
-        add_monster("wolf-002", "wilderness_wolf", "荒原狼", 3, 80.0F, 12.0F, 4.0F,
-                    2.8F, 10.0F, 24.0F, 13.0F, -7.0F);
-        add_monster("wolf-003", "wilderness_wolf", "荒原狼", 3, 80.0F, 12.0F, 4.0F,
-                    2.8F, 10.0F, 24.0F, 0.0F, 17.0F);
+        if (config.world_id == "qingyun_human") {
+            add_monster("wolf-001", "wilderness_wolf", "荒原狼", 3, 80.0F, 12.0F, 4.0F,
+                        2.8F, 10.0F, 24.0F, -12.0F, -8.0F);
+            add_monster("wolf-002", "wilderness_wolf", "荒原狼", 3, 80.0F, 12.0F, 4.0F,
+                        2.8F, 10.0F, 24.0F, 13.0F, -7.0F);
+            add_monster("wolf-003", "wilderness_wolf", "荒原狼", 3, 80.0F, 12.0F, 4.0F,
+                        2.8F, 10.0F, 24.0F, 0.0F, 17.0F);
+        } else if (config.world_id == "underworld_fengdu") {
+            add_monster("wraith-001", "wandering_wraith", "游祟", 3, 80.0F, 12.0F, 4.0F,
+                        2.4F, 10.0F, 24.0F, -12.0F, -8.0F);
+            add_monster("wraith-002", "wandering_wraith", "游祟", 3, 80.0F, 12.0F, 4.0F,
+                        2.4F, 10.0F, 24.0F, 13.0F, -7.0F);
+            add_monster("wraith-003", "wandering_wraith", "游祟", 3, 80.0F, 12.0F, 4.0F,
+                        2.4F, 10.0F, 24.0F, 0.0F, 17.0F);
+        }
     }
 
 
