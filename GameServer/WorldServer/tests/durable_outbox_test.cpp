@@ -46,7 +46,7 @@ int main() {
         assert(!box.claim_due(200, error));
         auto retry = box.claim_due(250, error);
         assert(retry && retry->attempts == 1);
-        assert(box.enqueue({"pickup-1", "ground_drop_pickup", "{\\"drop_id\\":\\"d1\\",\\"request_session_id\\":\\"s1\\"}", 0, 0, 275, {}}, error));
+        assert(box.enqueue({"pickup-1", "ground_drop_pickup", "{\"drop_id\":\"d1\",\"request_session_id\":\"s1\"}", 0, 0, 275, {}}, error));
         auto pickup = box.claim_due(275, error);
         assert(pickup && pickup->event_type == "ground_drop_pickup");
         assert(box.schedule_retry("pickup-1", 1, 300, "session temporarily unavailable", error));
@@ -83,7 +83,7 @@ int main() {
                 auto& box = (i % 2 == 0) ? first_box : second_box;
                 const bool stored = box.enqueue({
                     "parallel-" + std::to_string(i), "character_reward",
-                    "{\\"xp\\":1}", 0, 0, 400 + i, {}
+                    "{\"xp\":1}", 0, 0, 400 + i, {}
                 }, error);
                 if (stored) ++accepted;
             });
