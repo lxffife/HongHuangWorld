@@ -87,7 +87,7 @@ jobs:
             - Package: NativeNet DLL only, not a complete game client.
 
             Place \`honghuang_native_net.dll\` in \`Client/HongHuangClient/bin/\` for the matching source version.
-          files: \${{ env.PACKAGE_NAME }}
+          files: ${{ env.PACKAGE_NAME }}
           draft: false
-          prerelease: \${{ inputs.prerelease }}
+          prerelease: ${{ inputs.prerelease }}
           fail_on_unmatched_files: true
