@@ -21,6 +21,7 @@ var (
 	ErrInsufficientCultivation = errors.New("not enough cultivation for breakthrough")
 	ErrMaxRealm = errors.New("character has reached the highest configured realm")
 	ErrReincarnationUnavailable = errors.New("reincarnation is not currently available")
+	ErrReincarnationRequirements = errors.New("soul has not met reincarnation requirements")
 )
 
 type Character struct {
@@ -989,6 +990,29 @@ func (s *Service) Reincarnate(ctx context.Context, accountID, name, raceID strin
 	}
 	if err != nil {
 		return Character{}, fmt.Errorf("load current life for reincarnation: %w", err)
+	}
+
+	// First reincarnation requires 聚灵境 and completion of the first Fengdu
+	// soul trial. The check is repeated here inside the creation transaction;
+	// the public eligibility endpoint is never trusted as authorization.
+	var soulRealmOrder int
+	var firstTrialCompleted bool
+	err = tx.QueryRowContext(ctx,
+		`SELECT realm.realm_order,
+		        EXISTS (SELECT 1 FROM soul_trial_progress trial
+		                WHERE trial.soul_id=progression.soul_id
+		                  AND trial.trial_id='fengdu_first_exorcism'
+		                  AND trial.completed_at IS NOT NULL)
+		 FROM soul_progression progression
+		 JOIN soul_realm_definitions realm ON realm.id=progression.realm_id
+		 WHERE progression.soul_id=$1
+		 FOR UPDATE OF progression`, soulID,
+	).Scan(&soulRealmOrder,&firstTrialCompleted)
+	if err != nil {
+		return Character{}, fmt.Errorf("check soul reincarnation requirements: %w", err)
+	}
+	if soulRealmOrder < 3 || !firstTrialCompleted {
+		return Character{}, ErrReincarnationRequirements
 	}
 
 	var activeSession bool
