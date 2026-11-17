@@ -59,6 +59,14 @@ func (h *inventoryHandlers) lootTable(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
 }
 
+
+func (h *inventoryHandlers) listDrops(w http.ResponseWriter, r *http.Request) {
+	nodeKey, ok := h.authorizeServer(w, r); if !ok { return }
+	drops, err := h.service.ListGroundDrops(r.Context(), nodeKey)
+	if err != nil { h.logger.Error("list persisted ground drops failed", "error", err); http.Error(w, "internal server error", http.StatusInternalServerError); return }
+	writeJSON(w, http.StatusOK, map[string]any{"drops": drops})
+}
+
 func (h *inventoryHandlers) createDrop(w http.ResponseWriter, r *http.Request) {
 	nodeKey, ok := h.authorizeServer(w, r); if !ok { return }
 	var request createGroundDropRequest
