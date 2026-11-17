@@ -682,6 +682,24 @@ struct EnetServer::Impl {
                             payload.at("cultivation").get<std::int64_t>(), event->attempts
                         };
                         delivered = deliver_character_reward(config, reward, status, delivery_error);
+                    } else if (event->event_type == "ground_drop_pickup") {
+                        is_drop = true;
+                        GroundDropRuntime pickup_drop{
+                            payload.at("drop_id").get<std::string>(),
+                            payload.at("drop_session_id").get<std::string>(),
+                            payload.at("character_id").get<std::string>(),
+                            payload.at("item_id").get<std::string>(),
+                            payload.at("quantity").get<int>(),
+                            payload.at("position_x").get<float>(),
+                            payload.at("position_z").get<float>(),
+                            Clock::now() + std::chrono::milliseconds(60000), true
+                        };
+                        DropJob pickup_job{
+                            true, pickup_drop, event->event_id,
+                            payload.at("request_session_id").get<std::string>(), event->attempts
+                        };
+                        delivered_drop = pickup_drop;
+                        delivered = deliver_ground_pickup(config, pickup_job, status, delivery_error);
                     } else if (event->event_type == "ground_drop_create") {
                         is_drop = true;
                         const auto expiry_ms = payload.at("expires_at_unix_ms").get<std::int64_t>();
@@ -710,10 +728,11 @@ struct EnetServer::Impl {
                     std::string mark_error;
                     if (!durable_outbox->mark_delivered(event->event_id, mark_error))
                         std::cerr << "Outbox delivered marker failed; idempotent replay expected: " << mark_error << '\n';
-                    if (is_drop && delivered_drop.expires_at > Clock::now()) {
+                    if (is_drop) {
                         std::lock_guard lock(drop_mutex);
+                        const bool pickup = event->event_type == "ground_drop_pickup";
                         completed_drop_jobs.push_back(DropJobResult{
-                            false, std::move(delivered_drop), event->event_id, true, {}
+                            pickup, std::move(delivered_drop), event->event_id, true, {}
                         });
                     }
                     continue;
@@ -1001,15 +1020,20 @@ struct EnetServer::Impl {
             }
             return true;
         }
-        {
-            std::lock_guard lock(drop_mutex);
-            if (drop_stop_requested || pending_drop_jobs.size() >= 8192) {
-                std::cerr << "Pickup queue full for drop " << job.drop.id << '\n';
-                return false;
-            }
-            pending_drop_jobs.push_back(std::move(job));
+        const auto expiry = wall_clock_ms() +
+            std::chrono::duration_cast<std::chrono::milliseconds>(job.drop.expires_at - Clock::now()).count();
+        const Json payload{
+            {"drop_id", job.drop.id}, {"drop_session_id", job.drop.session_id},
+            {"request_session_id", job.request_session_id},
+            {"character_id", job.drop.owner_character_id}, {"item_id", job.drop.item_id},
+            {"quantity", job.drop.quantity}, {"position_x", job.drop.x},
+            {"position_z", job.drop.z}, {"expires_at_unix_ms", expiry}
+        };
+        std::string error;
+        if (!enqueue_durable_event(job.event_id, "ground_drop_pickup", payload, error)) {
+            std::cerr << "Could not persist pickup settlement: " << error << '\n';
+            return false;
         }
-        drop_cv.notify_one();
         return true;
     }
 
