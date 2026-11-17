@@ -16,7 +16,7 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 - `GET /api/v1/cultivation/race-growth`：读取种族五维成长权重（基点总和 10000），用于后续服务端属性成长计算。
 - `GET /api/v1/cultivation/bloodlines`：读取种族血脉、品阶、基础纯度和属性修正；角色可持有多条血脉，最多一条主血脉。
 - `GET /api/v1/cultivation/techniques`：读取功法目录及各族适配度；跨族修炼必须有明确兼容记录，不从境界映射推断。
-- `POST /api/v1/characters/first-life`：为当前灵魂创建第一世肉身；根据 race_id 选择种族默认修炼体系，并在同一事务中初始化属性和修炼进度。未传种族时默认人族。
+- `POST /api/v1/characters/first-life`：为当前灵魂创建第一世肉身；根据 race_id 选择种族默认修炼体系，并在同一事务中初始化属性、修炼进度和新手背包（基础装备与丹药）。未传种族时默认人族。
 - `GET /api/v1/characters/current`：读取当前肉身角色。
 - `GET /api/v1/characters/current/inventory`：读取当前角色背包，包含物品分类、品质、堆叠上限、装备部位和基础属性。
 - `GET /api/v1/characters/current/equipment`：读取当前角色六个装备部位的已穿戴物品。
