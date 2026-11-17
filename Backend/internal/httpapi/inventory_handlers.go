@@ -175,3 +175,23 @@ func (h *inventoryHandlers) sessionCombatStats(w http.ResponseWriter, r *http.Re
 	default: h.logger.Error("load session combat stats failed","error",err); http.Error(w,"internal server error",http.StatusInternalServerError)
 	}
 }
+
+type useConsumableRequest struct {
+	RequestID string `json:"request_id"`
+	ItemID string `json:"item_id"`
+	Quantity int `json:"quantity"`
+}
+
+func (h *inventoryHandlers) useConsumable(w http.ResponseWriter,r *http.Request) {
+	account,ok:=h.authenticateAccount(w,r); if !ok { return }
+	var request useConsumableRequest
+	if err:=decodeJSON(w,r,&request); err!=nil { http.Error(w,"invalid request body",http.StatusBadRequest); return }
+	result,err:=h.service.UseConsumable(r.Context(),account.ID,inventory.ItemUseRequest{
+		RequestID:request.RequestID,ItemID:request.ItemID,Quantity:request.Quantity,
+	})
+	switch {
+	case err==nil: writeJSON(w,http.StatusOK,result)
+	case errors.Is(err,inventory.ErrInvalidRequest): http.Error(w,"invalid consumable request, item is not owned, or quantity is insufficient",http.StatusBadRequest)
+	default: h.logger.Error("use consumable failed","error",err); http.Error(w,"internal server error",http.StatusInternalServerError)
+	}
+}
