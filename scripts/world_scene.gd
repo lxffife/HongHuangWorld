@@ -1733,7 +1733,9 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 		"exploration_discover":
 			var merit_delta := int(data.get("merit_delta", 0))
 			var karma_delta := int(data.get("karma_delta", 0))
-			exploration_feedback = "已发现「" + str(data.get("name", "探索点")) + "」。功德 " + ("+" if merit_delta >= 0 else "") + str(merit_delta) + "，业力 " + ("+" if karma_delta >= 0 else "") + str(karma_delta) + "。记录已永久写入灵魂因果簿。"
+			var discovered_name := str(data.get("name", "探索点"))
+			exploration_feedback = "已发现「" + discovered_name + "」。功德 " + ("+" if merit_delta >= 0 else "") + str(merit_delta) + "，业力 " + ("+" if karma_delta >= 0 else "") + str(karma_delta) + "。记录已永久写入灵魂因果簿。"
+			_show_notification("探索发现 · " + discovered_name + "  已记入灵魂因果簿", 4.0)
 			_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_list")
 		"exploration_event":
 			var event_merit_delta := int(data.get("merit_delta", 0))
@@ -2288,7 +2290,7 @@ func _create_exploration_marker(point: Dictionary) -> void:
 	beacon.material_override = beacon_material
 	marker.add_child(beacon)
 	var title := Label3D.new()
-	title.text = ("已发现 · " if discovered else "探索 · ") + str(point.get("name", "未知地点"))
+	title.text = ("已发现 · " if discovered else "探索 · ") + str(point.get("name", "未知地点")) + ("" if discovered else "\nF · 靠近后调查")
 	title.position.y = 1.55
 	title.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	title.font_size = 28
