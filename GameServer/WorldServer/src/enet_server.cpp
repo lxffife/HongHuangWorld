@@ -63,6 +63,7 @@ struct PlayerState {
     Clock::time_point last_input_at{Clock::now()};
     Clock::time_point last_input_received_at{};
     Clock::time_point last_attack_at{};
+    Clock::time_point last_pickup_at{};
 };
 
 struct MonsterRuntime {
@@ -537,6 +538,14 @@ struct EnetServer::Impl {
     ENetHost* host{};
     std::unordered_map<ENetPeer*, PlayerState> players;
     std::vector<MonsterRuntime> monsters;
+    std::vector<LootEntry> loot_table;
+    std::vector<GroundDropRuntime> ground_drops;
+    std::mutex drop_mutex;
+    std::condition_variable drop_cv;
+    std::deque<DropJob> pending_drop_jobs;
+    std::deque<DropJobResult> completed_drop_jobs;
+    bool drop_stop_requested{false};
+    std::thread drop_thread;
     Clock::time_point last_snapshot{Clock::now()};
     std::atomic_size_t online_players{0};
     std::mutex heartbeat_mutex;
@@ -770,6 +779,162 @@ struct EnetServer::Impl {
         });
     }
 
+
+    void start_drop_worker() {
+        drop_stop_requested = false;
+        drop_thread = std::thread([this] {
+            while (true) {
+                DropJob job;
+                {
+                    std::unique_lock lock(drop_mutex);
+                    drop_cv.wait(lock, [this] { return drop_stop_requested || !pending_drop_jobs.empty(); });
+                    if (drop_stop_requested && pending_drop_jobs.empty()) return;
+                    job = std::move(pending_drop_jobs.front());
+                    pending_drop_jobs.pop_front();
+                }
+                long status = 0;
+                std::string error;
+                const bool delivered = job.pickup
+                    ? deliver_ground_pickup(config, job, status, error)
+                    : deliver_ground_drop(config, job.drop, status, error);
+                if (!delivered && (status == 0 || status >= 500) && job.attempts < 6) {
+                    ++job.attempts;
+                    const auto delay = std::chrono::seconds(
+                        std::min<unsigned int>(1U << std::min(job.attempts, 4U), 10U));
+                    std::cerr << "Inventory request will retry in " << delay.count()
+                              << "s: " << error << '\n';
+                    std::this_thread::sleep_for(delay);
+                    {
+                        std::lock_guard lock(drop_mutex);
+                        pending_drop_jobs.push_front(std::move(job));
+                    }
+                    drop_cv.notify_one();
+                    continue;
+                }
+                if (!delivered) std::cerr << "Inventory request failed permanently: " << error << '\n';
+                {
+                    std::lock_guard lock(drop_mutex);
+                    completed_drop_jobs.push_back(DropJobResult{
+                        job.pickup, std::move(job.drop), std::move(job.event_id), delivered, error
+                    });
+                }
+            }
+        });
+    }
+
+    void enqueue_drop_job(DropJob job) {
+        {
+            std::lock_guard lock(drop_mutex);
+            if (drop_stop_requested || pending_drop_jobs.size() >= 8192) {
+                std::cerr << "Inventory job queue full; request rejected for drop " << job.drop.id << '\n';
+                return;
+            }
+            pending_drop_jobs.push_back(std::move(job));
+        }
+        drop_cv.notify_one();
+    }
+
+    void stop_drop_worker() {
+        {
+            std::lock_guard lock(drop_mutex);
+            drop_stop_requested = true;
+        }
+        drop_cv.notify_all();
+        if (drop_thread.joinable()) drop_thread.join();
+    }
+
+    void drain_drop_results() {
+        std::deque<DropJobResult> completed;
+        {
+            std::lock_guard lock(drop_mutex);
+            completed.swap(completed_drop_jobs);
+        }
+        for (auto& result : completed) {
+            if (!result.pickup) {
+                if (result.success) ground_drops.push_back(std::move(result.drop));
+                continue;
+            }
+            auto drop = std::find_if(ground_drops.begin(), ground_drops.end(), [&](const GroundDropRuntime& value) {
+                return value.id == result.drop.id;
+            });
+            if (result.success) {
+                if (drop != ground_drops.end()) ground_drops.erase(drop);
+            } else if (drop != ground_drops.end()) {
+                drop->pickup_pending = false;
+            }
+            for (const auto& [peer, player] : players) {
+                if (player.character_id != result.drop.owner_character_id ||
+                    player.session_id != result.drop.session_id) continue;
+                send_json(peer, honghuang::protocol::MessageType::PickupEvent, Json{
+                    {"accepted", result.success}, {"drop_id", result.drop.id},
+                    {"item_id", result.drop.item_id}, {"quantity", result.drop.quantity},
+                    {"reason", result.success ? std::string{} : result.error}
+                });
+                break;
+            }
+        }
+    }
+
+    void handle_pickup(ENetPeer* peer, const Json& command) {
+        auto player_it = players.find(peer);
+        if (player_it == players.end()) return;
+        auto& player = player_it->second;
+        const auto now = Clock::now();
+        if (player.last_pickup_at.time_since_epoch().count() != 0 &&
+            now - player.last_pickup_at < std::chrono::milliseconds(250)) {
+            send_json(peer, honghuang::protocol::MessageType::PickupEvent,
+                      Json{{"accepted", false}, {"reason", "拾取太频繁，请稍后再试。"}});
+            return;
+        }
+        player.last_pickup_at = now;
+        const auto drop_id = command.value("drop_id", std::string{});
+        if (drop_id.empty() || drop_id.size() > 64) {
+            send_json(peer, honghuang::protocol::MessageType::PickupEvent,
+                      Json{{"accepted", false}, {"reason", "掉落物编号无效。"}});
+            return;
+        }
+        auto drop = std::find_if(ground_drops.begin(), ground_drops.end(), [&](const GroundDropRuntime& value) {
+            return value.id == drop_id;
+        });
+        if (drop == ground_drops.end() || drop->expires_at <= now || drop->pickup_pending) {
+            send_json(peer, honghuang::protocol::MessageType::PickupEvent,
+                      Json{{"accepted", false}, {"reason", "掉落物已消失或正在结算。"}});
+            return;
+        }
+        if (drop->owner_character_id != player.character_id || drop->session_id != player.session_id) {
+            send_json(peer, honghuang::protocol::MessageType::PickupEvent,
+                      Json{{"accepted", false}, {"reason", "这件掉落物不属于当前角色。"}});
+            return;
+        }
+        const double dx = static_cast<double>(drop->x) - player.x;
+        const double dz = static_cast<double>(drop->z) - player.z;
+        constexpr double pickup_range = 3.0;
+        if (dx * dx + dz * dz > pickup_range * pickup_range) {
+            send_json(peer, honghuang::protocol::MessageType::PickupEvent,
+                      Json{{"accepted", false}, {"reason", "距离掉落物太远。"}});
+            return;
+        }
+        drop->pickup_pending = true;
+        enqueue_drop_job(DropJob{true, *drop, make_event_uuid(), 0});
+        send_json(peer, honghuang::protocol::MessageType::PickupEvent,
+                  Json{{"accepted", false}, {"pending", true}, {"drop_id", drop_id}, {"reason", "正在结算拾取……"}});
+    }
+
+    void enqueue_monster_drops(const MonsterRuntime& monster, const PlayerState& player) {
+        static thread_local std::mt19937 generator(std::random_device{}());
+        std::uniform_int_distribution<int> chance(1, 10000);
+        for (const auto& entry : loot_table) {
+            if (entry.monster_id != monster.definition.id || chance(generator) > entry.drop_chance_bp) continue;
+            std::uniform_int_distribution<int> quantity(entry.min_quantity, entry.max_quantity);
+            GroundDropRuntime drop{
+                make_event_uuid(), player.session_id, player.character_id, entry.item_id,
+                quantity(generator), monster.state.x, monster.state.z,
+                Clock::now() + std::chrono::minutes(15), false
+            };
+            enqueue_drop_job(DropJob{false, std::move(drop), {}, 0});
+        }
+    }
+
     void handle_attack(ENetPeer* peer, const Json& command) {
         auto player_it = players.find(peer);
         if (player_it == players.end()) return;
@@ -830,6 +995,7 @@ struct EnetServer::Impl {
             enqueue_character_reward(CharacterRewardEvent{
                 make_event_uuid(), player.session_id, player.character_id, experience_reward, cultivation_reward, 0
             });
+            enqueue_monster_drops(*target, player);
         }
         const Json event{
             {"attacker_character_id", player.character_id},
@@ -887,6 +1053,21 @@ struct EnetServer::Impl {
                     {"x", monster.state.x}, {"y", 0.0F}, {"z", monster.state.z}
                 });
             }
+            for (const auto& drop : ground_drops) {
+                if (drop.owner_character_id != recipient.character_id ||
+                    drop.session_id != recipient.session_id || drop.expires_at <= Clock::now() ||
+                    !honghuang::simulation::within_interest_radius(
+                        drop.x, drop.z, recipient.x, recipient.z, kInterestRadius)) continue;
+                const auto item = std::find_if(loot_table.begin(), loot_table.end(), [&](const LootEntry& entry) {
+                    return entry.item_id == drop.item_id;
+                });
+                entities.push_back({
+                    {"entity_type", "drop"}, {"entity_id", drop.id}, {"item_id", drop.item_id},
+                    {"item_name", item == loot_table.end() ? drop.item_id : item->item_name},
+                    {"quality", item == loot_table.end() ? 1 : item->quality},
+                    {"quantity", drop.quantity}, {"x", drop.x}, {"y", 0.15F}, {"z", drop.z}
+                });
+            }
             const auto payload_text = Json{{"entities", std::move(entities)}}.dump();
             const auto* begin = reinterpret_cast<const std::uint8_t*>(payload_text.data());
             const auto frame = honghuang::protocol::encode_frame(
@@ -901,6 +1082,7 @@ struct EnetServer::Impl {
     }
 
     void tick_world() {
+        drain_drop_results();
         const auto now = Clock::now();
         const auto elapsed = now - last_snapshot;
         if (elapsed < kSnapshotInterval) return;
@@ -1001,6 +1183,13 @@ bool EnetServer::start() {
     impl_->start_heartbeat_worker(heartbeat_ok);
     impl_->start_persistence_worker();
     impl_->start_reward_worker();
+    std::string loot_error;
+    if (!load_loot_table(impl_->config, impl_->loot_table, loot_error)) {
+        std::cerr << "Monster loot table unavailable; drops disabled until restart: " << loot_error << '\n';
+    } else {
+        std::cout << "Loaded " << impl_->loot_table.size() << " monster loot entries\n";
+    }
+    impl_->start_drop_worker();
     impl_->last_persistence = Clock::now();
     std::cout << "WorldServer ENet listening on UDP " << impl_->config.port << '\n';
     return true;
@@ -1079,6 +1268,16 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                     honghuang::protocol::MessageType::HeartbeatAck, {});
                 auto* packet = enet_packet_create(response.data(), response.size(), ENET_PACKET_FLAG_RELIABLE);
                 if (packet != nullptr && enet_peer_send(event.peer, 0, packet) != 0) enet_packet_destroy(packet);
+            } else if (frame.type == honghuang::protocol::MessageType::PickupCommand &&
+                       impl_->players.contains(event.peer)) {
+                try {
+                    const std::string payload(frame.payload.begin(), frame.payload.end());
+                    const auto command = Json::parse(payload);
+                    impl_->handle_pickup(event.peer, command);
+                } catch (const std::exception&) {
+                    send_json(event.peer, honghuang::protocol::MessageType::PickupEvent,
+                              Json{{"accepted", false}, {"reason", "拾取请求格式无效。"}});
+                }
             } else if (frame.type == honghuang::protocol::MessageType::AttackCommand &&
                        impl_->players.contains(event.peer)) {
                 try {
@@ -1164,6 +1363,8 @@ void EnetServer::stop() {
         if (impl_->heartbeat_thread.joinable()) impl_->heartbeat_thread.join();
 
         impl_->stop_reward_worker();
+        impl_->stop_drop_worker();
+        impl_->drain_drop_results();
         impl_->stop_persistence_worker();
 
         std::string heartbeat_error;
