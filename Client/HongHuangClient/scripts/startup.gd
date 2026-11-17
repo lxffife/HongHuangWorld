@@ -470,10 +470,33 @@ func _update_reincarnation_route_description(_index: int) -> void:
 		reincarnation_route_description.text = "当前种族暂无可用出生路线。"
 		return
 	var selected_id := str(reincarnation_route_select.get_item_metadata(reincarnation_route_select.selected))
+	var selected_race_id := str(reincarnation_race_select.get_item_metadata(reincarnation_race_select.selected)) if reincarnation_race_select.item_count > 0 else ""
 	for route_variant in reincarnation_routes:
 		if route_variant is Dictionary and str(route_variant.get("id", "")) == selected_id:
 			var route: Dictionary = route_variant
-			reincarnation_route_description.text = str(route.get("description", "")) + "\n出生坐标由中心服分配，客户端不能修改。"
+			var danger := int(route.get("danger_level", 1))
+			var danger_text := "低" if danger <= 2 else ("中" if danger <= 4 else ("高" if danger <= 7 else "极高"))
+			var tags_value: Variant = route.get("resource_tags", [])
+			var tags: Array = tags_value if tags_value is Array else []
+			var points_value: Variant = route.get("exploration_points", [])
+			var points: Array = points_value if points_value is Array else []
+			var affinity_value: Variant = route.get("race_affinity", {})
+			var affinity: Dictionary = affinity_value if affinity_value is Dictionary else {}
+			var race_note := "暂无该种族适应性资料。"
+			if affinity.has(selected_race_id) and affinity[selected_race_id] is Dictionary:
+				var race_data: Dictionary = affinity[selected_race_id]
+				race_note = str(race_data.get("rating", "未知")) + " · " + str(race_data.get("description", ""))
+			var point_lines := PackedStringArray()
+			for point_value in points:
+				if point_value is Dictionary:
+					point_lines.append("· " + str(point_value.get("name", "未命名探索点")) + "：" + str(point_value.get("description", "")))
+			reincarnation_route_description.text = str(route.get("description", "")) \
+				+ "\n区域：" + str(route.get("region_name", "未知区域")) + " · 危险等级：" + danger_text + "（" + str(danger) + "/10）" \
+				+ "\n区域概况：" + str(route.get("region_description", "")) \
+				+ "\n资源：" + (", ".join(PackedStringArray(tags)) if not tags.is_empty() else "暂无资料") \
+				+ "\n种族适应性：" + race_note \
+				+ "\n探索点：\n" + ("\n".join(point_lines) if not point_lines.is_empty() else "暂无探索点资料") \
+				+ "\n出生坐标由中心服分配，客户端不能修改。"
 			return
 
 func _check_reincarnation_eligibility() -> void:
