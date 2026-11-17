@@ -695,7 +695,7 @@ func _show_item_details(item: Dictionary) -> void:
 	dialog.dialog_text = details
 	add_child(dialog)
 	dialog.confirmed.connect(dialog.queue_free)
-	dialog.canceled.connect(dialog.queue_free)
+	dialog.close_requested.connect(dialog.queue_free)
 	dialog.popup_centered(Vector2i(440, 300))
 
 func _request_nearest_monster_attack() -> void:
