@@ -39,6 +39,7 @@ powershell -ExecutionPolicy Bypass -File .\Client\NativeNet\build_windows.ps1
 - 已实现：Godot 原生 ENet 连接、ClientHello、ServerWelcome / ServerReject 解析和心跳；PlayerJoined / PlayerLeft 可靠事件用于及时更新远端玩家。
 - 已实现：青云人界第三人称测试场景、服务器权威水平移动、基础跳跃/重力、20Hz EntitySnapshot 和远端玩家占位实体。
 - 已实现：80 米玩家 AOI 快照过滤、WorldServer 每秒异步位置快照持久化、中心服孤儿会话回收，以及客户端断线后的手动重新连接。
+- 已实现：背包查看、六个装备部位展示、装备穿戴/卸下、丹药使用；装备属性由中心服目录配置并在进入世界时同步给 WorldServer。穿脱装备前需先离开世界，再重新进入刷新战斗属性。消耗品恢复生命/灵力已写入中心服角色属性，但在线世界服的即时生命/灵力同步仍待接入。
 - 当前收到 ServerWelcome 后进入可操作的程序化测试地图；这不是最终游戏地图或角色美术。
 - 不要使用 Godot 内置 MultiplayerAPI 直接连接当前 C++ 世界服；它的 RPC wire protocol 与项目自定义帧协议不同。
 
