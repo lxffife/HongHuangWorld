@@ -14,6 +14,7 @@
 - `000008_character_death_and_respawn` 增加角色死亡事件与复活记录。
 - `000009_reincarnation_history` 增加肉身轮回历史。
 - `000010_soul_progression` 增加跨世保留的灵魂境界、灵魂经验与幂等奖励事件。
+- `000011_soul_trials` 增加数据驱动的冥界灵魂试炼定义与每个灵魂的任务进度。
 
 ## 当前迁移顺序
 
@@ -30,6 +31,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000007_item_use_a
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000008_character_death_and_respawn.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000009_reincarnation_history.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000010_soul_progression.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000011_soul_trials.up.sql
 ```
 
 回滚时按相反顺序执行对应的 `.down.sql`。不要在已运行的生产库上重复执行非幂等迁移；后续接入迁移工具后，应由工具记录每个已应用版本，避免人工重复执行。
