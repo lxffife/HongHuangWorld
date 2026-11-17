@@ -1179,6 +1179,8 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 	var raw := body.get_string_from_utf8()
 	var parsed: Variant = JSON.parse_string(raw)
 	var data: Dictionary = parsed if parsed is Dictionary else {}
+	if context != "eligibility" and npc_reincarnation_leave_button != null:
+		npc_reincarnation_leave_button.visible = false
 	if result != HTTPRequest.RESULT_SUCCESS:
 		if npc_status_label != null:
 			npc_status_label.text = "NPC 服务连接失败，请检查中心服。"
