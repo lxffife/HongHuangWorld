@@ -25,6 +25,7 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 - `GET /api/v1/cultivation/techniques`：读取功法目录及各族适配度；跨族修炼必须有明确兼容记录，不从境界映射推断。
 - `POST /api/v1/characters/first-life`：为当前灵魂创建第一世肉身并固定在冥界·酆都苏醒；根据 race_id 选择种族默认修炼体系，并在同一事务中初始化属性、修炼进度和新手背包（基础装备与丹药）。未传种族时默认人族。
 - `GET /api/v1/characters/current`：读取当前肉身角色。
+- `GET /api/v1/souls/current/lives`：读取当前灵魂全部肉身历世档案，按世次倒序返回角色名、种族、出生世界、境界、等级、状态、创建时间及对应轮回事件；不会把前世肉身数据覆盖为当前肉身数据。
 - `GET /api/v1/characters/current/inventory`：读取当前角色背包，包含物品分类、品质、堆叠上限、装备部位和基础属性。
 - `GET /api/v1/characters/current/equipment`：读取当前角色六个装备部位的已穿戴物品。
 - `POST /api/v1/characters/current/equipment/equip` 与 `/unequip`：事务化穿戴/卸下装备；校验物品归属、装备部位和背包堆叠空间。角色仍处于活跃世界会话时拒绝变更，离开并重新进入世界后同步新战斗属性。
