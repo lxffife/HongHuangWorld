@@ -522,11 +522,8 @@ func (s *Service) UseConsumable(ctx context.Context, accountID string, request I
 		if errors.Is(err,sql.ErrNoRows) { return ItemUseResult{},ErrInvalidRequest }; return ItemUseResult{},fmt.Errorf("load consumable definition: %w",err)
 	}
 	if itemType!="consumable" { return ItemUseResult{},ErrInvalidRequest }
-	effect:=map[string]int{}
-	if len(raw)==0 || json.Unmarshal(raw,&effect)!=nil || len(effect)==0 || len(effect)>2 { return ItemUseResult{},ErrInvalidRequest }
-	heal:=effect["heal_health"]; restore:=effect["restore_mana"]
-	if heal<0 || restore<0 || heal>10000 || restore>10000 || (heal==0 && restore==0) { return ItemUseResult{},ErrInvalidRequest }
-	if len(effect)>0 { for key:=range effect { if key!="heal_health" && key!="restore_mana" { return ItemUseResult{},ErrInvalidRequest } } }
+	heal,restore,effect,parseErr:=parseConsumableEffect(raw)
+	if parseErr!=nil { return ItemUseResult{},ErrInvalidRequest }
 	var owned int
 	if err:=tx.QueryRowContext(ctx,`SELECT quantity FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2 FOR UPDATE`,characterID,request.ItemID).Scan(&owned); err!=nil {
 		if errors.Is(err,sql.ErrNoRows) { return ItemUseResult{},ErrInvalidRequest }; return ItemUseResult{},fmt.Errorf("lock consumable inventory stack: %w",err)
@@ -565,4 +562,14 @@ func (s *Service) UseConsumable(ctx context.Context, accountID string, request I
 	result.Applied=true
 	if err:=tx.Commit(); err!=nil { return ItemUseResult{},fmt.Errorf("commit consumable use: %w",err) }
 	return result,nil
+}
+
+func parseConsumableEffect(raw []byte) (int,int,map[string]int,error) {
+	effect:=map[string]int{}
+	if len(raw)==0 { return 0,0,nil,ErrInvalidRequest }
+	if err:=json.Unmarshal(raw,&effect); err!=nil || len(effect)==0 || len(effect)>2 { return 0,0,nil,ErrInvalidRequest }
+	heal,restore:=effect["heal_health"],effect["restore_mana"]
+	if heal<0 || restore<0 || heal>10000 || restore>10000 || (heal==0 && restore==0) { return 0,0,nil,ErrInvalidRequest }
+	for key:=range effect { if key!="heal_health" && key!="restore_mana" { return 0,0,nil,ErrInvalidRequest } }
+	return heal,restore,effect,nil
 }
