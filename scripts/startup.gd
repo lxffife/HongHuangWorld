@@ -48,6 +48,10 @@ var soul_memory_title: Label
 var soul_memory_status: Label
 var soul_memory_box: VBoxContainer
 var soul_memory_refresh_button: Button
+var soul_fate_title: Label
+var soul_fate_status: Label
+var soul_fate_box: VBoxContainer
+var soul_fate_refresh_button: Button
 
 func _ready() -> void:
 	_build_ui()
@@ -273,6 +277,64 @@ func _build_reincarnation_ui() -> void:
 	content_box.add_child(soul_memory_refresh_button)
 	for control in [soul_memory_title, soul_memory_status, soul_memory_box, soul_memory_refresh_button]:
 		control.hide()
+	soul_fate_title = Label.new()
+	soul_fate_title.text = "因果簿 · 功德与业力"
+	soul_fate_title.add_theme_font_size_override("font_size", 18)
+	content_box.add_child(soul_fate_title)
+	soul_fate_status = Label.new()
+	soul_fate_status.text = "功德与业力属于灵魂，轮回后不会清零。"
+	soul_fate_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	content_box.add_child(soul_fate_status)
+	soul_fate_box = VBoxContainer.new()
+	soul_fate_box.add_theme_constant_override("separation", 4)
+	content_box.add_child(soul_fate_box)
+	soul_fate_refresh_button = Button.new()
+	soul_fate_refresh_button.text = "查看因果记录"
+	soul_fate_refresh_button.pressed.connect(_request_soul_fate)
+	content_box.add_child(soul_fate_refresh_button)
+	for control in [soul_fate_title, soul_fate_status, soul_fate_box, soul_fate_refresh_button]:
+		control.hide()
+
+func _request_soul_fate() -> void:
+	if access_token.is_empty():
+		soul_fate_status.text = "请先登录后查看因果簿。"
+		return
+	soul_fate_status.text = "正在读取功德、业力与因果记录……"
+	_enqueue(HTTPClient.METHOD_GET, "/api/v1/souls/current/fate", {}, true, "soul_fate")
+
+func _render_soul_fate(data: Dictionary) -> void:
+	for child in soul_fate_box.get_children():
+		child.queue_free()
+	soul_fate_status.text = "累计功德：" + str(data.get("merit", 0)) + "    累计业力：" + str(data.get("karma", 0))
+	var events: Variant = data.get("recent_events", [])
+	if not (events is Array) or events.is_empty():
+		var empty := Label.new()
+		empty.text = "尚无已记录的因果事件。"
+		soul_fate_box.add_child(empty)
+		return
+	for event_variant in events:
+		if not (event_variant is Dictionary):
+			continue
+		var event: Dictionary = event_variant
+		var row := Label.new()
+		row.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		var merit_delta := int(event.get("merit_delta", 0))
+		var karma_delta := int(event.get("karma_delta", 0))
+		var change_text := ""
+		if merit_delta > 0:
+			change_text += "功德 +" + str(merit_delta)
+		elif merit_delta < 0:
+			change_text += "功德 " + str(merit_delta)
+		if karma_delta > 0:
+			if not change_text.is_empty():
+				change_text += " · "
+			change_text += "业力 +" + str(karma_delta)
+		elif karma_delta < 0:
+			if not change_text.is_empty():
+				change_text += " · "
+			change_text += "业力 " + str(karma_delta)
+		row.text = str(event.get("created_at", "")) + "  " + str(event.get("source", "未知因果")) + "  " + change_text
+		soul_fate_box.add_child(row)
 
 func _request_soul_memories() -> void:
 	if access_token.is_empty():
@@ -494,6 +556,8 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 			life_history_status.text = "历世档案读取失败（HTTP " + str(response_code) + "）：" + body_text
 		elif context == "soul_memories":
 			soul_memory_status.text = "前世记忆读取失败（HTTP " + str(response_code) + "）：" + body_text
+		elif context == "soul_fate":
+			soul_fate_status.text = "因果簿读取失败（HTTP " + str(response_code) + "）：" + body_text
 		elif context == "reincarnation_eligibility":
 			reincarnation_check_button.disabled = false
 			reincarnation_eligible = false
@@ -554,6 +618,8 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 			_render_life_history(data.get("items", []))
 		"soul_memories":
 			_render_soul_memories(data.get("items", []))
+		"soul_fate":
+			_render_soul_fate(data)
 		"reincarnation_eligibility":
 			reincarnation_check_button.disabled = false
 			reincarnation_eligible = bool(data.get("eligible", false))
