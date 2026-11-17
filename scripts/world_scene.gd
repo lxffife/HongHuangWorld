@@ -37,6 +37,9 @@ var notification_panel: PanelContainer
 var notification_label: Label
 var notification_timer: Timer
 var vitals_known := false
+var input_debug_panel: PanelContainer
+var input_debug_label: Label
+var input_debug_accumulator := 0.0
 var local_target_position := Vector3.ZERO
 var remote_players: Dictionary = {}
 var remote_targets: Dictionary = {}
@@ -98,6 +101,7 @@ func _ready() -> void:
 	_build_player()
 	_build_compact_hud()
 	_build_combat_hud()
+	_build_input_debug_hud()
 	if HHSession.world_network != null:
 		HHSession.world_network.entities_updated.connect(_on_entities_updated)
 		HHSession.world_network.player_joined.connect(_on_player_joined)
@@ -947,6 +951,43 @@ func _create_remote_player(character_name: String) -> Node3D:
 	add_child(remote)
 	return remote
 
+func _build_input_debug_hud() -> void:
+	var hud := get_node_or_null("HUD") as CanvasLayer
+	if hud == null:
+		return
+	input_debug_panel = PanelContainer.new()
+	input_debug_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	input_debug_panel.position = Vector2(-238.0, -154.0)
+	input_debug_panel.custom_minimum_size = Vector2(220.0, 126.0)
+	hud.add_child(input_debug_panel)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 4)
+	input_debug_panel.add_child(layout)
+	var title := Label.new()
+	title.text = "键盘 / 移动诊断"
+	title.add_theme_font_size_override("font_size", 15)
+	layout.add_child(title)
+	input_debug_label = Label.new()
+	input_debug_label.text = "W A S D\n网络：检测中"
+	input_debug_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	layout.add_child(input_debug_label)
+
+func _update_input_debug_hud() -> void:
+	if not is_instance_valid(input_debug_label) or not is_instance_valid(local_player):
+		return
+	var keys := ""
+	keys += "[W]" if Input.is_action_pressed("move_forward") else " W "
+	keys += " "
+	keys += "[A]" if Input.is_action_pressed("move_left") else " A "
+	keys += " "
+	keys += "[S]" if Input.is_action_pressed("move_back") else " S "
+	keys += " "
+	keys += "[D]" if Input.is_action_pressed("move_right") else " D "
+	var network_text := "已连接" if local_player.movement_network_ready else "未就绪"
+	var movement_text := "有移动输入" if local_player.current_move_input.length_squared() > 0.001 else "无移动输入"
+	var send_text := "发送正常" if local_player.last_send_error == OK else "发送错误 " + str(local_player.last_send_error)
+	input_debug_label.text = keys + "\\n" + movement_text + " · 网络：" + network_text + "\\n" + send_text + " · ESC 释放鼠标"
+
 func _process(delta: float) -> void:
 	if is_instance_valid(local_player):
 		local_player.position = local_player.position.lerp(local_target_position, minf(delta * 14.0, 1.0))
@@ -966,6 +1007,10 @@ func _process(delta: float) -> void:
 		drop.position = drop.position.lerp(target, minf(delta * 12.0, 1.0))
 	_update_nearest_npc_prompt()
 	_update_exploration_proximity()
+	input_debug_accumulator += delta
+	if input_debug_accumulator >= 0.05:
+		input_debug_accumulator = 0.0
+		_update_input_debug_hud()
 
 
 func _on_world_disconnected() -> void:
