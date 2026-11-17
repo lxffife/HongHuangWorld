@@ -595,3 +595,87 @@ func (s *Service) TriggerExplorationEvent(ctx context.Context, accountID,eventID
 	if err:=tx.Commit();err!=nil { return ExplorationEventResult{},fmt.Errorf("commit exploration event: %w",err) }
 	return result,nil
 }
+
+
+// ExplorationRegionProgress summarizes soul-persistent discoveries for one region.
+type ExplorationRegionProgress struct {
+	RegionID string `json:"region_id"`
+	RegionName string `json:"region_name"`
+	TotalPoints int `json:"total_points"`
+	DiscoveredPoints int `json:"discovered_points"`
+	TotalEvents int `json:"total_events"`
+	ClaimedEvents int `json:"claimed_events"`
+}
+
+type ExplorationProgress struct {
+	WorldID string `json:"world_id"`
+	Regions []ExplorationRegionProgress `json:"regions"`
+	TotalPoints int `json:"total_points"`
+	DiscoveredPoints int `json:"discovered_points"`
+	TotalEvents int `json:"total_events"`
+	ClaimedEvents int `json:"claimed_events"`
+}
+
+// GetExplorationProgress aggregates only content applicable to the active
+// character. Discovery and event claims remain soul-wide across reincarnation.
+func (s *Service) GetExplorationProgress(ctx context.Context, accountID string) (ExplorationProgress, error) {
+	var soulID, worldID, raceID, traitID string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT soul.id::text,wi.world_id,c.race_id,COALESCE(trait.trait_id,'unmarked_fate')
+		 FROM souls soul
+		 JOIN characters c ON c.id=soul.current_character_id AND c.status='alive'
+		 JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
+		 JOIN world_instances wi ON wi.id=ws.instance_id AND wi.world_id=c.world_id
+		 LEFT JOIN character_fate_traits trait ON trait.character_id=c.id
+		 WHERE soul.account_id=$1
+		 ORDER BY ws.connected_at DESC NULLS LAST LIMIT 1`, accountID).
+		Scan(&soulID,&worldID,&raceID,&traitID)
+	if errors.Is(err,sql.ErrNoRows) { return ExplorationProgress{},ErrNoActiveSession }
+	if err != nil { return ExplorationProgress{},fmt.Errorf("resolve exploration progress session: %w",err) }
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT p.region_id,
+		        COALESCE(route.region_name,
+		            CASE p.region_id
+		                WHEN 'fengdu_gate_outskirts' THEN '酆都鬼门关'
+		                WHEN 'wangchuan_riverside' THEN '忘川河畔'
+		                WHEN 'naihe_bridge' THEN '奈何桥'
+		                WHEN 'reincarnation_hall_front' THEN '轮回殿前'
+		                ELSE p.region_id
+		            END),
+		        COUNT(DISTINCT p.id),
+		        COUNT(DISTINCT d.point_id),
+		        COUNT(DISTINCT e.id),
+		        COUNT(DISTINCT claim.event_id)
+		 FROM world_exploration_points p
+		 LEFT JOIN reincarnation_birth_routes route
+		   ON route.world_id=p.world_id AND route.region_id=p.region_id AND route.enabled=TRUE
+		 LEFT JOIN soul_exploration_discoveries d
+		   ON d.point_id=p.id AND d.soul_id=$1::uuid
+		 LEFT JOIN world_exploration_events e
+		   ON e.point_id=p.id AND e.enabled=TRUE
+		  AND (e.required_race_id IS NULL OR e.required_race_id=$3)
+		  AND (e.required_fate_trait_id IS NULL OR e.required_fate_trait_id=$4)
+		 LEFT JOIN soul_exploration_event_claims claim
+		   ON claim.event_id=e.id AND claim.soul_id=$1::uuid
+		 WHERE p.world_id=$2 AND p.enabled=TRUE
+		 GROUP BY p.region_id,route.region_name
+		 ORDER BY p.region_id`, soulID,worldID,raceID,traitID)
+	if err != nil { return ExplorationProgress{},fmt.Errorf("query exploration region progress: %w",err) }
+	defer rows.Close()
+
+	result := ExplorationProgress{WorldID:worldID,Regions:make([]ExplorationRegionProgress,0)}
+	for rows.Next() {
+		var item ExplorationRegionProgress
+		if err := rows.Scan(&item.RegionID,&item.RegionName,&item.TotalPoints,&item.DiscoveredPoints,&item.TotalEvents,&item.ClaimedEvents); err != nil {
+			return ExplorationProgress{},fmt.Errorf("scan exploration region progress: %w",err)
+		}
+		result.TotalPoints += item.TotalPoints
+		result.DiscoveredPoints += item.DiscoveredPoints
+		result.TotalEvents += item.TotalEvents
+		result.ClaimedEvents += item.ClaimedEvents
+		result.Regions = append(result.Regions,item)
+	}
+	if err := rows.Err(); err != nil { return ExplorationProgress{},fmt.Errorf("iterate exploration region progress: %w",err) }
+	return result,nil
+}
