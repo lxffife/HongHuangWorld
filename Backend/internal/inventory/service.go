@@ -534,18 +534,23 @@ func (s *Service) UseConsumable(ctx context.Context, accountID string, request I
 	if owned<request.Quantity { return ItemUseResult{},ErrInvalidRequest }
 	var result ItemUseResult
 	result.ItemID=request.ItemID; result.Quantity=request.Quantity
+	var oldHealth,oldMana int
+	if err:=tx.QueryRowContext(ctx,`SELECT health,mana FROM character_attributes WHERE character_id=$1::uuid FOR UPDATE`,characterID).Scan(&oldHealth,&oldMana); err!=nil {
+		return ItemUseResult{},fmt.Errorf("lock character consumable attributes: %w",err)
+	}
 	err=tx.QueryRowContext(ctx,`UPDATE character_attributes
 		SET health=LEAST(max_health,health+$2), mana=LEAST(max_mana,mana+$3)
 		WHERE character_id=$1::uuid
 		RETURNING health,max_health,mana,max_mana`,characterID,heal*request.Quantity,restore*request.Quantity).
 		Scan(&result.Health,&result.MaxHealth,&result.Mana,&result.MaxMana)
 	if err!=nil { return ItemUseResult{},fmt.Errorf("apply consumable effects: %w",err) }
-	result.HealthRestored=result.Health // overwritten below with actual delta
-	result.ManaRestored=result.Mana
-	if _,err:=tx.ExecContext(ctx,`UPDATE character_inventory SET quantity=quantity-$3,updated_at=now()
-		WHERE character_id=$1::uuid AND item_id=$2 AND quantity=$3`,characterID,request.ItemID,request.Quantity); err!=nil {
-		return ItemUseResult{},fmt.Errorf("consume inventory items: %w",err)
-	}
+	result.HealthRestored=result.Health-oldHealth
+	result.ManaRestored=result.Mana-oldMana
+	res,err:=tx.ExecContext(ctx,`UPDATE character_inventory SET quantity=quantity-$3,updated_at=now()
+		WHERE character_id=$1::uuid AND item_id=$2 AND quantity >= $3`,characterID,request.ItemID,request.Quantity)
+	if err!=nil { return ItemUseResult{},fmt.Errorf("consume inventory items: %w",err) }
+	affected,err:=res.RowsAffected()
+	if err!=nil || affected!=1 { return ItemUseResult{},ErrInvalidRequest }
 	if _,err:=tx.ExecContext(ctx,`DELETE FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2 AND quantity<=0`,characterID,request.ItemID); err!=nil {
 		return ItemUseResult{},fmt.Errorf("remove empty consumable stack: %w",err)
 	}
