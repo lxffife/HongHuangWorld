@@ -264,6 +264,9 @@ type LifeRecord struct {
 	ReincarnatedAt *string `json:"reincarnated_at,omitempty"`
 	PreviousWorldID string `json:"previous_world_id,omitempty"`
 	NextWorldID string `json:"next_world_id,omitempty"`
+	FateAspect string `json:"fate_aspect,omitempty"`
+	FateKarma int64 `json:"fate_karma,omitempty"`
+	FateMerit int64 `json:"fate_merit,omitempty"`
 }
 
 // History returns every physical life belonging to the authenticated soul.
@@ -278,7 +281,9 @@ func (s *Service) History(ctx context.Context, accountID string) ([]LifeRecord, 
 		        c.created_at,
 		        reincarnation.reincarnated_at,
 		        COALESCE(reincarnation.previous_world_id, ''),
-		        COALESCE(reincarnation.new_world_id, '')
+		        COALESCE(reincarnation.new_world_id, ''),
+		        COALESCE(reincarnation.fate_aspect, '因果未定'),
+		        COALESCE(reincarnation.fate_karma, 0), COALESCE(reincarnation.fate_merit, 0)
 		 FROM souls soul
 		 JOIN characters c ON c.soul_id = soul.id
 		 JOIN world_definitions world ON world.id = c.world_id
@@ -302,7 +307,7 @@ func (s *Service) History(ctx context.Context, accountID string) ([]LifeRecord, 
 			&item.CharacterID, &item.LifeIndex, &item.Name, &item.WorldID, &item.WorldName,
 			&raceID, &item.RaceName, &item.Level, &item.Status, &item.RealmName,
 			&item.RealmStage, &item.IsCurrent, &item.CreatedAt, &reincarnatedAt,
-			&item.PreviousWorldID, &item.NextWorldID,
+			&item.PreviousWorldID, &item.NextWorldID, &item.FateAspect, &item.FateKarma, &item.FateMerit,
 		); err != nil {
 			return nil, fmt.Errorf("scan soul life history: %w", err)
 		}
