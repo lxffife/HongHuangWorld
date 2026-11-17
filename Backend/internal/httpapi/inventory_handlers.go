@@ -110,3 +110,50 @@ func (h *inventoryHandlers) authorizeServer(w http.ResponseWriter, r *http.Reque
 	if nodeKey == "" { http.Error(w, "missing world server node", http.StatusBadRequest); return "", false }
 	return nodeKey, true
 }
+
+type equipmentActionRequest struct {
+	ItemID string `json:"item_id"`
+	Slot string `json:"slot"`
+}
+
+func (h *inventoryHandlers) equipment(w http.ResponseWriter, r *http.Request) {
+	account, ok := h.authenticateAccount(w, r)
+	if !ok { return }
+	items, err := h.service.CurrentEquipment(r.Context(), account.ID)
+	if err != nil { h.logger.Error("load current equipment failed", "error", err); http.Error(w, "internal server error", http.StatusInternalServerError); return }
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (h *inventoryHandlers) equip(w http.ResponseWriter, r *http.Request) {
+	account, ok := h.authenticateAccount(w, r)
+	if !ok { return }
+	var request equipmentActionRequest
+	if err := decodeJSON(w, r, &request); err != nil { http.Error(w, "invalid request body", http.StatusBadRequest); return }
+	err := h.service.Equip(r.Context(), account.ID, inventory.EquipmentRequest{ItemID: request.ItemID, Slot: request.Slot})
+	h.writeEquipmentResult(w, "equip item failed", err)
+}
+
+func (h *inventoryHandlers) unequip(w http.ResponseWriter, r *http.Request) {
+	account, ok := h.authenticateAccount(w, r)
+	if !ok { return }
+	var request equipmentActionRequest
+	if err := decodeJSON(w, r, &request); err != nil { http.Error(w, "invalid request body", http.StatusBadRequest); return }
+	h.writeEquipmentResult(w, "unequip item failed", h.service.Unequip(r.Context(), account.ID, request.Slot))
+}
+
+func (h *inventoryHandlers) authenticateAccount(w http.ResponseWriter, r *http.Request) (*auth.Account, bool) {
+	header := r.Header.Get("Authorization")
+	if !strings.HasPrefix(header, "Bearer ") { http.Error(w, "unauthorized", http.StatusUnauthorized); return nil, false }
+	account, err := h.authService.Authenticate(r.Context(), strings.TrimSpace(strings.TrimPrefix(header, "Bearer ")))
+	if err != nil { http.Error(w, "unauthorized", http.StatusUnauthorized); return nil, false }
+	return account, true
+}
+
+func (h *inventoryHandlers) writeEquipmentResult(w http.ResponseWriter, operation string, err error) {
+	switch {
+	case err == nil: writeJSON(w, http.StatusOK, map[string]any{"success": true})
+	case errors.Is(err, inventory.ErrInvalidRequest): http.Error(w, "invalid equipment request or item is not owned", http.StatusBadRequest)
+	case errors.Is(err, inventory.ErrInventoryFull): http.Error(w, "inventory stack is full", http.StatusConflict)
+	default: h.logger.Error(operation, "error", err); http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
+}
