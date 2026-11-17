@@ -46,9 +46,11 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/auth/register", handlers.register)
 		mux.HandleFunc("POST /api/v1/auth/login", handlers.login)
 		mux.HandleFunc("GET /api/v1/account/me", handlers.me)
-		souls := &soulHandlers{authService: authService, soulService: soul.NewService(db), logger: logger}
+		souls := &soulHandlers{authService: authService, soulService: soul.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
 		mux.HandleFunc("POST /api/v1/souls", souls.create)
 		mux.HandleFunc("GET /api/v1/souls/current", souls.current)
+		mux.HandleFunc("GET /api/v1/souls/current/progression", souls.progression)
+		mux.HandleFunc("POST /api/v1/servers/souls/rewards", souls.applyReward)
 		worlds := &worldHandlers{service: world.NewService(db), logger: logger}
 		mux.HandleFunc("GET /api/v1/worlds", worlds.list)
 		characters := &characterHandlers{authService: authService, characterService: character.NewService(db), logger: logger}
@@ -100,7 +102,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 			"GET /api/v1/characters/current/inventory", "GET /api/v1/characters/current/equipment",
 			"POST /api/v1/characters/current/equipment/equip", "POST /api/v1/characters/current/equipment/unequip", "POST /api/v1/characters/current/inventory/use", "POST /api/v1/servers/sessions/combat-stats", "POST /api/v1/servers/drops",
 			"POST /api/v1/servers/drops/pickup", "POST /api/v1/servers/heartbeat",
-			"POST /api/v1/servers/characters/rewards", "POST /api/v1/worlds/enter",
+			"POST /api/v1/servers/characters/rewards", "POST /api/v1/servers/souls/rewards", "POST /api/v1/worlds/enter",
 			"POST /api/v1/servers/tickets/redeem", "POST /api/v1/servers/sessions/snapshot",
 			"POST /api/v1/servers/sessions/close",
 		} { mux.HandleFunc(route, unavailable) }
