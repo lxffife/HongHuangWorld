@@ -23,6 +23,11 @@ type createCharacterRequest struct {
 	RaceID  string `json:"race_id"`
 }
 
+type reincarnateRequest struct {
+	Name   string `json:"name"`
+	RaceID string `json:"race_id"`
+}
+
 type allocateAttributePointsRequest struct {
 	Attribute string `json:"attribute"`
 	Points    int    `json:"points"`
@@ -100,6 +105,35 @@ func (h *characterHandlers) createFirstLife(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
+}
+
+
+func (h *characterHandlers) reincarnate(w http.ResponseWriter, r *http.Request) {
+	account, ok := h.currentAccount(w, r)
+	if !ok {
+		return
+	}
+	var request reincarnateRequest
+	if err := decodeJSON(w, r, &request); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	created, err := h.characterService.Reincarnate(r.Context(), account.ID, request.Name, request.RaceID)
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusCreated, created)
+	case errors.Is(err, character.ErrInvalid):
+		http.Error(w, "character name or race id is invalid", http.StatusBadRequest)
+	case errors.Is(err, character.ErrInvalidRace):
+		http.Error(w, "unsupported race or cultivation system", http.StatusBadRequest)
+	case errors.Is(err, character.ErrWorldInvalid):
+		http.Error(w, "reincarnation destination is unavailable", http.StatusServiceUnavailable)
+	case errors.Is(err, character.ErrReincarnationUnavailable):
+		http.Error(w, "reincarnation requires a living current body with no active world session", http.StatusConflict)
+	default:
+		h.logger.Error("reincarnate current soul failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
 }
 
 func (h *characterHandlers) allocateAttributePoints(w http.ResponseWriter, r *http.Request) {
