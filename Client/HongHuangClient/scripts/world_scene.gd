@@ -86,6 +86,7 @@ var npc_reincarnation_leave_button: Button
 var npc_fate_encounter_button: Button
 var exploration_open_button: Button
 var exploration_container: VBoxContainer
+var exploration_progress_label: Label
 var exploration_feedback := ""
 var exploration_markers: Dictionary = {}
 var exploration_buttons: Dictionary = {}
@@ -1726,6 +1727,9 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			_send_npc_request("GET", "/api/v1/worlds/current/exploration-events", "exploration_events")
 		"exploration_events_bootstrap", "exploration_events":
 			_render_exploration_events(data.get("events", []))
+			_request_exploration_progress()
+		"exploration_progress":
+			_render_exploration_progress(data)
 		"exploration_discover":
 			var merit_delta := int(data.get("merit_delta", 0))
 			var karma_delta := int(data.get("karma_delta", 0))
@@ -2078,6 +2082,11 @@ func _request_exploration_points() -> void:
 	npc_panel.visible = true
 	_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_list")
 
+func _request_exploration_progress() -> void:
+	if npc_request_busy:
+		return
+	_send_npc_request("GET", "/api/v1/worlds/current/exploration-progress", "exploration_progress")
+
 
 func _render_exploration_points(points: Variant) -> void:
 	if exploration_container == null:
@@ -2118,6 +2127,35 @@ func _render_exploration_points(points: Variant) -> void:
 		exploration_container.add_child(point_button)
 		exploration_buttons[point_id] = point_button
 		exploration_point_data[point_id] = point.duplicate(true)
+
+
+func _render_exploration_progress(data: Dictionary) -> void:
+	if exploration_container == null:
+		return
+	if exploration_progress_label == null or not is_instance_valid(exploration_progress_label):
+		exploration_progress_label = Label.new()
+		exploration_progress_label.name = "ExplorationProgressSummary"
+		exploration_progress_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		exploration_progress_label.add_theme_font_size_override("font_size", 15)
+		exploration_container.add_child(exploration_progress_label)
+	exploration_container.move_child(exploration_progress_label, 0)
+	var lines: Array[String] = []
+	lines.append("【灵魂探索总览】地点 %d/%d · 奇遇 %d/%d" % [
+		int(data.get("discovered_points", 0)), int(data.get("total_points", 0)),
+		int(data.get("claimed_events", 0)), int(data.get("total_events", 0))
+	])
+	var regions: Variant = data.get("regions", [])
+	if regions is Array:
+		for region_variant in regions:
+			if not region_variant is Dictionary:
+				continue
+			var region: Dictionary = region_variant
+			lines.append("%s  地点 %d/%d · 奇遇 %d/%d" % [
+				str(region.get("region_name", region.get("region_id", "未知区域"))),
+				int(region.get("discovered_points", 0)), int(region.get("total_points", 0)),
+				int(region.get("claimed_events", 0)), int(region.get("total_events", 0))
+			])
+	exploration_progress_label.text = "\n".join(PackedStringArray(lines))
 
 
 func _render_exploration_events(events: Variant) -> void:
