@@ -1,0 +1,25 @@
+name: Pull from Another Repository
+on:
+  # schedule:
+  #  - cron: '0 */6 * * *'   # 例如：每6小时拉取一次
+  workflow_dispatch:        # 支持手动触发
+
+jobs:
+  pull-and-sync:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. 检出“另一个仓库”的指定分支到当前工作区
+      - name: Checkout Source Repository
+        uses: actions/checkout@v4
+        with:
+          repository: source-owner/source-repo   # 源仓库，格式为 owner/repo
+          ref: main                              # 指定要拉取的分支、tag 或 commit SHA
+          path: ./source-code                    # (可选) 指定检出目录，默认为根目录
+          token: ${{ secrets.SOURCE_REPO_PAT }}  # 如果源仓库是私有的，需要 PAT
+
+      # 2. 现在，source-code 目录里就是另一个仓库的代码了
+      #    你可以在这里执行构建、测试，或将其内容复制到当前仓库
+      - name: Do Something with the Code
+        run: |
+          echo "Successfully pulled code from another repo."
+          ls -la ./source-code
