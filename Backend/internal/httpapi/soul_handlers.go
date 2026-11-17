@@ -122,3 +122,23 @@ func (h *soulHandlers) applyReward(w http.ResponseWriter, r *http.Request) {
   http.Error(w, "internal server error", http.StatusInternalServerError)
  }
 }
+
+ 
+func (h *soulHandlers) breakthrough(w http.ResponseWriter, r *http.Request) {
+ account, ok := h.currentAccount(w, r)
+ if !ok { return }
+ result, err := h.soulService.Breakthrough(r.Context(), account.ID)
+ switch {
+ case err == nil:
+  writeJSON(w, http.StatusOK, result)
+ case errors.Is(err, soul.ErrNotFound):
+  http.Error(w, "soul not found", http.StatusNotFound)
+ case errors.Is(err, soul.ErrInsufficientExperience):
+  http.Error(w, "not enough soul experience for breakthrough", http.StatusConflict)
+ case errors.Is(err, soul.ErrMaxRealm):
+  http.Error(w, "soul has reached the highest configured realm", http.StatusConflict)
+ default:
+  h.logger.Error("soul breakthrough failed", "error", err)
+  http.Error(w, "internal server error", http.StatusInternalServerError)
+ }
+}
