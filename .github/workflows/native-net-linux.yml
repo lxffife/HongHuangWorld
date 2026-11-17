@@ -1,0 +1,43 @@
+name: NativeNet - Linux x86_64
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-x64:
+    name: Linux x86_64 SO (compatibility build)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git python3 python3-pip
+          python3 -m pip install --user "cmake>=3.24,<4"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Cache CMake build
+        uses: actions/cache@v4
+        with:
+          path: build/godot-native-net
+          key: native-net-linux-x64-v2
+          restore-keys: |
+            native-net-linux-x64-
+
+      - name: Build GDExtension
+        run: |
+          cmake --version
+          cmake -S Client/NativeNet -B build/godot-native-net -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/godot-native-net --config Release --parallel 2
+          test -s Client/HongHuangClient/bin/libhonghuang_native_net.so
+
+      - name: Report build output (no artifact upload)
+        run: |
+          ls -lh Client/HongHuangClient/bin/libhonghuang_native_net.so
+          echo "Build verified. The library remains on the temporary runner and is not uploaded or committed."
