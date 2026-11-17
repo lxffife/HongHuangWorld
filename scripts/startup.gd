@@ -895,7 +895,7 @@ func _start_world_connection(host: String, port: int, ticket: String) -> void:
 func _on_world_welcomed(snapshot: Dictionary) -> void:
 	HHSession.api_base = api_base
 	HHSession.access_token = access_token
-	_set_status("世界服务器验证成功，正在进入青云人界……")
+	_set_status("世界服务器验证成功，正在载入当前世界……")
 	HHSession.world_snapshot = snapshot
 	if world_network != null and is_instance_valid(world_network):
 		remove_child(world_network)
