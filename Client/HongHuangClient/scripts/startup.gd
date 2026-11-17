@@ -42,6 +42,8 @@ var reincarnation_confirm: ConfirmationDialog
 var reincarnation_eligible := false
 var life_history_box: VBoxContainer
 var life_history_status: Label
+var life_history_title: Label
+var life_history_refresh_button: Button
 
 func _ready() -> void:
 	_build_ui()
@@ -233,10 +235,10 @@ func _build_reincarnation_ui() -> void:
 	add_child(reincarnation_confirm)
 	for control in [title, reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_check_button, reincarnation_submit_button]:
 		control.hide()
-	var history_title := Label.new()
-	history_title.text = "灵魂历世档案"
-	history_title.add_theme_font_size_override("font_size", 18)
-	content_box.add_child(history_title)
+	life_history_title = Label.new()
+	life_history_title.text = "灵魂历世档案"
+	life_history_title.add_theme_font_size_override("font_size", 18)
+	content_box.add_child(life_history_title)
 	life_history_status = Label.new()
 	life_history_status.text = "登录后读取同一灵魂的历世记录。"
 	life_history_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -244,11 +246,11 @@ func _build_reincarnation_ui() -> void:
 	life_history_box = VBoxContainer.new()
 	life_history_box.add_theme_constant_override("separation", 8)
 	content_box.add_child(life_history_box)
-	var refresh_history_button := Button.new()
-	refresh_history_button.text = "刷新历世档案"
-	refresh_history_button.pressed.connect(_request_life_history)
-	content_box.add_child(refresh_history_button)
-	for control in [history_title, life_history_status, life_history_box, refresh_history_button]:
+	life_history_refresh_button = Button.new()
+	life_history_refresh_button.text = "刷新历世档案"
+	life_history_refresh_button.pressed.connect(_request_life_history)
+	content_box.add_child(life_history_refresh_button)
+	for control in [life_history_title, life_history_status, life_history_box, life_history_refresh_button]:
 		control.hide()
 
 func _request_life_history() -> void:
@@ -534,7 +536,7 @@ func _on_login_pressed() -> void:
 	}, false, "login")
 
 func _show_reincarnation_controls() -> void:
-	for control in [reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_check_button, reincarnation_submit_button, life_history_status, life_history_box]:
+	for control in [reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_check_button, reincarnation_submit_button, life_history_title, life_history_status, life_history_box, life_history_refresh_button]:
 		control.show()
 	reincarnation_name_input.text = ""
 	reincarnation_eligible = false
