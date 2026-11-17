@@ -93,6 +93,7 @@ var exploration_buttons: Dictionary = {}
 var exploration_point_data: Dictionary = {}
 var exploration_event_buttons: Dictionary = {}
 var exploration_event_data: Dictionary = {}
+var exploration_animation_time := 0.0
 var npc_current_interaction_id := ""
 var leaving_for_reincarnation := false
 var npc_selected_id := ""
@@ -1251,6 +1252,7 @@ func _process(delta: float) -> void:
 		drop.position = drop.position.lerp(target, minf(delta * 12.0, 1.0))
 	_update_nearest_npc_prompt()
 	_update_exploration_proximity()
+	_animate_exploration_markers(delta)
 	region_update_accumulator += delta
 	if region_update_accumulator >= 0.2:
 		region_update_accumulator = 0.0
@@ -1740,7 +1742,9 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 		"exploration_event":
 			var event_merit_delta := int(data.get("merit_delta", 0))
 			var event_karma_delta := int(data.get("karma_delta", 0))
-			exploration_feedback = "奇遇「" + str(data.get("title", "未知奇遇")) + "」已完成。功德 " + ("+" if event_merit_delta >= 0 else "") + str(event_merit_delta) + "，业力 " + ("+" if event_karma_delta >= 0 else "") + str(event_karma_delta) + "。"
+			var event_title := str(data.get("title", "未知奇遇"))
+			exploration_feedback = "奇遇「" + event_title + "」已完成。功德 " + ("+" if event_merit_delta >= 0 else "") + str(event_merit_delta) + "，业力 " + ("+" if event_karma_delta >= 0 else "") + str(event_karma_delta) + "。"
+			_show_notification("奇遇完成 · " + event_title + "  因果已记录", 4.2)
 			_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_list")
 		"interact":
 			_clear_npc_choice_buttons()
@@ -2267,6 +2271,7 @@ func _create_exploration_marker(point: Dictionary) -> void:
 	var ring_mesh := TorusMesh.new()
 	ring_mesh.inner_radius = 0.72
 	ring_mesh.outer_radius = 0.9
+	ring.name = "Ring"
 	ring.mesh = ring_mesh
 	var ring_material := StandardMaterial3D.new()
 	ring_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -2280,6 +2285,7 @@ func _create_exploration_marker(point: Dictionary) -> void:
 	beacon_mesh.top_radius = 0.035
 	beacon_mesh.bottom_radius = 0.035
 	beacon_mesh.height = 1.35
+	beacon.name = "Beacon"
 	beacon.mesh = beacon_mesh
 	beacon.position.y = 0.72
 	var beacon_material := StandardMaterial3D.new()
@@ -2297,7 +2303,31 @@ func _create_exploration_marker(point: Dictionary) -> void:
 	title.modulate = ring_material.albedo_color
 	marker.add_child(title)
 	add_child(marker)
+	marker.set_meta("base_y", marker.position.y)
+	marker.set_meta("phase", float(abs(point_id.hash()) % 1000) / 1000.0 * TAU)
+	marker.set_meta("discovered", discovered)
 	exploration_markers[point_id] = marker
+
+
+func _animate_exploration_markers(delta: float) -> void:
+	exploration_animation_time += delta
+	for marker_id in exploration_markers.keys():
+		var marker: Node3D = exploration_markers[marker_id]
+		if not is_instance_valid(marker):
+			continue
+		var phase := float(marker.get_meta("phase", 0.0))
+		var discovered := bool(marker.get_meta("discovered", false))
+		var speed := 1.25 if discovered else 2.1
+		var amplitude := 0.035 if discovered else 0.13
+		var base_y := float(marker.get_meta("base_y", marker.position.y))
+		marker.position.y = base_y + sin(exploration_animation_time * speed + phase) * amplitude
+		var ring := marker.get_node_or_null("Ring") as MeshInstance3D
+		if ring != null:
+			var pulse := 1.0 + sin(exploration_animation_time * (1.5 if discovered else 2.8) + phase) * (0.025 if discovered else 0.09)
+			ring.scale = Vector3.ONE * pulse
+		var beacon := marker.get_node_or_null("Beacon") as MeshInstance3D
+		if beacon != null:
+			beacon.rotation.y = sin(exploration_animation_time * 0.8 + phase) * 0.12
 
 
 func _update_exploration_proximity() -> void:
