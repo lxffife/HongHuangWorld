@@ -18,6 +18,7 @@
 - `000012_world_npcs` 增加世界NPC目录、交互配置与酆都五名引导NPC。
 - `000013_soul_memories` 增加跨世前世记忆档案；轮回时自动保存上一世摘要，魂将境（灵魂境界序号 5）后才向玩家开放具体内容。
 - `000014_soul_fate_ledger` 增加灵魂因果账簿，以不可变事件记录功德/业力变化；酆都游祟讨伐每次增加 1 点功德。
+- `000015_npc_fate_choices` 增加 NPC 因果选项的一次性领取记录，并为冥府判官配置善恶分支；选项效果由中心服规则计算。
 
 ## 当前迁移顺序
 
@@ -38,6 +39,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000011_soul_trial
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000012_world_npcs.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000013_soul_memories.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000014_soul_fate_ledger.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000015_npc_fate_choices.up.sql
 ```
 
 回滚时按相反顺序执行对应的 `.down.sql`。不要在已运行的生产库上重复执行非幂等迁移；后续接入迁移工具后，应由工具记录每个已应用版本，避免人工重复执行。
