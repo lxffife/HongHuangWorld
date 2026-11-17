@@ -43,9 +43,9 @@ type ReincarnationRoute struct {
 
 type Character struct {
 	ID        string  `json:"id"`
-	PositionX float64 `json:"position_x"`
-	PositionY float64 `json:"position_y"`
-	PositionZ float64 `json:"position_z"`
+	PositionX float64 `json:"-"`
+	PositionY float64 `json:"-"`
+	PositionZ float64 `json:"-"`
 	BirthRouteName string `json:"birth_route_name,omitempty"`
 	SoulID    string  `json:"soul_id"`
 	LifeIndex int     `json:"life_index"`
