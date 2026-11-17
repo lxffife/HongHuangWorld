@@ -1219,7 +1219,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 						choice_button.tooltip_text = str(choice.get("description", ""))
 						choice_button.pressed.connect(_submit_npc_fate_choice.bind(str(npc_data.get("id", "")), str(choice.get("id", ""))))
 						npc_choice_container.add_child(choice_button)
-			npc_status_label.text = "交互已由中心服验证。选择会影响功德与业力，且每个选项只能作出一次。"
+			npc_status_label.text = "交互已由中心服验证。选择会影响功德与业力；与该 NPC 的因果抉择只能作出一次。"
 			npc_trial_button.visible = str(npc_data.get("interaction_type", "")) == "soul_trials"
 			npc_eligibility_button.visible = str(npc_data.get("interaction_type", "")) == "reincarnation_guidance"
 			npc_soul_button.visible = true
@@ -1228,7 +1228,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 		"fate_choice":
 			npc_title_label.text = "因果已记入 · " + str(data.get("npc_id", "NPC"))
 			npc_dialogue_label.text = str(data.get("result", "此事已记入因果簿。")) + "\n功德：" + str(data.get("merit", 0)) + "（" + ("+" if int(data.get("merit_delta", 0)) >= 0 else "") + str(data.get("merit_delta", 0)) + "）" + "\n业力：" + str(data.get("karma", 0)) + "（" + ("+" if int(data.get("karma_delta", 0)) >= 0 else "") + str(data.get("karma_delta", 0)) + "）"
-			npc_status_label.text = "该选择已永久记录；重复提交不会再次改变数值。"
+			npc_status_label.text = "该 NPC 的因果抉择已永久记录；不能再选择另一分支。"
 			_clear_npc_choice_buttons()
 			npc_trial_button.visible = false
 			npc_eligibility_button.visible = false
