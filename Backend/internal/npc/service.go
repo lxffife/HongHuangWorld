@@ -311,6 +311,7 @@ type ExplorationPoint struct {
 	ID string `json:"id"`
 	WorldID string `json:"world_id"`
 	RegionID string `json:"region_id"`
+	RegionName string `json:"region_name"`
 	Name string `json:"name"`
 	Description string `json:"description"`
 	PositionX float64 `json:"position_x"`
@@ -347,10 +348,11 @@ func (s *Service) ListExplorationPoints(ctx context.Context, accountID string) (
 	if err != nil { return nil, fmt.Errorf("resolve exploration session: %w", err) }
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT p.id,p.world_id,p.region_id,p.name,p.description,
+		`SELECT p.id,p.world_id,p.region_id,COALESCE(route.region_name,p.region_id),p.name,p.description,
 		        p.position_x,p.position_y,p.position_z,p.interaction_radius,p.danger_level,
 		        (d.point_id IS NOT NULL)
 		 FROM world_exploration_points p
+		 LEFT JOIN reincarnation_birth_routes route ON route.world_id=p.world_id AND route.region_id=p.region_id AND route.enabled=TRUE
 		 LEFT JOIN soul_exploration_discoveries d ON d.point_id=p.id AND d.soul_id=$1::uuid
 		 WHERE p.world_id=$2 AND p.enabled=TRUE
 		 ORDER BY p.region_id,p.id`, soulID, worldID)
@@ -359,7 +361,7 @@ func (s *Service) ListExplorationPoints(ctx context.Context, accountID string) (
 	points := make([]ExplorationPoint, 0)
 	for rows.Next() {
 		var point ExplorationPoint
-		if err := rows.Scan(&point.ID,&point.WorldID,&point.RegionID,&point.Name,&point.Description,
+		if err := rows.Scan(&point.ID,&point.WorldID,&point.RegionID,&point.RegionName,&point.Name,&point.Description,
 			&point.PositionX,&point.PositionY,&point.PositionZ,&point.InteractionRadius,&point.DangerLevel,&point.Discovered); err != nil {
 			return nil, fmt.Errorf("scan exploration point: %w", err)
 		}
