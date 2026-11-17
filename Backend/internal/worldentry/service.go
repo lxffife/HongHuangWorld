@@ -369,6 +369,12 @@ func (s *Service) RespawnCurrent(ctx context.Context, accountID string) error {
 	if err != nil { return fmt.Errorf("load pending character death: %w", err) }
 	if maxHealth < 1 { return ErrInvalidSessionSnapshot }
 	if _, err := tx.ExecContext(ctx,
+		`UPDATE world_sessions SET session_state = 'closed', disconnected_at = COALESCE(disconnected_at, now()), updated_at = now()
+		 WHERE id = (SELECT session_id FROM character_death_events WHERE id = $1)
+		   AND session_state IN ('connecting', 'active', 'saving')`,
+		deathID,
+	); err != nil { return fmt.Errorf("close dead world session before respawn: %w", err) }
+	if _, err := tx.ExecContext(ctx,
 		`UPDATE characters SET world_id = 'underworld_fengdu',
 		 position_x = 0, position_y = 0, position_z = 0, rotation_y = 0, updated_at = now()
 		 WHERE id = $1`, characterID,
