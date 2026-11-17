@@ -190,6 +190,7 @@ func TestInventoryEndpointsUnavailableWithoutDatabase(t *testing.T) {
 		{http.MethodGet, "/api/v1/items"},
 		{http.MethodGet, "/api/v1/characters/current/inventory"},
 		{http.MethodGet, "/api/v1/servers/loot-table"},
+		{http.MethodGet, "/api/v1/servers/drops"},
 		{http.MethodPost, "/api/v1/servers/drops"},
 		{http.MethodPost, "/api/v1/servers/drops/pickup"},
 	} {
