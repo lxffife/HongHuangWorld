@@ -4,6 +4,7 @@
   "dependencies": [
     "enet",
     "curl",
-    "nlohmann-json"
+    "nlohmann-json",
+    "sqlite3"
   ]
 }
