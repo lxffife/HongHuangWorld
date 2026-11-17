@@ -1090,6 +1090,9 @@ struct EnetServer::Impl {
     void tick_world() {
         drain_drop_results();
         const auto now = Clock::now();
+        ground_drops.erase(std::remove_if(ground_drops.begin(), ground_drops.end(), [&](const GroundDropRuntime& drop) {
+            return drop.expires_at <= now && !drop.pickup_pending;
+        }), ground_drops.end());
         const auto elapsed = now - last_snapshot;
         if (elapsed < kSnapshotInterval) return;
         const float delta = std::clamp(std::chrono::duration<float>(elapsed).count(), 0.0F, 0.1F);
