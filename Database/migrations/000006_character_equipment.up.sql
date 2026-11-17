@@ -28,4 +28,16 @@ CREATE TABLE character_equipment (
 
 CREATE INDEX idx_character_equipment_item ON character_equipment(item_id);
 
+-- Keep item_type aligned with the legacy category field for every catalog insert.
+CREATE FUNCTION sync_item_type_from_category() RETURNS trigger AS $
+BEGIN
+    NEW.item_type := NEW.category;
+    RETURN NEW;
+END;
+$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_item_type_from_category
+BEFORE INSERT OR UPDATE OF category ON item_definitions
+FOR EACH ROW EXECUTE FUNCTION sync_item_type_from_category();
+
 COMMIT;
