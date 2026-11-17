@@ -376,6 +376,8 @@ func _build_compact_hud() -> void:
 		return
 	# 完整修炼面板保留原有功能，默认收起，减少对 3D 画面的遮挡。
 	$HUD/Panel.visible = false
+	$HUD/Panel.offset_top = 146.0
+	$HUD/Panel.offset_bottom = 548.0
 	compact_hud_panel = PanelContainer.new()
 	compact_hud_panel.position = Vector2(18.0, 18.0)
 	compact_hud_panel.custom_minimum_size = Vector2(330.0, 72.0)
