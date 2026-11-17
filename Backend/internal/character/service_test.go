@@ -110,3 +110,27 @@ func TestCultivationStageThreshold(t *testing.T) {
 		})
 	}
 }
+
+func TestCurrentFateTraitID(t *testing.T) {
+	tests := []struct {
+		name   string
+		merit  int64
+		karma  int64
+		want   string
+	}{
+		{name: "unmarked", want: "unmarked_fate"},
+		{name: "blessed", merit: 5, want: "blessed_fate"},
+		{name: "karmic shadow", karma: 5, want: "karmic_shadow"},
+		{name: "entangled", merit: 5, karma: 5, want: "entangled_fate"},
+		{name: "merit below threshold", merit: 4, want: "unmarked_fate"},
+		{name: "karma below threshold", karma: 4, want: "unmarked_fate"},
+		{name: "both below threshold", merit: 4, karma: 4, want: "unmarked_fate"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := currentFateTraitID(test.merit, test.karma); got != test.want {
+				t.Fatalf("currentFateTraitID(%d, %d) = %q, want %q", test.merit, test.karma, got, test.want)
+			}
+		})
+	}
+}
