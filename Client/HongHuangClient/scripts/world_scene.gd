@@ -684,14 +684,14 @@ func _show_item_details(item: Dictionary) -> void:
 	var dialog := AcceptDialog.new()
 	dialog.title = str(item.get("name", "物品详情"))
 	var details := str(item.get("description", "暂无描述"))
-	details += "\\n\\n分类：" + str(item.get("item_type", "未知"))
-	details += "\\n品质：" + str(item.get("quality", 1))
-	details += "\\n数量：" + str(item.get("quantity", 0)) + " / " + str(item.get("max_stack", 1))
+	details += "\n\n分类：" + str(item.get("item_type", "未知"))
+	details += "\n品质：" + str(item.get("quality", 1))
+	details += "\n数量：" + str(item.get("quantity", 0)) + " / " + str(item.get("max_stack", 1))
 	var stats: Dictionary = item.get("base_stats", {})
 	if not stats.is_empty():
-		details += "\\n属性加成：" + str(stats)
+		details += "\n属性加成：" + str(stats)
 	if str(item.get("equipment_slot", "")) != "":
-		details += "\\n装备部位：" + str(item.get("equipment_slot", ""))
+		details += "\n装备部位：" + str(item.get("equipment_slot", ""))
 	dialog.dialog_text = details
 	add_child(dialog)
 	dialog.confirmed.connect(dialog.queue_free)
