@@ -15,6 +15,7 @@ var (
 	ErrSessionInvalid = errors.New("world session is not active on this server")
 	ErrDropUnavailable = errors.New("drop is unavailable")
 	ErrInventoryFull = errors.New("inventory stack is full")
+	ErrCharacterInWorld = errors.New("character must leave the world before changing equipment")
 )
 
 type ItemStack struct {
@@ -377,6 +378,11 @@ func (s *Service) Equip(ctx context.Context, accountID string, request Equipment
 	if err:=tx.QueryRowContext(ctx,`SELECT c.id::text FROM souls soul JOIN characters c ON c.id=soul.current_character_id WHERE soul.account_id=$1 AND c.status='alive' FOR UPDATE OF c`,accountID).Scan(&characterID); err!=nil {
 		if errors.Is(err,sql.ErrNoRows) { return ErrInvalidRequest }; return fmt.Errorf("resolve current character: %w",err)
 	}
+	var inWorld bool
+	if err:=tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM world_sessions WHERE character_id=$1::uuid AND session_state='active')`,characterID).Scan(&inWorld); err!=nil {
+		return fmt.Errorf("check active character session: %w",err)
+	}
+	if inWorld { return ErrCharacterInWorld }
 	var itemSlot string
 	if err:=tx.QueryRowContext(ctx,`SELECT equipment_slot FROM item_definitions WHERE id=$1 AND enabled AND item_type='equipment'`,request.ItemID).Scan(&itemSlot); err!=nil {
 		if errors.Is(err,sql.ErrNoRows) { return ErrInvalidRequest }; return fmt.Errorf("load equipment definition: %w",err)
@@ -417,6 +423,11 @@ func (s *Service) Unequip(ctx context.Context, accountID, slot string) error {
 	if err:=tx.QueryRowContext(ctx,`SELECT c.id::text FROM souls soul JOIN characters c ON c.id=soul.current_character_id WHERE soul.account_id=$1 AND c.status='alive' FOR UPDATE OF c`,accountID).Scan(&characterID); err!=nil {
 		if errors.Is(err,sql.ErrNoRows) { return ErrInvalidRequest }; return fmt.Errorf("resolve current character: %w",err)
 	}
+	var inWorld bool
+	if err:=tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM world_sessions WHERE character_id=$1::uuid AND session_state='active')`,characterID).Scan(&inWorld); err!=nil {
+		return fmt.Errorf("check active character session: %w",err)
+	}
+	if inWorld { return ErrCharacterInWorld }
 	if err:=tx.QueryRowContext(ctx,`SELECT item_id FROM character_equipment WHERE character_id=$1::uuid AND slot=$2 FOR UPDATE`,characterID,slot).Scan(&itemID); err!=nil {
 		if errors.Is(err,sql.ErrNoRows) { return ErrInvalidRequest }; return fmt.Errorf("load equipped item: %w",err)
 	}
