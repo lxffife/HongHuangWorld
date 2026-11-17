@@ -16,6 +16,7 @@
 - `000010_soul_progression` 增加跨世保留的灵魂境界、灵魂经验与幂等奖励事件。
 - `000011_soul_trials` 增加数据驱动的冥界灵魂试炼定义与每个灵魂的任务进度。
 - `000012_world_npcs` 增加世界NPC目录、交互配置与酆都五名引导NPC。
+- `000013_soul_memories` 增加跨世前世记忆档案；轮回时自动保存上一世摘要，魂将境（灵魂境界序号 5）后才向玩家开放具体内容。
 
 ## 当前迁移顺序
 
@@ -34,6 +35,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000009_reincarnat
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000010_soul_progression.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000011_soul_trials.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000012_world_npcs.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000013_soul_memories.up.sql
 ```
 
 回滚时按相反顺序执行对应的 `.down.sql`。不要在已运行的生产库上重复执行非幂等迁移；后续接入迁移工具后，应由工具记录每个已应用版本，避免人工重复执行。
