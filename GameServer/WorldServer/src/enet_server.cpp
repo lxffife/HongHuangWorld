@@ -53,6 +53,8 @@ struct PlayerState {
     std::string session_id;
     std::string character_id;
     std::string name;
+    std::int64_t attack{20};
+    std::int64_t defense{};
     float x{};
     float y{};
     float z{};
@@ -1197,7 +1199,7 @@ struct EnetServer::Impl {
                       Json{{"accepted", false}, {"reason", "距离目标太远。"}});
             return;
         }
-        const honghuang::simulation::CombatantStats attacker{20, 0, 100, 100};
+        const honghuang::simulation::CombatantStats attacker{player.attack, player.defense, 100, 100};
         const honghuang::simulation::CombatantStats defender{
             static_cast<std::int64_t>(target->definition.attack),
             static_cast<std::int64_t>(target->definition.defense),
@@ -1481,9 +1483,29 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                                   Json{{"reason", "world entry ticket rejected"}});
                         enet_peer_disconnect_later(event.peer, 3);
                     } else {
+                        const std::string session_id = snapshot.value("session_id", std::string{});
+                        const std::string character_id = snapshot.value("character_id", std::string{});
+                        Json combat_stats;
+                        long stats_http_status = 0;
+                        std::string stats_error;
+                        const Json stats_request{{"session_id", session_id}, {"character_id", character_id}};
+                        if (!backend_inventory_request(impl_->config, "/api/v1/servers/sessions/combat-stats",
+                                                       &stats_request, stats_http_status, combat_stats, stats_error) ||
+                            !combat_stats.is_object() || !combat_stats.contains("attack") ||
+                            !combat_stats.contains("defense") || !combat_stats["attack"].is_number_integer() ||
+                            !combat_stats["defense"].is_number_integer()) {
+                            std::cerr << "Could not synchronize authoritative character combat stats: "
+                                      << stats_error << '\\n';
+                            send_json(event.peer, honghuang::protocol::MessageType::ServerReject,
+                                      Json{{"reason", "character combat stats could not be synchronized"}});
+                            enet_peer_disconnect_later(event.peer, 7);
+                            continue;
+                        }
                         PlayerState player;
-                        player.session_id = snapshot.value("session_id", std::string{});
-                        player.character_id = snapshot.value("character_id", std::string{});
+                        player.session_id = session_id;
+                        player.character_id = character_id;
+                        player.attack = combat_stats.at("attack").get<std::int64_t>();
+                        player.defense = combat_stats.at("defense").get<std::int64_t>();
                         player.name = snapshot.value("name", std::string{});
                         player.x = snapshot.value("position_x", 0.0F);
                         player.y = snapshot.value("position_y", 0.0F);
