@@ -348,7 +348,16 @@ func (s *Service) ListExplorationPoints(ctx context.Context, accountID string) (
 	if err != nil { return nil, fmt.Errorf("resolve exploration session: %w", err) }
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT p.id,p.world_id,p.region_id,COALESCE(route.region_name,p.region_id),p.name,p.description,
+		`SELECT p.id,p.world_id,p.region_id,
+                COALESCE(route.region_name,
+                    CASE p.region_id
+                        WHEN 'fengdu_gate_outskirts' THEN '酆都鬼门关'
+                        WHEN 'wangchuan_riverside' THEN '忘川河畔'
+                        WHEN 'naihe_bridge' THEN '奈何桥'
+                        WHEN 'reincarnation_hall_front' THEN '轮回殿前'
+                        ELSE p.region_id
+                    END),
+                p.name,p.description,
 		        p.position_x,p.position_y,p.position_z,p.interaction_radius,p.danger_level,
 		        (d.point_id IS NOT NULL)
 		 FROM world_exploration_points p
