@@ -49,6 +49,20 @@ type GroundDrop struct {
 	ExpiresAt string `json:"expires_at"`
 }
 
+
+type GroundDropSnapshot struct {
+	ID string `json:"id"`
+	SessionID string `json:"session_id"`
+	OwnerCharacterID string `json:"owner_character_id"`
+	ItemID string `json:"item_id"`
+	ItemName string `json:"item_name"`
+	Quality int `json:"quality"`
+	Quantity int `json:"quantity"`
+	PositionX float64 `json:"position_x"`
+	PositionZ float64 `json:"position_z"`
+	RemainingSeconds int `json:"remaining_seconds"`
+}
+
 type DropRequest struct {
 	DropID string
 	SessionID string
@@ -136,6 +150,33 @@ func (s *Service) CurrentInventory(ctx context.Context, accountID string) ([]Ite
 
 // CreateDrop is called only by an authenticated world server after its own
 // authoritative loot roll. The server supplies the item and quantity.
+
+func (s *Service) ListGroundDrops(ctx context.Context, nodeKey string) ([]GroundDropSnapshot, error) {
+	if strings.TrimSpace(nodeKey) == "" { return nil, ErrInvalidRequest }
+	rows, err := s.db.QueryContext(ctx, `SELECT d.id::text, d.session_id::text, d.owner_character_id::text,
+		d.item_id, i.name, i.quality, d.quantity, d.position_x, d.position_z,
+		GREATEST(0, CEIL(EXTRACT(EPOCH FROM (d.expires_at - now()))))::integer
+		FROM ground_drops d
+		JOIN server_registry s ON s.id = d.server_id
+		JOIN item_definitions i ON i.id = d.item_id
+		WHERE s.node_key = $1 AND d.status = 'available' AND d.expires_at > now()
+		ORDER BY d.created_at`, nodeKey)
+	if err != nil { return nil, fmt.Errorf("list persisted ground drops: %w", err) }
+	defer rows.Close()
+	drops := make([]GroundDropSnapshot, 0)
+	for rows.Next() {
+		var drop GroundDropSnapshot
+		if err := rows.Scan(&drop.ID, &drop.SessionID, &drop.OwnerCharacterID, &drop.ItemID,
+			&drop.ItemName, &drop.Quality, &drop.Quantity, &drop.PositionX, &drop.PositionZ,
+			&drop.RemainingSeconds); err != nil {
+			return nil, fmt.Errorf("scan persisted ground drop: %w", err)
+		}
+		drops = append(drops, drop)
+	}
+	if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate persisted ground drops: %w", err) }
+	return drops, nil
+}
+
 func (s *Service) CreateDrop(ctx context.Context, nodeKey string, request DropRequest) (GroundDrop, error) {
 	if strings.TrimSpace(nodeKey) == "" || !validUUID(request.DropID) || !validUUID(request.SessionID) ||
 		!validUUID(request.CharacterID) || strings.TrimSpace(request.ItemID) == "" ||
@@ -224,9 +265,9 @@ func (s *Service) PickupDrop(ctx context.Context, nodeKey string, request Pickup
 	var itemID string
 	var quantity int
 	err = tx.QueryRowContext(ctx, `SELECT item_id, quantity FROM ground_drops
-		WHERE id = $1::uuid AND server_id = $2 AND session_id = $3::uuid
-		  AND owner_character_id = $4::uuid AND status = 'available' AND expires_at > now()
-		FOR UPDATE`, request.DropID, serverID, request.SessionID, request.CharacterID).Scan(&itemID, &quantity)
+		WHERE id = $1::uuid AND server_id = $2
+		  AND owner_character_id = $3::uuid AND status = 'available' AND expires_at > now()
+		FOR UPDATE`, request.DropID, serverID, request.CharacterID).Scan(&itemID, &quantity)
 	if errors.Is(err, sql.ErrNoRows) { return Result{}, ErrDropUnavailable }
 	if err != nil { return Result{}, fmt.Errorf("lock ground drop: %w", err) }
 	var maxStack int
