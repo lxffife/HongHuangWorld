@@ -746,6 +746,27 @@ struct EnetServer::Impl {
                     else
                         std::cerr << "Outbox event dead-lettered (HTTP " << status << "): "
                                   << event->event_id << " " << delivery_error << '\n';
+                    if (event->event_type == "ground_drop_pickup") {
+                        try {
+                            const Json payload = Json::parse(event->payload);
+                            GroundDropRuntime failed_drop{
+                                payload.at("drop_id").get<std::string>(),
+                                payload.at("drop_session_id").get<std::string>(),
+                                payload.at("character_id").get<std::string>(),
+                                payload.at("item_id").get<std::string>(),
+                                payload.at("quantity").get<int>(),
+                                payload.at("position_x").get<float>(),
+                                payload.at("position_z").get<float>(),
+                                Clock::now() + std::chrono::seconds(60), true
+                            };
+                            std::lock_guard lock(drop_mutex);
+                            completed_drop_jobs.push_back(DropJobResult{
+                                true, std::move(failed_drop), event->event_id, false, delivery_error
+                            });
+                        } catch (const std::exception&) {
+                            std::cerr << "Could not reconstruct failed pickup event " << event->event_id << '\n';
+                        }
+                    }
                     continue;
                 }
 
