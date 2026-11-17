@@ -106,7 +106,10 @@ func NewService(db *sql.DB) *Service {
 
 func (s *Service) CreateFirstLife(ctx context.Context, accountID, name, worldID, raceID string) (Character, error) {
 	name = strings.TrimSpace(name)
-	worldID = strings.TrimSpace(worldID)
+	// A soul's first physical form always awakens in Fengdu; the player
+	// reaches other worlds through the reincarnation/entry flow, never by
+	// selecting an arbitrary world during first-life creation.
+	worldID = "underworld_fengdu"
 	raceID = strings.TrimSpace(raceID)
 	if raceID == "" {
 		raceID = "human"
