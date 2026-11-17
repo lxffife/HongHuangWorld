@@ -1316,14 +1316,16 @@ func (s *Service) Reincarnate(ctx context.Context, accountID, name, raceID, rout
 	var result Character
 	result.FateAspect, result.FateKarma, result.FateMerit = fateAspect, fateKarma, fateMerit
 	result.BirthRouteName = routeName
-	result.FateTraitID, result.FateTraitName, result.FateTraitDescription = "unmarked_fate", "因果未定", "此世命格尚未显现，未来的善恶抉择仍可改变命运。"
-	switch {
-	case fateMerit >= 5 && fateKarma >= 5:
-		result.FateTraitID, result.FateTraitName, result.FateTraitDescription = "entangled_fate", "福祸交织", "福缘与业障并存，可能触发更复杂的因果遭遇。"
-	case fateMerit >= 5:
-		result.FateTraitID, result.FateTraitName, result.FateTraitDescription = "blessed_fate", "福缘深厚", "善缘随身，部分正道 NPC 可能给予额外信任与隐藏机缘。"
-	case fateKarma >= 5:
-		result.FateTraitID, result.FateTraitName, result.FateTraitDescription = "karmic_shadow", "业障缠身", "业障随身，部分冥界 NPC 与特殊事件会对你作出不同反应。"
+	result.FateTraitID = currentFateTraitID(fateMerit, fateKarma)
+	switch result.FateTraitID {
+	case "entangled_fate":
+		result.FateTraitName, result.FateTraitDescription = "福祸交织", "福缘与业障并存，可能触发更复杂的因果遭遇。"
+	case "blessed_fate":
+		result.FateTraitName, result.FateTraitDescription = "福缘深厚", "善缘随身，部分正道 NPC 可能给予额外信任与隐藏机缘。"
+	case "karmic_shadow":
+		result.FateTraitName, result.FateTraitDescription = "业障缠身", "业障随身，部分冥界 NPC 与特殊事件会对你作出不同反应。"
+	default:
+		result.FateTraitName, result.FateTraitDescription = "因果未定", "此世命格尚未显现，未来的善恶抉择仍可改变命运。"
 	}
 	if routeFateTraitID.Valid && routeFateTraitID.String != result.FateTraitID {
 		return Character{}, ErrInvalidBirthRoute
