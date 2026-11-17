@@ -81,3 +81,30 @@ func (h *npcHandlers) chooseFate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 	}
 }
+
+
+func (h *npcHandlers) discoverFateEncounter(w http.ResponseWriter, r *http.Request) {
+	account, ok := h.currentAccount(w, r)
+	if !ok { return }
+	var request struct { NPCID string `json:"npc_id"` }
+	if err := decodeJSON(w, r, &request); err != nil || strings.TrimSpace(request.NPCID) == "" || len(request.NPCID) > 64 {
+		http.Error(w, "npc_id is required", http.StatusBadRequest)
+		return
+	}
+	result, err := h.service.DiscoverFateEncounter(r.Context(), account.ID, strings.TrimSpace(request.NPCID))
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusOK, result)
+	case errors.Is(err, npc.ErrNoActiveSession):
+		http.Error(w, "active world session required", http.StatusConflict)
+	case errors.Is(err, npc.ErrTooFar):
+		http.Error(w, "move closer to this NPC", http.StatusConflict)
+	case errors.Is(err, npc.ErrEncounterUnavailable):
+		http.Error(w, "no hidden fate encounter is available for this character", http.StatusNotFound)
+	case errors.Is(err, npc.ErrEncounterResolved):
+		http.Error(w, "this hidden fate encounter has already been discovered by your soul", http.StatusConflict)
+	default:
+		h.logger.Error("discover fate encounter failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
+}
