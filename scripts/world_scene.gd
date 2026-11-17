@@ -1235,16 +1235,25 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_bootstrap")
 		"exploration_bootstrap":
 			_render_exploration_points(data.get("points", []))
+			_send_npc_request("GET", "/api/v1/worlds/current/exploration-events", "exploration_events_bootstrap")
 		"exploration_list":
 			_render_exploration_points(data.get("points", []))
 			npc_title_label.text = "区域探索 · 已发现记录"
 			npc_dialogue_label.text = "探索点由中心服依据角色实际位置验证。发现记录属于灵魂，轮回后仍会保留。"
-			npc_status_label.text = exploration_feedback if not exploration_feedback.is_empty() else "选择尚未发现的地点，靠近后即可调查。"
+			npc_status_label.text = exploration_feedback if not exploration_feedback.is_empty() else "先调查地点，再寻找地点中解锁的奇遇。"
 			npc_panel.visible = true
+			_send_npc_request("GET", "/api/v1/worlds/current/exploration-events", "exploration_events")
+		"exploration_events_bootstrap", "exploration_events":
+			_render_exploration_events(data.get("events", []))
 		"exploration_discover":
 			var merit_delta := int(data.get("merit_delta", 0))
 			var karma_delta := int(data.get("karma_delta", 0))
 			exploration_feedback = "已发现「" + str(data.get("name", "探索点")) + "」。功德 " + ("+" if merit_delta >= 0 else "") + str(merit_delta) + "，业力 " + ("+" if karma_delta >= 0 else "") + str(karma_delta) + "。记录已永久写入灵魂因果簿。"
+			_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_list")
+		"exploration_event":
+			var event_merit_delta := int(data.get("merit_delta", 0))
+			var event_karma_delta := int(data.get("karma_delta", 0))
+			exploration_feedback = "奇遇「" + str(data.get("title", "未知奇遇")) + "」已完成。功德 " + ("+" if event_merit_delta >= 0 else "") + str(event_merit_delta) + "，业力 " + ("+" if event_karma_delta >= 0 else "") + str(event_karma_delta) + "。"
 			_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_list")
 		"interact":
 			_clear_npc_choice_buttons()
@@ -1569,6 +1578,40 @@ func _render_exploration_points(points: Variant) -> void:
 		exploration_point_data[point_id] = point.duplicate(true)
 
 
+func _render_exploration_events(events: Variant) -> void:
+	if exploration_container == null or not events is Array or events.is_empty():
+		return
+	var heading := Label.new()
+	heading.text = "已解锁的区域奇遇"
+	heading.add_theme_font_size_override("font_size", 18)
+	exploration_container.add_child(heading)
+	for event_variant in events:
+		if not event_variant is Dictionary:
+			continue
+		var event: Dictionary = event_variant
+		var event_id := str(event.get("id", ""))
+		if event_id.is_empty():
+			continue
+		var target := Vector3(float(event.get("position_x", 0.0)), float(event.get("position_y", 0.0)), float(event.get("position_z", 0.0)))
+		var distance := local_player.global_position.distance_to(target) if is_instance_valid(local_player) else INF
+		var in_range := distance <= float(event.get("interaction_radius", 4.0))
+		var event_button := Button.new()
+		event_button.text = str(event.get("point_name", "探索地点")) + " · " + str(event.get("title", "未知奇遇")) + (" · 触发奇遇" if in_range else " · 距离 " + str(roundi(distance)) + "m")
+		event_button.tooltip_text = str(event.get("description", ""))
+		event_button.disabled = not in_range or npc_request_busy
+		event_button.pressed.connect(_trigger_exploration_event.bind(event_id))
+		exploration_container.add_child(event_button)
+
+
+func _trigger_exploration_event(event_id: String) -> void:
+	if npc_request_busy or event_id.is_empty():
+		return
+	npc_status_label.text = "正在验证奇遇触发条件……"
+	_send_npc_request("POST", "/api/v1/worlds/current/exploration-events/trigger", "exploration_event", {
+		"event_id": event_id
+	})
+
+
 func _discover_exploration_point(point_id: String) -> void:
 	if npc_request_busy or point_id.is_empty():
 		return
@@ -1649,4 +1692,4 @@ func _update_exploration_proximity() -> void:
 		var in_range := distance <= float(point.get("interaction_radius", 4.0))
 		point_button.disabled = not in_range or npc_request_busy
 		var danger := int(point.get("danger_level", 1))
-		point_button.text = str(point.get("region_name", "未知区域")) + " · " + ("调查" if in_range else "未抵达 · " + str(roundi(distance)) + "m") + " · " + str(point.get("name", "未知地点")) + "  | 危险 " + str(danger) + "/10
+		point_button.text = str(point.get("region_name", "未知区域")) + " · " + ("调查" if in_range else "未抵达 · " + str(roundi(distance)) + "m") + " · " + str(point.get("name", "未知地点")) + "  | 危险 " + str(danger) + "/10"
