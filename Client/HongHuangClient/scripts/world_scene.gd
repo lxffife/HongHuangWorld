@@ -663,7 +663,7 @@ func _refresh_current_region(show_entry_notice: bool) -> void:
 		return
 	var previous_region := current_region_name
 	current_region_name = next_region
-	_update_compact_hud()
+	_update_hud()
 	if show_entry_notice and not previous_region.is_empty():
 		_show_notification("已进入「" + next_region + "」", 2.8)
 
