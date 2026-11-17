@@ -19,6 +19,68 @@ var is_dead := false
 var current_move_input := Vector2.ZERO
 var last_send_error: int = OK
 var movement_network_ready := false
+func _ready() -> void:
+	_build_player()
+	_ensure_input_actions()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+func _build_player() -> void:
+	var capsule := CapsuleMesh.new()
+	capsule.radius = 0.42
+	capsule.height = 1.8
+	visual = MeshInstance3D.new()
+	visual.name = "PlaceholderBody"
+	visual.mesh = capsule
+	visual.position.y = 0.9
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#d5b47a")
+	material.metallic = 0.12
+	material.roughness = 0.48
+	visual.material_override = material
+	add_child(visual)
+
+	var collision := CollisionShape3D.new()
+	var shape := CapsuleShape3D.new()
+	shape.radius = 0.42
+	shape.height = 1.8
+	collision.shape = shape
+	collision.position.y = 0.9
+	add_child(collision)
+
+	camera_pivot = Node3D.new()
+	camera_pivot.name = "CameraPivot"
+	camera_pivot.position.y = 1.45
+	add_child(camera_pivot)
+	var spring := SpringArm3D.new()
+	spring.spring_length = 4.2
+	spring.margin = 0.2
+	camera_pivot.add_child(spring)
+	camera = Camera3D.new()
+	camera.current = true
+	camera.fov = 72.0
+	spring.add_child(camera)
+	camera_pivot.rotation.x = pitch
+
+func _ensure_input_actions() -> void:
+	_add_key_action("move_forward", KEY_W)
+	_add_key_action("move_back", KEY_S)
+	_add_key_action("move_left", KEY_A)
+	_add_key_action("move_right", KEY_D)
+	_add_key_action("jump", KEY_SPACE)
+	_add_key_action("release_mouse", KEY_ESCAPE)
+
+func _add_key_action(action: String, keycode: int) -> void:
+	if not InputMap.has_action(action):
+		InputMap.add_action(action)
+	# 同时注册物理键位和逻辑键位，兼容不同键盘布局与输入法状态。
+	var physical_event := InputEventKey.new()
+	physical_event.physical_keycode = keycode
+	InputMap.action_add_event(action, physical_event)
+	var logical_event := InputEventKey.new()
+	logical_event.keycode = keycode
+	InputMap.action_add_event(action, logical_event)
+
+
 func _is_move_key_down(physical_key: Key, logical_key: Key) -> bool:
 	# 直接查询当前键盘状态，按键松开后立即归零，不依赖释放事件是否被 UI/焦点吞掉。
 	return Input.is_physical_key_pressed(physical_key) or Input.is_key_pressed(logical_key)
@@ -68,6 +130,10 @@ func _physics_process(delta: float) -> void:
 		return
 	var input_2d := _get_move_input()
 	current_move_input = input_2d
+	if camera_pivot == null or not is_instance_valid(camera_pivot):
+		return
+	if visual == null or not is_instance_valid(visual):
+		return
 	var camera_basis := camera_pivot.global_transform.basis
 	var direction := camera_basis.x * input_2d.x + camera_basis.z * input_2d.y
 	direction.y = 0.0
