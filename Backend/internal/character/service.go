@@ -1199,8 +1199,8 @@ func (s *Service) Reincarnate(ctx context.Context, accountID, name, raceID strin
 	case fateKarma >= 5:
 		fateAspect = "业障缠身"
 	}
-	result.FateAspect, result.FateKarma, result.FateMerit = fateAspect, fateKarma, fateMerit
 	var result Character
+	result.FateAspect, result.FateKarma, result.FateMerit = fateAspect, fateKarma, fateMerit
 	var race sql.NullString
 	err = tx.QueryRowContext(ctx,
 		`INSERT INTO characters (soul_id, life_index, world_id, name, race_id)
