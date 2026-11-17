@@ -33,6 +33,10 @@ var inventory_button: Button
 var inventory_panel: PanelContainer
 var inventory_status: Label
 var inventory_items: VBoxContainer
+var inventory_cache: Array = []
+var inventory_filter := "all"
+var inventory_sort_mode := "quality"
+var inventory_sort_option: OptionButton
 var inventory_equipment: VBoxContainer
 var equipment_http: HTTPRequest
 var equipment_action_http: HTTPRequest
@@ -537,6 +541,19 @@ func _build_inventory_ui() -> void:
 	inventory_status = Label.new()
 	inventory_status.text = "正在读取背包……"
 	layout.add_child(inventory_status)
+	var filter_row := HBoxContainer.new()
+	layout.add_child(filter_row)
+	for filter_data in [["all","全部"],["equipment","装备"],["consumable","消耗品"],["material","材料"],["quest","任务"]] :
+		var filter_button := Button.new()
+		filter_button.text = filter_data[1]
+		filter_button.pressed.connect(_on_inventory_filter_pressed.bind(filter_data[0]))
+		filter_row.add_child(filter_button)
+	inventory_sort_option = OptionButton.new()
+	inventory_sort_option.add_item("品质优先", 0)
+	inventory_sort_option.add_item("名称排序", 1)
+	inventory_sort_option.add_item("数量排序", 2)
+	inventory_sort_option.item_selected.connect(_on_inventory_sort_selected)
+	layout.add_child(inventory_sort_option)
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size = Vector2(320.0, 330.0)
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -588,8 +605,6 @@ func _refresh_inventory() -> void:
 
 func _on_inventory_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	inventory_request_busy = false
-	for child in inventory_items.get_children():
-		child.queue_free()
 	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
 		inventory_status.text = "背包读取失败：" + body.get_string_from_utf8()
 		return
@@ -597,16 +612,48 @@ func _on_inventory_request_completed(result: int, response_code: int, _headers: 
 	if not (parsed is Dictionary) or not (parsed.get("items", []) is Array):
 		inventory_status.text = "中心服返回了无效的背包数据。"
 		return
-	var items: Array = parsed.get("items", [])
-	inventory_status.text = "物品数量：" + str(items.size()) + " 种"
+	inventory_cache = parsed.get("items", [])
+	inventory_status.text = "物品种类：" + str(inventory_cache.size())
+	_render_inventory_items()
+
+func _on_inventory_filter_pressed(filter_type: String) -> void:
+	inventory_filter = filter_type
+	_render_inventory_items()
+
+func _on_inventory_sort_selected(index: int) -> void:
+	match index:
+		0: inventory_sort_mode = "quality"
+		1: inventory_sort_mode = "name"
+		2: inventory_sort_mode = "quantity"
+	_render_inventory_items()
+
+func _render_inventory_items() -> void:
+	for child in inventory_items.get_children():
+		child.queue_free()
+	var items: Array = []
+	for item in inventory_cache:
+		if not (item is Dictionary):
+			continue
+		if inventory_filter != "all" and str(item.get("item_type", "")) != inventory_filter:
+			continue
+		items.append(item)
+	items.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		match inventory_sort_mode:
+			"name":
+				return str(a.get("name", "")) < str(b.get("name", ""))
+			"quantity":
+				return int(a.get("quantity", 0)) > int(b.get("quantity", 0))
+			_:
+				if int(a.get("quality", 1)) != int(b.get("quality", 1)):
+					return int(a.get("quality", 1)) > int(b.get("quality", 1))
+				return str(a.get("name", "")) < str(b.get("name", ""))
+	)
 	if items.is_empty():
 		var empty_label := Label.new()
-		empty_label.text = "背包空空如也，去击败荒原狼收集材料吧。"
+		empty_label.text = "当前分类没有物品。"
 		inventory_items.add_child(empty_label)
 		return
 	for item in items:
-		if not (item is Dictionary):
-			continue
 		var row := HBoxContainer.new()
 		inventory_items.add_child(row)
 		var line := Label.new()
@@ -617,6 +664,10 @@ func _on_inventory_request_completed(result: int, response_code: int, _headers: 
 		line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		row.add_child(line)
+		var detail_button := Button.new()
+		detail_button.text = "详情"
+		detail_button.pressed.connect(_show_item_details.bind(item))
+		row.add_child(detail_button)
 		if str(item.get("item_type", "")) == "equipment":
 			var equip_button := Button.new()
 			equip_button.text = "穿戴"
@@ -628,6 +679,24 @@ func _on_inventory_request_completed(result: int, response_code: int, _headers: 
 			use_button.disabled = consumable_busy
 			use_button.pressed.connect(_on_use_consumable_pressed.bind(str(item.get("item_id", ""))))
 			row.add_child(use_button)
+
+func _show_item_details(item: Dictionary) -> void:
+	var dialog := AcceptDialog.new()
+	dialog.title = str(item.get("name", "物品详情"))
+	var details := str(item.get("description", "暂无描述"))
+	details += "\\n\\n分类：" + str(item.get("item_type", "未知"))
+	details += "\\n品质：" + str(item.get("quality", 1))
+	details += "\\n数量：" + str(item.get("quantity", 0)) + " / " + str(item.get("max_stack", 1))
+	var stats: Dictionary = item.get("base_stats", {})
+	if not stats.is_empty():
+		details += "\\n属性加成：" + str(stats)
+	if str(item.get("equipment_slot", "")) != "":
+		details += "\\n装备部位：" + str(item.get("equipment_slot", ""))
+	dialog.dialog_text = details
+	add_child(dialog)
+	dialog.confirmed.connect(dialog.queue_free)
+	dialog.canceled.connect(dialog.queue_free)
+	dialog.popup_centered(Vector2i(440, 300))
 
 func _request_nearest_monster_attack() -> void:
 	var network := HHSession.world_network
