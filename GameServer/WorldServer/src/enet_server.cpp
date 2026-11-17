@@ -3,6 +3,7 @@
 #include "simulation/movement.hpp"
 #include "simulation/monster.hpp"
 #include "simulation/combat.hpp"
+#include "persistence/durable_outbox.hpp"
 
 #include <enet/enet.h>
 #include <curl/curl.h>
@@ -12,6 +13,7 @@
 #include <array>
 #include <cstdint>
 #include <deque>
+#include <filesystem>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -580,6 +582,11 @@ struct EnetServer::Impl {
     std::vector<MonsterRuntime> monsters;
     std::vector<LootEntry> loot_table;
     std::vector<GroundDropRuntime> ground_drops;
+    std::unique_ptr<honghuang::persistence::DurableOutbox> durable_outbox;
+    std::mutex outbox_mutex;
+    std::condition_variable outbox_cv;
+    bool outbox_stop_requested{false};
+    std::thread outbox_thread;
     std::mutex drop_mutex;
     std::condition_variable drop_cv;
     std::deque<DropJob> pending_drop_jobs;
@@ -627,6 +634,123 @@ struct EnetServer::Impl {
     }
 
 
+    static std::int64_t wall_clock_ms() {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+    }
+
+    bool enqueue_durable_event(const std::string& event_id, const std::string& type,
+                               const Json& payload, std::string& error) {
+        if (!durable_outbox) { error = "durable outbox is not initialized"; return false; }
+        const auto now = wall_clock_ms();
+        const bool stored = durable_outbox->enqueue(
+            honghuang::persistence::OutboxEvent{event_id, type, payload.dump(), 0, now, now, {}}, error);
+        if (stored) outbox_cv.notify_one();
+        return stored;
+    }
+
+    void start_outbox_worker() {
+        outbox_stop_requested = false;
+        outbox_thread = std::thread([this] {
+            while (true) {
+                {
+                    std::lock_guard lock(outbox_mutex);
+                    if (outbox_stop_requested) return;
+                }
+                std::string storage_error;
+                auto event = durable_outbox->claim_due(wall_clock_ms(), storage_error);
+                if (!event) {
+                    if (!storage_error.empty()) std::cerr << "Outbox claim failed: " << storage_error << '\n';
+                    std::unique_lock lock(outbox_mutex);
+                    if (outbox_stop_requested) return;
+                    outbox_cv.wait_for(lock, std::chrono::milliseconds(500));
+                    continue;
+                }
+
+                long status = 0;
+                std::string delivery_error;
+                bool delivered = false;
+                bool is_drop = false;
+                GroundDropRuntime delivered_drop;
+                try {
+                    const Json payload = Json::parse(event->payload);
+                    if (event->event_type == "character_reward") {
+                        CharacterRewardEvent reward{
+                            event->event_id, payload.at("session_id").get<std::string>(),
+                            payload.at("character_id").get<std::string>(),
+                            payload.at("experience").get<std::int64_t>(),
+                            payload.at("cultivation").get<std::int64_t>(), event->attempts
+                        };
+                        delivered = deliver_character_reward(config, reward, status, delivery_error);
+                    } else if (event->event_type == "ground_drop_create") {
+                        is_drop = true;
+                        const auto expiry_ms = payload.at("expires_at_unix_ms").get<std::int64_t>();
+                        const auto remaining_ms = std::max<std::int64_t>(0, expiry_ms - wall_clock_ms());
+                        delivered_drop = GroundDropRuntime{
+                            payload.at("drop_id").get<std::string>(),
+                            payload.at("session_id").get<std::string>(),
+                            payload.at("character_id").get<std::string>(),
+                            payload.at("item_id").get<std::string>(),
+                            payload.at("quantity").get<int>(),
+                            payload.at("position_x").get<float>(),
+                            payload.at("position_z").get<float>(),
+                            Clock::now() + std::chrono::milliseconds(remaining_ms), false
+                        };
+                        delivered = deliver_ground_drop(config, delivered_drop, status, delivery_error);
+                    } else {
+                        status = 400;
+                        delivery_error = "unsupported durable outbox event type: " + event->event_type;
+                    }
+                } catch (const std::exception& exception) {
+                    status = 400;
+                    delivery_error = std::string("invalid outbox payload: ") + exception.what();
+                }
+
+                if (delivered) {
+                    std::string mark_error;
+                    if (!durable_outbox->mark_delivered(event->event_id, mark_error))
+                        std::cerr << "Outbox delivered marker failed; idempotent replay expected: " << mark_error << '\n';
+                    if (is_drop && delivered_drop.expires_at > Clock::now()) {
+                        std::lock_guard lock(drop_mutex);
+                        completed_drop_jobs.push_back(DropJobResult{
+                            false, std::move(delivered_drop), event->event_id, true, {}
+                        });
+                    }
+                    continue;
+                }
+
+                if (status >= 400 && status < 500) {
+                    std::string dead_error;
+                    if (!durable_outbox->move_to_dead_letter(
+                            event->event_id, event->attempts + 1, delivery_error, dead_error))
+                        std::cerr << "Outbox dead-letter update failed: " << dead_error << '\n';
+                    else
+                        std::cerr << "Outbox event dead-lettered (HTTP " << status << "): "
+                                  << event->event_id << " " << delivery_error << '\n';
+                    continue;
+                }
+
+                const auto attempts = event->attempts == UINT32_MAX ? event->attempts : event->attempts + 1;
+                const auto exponent = std::min<std::uint32_t>(attempts, 8U);
+                const auto delay_ms = std::min<std::int64_t>(1000LL * (1LL << exponent), 300000LL);
+                std::string retry_error;
+                if (!durable_outbox->schedule_retry(
+                        event->event_id, attempts, wall_clock_ms() + delay_ms,
+                        delivery_error, retry_error))
+                    std::cerr << "Outbox retry scheduling failed: " << retry_error << '\n';
+            }
+        });
+    }
+
+    void stop_outbox_worker() {
+        {
+            std::lock_guard lock(outbox_mutex);
+            outbox_stop_requested = true;
+        }
+        outbox_cv.notify_all();
+        if (outbox_thread.joinable()) outbox_thread.join();
+    }
+
     void start_reward_worker() {
         reward_stop_requested = false;
         reward_thread = std::thread([this] {
@@ -671,16 +795,13 @@ struct EnetServer::Impl {
     }
 
     void enqueue_character_reward(CharacterRewardEvent reward) {
-        {
-            std::lock_guard lock(reward_mutex);
-            if (reward_stop_requested || pending_rewards.size() >= 4096) {
-                std::cerr << "Character reward queue unavailable/full; event " << reward.event_id
-                          << " could not be queued\\n";
-                return;
-            }
-            pending_rewards.push_back(std::move(reward));
-        }
-        reward_cv.notify_one();
+        const Json payload{
+            {"session_id", reward.session_id}, {"character_id", reward.character_id},
+            {"experience", reward.experience}, {"cultivation", reward.cultivation}
+        };
+        std::string error;
+        if (!enqueue_durable_event(reward.event_id, "character_reward", payload, error))
+            std::cerr << "Could not persist character reward: " << error << '\n';
     }
 
     void stop_reward_worker() {
@@ -863,10 +984,26 @@ struct EnetServer::Impl {
     }
 
     bool enqueue_drop_job(DropJob job) {
+        if (!job.pickup) {
+            const auto expiry = wall_clock_ms() +
+                std::chrono::duration_cast<std::chrono::milliseconds>(job.drop.expires_at - Clock::now()).count();
+            const Json payload{
+                {"drop_id", job.drop.id}, {"session_id", job.drop.session_id},
+                {"character_id", job.drop.owner_character_id}, {"item_id", job.drop.item_id},
+                {"quantity", job.drop.quantity}, {"position_x", job.drop.x},
+                {"position_z", job.drop.z}, {"expires_at_unix_ms", expiry}
+            };
+            std::string error;
+            if (!enqueue_durable_event(job.drop.id, "ground_drop_create", payload, error)) {
+                std::cerr << "Could not persist ground drop: " << error << '\n';
+                return false;
+            }
+            return true;
+        }
         {
             std::lock_guard lock(drop_mutex);
             if (drop_stop_requested || pending_drop_jobs.size() >= 8192) {
-                std::cerr << "Inventory job queue full; request rejected for drop " << job.drop.id << '\n';
+                std::cerr << "Pickup queue full for drop " << job.drop.id << '\n';
                 return false;
             }
             pending_drop_jobs.push_back(std::move(job));
@@ -1230,7 +1367,25 @@ bool EnetServer::start() {
     impl_->heartbeat_stop_requested = false;
     impl_->start_heartbeat_worker(heartbeat_ok);
     impl_->start_persistence_worker();
-    impl_->start_reward_worker();
+    std::filesystem::path outbox_path(impl_->config.outbox_database_path);
+    if (outbox_path.has_parent_path()) {
+        std::error_code directory_error;
+        std::filesystem::create_directories(outbox_path.parent_path(), directory_error);
+        if (directory_error) {
+            std::cerr << "Could not create WorldServer data directory: " << directory_error.message() << '
+';
+            return false;
+        }
+    }
+    try {
+        impl_->durable_outbox = std::make_unique<honghuang::persistence::DurableOutbox>(
+            outbox_path.string(), 10000);
+    } catch (const std::exception& exception) {
+        std::cerr << "Could not initialize durable outbox: " << exception.what() << '
+';
+        return false;
+    }
+    impl_->start_outbox_worker();
     std::string loot_error;
     if (!load_loot_table(impl_->config, impl_->loot_table, loot_error)) {
         std::cerr << "Monster loot table unavailable; drops disabled until restart: " << loot_error << '\n';
@@ -1416,6 +1571,7 @@ void EnetServer::stop() {
         impl_->heartbeat_cv.notify_all();
         if (impl_->heartbeat_thread.joinable()) impl_->heartbeat_thread.join();
 
+        impl_->stop_outbox_worker();
         impl_->stop_reward_worker();
         impl_->stop_drop_worker();
         impl_->drain_drop_results();
