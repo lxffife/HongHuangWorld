@@ -152,3 +152,31 @@ func (h *npcHandlers) discoverExplorationPoint(w http.ResponseWriter, r *http.Re
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 	}
 }
+
+
+func (h *npcHandlers) listExplorationEvents(w http.ResponseWriter,r *http.Request) {
+	account,ok:=h.currentAccount(w,r); if !ok{return}
+	items,err:=h.service.ListAvailableExplorationEvents(r.Context(),account.ID)
+	switch {
+	case err==nil: writeJSON(w,http.StatusOK,map[string]any{"events":items})
+	case errors.Is(err,npc.ErrNoActiveSession): http.Error(w,"active world session required",http.StatusConflict)
+	default: h.logger.Error("list exploration events failed","error",err); http.Error(w,"internal server error",http.StatusInternalServerError)
+	}
+}
+
+func (h *npcHandlers) triggerExplorationEvent(w http.ResponseWriter,r *http.Request) {
+	account,ok:=h.currentAccount(w,r); if !ok{return}
+	var request struct { EventID string `json:"event_id"` }
+	if err:=decodeJSON(w,r,&request);err!=nil || strings.TrimSpace(request.EventID)=="" || len(request.EventID)>96 {
+		http.Error(w,"event_id is required",http.StatusBadRequest);return
+	}
+	result,err:=h.service.TriggerExplorationEvent(r.Context(),account.ID,strings.TrimSpace(request.EventID))
+	switch {
+	case err==nil: writeJSON(w,http.StatusOK,result)
+	case errors.Is(err,npc.ErrNoActiveSession): http.Error(w,"active world session required",http.StatusConflict)
+	case errors.Is(err,npc.ErrTooFar): http.Error(w,"move closer to the exploration event",http.StatusConflict)
+	case errors.Is(err,npc.ErrExplorationEventUnavailable): http.Error(w,"exploration event is unavailable or locked",http.StatusNotFound)
+	case errors.Is(err,npc.ErrExplorationEventResolved): http.Error(w,"this event has already been resolved by your soul",http.StatusConflict)
+	default: h.logger.Error("trigger exploration event failed","error",err); http.Error(w,"internal server error",http.StatusInternalServerError)
+	}
+}
