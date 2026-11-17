@@ -134,10 +134,39 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+	bytes int
+}
+
+func (w *statusRecorder) WriteHeader(status int) {
+	if w.status != 0 { return }
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *statusRecorder) Write(data []byte) (int, error) {
+	if w.status == 0 { w.WriteHeader(http.StatusOK) }
+	n, err := w.ResponseWriter.Write(data)
+	w.bytes += n
+	return n, err
+}
+
 func requestLogger(logger *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		started := time.Now()
-		next.ServeHTTP(w, r)
-		logger.Info("http request", "method", r.Method, "path", r.URL.Path, "duration_ms", time.Since(started).Milliseconds())
+		recorder := &statusRecorder{ResponseWriter: w}
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				logger.Error("http handler panic", "method", r.Method, "path", r.URL.Path, "panic", recovered)
+				if recorder.status == 0 { http.Error(recorder, "internal server error", http.StatusInternalServerError) }
+			}
+			status := recorder.status
+			if status == 0 { status = http.StatusOK }
+			attrs := []any{"method", r.Method, "path", r.URL.Path, "status", status, "bytes", recorder.bytes, "duration_ms", time.Since(started).Milliseconds(), "remote", r.RemoteAddr}
+			if status >= 500 { logger.Error("http request", attrs...) } else if status >= 400 { logger.Warn("http request", attrs...) } else { logger.Info("http request", attrs...) }
+		}()
+		next.ServeHTTP(recorder, r)
 	})
 }
