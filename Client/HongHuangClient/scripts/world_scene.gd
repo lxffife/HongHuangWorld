@@ -69,6 +69,8 @@ var exploration_open_button: Button
 var exploration_container: VBoxContainer
 var exploration_feedback := ""
 var exploration_markers: Dictionary = {}
+var exploration_buttons: Dictionary = {}
+var exploration_point_data: Dictionary = {}
 var npc_current_interaction_id := ""
 var leaving_for_reincarnation := false
 var npc_selected_id := ""
@@ -1529,6 +1531,8 @@ func _render_exploration_points(points: Variant) -> void:
 		if is_instance_valid(old_marker):
 			old_marker.queue_free()
 	exploration_markers.clear()
+	exploration_buttons.clear()
+	exploration_point_data.clear()
 	for child in exploration_container.get_children():
 		child.queue_free()
 	if not points is Array or points.is_empty():
@@ -1554,6 +1558,8 @@ func _render_exploration_points(points: Variant) -> void:
 		point_button.tooltip_text = str(point.get("description", ""))
 		point_button.pressed.connect(_discover_exploration_point.bind(point_id))
 		exploration_container.add_child(point_button)
+		exploration_buttons[point_id] = point_button
+		exploration_point_data[point_id] = point.duplicate(true)
 
 
 func _discover_exploration_point(point_id: String) -> void:
@@ -1616,33 +1622,24 @@ func _create_exploration_marker(point: Dictionary) -> void:
 
 
 func _update_exploration_proximity() -> void:
-	if not is_instance_valid(local_player) or exploration_container == null:
+	if not is_instance_valid(local_player):
 		return
-	for child in exploration_container.get_children():
-		if not child is Button:
+	for point_id in exploration_buttons.keys():
+		var point: Dictionary = exploration_point_data.get(point_id, {})
+		var point_button: Button = exploration_buttons[point_id]
+		if not is_instance_valid(point_button):
 			continue
-		var point_id := ""
-		for connection in child.pressed.get_connections():
-			var callable: Callable = connection.get("callable", Callable())
-			var binds: Array = callable.get_bound_arguments()
-			if not binds.is_empty():
-				point_id = str(binds[0])
-				break
-		if point_id.is_empty():
+		var discovered := bool(point.get("discovered", false))
+		if discovered:
+			point_button.disabled = true
 			continue
-		var marker: Node3D = exploration_markers.get(point_id)
-		if not is_instance_valid(marker):
-			continue
-		var distance := local_player.global_position.distance_to(marker.global_position)
-		var point_radius := 4.0
-		var is_discovered := child.text.contains("已发现")
-		if is_discovered:
-			child.disabled = true
-			continue
-		var in_range := distance <= point_radius
-		child.disabled = not in_range or npc_request_busy
-		var parts := child.text.split(" · ")
-		if parts.size() >= 3:
-			var prefix := parts[0] + " · "
-			var point_name := parts[2].split("  |")[0]
-			child.text = prefix + ("调查" if in_range else "未抵达 · " + str(roundi(distance)) + "m") + " · " + point_name + "  |" + (parts[2].split("  |")[1] if parts[2].contains("  |") else "")
+		var target := Vector3(
+			float(point.get("position_x", 0.0)),
+			float(point.get("position_y", 0.0)),
+			float(point.get("position_z", 0.0))
+		)
+		var distance := local_player.global_position.distance_to(target)
+		var in_range := distance <= float(point.get("interaction_radius", 4.0))
+		point_button.disabled = not in_range or npc_request_busy
+		var danger := int(point.get("danger_level", 1))
+		point_button.text = str(point.get("region_name", "未知区域")) + " · " + ("调查" if in_range else "未抵达 · " + str(roundi(distance)) + "m") + " · " + str(point.get("name", "未知地点")) + "  | 危险 " + str(danger) + "/10
