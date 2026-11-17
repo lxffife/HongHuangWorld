@@ -153,6 +153,11 @@ func (s *Service) CurrentInventory(ctx context.Context, accountID string) ([]Ite
 
 func (s *Service) ListGroundDrops(ctx context.Context, nodeKey string) ([]GroundDropSnapshot, error) {
 	if strings.TrimSpace(nodeKey) == "" { return nil, ErrInvalidRequest }
+	if _, err := s.db.ExecContext(ctx, `UPDATE ground_drops SET status = 'expired', updated_at = now()
+		WHERE server_id = (SELECT id FROM server_registry WHERE node_key = $1)
+		  AND status = 'available' AND expires_at <= now()`, nodeKey); err != nil {
+		return nil, fmt.Errorf("expire old ground drops: %w", err)
+	}
 	rows, err := s.db.QueryContext(ctx, `SELECT d.id::text, d.session_id::text, d.owner_character_id::text,
 		d.item_id, i.name, i.quality, d.quantity, d.position_x, d.position_z,
 		GREATEST(0, CEIL(EXTRACT(EPOCH FROM (d.expires_at - now()))))::integer
