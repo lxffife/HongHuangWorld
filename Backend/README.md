@@ -18,6 +18,11 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 - `GET /api/v1/cultivation/techniques`：读取功法目录及各族适配度；跨族修炼必须有明确兼容记录，不从境界映射推断。
 - `POST /api/v1/characters/first-life`：为当前灵魂创建第一世肉身；根据 race_id 选择种族默认修炼体系，并在同一事务中初始化属性和修炼进度。未传种族时默认人族。
 - `GET /api/v1/characters/current`：读取当前肉身角色。
+- `GET /api/v1/characters/current/inventory`：读取当前角色背包，包含物品分类、品质、堆叠上限、装备部位和基础属性。
+- `GET /api/v1/characters/current/equipment`：读取当前角色六个装备部位的已穿戴物品。
+- `POST /api/v1/characters/current/equipment/equip` 与 `/unequip`：事务化穿戴/卸下装备；校验物品归属、装备部位和背包堆叠空间。角色仍处于活跃世界会话时拒绝变更，离开并重新进入世界后同步新战斗属性。
+- `POST /api/v1/characters/current/inventory/use`：通过 request_id 幂等使用消耗品，事务扣减物品并按物品效果恢复生命/灵力。
+- `POST /api/v1/servers/sessions/combat-stats`：仅可信节点可调用；校验当前活跃会话并返回角色基础攻防与已装备物品加成。
 - `GET /api/v1/characters/current/status`：读取当前角色属性、经验、修为、种族修炼体系、境界阶段、下一阶段/境界修为门槛、跨种族实力参考层级和角色血脉（品阶、纯度、觉醒阶段、主血脉标记）。
 - `POST /api/v1/characters/current/bloodlines/awaken`：请求当前角色已拥有的一条血脉觉醒；服务端按数据表校验下一阶段的境界和修为消耗，原子提升觉醒阶段/纯度并扣除修为。
 - `POST /api/v1/characters/current/techniques/train`：修炼角色已拥有的功法；按功法品阶和训练点数消耗修为、增加熟练度，服务端校验持有关系、境界和余额。
