@@ -36,6 +36,8 @@ var inventory_items: VBoxContainer
 var inventory_equipment: VBoxContainer
 var equipment_http: HTTPRequest
 var equipment_action_http: HTTPRequest
+var consumable_http: HTTPRequest
+var consumable_busy := false
 var equipment_action_busy := false
 var inventory_visible := false
 var inventory_request_busy := false
@@ -554,6 +556,10 @@ func _build_inventory_ui() -> void:
 	equipment_action_http.timeout = 10.0
 	add_child(equipment_action_http)
 	equipment_action_http.request_completed.connect(_on_equipment_action_completed)
+	consumable_http = HTTPRequest.new()
+	consumable_http.timeout = 10.0
+	add_child(consumable_http)
+	consumable_http.request_completed.connect(_on_consumable_completed)
 
 func _on_inventory_button_pressed() -> void:
 	inventory_visible = not inventory_visible
@@ -616,6 +622,12 @@ func _on_inventory_request_completed(result: int, response_code: int, _headers: 
 			equip_button.text = "穿戴"
 			equip_button.pressed.connect(_on_equip_item_pressed.bind(str(item.get("item_id", "")), str(item.get("equipment_slot", ""))))
 			row.add_child(equip_button)
+		elif str(item.get("item_type", "")) == "consumable":
+			var use_button := Button.new()
+			use_button.text = "使用"
+			use_button.disabled = consumable_busy
+			use_button.pressed.connect(_on_use_consumable_pressed.bind(str(item.get("item_id", ""))))
+			row.add_child(use_button)
 
 func _request_nearest_monster_attack() -> void:
 	var network := HHSession.world_network
@@ -887,5 +899,34 @@ func _on_equipment_action_completed(result: int, response_code: int, _headers: P
 		inventory_status.text = "装备操作失败：" + body.get_string_from_utf8()
 		return
 	inventory_status.text = "装备已更新。"
+	_refresh_inventory()
+	_refresh_equipment()
+
+func _make_request_uuid() -> String:
+	var hex := Crypto.new().generate_random_bytes(16).hex_encode()
+	return hex.substr(0,8) + "-" + hex.substr(8,4) + "-4" + hex.substr(13,3) + "-a" + hex.substr(17,3) + "-" + hex.substr(20,12)
+
+func _on_use_consumable_pressed(item_id: String) -> void:
+	if consumable_busy or consumable_http == null or item_id.is_empty():
+		return
+	consumable_busy = true
+	var payload := {"request_id": _make_request_uuid(), "item_id": item_id, "quantity": 1}
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token, "Content-Type: application/json"])
+	var error := consumable_http.request(
+		HHSession.api_base + "/api/v1/characters/current/inventory/use",
+		headers, HTTPClient.METHOD_POST, JSON.stringify(payload)
+	)
+	if error != OK:
+		consumable_busy = false
+		inventory_status.text = "使用物品请求失败，错误码：" + str(error)
+
+func _on_consumable_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	consumable_busy = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		inventory_status.text = "使用物品失败：" + body.get_string_from_utf8()
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if parsed is Dictionary:
+		inventory_status.text = "使用成功：生命 +" + str(parsed.get("health_restored", 0)) + "，灵力 +" + str(parsed.get("mana_restored", 0))
 	_refresh_inventory()
 	_refresh_equipment()
