@@ -22,6 +22,8 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000002_character_
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000003_race_bloodline_techniques.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000004_bloodline_awakening_technique_training.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000005_items_inventory_drops.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000006_character_equipment.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000007_item_use_and_starter_catalog.up.sql
 ```
 
 回滚时按相反顺序执行对应的 `.down.sql`。不要在已运行的生产库上重复执行非幂等迁移；后续接入迁移工具后，应由工具记录每个已应用版本，避免人工重复执行。
