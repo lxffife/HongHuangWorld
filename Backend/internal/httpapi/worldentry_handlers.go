@@ -142,3 +142,30 @@ func (h *worldEntryHandlers) closeSession(w http.ResponseWriter, r *http.Request
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "closed"})
 }
+
+func (h *worldEntryHandlers) respawn(w http.ResponseWriter, r *http.Request) {
+	header := r.Header.Get("Authorization")
+	if !strings.HasPrefix(header, "Bearer ") {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	account, err := h.authService.Authenticate(r.Context(), strings.TrimSpace(strings.TrimPrefix(header, "Bearer ")))
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if err := h.entryService.RespawnCurrent(r.Context(), account.ID); err != nil {
+		if errors.Is(err, worldentry.ErrNoPendingDeath) {
+			http.Error(w, "character has no pending death", http.StatusConflict)
+			return
+		}
+		h.logger.Error("respawn current character failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status": "respawned",
+		"world_id": "underworld_fengdu",
+		"position_x": 0, "position_y": 0, "position_z": 0,
+	})
+}
