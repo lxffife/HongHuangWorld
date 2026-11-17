@@ -130,6 +130,8 @@ func (h *characterHandlers) reincarnate(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "reincarnation destination is unavailable", http.StatusServiceUnavailable)
 	case errors.Is(err, character.ErrReincarnationUnavailable):
 		http.Error(w, "reincarnation requires a living current body with no active world session", http.StatusConflict)
+	case errors.Is(err, character.ErrReincarnationRequirements):
+		http.Error(w, "reincarnation requires 聚灵境 and completion of the Fengdu first soul trial", http.StatusConflict)
 	default:
 		h.logger.Error("reincarnate current soul failed", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
