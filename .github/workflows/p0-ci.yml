@@ -1,0 +1,117 @@
+name: P0 foundation CI
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: p0-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  go-backend:
+    name: Go backend tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.0'
+          cache: true
+          cache-dependency-path: Backend/go.mod
+      - name: Resolve and verify modules
+        working-directory: Backend
+        run: go mod tidy
+      - name: Test
+        working-directory: Backend
+        run: go test ./...
+      - name: Vet
+        working-directory: Backend
+        run: go vet ./...
+
+  cpp-world-server:
+    name: C++ world server build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ENet
+        run: sudo apt-get update && sudo apt-get install -y libenet-dev libcurl4-openssl-dev nlohmann-json3-dev pkg-config
+      - name: Configure
+        run: cmake -S GameServer/WorldServer -B build/world-server -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build/world-server --config Release --parallel
+      - name: Test protocol codec
+        run: ctest --test-dir build/world-server --output-on-failure
+
+  database-migration:
+    name: PostgreSQL migration up/down
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_USER: honghuang
+          POSTGRES_PASSWORD: ci-password
+          POSTGRES_DB: honghuang
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U honghuang -d honghuang"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Apply all migrations
+        env:
+          PGPASSWORD: ci-password
+        run: |
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000001_initial_schema.up.sql
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000002_character_progression.up.sql
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000003_race_bloodline_techniques.up.sql
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000004_bloodline_awakening_technique_training.up.sql
+      - name: Verify character progression schema and realm seeds
+        env:
+          PGPASSWORD: ci-password
+        run: |
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('character_attributes','character_progression','cultivation_systems','cultivation_realms','cultivation_stages','power_tiers','realm_power_mappings','race_definitions','race_cultivation_systems','character_reward_events')")" = "10"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM cultivation_systems")" = "4"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM cultivation_realms")" = "36"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM power_tiers")" = "9"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM realm_power_mappings")" = "36"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM race_definitions")" = "4"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM cultivation_stages")" = "324"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM race_cultivation_systems WHERE is_default")" = "4"
+      - name: Verify race growth, bloodline and technique schema
+        env:
+          PGPASSWORD: ci-password
+        run: |
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('race_attribute_growth_profiles','bloodline_definitions','bloodline_attribute_modifiers','character_bloodlines','cultivation_techniques','technique_race_compatibility','character_techniques')")" = "7"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM race_attribute_growth_profiles")" = "4"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM bloodline_definitions WHERE is_default")" = "4"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM cultivation_techniques")" = "12"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM technique_race_compatibility")" = "48"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM race_attribute_growth_profiles WHERE strength_weight + constitution_weight + agility_weight + spirit_weight + vitality_weight <> 10000")" = "0"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM bloodline_awakening_rules")" = "9"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM race_starter_techniques")" = "4"
+          test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM character_techniques")" = "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM characters")"
+      - name: Roll back all migrations
+        env:
+          PGPASSWORD: ci-password
+        run: |
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000004_bloodline_awakening_technique_training.down.sql
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000003_race_bloodline_techniques.down.sql
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000002_character_progression.down.sql
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000001_initial_schema.down.sql
+      - name: Reapply all migrations
+        env:
+          PGPASSWORD: ci-password
+        run: |
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000001_initial_schema.up.sql
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000002_character_progression.up.sql
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000003_race_bloodline_techniques.up.sql
+          psql -h localhost -U honghuang -d honghuang -v ON_ERROR_STOP=1 -f Database/migrations/000004_bloodline_awakening_technique_training.up.sql
