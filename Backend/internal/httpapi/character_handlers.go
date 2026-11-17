@@ -26,6 +26,7 @@ type createCharacterRequest struct {
 type reincarnateRequest struct {
 	Name   string `json:"name"`
 	RaceID string `json:"race_id"`
+	RouteID string `json:"route_id"`
 }
 
 type allocateAttributePointsRequest struct {
@@ -108,6 +109,13 @@ func (h *characterHandlers) createFirstLife(w http.ResponseWriter, r *http.Reque
 }
 
 
+func (h *characterHandlers) reincarnationRoutes(w http.ResponseWriter, r *http.Request) {
+ account, ok := h.currentAccount(w, r); if !ok { return }; _ = account
+ routes, err := h.characterService.ReincarnationRoutes(r.Context())
+ if err != nil { h.logger.Error("load reincarnation routes failed", "error", err); http.Error(w, "internal server error", http.StatusInternalServerError); return }
+ writeJSON(w, http.StatusOK, map[string]any{"routes": routes})
+}
+
 func (h *characterHandlers) reincarnate(w http.ResponseWriter, r *http.Request) {
 	account, ok := h.currentAccount(w, r)
 	if !ok {
@@ -118,7 +126,7 @@ func (h *characterHandlers) reincarnate(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	created, err := h.characterService.Reincarnate(r.Context(), account.ID, request.Name, request.RaceID)
+	created, err := h.characterService.Reincarnate(r.Context(), account.ID, request.Name, request.RaceID, request.RouteID)
 	switch {
 	case err == nil:
 		writeJSON(w, http.StatusCreated, created)
@@ -126,6 +134,8 @@ func (h *characterHandlers) reincarnate(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "character name or race id is invalid", http.StatusBadRequest)
 	case errors.Is(err, character.ErrInvalidRace):
 		http.Error(w, "unsupported race or cultivation system", http.StatusBadRequest)
+	case errors.Is(err, character.ErrInvalidBirthRoute):
+		http.Error(w, "selected birth route is unavailable for this race or fate", http.StatusBadRequest)
 	case errors.Is(err, character.ErrWorldInvalid):
 		http.Error(w, "reincarnation destination is unavailable", http.StatusServiceUnavailable)
 	case errors.Is(err, character.ErrReincarnationUnavailable):
