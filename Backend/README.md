@@ -14,8 +14,11 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 - `GET /api/v1/souls/current/progression`：读取跨世保留的灵魂经验与灵魂境界。
 - `POST /api/v1/souls/current/breakthrough`：达到下一灵魂境界经验门槛后主动突破；灵魂经验奖励不会自动提升境界。
 - `GET /api/v1/souls/current/trials`：读取当前灵魂可见的冥界试炼目标、进度和奖励状态。
+- `GET /api/v1/souls/current/reincarnation-eligibility`：查询当前灵魂是否满足首次投胎门槛（聚灵境、完成酆都首个试炼），并返回未满足条件。
 - `POST /api/v1/servers/souls/rewards`：可信世界节点提交灵魂经验奖励；校验节点密钥、节点标识、角色世界会话和事件幂等性。单次奖励限制为 1–100000 灵魂经验。
 - `GET /api/v1/worlds`：读取已启用的世界目录。
+- `GET /api/v1/worlds/current/npcs`：按当前角色活跃世界会话读取该世界启用的 NPC 目录和交互配置。
+- `POST /api/v1/worlds/current/npcs/interact`：与当前世界 NPC 交互；中心服根据当前活跃会话和已保存角色坐标校验世界归属及交互半径，不接受客户端自报坐标。
 - `GET /api/v1/cultivation/systems`：读取种族、默认修炼体系、各自境界和跨种族实力参考层级。
 - `GET /api/v1/cultivation/race-growth`：读取种族五维成长权重（基点总和 10000），用于后续服务端属性成长计算。
 - `GET /api/v1/cultivation/bloodlines`：读取种族血脉、品阶、基础纯度和属性修正；角色可持有多条血脉，最多一条主血脉。
@@ -73,7 +76,7 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 ## 本地运行
 
 1. 按 `Deployment/README.md` 启动 PostgreSQL。
-2. 按编号执行 `Database/migrations/` 中全部 `.up.sql` 迁移；当前需依次执行 `000001` 至 `000011`（每个编号只执行 `.up.sql` 一次）。
+2. 按编号执行 `Database/migrations/` 中全部 `.up.sql` 迁移；当前需依次执行 `000001` 至 `000012`（每个编号只执行 `.up.sql` 一次）。
 3. 在 `Deployment/.env` 配置 `DATABASE_URL` 和 `HTTP_ADDR`。
 4. Windows PowerShell 执行 `../Deployment/start-backend.ps1`；或在本目录执行 `go test ./...`、`go run ./cmd/api`（需先设置环境变量）。
 
@@ -95,7 +98,7 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 - 旧肉身状态改为 `retired` 并保留原有属性、修为、背包、装备和历史；不会覆盖旧肉身。
 - `souls` 记录不重建，灵魂 ID、功德、业力等灵魂级数据保留；只切换 `current_character_id`。
 - `reincarnation_events` 保存每次轮回的前后肉身、世界、种族和世次，便于后续轮回殿展示。
-- 当前阶段尚未扣除功德/业力，也未实现轮回冷却、记忆继承效果、因果/轮回印记加成或轮回使者交互；这些规则应在配置和玩法设计确定后加入。
+- 首次投胎必须达到聚灵境（灵魂境界序号 3）并完成“引魂试炼·初除游祟”；查询接口仅用于展示资格，创建肉身的事务会再次检查门槛。当前尚未扣除功德/业力，也未实现轮回冷却、记忆继承效果或因果/轮回印记加成。
 - 新肉身创建后仍需通过正常世界进入流程取得目标 WorldServer 的一次性 ticket；冥界实例未 ready 时不能进入场景。
 
 
@@ -115,14 +118,26 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 | 魂尊境 | 250,000 | 高阶因果与轮回印记 |
 | 魂圣境 | 1,000,000 | 特殊轮回路线 |
 
-普通死亡复活与主动投胎必须区分：普通死亡回冥界后复活原肉身，不要求灵魂升级；主动投胎才检查灵魂境界、功德、业力和目标种族/世界条件。当前提交仅建立境界目录、永久成长数据和查询接口；灵魂经验奖励来源、境界突破、首次投胎门槛及高阶世界条件尚未接入任务系统，因此暂不对投胎API强制加门槛，避免角色被锁死在冥界。后续由可信任务/世界节点发放灵魂经验，客户端不得自行提交经验数值。
+普通死亡复活与主动投胎必须区分：普通死亡回冥界后复活原肉身，不要求灵魂升级；主动投胎才检查灵魂境界、功德、业力和目标种族/世界条件。当前已接入灵魂经验奖励、主动境界突破、酆都首个试炼，以及首次投胎的聚灵境与试炼完成门槛。高阶世界条件、功德/业力审判和不同种族出生路线仍待扩展。灵魂经验只能由可信世界节点/任务服务端发放，客户端不得自行提交经验数值。
 
 
 ## 灵魂经验奖励与境界突破
 
 世界节点使用 `X-World-Server-Key` 和 `X-World-Server-Node` 调用 `POST /api/v1/servers/souls/rewards`。请求字段为 `event_id`、`session_id`、`character_id`、`experience`、`source`。中心服确认该角色属于节点对应的在线/近期关闭会话后，才会写入灵魂经验；同一灵魂的 event_id 唯一，网络重试不会重复发奖。奖励来源使用小写字母、数字、下划线、短横线或冒号。
 
-经验增加后只更新经验值，不自动突破境界。玩家达到下一境界累计经验门槛后，通过 `POST /api/v1/souls/current/breakthrough` 完成境界晋升。当前接口尚未接入冥界 NPC、试炼任务、功德/业力条件和首次投胎门槛；这些条件会在任务系统接入后由中心服统一检查。
+经验增加后只更新经验值，不自动突破境界。玩家达到下一境界累计经验门槛后，通过 `POST /api/v1/souls/current/breakthrough` 完成境界晋升。境界突破、NPC交互和投胎资格查询均由中心服提供；投胎创建事务会再次校验聚灵境和首个冥界试炼完成状态。功德/业力审判暂未作为首阶段硬门槛。
 
 
 冥界首个数据驱动试炼为“引魂试炼·初除游祟”：在酆都击败 20 只怪物，获得一次性 100 点灵魂经验奖励。酆都 WorldServer 每次击败怪物会通过 Durable Outbox 发送 5 点基础灵魂经验；中心服在同一奖励事务中推进试炼计数，第 20 次完成时额外发放 100 点奖励。重复事件不会重复增加经验或任务进度。试炼奖励只增加经验，境界仍需玩家主动突破。
+
+
+## 冥界 NPC 与轮回殿入口（第一阶段）
+
+迁移 `000012_world_npcs` 建立数据驱动的 `world_npc_definitions`，酆都预置五名 NPC：引魂使、镇祟校尉、冥府判官、孟婆、轮回殿守卫。NPC 的世界归属、位置、朝向、交互半径、交互类型和对白配置均由数据库提供，不在客户端硬编码。
+
+- 客户端进入世界并建立活跃会话后调用 `GET /api/v1/worlds/current/npcs` 加载当前世界 NPC。
+- 与 NPC 交互调用 `POST /api/v1/worlds/current/npcs/interact`，请求体为 `{"npc_id":"fengdu_reincarnation_guard"}`。
+- 服务端只根据中心服保存的角色位置、当前活跃会话和实例世界归属判定交互距离；未进入世界、NPC 不属于当前世界或距离过远均拒绝。
+- 轮回殿守卫交互配置告知首次投胎要求；客户端随后读取 `GET /api/v1/souls/current/reincarnation-eligibility` 展示灵魂境界和试炼条件。
+- `POST /api/v1/characters/current/reincarnate` 在创建新肉身的同一事务中再次校验：灵魂境界至少为聚灵境（realm_order >= 3），且 `fengdu_first_exorcism` 已完成。普通死亡复活不受此门槛影响。
+- 当前 NPC 交互返回数据驱动对白/功能类型；正式对话树、NPC 动画、任务接取按钮和客户端 UI 尚待接入。
