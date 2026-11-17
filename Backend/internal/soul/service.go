@@ -226,7 +226,8 @@ func (s *Service) Breakthrough(ctx context.Context, accountID string) (Breakthro
  var currentID string
  var currentOrder int
  var experience, nextRequired int64
- var nextID, nextName string
+ var nextID, nextName sql.NullString
+ var nextRequired sql.NullInt64
  err = tx.QueryRowContext(ctx,
   `SELECT current.id, current.realm_order, progression.experience,
           next_realm.id, next_realm.name, next_realm.required_experience
@@ -239,11 +240,11 @@ func (s *Service) Breakthrough(ctx context.Context, accountID string) (Breakthro
  ).Scan(&currentID, &currentOrder, &experience, &nextID, &nextName, &nextRequired)
  if errors.Is(err, sql.ErrNoRows) { return BreakthroughResult{}, ErrNotFound }
  if err != nil { return BreakthroughResult{}, fmt.Errorf("load soul breakthrough state: %w", err) }
- if nextID == "" { return BreakthroughResult{}, ErrMaxRealm }
- if experience < nextRequired { return BreakthroughResult{}, ErrInsufficientExperience }
- if _, err := tx.ExecContext(ctx, `UPDATE soul_progression SET realm_id=$1, updated_at=now() WHERE soul_id=(SELECT id FROM souls WHERE account_id=$2)`, nextID, accountID); err != nil {
+ if !nextID.Valid || !nextRequired.Valid { return BreakthroughResult{}, ErrMaxRealm }
+ if experience < nextRequired.Int64 { return BreakthroughResult{}, ErrInsufficientExperience }
+ if _, err := tx.ExecContext(ctx, `UPDATE soul_progression SET realm_id=$1, updated_at=now() WHERE soul_id=(SELECT id FROM souls WHERE account_id=$2)`, nextID.String, accountID); err != nil {
   return BreakthroughResult{}, fmt.Errorf("advance soul realm: %w", err)
  }
  if err := tx.Commit(); err != nil { return BreakthroughResult{}, fmt.Errorf("commit soul breakthrough: %w", err) }
- return BreakthroughResult{RealmID:nextID, RealmName:nextName, RealmOrder:currentOrder+1}, nil
+ return BreakthroughResult{RealmID:nextID.String, RealmName:nextName.String, RealmOrder:currentOrder+1}, nil
 }
