@@ -69,6 +69,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("GET /api/v1/cultivation/bloodlines", characters.bloodlines)
 		mux.HandleFunc("GET /api/v1/cultivation/techniques", characters.techniques)
 		mux.HandleFunc("POST /api/v1/characters/first-life", characters.createFirstLife)
+		mux.HandleFunc("GET /api/v1/characters/current/reincarnation-routes", characters.reincarnationRoutes)
 		mux.HandleFunc("POST /api/v1/characters/current/reincarnate", characters.reincarnate)
 		mux.HandleFunc("GET /api/v1/characters/current", characters.current)
 		mux.HandleFunc("GET /api/v1/souls/current/lives", characters.history)
