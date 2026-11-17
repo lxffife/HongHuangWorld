@@ -688,6 +688,7 @@ func _show_reincarnation_controls() -> void:
 			break
 	_request_life_history()
 	_request_soul_memories()
+	_request_soul_fate()
 
 func _show_character_setup() -> void:
 	right_info_label.text = "灵魂档案已载入。请在左侧完成角色名、种族修炼体系与出生世界的选择。"
