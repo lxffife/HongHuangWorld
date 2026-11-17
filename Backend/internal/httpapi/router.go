@@ -50,6 +50,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/souls", souls.create)
 		mux.HandleFunc("GET /api/v1/souls/current", souls.current)
 		mux.HandleFunc("GET /api/v1/souls/current/progression", souls.progression)
+		mux.HandleFunc("POST /api/v1/souls/current/breakthrough", souls.breakthrough)
 		mux.HandleFunc("POST /api/v1/servers/souls/rewards", souls.applyReward)
 		worlds := &worldHandlers{service: world.NewService(db), logger: logger}
 		mux.HandleFunc("GET /api/v1/worlds", worlds.list)
@@ -92,7 +93,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		unavailable := func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "service unavailable", http.StatusServiceUnavailable) }
 		for _, route := range []string{
 			"POST /api/v1/auth/register", "POST /api/v1/auth/login", "GET /api/v1/account/me",
-			"POST /api/v1/souls", "GET /api/v1/souls/current", "GET /api/v1/souls/current/progression", "GET /api/v1/worlds",
+			"POST /api/v1/souls", "GET /api/v1/souls/current", "GET /api/v1/souls/current/progression", "POST /api/v1/souls/current/breakthrough", "POST /api/v1/servers/souls/rewards", "GET /api/v1/worlds",
 			"GET /api/v1/cultivation/systems", "GET /api/v1/cultivation/race-growth",
 			"GET /api/v1/cultivation/bloodlines", "GET /api/v1/cultivation/techniques",
 			"POST /api/v1/characters/first-life", "GET /api/v1/characters/current", "POST /api/v1/characters/current/respawn", "POST /api/v1/characters/current/reincarnate",
