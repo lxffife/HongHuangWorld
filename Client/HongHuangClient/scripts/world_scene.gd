@@ -982,13 +982,13 @@ func _update_input_debug_hud() -> void:
 	if not is_instance_valid(input_debug_label) or not is_instance_valid(local_player):
 		return
 	var keys := ""
-	keys += "[W]" if Input.is_action_pressed("move_forward") else " W "
+	keys += "[W]" if local_player.is_move_key_pressed("forward") else " W "
 	keys += " "
-	keys += "[A]" if Input.is_action_pressed("move_left") else " A "
+	keys += "[A]" if local_player.is_move_key_pressed("left") else " A "
 	keys += " "
-	keys += "[S]" if Input.is_action_pressed("move_back") else " S "
+	keys += "[S]" if local_player.is_move_key_pressed("back") else " S "
 	keys += " "
-	keys += "[D]" if Input.is_action_pressed("move_right") else " D "
+	keys += "[D]" if local_player.is_move_key_pressed("right") else " D "
 	var network_text := "已连接" if local_player.movement_network_ready else "未就绪"
 	var movement_text := "有移动输入" if local_player.current_move_input.length_squared() > 0.001 else "无移动输入"
 	var send_text := "发送正常" if local_player.last_send_error == OK else "发送错误 " + str(local_player.last_send_error)
