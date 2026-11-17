@@ -156,3 +156,16 @@ func (h *soulHandlers) trials(w http.ResponseWriter, r *http.Request) {
  }
  writeJSON(w, http.StatusOK, map[string]any{"trials":trials})
 }
+
+ 
+func (h *soulHandlers) reincarnationEligibility(w http.ResponseWriter,r *http.Request) {
+ account,ok:=h.currentAccount(w,r); if !ok{return}
+ result,err:=h.soulService.ReincarnationEligibility(r.Context(),account.ID)
+ if err!=nil {
+  if errors.Is(err,soul.ErrNotFound) { http.Error(w,"soul not found",http.StatusNotFound); return }
+  h.logger.Error("load reincarnation eligibility failed","error",err)
+  http.Error(w,"internal server error",http.StatusInternalServerError)
+  return
+ }
+ writeJSON(w,http.StatusOK,result)
+}
