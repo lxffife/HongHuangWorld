@@ -65,6 +65,9 @@ var npc_soul_button: Button
 var npc_soul_breakthrough_button: Button
 var npc_reincarnation_leave_button: Button
 var npc_fate_encounter_button: Button
+var exploration_open_button: Button
+var exploration_container: VBoxContainer
+var exploration_feedback := ""
 var npc_current_interaction_id := ""
 var leaving_for_reincarnation := false
 var npc_selected_id := ""
@@ -1098,6 +1101,15 @@ func _build_npc_ui() -> void:
 	npc_interact_button.visible = false
 	npc_interact_button.pressed.connect(_try_interact_nearest_npc)
 	hud.add_child(npc_interact_button)
+	exploration_open_button = Button.new()
+	exploration_open_button.text = "探索本区域"
+	exploration_open_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	exploration_open_button.offset_left = 18.0
+	exploration_open_button.offset_top = -76.0
+	exploration_open_button.offset_right = 180.0
+	exploration_open_button.offset_bottom = -30.0
+	exploration_open_button.pressed.connect(_request_exploration_points)
+	hud.add_child(exploration_open_button)
 
 	npc_panel = PanelContainer.new()
 	npc_panel.set_anchors_preset(Control.PRESET_CENTER)
@@ -1125,6 +1137,9 @@ func _build_npc_ui() -> void:
 	npc_choice_container = VBoxContainer.new()
 	npc_choice_container.add_theme_constant_override("separation", 6)
 	layout.add_child(npc_choice_container)
+	exploration_container = VBoxContainer.new()
+	exploration_container.add_theme_constant_override("separation", 5)
+	layout.add_child(exploration_container)
 	npc_trial_button = Button.new()
 	npc_trial_button.text = "查看冥界试炼"
 	npc_trial_button.pressed.connect(_request_soul_trials)
@@ -1204,6 +1219,17 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 		"list":
 			npc_definitions = data.get("npcs", [])
 			_render_world_npcs()
+		"exploration_list":
+			_render_exploration_points(data.get("points", []))
+			npc_title_label.text = "区域探索 · 已发现记录"
+			npc_dialogue_label.text = "探索点由中心服依据角色实际位置验证。发现记录属于灵魂，轮回后仍会保留。"
+			npc_status_label.text = exploration_feedback if not exploration_feedback.is_empty() else "选择尚未发现的地点，靠近后即可调查。"
+			npc_panel.visible = true
+		"exploration_discover":
+			var merit_delta := int(data.get("merit_delta", 0))
+			var karma_delta := int(data.get("karma_delta", 0))
+			exploration_feedback = "已发现「" + str(data.get("name", "探索点")) + "」。功德 " + ("+" if merit_delta >= 0 else "") + str(merit_delta) + "，业力 " + ("+" if karma_delta >= 0 else "") + str(karma_delta) + "。记录已永久写入灵魂因果簿。"
+			_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_list")
 		"interact":
 			_clear_npc_choice_buttons()
 			var npc_data: Dictionary = data.get("npc", {})
@@ -1476,3 +1502,47 @@ func _request_soul_breakthrough() -> void:
 		return
 	npc_status_label.text = "正在向中心服申请灵魂境界突破……"
 	_send_npc_request("POST", "/api/v1/souls/current/breakthrough", "soul_breakthrough", {})
+
+
+func _request_exploration_points() -> void:
+	if npc_request_busy:
+		return
+	exploration_feedback = ""
+	npc_title_label.text = "正在读取区域探索点……"
+	npc_dialogue_label.text = "正在向中心服查询本世界的探索记录。"
+	npc_panel.visible = true
+	_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_list")
+
+
+func _render_exploration_points(points: Variant) -> void:
+	if exploration_container == null:
+		return
+	for child in exploration_container.get_children():
+		child.queue_free()
+	if not points is Array or points.is_empty():
+		var empty_label := Label.new()
+		empty_label.text = "当前世界暂未配置探索点。"
+		exploration_container.add_child(empty_label)
+		return
+	for point_variant in points:
+		if not point_variant is Dictionary:
+			continue
+		var point: Dictionary = point_variant
+		var discovered := bool(point.get("discovered", false))
+		var point_button := Button.new()
+		var danger := int(point.get("danger_level", 1))
+		point_button.text = ("已发现 · " if discovered else "调查 · ") + str(point.get("name", "未知地点")) + "  | 危险 " + str(danger) + "/10"
+		point_button.disabled = discovered or npc_request_busy
+		point_button.tooltip_text = str(point.get("description", ""))
+		point_button.pressed.connect(_discover_exploration_point.bind(str(point.get("id", ""))))
+		exploration_container.add_child(point_button)
+
+
+func _discover_exploration_point(point_id: String) -> void:
+	if npc_request_busy or point_id.is_empty():
+		return
+	npc_status_label.text = "正在验证距离并记录探索发现……"
+	_send_npc_request("POST", "/api/v1/worlds/current/exploration-points/discover", "exploration_discover", {
+		"point_id": point_id
+	})
+
