@@ -545,9 +545,11 @@ func _on_inventory_button_pressed() -> void:
 		_refresh_inventory()
 
 func _refresh_inventory() -> void:
-	if inventory_http == null or inventory_request_busy or HHSession.access_token.is_empty():
+	if inventory_http == null or HHSession.access_token.is_empty():
 		if inventory_status != null:
 			inventory_status.text = "请先登录后查看背包。"
+		return
+	if inventory_request_busy:
 		return
 	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token])
 	var error := inventory_http.request(
