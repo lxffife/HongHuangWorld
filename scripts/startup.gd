@@ -607,7 +607,9 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 	request_busy = false
 	var context := str(http.get_meta("request_context", ""))
 	var body_text := body.get_string_from_utf8()
-	var parsed: Variant = JSON.parse_string(body_text)
+	var response_json := JSON.new()
+	var parse_error := response_json.parse(body_text)
+	var parsed: Variant = response_json.data if parse_error == OK else null
 	var data: Dictionary = parsed if parsed is Dictionary else {}
 
 	if result != HTTPRequest.RESULT_SUCCESS:
