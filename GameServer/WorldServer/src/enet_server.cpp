@@ -55,6 +55,8 @@ struct PlayerState {
     std::string name;
     std::int64_t attack{20};
     std::int64_t defense{};
+    std::int64_t health{100};
+    std::int64_t max_health{100};
     float x{};
     float y{};
     float z{};
@@ -75,6 +77,7 @@ struct MonsterRuntime {
     honghuang::simulation::MonsterState state;
     std::string runtime_id;
     Clock::time_point respawn_at{};
+    Clock::time_point last_attack_at{};
 };
 
 
@@ -1492,8 +1495,10 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                         if (!backend_inventory_request(impl_->config, "/api/v1/servers/sessions/combat-stats",
                                                        &stats_request, stats_http_status, combat_stats, stats_error) ||
                             !combat_stats.is_object() || !combat_stats.contains("attack") ||
-                            !combat_stats.contains("defense") || !combat_stats["attack"].is_number_integer() ||
-                            !combat_stats["defense"].is_number_integer()) {
+                            !combat_stats.contains("defense") || !combat_stats.contains("health") ||
+                            !combat_stats.contains("max_health") || !combat_stats["attack"].is_number_integer() ||
+                            !combat_stats["defense"].is_number_integer() || !combat_stats["health"].is_number_integer() ||
+                            !combat_stats["max_health"].is_number_integer()) {
                             std::cerr << "Could not synchronize authoritative character combat stats: "
                                       << stats_error << std::endl;
                             send_json(event.peer, honghuang::protocol::MessageType::ServerReject,
@@ -1516,6 +1521,8 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                         player.character_id = character_id;
                         player.attack = combat_stats.at("attack").get<std::int64_t>();
                         player.defense = combat_stats.at("defense").get<std::int64_t>();
+                        player.health = combat_stats.at("health").get<std::int64_t>();
+                        player.max_health = combat_stats.at("max_health").get<std::int64_t>();
                         player.name = snapshot.value("name", std::string{});
                         player.x = snapshot.value("position_x", 0.0F);
                         player.y = snapshot.value("position_y", 0.0F);
