@@ -1204,6 +1204,10 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_title_label.text = str(npc_data.get("name", "冥界来者")) + " · " + str(npc_data.get("title", ""))
 			var lines: Array[String] = []
 			lines.append(str(dialogue.get("greeting", "这位道友，有何事？")))
+			var fate_reaction := str(npc_data.get("fate_reaction", ""))
+			if not fate_reaction.is_empty():
+				lines.append("")
+				lines.append("【命格感应】" + fate_reaction)
 			var topics: Variant = dialogue.get("topics", [])
 			if topics is Array:
 				for topic in topics:
