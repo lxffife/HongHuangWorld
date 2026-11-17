@@ -1232,8 +1232,8 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_panel.visible = true
 		"soul_breakthrough":
 			npc_title_label.text = "灵魂境界突破"
-			npc_dialogue_label.text = "灵魂境界突破成功：" + str(data.get("realm_name", "新境界")) + "\n当前灵魂经验：" + str(data.get("experience", 0))
-			npc_status_label.text = "境界已由中心服更新。"
+			npc_dialogue_label.text = "灵魂境界突破成功：" + str(data.get("realm_name", "新境界"))
+			npc_status_label.text = "境界已由中心服更新，正在刷新灵魂经验。"
 			npc_soul_breakthrough_button.visible = false
 			npc_panel.visible = true
 			_request_soul_progression()
