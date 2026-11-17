@@ -432,7 +432,7 @@ func _render_life_history(items: Array) -> void:
 		if not str(item.get("reincarnated_at", "")).is_empty():
 			var transition := Label.new()
 			transition.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			transition.text = "转入此世的轮回时间：" + str(item.get("reincarnated_at", "")) + "\n前世出生世界：" + str(item.get("previous_world_id", "未知")) + " → 今世出生世界：" + str(item.get("next_world_id", "未知"))
+			transition.text = "转入此世的轮回时间：" + str(item.get("reincarnated_at", "")) + "\n前世出生世界：" + str(item.get("previous_world_id", "未知")) + " → 今世出生世界：" + str(item.get("next_world_id", "未知")) + "\n出生路线：" + str(item.get("birth_route_name", "未记录"))
 			layout.add_child(transition)
 		life_history_box.add_child(card)
 
