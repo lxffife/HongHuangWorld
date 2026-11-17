@@ -1,10 +1,9 @@
-
 name: Sync All Branches (exclude workflows)
 on:
   workflow_dispatch:        # 仅手动触发
 
 permissions:
-  contents: write           # push 需要
+  contents: write
 
 jobs:
   sync:
@@ -14,9 +13,9 @@ jobs:
       - name: Checkout source (all branches)
         uses: actions/checkout@v4
         with:
-          repository: liflife/HongHuangWorld          # TODO: 换成你的源仓库
-          token: ${{ secrets.SOURCE_REPO_PAT }}          # 源仓库是私有仓库时需要
-          fetch-depth: 0                                 # 0 = 拉所有分支和标签的完整历史
+          repository: liflife/HongHuangWorld
+          token: ${{ secrets.SOURCE_REPO_PAT }}
+          fetch-depth: 0
           path: src
           persist-credentials: false
 
@@ -26,7 +25,7 @@ jobs:
         with:
           path: dst
 
-      # 3. 同步 main：文件级，排除 workflows（保留目标 main 自己的 pull.yml）
+      # 3. 同步 main：文件级，排除 workflows
       - name: Sync main (keep target workflows)
         run: |
           set -e
@@ -41,13 +40,12 @@ jobs:
           git commit -m "Sync main (workflows excluded)" || echo "no changes on main"
           git push origin HEAD:main
 
-      # 4. 同步 main 之外的所有分支：分支级，排除 workflows
+      # 4. 同步 main 之外的所有分支：分支级，保留目标分支上的 workflows
       - name: Sync other branches
         run: |
           set -e
 
           # 4.1 在 src 里把 refs/remotes/origin/* 复制成 refs/heads/*
-          #     目的：本地路径 fetch 只 advertise refs/heads/*，必须先把分支"落地"成 head
           cd "$GITHUB_WORKSPACE/src"
           for b in $(git for-each-ref --format='%(refname:strip=3)' refs/remotes/origin/); do
             [ "$b" = "HEAD" ] && continue
@@ -71,14 +69,29 @@ jobs:
             exit 0
           fi
 
-          # 4.4 逐分支同步
+          # 4.4 逐分支同步（保留目标分支自身的 workflows）
           for b in $branches; do
             echo "===== syncing branch: $b ====="
             if ! git checkout -B "$b" "refs/remotes/src/$b"; then
               echo "!! checkout $b 失败，跳过"
               continue
             fi
+
+            # ① 丢弃源分支带入的 workflows
             rm -rf .github/workflows
+
+            # ② 若目标分支原本存在且有 workflows，恢复目标分支的版本
+            if git show-ref --verify --quiet "refs/remotes/origin/$b"; then
+              if git cat-file -e "refs/remotes/origin/$b:.github/workflows" 2>/dev/null; then
+                git checkout "refs/remotes/origin/$b" -- .github/workflows
+                echo "   已恢复目标分支 $b 原有的 workflows"
+              else
+                echo "   目标分支 $b 原本没有 workflows，不创建"
+              fi
+            else
+              echo "   目标分支 $b 首次同步，不带入 workflows"
+            fi
+
             git add -A
             git commit -m "Sync branch $b (workflows excluded)" || echo "no changes on $b"
             git push --force origin "$b" || echo "!! push $b 失败，跳过"
