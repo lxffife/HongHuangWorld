@@ -256,7 +256,7 @@ type LifeRecord struct {
 	RealmName   string  `json:"realm_name"`
 	RealmStage  int     `json:"realm_stage"`
 	IsCurrent   bool    `json:"is_current"`
-	CreatedAt   string  `json:"created_at"`
+	CreatedAt   time.Time `json:"created_at"`
 	ReincarnatedAt *string `json:"reincarnated_at,omitempty"`
 	PreviousWorldID string `json:"previous_world_id,omitempty"`
 	NextWorldID string `json:"next_world_id,omitempty"`
@@ -305,7 +305,6 @@ func (s *Service) History(ctx context.Context, accountID string) ([]LifeRecord, 
 		if raceID.Valid {
 			item.RaceID = &raceID.String
 		}
-		item.CreatedAt = item.CreatedAt
 		if reincarnatedAt.Valid {
 			value := reincarnatedAt.Time.UTC().Format(time.RFC3339)
 			item.ReincarnatedAt = &value
