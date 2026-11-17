@@ -17,7 +17,7 @@ VALUES
      22,0,2,4,2,2,0),
     ('reincarnation_hall_tablet','underworld_fengdu','reincarnation_hall_front','轮回殿旧碑',
      '轮回殿前的旧碑记载着肉身与灵魂分离的古老规矩。仔细辨读，理解轮回秩序。',
-     0,0,12,4,3,2,0)
+     -22,0,-54,4,3,2,0)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO world_exploration_events
