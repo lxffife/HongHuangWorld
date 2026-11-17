@@ -46,6 +46,7 @@ type Character struct {
 	PositionX float64 `json:"position_x"`
 	PositionY float64 `json:"position_y"`
 	PositionZ float64 `json:"position_z"`
+	BirthRouteName string `json:"birth_route_name,omitempty"`
 	SoulID    string  `json:"soul_id"`
 	LifeIndex int     `json:"life_index"`
 	WorldID   string  `json:"world_id"`
@@ -288,6 +289,7 @@ type LifeRecord struct {
 	ReincarnatedAt *string `json:"reincarnated_at,omitempty"`
 	PreviousWorldID string `json:"previous_world_id,omitempty"`
 	NextWorldID string `json:"next_world_id,omitempty"`
+	BirthRouteName string `json:"birth_route_name,omitempty"`
 	FateAspect string `json:"fate_aspect,omitempty"`
 	FateKarma int64 `json:"fate_karma,omitempty"`
 	FateMerit int64 `json:"fate_merit,omitempty"`
@@ -309,6 +311,7 @@ func (s *Service) History(ctx context.Context, accountID string) ([]LifeRecord, 
 		        reincarnation.reincarnated_at,
 		        COALESCE(reincarnation.previous_world_id, ''),
 		        COALESCE(reincarnation.new_world_id, ''),
+		        COALESCE(reincarnation.birth_route_name, ''),
 		        COALESCE(reincarnation.fate_aspect, '因果未定'),
 		        COALESCE(reincarnation.fate_karma, 0), COALESCE(reincarnation.fate_merit, 0),
 		 COALESCE(fate_trait.trait_id, 'unmarked_fate'), COALESCE(fate_trait.trait_name, '因果未定'),
@@ -337,7 +340,7 @@ func (s *Service) History(ctx context.Context, accountID string) ([]LifeRecord, 
 			&item.CharacterID, &item.LifeIndex, &item.Name, &item.WorldID, &item.WorldName,
 			&raceID, &item.RaceName, &item.Level, &item.Status, &item.RealmName,
 			&item.RealmStage, &item.IsCurrent, &item.CreatedAt, &reincarnatedAt,
-			&item.PreviousWorldID, &item.NextWorldID, &item.FateAspect, &item.FateKarma, &item.FateMerit,
+			&item.PreviousWorldID, &item.NextWorldID, &item.BirthRouteName, &item.FateAspect, &item.FateKarma, &item.FateMerit,
 			&item.FateTraitID, &item.FateTraitName, &item.FateTraitDescription,
 		); err != nil {
 			return nil, fmt.Errorf("scan soul life history: %w", err)
@@ -1278,6 +1281,7 @@ func (s *Service) Reincarnate(ctx context.Context, accountID, name, raceID, rout
 	}
 	var result Character
 	result.FateAspect, result.FateKarma, result.FateMerit = fateAspect, fateKarma, fateMerit
+	result.BirthRouteName = routeName
 	result.FateTraitID, result.FateTraitName, result.FateTraitDescription = "unmarked_fate", "因果未定", "此世命格尚未显现，未来的善恶抉择仍可改变命运。"
 	switch {
 	case fateMerit >= 5 && fateKarma >= 5:
