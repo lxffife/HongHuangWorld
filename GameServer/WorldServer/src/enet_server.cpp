@@ -1499,6 +1499,17 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                             send_json(event.peer, honghuang::protocol::MessageType::ServerReject,
                                       Json{{"reason", "character combat stats could not be synchronized"}});
                             enet_peer_disconnect_later(event.peer, 7);
+                            PlayerState rejected_player;
+                            rejected_player.session_id = session_id;
+                            rejected_player.character_id = character_id;
+                            rejected_player.x = snapshot.value("position_x", 0.0F);
+                            rejected_player.y = snapshot.value("position_y", 0.0F);
+                            rejected_player.z = snapshot.value("position_z", 0.0F);
+                            rejected_player.yaw = snapshot.value("rotation_y", 0.0F);
+                            std::string close_error;
+                            if (!save_and_close_session(impl_->config, rejected_player, close_error)) {
+                                std::cerr << "Could not close rejected world session: " << close_error << std::endl;
+                            }
                         } else {
                         PlayerState player;
                         player.session_id = session_id;
