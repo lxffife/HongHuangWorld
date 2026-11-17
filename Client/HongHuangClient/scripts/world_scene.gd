@@ -927,6 +927,9 @@ func _on_consumable_completed(result: int, response_code: int, _headers: PackedS
 		return
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
 	if parsed is Dictionary:
-		inventory_status.text = "使用成功：生命 +" + str(parsed.get("health_restored", 0)) + "，灵力 +" + str(parsed.get("mana_restored", 0))
+		if bool(parsed.get("applied", false)):
+			inventory_status.text = "使用成功：生命 +" + str(parsed.get("health_restored", 0)) + "，灵力 +" + str(parsed.get("mana_restored", 0))
+		else:
+			inventory_status.text = "该使用请求已结算，正在同步背包。"
 	_refresh_inventory()
 	_refresh_equipment()
