@@ -1361,7 +1361,44 @@ struct EnetServer::Impl {
                     monster.definition, monster.state, nearest_target, delta)) {
                 std::cerr << "Skipping invalid monster simulation state: "
                           << monster.runtime_id << '\n';
+                continue;
             }
+            if (monster.state.mode != honghuang::simulation::MonsterMode::Chasing ||
+                monster.state.target_id.empty()) continue;
+            auto victim = std::find_if(players.begin(), players.end(), [&](const auto& entry) {
+                return entry.second.character_id == monster.state.target_id;
+            });
+            if (victim == players.end() || victim->second.health <= 0) continue;
+            auto& player = victim->second;
+            const double attack_dx = static_cast<double>(player.x) - monster.state.x;
+            const double attack_dz = static_cast<double>(player.z) - monster.state.z;
+            constexpr double kMonsterAttackRange = 1.8;
+            constexpr auto kMonsterAttackCooldown = std::chrono::milliseconds(1500);
+            if (attack_dx * attack_dx + attack_dz * attack_dz >
+                kMonsterAttackRange * kMonsterAttackRange) continue;
+            if (monster.last_attack_at.time_since_epoch().count() != 0 &&
+                now - monster.last_attack_at < kMonsterAttackCooldown) continue;
+            monster.last_attack_at = now;
+            const honghuang::simulation::CombatantStats attacker{
+                static_cast<std::int64_t>(monster.definition.attack),
+                static_cast<std::int64_t>(monster.definition.defense), 1, 1
+            };
+            const honghuang::simulation::CombatantStats defender{
+                player.attack, player.defense, player.health, player.max_health
+            };
+            honghuang::simulation::DamageResult damage{};
+            if (!honghuang::simulation::calculate_damage(
+                    attacker, defender, honghuang::simulation::AttackProfile{}, damage)) {
+                std::cerr << "Monster attack rejected by combat validation: "
+                          << monster.runtime_id << '\n';
+                continue;
+            }
+            player.health = damage.remaining_health;
+            send_json(victim->first, honghuang::protocol::MessageType::CombatEvent,
+                      Json{{"accepted", true}, {"source", "monster"},
+                           {"source_entity_id", monster.runtime_id},
+                           {"damage", damage.damage}, {"health", player.health},
+                           {"max_health", player.max_health}, {"defeated", damage.defeated}});
         }
         last_snapshot = now;
         broadcast_snapshot();
