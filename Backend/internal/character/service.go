@@ -20,6 +20,7 @@ var (
 	ErrInvalidRace = errors.New("race has no configured default cultivation system")
 	ErrInsufficientCultivation = errors.New("not enough cultivation for breakthrough")
 	ErrMaxRealm = errors.New("character has reached the highest configured realm")
+	ErrReincarnationUnavailable = errors.New("reincarnation is not currently available")
 )
 
 type Character struct {
@@ -951,4 +952,160 @@ func (s *Service) TrainTechnique(ctx context.Context, accountID, techniqueID str
 	}
 	if err := tx.Commit(); err != nil { return TechniqueTrainingResult{}, fmt.Errorf("commit technique training: %w", err) }
 	return TechniqueTrainingResult{TechniqueID:techniqueID, Proficiency:newProficiency, CultivationRemaining:remaining}, nil
+}
+
+
+// Reincarnate creates a new physical life while retaining the soul record.
+// The old body is retired, never overwritten; all writes are atomic.
+func (s *Service) Reincarnate(ctx context.Context, accountID, name, raceID string) (Character, error) {
+	name = strings.TrimSpace(name)
+	raceID = strings.TrimSpace(raceID)
+	if len([]rune(name)) < 2 || len([]rune(name)) > 24 || len(raceID) == 0 || len(raceID) > 64 {
+		return Character{}, ErrInvalid
+	}
+
+	const destinationWorld = "underworld_fengdu"
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Character{}, fmt.Errorf("begin reincarnation: %w", err)
+	}
+	defer tx.Rollback()
+
+	var soulID, oldCharacterID, oldWorldID, oldRaceID string
+	var oldLifeIndex int
+	err = tx.QueryRowContext(ctx,
+		`SELECT soul.id::text, c.id::text, c.world_id, c.race_id, c.life_index
+		 FROM souls soul
+		 JOIN characters c ON c.id = soul.current_character_id
+		 WHERE soul.account_id = $1 AND c.status = 'alive'
+		 FOR UPDATE OF soul, c`,
+		accountID,
+	).Scan(&soulID, &oldCharacterID, &oldWorldID, &oldRaceID, &oldLifeIndex)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Character{}, ErrReincarnationUnavailable
+	}
+	if err != nil {
+		return Character{}, fmt.Errorf("load current life for reincarnation: %w", err)
+	}
+
+	var activeSession bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS (SELECT 1 FROM world_sessions
+		 WHERE character_id = $1 AND session_state IN ('connecting','active','saving'))`,
+		oldCharacterID,
+	).Scan(&activeSession); err != nil {
+		return Character{}, fmt.Errorf("check current life session: %w", err)
+	}
+	if activeSession {
+		return Character{}, ErrReincarnationUnavailable
+	}
+
+	var worldEnabled bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT enabled FROM world_definitions WHERE id = $1`, destinationWorld,
+	).Scan(&worldEnabled); err != nil || !worldEnabled {
+		return Character{}, ErrWorldInvalid
+	}
+
+	var systemID, firstRealmID string
+	err = tx.QueryRowContext(ctx,
+		`SELECT mapping.system_id, realm.id
+		 FROM race_cultivation_systems mapping
+		 JOIN cultivation_realms realm ON realm.system_id = mapping.system_id AND realm.realm_order = 1
+		 WHERE mapping.race_id = $1 AND mapping.is_default`,
+		raceID,
+	).Scan(&systemID, &firstRealmID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Character{}, ErrInvalidRace
+	}
+	if err != nil {
+		return Character{}, fmt.Errorf("resolve reincarnated race cultivation: %w", err)
+	}
+
+	newLifeIndex := oldLifeIndex + 1
+	var result Character
+	var race sql.NullString
+	err = tx.QueryRowContext(ctx,
+		`INSERT INTO characters (soul_id, life_index, world_id, name, race_id)
+		 VALUES ($1, $2, $3, $4, $5)
+		 RETURNING id::text, soul_id::text, life_index, world_id, name, race_id, level, status`,
+		soulID, newLifeIndex, destinationWorld, name, raceID,
+	).Scan(&result.ID, &result.SoulID, &result.LifeIndex, &result.WorldID, &result.Name, &race, &result.Level, &result.Status)
+	if err != nil {
+		return Character{}, fmt.Errorf("create reincarnated body: %w", err)
+	}
+	if race.Valid {
+		result.RaceID = &race.String
+	}
+
+	if _, err := tx.ExecContext(ctx, `INSERT INTO character_attributes (character_id) VALUES ($1)`, result.ID); err != nil {
+		return Character{}, fmt.Errorf("initialize reincarnated attributes: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO character_progression (character_id, system_id, realm_id) VALUES ($1, $2, $3)`,
+		result.ID, systemID, firstRealmID,
+	); err != nil {
+		return Character{}, fmt.Errorf("initialize reincarnated cultivation: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO character_inventory (character_id, item_id, quantity)
+		 VALUES ($1, 'starter_iron_sword', 1), ($1, 'starter_cloth_cap', 1),
+		        ($1, 'starter_leather_vest', 1), ($1, 'starter_trousers', 1),
+		        ($1, 'starter_travel_boots', 1), ($1, 'starter_wooden_charm', 1),
+		        ($1, 'minor_health_pill', 3), ($1, 'minor_mana_pill', 3)`,
+		result.ID,
+	); err != nil {
+		return Character{}, fmt.Errorf("grant reincarnated starter inventory: %w", err)
+	}
+
+	bloodlineResult, err := tx.ExecContext(ctx,
+		`INSERT INTO character_bloodlines (character_id, bloodline_id, purity, awakening_stage, is_primary)
+		 SELECT $1, id, base_purity, 0, TRUE FROM bloodline_definitions
+		 WHERE race_id = $2 AND is_default`,
+		result.ID, raceID,
+	)
+	if err != nil {
+		return Character{}, fmt.Errorf("initialize reincarnated bloodline: %w", err)
+	}
+	if rows, rowsErr := bloodlineResult.RowsAffected(); rowsErr != nil || rows != 1 {
+		return Character{}, fmt.Errorf("initialize reincarnated bloodline: expected one default, inserted %d: %v", rows, rowsErr)
+	}
+	techniqueResult, err := tx.ExecContext(ctx,
+		`INSERT INTO character_techniques (character_id, technique_id, proficiency, is_equipped, is_starter)
+		 SELECT $1, technique_id, 0, TRUE, TRUE FROM race_starter_techniques WHERE race_id = $2`,
+		result.ID, raceID,
+	)
+	if err != nil {
+		return Character{}, fmt.Errorf("initialize reincarnated starter technique: %w", err)
+	}
+	if rows, rowsErr := techniqueResult.RowsAffected(); rowsErr != nil || rows != 1 {
+		return Character{}, fmt.Errorf("initialize reincarnated starter technique: expected one starter, inserted %d: %v", rows, rowsErr)
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE characters SET status = 'retired', updated_at = now() WHERE id = $1 AND status = 'alive'`,
+		oldCharacterID,
+	); err != nil {
+		return Character{}, fmt.Errorf("retire previous physical life: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE souls SET current_character_id = $1, updated_at = now() WHERE id = $2`,
+		result.ID, soulID,
+	); err != nil {
+		return Character{}, fmt.Errorf("switch soul to reincarnated body: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO reincarnation_events
+		 (soul_id, previous_character_id, new_character_id, previous_world_id, new_world_id,
+		  previous_race_id, new_race_id, life_index, merit_spent)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,0)`,
+		soulID, oldCharacterID, result.ID, oldWorldID, destinationWorld,
+		oldRaceID, raceID, newLifeIndex,
+	); err != nil {
+		return Character{}, fmt.Errorf("record reincarnation history: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Character{}, fmt.Errorf("commit reincarnation: %w", err)
+	}
+	return result, nil
 }
