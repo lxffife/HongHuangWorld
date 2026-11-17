@@ -411,7 +411,7 @@ func _render_life_history(items: Array) -> void:
 		layout.add_child(heading)
 		var details := Label.new()
 		details.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		details.text = "种族：" + str(item.get("race_name", "未知")) + "    世界：" + str(item.get("world_name", item.get("world_id", "未知"))) + "\n境界：" + str(item.get("realm_name", "尚未记录")) + " · " + str(item.get("realm_stage", 1)) + "阶    等级：" + str(item.get("level", 1)) + "\n状态：" + str(item.get("status", "未知")) + "    初生：" + str(item.get("created_at", "未知"))
+		details.text = "种族：" + str(item.get("race_name", "未知")) + "    世界：" + str(item.get("world_name", item.get("world_id", "未知"))) + "\n境界：" + str(item.get("realm_name", "尚未记录")) + " · " + str(item.get("realm_stage", 1)) + "阶    等级：" + str(item.get("level", 1)) + "\n状态：" + str(item.get("status", "未知")) + "    初生：" + str(item.get("created_at", "未知")) + "\n命格：" + str(item.get("fate_aspect", "因果未定")) + "    功德：" + str(item.get("fate_merit", 0)) + "    业力：" + str(item.get("fate_karma", 0))
 		layout.add_child(details)
 		if not str(item.get("reincarnated_at", "")).is_empty():
 			var transition := Label.new()
