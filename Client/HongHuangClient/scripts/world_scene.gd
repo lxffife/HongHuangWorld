@@ -1536,7 +1536,7 @@ func _render_exploration_points(points: Variant) -> void:
 		var discovered := bool(point.get("discovered", false))
 		var point_button := Button.new()
 		var danger := int(point.get("danger_level", 1))
-		point_button.text = ("已发现 · " if discovered else "调查 · ") + str(point.get("name", "未知地点")) + "  | 危险 " + str(danger) + "/10"
+		point_button.text = str(point.get("region_name", "未知区域")) + " · " + ("已发现 · " if discovered else "调查 · ") + str(point.get("name", "未知地点")) + "  | 危险 " + str(danger) + "/10
 		point_button.disabled = discovered or npc_request_busy
 		point_button.tooltip_text = str(point.get("description", ""))
 		point_button.pressed.connect(_discover_exploration_point.bind(str(point.get("id", ""))))
