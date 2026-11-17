@@ -1738,6 +1738,22 @@ func _finish_leave_for_reincarnation() -> void:
 		leaving_for_reincarnation = false
 		hud_label.text = "返回角色界面失败，错误码：" + str(error)
 
+func _make_npc_part(parent: Node3D, part_name: String, mesh: Mesh, local_position: Vector3, color: Color, emissive: bool = false) -> MeshInstance3D:
+	var part := MeshInstance3D.new()
+	part.name = part_name
+	part.mesh = mesh
+	part.position = local_position
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = 0.78
+	if emissive:
+		material.emission_enabled = true
+		material.emission = color
+		material.emission_energy_multiplier = 0.7
+	part.material_override = material
+	parent.add_child(part)
+	return part
+
 func _render_world_npcs() -> void:
 	for npc_id in npc_nodes.keys():
 		if is_instance_valid(npc_nodes[npc_id]):
@@ -1750,27 +1766,70 @@ func _render_world_npcs() -> void:
 		var npc_id := str(npc_data.get("id", ""))
 		if npc_id.is_empty():
 			continue
+		var npc_type := str(npc_data.get("npc_type", "guide"))
+		var npc_name := str(npc_data.get("name", "NPC"))
 		var marker := Node3D.new()
 		marker.name = "NPC_" + npc_id
 		marker.position = Vector3(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_y", 0.0)), float(npc_data.get("position_z", 0.0)))
 		marker.rotation.y = float(npc_data.get("rotation_y", 0.0))
-		var orb := MeshInstance3D.new()
-		var mesh := CapsuleMesh.new()
-		mesh.radius = 0.38
-		mesh.height = 1.65
-		orb.mesh = mesh
-		orb.position.y = 0.82
-		var material := StandardMaterial3D.new()
-		material.albedo_color = Color("#8c7bd1") if str(npc_data.get("npc_type", "")) == "judge" else Color("#d6b16b")
-		material.emission_enabled = true
-		material.emission = material.albedo_color * 0.12
-		orb.material_override = material
-		marker.add_child(orb)
+
+		var robe_color := Color("#b9a47c")
+		var accent_color := Color("#e7c77f")
+		match npc_type:
+			"soup_keeper":
+				robe_color = Color("#315d68")
+				accent_color = Color("#9bd8ce")
+			"judge":
+				robe_color = Color("#55416f")
+				accent_color = Color("#b99be8")
+			"trial_master":
+				robe_color = Color("#713e37")
+				accent_color = Color("#e5a16c")
+			"guard":
+				robe_color = Color("#465568")
+				accent_color = Color("#a9c5d9")
+			_:
+				robe_color = Color("#746044")
+				accent_color = Color("#e6c77d")
+
+		var robe_mesh := CapsuleMesh.new()
+		robe_mesh.radius = 0.43 if npc_type == "soup_keeper" else 0.38
+		robe_mesh.height = 1.65
+		_make_npc_part(marker, "Robe", robe_mesh, Vector3(0.0, 0.83, 0.0), robe_color)
+		var head_mesh := SphereMesh.new()
+		head_mesh.radius = 0.25
+		head_mesh.height = 0.5
+		_make_npc_part(marker, "Head", head_mesh, Vector3(0.0, 1.82, 0.0), Color("#d5b69a"))
+		var hair_mesh := SphereMesh.new()
+		hair_mesh.radius = 0.27
+		hair_mesh.height = 0.3
+		_make_npc_part(marker, "Hair", hair_mesh, Vector3(0.0, 2.02, -0.015), Color("#25232c"))
+
+		if npc_type == "soup_keeper" or npc_name == "孟婆":
+			# A small jade bowl makes Meng Po recognizable even before the nameplate is read.
+			var bowl_mesh := CylinderMesh.new()
+			bowl_mesh.top_radius = 0.19
+			bowl_mesh.bottom_radius = 0.12
+			bowl_mesh.height = 0.12
+			_make_npc_part(marker, "ForgetfulnessBowl", bowl_mesh, Vector3(0.38, 1.05, -0.08), Color("#83c9bd"), true)
+			var hair_pin := BoxMesh.new()
+			hair_pin.size = Vector3(0.08, 0.42, 0.08)
+			_make_npc_part(marker, "JadeHairPin", hair_pin, Vector3(0.18, 2.12, 0.0), accent_color)
+		elif npc_type == "judge":
+			var crown_mesh := BoxMesh.new()
+			crown_mesh.size = Vector3(0.62, 0.18, 0.22)
+			_make_npc_part(marker, "JudgeCrown", crown_mesh, Vector3(0.0, 2.13, 0.0), accent_color, true)
+		elif npc_type == "trial_master" or npc_type == "guard":
+			var shoulder_mesh := BoxMesh.new()
+			shoulder_mesh.size = Vector3(1.0, 0.22, 0.48)
+			_make_npc_part(marker, "ShoulderArmor", shoulder_mesh, Vector3(0.0, 1.42, 0.0), accent_color)
+
 		var label := Label3D.new()
-		label.text = str(npc_data.get("name", "NPC")) + "\nF 交互"
-		label.position.y = 2.0
+		var title := str(npc_data.get("title", ""))
+		label.text = npc_name + (("\n" + title) if not title.is_empty() else "") + "\nF · 交互"
+		label.position.y = 2.55
 		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		label.modulate = Color("#f3dfb6")
+		label.modulate = accent_color.lightened(0.35)
 		marker.add_child(label)
 		add_child(marker)
 		npc_nodes[npc_id] = marker
