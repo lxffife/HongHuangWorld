@@ -1,4 +1,6 @@
-# WorldServer Durable Outbox
+# WorldServer Durable Outbox Foundation
+
+> The SQLite storage module and tests are in place. Reward/drop worker integration is the next implementation step; until that wiring lands, existing in-memory workers remain active.
 
 WorldServer reliable gameplay events use a node-local SQLite database. The database must live on persistent local storage, not /tmp or an ephemeral container layer.
 
