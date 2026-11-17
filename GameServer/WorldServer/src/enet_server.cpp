@@ -131,6 +131,14 @@ struct CharacterRewardEvent {
     unsigned int attempts{};
 };
 
+struct SoulRewardEvent {
+    std::string event_id;
+    std::string session_id;
+    std::string character_id;
+    std::int64_t experience{};
+    std::string source;
+};
+
 std::string make_event_uuid() {
     static thread_local std::mt19937_64 generator(std::random_device{}());
     std::array<std::uint8_t, 16> bytes{};
@@ -419,6 +427,51 @@ bool deliver_character_reward(const ServerConfig& config, const CharacterRewardE
 }
 
 
+bool deliver_soul_reward(const ServerConfig& config, const SoulRewardEvent& reward,
+                          long& http_status, std::string& error) {
+    CURL* curl = curl_easy_init();
+    if (curl == nullptr) { error = "could not initialize soul reward HTTP client"; return false; }
+    const std::string url = config.backend_url + "/api/v1/servers/souls/rewards";
+    const std::string body = Json{
+        {"event_id", reward.event_id},
+        {"session_id", reward.session_id},
+        {"character_id", reward.character_id},
+        {"experience", reward.experience},
+        {"source", reward.source}
+    }.dump();
+    std::string response;
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    const std::string auth_header = "X-World-Server-Key: " + config.api_key;
+    const std::string node_header = "X-World-Server-Node: " + config.node_key;
+    headers = curl_slist_append(headers, auth_header.c_str());
+    headers = curl_slist_append(headers, node_header.c_str());
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_POST, 1L);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body.size()));
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, collect_response);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 1500L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 4000L);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+    const auto result = curl_easy_perform(curl);
+    http_status = 0;
+    if (result == CURLE_OK) curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+    if (result != CURLE_OK) {
+        error = std::string("soul reward request failed: ") + curl_easy_strerror(result);
+        return false;
+    }
+    if (http_status != 200) {
+        error = "soul reward rejected by backend (HTTP " + std::to_string(http_status) + ")";
+        return false;
+    }
+    return true;
+}
+
 bool backend_inventory_request(const ServerConfig& config, const std::string& path,
                                const Json* body, long& http_status, Json& response,
                                std::string& error) {
@@ -689,6 +742,14 @@ struct EnetServer::Impl {
                             payload.at("cultivation").get<std::int64_t>(), event->attempts
                         };
                         delivered = deliver_character_reward(config, reward, status, delivery_error);
+                    } else if (event->event_type == "soul_reward") {
+                        SoulRewardEvent reward{
+                            event->event_id, payload.at("session_id").get<std::string>(),
+                            payload.at("character_id").get<std::string>(),
+                            payload.at("experience").get<std::int64_t>(),
+                            payload.at("source").get<std::string>()
+                        };
+                        delivered = deliver_soul_reward(config, reward, status, delivery_error);
                     } else if (event->event_type == "ground_drop_pickup") {
                         is_drop = true;
                         GroundDropRuntime pickup_drop{
@@ -850,6 +911,21 @@ struct EnetServer::Impl {
         std::string error;
         if (!enqueue_durable_event(reward.event_id, "character_reward", payload, error))
             std::cerr << "Could not persist character reward: " << error << '\n';
+    }
+
+    void enqueue_soul_reward(const PlayerState& player, std::int64_t experience,
+                             const std::string& source) {
+        if (experience <= 0 || source.empty()) return;
+        const auto event_id = make_event_uuid();
+        const Json payload{
+            {"session_id", player.session_id},
+            {"character_id", player.character_id},
+            {"experience", experience},
+            {"source", source}
+        };
+        std::string error;
+        if (!enqueue_durable_event(event_id, "soul_reward", payload, error))
+            std::cerr << "Could not persist soul reward: " << error << '\\n';
     }
 
     void stop_reward_worker() {
@@ -1240,6 +1316,11 @@ struct EnetServer::Impl {
             enqueue_character_reward(CharacterRewardEvent{
                 make_event_uuid(), player.session_id, player.character_id, experience_reward, cultivation_reward, 0
             });
+            // The underworld's spirit trial grants permanent soul experience.
+            const std::int64_t soul_experience_reward =
+                config.world_id == "underworld_fengdu" ? 5 : 0;
+            if (soul_experience_reward > 0)
+                enqueue_soul_reward(player, soul_experience_reward, "underworld_trial:monster_hunt");
             enqueue_monster_drops(*target, player);
         }
         const Json event{
@@ -1251,7 +1332,8 @@ struct EnetServer::Impl {
             {"max_health", target->definition.max_health},
             {"defeated", damage.defeated},
             {"experience_reward", experience_reward},
-            {"cultivation_reward", cultivation_reward}
+            {"cultivation_reward", cultivation_reward},
+            {"soul_experience_reward", damage.defeated && config.world_id == "underworld_fengdu" ? 5 : 0}
         };
         send_json(peer, honghuang::protocol::MessageType::CombatEvent, event);
     }
