@@ -49,3 +49,35 @@ func (h *npcHandlers) interact(w http.ResponseWriter,r *http.Request) {
 	default: h.logger.Error("interact with world NPC failed","error",err); http.Error(w,"internal server error",http.StatusInternalServerError)
 	}
 }
+
+
+func (h *npcHandlers) chooseFate(w http.ResponseWriter, r *http.Request) {
+	account, ok := h.currentAccount(w, r)
+	if !ok { return }
+	var request struct {
+		NPCID string `json:"npc_id"`
+		ChoiceID string `json:"choice_id"`
+	}
+	if err := decodeJSON(w, r, &request); err != nil || strings.TrimSpace(request.NPCID) == "" || strings.TrimSpace(request.ChoiceID) == "" {
+		http.Error(w, "npc_id and choice_id are required", http.StatusBadRequest)
+		return
+	}
+	result, err := h.service.ChooseFate(r.Context(), account.ID, strings.TrimSpace(request.NPCID), strings.TrimSpace(request.ChoiceID))
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusOK, result)
+	case errors.Is(err, npc.ErrNoActiveSession):
+		http.Error(w, "active world session required", http.StatusConflict)
+	case errors.Is(err, npc.ErrNotFound):
+		http.Error(w, "npc not found in current world", http.StatusNotFound)
+	case errors.Is(err, npc.ErrTooFar):
+		http.Error(w, "move closer to interact with this NPC", http.StatusConflict)
+	case errors.Is(err, npc.ErrChoiceUnavailable):
+		http.Error(w, "NPC fate choice is unavailable", http.StatusBadRequest)
+	case errors.Is(err, npc.ErrChoiceResolved):
+		http.Error(w, "this fate choice has already been resolved for your soul", http.StatusConflict)
+	default:
+		h.logger.Error("resolve NPC fate choice failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
+}
