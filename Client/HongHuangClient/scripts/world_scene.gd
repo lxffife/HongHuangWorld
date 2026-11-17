@@ -13,6 +13,9 @@ extends Node3D
 @onready var vitality_button: Button = $HUD/Panel/Margin/Content/AttributeButtons/Vitality
 @onready var reconnect_button: Button = $HUD/Panel/Margin/Content/Reconnect
 
+var respawn_http: HTTPRequest
+var respawn_button: Button
+var respawn_busy := false
 var progression_http: HTTPRequest
 var progression_request_context := ""
 var reconnect_http: HTTPRequest
@@ -65,6 +68,15 @@ func _ready() -> void:
 	progression_http.timeout = 10.0
 	add_child(progression_http)
 	progression_http.request_completed.connect(_on_progression_request_completed)
+	respawn_http = HTTPRequest.new()
+	respawn_http.timeout = 12.0
+	add_child(respawn_http)
+	respawn_http.request_completed.connect(_on_respawn_request_completed)
+	respawn_button = Button.new()
+	respawn_button.text = "返回冥界·酆都复活"
+	respawn_button.visible = false
+	$HUD/Panel/Margin/Content.add_child(respawn_button)
+	respawn_button.pressed.connect(_on_respawn_pressed)
 	breakthrough_button.pressed.connect(_on_breakthrough_pressed)
 	awaken_bloodline_button.pressed.connect(_on_awaken_bloodline_pressed)
 	train_technique_button.pressed.connect(_on_train_technique_pressed)
@@ -726,7 +738,8 @@ func _on_combat_event(event: Dictionary) -> void:
 		var current_health := int(event.get("health", 0))
 		var max_health := int(event.get("max_health", 0))
 		if bool(event.get("defeated", false)):
-			hud_label.text = "你被怪物击倒了！受到 " + str(incoming_damage) + " 点伤害。生命 " + str(current_health) + "/" + str(max_health)
+			respawn_button.visible = true
+			hud_label.text = "你已死亡。受到 " + str(incoming_damage) + " 点伤害，生命归零。可返回冥界·酆都复活。 " + str(current_health) + "/" + str(max_health)
 		else:
 			hud_label.text = "受到怪物攻击，损失 " + str(incoming_damage) + " 点生命。当前生命 " + str(current_health) + "/" + str(max_health)
 		return
@@ -1011,3 +1024,30 @@ func _on_consumable_completed(result: int, response_code: int, _headers: PackedS
 			inventory_status.text = "该使用请求已结算，正在同步背包。"
 	_refresh_inventory()
 	_refresh_equipment()
+
+func _on_respawn_pressed() -> void:
+	if respawn_busy or HHSession.access_token.is_empty():
+		return
+	respawn_busy = true
+	respawn_button.disabled = true
+	hud_label.text = "正在返回冥界·酆都……"
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token])
+	var error := respawn_http.request(
+		HHSession.api_base + "/api/v1/characters/current/respawn",
+		headers,
+		HTTPClient.METHOD_POST,
+		"{}"
+	)
+	if error != OK:
+		respawn_busy = false
+		respawn_button.disabled = false
+		hud_label.text = "提交复活请求失败，错误码：" + str(error)
+
+func _on_respawn_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	respawn_busy = false
+	respawn_button.disabled = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code != 200:
+		hud_label.text = "复活失败：" + body.get_string_from_utf8()
+		return
+	respawn_button.visible = false
+	hud_label.text = "已返回冥界·酆都，生命与灵力已恢复。请返回主界面重新进入世界。"
