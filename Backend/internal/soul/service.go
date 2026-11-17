@@ -120,6 +120,45 @@ func (s *Service) CurrentProgression(ctx context.Context, accountID string) (Pro
  return result, nil
 }
 
+type FateEvent struct {
+ Source string `json:"source"`
+ WorldID string `json:"world_id"`
+ KarmaDelta int64 `json:"karma_delta"`
+ MeritDelta int64 `json:"merit_delta"`
+ CreatedAt time.Time `json:"created_at"`
+}
+type FateSummary struct {
+ Karma int64 `json:"karma"`
+ Merit int64 `json:"merit"`
+ RecentEvents []FateEvent `json:"recent_events"`
+}
+
+// CurrentFate returns soul-level karma, merit, and a short immutable event history.
+func (s *Service) CurrentFate(ctx context.Context, accountID string) (FateSummary, error) {
+ var result FateSummary
+ err := s.db.QueryRowContext(ctx,
+  `SELECT karma,merit FROM souls WHERE account_id=$1`,accountID).Scan(&result.Karma,&result.Merit)
+ if errors.Is(err,sql.ErrNoRows) { return FateSummary{},ErrNotFound }
+ if err != nil { return FateSummary{},fmt.Errorf("load soul fate totals: %w",err) }
+ rows,err:=s.db.QueryContext(ctx,
+  `SELECT source,world_id,karma_delta,merit_delta,created_at
+   FROM soul_fate_events
+   WHERE soul_id=(SELECT id FROM souls WHERE account_id=$1)
+   ORDER BY created_at DESC LIMIT 20`,accountID)
+ if err != nil { return FateSummary{},fmt.Errorf("load soul fate events: %w",err) }
+ defer rows.Close()
+ result.RecentEvents=make([]FateEvent,0)
+ for rows.Next() {
+  var item FateEvent
+  if err:=rows.Scan(&item.Source,&item.WorldID,&item.KarmaDelta,&item.MeritDelta,&item.CreatedAt);err!=nil {
+   return FateSummary{},fmt.Errorf("scan soul fate event: %w",err)
+  }
+  result.RecentEvents=append(result.RecentEvents,item)
+ }
+ if err:=rows.Err();err!=nil{return FateSummary{},fmt.Errorf("iterate soul fate events: %w",err)}
+ return result,nil
+}
+
 type Reward struct {
  EventID string `json:"event_id"`
  SessionID string `json:"session_id"`
@@ -153,9 +192,12 @@ func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward 
  if err != nil { return RewardResult{}, fmt.Errorf("resolve soul reward node: %w", err) }
  var soulID string
  var currentExperience int64
+ var worldID string
  err = tx.QueryRowContext(ctx,
-  `SELECT soul.id::text, progression.experience
+  `SELECT soul.id::text, progression.experience, world.id
    FROM world_sessions ws
+   JOIN world_instances instance ON instance.id = ws.instance_id
+   JOIN world_definitions world ON world.id = instance.world_id
    JOIN characters character ON character.id = ws.character_id
    JOIN souls soul ON soul.id = character.soul_id
    JOIN soul_progression progression ON progression.soul_id = soul.id
@@ -163,7 +205,7 @@ func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward 
      AND character.status = 'alive'
      AND (ws.session_state = 'active' OR (ws.session_state = 'closed' AND ws.updated_at >= now() - INTERVAL '10 minutes'))
    FOR UPDATE OF ws, soul, progression`, reward.SessionID, serverID, reward.CharacterID,
- ).Scan(&soulID, &currentExperience)
+ ).Scan(&soulID, &currentExperience, &worldID)
  if errors.Is(err, sql.ErrNoRows) {
   var duplicate bool
   checkErr := tx.QueryRowContext(ctx,
@@ -188,6 +230,24 @@ func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward 
  if rows == 0 {
   if err := tx.Commit(); err != nil { return RewardResult{}, fmt.Errorf("commit duplicate soul reward: %w", err) }
   return RewardResult{Applied:false}, nil
+ }
+ // Moral outcomes are derived from the verified world session and trusted event source.
+ // A successful exorcism in Fengdu grants one merit point; clients cannot submit deltas.
+ if reward.Source == "underworld_trial:monster_hunt" && worldID == "underworld_fengdu" {
+  fateInsert, fateErr := tx.ExecContext(ctx,
+   `INSERT INTO soul_fate_events (soul_id,event_id,source,world_id,karma_delta,merit_delta)
+    VALUES ($1,$2::uuid,$3,$4,0,1)
+    ON CONFLICT (soul_id,event_id) DO NOTHING`,
+   soulID,reward.EventID,reward.Source,worldID)
+  if fateErr != nil { return RewardResult{}, fmt.Errorf("record soul fate event: %w",fateErr) }
+  fateRows, fateErr := fateInsert.RowsAffected()
+  if fateErr != nil { return RewardResult{}, fmt.Errorf("read soul fate event result: %w",fateErr) }
+  if fateRows > 0 {
+   if _, fateErr = tx.ExecContext(ctx,
+    `UPDATE souls SET merit=merit+1,updated_at=now() WHERE id=$1`,soulID); fateErr != nil {
+    return RewardResult{}, fmt.Errorf("grant exorcism merit: %w",fateErr)
+   }
+  }
  }
  if currentExperience > 9223372036854775807-reward.Experience { return RewardResult{}, ErrInvalidReward }
  newExperience := currentExperience + reward.Experience
