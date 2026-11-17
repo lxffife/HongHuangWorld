@@ -73,6 +73,46 @@ struct MonsterRuntime {
 };
 
 
+
+struct LootEntry {
+    std::string monster_id;
+    std::string item_id;
+    std::string item_name;
+    int quality{};
+    int drop_chance_bp{};
+    int min_quantity{};
+    int max_quantity{};
+    int max_stack{};
+    std::string icon_key;
+};
+
+struct GroundDropRuntime {
+    std::string id;
+    std::string session_id;
+    std::string owner_character_id;
+    std::string item_id;
+    int quantity{};
+    float x{};
+    float z{};
+    Clock::time_point expires_at{};
+    bool pickup_pending{};
+};
+
+struct DropJob {
+    bool pickup{};
+    GroundDropRuntime drop;
+    std::string event_id;
+    unsigned int attempts{};
+};
+
+struct DropJobResult {
+    bool pickup{};
+    GroundDropRuntime drop;
+    std::string event_id;
+    bool success{};
+    std::string error;
+};
+
 struct CharacterRewardEvent {
     std::string event_id;
     std::string session_id;
@@ -365,6 +405,120 @@ bool deliver_character_reward(const ServerConfig& config, const CharacterRewardE
         return false;
     }
     return true;
+}
+
+
+bool backend_inventory_request(const ServerConfig& config, const std::string& path,
+                               const Json* body, long& http_status, Json& response,
+                               std::string& error) {
+    CURL* curl = curl_easy_init();
+    if (curl == nullptr) { error = "could not initialize inventory HTTP client"; return false; }
+    const std::string url = config.backend_url + path;
+    const std::string payload = body == nullptr ? std::string{} : body->dump();
+    std::string response_text;
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, "Accept: application/json");
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    const std::string auth_header = "X-World-Server-Key: " + config.api_key;
+    const std::string node_header = "X-World-Server-Node: " + config.node_key;
+    headers = curl_slist_append(headers, auth_header.c_str());
+    headers = curl_slist_append(headers, node_header.c_str());
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    if (body != nullptr) {
+        curl_easy_setopt(curl, CURLOPT_POST, 1L);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload.c_str());
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(payload.size()));
+    } else {
+        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    }
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, collect_response);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_text);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 1500L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 4000L);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+    const auto result = curl_easy_perform(curl);
+    http_status = 0;
+    if (result == CURLE_OK) curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+    if (result != CURLE_OK) {
+        error = std::string("inventory request failed: ") + curl_easy_strerror(result);
+        return false;
+    }
+    if (http_status < 200 || http_status >= 300) {
+        error = "inventory backend returned HTTP " + std::to_string(http_status);
+        return false;
+    }
+    try {
+        response = response_text.empty() ? Json::object() : Json::parse(response_text);
+    } catch (const std::exception&) {
+        error = "inventory backend returned invalid JSON";
+        return false;
+    }
+    return true;
+}
+
+bool load_loot_table(const ServerConfig& config, std::vector<LootEntry>& entries, std::string& error) {
+    long status = 0;
+    Json response;
+    if (!backend_inventory_request(config, "/api/v1/servers/loot-table", nullptr, status, response, error)) {
+        return false;
+    }
+    if (!response.is_object() || !response.contains("entries") || !response["entries"].is_array()) {
+        error = "loot table response is missing entries";
+        return false;
+    }
+    std::vector<LootEntry> loaded;
+    for (const auto& value : response["entries"]) {
+        if (!value.is_object()) continue;
+        LootEntry entry;
+        try {
+            entry.monster_id = value.at("monster_id").get<std::string>();
+            entry.item_id = value.at("item_id").get<std::string>();
+            entry.item_name = value.value("item_name", std::string{});
+            entry.quality = value.value("quality", 1);
+            entry.drop_chance_bp = value.at("drop_chance_bp").get<int>();
+            entry.min_quantity = value.at("min_quantity").get<int>();
+            entry.max_quantity = value.at("max_quantity").get<int>();
+            entry.max_stack = value.at("max_stack").get<int>();
+            entry.icon_key = value.value("icon_key", std::string{});
+        } catch (const std::exception&) {
+            error = "loot table contains an invalid entry";
+            return false;
+        }
+        if (entry.monster_id.empty() || entry.item_id.empty() ||
+            entry.drop_chance_bp < 0 || entry.drop_chance_bp > 10000 ||
+            entry.min_quantity < 1 || entry.max_quantity < entry.min_quantity ||
+            entry.max_quantity > entry.max_stack || entry.max_stack < 1) {
+            error = "loot table entry failed validation";
+            return false;
+        }
+        loaded.push_back(std::move(entry));
+    }
+    entries = std::move(loaded);
+    return true;
+}
+
+bool deliver_ground_drop(const ServerConfig& config, const GroundDropRuntime& drop,
+                         long& status, std::string& error) {
+    const Json body{
+        {"drop_id", drop.id}, {"session_id", drop.session_id},
+        {"character_id", drop.owner_character_id}, {"item_id", drop.item_id},
+        {"quantity", drop.quantity}, {"position_x", drop.x}, {"position_z", drop.z}
+    };
+    Json response;
+    return backend_inventory_request(config, "/api/v1/servers/drops", &body, status, response, error);
+}
+
+bool deliver_ground_pickup(const ServerConfig& config, const DropJob& job,
+                           long& status, std::string& error) {
+    const Json body{
+        {"event_id", job.event_id}, {"drop_id", job.drop.id},
+        {"session_id", job.drop.session_id}, {"character_id", job.drop.owner_character_id}
+    };
+    Json response;
+    return backend_inventory_request(config, "/api/v1/servers/drops/pickup", &body, status, response, error);
 }
 
 void send_json(ENetPeer* peer, honghuang::protocol::MessageType type, const Json& value) {
