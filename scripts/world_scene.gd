@@ -354,7 +354,7 @@ func _update_hud() -> void:
 	var snapshot: Dictionary = HHSession.world_snapshot
 	var world_id := str(snapshot.get("world_id", "青云人界"))
 	var character_name := str(snapshot.get("name", "初入洪荒"))
-	hud_label.text = "洪荒 · " + world_id + "\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · E 拾取\n服务器权威移动已启用 · 左键攻击附近怪物 · 20Hz 实体快照"
+	hud_label.text = "洪荒 · " + world_id + "\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F NPC交互 · E 拾取\n服务器权威移动已启用 · 左键攻击附近怪物 · 20Hz 实体快照"
 
 func _exit_tree() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
