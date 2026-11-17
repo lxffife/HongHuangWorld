@@ -703,7 +703,7 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 		"reincarnate":
 			current_character = data
 			reincarnation_eligible = false
-			reincarnation_status_label.text = "新肉身创建成功，前世肉身已归档。出生路线：" + str(data.get("birth_route_name", "未记录")) + "。此世因果命格：" + str(data.get("fate_aspect", "因果未定")) + "；特性：" + str(data.get("fate_trait_name", "因果未定")) + "（" + str(data.get("fate_trait_description", "")) + "）（功德 " + str(data.get("fate_merit", 0)) + "，业力 " + str(data.get("fate_karma", 0)) + "）。正在申请冥界入口……"
+			reincarnation_status_label.text = "新肉身创建成功，前世肉身已归档。出生路线：" + str(data.get("birth_route_name", "未记录")) + "。此世因果命格：" + str(data.get("fate_aspect", "因果未定")) + "；特性：" + str(data.get("fate_trait_name", "因果未定")) + "（" + str(data.get("fate_trait_description", "")) + "）（功德 " + str(data.get("fate_merit", 0)) + "，业力 " + str(data.get("fate_karma", 0)) + "）。正在申请新出生世界入口……"
 			_enqueue(HTTPClient.METHOD_POST, "/api/v1/worlds/enter", {}, true, "enter")
 		"character_create":
 			current_character = data
