@@ -1329,6 +1329,23 @@ bool EnetServer::start() {
                      "WORLD_SERVER_CAPACITY are required\n";
         return false;
     }
+    std::filesystem::path outbox_path(impl_->config.outbox_database_path);
+    if (outbox_path.has_parent_path()) {
+        std::error_code directory_error;
+        std::filesystem::create_directories(outbox_path.parent_path(), directory_error);
+        if (directory_error) {
+            std::cerr << "Could not create WorldServer data directory: " << directory_error.message() << '\n';
+            return false;
+        }
+    }
+    try {
+        impl_->durable_outbox = std::make_unique<honghuang::persistence::DurableOutbox>(
+            outbox_path.string(), 10000);
+    } catch (const std::exception& exception) {
+        std::cerr << "Could not initialize durable outbox: " << exception.what() << '\n';
+        return false;
+    }
+
     if (enet_initialize() != 0) {
         std::cerr << "ENet initialization failed\n";
         return false;
@@ -1365,24 +1382,6 @@ bool EnetServer::start() {
                   << heartbeat_error << '\n';
     }
     impl_->heartbeat_stop_requested = false;
-    std::filesystem::path outbox_path(impl_->config.outbox_database_path);
-    if (outbox_path.has_parent_path()) {
-        std::error_code directory_error;
-        std::filesystem::create_directories(outbox_path.parent_path(), directory_error);
-        if (directory_error) {
-            std::cerr << "Could not create WorldServer data directory: " << directory_error.message() << '
-';
-            return false;
-        }
-    }
-    try {
-        impl_->durable_outbox = std::make_unique<honghuang::persistence::DurableOutbox>(
-            outbox_path.string(), 10000);
-    } catch (const std::exception& exception) {
-        std::cerr << "Could not initialize durable outbox: " << exception.what() << '
-';
-        return false;
-    }
     impl_->start_heartbeat_worker(heartbeat_ok);
     impl_->start_persistence_worker();
     impl_->start_outbox_worker();
