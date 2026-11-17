@@ -1365,8 +1365,6 @@ bool EnetServer::start() {
                   << heartbeat_error << '\n';
     }
     impl_->heartbeat_stop_requested = false;
-    impl_->start_heartbeat_worker(heartbeat_ok);
-    impl_->start_persistence_worker();
     std::filesystem::path outbox_path(impl_->config.outbox_database_path);
     if (outbox_path.has_parent_path()) {
         std::error_code directory_error;
@@ -1385,6 +1383,8 @@ bool EnetServer::start() {
 ';
         return false;
     }
+    impl_->start_heartbeat_worker(heartbeat_ok);
+    impl_->start_persistence_worker();
     impl_->start_outbox_worker();
     std::string loot_error;
     if (!load_loot_table(impl_->config, impl_->loot_table, loot_error)) {
