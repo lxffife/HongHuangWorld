@@ -2,7 +2,9 @@
 
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
-#include <enet/enet.h>
+
+struct _ENetHost;
+struct _ENetPeer;
 
 namespace honghuang {
 
@@ -23,8 +25,8 @@ protected:
     void _process(double delta) override;
 
 private:
-    ENetHost* host_{nullptr};
-    ENetPeer* peer_{nullptr};
+    _ENetHost* host_{nullptr};
+    _ENetPeer* peer_{nullptr};
     bool initialized_enet_{false};
     bool connected_{false};
 
