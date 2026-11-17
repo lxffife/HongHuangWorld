@@ -1,0 +1,3 @@
+BEGIN;
+DROP TABLE IF EXISTS soul_fate_events;
+COMMIT;
