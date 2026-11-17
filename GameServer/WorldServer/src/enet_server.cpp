@@ -1499,8 +1499,7 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                             send_json(event.peer, honghuang::protocol::MessageType::ServerReject,
                                       Json{{"reason", "character combat stats could not be synchronized"}});
                             enet_peer_disconnect_later(event.peer, 7);
-                            continue;
-                        }
+                        } else {
                         PlayerState player;
                         player.session_id = session_id;
                         player.character_id = character_id;
@@ -1536,6 +1535,7 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                         send_json(event.peer, honghuang::protocol::MessageType::ServerWelcome, client_welcome);
                         std::cout << "Authenticated character entered world: "
                                   << snapshot.value("character_id", std::string{}) << '\n';
+                        }
                     }
                 }
             } else if (frame.type == honghuang::protocol::MessageType::Heartbeat &&
