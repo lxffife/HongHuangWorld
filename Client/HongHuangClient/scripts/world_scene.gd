@@ -721,6 +721,15 @@ func _on_combat_event(event: Dictionary) -> void:
 	if not bool(event.get("accepted", true)):
 		hud_label.text = str(event.get("reason", "攻击未命中。"))
 		return
+	if str(event.get("source", "")) == "monster":
+		var incoming_damage := int(event.get("damage", 0))
+		var current_health := int(event.get("health", 0))
+		var max_health := int(event.get("max_health", 0))
+		if bool(event.get("defeated", false)):
+			hud_label.text = "你被怪物击倒了！受到 " + str(incoming_damage) + " 点伤害。生命 " + str(current_health) + "/" + str(max_health)
+		else:
+			hud_label.text = "受到怪物攻击，损失 " + str(incoming_damage) + " 点生命。当前生命 " + str(current_health) + "/" + str(max_health)
+		return
 	var monster_name := str(event.get("target_name", "目标"))
 	var damage := int(event.get("damage", 0))
 	if bool(event.get("defeated", false)):
