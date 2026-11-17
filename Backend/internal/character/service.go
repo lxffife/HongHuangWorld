@@ -38,6 +38,12 @@ type Character struct {
 	FateAspect string `json:"fate_aspect,omitempty"`
 	FateKarma int64 `json:"fate_karma,omitempty"`
 	FateMerit int64 `json:"fate_merit,omitempty"`
+	FateTraitID string `json:"fate_trait_id,omitempty"`
+	FateTraitName string `json:"fate_trait_name,omitempty"`
+	FateTraitDescription string `json:"fate_trait_description,omitempty"`
+	FateTraitID string `json:"fate_trait_id,omitempty"`
+	FateTraitName string `json:"fate_trait_name,omitempty"`
+	FateTraitDescription string `json:"fate_trait_description,omitempty"`
 }
 
 type Attributes struct {
@@ -283,7 +289,9 @@ func (s *Service) History(ctx context.Context, accountID string) ([]LifeRecord, 
 		        COALESCE(reincarnation.previous_world_id, ''),
 		        COALESCE(reincarnation.new_world_id, ''),
 		        COALESCE(reincarnation.fate_aspect, '因果未定'),
-		        COALESCE(reincarnation.fate_karma, 0), COALESCE(reincarnation.fate_merit, 0)
+		        COALESCE(reincarnation.fate_karma, 0), COALESCE(reincarnation.fate_merit, 0),
+		 COALESCE(fate_trait.trait_id, 'unmarked_fate'), COALESCE(fate_trait.trait_name, '因果未定'),
+		 COALESCE(fate_trait.description, '')
 		 FROM souls soul
 		 JOIN characters c ON c.soul_id = soul.id
 		 JOIN world_definitions world ON world.id = c.world_id
@@ -291,6 +299,7 @@ func (s *Service) History(ctx context.Context, accountID string) ([]LifeRecord, 
 		 LEFT JOIN character_progression progression ON progression.character_id = c.id
 		 LEFT JOIN cultivation_realms realm ON realm.id = progression.realm_id
 		 LEFT JOIN reincarnation_events reincarnation ON reincarnation.new_character_id = c.id
+		 LEFT JOIN character_fate_traits fate_trait ON fate_trait.character_id = c.id
 		 WHERE soul.account_id = $1
 		 ORDER BY c.life_index DESC`, accountID)
 	if err != nil {
@@ -308,6 +317,7 @@ func (s *Service) History(ctx context.Context, accountID string) ([]LifeRecord, 
 			&raceID, &item.RaceName, &item.Level, &item.Status, &item.RealmName,
 			&item.RealmStage, &item.IsCurrent, &item.CreatedAt, &reincarnatedAt,
 			&item.PreviousWorldID, &item.NextWorldID, &item.FateAspect, &item.FateKarma, &item.FateMerit,
+			&item.FateTraitID, &item.FateTraitName, &item.FateTraitDescription,
 		); err != nil {
 			return nil, fmt.Errorf("scan soul life history: %w", err)
 		}
@@ -1206,6 +1216,15 @@ func (s *Service) Reincarnate(ctx context.Context, accountID, name, raceID strin
 	}
 	var result Character
 	result.FateAspect, result.FateKarma, result.FateMerit = fateAspect, fateKarma, fateMerit
+	result.FateTraitID, result.FateTraitName, result.FateTraitDescription = "unmarked_fate", "因果未定", "此世命格尚未显现，未来的善恶抉择仍可改变命运。"
+	switch {
+	case fateMerit >= 5 && fateKarma >= 5:
+		result.FateTraitID, result.FateTraitName, result.FateTraitDescription = "entangled_fate", "福祸交织", "福缘与业障并存，可能触发更复杂的因果遭遇。"
+	case fateMerit >= 5:
+		result.FateTraitID, result.FateTraitName, result.FateTraitDescription = "blessed_fate", "福缘深厚", "善缘随身，部分正道 NPC 可能给予额外信任与隐藏机缘。"
+	case fateKarma >= 5:
+		result.FateTraitID, result.FateTraitName, result.FateTraitDescription = "karmic_shadow", "业障缠身", "业障随身，部分冥界 NPC 与特殊事件会对你作出不同反应。"
+	}
 	var race sql.NullString
 	err = tx.QueryRowContext(ctx,
 		`INSERT INTO characters (soul_id, life_index, world_id, name, race_id)
@@ -1320,6 +1339,16 @@ func (s *Service) Reincarnate(ctx context.Context, accountID, name, raceID strin
 		oldRaceID, raceID, newLifeIndex, fateKarma, fateMerit, fateAspect,
 	); err != nil {
 		return Character{}, fmt.Errorf("record reincarnation history: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO character_fate_traits
+		 (character_id, soul_id, life_index, trait_id, trait_name, description, effect_data)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb)`,
+		result.ID, soulID, newLifeIndex, result.FateTraitID, result.FateTraitName,
+		result.FateTraitDescription,
+		`{"source":"server_reincarnation","merit_threshold":5,"karma_threshold":5}`,
+	); err != nil {
+		return Character{}, fmt.Errorf("record reincarnation fate trait: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return Character{}, fmt.Errorf("commit reincarnation: %w", err)
