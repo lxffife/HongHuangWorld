@@ -46,6 +46,14 @@ int main() {
         assert(!box.claim_due(200, error));
         auto retry = box.claim_due(250, error);
         assert(retry && retry->attempts == 1);
+        assert(box.enqueue({"pickup-1", "ground_drop_pickup", "{\\"drop_id\\":\\"d1\\",\\"request_session_id\\":\\"s1\\"}", 0, 0, 275, {}}, error));
+        auto pickup = box.claim_due(275, error);
+        assert(pickup && pickup->event_type == "ground_drop_pickup");
+        assert(box.schedule_retry("pickup-1", 1, 300, "session temporarily unavailable", error));
+        auto pickup_retry = box.claim_due(300, error);
+        assert(pickup_retry && pickup_retry->event_id == "pickup-1");
+        assert(box.mark_delivered("pickup-1", error));
+
         assert(box.mark_delivered("e1", error));
         assert(!box.mark_delivered("e1", error));
         assert(box.pending_count(error) == 0);
