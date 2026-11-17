@@ -671,7 +671,7 @@ func _on_login_pressed() -> void:
 	}, false, "login")
 
 func _show_reincarnation_controls() -> void:
-	for control in [reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_check_button, reincarnation_submit_button, life_history_title, life_history_status, life_history_box, life_history_refresh_button, soul_memory_title, soul_memory_status, soul_memory_box, soul_memory_refresh_button]:
+	for control in [reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_check_button, reincarnation_submit_button, life_history_title, life_history_status, life_history_box, life_history_refresh_button, soul_memory_title, soul_memory_status, soul_memory_box, soul_memory_refresh_button, soul_fate_title, soul_fate_status, soul_fate_box, soul_fate_refresh_button]:
 		control.show()
 	reincarnation_name_input.text = ""
 	reincarnation_eligible = false
