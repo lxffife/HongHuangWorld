@@ -1183,7 +1183,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			if topics is Array:
 				for topic in topics:
 					lines.append("· " + str(topic))
-			npc_dialogue_label.text = PackedStringArray(lines).join("\n")
+			npc_dialogue_label.text = "\n".join(PackedStringArray(lines))
 			npc_status_label.text = "交互已由中心服验证。"
 			npc_trial_button.visible = str(npc_data.get("interaction_type", "")) == "soul_trials"
 			npc_eligibility_button.visible = str(npc_data.get("interaction_type", "")) == "reincarnation_guidance"
@@ -1198,7 +1198,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 					lines.append(str(trial.get("description", "")))
 					if bool(trial.get("reward_granted", false)):
 						lines.append("奖励已入账：" + str(trial.get("reward_experience", 0)) + " 灵魂经验")
-			npc_dialogue_label.text = "\n".join(lines)
+			npc_dialogue_label.text = "\n".join(PackedStringArray(lines))
 			npc_status_label.text = "任务进度来自中心服，不使用客户端本地计数。"
 			npc_panel.visible = true
 		"eligibility":
