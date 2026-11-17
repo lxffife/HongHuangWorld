@@ -79,7 +79,7 @@ godot::Error EnetClient::send_frame(const godot::PackedByteArray& frame, bool re
     }
     if (enet_peer_send(peer_, channel, packet) != 0) {
         enet_packet_destroy(packet);
-        return godot::ERR_CANT_SEND;
+        return godot::FAILED;
     }
     enet_host_flush(host_);
     return godot::OK;
