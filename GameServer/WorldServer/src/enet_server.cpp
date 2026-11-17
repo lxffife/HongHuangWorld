@@ -276,7 +276,8 @@ bool save_and_close_session(const ServerConfig& config, const PlayerState& playe
         {"position_x", player.x},
         {"position_y", player.y},
         {"position_z", player.z},
-        {"rotation_y", player.yaw}
+        {"rotation_y", player.yaw},
+        {"health", player.health}
     }.dump();
     std::string response;
     struct curl_slist* headers = nullptr;
@@ -330,7 +331,8 @@ bool save_periodic_position(const ServerConfig& config, const PlayerState& playe
         {"position_x", player.x},
         {"position_y", player.y},
         {"position_z", player.z},
-        {"rotation_y", player.yaw}
+        {"rotation_y", player.yaw},
+        {"health", player.health}
     }.dump();
     std::string response;
     struct curl_slist* headers = nullptr;
