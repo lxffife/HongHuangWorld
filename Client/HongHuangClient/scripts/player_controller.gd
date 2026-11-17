@@ -16,6 +16,9 @@ var input_send_accumulator := 0.0
 var input_sequence := 0
 var jump_pending := false
 var is_dead := false
+var current_move_input := Vector2.ZERO
+var last_send_error: int = OK
+var movement_network_ready := false
 
 func _ready() -> void:
 	_build_player()
@@ -70,9 +73,13 @@ func _ensure_input_actions() -> void:
 func _add_key_action(action: String, keycode: int) -> void:
 	if not InputMap.has_action(action):
 		InputMap.add_action(action)
-	var event := InputEventKey.new()
-	event.physical_keycode = keycode
-	InputMap.action_add_event(action, event)
+	# 同时注册物理键位和逻辑键位，兼容不同键盘布局与输入法状态。
+	var physical_event := InputEventKey.new()
+	physical_event.physical_keycode = keycode
+	InputMap.action_add_event(action, physical_event)
+	var logical_event := InputEventKey.new()
+	logical_event.keycode = keycode
+	InputMap.action_add_event(action, logical_event)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("release_mouse"):
@@ -100,6 +107,7 @@ func _physics_process(delta: float) -> void:
 		velocity = Vector3.ZERO
 		return
 	var input_2d := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	current_move_input = input_2d
 	var camera_basis := camera_pivot.global_transform.basis
 	var direction := camera_basis.x * input_2d.x + camera_basis.z * input_2d.y
 	direction.y = 0.0
@@ -112,10 +120,13 @@ func _physics_process(delta: float) -> void:
 	if input_send_accumulator >= 0.05:
 		input_send_accumulator = 0.0
 		var network := HHSession.world_network
-		if network != null and network.is_world_ready():
+		movement_network_ready = network != null and network.is_world_ready()
+		last_send_error = OK
+		if movement_network_ready:
 			input_sequence += 1
 			var send_error: Error = network.send_input(direction.x, direction.z, input_sequence, jump_pending)
 			if send_error == OK:
 				jump_pending = false
+			last_send_error = send_error
 			if send_error != OK:
 				push_warning("World movement input send failed: " + str(send_error))
