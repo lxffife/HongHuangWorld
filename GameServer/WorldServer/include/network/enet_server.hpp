@@ -17,6 +17,7 @@ struct ServerConfig {
     std::string region{"local"};
     std::string world_id{"qingyun_human"};
     std::string instance_key{"qingyun-local-1"};
+    std::string outbox_database_path{"./data/worldserver-outbox.sqlite3"};
     int capacity{100};
 };
 
