@@ -26,4 +26,16 @@ INSERT INTO item_definitions (id,name,category,quality,max_stack,icon_key,descri
 ('minor_mana_pill','小聚灵丹','consumable',1,99,'consumable_mana_pill','服用后恢复少量灵力。','{"restore_mana":20}')
 ON CONFLICT (id) DO NOTHING;
 
+-- Existing living characters receive the same one-time starter kit.
+INSERT INTO character_inventory (character_id,item_id,quantity)
+SELECT c.id, starter.item_id, starter.quantity
+FROM characters c
+CROSS JOIN (VALUES
+ ('starter_iron_sword',1),('starter_cloth_cap',1),('starter_leather_vest',1),
+ ('starter_trousers',1),('starter_travel_boots',1),('starter_wooden_charm',1),
+ ('minor_health_pill',3),('minor_mana_pill',3)
+) AS starter(item_id,quantity)
+WHERE c.status='alive'
+ON CONFLICT (character_id,item_id) DO NOTHING;
+
 COMMIT;
