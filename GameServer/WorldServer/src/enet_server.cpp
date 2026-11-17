@@ -1445,7 +1445,7 @@ struct EnetServer::Impl {
                            << " position=(" << player.x << ',' << player.y << ',' << player.z << ')'
                            << " health=" << player.health
                            << " input_age_ms=" << input_age_ms;
-                std::cout << diagnostic.str() << '\\n';
+                std::cout << diagnostic.str() << '\n';
                 player.accepted_inputs_since_diagnostic = 0;
                 player.last_movement_diagnostic_at = now;
             }
