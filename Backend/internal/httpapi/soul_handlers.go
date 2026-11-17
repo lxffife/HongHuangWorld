@@ -82,6 +82,22 @@ func (h *soulHandlers) currentAccount(w http.ResponseWriter, r *http.Request) (a
 }
 
  
+func (h *soulHandlers) fate(w http.ResponseWriter, r *http.Request) {
+ account, ok := h.currentAccount(w, r)
+ if !ok { return }
+ result, err := h.soulService.CurrentFate(r.Context(), account.ID)
+ if err != nil {
+  if errors.Is(err, soul.ErrNotFound) {
+   http.Error(w, "soul not found", http.StatusNotFound)
+   return
+  }
+  h.logger.Error("load soul fate failed", "error", err)
+  http.Error(w, "internal server error", http.StatusInternalServerError)
+  return
+ }
+ writeJSON(w, http.StatusOK, result)
+}
+
 func (h *soulHandlers) progression(w http.ResponseWriter, r *http.Request) {
  account, ok := h.currentAccount(w, r)
  if !ok { return }
