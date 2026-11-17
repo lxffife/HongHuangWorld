@@ -23,6 +23,9 @@ var reconnect_network: HHWorldNetwork
 var reconnect_request_busy := false
 
 var local_player: HHPlayerController
+var hud_visible := true
+var death_panel: PanelContainer
+var death_message_label: Label
 var local_target_position := Vector3.ZERO
 var remote_players: Dictionary = {}
 var remote_targets: Dictionary = {}
@@ -101,11 +104,6 @@ func _ready() -> void:
 	respawn_http.timeout = 12.0
 	add_child(respawn_http)
 	respawn_http.request_completed.connect(_on_respawn_request_completed)
-	respawn_button = Button.new()
-	respawn_button.text = "返回冥界·酆都复活"
-	respawn_button.visible = false
-	$HUD/Panel/Margin/Content.add_child(respawn_button)
-	respawn_button.pressed.connect(_on_respawn_pressed)
 	breakthrough_button.pressed.connect(_on_breakthrough_pressed)
 	awaken_bloodline_button.pressed.connect(_on_awaken_bloodline_pressed)
 	train_technique_button.pressed.connect(_on_train_technique_pressed)
@@ -122,6 +120,7 @@ func _ready() -> void:
 	_refresh_character_status()
 	_build_inventory_ui()
 	_build_npc_ui()
+	_build_death_ui()
 	_request_world_npcs()
 
 func _refresh_character_status() -> void:
@@ -508,6 +507,11 @@ func _create_drop(item_name: String, quality: int, quantity: int) -> Node3D:
 	return root
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F1:
+		hud_visible = not hud_visible
+		$HUD/Panel.visible = hud_visible
+		get_viewport().set_input_as_handled()
+		return
 	if not (event is InputEventKey) or not event.pressed or event.echo:
 		return
 	if event.keycode == KEY_F:
@@ -774,8 +778,11 @@ func _on_combat_event(event: Dictionary) -> void:
 		var current_health := int(event.get("health", 0))
 		var max_health := int(event.get("max_health", 0))
 		if bool(event.get("defeated", false)):
-			respawn_button.visible = true
-			hud_label.text = "你已死亡。受到 " + str(incoming_damage) + " 点伤害，生命归零。可返回冥界·酆都复活。 " + str(current_health) + "/" + str(max_health)
+			local_player.is_dead = true
+			local_target_position = local_player.position
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+			death_message_label.text = "角色已倒地，无法继续行动。\n受到 " + str(incoming_damage) + " 点伤害，生命 " + str(current_health) + "/" + str(max_health) + "。\n确认后将结算复活并返回角色界面。"
+			death_panel.visible = true
 		else:
 			hud_label.text = "受到怪物攻击，损失 " + str(incoming_damage) + " 点生命。当前生命 " + str(current_health) + "/" + str(max_health)
 		return
@@ -1063,6 +1070,38 @@ func _on_consumable_completed(result: int, response_code: int, _headers: PackedS
 	_refresh_inventory()
 	_refresh_equipment()
 
+func _build_death_ui() -> void:
+	var hud := get_node_or_null("HUD") as CanvasLayer
+	if hud == null:
+		return
+	death_panel = PanelContainer.new()
+	death_panel.set_anchors_preset(Control.PRESET_CENTER)
+	death_panel.offset_left = -230.0
+	death_panel.offset_top = -115.0
+	death_panel.offset_right = 230.0
+	death_panel.offset_bottom = 115.0
+	death_panel.visible = false
+	death_panel.z_index = 100
+	hud.add_child(death_panel)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 14)
+	death_panel.add_child(layout)
+	var title := Label.new()
+	title.text = "角色倒地"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 24)
+	layout.add_child(title)
+	death_message_label = Label.new()
+	death_message_label.text = "角色已倒地。"
+	death_message_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	death_message_label.custom_minimum_size = Vector2(400.0, 90.0)
+	layout.add_child(death_message_label)
+	respawn_button = Button.new()
+	respawn_button.text = "复活并返回角色界面"
+	respawn_button.custom_minimum_size.y = 44.0
+	respawn_button.pressed.connect(_on_respawn_pressed)
+	layout.add_child(respawn_button)
+
 func _on_respawn_pressed() -> void:
 	if respawn_busy or HHSession.access_token.is_empty():
 		return
@@ -1085,10 +1124,16 @@ func _on_respawn_request_completed(result: int, response_code: int, _headers: Pa
 	respawn_busy = false
 	respawn_button.disabled = false
 	if result != HTTPRequest.RESULT_SUCCESS or response_code != 200:
-		hud_label.text = "复活失败：" + body.get_string_from_utf8()
+		death_message_label.text = "复活请求失败：\n" + body.get_string_from_utf8() + "\n请检查中心服后重试。"
 		return
-	respawn_button.visible = false
-	hud_label.text = "已返回冥界·酆都，生命与灵力已恢复。请返回主界面重新进入世界。"
+	death_message_label.text = "复活成功，正在返回角色界面……"
+	if HHSession.world_network != null:
+		HHSession.world_network.close()
+		HHSession.world_network.queue_free()
+		HHSession.world_network = null
+	var change_error := get_tree().change_scene_to_file("res://scenes/Startup.tscn")
+	if change_error != OK:
+		death_message_label.text = "复活成功，但返回角色界面失败，错误码：" + str(change_error)
 
 
 # ---------------- World NPC interaction ----------------
