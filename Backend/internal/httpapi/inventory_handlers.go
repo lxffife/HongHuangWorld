@@ -51,6 +51,14 @@ func (h *inventoryHandlers) current(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
+
+func (h *inventoryHandlers) lootTable(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.authorizeServer(w, r); !ok { return }
+	entries, err := h.service.ListLootTable(r.Context())
+	if err != nil { h.logger.Error("list monster loot table failed", "error", err); http.Error(w, "internal server error", http.StatusInternalServerError); return }
+	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
+}
+
 func (h *inventoryHandlers) createDrop(w http.ResponseWriter, r *http.Request) {
 	nodeKey, ok := h.authorizeServer(w, r); if !ok { return }
 	var request createGroundDropRequest
