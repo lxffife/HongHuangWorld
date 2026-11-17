@@ -35,6 +35,8 @@ var account_label: Label
 var right_info_label: Label
 var reincarnation_name_input: LineEdit
 var reincarnation_race_select: OptionButton
+var reincarnation_route_select: OptionButton
+var reincarnation_routes: Array = []
 var reincarnation_status_label: Label
 var reincarnation_check_button: Button
 var reincarnation_submit_button: Button
@@ -226,7 +228,14 @@ func _build_reincarnation_ui() -> void:
 	content_box.add_child(reincarnation_name_input)
 	reincarnation_race_select = OptionButton.new()
 	reincarnation_race_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	reincarnation_race_select.item_selected.connect(_on_reincarnation_race_selected)
 	content_box.add_child(reincarnation_race_select)
+	var route_label := Label.new()
+	route_label.text = "选择出生路线（由中心服配置）"
+	content_box.add_child(route_label)
+	reincarnation_route_select = OptionButton.new()
+	reincarnation_route_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content_box.add_child(reincarnation_route_select)
 	reincarnation_check_button = Button.new()
 	reincarnation_check_button.text = "查询投胎资格"
 	reincarnation_check_button.pressed.connect(_check_reincarnation_eligibility)
@@ -241,7 +250,7 @@ func _build_reincarnation_ui() -> void:
 	reincarnation_confirm.dialog_text = "此操作不可撤销：当前肉身将归档为前世，并为同一灵魂创建新的肉身。灵魂经验、功德、业力会保留。是否继续？"
 	reincarnation_confirm.confirmed.connect(_submit_reincarnation)
 	add_child(reincarnation_confirm)
-	for control in [title, reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_check_button, reincarnation_submit_button]:
+	for control in [title, reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, route_label, reincarnation_route_select, reincarnation_check_button, reincarnation_submit_button]:
 		control.hide()
 	life_history_title = Label.new()
 	life_history_title.text = "灵魂历世档案"
@@ -420,6 +429,32 @@ func _render_life_history(items: Array) -> void:
 			layout.add_child(transition)
 		life_history_box.add_child(card)
 
+func _render_reincarnation_routes() -> void:
+	_on_reincarnation_race_selected(reincarnation_race_select.selected)
+
+func _on_reincarnation_race_selected(_index: int) -> void:
+	if reincarnation_route_select == null:
+		return
+	reincarnation_route_select.clear()
+	if reincarnation_race_select.item_count == 0:
+		return
+	var race_id := str(reincarnation_race_select.get_item_metadata(reincarnation_race_select.selected))
+	for route_variant in reincarnation_routes:
+		if not (route_variant is Dictionary):
+			continue
+		var route: Dictionary = route_variant
+		var route_race := str(route.get("race_id", ""))
+		if not route_race.is_empty() and route_race != race_id:
+			continue
+		var display_name := str(route.get("name", route.get("id", "未知路线")))
+		display_name += " · " + str(route.get("world_name", route.get("world_id", "未知世界")))
+		reincarnation_route_select.add_item(display_name)
+		reincarnation_route_select.set_item_metadata(reincarnation_route_select.item_count - 1, str(route.get("id", "")))
+	if reincarnation_route_select.item_count > 0:
+		reincarnation_route_select.select(0)
+	if reincarnation_eligible:
+		reincarnation_submit_button.disabled = reincarnation_route_select.item_count == 0
+
 func _check_reincarnation_eligibility() -> void:
 	if access_token.is_empty() or current_character.is_empty():
 		reincarnation_status_label.text = "请先登录并载入当前肉身。"
@@ -438,11 +473,15 @@ func _submit_reincarnation() -> void:
 	if reincarnation_race_select.item_count == 0:
 		reincarnation_status_label.text = "种族目录为空，暂时无法创建新肉身。"
 		return
+	if reincarnation_route_select.item_count == 0:
+		reincarnation_status_label.text = "当前种族没有可用的出生路线，请检查世界配置。"
+		return
 	var race_id := str(reincarnation_race_select.get_item_metadata(reincarnation_race_select.selected))
+	var route_id := str(reincarnation_route_select.get_item_metadata(reincarnation_route_select.selected))
 	reincarnation_submit_button.disabled = true
 	reincarnation_check_button.disabled = true
 	reincarnation_status_label.text = "正在由中心服事务创建新肉身……"
-	_enqueue(HTTPClient.METHOD_POST, "/api/v1/characters/current/reincarnate", {"name": name, "race_id": race_id}, true, "reincarnate")
+	_enqueue(HTTPClient.METHOD_POST, "/api/v1/characters/current/reincarnate", {"name": name, "race_id": race_id, "route_id": route_id}, true, "reincarnate")
 
 func _load_client_config() -> void:
 	var config := ConfigFile.new()
@@ -558,6 +597,10 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 			soul_memory_status.text = "前世记忆读取失败（HTTP " + str(response_code) + "）：" + body_text
 		elif context == "soul_fate":
 			soul_fate_status.text = "因果簿读取失败（HTTP " + str(response_code) + "）：" + body_text
+		elif context == "reincarnation_routes":
+			reincarnation_route_select.clear()
+			reincarnation_status_label.text = "出生路线读取失败（HTTP " + str(response_code) + "）：" + body_text
+			reincarnation_submit_button.disabled = true
 		elif context == "reincarnation_eligibility":
 			reincarnation_check_button.disabled = false
 			reincarnation_eligible = false
@@ -620,6 +663,9 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 			_render_soul_memories(data.get("items", []))
 		"soul_fate":
 			_render_soul_fate(data)
+		"reincarnation_routes":
+			reincarnation_routes = data.get("routes", [])
+			_render_reincarnation_routes()
 		"reincarnation_eligibility":
 			reincarnation_check_button.disabled = false
 			reincarnation_eligible = bool(data.get("eligible", false))
@@ -629,7 +675,7 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 			var trial_done := bool(data.get("trial_completed", false))
 			if reincarnation_eligible:
 				reincarnation_status_label.text = "投胎资格已满足。灵魂境界：" + realm_name + "；引魂试炼：已完成。选择新肉身名称与种族后确认即可。"
-				reincarnation_submit_button.disabled = false
+				reincarnation_submit_button.disabled = reincarnation_route_select.item_count == 0
 			else:
 				reincarnation_status_label.text = "暂不具备投胎资格。当前境界：" + realm_name + "；要求：" + required_name + "；引魂试炼：" + ("已完成" if trial_done else "未完成") + "。\n待完成：" + ", ".join(PackedStringArray(reasons))
 				reincarnation_submit_button.disabled = true
@@ -671,7 +717,7 @@ func _on_login_pressed() -> void:
 	}, false, "login")
 
 func _show_reincarnation_controls() -> void:
-	for control in [reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_check_button, reincarnation_submit_button, life_history_title, life_history_status, life_history_box, life_history_refresh_button, soul_memory_title, soul_memory_status, soul_memory_box, soul_memory_refresh_button, soul_fate_title, soul_fate_status, soul_fate_box, soul_fate_refresh_button]:
+	for control in [reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_route_select, reincarnation_check_button, reincarnation_submit_button, life_history_title, life_history_status, life_history_box, life_history_refresh_button, soul_memory_title, soul_memory_status, soul_memory_box, soul_memory_refresh_button, soul_fate_title, soul_fate_status, soul_fate_box, soul_fate_refresh_button]:
 		control.show()
 	reincarnation_name_input.text = ""
 	reincarnation_eligible = false
@@ -686,6 +732,7 @@ func _show_reincarnation_controls() -> void:
 		if str(reincarnation_race_select.get_item_metadata(index)) == "human":
 			reincarnation_race_select.select(index)
 			break
+	_enqueue(HTTPClient.METHOD_GET, "/api/v1/characters/current/reincarnation-routes", {}, true, "reincarnation_routes")
 	_request_life_history()
 	_request_soul_memories()
 	_request_soul_fate()
