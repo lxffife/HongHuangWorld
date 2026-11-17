@@ -37,7 +37,8 @@ try {
         '000016_reincarnation_fate_imprint.up.sql',
         '000017_character_fate_traits.up.sql',
         '000018_npc_fate_reactions.up.sql',
-        '000019_hidden_fate_encounters.up.sql'
+        '000019_hidden_fate_encounters.up.sql',
+        '000020_reincarnation_birth_routes.up.sql'
     )
 
     $existing = docker compose --env-file .env exec -T postgres psql -U $env:POSTGRES_USER -d $env:POSTGRES_DB -At -c "SELECT to_regclass('public.accounts') IS NOT NULL;"
