@@ -9,6 +9,8 @@
 - `000003_race_bloodline_techniques` 创建种族属性成长权重、血脉定义/修正/角色继承记录、功法目录/跨族适配矩阵/角色熟练度记录，并为已有角色补齐默认血脉。
 - `000004_bloodline_awakening_technique_training` 创建数据驱动的血脉觉醒门槛、种族入门功法映射，并为已有角色补齐一项种族入门功法。
 - `000005_items_inventory_drops` 创建物品目录、怪物掉落配置、地面掉落实体、角色背包和幂等拾取流水；初始配置荒原狼掉落荒狼獠牙与荒狼皮。
+- `000006_character_equipment` 增加物品类型/装备部位/基础属性/使用效果元数据，以及角色装备槽；兼容同步现有 category 与 item_type。
+- `000007_item_use_and_starter_catalog` 增加消耗品幂等流水、初始装备/丹药目录，并为已有角色发放一次性新手物品。
 
 ## 当前迁移顺序
 
