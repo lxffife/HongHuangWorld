@@ -730,7 +730,8 @@ struct EnetServer::Impl {
                     continue;
                 }
 
-                const auto attempts = event->attempts == UINT32_MAX ? event->attempts : event->attempts + 1;
+                const auto attempts = event->attempts == std::numeric_limits<std::uint32_t>::max()
+                    ? event->attempts : event->attempts + 1;
                 const auto exponent = std::min<std::uint32_t>(attempts, 8U);
                 const auto delay_ms = std::min<std::int64_t>(1000LL * (1LL << exponent), 300000LL);
                 std::string retry_error;
@@ -1384,7 +1385,6 @@ bool EnetServer::start() {
     impl_->heartbeat_stop_requested = false;
     impl_->start_heartbeat_worker(heartbeat_ok);
     impl_->start_persistence_worker();
-    impl_->start_outbox_worker();
     std::string loot_error;
     if (!load_loot_table(impl_->config, impl_->loot_table, loot_error)) {
         std::cerr << "Monster loot table unavailable; drops disabled until restart: " << loot_error << '\n';
@@ -1398,6 +1398,7 @@ bool EnetServer::start() {
         std::cout << "Restored " << impl_->ground_drops.size() << " persisted ground drops\n";
     }
     impl_->start_drop_worker();
+    impl_->start_outbox_worker();
     impl_->last_persistence = Clock::now();
     std::cout << "WorldServer ENet listening on UDP " << impl_->config.port << '\n';
     return true;
