@@ -70,3 +70,13 @@ P0 使用基于 X/Z 平面距离的简单兴趣范围：每个客户端每 50ms 
 - 新玩家完成一次性票据兑换后，WorldServer 会向当前在线客户端发送可靠的 `PlayerJoined` 事件，包含角色 ID、名称和初始位置。
 - 玩家断线或同角色新连接替换旧连接时，WorldServer 会向其他客户端发送可靠的 `PlayerLeft` 事件。
 - 加入/离开事件使用可靠 ENet 通道；20Hz `EntitySnapshot` 仍是实体位置与 AOI 可见范围的权威状态来源。客户端收到事件后即时创建/移除远端占位角色，随后由快照持续校正位置。
+
+## 持久化事件 Outbox
+
+怪物击杀奖励（经验/修为）和地面掉落创建已先写入节点本地 SQLite Outbox，再由后台线程异步投递中心服。事件使用稳定 ID；相同 ID 与相同 payload 重复入队幂等，ID 对应不同 payload 会被拒绝。进程重启时会把遗留的 inflight 事件恢复为 pending，网络错误和 HTTP 5xx 使用持久化指数退避重试，HTTP 4xx 进入 dead-letter。中心服仍需按事件 ID/掉落 ID 保持幂等。
+
+新增配置：
+- `WORLD_SERVER_OUTBOX_PATH`：SQLite 文件路径，默认 `./data/worldserver-outbox.sqlite3`。父目录会自动创建。
+- 数据文件必须放在持久化磁盘；不要放在临时目录或临时容器层。不要让多个 WorldServer 进程共享同一数据库文件。
+
+当前 Outbox 容量为 10,000 条 pending/inflight 事件；已投递和死信记录保留用于排查，不计入活动容量。拾取结算仍使用原内存队列，尚未纳入 Outbox。详见 [OUTBOX.md](OUTBOX.md)。
