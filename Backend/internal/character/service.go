@@ -272,16 +272,16 @@ func (s *Service) History(ctx context.Context, accountID string) ([]LifeRecord, 
 		        COALESCE(realm.name, '尚未记录'), COALESCE(progression.realm_stage, 1),
 		        (c.id = soul.current_character_id),
 		        c.created_at,
-		        event.reincarnated_at,
-		        COALESCE(event.previous_world_id, ''),
-		        COALESCE(event.new_world_id, '')
+		        reincarnation.reincarnated_at,
+		        COALESCE(reincarnation.previous_world_id, ''),
+		        COALESCE(reincarnation.new_world_id, '')
 		 FROM souls soul
 		 JOIN characters c ON c.soul_id = soul.id
 		 JOIN world_definitions world ON world.id = c.world_id
 		 LEFT JOIN race_definitions race ON race.id = c.race_id
 		 LEFT JOIN character_progression progression ON progression.character_id = c.id
 		 LEFT JOIN cultivation_realms realm ON realm.id = progression.realm_id
-		 LEFT JOIN reincarnation_events event ON event.new_character_id = c.id
+		 LEFT JOIN reincarnation_events reincarnation ON reincarnation.new_character_id = c.id
 		 WHERE soul.account_id = $1
 		 ORDER BY c.life_index DESC`, accountID)
 	if err != nil {
