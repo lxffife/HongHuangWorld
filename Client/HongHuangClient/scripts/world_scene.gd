@@ -1228,6 +1228,9 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 		"list":
 			npc_definitions = data.get("npcs", [])
 			_render_world_npcs()
+			_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_bootstrap")
+		"exploration_bootstrap":
+			_render_exploration_points(data.get("points", []))
 		"exploration_list":
 			_render_exploration_points(data.get("points", []))
 			npc_title_label.text = "区域探索 · 已发现记录"
