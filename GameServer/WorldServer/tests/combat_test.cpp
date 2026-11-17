@@ -38,5 +38,13 @@ int main() {
     const AttackProfile invalid_profile{10000, 10001};
     assert(!calculate_damage(attacker, defender, invalid_profile, result));
 
+    // Monster attacks use the same authoritative defense calculation.
+    const CombatantStats monster_attacker{attack: 12, defense: 4, current_health: 1, max_health: 1};
+    const CombatantStats player_defender{attack: 20, defense: 5, current_health: 80, max_health: 100};
+    assert(calculate_damage(monster_attacker, player_defender, AttackProfile{}, result));
+    assert(result.damage == 7);
+    assert(result.remaining_health == 73);
+    assert(!result.defeated);
+
     return 0;
 }
