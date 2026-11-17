@@ -1109,6 +1109,11 @@ struct EnetServer::Impl {
         auto player_it = players.find(peer);
         if (player_it == players.end()) return;
         auto& player = player_it->second;
+        if (player.health <= 0) {
+            send_json(peer, honghuang::protocol::MessageType::PickupEvent,
+                      Json{{"accepted", false}, {"reason", "角色已倒地，无法拾取。"}});
+            return;
+        }
         const auto now = Clock::now();
         if (player.last_pickup_at.time_since_epoch().count() != 0 &&
             now - player.last_pickup_at < std::chrono::milliseconds(250)) {
@@ -1174,6 +1179,11 @@ struct EnetServer::Impl {
         auto player_it = players.find(peer);
         if (player_it == players.end()) return;
         auto& player = player_it->second;
+        if (player.health <= 0) {
+            send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                      Json{{"accepted", false}, {"reason", "角色已倒地，无法攻击。"}});
+            return;
+        }
         const auto now = Clock::now();
         if (player.last_attack_at.time_since_epoch().count() != 0 &&
             now - player.last_attack_at < kAttackCooldown) {
@@ -1327,9 +1337,10 @@ struct EnetServer::Impl {
         const float delta = std::clamp(std::chrono::duration<float>(elapsed).count(), 0.0F, 0.1F);
         for (auto& [peer, player] : players) {
             (void)peer;
-            if (now - player.last_input_at > kInputTimeout) {
+            if (player.health <= 0 || now - player.last_input_at > kInputTimeout) {
                 player.move_x = 0.0F;
                 player.move_z = 0.0F;
+                player.jump_requested = false;
             }
             honghuang::simulation::integrate_horizontal(
                 player.x, player.z, player.move_x, player.move_z, delta);
@@ -1350,6 +1361,7 @@ struct EnetServer::Impl {
             double nearest_distance_squared = std::numeric_limits<double>::max();
             for (const auto& [peer, player] : players) {
                 (void)peer;
+                if (player.health <= 0) continue;
                 const double dx = static_cast<double>(player.x) - monster.state.x;
                 const double dz = static_cast<double>(player.z) - monster.state.z;
                 const double distance_squared = dx * dx + dz * dz;
