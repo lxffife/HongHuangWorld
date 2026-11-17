@@ -9,6 +9,7 @@ signal entities_updated(entities: Array)
 signal player_joined(player: Dictionary)
 signal player_left(character_id: String)
 signal combat_event(event: Dictionary)
+signal pickup_event(event: Dictionary)
 
 const BUILD := "0.1.0"
 const EXTENSION_PATH := "res://bin/honghuang_native_net.gdextension"
@@ -93,6 +94,16 @@ func send_attack(target_entity_id: String) -> Error:
 		return ERR_INVALID_DATA
 	return transport.send_frame(frame)
 
+
+func send_pickup(drop_id: String) -> Error:
+	if not world_ready or transport == null or drop_id.is_empty() or drop_id.length() > 64:
+		return ERR_INVALID_PARAMETER
+	var payload := JSON.stringify({"drop_id": drop_id}).to_utf8_buffer()
+	var frame := HHProtocolCodec.encode_frame(HHProtocolCodec.MessageType.PICKUP_COMMAND, payload)
+	if frame.is_empty():
+		return ERR_INVALID_DATA
+	return transport.send_frame(frame)
+
 func _on_frame_received(bytes: PackedByteArray) -> void:
 	var decoded := HHProtocolCodec.decode_frame(bytes)
 	if not decoded.get("ok", false):
@@ -145,6 +156,12 @@ func _on_frame_received(bytes: PackedByteArray) -> void:
 				combat_event.emit(combat)
 			else:
 				rejected.emit("收到无效的 CombatEvent。")
+		HHProtocolCodec.MessageType.PICKUP_EVENT:
+			var pickup: Variant = JSON.parse_string(payload.get_string_from_utf8())
+			if pickup is Dictionary:
+				pickup_event.emit(pickup)
+			else:
+				rejected.emit("收到无效的 PickupEvent。")
 		_:
 			rejected.emit("收到未知服务端消息类型：" + str(message_type))
 			transport.disconnect_from_host()
