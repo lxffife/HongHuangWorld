@@ -33,6 +33,7 @@ type Definition struct {
 	Dialogue json.RawMessage `json:"dialogue"`
 	FateTraitID string `json:"fate_trait_id,omitempty"`
 	FateReaction string `json:"fate_reaction,omitempty"`
+	FateEncounterAvailable bool `json:"fate_encounter_available"`
 }
 
 type Service struct { db *sql.DB }
@@ -80,7 +81,11 @@ func (s *Service) Interact(ctx context.Context, accountID, npcID string) (Defini
 	err:=s.db.QueryRowContext(ctx,
 		`SELECT n.id,n.world_id,n.name,n.title,n.npc_type,n.interaction_type,
 		        n.position_x,n.position_y,n.position_z,n.rotation_y,n.interaction_radius,n.dialogue,
-		        COALESCE(trait.trait_id, ''), COALESCE(n.dialogue->'fate_reactions'->>trait.trait_id, '')
+		        COALESCE(trait.trait_id, ''), COALESCE(n.dialogue->'fate_reactions'->>trait.trait_id, ''),
+		        (COALESCE(n.dialogue->'fate_encounters'->trait.trait_id, '{}'::jsonb) <> '{}'::jsonb
+		         AND NOT EXISTS (SELECT 1 FROM soul_fate_encounter_claims claim
+		                         WHERE claim.soul_id=soul.id
+		                           AND claim.encounter_id=n.dialogue->'fate_encounters'->trait.trait_id->>'id'))
 		 FROM souls soul
 		 JOIN characters c ON c.id=soul.current_character_id AND c.status='alive'
 		 JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
@@ -92,7 +97,7 @@ func (s *Service) Interact(ctx context.Context, accountID, npcID string) (Defini
 		 ORDER BY ws.connected_at DESC NULLS LAST LIMIT 1`,accountID,npcID).Scan(
 		&item.ID,&item.WorldID,&item.Name,&item.Title,&item.Type,&item.InteractionType,
 		&item.PositionX,&item.PositionY,&item.PositionZ,&item.RotationY,&item.InteractionRadius,&item.Dialogue,
-		&item.FateTraitID,&item.FateReaction)
+		&item.FateTraitID,&item.FateReaction,&item.FateEncounterAvailable)
 	if errors.Is(err,sql.ErrNoRows) {
 		var active bool
 		checkErr:=s.db.QueryRowContext(ctx,
