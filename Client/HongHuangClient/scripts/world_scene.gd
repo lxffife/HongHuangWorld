@@ -26,6 +26,14 @@ var remote_targets: Dictionary = {}
 var remote_yaws: Dictionary = {}
 var monsters: Dictionary = {}
 var monster_targets: Dictionary = {}
+var drops: Dictionary = {}
+var drop_targets: Dictionary = {}
+var inventory_http: HTTPRequest
+var inventory_button: Button
+var inventory_panel: PanelContainer
+var inventory_status: Label
+var inventory_items: VBoxContainer
+var inventory_visible := false
 
 func _ready() -> void:
 	_build_environment()
@@ -36,6 +44,7 @@ func _ready() -> void:
 		HHSession.world_network.player_joined.connect(_on_player_joined)
 		HHSession.world_network.player_left.connect(_on_player_left)
 		HHSession.world_network.combat_event.connect(_on_combat_event)
+		HHSession.world_network.pickup_event.connect(_on_pickup_event)
 		HHSession.world_network.disconnected.connect(_on_world_disconnected)
 		var spawn: Dictionary = HHSession.world_snapshot
 		local_target_position = Vector3(float(spawn.get("position_x", 0.0)), float(spawn.get("position_y", 0.15)), float(spawn.get("position_z", 0.0)))
@@ -59,6 +68,7 @@ func _ready() -> void:
 	add_child(reconnect_http)
 	reconnect_http.request_completed.connect(_on_reconnect_request_completed)
 	_refresh_character_status()
+	_build_inventory_ui()
 
 func _refresh_character_status() -> void:
 	if HHSession.access_token.is_empty():
@@ -305,7 +315,7 @@ func _update_hud() -> void:
 	var snapshot: Dictionary = HHSession.world_snapshot
 	var world_id := str(snapshot.get("world_id", "青云人界"))
 	var character_name := str(snapshot.get("name", "初入洪荒"))
-	hud_label.text = "洪荒 · " + world_id + "\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标\n服务器权威移动已启用 · 左键攻击附近怪物 · 20Hz 实体快照"
+	hud_label.text = "洪荒 · " + world_id + "\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · E 拾取\n服务器权威移动已启用 · 左键攻击附近怪物 · 20Hz 实体快照"
 
 func _exit_tree() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -313,6 +323,7 @@ func _exit_tree() -> void:
 func _on_entities_updated(entities: Array) -> void:
 	var seen: Dictionary = {}
 	var seen_monsters: Dictionary = {}
+	var seen_drops: Dictionary = {}
 	var own_id := str(HHSession.world_snapshot.get("character_id", ""))
 	for entity in entities:
 		if not (entity is Dictionary):
@@ -324,6 +335,13 @@ func _on_entities_updated(entities: Array) -> void:
 				continue
 			seen_monsters[monster_id] = true
 			_upsert_monster(entity)
+			continue
+		if entity_type == "drop":
+			var drop_id := str(entity.get("entity_id", ""))
+			if drop_id.is_empty():
+				continue
+			seen_drops[drop_id] = true
+			_upsert_drop(entity)
 			continue
 		var character_id := str(entity.get("character_id", ""))
 		if character_id.is_empty():
@@ -345,6 +363,11 @@ func _on_entities_updated(entities: Array) -> void:
 			monsters[monster_id].queue_free()
 			monsters.erase(monster_id)
 			monster_targets.erase(monster_id)
+	for drop_id in drops.keys():
+		if not seen_drops.has(drop_id):
+			drops[drop_id].queue_free()
+			drops.erase(drop_id)
+			drop_targets.erase(drop_id)
 
 func _upsert_remote_player(entity: Dictionary) -> void:
 	var character_id := str(entity.get("character_id", ""))
@@ -392,6 +415,175 @@ func _create_monster(monster_name: String, monster_level: int) -> Node3D:
 	monster.add_child(label)
 	add_child(monster)
 	return monster
+
+
+func _upsert_drop(entity: Dictionary) -> void:
+	var drop_id := str(entity.get("entity_id", ""))
+	if drop_id.is_empty():
+		return
+	if not drops.has(drop_id):
+		drops[drop_id] = _create_drop(str(entity.get("item_name", "掉落物")), int(entity.get("quality", 1)), int(entity.get("quantity", 1)))
+	drop_targets[drop_id] = Vector3(
+		float(entity.get("x", 0.0)),
+		float(entity.get("y", 0.15)),
+		float(entity.get("z", 0.0))
+	)
+
+func _create_drop(item_name: String, quality: int, quantity: int) -> Node3D:
+	var root := Node3D.new()
+	var mesh_instance := MeshInstance3D.new()
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.28
+	mesh.height = 0.5
+	mesh_instance.mesh = mesh
+	var material := StandardMaterial3D.new()
+	var quality_colors := [Color("#c6c6c6"), Color("#72c98a"), Color("#5ba9ef"), Color("#b184ed"), Color("#e8b85b")]
+	material.albedo_color = quality_colors[clampi(quality - 1, 0, quality_colors.size() - 1)]
+	material.emission_enabled = true
+	material.emission = material.albedo_color * 0.22
+	material.roughness = 0.35
+	mesh_instance.material_override = material
+	root.add_child(mesh_instance)
+	var label := Label3D.new()
+	label.text = item_name + " ×" + str(quantity) + "\n按 E 拾取"
+	label.position.y = 0.65
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.modulate = Color("#f4e6bd")
+	root.add_child(label)
+	add_child(root)
+	return root
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not (event is InputEventKey) or not event.pressed or event.echo or event.keycode != KEY_E:
+		return
+	var network := HHSession.world_network
+	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
+		return
+	var nearest_id := ""
+	var nearest_distance := 3.0
+	for drop_id in drops.keys():
+		var target: Vector3 = drop_targets.get(drop_id, drops[drop_id].position)
+		var distance := Vector2(target.x - local_player.position.x, target.z - local_player.position.z).length()
+		if distance <= nearest_distance:
+			nearest_distance = distance
+			nearest_id = str(drop_id)
+	if nearest_id.is_empty():
+		return
+	var error := network.send_pickup(nearest_id)
+	if error == OK:
+		hud_label.text = "正在拾取物品……"
+	else:
+		hud_label.text = "发送拾取请求失败，错误码：" + str(error)
+
+func _on_pickup_event(event: Dictionary) -> void:
+	if bool(event.get("pending", false)):
+		hud_label.text = str(event.get("reason", "正在结算拾取……"))
+		return
+	if bool(event.get("accepted", false)):
+		hud_label.text = "拾取成功：" + str(event.get("item_id", "物品")) + " ×" + str(event.get("quantity", 1))
+		_refresh_inventory()
+	else:
+		hud_label.text = str(event.get("reason", "拾取失败。"))
+
+func _build_inventory_ui() -> void:
+	var hud := get_node_or_null("HUD") as CanvasLayer
+	if hud == null:
+		return
+	inventory_button = Button.new()
+	inventory_button.text = "背包"
+	inventory_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	inventory_button.offset_left = -118.0
+	inventory_button.offset_top = 18.0
+	inventory_button.offset_right = -18.0
+	inventory_button.offset_bottom = 58.0
+	inventory_button.pressed.connect(_on_inventory_button_pressed)
+	hud.add_child(inventory_button)
+
+	inventory_panel = PanelContainer.new()
+	inventory_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	inventory_panel.offset_left = -360.0
+	inventory_panel.offset_top = 68.0
+	inventory_panel.offset_right = -18.0
+	inventory_panel.offset_bottom = 470.0
+	inventory_panel.visible = false
+	hud.add_child(inventory_panel)
+	var layout := VBoxContainer.new()
+	inventory_panel.add_child(layout)
+	var heading := HBoxContainer.new()
+	layout.add_child(heading)
+	var title := Label.new()
+	title.text = "角色背包"
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_child(title)
+	var close_button := Button.new()
+	close_button.text = "关闭"
+	close_button.pressed.connect(func():
+		inventory_panel.visible = false
+		inventory_visible = false
+	)
+	heading.add_child(close_button)
+	inventory_status = Label.new()
+	inventory_status.text = "正在读取背包……"
+	layout.add_child(inventory_status)
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(320.0, 330.0)
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	layout.add_child(scroll)
+	inventory_items = VBoxContainer.new()
+	inventory_items.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(inventory_items)
+	inventory_http = HTTPRequest.new()
+	inventory_http.timeout = 10.0
+	add_child(inventory_http)
+	inventory_http.request_completed.connect(_on_inventory_request_completed)
+
+func _on_inventory_button_pressed() -> void:
+	inventory_visible = not inventory_visible
+	inventory_panel.visible = inventory_visible
+	if inventory_visible:
+		_refresh_inventory()
+
+func _refresh_inventory() -> void:
+	if inventory_http == null or HHSession.access_token.is_empty():
+		if inventory_status != null:
+			inventory_status.text = "请先登录后查看背包。"
+		return
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token])
+	var error := inventory_http.request(
+		HHSession.api_base + "/api/v1/characters/current/inventory",
+		headers,
+		HTTPClient.METHOD_GET
+	)
+	if error != OK:
+		inventory_status.text = "读取背包请求失败，错误码：" + str(error)
+
+func _on_inventory_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	for child in inventory_items.get_children():
+		child.queue_free()
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		inventory_status.text = "背包读取失败：" + body.get_string_from_utf8()
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if not (parsed is Dictionary) or not (parsed.get("items", []) is Array):
+		inventory_status.text = "中心服返回了无效的背包数据。"
+		return
+	var items: Array = parsed.get("items", [])
+	inventory_status.text = "物品数量：" + str(items.size()) + " 种"
+	if items.is_empty():
+		var empty_label := Label.new()
+		empty_label.text = "背包空空如也，去击败荒原狼收集材料吧。"
+		inventory_items.add_child(empty_label)
+		return
+	for item in items:
+		if not (item is Dictionary):
+			continue
+		var line := Label.new()
+		var quality := int(item.get("quality", 1))
+		var quality_names := ["普通", "优秀", "精良", "稀有", "传说"]
+		var quality_name: String = quality_names[clampi(quality - 1, 0, quality_names.size() - 1)]
+		line.text = str(item.get("name", item.get("item_id", "未知物品"))) + " · " + quality_name + " · ×" + str(item.get("quantity", 0))
+		line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		inventory_items.add_child(line)
 
 func _request_nearest_monster_attack() -> void:
 	var network := HHSession.world_network
@@ -475,6 +667,10 @@ func _process(delta: float) -> void:
 		var monster: Node3D = monsters[monster_id]
 		var target: Vector3 = monster_targets.get(monster_id, monster.position)
 		monster.position = monster.position.lerp(target, minf(delta * 10.0, 1.0))
+	for drop_id in drops:
+		var drop: Node3D = drops[drop_id]
+		var target: Vector3 = drop_targets.get(drop_id, drop.position)
+		drop.position = drop.position.lerp(target, minf(delta * 12.0, 1.0))
 
 
 func _on_world_disconnected() -> void:
@@ -568,6 +764,10 @@ func _on_reconnected_welcomed(snapshot: Dictionary) -> void:
 		reconnect_network.player_joined.connect(_on_player_joined)
 	if not reconnect_network.player_left.is_connected(_on_player_left):
 		reconnect_network.player_left.connect(_on_player_left)
+	if not reconnect_network.combat_event.is_connected(_on_combat_event):
+		reconnect_network.combat_event.connect(_on_combat_event)
+	if not reconnect_network.pickup_event.is_connected(_on_pickup_event):
+		reconnect_network.pickup_event.connect(_on_pickup_event)
 	local_target_position = Vector3(
 		float(snapshot.get("position_x", 0.0)),
 		float(snapshot.get("position_y", 0.15)),
@@ -583,6 +783,10 @@ func _on_reconnected_welcomed(snapshot: Dictionary) -> void:
 		monsters[monster_id].queue_free()
 	monsters.clear()
 	monster_targets.clear()
+	for drop_id in drops.keys():
+		drops[drop_id].queue_free()
+	drops.clear()
+	drop_targets.clear()
 	reconnect_button.visible = false
 	reconnect_button.disabled = false
 	hud_label.text = "已重新进入青云人界，角色已恢复到最近保存的位置。"
