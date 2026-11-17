@@ -103,6 +103,7 @@ struct DropJob {
     bool pickup{};
     GroundDropRuntime drop;
     std::string event_id;
+    std::string request_session_id;
     unsigned int attempts{};
 };
 
@@ -501,6 +502,45 @@ bool load_loot_table(const ServerConfig& config, std::vector<LootEntry>& entries
     return true;
 }
 
+
+bool load_persisted_ground_drops(const ServerConfig& config, std::vector<GroundDropRuntime>& drops,
+                                 std::string& error) {
+    long status = 0;
+    Json response;
+    if (!backend_inventory_request(config, "/api/v1/servers/drops", nullptr, status, response, error)) return false;
+    if (!response.is_object() || !response.contains("drops") || !response["drops"].is_array()) {
+        error = "ground drop response is missing drops";
+        return false;
+    }
+    std::vector<GroundDropRuntime> loaded;
+    for (const auto& value : response["drops"]) {
+        if (!value.is_object()) continue;
+        try {
+            GroundDropRuntime drop;
+            drop.id = value.at("id").get<std::string>();
+            drop.session_id = value.at("session_id").get<std::string>();
+            drop.owner_character_id = value.at("owner_character_id").get<std::string>();
+            drop.item_id = value.at("item_id").get<std::string>();
+            drop.quantity = value.at("quantity").get<int>();
+            drop.x = value.at("position_x").get<float>();
+            drop.z = value.at("position_z").get<float>();
+            const int remaining = value.at("remaining_seconds").get<int>();
+            if (drop.id.empty() || drop.owner_character_id.empty() || drop.item_id.empty() ||
+                drop.quantity < 1 || remaining < 1 || !std::isfinite(drop.x) || !std::isfinite(drop.z)) {
+                continue;
+            }
+            drop.expires_at = Clock::now() + std::chrono::seconds(remaining);
+            drop.pickup_pending = false;
+            loaded.push_back(std::move(drop));
+        } catch (const std::exception&) {
+            error = "ground drop response contains an invalid entry";
+            return false;
+        }
+    }
+    drops = std::move(loaded);
+    return true;
+}
+
 bool deliver_ground_drop(const ServerConfig& config, const GroundDropRuntime& drop,
                          long& status, std::string& error) {
     const Json body{
@@ -516,7 +556,7 @@ bool deliver_ground_pickup(const ServerConfig& config, const DropJob& job,
                            long& status, std::string& error) {
     const Json body{
         {"event_id", job.event_id}, {"drop_id", job.drop.id},
-        {"session_id", job.drop.session_id}, {"character_id", job.drop.owner_character_id}
+        {"session_id", job.request_session_id}, {"character_id", job.drop.owner_character_id}
     };
     Json response;
     return backend_inventory_request(config, "/api/v1/servers/drops/pickup", &body, status, response, error);
@@ -864,8 +904,7 @@ struct EnetServer::Impl {
                 drop->pickup_pending = false;
             }
             for (const auto& [peer, player] : players) {
-                if (player.character_id != result.drop.owner_character_id ||
-                    player.session_id != result.drop.session_id) continue;
+                if (player.character_id != result.drop.owner_character_id) continue;
                 send_json(peer, honghuang::protocol::MessageType::PickupEvent, Json{
                     {"accepted", result.success}, {"drop_id", result.drop.id},
                     {"item_id", result.drop.item_id}, {"quantity", result.drop.quantity},
@@ -902,7 +941,7 @@ struct EnetServer::Impl {
                       Json{{"accepted", false}, {"reason", "掉落物已消失或正在结算。"}});
             return;
         }
-        if (drop->owner_character_id != player.character_id || drop->session_id != player.session_id) {
+        if (drop->owner_character_id != player.character_id) {
             send_json(peer, honghuang::protocol::MessageType::PickupEvent,
                       Json{{"accepted", false}, {"reason", "这件掉落物不属于当前角色。"}});
             return;
@@ -916,7 +955,7 @@ struct EnetServer::Impl {
             return;
         }
         drop->pickup_pending = true;
-        if (!enqueue_drop_job(DropJob{true, *drop, make_event_uuid(), 0})) {
+        if (!enqueue_drop_job(DropJob{true, *drop, make_event_uuid(), player.session_id, 0})) {
             drop->pickup_pending = false;
             send_json(peer, honghuang::protocol::MessageType::PickupEvent,
                       Json{{"accepted", false}, {"reason", "拾取队列繁忙，请稍后重试。"}});
@@ -937,7 +976,7 @@ struct EnetServer::Impl {
                 quantity(generator), monster.state.x, monster.state.z,
                 Clock::now() + std::chrono::minutes(15), false
             };
-            enqueue_drop_job(DropJob{false, std::move(drop), {}, 0});
+            enqueue_drop_job(DropJob{false, std::move(drop), {}, {}, 0});
         }
     }
 
@@ -1061,7 +1100,7 @@ struct EnetServer::Impl {
             }
             for (const auto& drop : ground_drops) {
                 if (drop.owner_character_id != recipient.character_id ||
-                    drop.session_id != recipient.session_id || drop.expires_at <= Clock::now() ||
+                    drop.expires_at <= Clock::now() ||
                     !honghuang::simulation::within_interest_radius(
                         drop.x, drop.z, recipient.x, recipient.z, kInterestRadius)) continue;
                 const auto item = std::find_if(loot_table.begin(), loot_table.end(), [&](const LootEntry& entry) {
@@ -1197,6 +1236,12 @@ bool EnetServer::start() {
         std::cerr << "Monster loot table unavailable; drops disabled until restart: " << loot_error << '\n';
     } else {
         std::cout << "Loaded " << impl_->loot_table.size() << " monster loot entries\n";
+    }
+    std::string persisted_drop_error;
+    if (!load_persisted_ground_drops(impl_->config, impl_->ground_drops, persisted_drop_error)) {
+        std::cerr << "Persisted ground drops could not be restored: " << persisted_drop_error << '\n';
+    } else {
+        std::cout << "Restored " << impl_->ground_drops.size() << " persisted ground drops\n";
     }
     impl_->start_drop_worker();
     impl_->last_persistence = Clock::now();
