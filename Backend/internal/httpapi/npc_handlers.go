@@ -108,3 +108,47 @@ func (h *npcHandlers) discoverFateEncounter(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 	}
 }
+
+
+func (h *npcHandlers) listExplorationPoints(w http.ResponseWriter, r *http.Request) {
+	account, ok := h.currentAccount(w, r)
+	if !ok { return }
+	items, err := h.service.ListExplorationPoints(r.Context(), account.ID)
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusOK, map[string]any{"points": items})
+	case errors.Is(err, npc.ErrNoActiveSession):
+		http.Error(w, "active world session required", http.StatusConflict)
+	default:
+		h.logger.Error("list world exploration points failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
+}
+
+func (h *npcHandlers) discoverExplorationPoint(w http.ResponseWriter, r *http.Request) {
+	account, ok := h.currentAccount(w, r)
+	if !ok { return }
+	var request struct { PointID string `json:"point_id"` }
+	if err := decodeJSON(w, r, &request); err != nil || strings.TrimSpace(request.PointID) == "" || len(request.PointID) > 96 {
+		http.Error(w, "point_id is required", http.StatusBadRequest)
+		return
+	}
+	result, err := h.service.DiscoverExplorationPoint(r.Context(), account.ID, strings.TrimSpace(request.PointID))
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusOK, result)
+	case errors.Is(err, npc.ErrNoActiveSession):
+		http.Error(w, "active world session required", http.StatusConflict)
+	case errors.Is(err, npc.ErrNotFound):
+		http.Error(w, "exploration point not found", http.StatusNotFound)
+	case errors.Is(err, npc.ErrTooFar):
+		http.Error(w, "move closer to this exploration point", http.StatusConflict)
+	case errors.Is(err, npc.ErrExplorationUnavailable):
+		http.Error(w, "exploration point is unavailable", http.StatusNotFound)
+	case errors.Is(err, npc.ErrExplorationResolved):
+		http.Error(w, "this point has already been discovered by your soul", http.StatusConflict)
+	default:
+		h.logger.Error("discover world exploration point failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
+}
