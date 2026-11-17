@@ -1258,13 +1258,16 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			var required := str(data.get("required_realm_name", "聚灵境"))
 			var completed := bool(data.get("trial_completed", false))
 			var reasons: Array = data.get("reasons", [])
+			var eligible := bool(data.get("eligible", false))
 			npc_title_label.text = "轮回殿 · 投胎资格"
 			npc_dialogue_label.text = "当前灵魂境界：" + realm + "\n要求灵魂境界：" + required + "\n引魂试炼：" + ("已完成" if completed else "尚未完成")
-			npc_status_label.text = "已满足首次投胎条件，可以申请创建新肉身。" if bool(data.get("eligible", false)) else "尚未满足条件：" + ", ".join(PackedStringArray(reasons))
+			npc_status_label.text = "已满足首次投胎条件。请先安全退出世界，再在角色界面选择新肉身名称与种族。" if eligible else "尚未满足条件：" + ", ".join(PackedStringArray(reasons))
 			npc_trial_button.visible = false
 			npc_eligibility_button.visible = true
 			npc_soul_button.visible = true
 			npc_soul_breakthrough_button.visible = false
+			npc_reincarnation_leave_button.visible = eligible
+			npc_reincarnation_leave_button.disabled = false
 			npc_panel.visible = true
 
 func _leave_world_for_reincarnation() -> void:
