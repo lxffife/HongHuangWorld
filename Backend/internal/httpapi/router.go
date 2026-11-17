@@ -66,6 +66,9 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		items := &inventoryHandlers{authService: authService, service: inventory.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
 		mux.HandleFunc("GET /api/v1/items", items.catalog)
 		mux.HandleFunc("GET /api/v1/characters/current/inventory", items.current)
+		mux.HandleFunc("GET /api/v1/characters/current/equipment", items.equipment)
+		mux.HandleFunc("POST /api/v1/characters/current/equipment/equip", items.equip)
+		mux.HandleFunc("POST /api/v1/characters/current/equipment/unequip", items.unequip)
 		mux.HandleFunc("GET /api/v1/servers/loot-table", items.lootTable)
 		mux.HandleFunc("GET /api/v1/servers/drops", items.listDrops)
 		mux.HandleFunc("POST /api/v1/servers/drops", items.createDrop)
@@ -90,7 +93,8 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 			"GET /api/v1/characters/current/status", "POST /api/v1/characters/current/breakthrough",
 			"POST /api/v1/characters/current/bloodlines/awaken", "POST /api/v1/characters/current/techniques/train",
 			"POST /api/v1/characters/current/attributes/allocate", "GET /api/v1/items",
-			"GET /api/v1/characters/current/inventory", "POST /api/v1/servers/drops",
+			"GET /api/v1/characters/current/inventory", "GET /api/v1/characters/current/equipment",
+			"POST /api/v1/characters/current/equipment/equip", "POST /api/v1/characters/current/equipment/unequip", "POST /api/v1/servers/drops",
 			"POST /api/v1/servers/drops/pickup", "POST /api/v1/servers/heartbeat",
 			"POST /api/v1/servers/characters/rewards", "POST /api/v1/worlds/enter",
 			"POST /api/v1/servers/tickets/redeem", "POST /api/v1/servers/sessions/snapshot",
