@@ -12,6 +12,8 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 - `POST /api/v1/souls`：为当前账号创建唯一灵魂档案。
 - `GET /api/v1/souls/current`：读取当前账号的灵魂档案。
 - `GET /api/v1/souls/current/progression`：读取跨世保留的灵魂经验与灵魂境界。
+- `POST /api/v1/souls/current/breakthrough`：达到下一灵魂境界经验门槛后主动突破；灵魂经验奖励不会自动提升境界。
+- `POST /api/v1/servers/souls/rewards`：可信世界节点提交灵魂经验奖励；校验节点密钥、节点标识、角色世界会话和事件幂等性。单次奖励限制为 1–100000 灵魂经验。
 - `GET /api/v1/worlds`：读取已启用的世界目录。
 - `GET /api/v1/cultivation/systems`：读取种族、默认修炼体系、各自境界和跨种族实力参考层级。
 - `GET /api/v1/cultivation/race-growth`：读取种族五维成长权重（基点总和 10000），用于后续服务端属性成长计算。
@@ -113,3 +115,10 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 | 魂圣境 | 1,000,000 | 特殊轮回路线 |
 
 普通死亡复活与主动投胎必须区分：普通死亡回冥界后复活原肉身，不要求灵魂升级；主动投胎才检查灵魂境界、功德、业力和目标种族/世界条件。当前提交仅建立境界目录、永久成长数据和查询接口；灵魂经验奖励来源、境界突破、首次投胎门槛及高阶世界条件尚未接入任务系统，因此暂不对投胎API强制加门槛，避免角色被锁死在冥界。后续由可信任务/世界节点发放灵魂经验，客户端不得自行提交经验数值。
+
+
+## 灵魂经验奖励与境界突破
+
+世界节点使用 `X-World-Server-Key` 和 `X-World-Server-Node` 调用 `POST /api/v1/servers/souls/rewards`。请求字段为 `event_id`、`session_id`、`character_id`、`experience`、`source`。中心服确认该角色属于节点对应的在线/近期关闭会话后，才会写入灵魂经验；同一灵魂的 event_id 唯一，网络重试不会重复发奖。奖励来源使用小写字母、数字、下划线、短横线或冒号。
+
+经验增加后只更新经验值，不自动突破境界。玩家达到下一境界累计经验门槛后，通过 `POST /api/v1/souls/current/breakthrough` 完成境界晋升。当前接口尚未接入冥界 NPC、试炼任务、功德/业力条件和首次投胎门槛；这些条件会在任务系统接入后由中心服统一检查。
