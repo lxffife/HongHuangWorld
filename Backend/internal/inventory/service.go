@@ -492,6 +492,8 @@ func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessio
 		result.MaxMana+=bonuses["max_mana"]
 	}
 	if err:=rows.Err(); err!=nil { return CombatStats{},fmt.Errorf("iterate equipped combat bonuses: %w",err) }
+	if result.MaxHealth < 1 || result.MaxMana < 0 { return CombatStats{},ErrInvalidRequest }
+	if result.Health > result.MaxHealth { result.Health = result.MaxHealth }
 	if result.Health<0 || result.Health>result.MaxHealth || result.Attack<1 || result.Attack>100000 || result.Defense<0 || result.Defense>100000 ||
 		result.MaxHealth<1 || result.MaxHealth>10000000 || result.MaxMana<0 || result.MaxMana>10000000 {
 		return CombatStats{},ErrInvalidRequest
