@@ -1137,9 +1137,14 @@ func _build_npc_ui() -> void:
 	npc_choice_container = VBoxContainer.new()
 	npc_choice_container.add_theme_constant_override("separation", 6)
 	layout.add_child(npc_choice_container)
+	var exploration_scroll := ScrollContainer.new()
+	exploration_scroll.custom_minimum_size = Vector2(420.0, 110.0)
+	exploration_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	layout.add_child(exploration_scroll)
 	exploration_container = VBoxContainer.new()
+	exploration_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	exploration_container.add_theme_constant_override("separation", 5)
-	layout.add_child(exploration_container)
+	exploration_scroll.add_child(exploration_container)
 	npc_trial_button = Button.new()
 	npc_trial_button.text = "查看冥界试炼"
 	npc_trial_button.pressed.connect(_request_soul_trials)
