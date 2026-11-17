@@ -496,6 +496,8 @@ func (s *Service) ListAvailableExplorationEvents(ctx context.Context, accountID 
 		 JOIN soul_exploration_discoveries d ON d.point_id=p.id AND d.soul_id=$1::uuid
 		 LEFT JOIN soul_exploration_event_claims claim ON claim.soul_id=$1::uuid AND claim.event_id=e.id
 		 WHERE e.enabled=TRUE AND claim.event_id IS NULL
+		   AND (e.required_race_id IS NULL OR e.required_race_id=(SELECT race_id FROM characters WHERE id=(SELECT current_character_id FROM souls WHERE id=$1::uuid)))
+		   AND (e.required_fate_trait_id IS NULL OR e.required_fate_trait_id=COALESCE((SELECT trait_id FROM character_fate_traits WHERE character_id=(SELECT current_character_id FROM souls WHERE id=$1::uuid)),'unmarked_fate'))
 		 ORDER BY p.region_id,e.id`,soulID,worldID)
 	if err!=nil { return nil,fmt.Errorf("query available exploration events: %w",err) }
 	defer rows.Close()
@@ -534,6 +536,8 @@ func (s *Service) TriggerExplorationEvent(ctx context.Context, accountID,eventID
 		 JOIN world_exploration_points p ON p.id=e.point_id AND p.world_id=wi.world_id AND p.enabled=TRUE
 		 JOIN soul_exploration_discoveries d ON d.point_id=p.id AND d.soul_id=soul.id
 		 WHERE soul.account_id=$1
+		   AND (e.required_race_id IS NULL OR e.required_race_id=c.race_id)
+		   AND (e.required_fate_trait_id IS NULL OR e.required_fate_trait_id=COALESCE((SELECT trait_id FROM character_fate_traits WHERE character_id=c.id),'unmarked_fate'))
 		   AND SQRT(POWER(c.position_x-p.position_x,2)+POWER(c.position_y-p.position_y,2)+POWER(c.position_z-p.position_z,2))<=p.interaction_radius
 		 ORDER BY ws.connected_at DESC NULLS LAST LIMIT 1
 		 FOR UPDATE OF soul,c,ws`,accountID,eventID).Scan(
@@ -552,7 +556,10 @@ func (s *Service) TriggerExplorationEvent(ctx context.Context, accountID,eventID
 			 JOIN world_exploration_events e ON e.id=$2 AND e.enabled=TRUE
 			 JOIN world_exploration_points p ON p.id=e.point_id AND p.world_id=c.world_id AND p.enabled=TRUE
 			 JOIN soul_exploration_discoveries d ON d.point_id=p.id AND d.soul_id=soul.id
-			 WHERE soul.account_id=$1)`,accountID,eventID).Scan(&known)
+			 LEFT JOIN character_fate_traits trait ON trait.character_id=c.id
+			 WHERE soul.account_id=$1
+			   AND (e.required_race_id IS NULL OR e.required_race_id=c.race_id)
+			   AND (e.required_fate_trait_id IS NULL OR e.required_fate_trait_id=COALESCE(trait.trait_id,'unmarked_fate')) )`,accountID,eventID).Scan(&known)
 		if checkErr!=nil { return ExplorationEventResult{},fmt.Errorf("check exploration event unlock: %w",checkErr) }
 		if !known { return ExplorationEventResult{},ErrExplorationEventUnavailable }
 		return ExplorationEventResult{},ErrTooFar
