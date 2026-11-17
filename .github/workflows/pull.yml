@@ -1,34 +1,35 @@
 
 name: Sync All Branches (exclude workflows)
 on:
-  workflow_dispatch:
+  workflow_dispatch:        # 仅手动触发
 
 permissions:
-  contents: write          # 推送到非 main 分支需要；main 用 GITHUB_TOKEN 也够
+  contents: write           # push 需要
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      # 1. 拉取源仓库所有分支
+      # 1. 拉取源仓库所有分支到 src/
       - name: Checkout source (all branches)
         uses: actions/checkout@v4
         with:
-          repository: liflife/HongHuangWorld
-          token: ${{ secrets.SOURCE_REPO_PAT }}
-          fetch-depth: 0
+          repository: liflife/HongHuangWorld          # TODO: 换成你的源仓库
+          token: ${{ secrets.SOURCE_REPO_PAT }}          # 源仓库是私有仓库时需要
+          fetch-depth: 0                                 # 0 = 拉所有分支和标签的完整历史
           path: src
           persist-credentials: false
 
-      # 2. 拉取目标仓库
+      # 2. 拉取目标仓库到 dst/
       - name: Checkout target
         uses: actions/checkout@v4
         with:
           path: dst
 
-      # 3. 同步 main：文件级，排除 workflows（保护目标 main 自己的工作流）
+      # 3. 同步 main：文件级，排除 workflows（保留目标 main 自己的 pull.yml）
       - name: Sync main (keep target workflows)
         run: |
+          set -e
           rsync -a --delete \
             --exclude '.git' \
             --exclude '.github/workflows' \
@@ -40,14 +41,28 @@ jobs:
           git commit -m "Sync main (workflows excluded)" || echo "no changes on main"
           git push origin HEAD:main
 
-      # 4. 同步其他所有分支：分支级，排除 workflows
+      # 4. 同步 main 之外的所有分支：分支级，排除 workflows
       - name: Sync other branches
         run: |
           set -e
+
+          # 4.1 在 src 里把 refs/remotes/origin/* 复制成 refs/heads/*
+          #     目的：本地路径 fetch 只 advertise refs/heads/*，必须先把分支"落地"成 head
           cd "$GITHUB_WORKSPACE/src"
-          # 列出源仓库所有远程分支名（去掉 origin/ 前缀、HEAD、main）
-          branches=$(git for-each-ref --format='%(refname:short)' refs/remotes/origin/ \
-            | sed 's|^origin/||' \
+          for b in $(git for-each-ref --format='%(refname:strip=3)' refs/remotes/origin/); do
+            [ "$b" = "HEAD" ] && continue
+            git branch -f "$b" "refs/remotes/origin/$b" 2>/dev/null || true
+          done
+
+          # 4.2 在 dst 里注册 src 为 remote，并 fetch 所有分支
+          cd "$GITHUB_WORKSPACE/dst"
+          git remote remove src 2>/dev/null || true
+          git remote add src "$GITHUB_WORKSPACE/src"
+          git fetch src '+refs/heads/*:refs/remotes/src/*'
+
+          # 4.3 列出源仓库所有分支（排除 HEAD 和 main）
+          branches=$(git for-each-ref --format='%(refname:short)' refs/remotes/src/ \
+            | sed 's|^src/||' \
             | grep -v '^HEAD$' \
             | grep -v '^main$' || true)
 
@@ -56,15 +71,15 @@ jobs:
             exit 0
           fi
 
+          # 4.4 逐分支同步
           for b in $branches; do
             echo "===== syncing branch: $b ====="
-            cd "$GITHUB_WORKSPACE/dst"
-            git fetch "$GITHUB_WORKSPACE/src" "$b"
-            git checkout -B "$b" FETCH_HEAD
-            # 排除工作流目录
+            if ! git checkout -B "$b" "refs/remotes/src/$b"; then
+              echo "!! checkout $b 失败，跳过"
+              continue
+            fi
             rm -rf .github/workflows
             git add -A
             git commit -m "Sync branch $b (workflows excluded)" || echo "no changes on $b"
-            # 覆盖目标同名分支（同步语义）
-            git push --force origin "$b"
+            git push --force origin "$b" || echo "!! push $b 失败，跳过"
           done
