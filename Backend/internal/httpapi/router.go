@@ -59,7 +59,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		worlds := &worldHandlers{service: world.NewService(db), logger: logger}
 		npcs := &npcHandlers{authService: authService, service: npc.NewService(db), logger: logger}
 		mux.HandleFunc("GET /api/v1/worlds/current/npcs", npcs.list)
-		mux.HandleFunc("POST /api/v1/worlds/current/npcs/interact", "POST /api/v1/worlds/current/npcs/choose", npcs.interact)
+		mux.HandleFunc("POST /api/v1/worlds/current/npcs/interact", npcs.interact)
 		mux.HandleFunc("POST /api/v1/worlds/current/npcs/choose", npcs.chooseFate)
 		mux.HandleFunc("GET /api/v1/worlds", worlds.list)
 		characters := &characterHandlers{authService: authService, characterService: character.NewService(db), logger: logger}
@@ -103,7 +103,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		unavailable := func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "service unavailable", http.StatusServiceUnavailable) }
 		for _, route := range []string{
 			"POST /api/v1/auth/register", "POST /api/v1/auth/login", "GET /api/v1/account/me",
-			"POST /api/v1/souls", "GET /api/v1/souls/current", "GET /api/v1/souls/current/progression", "POST /api/v1/souls/current/breakthrough", "GET /api/v1/souls/current/trials", "GET /api/v1/souls/current/reincarnation-eligibility", "POST /api/v1/servers/souls/rewards", "GET /api/v1/worlds", "GET /api/v1/worlds/current/npcs", "POST /api/v1/worlds/current/npcs/interact",
+			"POST /api/v1/souls", "GET /api/v1/souls/current", "GET /api/v1/souls/current/progression", "POST /api/v1/souls/current/breakthrough", "GET /api/v1/souls/current/trials", "GET /api/v1/souls/current/reincarnation-eligibility", "POST /api/v1/servers/souls/rewards", "GET /api/v1/worlds", "GET /api/v1/worlds/current/npcs", "POST /api/v1/worlds/current/npcs/interact", "POST /api/v1/worlds/current/npcs/choose",
 			"GET /api/v1/cultivation/systems", "GET /api/v1/cultivation/race-growth",
 			"GET /api/v1/cultivation/bloodlines", "GET /api/v1/cultivation/techniques",
 			"POST /api/v1/characters/first-life", "GET /api/v1/characters/current", "POST /api/v1/characters/current/respawn", "POST /api/v1/characters/current/reincarnate",
