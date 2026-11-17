@@ -336,7 +336,7 @@ type SoulMemory struct {
 // detailed payload are only returned after the soul reaches the required realm.
 func (s *Service) Memories(ctx context.Context, accountID string) ([]SoulMemory, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT memory.id::text, memory.source_character_id::text, character.life_index,
+		`SELECT memory.id::text, memory.source_character_id::text, life.life_index,
 		        memory.memory_type, memory.title, memory.summary, memory.memory_data,
 		        memory.min_realm_order, required.name,
 		        (current_realm.realm_order >= memory.min_realm_order),
