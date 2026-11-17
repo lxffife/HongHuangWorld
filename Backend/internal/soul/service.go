@@ -225,7 +225,7 @@ func (s *Service) Breakthrough(ctx context.Context, accountID string) (Breakthro
  defer tx.Rollback()
  var currentID string
  var currentOrder int
- var experience, nextRequired int64
+ var experience int64
  var nextID, nextName sql.NullString
  var nextRequired sql.NullInt64
  err = tx.QueryRowContext(ctx,
