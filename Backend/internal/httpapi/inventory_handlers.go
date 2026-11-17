@@ -157,3 +157,21 @@ func (h *inventoryHandlers) writeEquipmentResult(w http.ResponseWriter, operatio
 	default: h.logger.Error(operation, "error", err); http.Error(w, "internal server error", http.StatusInternalServerError)
 	}
 }
+
+type sessionCombatStatsRequest struct {
+	SessionID string `json:"session_id"`
+	CharacterID string `json:"character_id"`
+}
+
+func (h *inventoryHandlers) sessionCombatStats(w http.ResponseWriter, r *http.Request) {
+	nodeKey,ok:=h.authorizeServer(w,r); if !ok { return }
+	var request sessionCombatStatsRequest
+	if err:=decodeJSON(w,r,&request); err!=nil { http.Error(w,"invalid request body",http.StatusBadRequest); return }
+	stats,err:=h.service.CurrentSessionCombatStats(r.Context(),nodeKey,request.SessionID,request.CharacterID)
+	switch {
+	case err==nil: writeJSON(w,http.StatusOK,stats)
+	case errors.Is(err,inventory.ErrInvalidRequest): http.Error(w,"invalid session combat stats request",http.StatusBadRequest)
+	case errors.Is(err,inventory.ErrSessionInvalid): http.Error(w,"active character session not found on this server",http.StatusConflict)
+	default: h.logger.Error("load session combat stats failed","error",err); http.Error(w,"internal server error",http.StatusInternalServerError)
+	}
+}
