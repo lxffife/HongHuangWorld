@@ -357,6 +357,13 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 	if response_code < 200 or response_code >= 300:
 		if context == "register" and response_code == 400:
 			_set_status("注册失败：账号必须为 3–32 位英文字母、数字或下划线；密码必须为 12–72 个字符。邮箱可以填写有效邮箱。")
+		elif context == "soul_check" and response_code == 401:
+			access_token = ""
+			HHSession.access_token = ""
+			for control in auth_controls:
+				control.show()
+			account_label.hide()
+			_set_status("登录会话已过期，请重新登录后继续办理轮回。")
 		elif context == "reincarnation_eligibility":
 			reincarnation_check_button.disabled = false
 			reincarnation_eligible = false
