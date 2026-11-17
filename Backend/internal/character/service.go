@@ -24,10 +24,28 @@ var (
 	ErrMaxRealm = errors.New("character has reached the highest configured realm")
 	ErrReincarnationUnavailable = errors.New("reincarnation is not currently available")
 	ErrReincarnationRequirements = errors.New("soul has not met reincarnation requirements")
+	ErrInvalidBirthRoute = errors.New("selected reincarnation birth route is unavailable for this race or fate")
 )
+
+type ReincarnationRoute struct {
+	ID string `json:"id"`
+	WorldID string `json:"world_id"`
+	WorldName string `json:"world_name"`
+	RaceID *string `json:"race_id,omitempty"`
+	FateTraitID *string `json:"fate_trait_id,omitempty"`
+	Name string `json:"name"`
+	Description string `json:"description"`
+	SpawnX float64 `json:"spawn_x"`
+	SpawnY float64 `json:"spawn_y"`
+	SpawnZ float64 `json:"spawn_z"`
+	InitialBoon json.RawMessage `json:"initial_boon"`
+}
 
 type Character struct {
 	ID        string  `json:"id"`
+	PositionX float64 `json:"position_x"`
+	PositionY float64 `json:"position_y"`
+	PositionZ float64 `json:"position_z"`
 	SoulID    string  `json:"soul_id"`
 	LifeIndex int     `json:"life_index"`
 	WorldID   string  `json:"world_id"`
@@ -1116,16 +1134,46 @@ func (s *Service) TrainTechnique(ctx context.Context, accountID, techniqueID str
 }
 
 
+// ReincarnationRoutes returns enabled, data-driven routes. Final race, fate and
+// world validation is repeated inside Reincarnate's transaction.
+func (s *Service) ReincarnationRoutes(ctx context.Context) ([]ReincarnationRoute, error) {
+ rows, err := s.db.QueryContext(ctx,
+  `SELECT route.id, route.world_id, world.name, route.race_id, route.fate_trait_id,
+          route.name, route.description, route.spawn_x, route.spawn_y, route.spawn_z,
+          route.initial_boon
+   FROM reincarnation_birth_routes route
+   JOIN world_definitions world ON world.id = route.world_id
+   WHERE route.enabled AND world.enabled
+   ORDER BY world.world_level, route.sort_order, route.name`)
+ if err != nil { return nil, fmt.Errorf("query reincarnation birth routes: %w", err) }
+ defer rows.Close()
+ routes := make([]ReincarnationRoute, 0)
+ for rows.Next() {
+  var item ReincarnationRoute
+  var raceID, fateTraitID sql.NullString
+  var boon []byte
+  if err := rows.Scan(&item.ID, &item.WorldID, &item.WorldName, &raceID, &fateTraitID,
+   &item.Name, &item.Description, &item.SpawnX, &item.SpawnY, &item.SpawnZ, &boon); err != nil {
+   return nil, fmt.Errorf("scan reincarnation birth route: %w", err)
+  }
+  if raceID.Valid { item.RaceID = &raceID.String }
+  if fateTraitID.Valid { item.FateTraitID = &fateTraitID.String }
+  item.InitialBoon = append(json.RawMessage(nil), boon...)
+  routes = append(routes, item)
+ }
+ if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate reincarnation birth routes: %w", err) }
+ return routes, nil
+}
+
 // Reincarnate creates a new physical life while retaining the soul record.
 // The old body is retired, never overwritten; all writes are atomic.
-func (s *Service) Reincarnate(ctx context.Context, accountID, name, raceID string) (Character, error) {
+func (s *Service) Reincarnate(ctx context.Context, accountID, name, raceID, routeID string) (Character, error) {
 	name = strings.TrimSpace(name)
 	raceID = strings.TrimSpace(raceID)
-	if len([]rune(name)) < 2 || len([]rune(name)) > 24 || len(raceID) == 0 || len(raceID) > 64 {
+	if len([]rune(name)) < 2 || len([]rune(name)) > 24 || len(raceID) == 0 || len(raceID) > 64 || strings.TrimSpace(routeID) == "" || len(routeID) > 96 {
 		return Character{}, ErrInvalid
 	}
 
-	const destinationWorld = "underworld_fengdu"
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Character{}, fmt.Errorf("begin reincarnation: %w", err)
@@ -1185,12 +1233,23 @@ func (s *Service) Reincarnate(ctx context.Context, accountID, name, raceID strin
 		return Character{}, ErrReincarnationUnavailable
 	}
 
-	var worldEnabled bool
-	if err := tx.QueryRowContext(ctx,
-		`SELECT enabled FROM world_definitions WHERE id = $1`, destinationWorld,
-	).Scan(&worldEnabled); err != nil || !worldEnabled {
-		return Character{}, ErrWorldInvalid
-	}
+	var destinationWorld, routeName, routeDescription string
+	var routeRaceID, routeFateTraitID sql.NullString
+	var spawnX, spawnY, spawnZ float64
+	var initialBoon []byte
+	err = tx.QueryRowContext(ctx,
+	 `SELECT route.world_id, route.name, route.description, route.race_id,
+	         route.fate_trait_id, route.spawn_x, route.spawn_y, route.spawn_z, route.initial_boon
+	  FROM reincarnation_birth_routes route
+	  JOIN world_definitions world ON world.id = route.world_id
+	  WHERE route.id = $1 AND route.enabled AND world.enabled`,
+	 routeID,
+	).Scan(&destinationWorld, &routeName, &routeDescription, &routeRaceID, &routeFateTraitID,
+	 &spawnX, &spawnY, &spawnZ, &initialBoon)
+	if errors.Is(err, sql.ErrNoRows) { return Character{}, ErrInvalidBirthRoute }
+	if err != nil { return Character{}, fmt.Errorf("load selected reincarnation route: %w", err) }
+	if routeRaceID.Valid && routeRaceID.String != raceID { return Character{}, ErrInvalidBirthRoute }
+
 
 	var systemID, firstRealmID string
 	err = tx.QueryRowContext(ctx,
@@ -1228,13 +1287,16 @@ func (s *Service) Reincarnate(ctx context.Context, accountID, name, raceID strin
 	case fateKarma >= 5:
 		result.FateTraitID, result.FateTraitName, result.FateTraitDescription = "karmic_shadow", "业障缠身", "业障随身，部分冥界 NPC 与特殊事件会对你作出不同反应。"
 	}
+	if routeFateTraitID.Valid && routeFateTraitID.String != result.FateTraitID {
+		return Character{}, ErrInvalidBirthRoute
+	}
 	var race sql.NullString
 	err = tx.QueryRowContext(ctx,
-		`INSERT INTO characters (soul_id, life_index, world_id, name, race_id)
-		 VALUES ($1, $2, $3, $4, $5)
-		 RETURNING id::text, soul_id::text, life_index, world_id, name, race_id, level, status`,
-		soulID, newLifeIndex, destinationWorld, name, raceID,
-	).Scan(&result.ID, &result.SoulID, &result.LifeIndex, &result.WorldID, &result.Name, &race, &result.Level, &result.Status)
+		`INSERT INTO characters (soul_id, life_index, world_id, name, race_id, position_x, position_y, position_z)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		 RETURNING id::text, soul_id::text, life_index, world_id, name, race_id, level, status, position_x, position_y, position_z`,
+		soulID, newLifeIndex, destinationWorld, name, raceID, spawnX, spawnY, spawnZ,
+	).Scan(&result.ID, &result.SoulID, &result.LifeIndex, &result.WorldID, &result.Name, &race, &result.Level, &result.Status, &result.PositionX, &result.PositionY, &result.PositionZ)
 	if err != nil {
 		return Character{}, fmt.Errorf("create reincarnated body: %w", err)
 	}
@@ -1336,10 +1398,13 @@ func (s *Service) Reincarnate(ctx context.Context, accountID, name, raceID strin
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO reincarnation_events
 		 (soul_id, previous_character_id, new_character_id, previous_world_id, new_world_id,
-		  previous_race_id, new_race_id, life_index, merit_spent, fate_karma, fate_merit, fate_aspect)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,0,$9,$10,$11)`,
+		  previous_race_id, new_race_id, life_index, merit_spent, fate_karma, fate_merit, fate_aspect,
+		  birth_route_id, birth_route_name, birth_route_description, birth_route_snapshot)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,0,$9,$10,$11,$12,$13,$14,
+		         jsonb_build_object('spawn_x',$15,'spawn_y',$16,'spawn_z',$17,'initial_boon',$18::jsonb))`,
 		soulID, oldCharacterID, result.ID, oldWorldID, destinationWorld,
 		oldRaceID, raceID, newLifeIndex, fateKarma, fateMerit, fateAspect,
+		routeID, routeName, routeDescription, spawnX, spawnY, spawnZ, string(initialBoon),
 	); err != nil {
 		return Character{}, fmt.Errorf("record reincarnation history: %w", err)
 	}
