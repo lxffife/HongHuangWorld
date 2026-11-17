@@ -66,6 +66,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		items := &inventoryHandlers{authService: authService, service: inventory.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
 		mux.HandleFunc("GET /api/v1/items", items.catalog)
 		mux.HandleFunc("GET /api/v1/characters/current/inventory", items.current)
+		mux.HandleFunc("GET /api/v1/servers/loot-table", items.lootTable)
 		mux.HandleFunc("POST /api/v1/servers/drops", items.createDrop)
 		mux.HandleFunc("POST /api/v1/servers/drops/pickup", items.pickupDrop)
 		servers := &serverHandlers{service: serverregistry.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
