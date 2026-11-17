@@ -35,6 +35,13 @@ type ReincarnationRoute struct {
 	FateTraitID *string `json:"fate_trait_id,omitempty"`
 	Name string `json:"name"`
 	Description string `json:"description"`
+	RegionID string `json:"region_id"`
+	RegionName string `json:"region_name"`
+	RegionDescription string `json:"region_description"`
+	DangerLevel int `json:"danger_level"`
+	ResourceTags json.RawMessage `json:"resource_tags"`
+	ExplorationPoints json.RawMessage `json:"exploration_points"`
+	RaceAffinity json.RawMessage `json:"race_affinity"`
 	SpawnX float64 `json:"-"`
 	SpawnY float64 `json:"-"`
 	SpawnZ float64 `json:"-"`
@@ -1167,8 +1174,10 @@ func (s *Service) ReincarnationRoutes(ctx context.Context, accountID string) ([]
 
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT route.id, route.world_id, world.name, route.race_id, route.fate_trait_id,
-		        route.name, route.description, route.spawn_x, route.spawn_y, route.spawn_z,
-		        route.initial_boon
+		        route.name, route.description, route.region_id, route.region_name,
+		        route.region_description, route.danger_level, route.resource_tags,
+		        route.exploration_points, route.race_affinity, route.spawn_x, route.spawn_y,
+		        route.spawn_z, route.initial_boon
 	 FROM reincarnation_birth_routes route
 	 JOIN world_definitions world ON world.id = route.world_id
 	 WHERE route.enabled AND world.enabled
@@ -1184,7 +1193,9 @@ func (s *Service) ReincarnationRoutes(ctx context.Context, accountID string) ([]
 		var raceID, fateTraitID sql.NullString
 		var boon []byte
 		if err := rows.Scan(&item.ID, &item.WorldID, &item.WorldName, &raceID, &fateTraitID,
-			&item.Name, &item.Description, &item.SpawnX, &item.SpawnY, &item.SpawnZ, &boon); err != nil {
+			&item.Name, &item.Description, &item.RegionID, &item.RegionName, &item.RegionDescription,
+			&item.DangerLevel, &item.ResourceTags, &item.ExplorationPoints, &item.RaceAffinity,
+			&item.SpawnX, &item.SpawnY, &item.SpawnZ, &boon); err != nil {
 			return nil, fmt.Errorf("scan reincarnation birth route: %w", err)
 		}
 		if raceID.Valid {
