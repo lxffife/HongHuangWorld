@@ -411,7 +411,7 @@ func _render_life_history(items: Array) -> void:
 		layout.add_child(heading)
 		var details := Label.new()
 		details.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		details.text = "种族：" + str(item.get("race_name", "未知")) + "    世界：" + str(item.get("world_name", item.get("world_id", "未知"))) + "\n境界：" + str(item.get("realm_name", "尚未记录")) + " · " + str(item.get("realm_stage", 1)) + "阶    等级：" + str(item.get("level", 1)) + "\n状态：" + str(item.get("status", "未知")) + "    初生：" + str(item.get("created_at", "未知")) + "\n命格：" + str(item.get("fate_aspect", "因果未定")) + "    功德：" + str(item.get("fate_merit", 0)) + "    业力：" + str(item.get("fate_karma", 0))
+		details.text = "种族：" + str(item.get("race_name", "未知")) + "    世界：" + str(item.get("world_name", item.get("world_id", "未知"))) + "\n境界：" + str(item.get("realm_name", "尚未记录")) + " · " + str(item.get("realm_stage", 1)) + "阶    等级：" + str(item.get("level", 1)) + "\n状态：" + str(item.get("status", "未知")) + "    初生：" + str(item.get("created_at", "未知")) + "\n命格：" + str(item.get("fate_aspect", "因果未定")) + "    功德：" + str(item.get("fate_merit", 0)) + "    业力：" + str(item.get("fate_karma", 0)) + "\n命格特性：" + str(item.get("fate_trait_name", "因果未定")) + "——" + str(item.get("fate_trait_description", ""))
 		layout.add_child(details)
 		if not str(item.get("reincarnated_at", "")).is_empty():
 			var transition := Label.new()
@@ -636,7 +636,7 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 		"reincarnate":
 			current_character = data
 			reincarnation_eligible = false
-			reincarnation_status_label.text = "新肉身创建成功，前世肉身已归档。此世因果命格：" + str(data.get("fate_aspect", "因果未定")) + "（功德 " + str(data.get("fate_merit", 0)) + "，业力 " + str(data.get("fate_karma", 0)) + "）。正在申请冥界入口……"
+			reincarnation_status_label.text = "新肉身创建成功，前世肉身已归档。此世因果命格：" + str(data.get("fate_aspect", "因果未定")) + "；特性：" + str(data.get("fate_trait_name", "因果未定")) + "（" + str(data.get("fate_trait_description", "")) + "）（功德 " + str(data.get("fate_merit", 0)) + "，业力 " + str(data.get("fate_karma", 0)) + "）。正在申请冥界入口……"
 			_enqueue(HTTPClient.METHOD_POST, "/api/v1/worlds/enter", {}, true, "enter")
 		"character_create":
 			current_character = data
