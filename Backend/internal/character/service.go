@@ -35,6 +35,9 @@ type Character struct {
 	RaceID    *string `json:"race_id,omitempty"`
 	Level     int     `json:"level"`
 	Status    string  `json:"status"`
+	FateAspect string `json:"fate_aspect,omitempty"`
+	FateKarma int64 `json:"fate_karma,omitempty"`
+	FateMerit int64 `json:"fate_merit,omitempty"`
 }
 
 type Attributes struct {
@@ -1113,14 +1116,15 @@ func (s *Service) Reincarnate(ctx context.Context, accountID, name, raceID strin
 
 	var soulID, oldCharacterID, oldWorldID, oldRaceID string
 	var oldLifeIndex int
+	var fateKarma, fateMerit int64
 	err = tx.QueryRowContext(ctx,
-		`SELECT soul.id::text, c.id::text, c.world_id, c.race_id, c.life_index
+		`SELECT soul.id::text, c.id::text, c.world_id, c.race_id, c.life_index, soul.karma, soul.merit
 		 FROM souls soul
 		 JOIN characters c ON c.id = soul.current_character_id
 		 WHERE soul.account_id = $1 AND c.status = 'alive'
 		 FOR UPDATE OF soul, c`,
 		accountID,
-	).Scan(&soulID, &oldCharacterID, &oldWorldID, &oldRaceID, &oldLifeIndex)
+	).Scan(&soulID, &oldCharacterID, &oldWorldID, &oldRaceID, &oldLifeIndex, &fateKarma, &fateMerit)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Character{}, ErrReincarnationUnavailable
 	}
@@ -1186,6 +1190,16 @@ func (s *Service) Reincarnate(ctx context.Context, accountID, name, raceID strin
 	}
 
 	newLifeIndex := oldLifeIndex + 1
+	fateAspect := "因果未定"
+	switch {
+	case fateMerit >= 5 && fateKarma >= 5:
+		fateAspect = "福祸交织"
+	case fateMerit >= 5:
+		fateAspect = "福缘深厚"
+	case fateKarma >= 5:
+		fateAspect = "业障缠身"
+	}
+	result.FateAspect, result.FateKarma, result.FateMerit = fateAspect, fateKarma, fateMerit
 	var result Character
 	var race sql.NullString
 	err = tx.QueryRowContext(ctx,
@@ -1295,10 +1309,10 @@ func (s *Service) Reincarnate(ctx context.Context, accountID, name, raceID strin
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO reincarnation_events
 		 (soul_id, previous_character_id, new_character_id, previous_world_id, new_world_id,
-		  previous_race_id, new_race_id, life_index, merit_spent)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,0)`,
+		  previous_race_id, new_race_id, life_index, merit_spent, fate_karma, fate_merit, fate_aspect)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,0,$9,$10,$11)`,
 		soulID, oldCharacterID, result.ID, oldWorldID, destinationWorld,
-		oldRaceID, raceID, newLifeIndex,
+		oldRaceID, raceID, newLifeIndex, fateKarma, fateMerit, fateAspect,
 	); err != nil {
 		return Character{}, fmt.Errorf("record reincarnation history: %w", err)
 	}
