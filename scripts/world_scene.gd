@@ -64,6 +64,8 @@ var npc_eligibility_button: Button
 var npc_soul_button: Button
 var npc_soul_breakthrough_button: Button
 var npc_reincarnation_leave_button: Button
+var npc_fate_encounter_button: Button
+var npc_current_interaction_id := ""
 var leaving_for_reincarnation := false
 var npc_selected_id := ""
 var npc_request_busy := false
@@ -1131,6 +1133,11 @@ func _build_npc_ui() -> void:
 	npc_eligibility_button.text = "查看投胎资格"
 	npc_eligibility_button.pressed.connect(_request_reincarnation_eligibility)
 	layout.add_child(npc_eligibility_button)
+	npc_fate_encounter_button = Button.new()
+	npc_fate_encounter_button.text = "探查命格奇遇"
+	npc_fate_encounter_button.visible = false
+	npc_fate_encounter_button.pressed.connect(_discover_npc_fate_encounter)
+	layout.add_child(npc_fate_encounter_button)
 	npc_soul_button = Button.new()
 	npc_soul_button.text = "查看灵魂境界"
 	npc_soul_button.pressed.connect(_request_soul_progression)
@@ -1201,6 +1208,8 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			_clear_npc_choice_buttons()
 			var npc_data: Dictionary = data.get("npc", {})
 			var dialogue: Dictionary = data.get("dialogue", {})
+			npc_current_interaction_id = str(npc_data.get("id", ""))
+			npc_fate_encounter_button.visible = npc_current_interaction_id == "fengdu_mengpo" and not str(npc_data.get("fate_trait_id", "")).is_empty()
 			npc_title_label.text = str(npc_data.get("name", "冥界来者")) + " · " + str(npc_data.get("title", ""))
 			var lines: Array[String] = []
 			lines.append(str(dialogue.get("greeting", "这位道友，有何事？")))
@@ -1228,6 +1237,13 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_eligibility_button.visible = str(npc_data.get("interaction_type", "")) == "reincarnation_guidance"
 			npc_soul_button.visible = true
 			npc_soul_breakthrough_button.visible = false
+			npc_panel.visible = true
+		"fate_encounter":
+			npc_title_label.text = "命格奇遇 · " + str(data.get("title", "未知奇遇"))
+			npc_dialogue_label.text = str(data.get("description", "奇遇已记入因果簿。")) + "\n功德：" + str(data.get("merit", 0)) + "（+" + str(data.get("merit_delta", 0)) + "）\n业力：" + str(data.get("karma", 0)) + "（" + str(data.get("karma_delta", 0)) + "）"
+			npc_status_label.text = "这次奇遇已由中心服永久记入灵魂因果簿，每个灵魂只能发现一次。"
+			npc_fate_encounter_button.visible = false
+			_clear_npc_choice_buttons()
 			npc_panel.visible = true
 		"fate_choice":
 			npc_title_label.text = "因果已记入 · " + str(data.get("npc_id", "NPC"))
@@ -1306,6 +1322,16 @@ func _clear_npc_choice_buttons() -> void:
 		return
 	for child in npc_choice_container.get_children():
 		child.queue_free()
+
+
+
+func _discover_npc_fate_encounter() -> void:
+	if npc_request_busy or npc_current_interaction_id.is_empty():
+		return
+	npc_status_label.text = "正在探查命格与忘川因缘……"
+	_send_npc_request("POST", "/api/v1/worlds/current/npcs/discover", "fate_encounter", {
+		"npc_id": npc_current_interaction_id
+	})
 
 
 func _submit_npc_fate_choice(npc_id: String, choice_id: String) -> void:
