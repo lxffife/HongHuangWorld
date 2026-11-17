@@ -79,4 +79,4 @@ P0 使用基于 X/Z 平面距离的简单兴趣范围：每个客户端每 50ms 
 - `WORLD_SERVER_OUTBOX_PATH`：SQLite 文件路径，默认 `./data/worldserver-outbox.sqlite3`。父目录会自动创建。
 - 数据文件必须放在持久化磁盘；不要放在临时目录或临时容器层。不要让多个 WorldServer 进程共享同一数据库文件。
 
-当前 Outbox 容量为 10,000 条 pending/inflight 事件；已投递和死信记录保留用于排查，不计入活动容量。拾取结算仍使用原内存队列，尚未纳入 Outbox。详见 [OUTBOX.md](OUTBOX.md)。
+当前 Outbox 容量为 10,000 条 pending/inflight 事件；已投递和死信记录保留用于排查，不计入活动容量。拾取结算也已纳入 Outbox，先持久化稳定事件 ID 和请求快照，再异步提交中心服。若原请求会话在重启后已失效，重放可能被中心服拒绝并进入死信；详见 [OUTBOX.md](OUTBOX.md)。
