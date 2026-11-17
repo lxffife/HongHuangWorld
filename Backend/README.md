@@ -81,3 +81,16 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 - WorldServer 在周期/最终快照提交生命值为 0 时，中心服在同一事务中记录角色死亡事件（按 session + character 幂等）。
 - `POST /api/v1/characters/current/respawn`：登录玩家只能复活自己当前肉身的待处理死亡记录；事务关闭死亡会话、将角色世界切换到 `underworld_fengdu`、重置出生坐标为 `(0,0,0)`，恢复生命/灵力，并标记死亡记录已复活。灵魂、修为、背包和装备不被重置。
 - 复活后客户端需返回主界面重新申请世界入场票据；冥界实例必须处于 ready 状态才能进入。
+
+## 灵魂主动轮回（第一阶段）
+
+- API：`POST /api/v1/characters/current/reincarnate`，Bearer 登录凭证。
+- 请求体：`{"name":"新肉身名称","race_id":"human"}`。
+- 仅允许当前肉身存活且没有 `connecting/active/saving` 世界会话时轮回；必须先退出当前世界。
+- 新肉身出生世界固定为 `underworld_fengdu`，使用所选种族的默认修炼体系、初始境界、基础属性、默认血脉、种族入门功法和新手背包。
+- 旧肉身状态改为 `retired` 并保留原有属性、修为、背包、装备和历史；不会覆盖旧肉身。
+- `souls` 记录不重建，灵魂 ID、功德、业力等灵魂级数据保留；只切换 `current_character_id`。
+- `reincarnation_events` 保存每次轮回的前后肉身、世界、种族和世次，便于后续轮回殿展示。
+- 当前阶段尚未扣除功德/业力，也未实现轮回冷却、记忆继承效果、因果/轮回印记加成或轮回使者交互；这些规则应在配置和玩法设计确定后加入。
+- 新肉身创建后仍需通过正常世界进入流程取得目标 WorldServer 的一次性 ticket；冥界实例未 ready 时不能进入场景。
+
