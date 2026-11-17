@@ -49,6 +49,20 @@ var equipment_action_busy := false
 var inventory_visible := false
 var inventory_request_busy := false
 
+var npc_http: HTTPRequest
+var npc_request_context := ""
+var npc_definitions: Array = []
+var npc_nodes: Dictionary = {}
+var npc_panel: PanelContainer
+var npc_title_label: Label
+var npc_dialogue_label: Label
+var npc_status_label: Label
+var npc_interact_button: Button
+var npc_trial_button: Button
+var npc_eligibility_button: Button
+var npc_selected_id := ""
+var npc_request_busy := false
+
 func _ready() -> void:
 	_build_environment()
 	_build_terrain()
@@ -92,6 +106,8 @@ func _ready() -> void:
 	reconnect_http.request_completed.connect(_on_reconnect_request_completed)
 	_refresh_character_status()
 	_build_inventory_ui()
+	_build_npc_ui()
+	_request_world_npcs()
 
 func _refresh_character_status() -> void:
 	if HHSession.access_token.is_empty():
@@ -477,7 +493,12 @@ func _create_drop(item_name: String, quality: int, quantity: int) -> Node3D:
 	return root
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not (event is InputEventKey) or not event.pressed or event.echo or event.keycode != KEY_E:
+	if not (event is InputEventKey) or not event.pressed or event.echo:
+		return
+	if event.keycode == KEY_F:
+		_try_interact_nearest_npc()
+		return
+	if event.keycode != KEY_E:
 		return
 	var network := HHSession.world_network
 	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
@@ -1051,3 +1072,229 @@ func _on_respawn_request_completed(result: int, response_code: int, _headers: Pa
 		return
 	respawn_button.visible = false
 	hud_label.text = "已返回冥界·酆都，生命与灵力已恢复。请返回主界面重新进入世界。"
+
+
+# ---------------- World NPC interaction ----------------
+
+func _build_npc_ui() -> void:
+	var hud := get_node_or_null("HUD") as CanvasLayer
+	if hud == null:
+		return
+	npc_interact_button = Button.new()
+	npc_interact_button.text = "F · 与附近 NPC 交互"
+	npc_interact_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	npc_interact_button.offset_left = -250.0
+	npc_interact_button.offset_top = -76.0
+	npc_interact_button.offset_right = -18.0
+	npc_interact_button.offset_bottom = -30.0
+	npc_interact_button.visible = false
+	npc_interact_button.pressed.connect(_try_interact_nearest_npc)
+	hud.add_child(npc_interact_button)
+
+	npc_panel = PanelContainer.new()
+	npc_panel.set_anchors_preset(Control.PRESET_CENTER)
+	npc_panel.offset_left = -230.0
+	npc_panel.offset_top = -170.0
+	npc_panel.offset_right = 230.0
+	npc_panel.offset_bottom = 170.0
+	npc_panel.visible = false
+	hud.add_child(npc_panel)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 10)
+	npc_panel.add_child(layout)
+	npc_title_label = Label.new()
+	npc_title_label.add_theme_font_size_override("font_size", 22)
+	npc_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	layout.add_child(npc_title_label)
+	npc_dialogue_label = Label.new()
+	npc_dialogue_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	npc_dialogue_label.custom_minimum_size = Vector2(420.0, 120.0)
+	npc_dialogue_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	layout.add_child(npc_dialogue_label)
+	npc_status_label = Label.new()
+	npc_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	layout.add_child(npc_status_label)
+	npc_trial_button = Button.new()
+	npc_trial_button.text = "查看冥界试炼"
+	npc_trial_button.pressed.connect(_request_soul_trials)
+	layout.add_child(npc_trial_button)
+	npc_eligibility_button = Button.new()
+	npc_eligibility_button.text = "查看投胎资格"
+	npc_eligibility_button.pressed.connect(_request_reincarnation_eligibility)
+	layout.add_child(npc_eligibility_button)
+	var close_button := Button.new()
+	close_button.text = "关闭"
+	close_button.pressed.connect(func(): npc_panel.visible = false)
+	layout.add_child(close_button)
+
+	npc_http = HTTPRequest.new()
+	npc_http.timeout = 12.0
+	add_child(npc_http)
+	npc_http.request_completed.connect(_on_npc_request_completed)
+
+func _request_world_npcs() -> void:
+	_send_npc_request("GET", "/api/v1/worlds/current/npcs", "list")
+
+func _send_npc_request(method: String, path: String, context: String, payload: Dictionary = {}) -> void:
+	if npc_http == null or npc_request_busy or HHSession.access_token.is_empty():
+		return
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token])
+	var http_method := HTTPClient.METHOD_GET
+	var body := ""
+	if method == "POST":
+		http_method = HTTPClient.METHOD_POST
+		headers.append("Content-Type: application/json")
+		body = JSON.stringify(payload)
+	npc_request_context = context
+	var error := npc_http.request(HHSession.api_base + path, headers, http_method, body)
+	if error != OK:
+		npc_request_context = ""
+		npc_status_label.text = "无法向中心服发送 NPC 请求，错误码：" + str(error)
+	else:
+		npc_request_busy = true
+
+func _on_npc_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	npc_request_busy = false
+	var context := npc_request_context
+	npc_request_context = ""
+	var raw := body.get_string_from_utf8()
+	var parsed: Variant = JSON.parse_string(raw)
+	var data: Dictionary = parsed if parsed is Dictionary else {}
+	if result != HTTPRequest.RESULT_SUCCESS:
+		if npc_status_label != null:
+			npc_status_label.text = "NPC 服务连接失败，请检查中心服。"
+		return
+	if response_code < 200 or response_code >= 300:
+		if npc_status_label != null:
+			npc_status_label.text = "请求未完成（HTTP " + str(response_code) + "）：" + raw
+		return
+	match context:
+		"list":
+			npc_definitions = data.get("npcs", [])
+			_render_world_npcs()
+		"interact":
+			var npc_data: Dictionary = data.get("npc", {})
+			var dialogue: Dictionary = data.get("dialogue", {})
+			npc_title_label.text = str(npc_data.get("name", "冥界来者")) + " · " + str(npc_data.get("title", ""))
+			var lines: Array[String] = []
+			lines.append(str(dialogue.get("greeting", "这位道友，有何事？")))
+			var topics: Variant = dialogue.get("topics", [])
+			if topics is Array:
+				for topic in topics:
+					lines.append("· " + str(topic))
+			npc_dialogue_label.text = "\n".join(lines)
+			npc_status_label.text = "交互已由中心服验证。"
+			npc_trial_button.visible = str(npc_data.get("interaction_type", "")) == "soul_trials"
+			npc_eligibility_button.visible = str(npc_data.get("interaction_type", "")) == "reincarnation_guidance"
+			npc_panel.visible = true
+		"trials":
+			var trials: Array = data.get("trials", [])
+			var lines: Array[String] = ["冥界试炼进度"]
+			for trial in trials:
+				if trial is Dictionary:
+					var state := "已完成" if bool(trial.get("completed", false)) else "进行中"
+					lines.append(str(trial.get("name", "试炼")) + "：" + str(trial.get("progress", 0)) + "/" + str(trial.get("target", 0)) + " · " + state)
+					lines.append(str(trial.get("description", "")))
+					if bool(trial.get("reward_granted", false)):
+						lines.append("奖励已入账：" + str(trial.get("reward_experience", 0)) + " 灵魂经验")
+			npc_dialogue_label.text = "\n".join(lines)
+			npc_status_label.text = "任务进度来自中心服，不使用客户端本地计数。"
+			npc_panel.visible = true
+		"eligibility":
+			var realm := str(data.get("current_realm_name", "未知"))
+			var required := str(data.get("required_realm_name", "聚灵境"))
+			var completed := bool(data.get("trial_completed", false))
+			var reasons: Array = data.get("reasons", [])
+			npc_title_label.text = "轮回殿 · 投胎资格"
+			npc_dialogue_label.text = "当前灵魂境界：" + realm + "\n要求灵魂境界：" + required + "\n引魂试炼：" + ("已完成" if completed else "尚未完成")
+			npc_status_label.text = "已满足首次投胎条件，可以申请创建新肉身。" if bool(data.get("eligible", false)) else "尚未满足条件：" + ", ".join(PackedStringArray(reasons))
+			npc_panel.visible = true
+
+func _render_world_npcs() -> void:
+	for npc_id in npc_nodes.keys():
+		if is_instance_valid(npc_nodes[npc_id]):
+			npc_nodes[npc_id].queue_free()
+	npc_nodes.clear()
+	for npc_variant in npc_definitions:
+		if not (npc_variant is Dictionary):
+			continue
+		var npc_data: Dictionary = npc_variant
+		var npc_id := str(npc_data.get("id", ""))
+		if npc_id.is_empty():
+			continue
+		var marker := Node3D.new()
+		marker.name = "NPC_" + npc_id
+		marker.position = Vector3(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_y", 0.0)), float(npc_data.get("position_z", 0.0)))
+		marker.rotation.y = float(npc_data.get("rotation_y", 0.0))
+		var orb := MeshInstance3D.new()
+		var mesh := CapsuleMesh.new()
+		mesh.radius = 0.38
+		mesh.height = 1.65
+		orb.mesh = mesh
+		orb.position.y = 0.82
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color("#8c7bd1") if str(npc_data.get("npc_type", "")) == "judge" else Color("#d6b16b")
+		material.emission_enabled = true
+		material.emission = material.albedo_color * 0.12
+		orb.material_override = material
+		marker.add_child(orb)
+		var label := Label3D.new()
+		label.text = str(npc_data.get("name", "NPC")) + "\nF 交互"
+		label.position.y = 2.0
+		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		label.modulate = Color("#f3dfb6")
+		marker.add_child(label)
+		add_child(marker)
+		npc_nodes[npc_id] = marker
+	_update_nearest_npc_prompt()
+
+func _update_nearest_npc_prompt() -> void:
+	if npc_interact_button == null or not is_instance_valid(local_player):
+		return
+	var nearest_distance := INF
+	var nearest_name := ""
+	for npc_variant in npc_definitions:
+		if not (npc_variant is Dictionary):
+			continue
+		var npc_data: Dictionary = npc_variant
+		var target := Vector3(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_y", 0.0)), float(npc_data.get("position_z", 0.0)))
+		var distance := Vector2(target.x - local_player.position.x, target.z - local_player.position.z).length()
+		var radius := float(npc_data.get("interaction_radius", 3.0))
+		if distance <= radius and distance < nearest_distance:
+			nearest_distance = distance
+			nearest_name = str(npc_data.get("name", "NPC"))
+	npc_interact_button.visible = not nearest_name.is_empty()
+	if npc_interact_button.visible:
+		npc_interact_button.text = "F · 与 " + nearest_name + " 交互"
+
+func _try_interact_nearest_npc() -> void:
+	if npc_request_busy or not is_instance_valid(local_player):
+		return
+	var nearest_id := ""
+	var nearest_distance := INF
+	for npc_variant in npc_definitions:
+		if not (npc_variant is Dictionary):
+			continue
+		var npc_data: Dictionary = npc_variant
+		var target := Vector3(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_y", 0.0)), float(npc_data.get("position_z", 0.0)))
+		var distance := Vector2(target.x - local_player.position.x, target.z - local_player.position.z).length()
+		if distance <= float(npc_data.get("interaction_radius", 3.0)) and distance < nearest_distance:
+			nearest_distance = distance
+			nearest_id = str(npc_data.get("id", ""))
+	if nearest_id.is_empty():
+		return
+	npc_selected_id = nearest_id
+	npc_status_label.text = "正在与 NPC 建立交互……"
+	_send_npc_request("POST", "/api/v1/worlds/current/npcs/interact", "interact", {"npc_id": nearest_id})
+
+func _request_soul_trials() -> void:
+	if npc_request_busy:
+		return
+	npc_status_label.text = "正在读取中心服试炼进度……"
+	_send_npc_request("GET", "/api/v1/souls/current/trials", "trials")
+
+func _request_reincarnation_eligibility() -> void:
+	if npc_request_busy:
+		return
+	npc_status_label.text = "正在核验灵魂境界与试炼记录……"
+	_send_npc_request("GET", "/api/v1/souls/current/reincarnation-eligibility", "eligibility")
