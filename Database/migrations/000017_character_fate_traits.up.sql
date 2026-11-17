@@ -14,7 +14,8 @@ CREATE TABLE character_fate_traits (
     description TEXT NOT NULL,
     effect_data JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (soul_id, life_index)
+    UNIQUE (soul_id, life_index),
+    FOREIGN KEY (soul_id, character_id) REFERENCES characters(soul_id, id) ON DELETE CASCADE
 );
 
 CREATE INDEX idx_character_fate_traits_soul
