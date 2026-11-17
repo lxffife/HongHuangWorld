@@ -9,7 +9,7 @@ CREATE TABLE soul_fate_choice_claims (
     choice_id VARCHAR(64) NOT NULL,
     fate_event_id UUID NOT NULL UNIQUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (soul_id, npc_id, choice_id)
+    UNIQUE (soul_id, npc_id)
 );
 
 CREATE INDEX idx_soul_fate_choice_claims_soul
