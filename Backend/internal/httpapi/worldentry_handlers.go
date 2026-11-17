@@ -129,7 +129,7 @@ func (h *worldEntryHandlers) closeSession(w http.ResponseWriter, r *http.Request
 	err := h.entryService.SaveAndClose(r.Context(), worldentry.SessionSnapshot{
 		NodeKey: request.NodeKey, SessionID: request.SessionID, CharacterID: request.CharacterID,
 		PositionX: request.PositionX, PositionY: request.PositionY, PositionZ: request.PositionZ,
-		RotationY: request.RotationY,
+		RotationY: request.RotationY, Health: request.Health,
 	})
 	if err != nil {
 		if errors.Is(err, worldentry.ErrInvalidSessionSnapshot) {
