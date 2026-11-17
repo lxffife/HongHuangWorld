@@ -16,6 +16,7 @@ var (
 	ErrNoAvailableServer = errors.New("no available world server")
 	ErrInvalidTicket    = errors.New("invalid or expired world entry ticket")
 	ErrInvalidSessionSnapshot = errors.New("invalid or unauthorized world session snapshot")
+	ErrNoPendingDeath = errors.New("character has no pending death to respawn")
 )
 
 type Entry struct {
@@ -222,6 +223,26 @@ func (s *Service) SavePosition(ctx context.Context, input SessionSnapshot) error
 	} else if rows != 1 {
 		return ErrInvalidSessionSnapshot
 	}
+	if input.Health != nil && *input.Health == 0 {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO character_death_events (character_id, session_id, world_id, death_reason)
+			 SELECT ws.character_id, ws.id, ws.world_id, 'combat'
+			 FROM world_sessions ws
+			 WHERE ws.id = $1 AND ws.character_id = $2
+			 ON CONFLICT (session_id, character_id) DO NOTHING`,
+			input.SessionID, input.CharacterID,
+		); err != nil { return fmt.Errorf("record character death: %w", err) }
+	}
+	if input.Health != nil && *input.Health == 0 {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO character_death_events (character_id, session_id, world_id, death_reason)
+			 SELECT ws.character_id, ws.id, ws.world_id, 'combat'
+			 FROM world_sessions ws
+			 WHERE ws.id = $1 AND ws.character_id = $2
+			 ON CONFLICT (session_id, character_id) DO NOTHING`,
+			input.SessionID, input.CharacterID,
+		); err != nil { return fmt.Errorf("record character death: %w", err) }
+	}
 	if input.Health != nil {
 		result, err := tx.ExecContext(ctx,
 			`UPDATE character_attributes SET health = LEAST($2, max_health), updated_at = now()
@@ -318,5 +339,48 @@ func (s *Service) SaveAndClose(ctx context.Context, input SessionSnapshot) error
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit world session snapshot: %w", err)
 	}
+	return nil
+}
+
+// RespawnCurrent returns a dead current life to the underworld while preserving
+// its soul, progression, inventory and equipment. Only a recorded death can be respawned.
+func (s *Service) RespawnCurrent(ctx context.Context, accountID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil { return fmt.Errorf("begin character respawn: %w", err) }
+	defer tx.Rollback()
+	var characterID string
+	var maxHealth int
+	var deathID string
+	err = tx.QueryRowContext(ctx,
+		`SELECT c.id::text, a.max_health, d.id::text
+		 FROM souls soul
+		 JOIN characters c ON c.id = soul.current_character_id
+		 JOIN character_attributes a ON a.character_id = c.id
+		 JOIN LATERAL (
+		   SELECT id FROM character_death_events
+		   WHERE character_id = c.id AND respawned_at IS NULL
+		   ORDER BY died_at DESC LIMIT 1 FOR UPDATE
+		 ) d ON true
+		 WHERE soul.account_id = $1 AND a.health = 0 AND c.status = 'alive'
+		 FOR UPDATE OF c, a`,
+		accountID,
+	).Scan(&characterID, &maxHealth, &deathID)
+	if errors.Is(err, sql.ErrNoRows) { return ErrNoPendingDeath }
+	if err != nil { return fmt.Errorf("load pending character death: %w", err) }
+	if maxHealth < 1 { return ErrInvalidSessionSnapshot }
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE characters SET world_id = 'underworld_fengdu',
+		 position_x = 0, position_y = 0, position_z = 0, rotation_y = 0, updated_at = now()
+		 WHERE id = $1`, characterID,
+	); err != nil { return fmt.Errorf("move respawned character to Fengdu: %w", err) }
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE character_attributes SET health = max_health, mana = max_mana, updated_at = now()
+		 WHERE character_id = $1`, characterID,
+	); err != nil { return fmt.Errorf("restore respawned character attributes: %w", err) }
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE character_death_events SET respawned_at = now(), respawn_world_id = 'underworld_fengdu'
+		 WHERE id = $1 AND respawned_at IS NULL`, deathID,
+	); err != nil { return fmt.Errorf("complete character respawn record: %w", err) }
+	if err := tx.Commit(); err != nil { return fmt.Errorf("commit character respawn: %w", err) }
 	return nil
 }
