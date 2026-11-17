@@ -28,6 +28,7 @@ int main() {
     config.region = env_or("WORLD_SERVER_REGION", "local");
     config.world_id = env_or("WORLD_ID", "qingyun_human");
     config.instance_key = env_or("WORLD_SERVER_INSTANCE_KEY", "qingyun-local-1");
+    config.outbox_database_path = env_or("WORLD_SERVER_OUTBOX_PATH", "./data/worldserver-outbox.sqlite3");
     config.capacity = std::stoi(env_or("WORLD_SERVER_CAPACITY", "100"));
     config.port = static_cast<std::uint16_t>(std::stoi(env_or("WORLD_SERVER_UDP_PORT", "7777")));
 
