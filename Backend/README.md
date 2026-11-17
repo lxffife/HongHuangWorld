@@ -25,7 +25,7 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 - `GET /api/v1/cultivation/bloodlines`：读取种族血脉、品阶、基础纯度和属性修正；角色可持有多条血脉，最多一条主血脉。
 - `GET /api/v1/cultivation/techniques`：读取功法目录及各族适配度；跨族修炼必须有明确兼容记录，不从境界映射推断。
 - `POST /api/v1/characters/first-life`：为当前灵魂创建第一世肉身并固定在冥界·酆都苏醒；根据 race_id 选择种族默认修炼体系，并在同一事务中初始化属性、修炼进度和新手背包（基础装备与丹药）。未传种族时默认人族。
-- `GET /api/v1/characters/current/reincarnation-routes`：读取已启用的轮回出生路线，返回目标世界、适配种族/命格、路线说明和服务端出生坐标；客户端只展示，不得自行修改坐标或初始资源。
+- `GET /api/v1/characters/current/reincarnation-routes`：读取已启用的轮回出生路线，返回目标世界、适配种族/命格和路线说明；出生坐标及路线奖励配置仅保留在服务端，不下发客户端。本阶段暂不发放路线专属资源。
 - `POST /api/v1/characters/current/reincarnate`：请求体包含 `name`、`race_id`、`route_id`；服务端在同一事务中重新校验灵魂境界、酆都试炼、世界会话、路线启用状态、种族/命格适配，按路线写入出生世界与坐标，并归档路线快照。
 - `GET /api/v1/characters/current`：读取当前肉身角色。
 - `GET /api/v1/souls/current/lives`：读取当前灵魂全部肉身历世档案，按世次倒序返回角色名、种族、出生世界、境界、等级、状态、创建时间及对应轮回事件；不会把前世肉身数据覆盖为当前肉身数据。
