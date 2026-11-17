@@ -81,6 +81,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/servers/characters/rewards", rewards.apply)
 		entry := &worldEntryHandlers{authService: authService, entryService: worldentry.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
 		mux.HandleFunc("POST /api/v1/worlds/enter", entry.issue)
+		mux.HandleFunc("POST /api/v1/characters/current/respawn", entry.respawn)
 		mux.HandleFunc("POST /api/v1/servers/tickets/redeem", entry.redeem)
 		mux.HandleFunc("POST /api/v1/servers/sessions/snapshot", entry.saveSnapshot)
 		mux.HandleFunc("POST /api/v1/servers/sessions/close", entry.closeSession)
@@ -91,7 +92,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 			"POST /api/v1/souls", "GET /api/v1/souls/current", "GET /api/v1/worlds",
 			"GET /api/v1/cultivation/systems", "GET /api/v1/cultivation/race-growth",
 			"GET /api/v1/cultivation/bloodlines", "GET /api/v1/cultivation/techniques",
-			"POST /api/v1/characters/first-life", "GET /api/v1/characters/current",
+			"POST /api/v1/characters/first-life", "GET /api/v1/characters/current", "POST /api/v1/characters/current/respawn",
 			"GET /api/v1/characters/current/status", "POST /api/v1/characters/current/breakthrough",
 			"POST /api/v1/characters/current/bloodlines/awaken", "POST /api/v1/characters/current/techniques/train",
 			"POST /api/v1/characters/current/attributes/allocate", "GET /api/v1/items",
