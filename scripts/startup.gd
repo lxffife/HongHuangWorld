@@ -357,6 +357,15 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 	if response_code < 200 or response_code >= 300:
 		if context == "register" and response_code == 400:
 			_set_status("注册失败：账号必须为 3–32 位英文字母、数字或下划线；密码必须为 12–72 个字符。邮箱可以填写有效邮箱。")
+		elif context == "reincarnation_eligibility":
+			reincarnation_check_button.disabled = false
+			reincarnation_eligible = false
+			reincarnation_submit_button.disabled = true
+			reincarnation_status_label.text = "资格查询失败（HTTP " + str(response_code) + "）：" + body_text
+		elif context == "reincarnate":
+			reincarnation_check_button.disabled = false
+			reincarnation_submit_button.disabled = true
+			reincarnation_status_label.text = "创建新肉身失败（HTTP " + str(response_code) + "）：" + body_text + "。请重新查询资格后再试。"
 		else:
 			_set_status("请求失败 HTTP " + str(response_code) + "：" + body_text)
 		_process_queue()
