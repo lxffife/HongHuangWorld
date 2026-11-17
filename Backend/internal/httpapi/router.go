@@ -90,7 +90,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		unavailable := func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "service unavailable", http.StatusServiceUnavailable) }
 		for _, route := range []string{
 			"POST /api/v1/auth/register", "POST /api/v1/auth/login", "GET /api/v1/account/me",
-			"POST /api/v1/souls", "GET /api/v1/souls/current", "GET /api/v1/worlds",
+			"POST /api/v1/souls", "GET /api/v1/souls/current", "GET /api/v1/souls/current/progression", "GET /api/v1/worlds",
 			"GET /api/v1/cultivation/systems", "GET /api/v1/cultivation/race-growth",
 			"GET /api/v1/cultivation/bloodlines", "GET /api/v1/cultivation/techniques",
 			"POST /api/v1/characters/first-life", "GET /api/v1/characters/current", "POST /api/v1/characters/current/respawn", "POST /api/v1/characters/current/reincarnate",
