@@ -15,11 +15,12 @@ var pitch := -0.18
 var input_send_accumulator := 0.0
 var input_sequence := 0
 var jump_pending := false
+var is_dead := false
 
 func _ready() -> void:
 	_build_player()
 	_ensure_input_actions()
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func _build_player() -> void:
 	var capsule := CapsuleMesh.new()
@@ -74,22 +75,30 @@ func _add_key_action(action: String, keycode: int) -> void:
 	InputMap.action_add_event(action, event)
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("release_mouse"):
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		return
+	if is_dead:
+		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+			# 首次点击游戏画面只负责锁定鼠标，不误触发攻击。
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+			return
 		var world := get_parent()
 		if world != null and world.has_method("_request_nearest_monster_attack"):
 			world.call("_request_nearest_monster_attack")
 	elif event.is_action_pressed("jump"):
 		jump_pending = true
-	elif event.is_action_pressed("release_mouse"):
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	elif event is InputEventMouseButton and event.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	elif event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		yaw -= event.relative.x * mouse_sensitivity
 		pitch = clampf(pitch - event.relative.y * mouse_sensitivity, -0.9, 0.35)
 		camera_pivot.rotation = Vector3(pitch, yaw, 0.0)
 
 func _physics_process(delta: float) -> void:
+	if is_dead:
+		velocity = Vector3.ZERO
+		return
 	var input_2d := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var camera_basis := camera_pivot.global_transform.basis
 	var direction := camera_basis.x * input_2d.x + camera_basis.z * input_2d.y
