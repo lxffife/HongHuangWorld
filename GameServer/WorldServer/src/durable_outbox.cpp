@@ -103,7 +103,12 @@ bool DurableOutbox::enqueue(const OutboxEvent& event, std::string& error) {
         if (existing_result == SQLITE_ROW) {
             const bool same = column_text(existing.get(), 0) == event.event_type &&
                               column_text(existing.get(), 1) == event.payload;
-            if (!execute("COMMIT", error)) return false;
+            if (!execute("COMMIT", error)) {
+                std::string ignored;
+                execute("ROLLBACK", ignored);
+                transaction_open = false;
+                return false;
+            }
             transaction_open = false;
             if (!same) error = "event id already exists with a different type or payload";
             return same;
@@ -132,7 +137,12 @@ bool DurableOutbox::enqueue(const OutboxEvent& event, std::string& error) {
         sqlite3_bind_int64(insert.get(), 7, event.created_at_ms);
         if (sqlite3_step(insert.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
 
-        if (!execute("COMMIT", error)) return false;
+        if (!execute("COMMIT", error)) {
+            std::string ignored;
+            execute("ROLLBACK", ignored);
+            transaction_open = false;
+            return false;
+        }
         transaction_open = false;
         return true;
     } catch (const std::exception& exception) {
@@ -159,7 +169,12 @@ std::optional<OutboxEvent> DurableOutbox::claim_due(std::int64_t now_ms, std::st
         sqlite3_bind_int64(query.get(), 1, now_ms);
         const int result = sqlite3_step(query.get());
         if (result == SQLITE_DONE) {
-            if (!execute("COMMIT", error)) return std::nullopt;
+            if (!execute("COMMIT", error)) {
+                std::string ignored;
+                execute("ROLLBACK", ignored);
+                transaction_open = false;
+                return std::nullopt;
+            }
             transaction_open = false;
             return std::nullopt;
         }
@@ -179,7 +194,12 @@ std::optional<OutboxEvent> DurableOutbox::claim_due(std::int64_t now_ms, std::st
         if (sqlite3_step(update.get()) != SQLITE_DONE || sqlite3_changes(db_) != 1) {
             throw std::runtime_error("outbox claim conflict");
         }
-        if (!execute("COMMIT", error)) return std::nullopt;
+        if (!execute("COMMIT", error)) {
+            std::string ignored;
+            execute("ROLLBACK", ignored);
+            transaction_open = false;
+            return std::nullopt;
+        }
         transaction_open = false;
         return event;
     } catch (const std::exception& exception) {
