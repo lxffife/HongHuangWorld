@@ -31,7 +31,8 @@ try {
         '000010_soul_progression.up.sql',
         '000011_soul_trials.up.sql',
         '000012_world_npcs.up.sql',
-        '000013_soul_memories.up.sql'
+        '000013_soul_memories.up.sql',
+        '000014_soul_fate_ledger.up.sql'
     )
 
     $existing = docker compose --env-file .env exec -T postgres psql -U $env:POSTGRES_USER -d $env:POSTGRES_DB -At -c "SELECT to_regclass('public.accounts') IS NOT NULL;"
