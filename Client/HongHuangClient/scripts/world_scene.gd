@@ -40,6 +40,8 @@ var vitals_known := false
 var input_debug_panel: PanelContainer
 var input_debug_label: Label
 var input_debug_accumulator := 0.0
+var region_update_accumulator := 0.0
+var current_region_name := ""
 var local_target_position := Vector3.ZERO
 var remote_players: Dictionary = {}
 var remote_targets: Dictionary = {}
@@ -112,6 +114,7 @@ func _ready() -> void:
 		var spawn: Dictionary = HHSession.world_snapshot
 		local_target_position = Vector3(float(spawn.get("position_x", 0.0)), float(spawn.get("position_y", 0.15)), float(spawn.get("position_z", 0.0)))
 		local_player.position = local_target_position
+	_refresh_current_region(false)
 	_update_hud()
 	progression_http = HTTPRequest.new()
 	progression_http.timeout = 10.0
@@ -541,12 +544,12 @@ func _build_compact_hud() -> void:
 	$HUD/Panel.offset_bottom = 548.0
 	compact_hud_panel = PanelContainer.new()
 	compact_hud_panel.position = Vector2(18.0, 18.0)
-	compact_hud_panel.custom_minimum_size = Vector2(330.0, 72.0)
+	compact_hud_panel.custom_minimum_size = Vector2(360.0, 92.0)
 	hud.add_child(compact_hud_panel)
 	compact_hud_label = Label.new()
 	compact_hud_label.text = "洪荒 · 正在载入角色状态……"
 	compact_hud_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	compact_hud_label.custom_minimum_size = Vector2(310.0, 54.0)
+	compact_hud_label.custom_minimum_size = Vector2(340.0, 74.0)
 	compact_hud_panel.add_child(compact_hud_label)
 	details_toggle_button = Button.new()
 	details_toggle_button.text = "角色 · 修炼"
@@ -625,6 +628,45 @@ func _world_display_name(world_id: String) -> String:
 		_:
 			return "未知世界（" + world_id + "）"
 
+func _region_for_position(world_id: String, position: Vector3) -> String:
+	var x := position.x
+	var z := position.z
+	if world_id == "underworld_fengdu":
+		# Match named landmarks before broad terrain regions.
+		if x >= 15.0 and x <= 29.0 and z >= -0.5 and z <= 5.5:
+			return "奈何桥"
+		if x >= -35.0 and x <= -8.0 and z >= -69.0 and z <= -42.0:
+			return "轮回殿前"
+		if x >= -12.0 and x <= 12.0 and z >= -28.0 and z <= -9.0:
+			return "酆都鬼门关"
+		if x >= 17.0 and x <= 27.0 and z >= -68.0 and z <= 82.0:
+			return "忘川河畔"
+		if x >= -32.0 and x <= 32.0 and z >= -40.0 and z <= -26.0:
+			return "引魂石道"
+		return "酆都荒原"
+	if world_id == "qingyun_human":
+		if x >= -9.0 and x <= 9.0 and z >= -28.0 and z <= -16.0:
+			return "青云山门"
+		if x >= -7.0 and x <= 7.0 and z >= -42.0 and z <= -3.0:
+			return "青云石径"
+		if absf(x) >= 8.0 and absf(x) <= 30.0 and z >= -48.0 and z <= 8.0:
+			return "青云松林"
+		return "青云郊野"
+	return "未知区域"
+
+func _refresh_current_region(show_entry_notice: bool) -> void:
+	if not is_instance_valid(local_player):
+		return
+	var world_id := str(HHSession.world_snapshot.get("world_id", ""))
+	var next_region := _region_for_position(world_id, local_player.position)
+	if next_region == current_region_name:
+		return
+	var previous_region := current_region_name
+	current_region_name = next_region
+	_update_compact_hud()
+	if show_entry_notice and not previous_region.is_empty():
+		_show_notification("已进入「" + next_region + "」", 2.8)
+
 func _update_compact_hud(progression: Dictionary = {}) -> void:
 	if compact_hud_label == null:
 		return
@@ -636,14 +678,15 @@ func _update_compact_hud(progression: Dictionary = {}) -> void:
 	var realm_name := str(progression.get("realm_name", ""))
 	var stage_name := str(progression.get("realm_stage_name", ""))
 	var cultivation := int(progression.get("cultivation", 0))
-	compact_hud_label.text = "当前世界 · " + world_name + "\\n" + character_name + "  |  " + system_name + " · " + realm_name + stage_name + "  |  修为 " + str(cultivation)
+	var region_name := current_region_name if not current_region_name.is_empty() else "区域载入中"
+	compact_hud_label.text = "当前世界 · " + world_name + "\n所在区域 · " + region_name + "\n" + character_name + "  |  " + system_name + " · " + realm_name + stage_name + "  |  修为 " + str(cultivation)
 
 func _update_hud() -> void:
 	var snapshot: Dictionary = HHSession.world_snapshot
 	var world_id := str(snapshot.get("world_id", ""))
 	var world_name := _world_display_name(world_id)
 	var character_name := str(snapshot.get("name", "初入洪荒"))
-	hud_label.text = "当前世界 · " + world_name + "\\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\\nF NPC交互 · E 拾取 · 鼠标左键攻击附近怪物 · 首次点击画面锁定鼠标"
+	hud_label.text = "当前世界 · " + world_name + " · 所在区域 " + (current_region_name if not current_region_name.is_empty() else "区域载入中") + "\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\nF NPC交互 · E 拾取 · 鼠标左键攻击附近怪物 · 首次点击画面锁定鼠标"
 	_update_compact_hud()
 
 func _exit_tree() -> void:
@@ -1207,6 +1250,10 @@ func _process(delta: float) -> void:
 		drop.position = drop.position.lerp(target, minf(delta * 12.0, 1.0))
 	_update_nearest_npc_prompt()
 	_update_exploration_proximity()
+	region_update_accumulator += delta
+	if region_update_accumulator >= 0.2:
+		region_update_accumulator = 0.0
+		_refresh_current_region(true)
 	input_debug_accumulator += delta
 	if input_debug_accumulator >= 0.05:
 		input_debug_accumulator = 0.0
