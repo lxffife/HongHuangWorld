@@ -29,6 +29,8 @@ type Definition struct {
 	RotationY float64 `json:"rotation_y"`
 	InteractionRadius float64 `json:"interaction_radius"`
 	Dialogue json.RawMessage `json:"dialogue"`
+	FateTraitID string `json:"fate_trait_id,omitempty"`
+	FateReaction string `json:"fate_reaction,omitempty"`
 }
 
 type Service struct { db *sql.DB }
@@ -75,17 +77,20 @@ func (s *Service) Interact(ctx context.Context, accountID, npcID string) (Defini
 	var item Definition
 	err:=s.db.QueryRowContext(ctx,
 		`SELECT n.id,n.world_id,n.name,n.title,n.npc_type,n.interaction_type,
-		        n.position_x,n.position_y,n.position_z,n.rotation_y,n.interaction_radius,n.dialogue
+		        n.position_x,n.position_y,n.position_z,n.rotation_y,n.interaction_radius,n.dialogue,
+		        COALESCE(trait.trait_id, ''), COALESCE(n.dialogue->'fate_reactions'->>trait.trait_id, '')
 		 FROM souls soul
 		 JOIN characters c ON c.id=soul.current_character_id AND c.status='alive'
 		 JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
 		 JOIN world_instances wi ON wi.id=ws.instance_id AND wi.world_id=c.world_id
 		 JOIN world_npc_definitions n ON n.world_id=wi.world_id AND n.id=$2 AND n.enabled=TRUE
+		 LEFT JOIN character_fate_traits trait ON trait.character_id=c.id
 		 WHERE soul.account_id=$1
 		   AND SQRT(POWER(c.position_x-n.position_x,2)+POWER(c.position_y-n.position_y,2)+POWER(c.position_z-n.position_z,2)) <= n.interaction_radius
 		 ORDER BY ws.connected_at DESC NULLS LAST LIMIT 1`,accountID,npcID).Scan(
 		&item.ID,&item.WorldID,&item.Name,&item.Title,&item.Type,&item.InteractionType,
-		&item.PositionX,&item.PositionY,&item.PositionZ,&item.RotationY,&item.InteractionRadius,&item.Dialogue)
+		&item.PositionX,&item.PositionY,&item.PositionZ,&item.RotationY,&item.InteractionRadius,&item.Dialogue,
+		&item.FateTraitID,&item.FateReaction)
 	if errors.Is(err,sql.ErrNoRows) {
 		var active bool
 		checkErr:=s.db.QueryRowContext(ctx,
