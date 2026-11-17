@@ -19,11 +19,12 @@ jobs:
           path: src
           persist-credentials: false
 
-      # 2. 拉取目标仓库到 dst/
+      # 2. 拉取目标仓库到 dst/（关键：fetch-depth: 0 拿到所有分支 ref）
       - name: Checkout target
         uses: actions/checkout@v4
         with:
           path: dst
+          fetch-depth: 0          # ← 修复点 1
 
       # 3. 同步 main：文件级，排除 workflows
       - name: Sync main (keep target workflows)
@@ -57,6 +58,9 @@ jobs:
           git remote remove src 2>/dev/null || true
           git remote add src "$GITHUB_WORKSPACE/src"
           git fetch src '+refs/heads/*:refs/remotes/src/*'
+
+          # 4.2b 显式再 fetch 一次目标仓库的所有分支 ref（双保险）
+          git fetch origin '+refs/heads/*:refs/remotes/origin/*'
 
           # 4.3 列出源仓库所有分支（排除 HEAD 和 main）
           branches=$(git for-each-ref --format='%(refname:short)' refs/remotes/src/ \
