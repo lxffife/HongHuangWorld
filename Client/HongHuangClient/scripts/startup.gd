@@ -37,6 +37,7 @@ var reincarnation_name_input: LineEdit
 var reincarnation_race_select: OptionButton
 var reincarnation_route_select: OptionButton
 var reincarnation_route_label: Label
+var reincarnation_route_description: Label
 var reincarnation_routes: Array = []
 var reincarnation_status_label: Label
 var reincarnation_check_button: Button
@@ -236,7 +237,12 @@ func _build_reincarnation_ui() -> void:
 	content_box.add_child(reincarnation_route_label)
 	reincarnation_route_select = OptionButton.new()
 	reincarnation_route_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	reincarnation_route_select.item_selected.connect(_update_reincarnation_route_description)
 	content_box.add_child(reincarnation_route_select)
+	reincarnation_route_description = Label.new()
+	reincarnation_route_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	reincarnation_route_description.add_theme_color_override("font_color", Color("#aab6cc"))
+	content_box.add_child(reincarnation_route_description)
 	reincarnation_check_button = Button.new()
 	reincarnation_check_button.text = "查询投胎资格"
 	reincarnation_check_button.pressed.connect(_check_reincarnation_eligibility)
@@ -251,7 +257,7 @@ func _build_reincarnation_ui() -> void:
 	reincarnation_confirm.dialog_text = "此操作不可撤销：当前肉身将归档为前世，并为同一灵魂创建新的肉身。灵魂经验、功德、业力会保留。是否继续？"
 	reincarnation_confirm.confirmed.connect(_submit_reincarnation)
 	add_child(reincarnation_confirm)
-	for control in [title, reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_route_label, reincarnation_route_select, reincarnation_check_button, reincarnation_submit_button]:
+	for control in [title, reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_route_label, reincarnation_route_select, reincarnation_route_description, reincarnation_check_button, reincarnation_submit_button]:
 		control.hide()
 	life_history_title = Label.new()
 	life_history_title.text = "灵魂历世档案"
@@ -453,8 +459,22 @@ func _on_reincarnation_race_selected(_index: int) -> void:
 		reincarnation_route_select.set_item_metadata(reincarnation_route_select.item_count - 1, str(route.get("id", "")))
 	if reincarnation_route_select.item_count > 0:
 		reincarnation_route_select.select(0)
+	_update_reincarnation_route_description(reincarnation_route_select.selected)
 	if reincarnation_eligible:
 		reincarnation_submit_button.disabled = reincarnation_route_select.item_count == 0
+
+func _update_reincarnation_route_description(_index: int) -> void:
+	if reincarnation_route_description == null:
+		return
+	if reincarnation_route_select.item_count == 0:
+		reincarnation_route_description.text = "当前种族暂无可用出生路线。"
+		return
+	var selected_id := str(reincarnation_route_select.get_item_metadata(reincarnation_route_select.selected))
+	for route_variant in reincarnation_routes:
+		if route_variant is Dictionary and str(route_variant.get("id", "")) == selected_id:
+			var route: Dictionary = route_variant
+			reincarnation_route_description.text = str(route.get("description", "")) + "\n出生坐标由中心服分配，客户端不能修改。"
+			return
 
 func _check_reincarnation_eligibility() -> void:
 	if access_token.is_empty() or current_character.is_empty():
@@ -683,7 +703,7 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 		"reincarnate":
 			current_character = data
 			reincarnation_eligible = false
-			reincarnation_status_label.text = "新肉身创建成功，前世肉身已归档。此世因果命格：" + str(data.get("fate_aspect", "因果未定")) + "；特性：" + str(data.get("fate_trait_name", "因果未定")) + "（" + str(data.get("fate_trait_description", "")) + "）（功德 " + str(data.get("fate_merit", 0)) + "，业力 " + str(data.get("fate_karma", 0)) + "）。正在申请冥界入口……"
+			reincarnation_status_label.text = "新肉身创建成功，前世肉身已归档。出生路线：" + str(data.get("birth_route_name", "未记录")) + "。此世因果命格：" + str(data.get("fate_aspect", "因果未定")) + "；特性：" + str(data.get("fate_trait_name", "因果未定")) + "（" + str(data.get("fate_trait_description", "")) + "）（功德 " + str(data.get("fate_merit", 0)) + "，业力 " + str(data.get("fate_karma", 0)) + "）。正在申请冥界入口……"
 			_enqueue(HTTPClient.METHOD_POST, "/api/v1/worlds/enter", {}, true, "enter")
 		"character_create":
 			current_character = data
