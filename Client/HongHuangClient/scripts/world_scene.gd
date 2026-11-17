@@ -62,6 +62,8 @@ var npc_trial_button: Button
 var npc_eligibility_button: Button
 var npc_soul_button: Button
 var npc_soul_breakthrough_button: Button
+var npc_reincarnation_leave_button: Button
+var leaving_for_reincarnation := false
 var npc_selected_id := ""
 var npc_request_busy := false
 
@@ -1134,6 +1136,11 @@ func _build_npc_ui() -> void:
 	npc_soul_breakthrough_button.visible = false
 	npc_soul_breakthrough_button.pressed.connect(_request_soul_breakthrough)
 	layout.add_child(npc_soul_breakthrough_button)
+	npc_reincarnation_leave_button = Button.new()
+	npc_reincarnation_leave_button.text = "返回角色界面办理轮回"
+	npc_reincarnation_leave_button.visible = false
+	npc_reincarnation_leave_button.pressed.connect(_leave_world_for_reincarnation)
+	layout.add_child(npc_reincarnation_leave_button)
 	var close_button := Button.new()
 	close_button.text = "关闭"
 	close_button.pressed.connect(func(): npc_panel.visible = false)
@@ -1217,6 +1224,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_eligibility_button.visible = false
 			npc_soul_button.visible = true
 			npc_soul_breakthrough_button.visible = false
+			npc_reincarnation_leave_button.visible = false
 			npc_panel.visible = true
 		"soul_progression":
 			var experience := int(data.get("experience", 0))
@@ -1227,6 +1235,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			if next_required == null:
 				npc_dialogue_label.text = "当前灵魂经验：" + str(experience) + "\n已达到当前配置的最高灵魂境界。"
 				npc_soul_breakthrough_button.visible = false
+				npc_reincarnation_leave_button.visible = false
 			else:
 				npc_dialogue_label.text = "当前灵魂经验：" + str(experience) + "\n下一境界：" + next_name + "\n突破所需累计经验：" + str(next_required)
 				npc_soul_breakthrough_button.visible = experience >= int(next_required)
@@ -1257,6 +1266,37 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_soul_button.visible = true
 			npc_soul_breakthrough_button.visible = false
 			npc_panel.visible = true
+
+func _leave_world_for_reincarnation() -> void:
+	if leaving_for_reincarnation:
+		return
+	if HHSession.world_network == null or not is_instance_valid(HHSession.world_network):
+		hud_label.text = "当前世界连接已不存在，正在返回角色界面……"
+		_finish_leave_for_reincarnation()
+		return
+	leaving_for_reincarnation = true
+	npc_reincarnation_leave_button.disabled = true
+	npc_status_label.text = "正在保存当前位置并安全退出世界……"
+	var network: HHWorldNetwork = HHSession.world_network
+	if not network.disconnected.is_connected(_on_reincarnation_world_left):
+		network.disconnected.connect(_on_reincarnation_world_left, CONNECT_ONE_SHOT)
+	network.close()
+
+func _on_reincarnation_world_left() -> void:
+	_finish_leave_for_reincarnation()
+
+func _finish_leave_for_reincarnation() -> void:
+	var network: HHWorldNetwork = HHSession.world_network
+	if network != null and is_instance_valid(network):
+		if network.get_parent() == HHSession:
+			HHSession.remove_child(network)
+		network.queue_free()
+	HHSession.world_network = null
+	HHSession.world_snapshot = {}
+	var error := get_tree().change_scene_to_file("res://scenes/Startup.tscn")
+	if error != OK:
+		leaving_for_reincarnation = false
+		hud_label.text = "返回角色界面失败，错误码：" + str(error)
 
 func _render_world_npcs() -> void:
 	for npc_id in npc_nodes.keys():
