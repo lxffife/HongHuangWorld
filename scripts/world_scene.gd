@@ -68,6 +68,7 @@ var npc_fate_encounter_button: Button
 var exploration_open_button: Button
 var exploration_container: VBoxContainer
 var exploration_feedback := ""
+var exploration_markers: Dictionary = {}
 var npc_current_interaction_id := ""
 var leaving_for_reincarnation := false
 var npc_selected_id := ""
@@ -838,6 +839,7 @@ func _process(delta: float) -> void:
 		var target: Vector3 = drop_targets.get(drop_id, drop.position)
 		drop.position = drop.position.lerp(target, minf(delta * 12.0, 1.0))
 	_update_nearest_npc_prompt()
+	_update_exploration_proximity()
 
 
 func _on_world_disconnected() -> void:
@@ -1522,6 +1524,11 @@ func _request_exploration_points() -> void:
 func _render_exploration_points(points: Variant) -> void:
 	if exploration_container == null:
 		return
+	for marker_id in exploration_markers.keys():
+		var old_marker: Node3D = exploration_markers[marker_id]
+		if is_instance_valid(old_marker):
+			old_marker.queue_free()
+	exploration_markers.clear()
 	for child in exploration_container.get_children():
 		child.queue_free()
 	if not points is Array or points.is_empty():
@@ -1534,12 +1541,18 @@ func _render_exploration_points(points: Variant) -> void:
 			continue
 		var point: Dictionary = point_variant
 		var discovered := bool(point.get("discovered", false))
+		var point_id := str(point.get("id", ""))
+		_create_exploration_marker(point)
 		var point_button := Button.new()
 		var danger := int(point.get("danger_level", 1))
-		point_button.text = str(point.get("region_name", "未知区域")) + " · " + ("已发现 · " if discovered else "调查 · ") + str(point.get("name", "未知地点")) + "  | 危险 " + str(danger) + "/10
-		point_button.disabled = discovered or npc_request_busy
+		var target := Vector3(float(point.get("position_x", 0.0)), float(point.get("position_y", 0.0)), float(point.get("position_z", 0.0)))
+		var distance := local_player.global_position.distance_to(target) if is_instance_valid(local_player) else INF
+		var radius := float(point.get("interaction_radius", 4.0))
+		var state_text := "已发现" if discovered else ("调查" if distance <= radius else "未抵达 · " + str(roundi(distance)) + "m")
+		point_button.text = str(point.get("region_name", "未知区域")) + " · " + state_text + " · " + str(point.get("name", "未知地点")) + "  | 危险 " + str(danger) + "/10
+		point_button.disabled = discovered or distance > radius or npc_request_busy
 		point_button.tooltip_text = str(point.get("description", ""))
-		point_button.pressed.connect(_discover_exploration_point.bind(str(point.get("id", ""))))
+		point_button.pressed.connect(_discover_exploration_point.bind(point_id))
 		exploration_container.add_child(point_button)
 
 
@@ -1551,3 +1564,85 @@ func _discover_exploration_point(point_id: String) -> void:
 		"point_id": point_id
 	})
 
+
+
+func _create_exploration_marker(point: Dictionary) -> void:
+	var point_id := str(point.get("id", ""))
+	if point_id.is_empty():
+		return
+	var marker := Node3D.new()
+	marker.name = "Exploration_" + point_id
+	marker.position = Vector3(
+		float(point.get("position_x", 0.0)),
+		float(point.get("position_y", 0.0)) + 0.08,
+		float(point.get("position_z", 0.0))
+	)
+	var discovered := bool(point.get("discovered", false))
+	var ring := MeshInstance3D.new()
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.72
+	ring_mesh.outer_radius = 0.9
+	ring.mesh = ring_mesh
+	var ring_material := StandardMaterial3D.new()
+	ring_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring_material.albedo_color = Color("#79c8a4") if discovered else Color("#e7bd69")
+	ring_material.emission_enabled = true
+	ring_material.emission = ring_material.albedo_color
+	ring.material_override = ring_material
+	marker.add_child(ring)
+	var beacon := MeshInstance3D.new()
+	var beacon_mesh := CylinderMesh.new()
+	beacon_mesh.top_radius = 0.035
+	beacon_mesh.bottom_radius = 0.035
+	beacon_mesh.height = 1.35
+	beacon.mesh = beacon_mesh
+	beacon.position.y = 0.72
+	var beacon_material := StandardMaterial3D.new()
+	beacon_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	beacon_material.albedo_color = ring_material.albedo_color
+	beacon_material.emission_enabled = true
+	beacon_material.emission = ring_material.albedo_color
+	beacon.material_override = beacon_material
+	marker.add_child(beacon)
+	var title := Label3D.new()
+	title.text = ("已发现 · " if discovered else "探索 · ") + str(point.get("name", "未知地点"))
+	title.position.y = 1.55
+	title.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	title.font_size = 28
+	title.modulate = ring_material.albedo_color
+	marker.add_child(title)
+	add_child(marker)
+	exploration_markers[point_id] = marker
+
+
+func _update_exploration_proximity() -> void:
+	if not is_instance_valid(local_player) or exploration_container == null:
+		return
+	for child in exploration_container.get_children():
+		if not child is Button:
+			continue
+		var point_id := ""
+		for connection in child.pressed.get_connections():
+			var callable: Callable = connection.get("callable", Callable())
+			var binds: Array = callable.get_bound_arguments()
+			if not binds.is_empty():
+				point_id = str(binds[0])
+				break
+		if point_id.is_empty():
+			continue
+		var marker: Node3D = exploration_markers.get(point_id)
+		if not is_instance_valid(marker):
+			continue
+		var distance := local_player.global_position.distance_to(marker.global_position)
+		var point_radius := 4.0
+		var is_discovered := child.text.contains("已发现")
+		if is_discovered:
+			child.disabled = true
+			continue
+		var in_range := distance <= point_radius
+		child.disabled = not in_range or npc_request_busy
+		var parts := child.text.split(" · ")
+		if parts.size() >= 3:
+			var prefix := parts[0] + " · "
+			var point_name := parts[2].split("  |")[0]
+			child.text = prefix + ("调查" if in_range else "未抵达 · " + str(roundi(distance)) + "m") + " · " + point_name + "  |" + (parts[2].split("  |")[1] if parts[2].contains("  |") else "")
