@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 var (
@@ -240,6 +241,81 @@ func (s *Service) Current(ctx context.Context, accountID string) (Character, err
 		result.RaceID = &race.String
 	}
 	return result, nil
+}
+
+type LifeRecord struct {
+	CharacterID string  `json:"character_id"`
+	LifeIndex   int     `json:"life_index"`
+	Name        string  `json:"name"`
+	WorldID     string  `json:"world_id"`
+	WorldName   string  `json:"world_name"`
+	RaceID      *string `json:"race_id,omitempty"`
+	RaceName    string  `json:"race_name"`
+	Level       int     `json:"level"`
+	Status      string  `json:"status"`
+	RealmName   string  `json:"realm_name"`
+	RealmStage  int     `json:"realm_stage"`
+	IsCurrent   bool    `json:"is_current"`
+	CreatedAt   string  `json:"created_at"`
+	ReincarnatedAt *string `json:"reincarnated_at,omitempty"`
+	PreviousWorldID string `json:"previous_world_id,omitempty"`
+	NextWorldID string `json:"next_world_id,omitempty"`
+}
+
+// History returns every physical life belonging to the authenticated soul.
+// It deliberately reads immutable life records rather than inferring history
+// from the current character pointer.
+func (s *Service) History(ctx context.Context, accountID string) ([]LifeRecord, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT c.id::text, c.life_index, c.name, c.world_id, world.name,
+		        c.race_id, COALESCE(race.name, '未知种族'), c.level, c.status,
+		        COALESCE(realm.name, '尚未记录'), COALESCE(progression.realm_stage, 1),
+		        (c.id = soul.current_character_id),
+		        c.created_at,
+		        event.reincarnated_at,
+		        COALESCE(event.previous_world_id, ''),
+		        COALESCE(event.new_world_id, '')
+		 FROM souls soul
+		 JOIN characters c ON c.soul_id = soul.id
+		 JOIN world_definitions world ON world.id = c.world_id
+		 LEFT JOIN race_definitions race ON race.id = c.race_id
+		 LEFT JOIN character_progression progression ON progression.character_id = c.id
+		 LEFT JOIN cultivation_realms realm ON realm.id = progression.realm_id
+		 LEFT JOIN reincarnation_events event ON event.new_character_id = c.id
+		 WHERE soul.account_id = $1
+		 ORDER BY c.life_index DESC`, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("query soul life history: %w", err)
+	}
+	defer rows.Close()
+
+	history := make([]LifeRecord, 0)
+	for rows.Next() {
+		var item LifeRecord
+		var raceID sql.NullString
+		var reincarnatedAt sql.NullTime
+		if err := rows.Scan(
+			&item.CharacterID, &item.LifeIndex, &item.Name, &item.WorldID, &item.WorldName,
+			&raceID, &item.RaceName, &item.Level, &item.Status, &item.RealmName,
+			&item.RealmStage, &item.IsCurrent, &item.CreatedAt, &reincarnatedAt,
+			&item.PreviousWorldID, &item.NextWorldID,
+		); err != nil {
+			return nil, fmt.Errorf("scan soul life history: %w", err)
+		}
+		if raceID.Valid {
+			item.RaceID = &raceID.String
+		}
+		item.CreatedAt = item.CreatedAt
+		if reincarnatedAt.Valid {
+			value := reincarnatedAt.Time.UTC().Format(time.RFC3339)
+			item.ReincarnatedAt = &value
+		}
+		history = append(history, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate soul life history: %w", err)
+	}
+	return history, nil
 }
 
 type Reward struct {
