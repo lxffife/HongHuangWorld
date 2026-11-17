@@ -26,6 +26,7 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 - `POST /api/v1/characters/first-life`：为当前灵魂创建第一世肉身并固定在冥界·酆都苏醒；根据 race_id 选择种族默认修炼体系，并在同一事务中初始化属性、修炼进度和新手背包（基础装备与丹药）。未传种族时默认人族。
 - `GET /api/v1/characters/current`：读取当前肉身角色。
 - `GET /api/v1/souls/current/lives`：读取当前灵魂全部肉身历世档案，按世次倒序返回角色名、种族、出生世界、境界、等级、状态、创建时间及对应轮回事件；不会把前世肉身数据覆盖为当前肉身数据。
+- `GET /api/v1/souls/current/memories`：读取当前灵魂的前世记忆印记；达到记忆要求的灵魂境界才返回摘要和详情，未达到时仅返回印记标题与解封门槛。
 - `GET /api/v1/characters/current/inventory`：读取当前角色背包，包含物品分类、品质、堆叠上限、装备部位和基础属性。
 - `GET /api/v1/characters/current/equipment`：读取当前角色六个装备部位的已穿戴物品。
 - `POST /api/v1/characters/current/equipment/equip` 与 `/unequip`：事务化穿戴/卸下装备；校验物品归属、装备部位和背包堆叠空间。角色仍处于活跃世界会话时拒绝变更，离开并重新进入世界后同步新战斗属性。
@@ -77,7 +78,7 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 ## 本地运行
 
 1. 按 `Deployment/README.md` 启动 PostgreSQL。
-2. 按编号执行 `Database/migrations/` 中全部 `.up.sql` 迁移；当前需依次执行 `000001` 至 `000012`（每个编号只执行 `.up.sql` 一次）。
+2. 按编号执行 `Database/migrations/` 中全部 `.up.sql` 迁移；当前需依次执行 `000001` 至 `000013`（每个编号只执行 `.up.sql` 一次）。
 3. 在 `Deployment/.env` 配置 `DATABASE_URL` 和 `HTTP_ADDR`。
 4. Windows PowerShell 执行 `../Deployment/start-backend.ps1`；或在本目录执行 `go test ./...`、`go run ./cmd/api`（需先设置环境变量）。
 
