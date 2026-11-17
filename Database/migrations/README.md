@@ -26,6 +26,7 @@
 - `000020_reincarnation_birth_routes` 增加数据驱动的轮回出生路线；路线限定种族/命格、目标世界与服务端出生坐标，并将路线描述和出生快照写入不可变轮回档案。
 - `000021_birth_route_region_metadata` 为出生路线补充区域说明、危险等级、资源标签、探索点与种族适应性资料，供轮回选择界面展示；不向客户端暴露出生坐标或初始奖励配置。
 - `000022_world_exploration_points` 创建服务端权威的世界探索点与灵魂级发现记录；中心服依据角色服务端保存的位置校验距离，并在同一事务中写入幂等发现记录和功德/业力因果账簿。
+- `000023_world_exploration_events` 创建数据驱动的区域奇遇与灵魂级一次性领取记录；奇遇必须先发现关联探索点，触发时由中心服验证活跃会话、服务端位置和领取幂等性，并在同一事务中结算功德/业力。
 
 ## 当前迁移顺序
 
@@ -54,6 +55,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000019_hidden_fat
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000020_reincarnation_birth_routes.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000021_birth_route_region_metadata.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000022_world_exploration_points.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000023_world_exploration_events.up.sql
 ```
 
 回滚时按相反顺序执行对应的 `.down.sql`。不要在已运行的生产库上重复执行非幂等迁移；后续接入迁移工具后，应由工具记录每个已应用版本，避免人工重复执行。
