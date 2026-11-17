@@ -430,3 +430,56 @@ func (s *Service) Unequip(ctx context.Context, accountID, slot string) error {
 	if _,err:=tx.ExecContext(ctx,`DELETE FROM character_equipment WHERE character_id=$1::uuid AND slot=$2`,characterID,slot); err!=nil { return fmt.Errorf("remove equipment slot: %w",err) }
 	if err:=tx.Commit(); err!=nil { return fmt.Errorf("commit unequipped item: %w",err) }; return nil
 }
+
+type CombatStats struct {
+	Attack int `json:"attack"`
+	Defense int `json:"defense"`
+	Strength int `json:"strength"`
+	Constitution int `json:"constitution"`
+	Agility int `json:"agility"`
+	Spirit int `json:"spirit"`
+	Vitality int `json:"vitality"`
+	MaxHealth int `json:"max_health"`
+	MaxMana int `json:"max_mana"`
+}
+
+// CurrentSessionCombatStats is restricted to a live session on the requesting
+// node. Equipment bonuses are combined with the character's persisted base stats.
+func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessionID, characterID string) (CombatStats, error) {
+	if strings.TrimSpace(nodeKey)=="" || !validUUID(sessionID) || !validUUID(characterID) { return CombatStats{}, ErrInvalidRequest }
+	var result CombatStats
+	err:=s.db.QueryRowContext(ctx,`SELECT a.attack,a.defense,a.strength,a.constitution,a.agility,a.spirit,a.vitality,a.max_health,a.max_mana
+		FROM world_sessions ws
+		JOIN server_registry sr ON sr.id=ws.server_id
+		JOIN character_attributes a ON a.character_id=ws.character_id
+		WHERE sr.node_key=$1 AND ws.id=$2::uuid AND ws.character_id=$3::uuid AND ws.session_state='active'`,
+		nodeKey,sessionID,characterID).Scan(&result.Attack,&result.Defense,&result.Strength,&result.Constitution,&result.Agility,&result.Spirit,&result.Vitality,&result.MaxHealth,&result.MaxMana)
+	if errors.Is(err,sql.ErrNoRows) { return CombatStats{},ErrSessionInvalid }
+	if err!=nil { return CombatStats{},fmt.Errorf("load session combat attributes: %w",err) }
+	rows,err:=s.db.QueryContext(ctx,`SELECT i.base_stats FROM character_equipment e
+		JOIN item_definitions i ON i.id=e.item_id
+		WHERE e.character_id=$1::uuid AND i.enabled`,characterID)
+	if err!=nil { return CombatStats{},fmt.Errorf("load equipped combat bonuses: %w",err) }
+	defer rows.Close()
+	for rows.Next() {
+		var raw []byte
+		if err:=rows.Scan(&raw); err!=nil { return CombatStats{},fmt.Errorf("scan equipped combat bonuses: %w",err) }
+		bonuses:=map[string]int{}
+		if len(raw)>0 { if err:=json.Unmarshal(raw,&bonuses); err!=nil { return CombatStats{},fmt.Errorf("decode equipped combat bonuses: %w",err) } }
+		result.Attack+=bonuses["attack"]
+		result.Defense+=bonuses["defense"]
+		result.Strength+=bonuses["strength"]
+		result.Constitution+=bonuses["constitution"]
+		result.Agility+=bonuses["agility"]
+		result.Spirit+=bonuses["spirit"]
+		result.Vitality+=bonuses["vitality"]
+		result.MaxHealth+=bonuses["max_health"]
+		result.MaxMana+=bonuses["max_mana"]
+	}
+	if err:=rows.Err(); err!=nil { return CombatStats{},fmt.Errorf("iterate equipped combat bonuses: %w",err) }
+	if result.Attack<1 || result.Attack>100000 || result.Defense<0 || result.Defense>100000 ||
+		result.MaxHealth<1 || result.MaxHealth>10000000 || result.MaxMana<0 || result.MaxMana>10000000 {
+		return CombatStats{},ErrInvalidRequest
+	}
+	return result,nil
+}
