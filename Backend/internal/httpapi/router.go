@@ -103,7 +103,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 			"GET /api/v1/characters/current/inventory", "GET /api/v1/characters/current/equipment",
 			"POST /api/v1/characters/current/equipment/equip", "POST /api/v1/characters/current/equipment/unequip", "POST /api/v1/characters/current/inventory/use", "POST /api/v1/servers/sessions/combat-stats", "POST /api/v1/servers/drops",
 			"POST /api/v1/servers/drops/pickup", "POST /api/v1/servers/heartbeat",
-			"POST /api/v1/servers/characters/rewards", "POST /api/v1/servers/souls/rewards", "POST /api/v1/worlds/enter",
+			"POST /api/v1/servers/characters/rewards", "POST /api/v1/worlds/enter",
 			"POST /api/v1/servers/tickets/redeem", "POST /api/v1/servers/sessions/snapshot",
 			"POST /api/v1/servers/sessions/close",
 		} { mux.HandleFunc(route, unavailable) }
