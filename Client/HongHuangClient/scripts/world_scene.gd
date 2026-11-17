@@ -1218,11 +1218,15 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 		npc_reincarnation_leave_button.visible = false
 	if result != HTTPRequest.RESULT_SUCCESS:
 		if npc_status_label != null:
-			npc_status_label.text = "NPC 服务连接失败，请检查中心服。"
+			npc_status_label.text = "中心服请求连接失败，请检查网络。"
+		if context == "list":
+			_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_bootstrap")
 		return
 	if response_code < 200 or response_code >= 300:
 		if npc_status_label != null:
 			npc_status_label.text = "请求未完成（HTTP " + str(response_code) + "）：" + raw
+		if context == "list":
+			_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_bootstrap")
 		return
 	match context:
 		"list":
