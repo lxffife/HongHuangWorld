@@ -27,6 +27,19 @@ type ItemStack struct {
 	Description string `json:"description"`
 }
 
+
+type LootEntry struct {
+	MonsterID string `json:"monster_id"`
+	ItemID string `json:"item_id"`
+	ItemName string `json:"item_name"`
+	Quality int `json:"quality"`
+	DropChanceBP int `json:"drop_chance_bp"`
+	MinQuantity int `json:"min_quantity"`
+	MaxQuantity int `json:"max_quantity"`
+	MaxStack int `json:"max_stack"`
+	IconKey string `json:"icon_key"`
+}
+
 type GroundDrop struct {
 	ID string `json:"id"`
 	ItemID string `json:"item_id"`
@@ -74,6 +87,29 @@ func (s *Service) ListItems(ctx context.Context) ([]ItemStack, error) {
 	}
 	if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate item definitions: %w", err) }
 	return items, nil
+}
+
+
+func (s *Service) ListLootTable(ctx context.Context) ([]LootEntry, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT ml.monster_id, i.id, i.name, i.quality,
+		ml.drop_chance_bp, ml.min_quantity, ml.max_quantity, i.max_stack, i.icon_key
+		FROM monster_loot_entries ml
+		JOIN item_definitions i ON i.id = ml.item_id
+		WHERE i.enabled
+		ORDER BY ml.monster_id, i.quality DESC, i.id`)
+	if err != nil { return nil, fmt.Errorf("list monster loot table: %w", err) }
+	defer rows.Close()
+	entries := make([]LootEntry, 0)
+	for rows.Next() {
+		var entry LootEntry
+		if err := rows.Scan(&entry.MonsterID, &entry.ItemID, &entry.ItemName, &entry.Quality,
+			&entry.DropChanceBP, &entry.MinQuantity, &entry.MaxQuantity, &entry.MaxStack, &entry.IconKey); err != nil {
+			return nil, fmt.Errorf("scan monster loot entry: %w", err)
+		}
+		entries = append(entries, entry)
+	}
+	if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate monster loot table: %w", err) }
+	return entries, nil
 }
 
 func (s *Service) CurrentInventory(ctx context.Context, accountID string) ([]ItemStack, error) {
