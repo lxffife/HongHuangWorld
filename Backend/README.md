@@ -21,6 +21,8 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 - `POST /api/v1/worlds/current/npcs/interact`：与当前世界 NPC 交互；中心服根据当前活跃会话和已保存角色坐标校验世界归属及交互半径，不接受客户端自报坐标。
 - `POST /api/v1/worlds/current/npcs/choose`：提交 NPC 因果分支 ID；中心服重新校验会话、世界和交互距离，从 NPC 数据配置读取选项，并由可信规则计算功德/业力。每个灵魂对同一 NPC 只能作出一次选择，幂等与数值更新在同一事务完成。
 - `GET /api/v1/worlds/current/exploration-points`：读取当前世界探索点及当前灵魂的已发现状态；返回区域、危险等级、位置和交互半径。
+- `GET /api/v1/worlds/current/exploration-events`：读取当前灵魂已发现地点解锁且尚未领取的区域奇遇；隐藏事件不会提前暴露。
+- `POST /api/v1/worlds/current/exploration-events/trigger`：请求体仅包含 `event_id`；中心服校验活跃会话、服务端角色位置、探索点发现状态和灵魂级一次性领取，并在同一事务中写入因果账簿及奖励。
 - `POST /api/v1/worlds/current/exploration-points/discover`：请求体仅包含 `point_id`；中心服按活跃会话和数据库中的角色位置验证距离，再以灵魂为单位幂等记录发现，并在同一事务中结算功德/业力因果事件。发现跨越轮回保留。
 - `GET /api/v1/cultivation/systems`：读取种族、默认修炼体系、各自境界和跨种族实力参考层级。
 - `GET /api/v1/cultivation/race-growth`：读取种族五维成长权重（基点总和 10000），用于后续服务端属性成长计算。
