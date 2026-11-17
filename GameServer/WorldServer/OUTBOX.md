@@ -1,28 +1,34 @@
-# WorldServer Durable Outbox Foundation
+# WorldServer Durable Outbox
 
-> The SQLite storage module and tests are in place. Reward/drop worker integration is the next implementation step; until that wiring lands, existing in-memory workers remain active.
+WorldServer persists gameplay events to a node-local SQLite database **before** attempting delivery to the center service. Character rewards and ground-drop creation use this path. Pickup settlement still uses its existing worker and center-service transaction; durable pickup replay is not yet implemented.
 
-WorldServer reliable gameplay events use a node-local SQLite database. The database must live on persistent local storage, not /tmp or an ephemeral container layer.
+## Configuration
 
-## Storage
+- `WORLD_SERVER_OUTBOX_PATH`: database file path; default `./data/worldserver-outbox.sqlite3`.
+- The parent directory is created automatically when possible.
+- Keep the file and its `-wal` / `-shm` companions on persistent local storage. Do not place it on `/tmp` or an ephemeral container layer.
+- Do not share one database file between multiple WorldServer processes.
+- Back up the database using SQLite's online backup API, or after a clean shutdown. Copying only the main database file while WAL is active may omit committed records.
 
-Set WORLD_SERVER_DATA_DIR to a writable persistent directory (planned default: ./data). The database is worldserver-outbox.sqlite3 in that directory. Keep this directory across upgrades and restarts, include it in node backups, and never share one database file between multiple WorldServer processes.
+SQLite is configured with WAL journaling, `synchronous=FULL`, a 5-second busy timeout, and a bounded 10,000 pending/in-flight event capacity.
 
-SQLite uses WAL journaling, synchronous=FULL, a busy timeout, and a bounded pending/in-flight event count. Event ID is the primary key; re-enqueueing the same ID is idempotent. Startup converts abandoned inflight records back to pending. Successful delivery marks an event delivered; retryable failures store attempts, next retry time, and last error; permanent failures move to dead_letter.
+## Event delivery
 
-## Event contract
+Supported event types:
 
-The outbox stores event type and the exact JSON payload sent to the center service. Never generate a new event ID when retrying. The center service must continue enforcing idempotency by server ID and event ID.
+- `character_reward`: session ID, character ID, experience and cultivation.
+- `ground_drop_create`: stable drop ID, owner/session, item, quantity, position and absolute expiry time.
 
-Planned event types:
-- character_reward: experience and cultivation reward.
-- ground_drop_create: persistent ground-drop creation.
+Each event has a stable UUID/ID and exact serialized JSON payload. Re-enqueuing the same ID and identical payload is idempotent; reusing an ID with a different type or payload is rejected.
 
-Pickup settlement remains in the existing worker queue for now. Its center-service transaction and uniqueness constraints prevent duplicate consumption; durable pickup recovery will be added with the client-facing pending/confirmation recovery flow.
+The worker claims due events from SQLite. Successful HTTP delivery marks the event `delivered`. Network errors and HTTP 5xx are persisted as retry state with exponential backoff (capped at five minutes). HTTP 4xx and malformed/unsupported events move to `dead_letter`. A process restart resets abandoned `inflight` records to `pending`; the same event ID is replayed, so the center service must keep enforcing idempotency.
 
-## Operations
+The outbox retains delivered and dead-letter rows for diagnosis; they do not count against the pending/in-flight capacity. No automatic retention purge is performed yet.
 
-- Monitor pending count and dead-letter records; dead-letter events require operator inspection.
-- Do not delete the SQLite database to clear a queue.
-- Back up with SQLite's online backup API or after clean shutdown. Copying only the main file while WAL is active may omit committed records.
-- Local SQLite protects against process crashes and host restarts, not loss of the node storage device. Back up the data directory.
+## Reliability boundaries
+
+- This protects events after their SQLite transaction commits, including process crashes and host restarts when the data directory survives.
+- It does not protect against disk/device loss without backups.
+- A failure to write the event (disk full, permissions, database error, or capacity reached) is logged; it cannot be described as durable acceptance.
+- Pickup requests remain in the in-memory worker queue. Their center-service transaction prevents duplicate consumption for requests that reach the backend, but an unsubmitted pickup is not yet recovered by this outbox.
+- Normal shutdown stops the outbox worker after its current delivery attempt. Pending and delayed-retry records remain on disk for the next start.
