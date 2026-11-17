@@ -144,11 +144,17 @@ func (h *inventoryHandlers) unequip(w http.ResponseWriter, r *http.Request) {
 	h.writeEquipmentResult(w, "unequip item failed", h.service.Unequip(r.Context(), account.ID, request.Slot))
 }
 
-func (h *inventoryHandlers) authenticateAccount(w http.ResponseWriter, r *http.Request) (*auth.Account, bool) {
+func (h *inventoryHandlers) authenticateAccount(w http.ResponseWriter, r *http.Request) (auth.Account, bool) {
 	header := r.Header.Get("Authorization")
-	if !strings.HasPrefix(header, "Bearer ") { http.Error(w, "unauthorized", http.StatusUnauthorized); return nil, false }
+	if !strings.HasPrefix(header, "Bearer ") {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return auth.Account{}, false
+	}
 	account, err := h.authService.Authenticate(r.Context(), strings.TrimSpace(strings.TrimPrefix(header, "Bearer ")))
-	if err != nil { http.Error(w, "unauthorized", http.StatusUnauthorized); return nil, false }
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return auth.Account{}, false
+	}
 	return account, true
 }
 
