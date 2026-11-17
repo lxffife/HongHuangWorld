@@ -33,6 +33,10 @@ var inventory_button: Button
 var inventory_panel: PanelContainer
 var inventory_status: Label
 var inventory_items: VBoxContainer
+var inventory_equipment: VBoxContainer
+var equipment_http: HTTPRequest
+var equipment_action_http: HTTPRequest
+var equipment_action_busy := false
 var inventory_visible := false
 var inventory_request_busy := false
 
@@ -523,6 +527,11 @@ func _build_inventory_ui() -> void:
 		inventory_visible = false
 	)
 	heading.add_child(close_button)
+	var equipment_title := Label.new()
+	equipment_title.text = "已装备"
+	layout.add_child(equipment_title)
+	inventory_equipment = VBoxContainer.new()
+	layout.add_child(inventory_equipment)
 	inventory_status = Label.new()
 	inventory_status.text = "正在读取背包……"
 	layout.add_child(inventory_status)
@@ -537,12 +546,21 @@ func _build_inventory_ui() -> void:
 	inventory_http.timeout = 10.0
 	add_child(inventory_http)
 	inventory_http.request_completed.connect(_on_inventory_request_completed)
+	equipment_http = HTTPRequest.new()
+	equipment_http.timeout = 10.0
+	add_child(equipment_http)
+	equipment_http.request_completed.connect(_on_equipment_request_completed)
+	equipment_action_http = HTTPRequest.new()
+	equipment_action_http.timeout = 10.0
+	add_child(equipment_action_http)
+	equipment_action_http.request_completed.connect(_on_equipment_action_completed)
 
 func _on_inventory_button_pressed() -> void:
 	inventory_visible = not inventory_visible
 	inventory_panel.visible = inventory_visible
 	if inventory_visible:
 		_refresh_inventory()
+		_refresh_equipment()
 
 func _refresh_inventory() -> void:
 	if inventory_http == null or HHSession.access_token.is_empty():
@@ -583,13 +601,21 @@ func _on_inventory_request_completed(result: int, response_code: int, _headers: 
 	for item in items:
 		if not (item is Dictionary):
 			continue
+		var row := HBoxContainer.new()
+		inventory_items.add_child(row)
 		var line := Label.new()
 		var quality := int(item.get("quality", 1))
 		var quality_names := ["普通", "优秀", "精良", "稀有", "传说"]
 		var quality_name: String = quality_names[clampi(quality - 1, 0, quality_names.size() - 1)]
 		line.text = str(item.get("name", item.get("item_id", "未知物品"))) + " · " + quality_name + " · ×" + str(item.get("quantity", 0))
+		line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		inventory_items.add_child(line)
+		row.add_child(line)
+		if str(item.get("item_type", "")) == "equipment":
+			var equip_button := Button.new()
+			equip_button.text = "穿戴"
+			equip_button.pressed.connect(_on_equip_item_pressed.bind(str(item.get("item_id", "")), str(item.get("equipment_slot", ""))))
+			row.add_child(equip_button)
 
 func _request_nearest_monster_attack() -> void:
 	var network := HHSession.world_network
@@ -797,3 +823,69 @@ func _on_reconnected_welcomed(snapshot: Dictionary) -> void:
 	reconnect_button.disabled = false
 	hud_label.text = "已重新进入青云人界，角色已恢复到最近保存的位置。"
 	_update_hud()
+
+func _refresh_equipment() -> void:
+	if equipment_http == null or HHSession.access_token.is_empty():
+		return
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token])
+	var error := equipment_http.request(HHSession.api_base + "/api/v1/characters/current/equipment", headers, HTTPClient.METHOD_GET)
+	if error != OK:
+		inventory_status.text = "读取装备栏失败，错误码：" + str(error)
+
+func _on_equipment_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	for child in inventory_equipment.get_children():
+		child.queue_free()
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		inventory_status.text = "装备栏读取失败：" + body.get_string_from_utf8()
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if not (parsed is Dictionary):
+		return
+	var items: Array = parsed.get("items", [])
+	var slots := ["weapon", "head", "chest", "legs", "boots", "accessory"]
+	var labels := {"weapon":"武器", "head":"头部", "chest":"胸甲", "legs":"腿部", "boots":"鞋子", "accessory":"饰品"}
+	var equipped: Dictionary = {}
+	for item in items:
+		if item is Dictionary:
+			equipped[str(item.get("slot", ""))] = item
+	for slot in slots:
+		var row := HBoxContainer.new()
+		inventory_equipment.add_child(row)
+		var label := Label.new()
+		var item: Dictionary = equipped.get(slot, {})
+		label.text = str(labels[slot]) + "：" + (str(item.get("name", "未装备")) if not item.is_empty() else "未装备")
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(label)
+		if not item.is_empty():
+			var button := Button.new()
+			button.text = "卸下"
+			button.pressed.connect(_on_unequip_item_pressed.bind(slot))
+			row.add_child(button)
+
+func _on_equip_item_pressed(item_id: String, slot: String) -> void:
+	_submit_equipment_action("equip", {"item_id": item_id, "slot": slot})
+
+func _on_unequip_item_pressed(slot: String) -> void:
+	_submit_equipment_action("unequip", {"slot": slot})
+
+func _submit_equipment_action(action: String, payload: Dictionary) -> void:
+	if equipment_action_busy or equipment_action_http == null:
+		return
+	equipment_action_busy = true
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token, "Content-Type: application/json"])
+	var error := equipment_action_http.request(
+		HHSession.api_base + "/api/v1/characters/current/equipment/" + action,
+		headers, HTTPClient.METHOD_POST, JSON.stringify(payload)
+	)
+	if error != OK:
+		equipment_action_busy = false
+		inventory_status.text = "装备操作提交失败，错误码：" + str(error)
+
+func _on_equipment_action_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	equipment_action_busy = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		inventory_status.text = "装备操作失败：" + body.get_string_from_utf8()
+		return
+	inventory_status.text = "装备已更新。"
+	_refresh_inventory()
+	_refresh_equipment()
