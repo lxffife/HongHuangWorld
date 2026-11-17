@@ -822,16 +822,17 @@ struct EnetServer::Impl {
         });
     }
 
-    void enqueue_drop_job(DropJob job) {
+    bool enqueue_drop_job(DropJob job) {
         {
             std::lock_guard lock(drop_mutex);
             if (drop_stop_requested || pending_drop_jobs.size() >= 8192) {
                 std::cerr << "Inventory job queue full; request rejected for drop " << job.drop.id << '\n';
-                return;
+                return false;
             }
             pending_drop_jobs.push_back(std::move(job));
         }
         drop_cv.notify_one();
+        return true;
     }
 
     void stop_drop_worker() {
@@ -915,7 +916,12 @@ struct EnetServer::Impl {
             return;
         }
         drop->pickup_pending = true;
-        enqueue_drop_job(DropJob{true, *drop, make_event_uuid(), 0});
+        if (!enqueue_drop_job(DropJob{true, *drop, make_event_uuid(), 0})) {
+            drop->pickup_pending = false;
+            send_json(peer, honghuang::protocol::MessageType::PickupEvent,
+                      Json{{"accepted", false}, {"reason", "拾取队列繁忙，请稍后重试。"}});
+            return;
+        }
         send_json(peer, honghuang::protocol::MessageType::PickupEvent,
                   Json{{"accepted", false}, {"pending", true}, {"drop_id", drop_id}, {"reason", "正在结算拾取……"}});
     }
