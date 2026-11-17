@@ -3,6 +3,7 @@ package character
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -315,6 +316,66 @@ func (s *Service) History(ctx context.Context, accountID string) ([]LifeRecord, 
 		return nil, fmt.Errorf("iterate soul life history: %w", err)
 	}
 	return history, nil
+}
+
+type SoulMemory struct {
+	ID string `json:"id"`
+	SourceCharacterID string `json:"source_character_id"`
+	LifeIndex int `json:"life_index"`
+	MemoryType string `json:"memory_type"`
+	Title string `json:"title"`
+	Summary string `json:"summary,omitempty"`
+	Details json.RawMessage `json:"details,omitempty"`
+	MinRealmOrder int `json:"min_realm_order"`
+	RequiredRealmName string `json:"required_realm_name"`
+	Unlocked bool `json:"unlocked"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// Memories returns archive metadata for every previous life. The summary and
+// detailed payload are only returned after the soul reaches the required realm.
+func (s *Service) Memories(ctx context.Context, accountID string) ([]SoulMemory, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT memory.id::text, memory.source_character_id::text, character.life_index,
+		        memory.memory_type, memory.title, memory.summary, memory.memory_data,
+		        memory.min_realm_order, required.name,
+		        (current_realm.realm_order >= memory.min_realm_order),
+		        memory.created_at
+		 FROM souls soul
+		 JOIN soul_progression progression ON progression.soul_id = soul.id
+		 JOIN soul_realm_definitions current_realm ON current_realm.id = progression.realm_id
+		 JOIN soul_memory_entries memory ON memory.soul_id = soul.id
+		 JOIN characters character ON character.id = memory.source_character_id
+		 JOIN soul_realm_definitions required ON required.realm_order = memory.min_realm_order
+		 WHERE soul.account_id = $1
+		 ORDER BY character.life_index DESC, memory.created_at DESC`, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("query soul memories: %w", err)
+	}
+	defer rows.Close()
+
+	memories := make([]SoulMemory, 0)
+	for rows.Next() {
+		var item SoulMemory
+		var summary string
+		var details []byte
+		if err := rows.Scan(
+			&item.ID, &item.SourceCharacterID, &item.LifeIndex, &item.MemoryType,
+			&item.Title, &summary, &details, &item.MinRealmOrder,
+			&item.RequiredRealmName, &item.Unlocked, &item.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan soul memory: %w", err)
+		}
+		if item.Unlocked {
+			item.Summary = summary
+			item.Details = append(json.RawMessage(nil), details...)
+		}
+		memories = append(memories, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate soul memories: %w", err)
+	}
+	return memories, nil
 }
 
 type Reward struct {
@@ -1190,6 +1251,41 @@ func (s *Service) Reincarnate(ctx context.Context, accountID, name, raceID strin
 	); err != nil {
 		return Character{}, fmt.Errorf("retire previous physical life: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO soul_memory_entries
+		 (soul_id, source_character_id, memory_type, title, summary, memory_data, min_realm_order)
+		 SELECT $1, c.id, 'life_summary',
+		        format('第 %s 世：%s', c.life_index, c.name),
+		        format('%s曾在%s度过这一世，最终修炼至%s。', c.name, world.name, COALESCE(realm.name, '初始境界')),
+		        jsonb_build_object(
+		            'life_index', c.life_index,
+		            'character_name', c.name,
+		            'world_id', c.world_id,
+		            'world_name', world.name,
+		            'race_id', c.race_id,
+		            'race_name', COALESCE(race.name, '未知种族'),
+		            'level', c.level,
+		            'character_status', c.status,
+		            'cultivation_experience', COALESCE(progression.experience, 0),
+		            'cultivation_value', COALESCE(progression.cultivation, 0),
+		            'realm_id', progression.realm_id,
+		            'realm_name', realm.name,
+		            'realm_stage', COALESCE(progression.realm_stage, 1),
+		            'archived_at', now()
+		        ),
+		        5
+		 FROM characters c
+		 JOIN world_definitions world ON world.id = c.world_id
+		 LEFT JOIN race_definitions race ON race.id = c.race_id
+		 LEFT JOIN character_progression progression ON progression.character_id = c.id
+		 LEFT JOIN cultivation_realms realm ON realm.id = progression.realm_id
+		 WHERE c.id = $2
+		 ON CONFLICT (soul_id, source_character_id, memory_type) DO NOTHING`,
+		soulID, oldCharacterID,
+	); err != nil {
+		return Character{}, fmt.Errorf("preserve previous life memory: %w", err)
+	}
+
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE souls SET current_character_id = $1, updated_at = now() WHERE id = $2`,
 		result.ID, soulID,
