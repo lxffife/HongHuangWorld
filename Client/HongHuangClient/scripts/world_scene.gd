@@ -759,11 +759,13 @@ func _update_compact_hud(progression: Dictionary = {}) -> void:
 	compact_hud_label.text = "当前世界 · " + world_name + "\n所在区域 · " + region_name + "\n" + character_name + "  |  " + system_name + " · " + realm_name + stage_name + "  |  修为 " + str(cultivation)
 	if world_id == "underworld_fengdu":
 		var soul_stage := str(soul_essence_profile.get("form_name", "魂光载入中"))
+		var growth_name := str(soul_essence_profile.get("growth_name", "初生魂团"))
 		var soul_power := int(soul_essence_profile.get("soul_power", 0))
 		var absorbed := int(soul_essence_profile.get("absorbed_count", 0))
 		var inheritance: Dictionary = soul_essence_profile.get("inheritance_attributes", {})
 		var pending_choices: Array = soul_essence_profile.get("pending_rare_choices", [])
 		compact_hud_label.text += "\n灵魂形态 · " + soul_stage + "  |  魂力 " + str(soul_power) + "  |  吞噬 " + str(absorbed)
+		compact_hud_label.text += "\n魂体成长 · " + growth_name + "（阶段 " + str(soul_essence_profile.get("growth_stage", 1)) + "/5）"
 		compact_hud_label.text += "\n来世资质 · 力量 " + str(inheritance.get("strength", 0)) + " 体质 " + str(inheritance.get("constitution", 0)) + " 敏捷 " + str(inheritance.get("agility", 0))
 		compact_hud_label.text += "\n灵力 " + str(inheritance.get("spirit", 0)) + " 气血 " + str(inheritance.get("vitality", 0))
 		var affinities: Dictionary = soul_essence_profile.get("affinity_counts", {})
@@ -781,7 +783,8 @@ func _apply_world_player_form() -> void:
 		local_player.set_soul_form(true,
 			int(soul_essence_profile.get("form_stage", 1)),
 			float(soul_essence_profile.get("visual_scale", 0.35)),
-			affinities)
+			affinities,
+			int(soul_essence_profile.get("growth_stage", 1)))
 	else:
 		local_player.set_soul_form(false)
 	if is_instance_valid(soul_choice_button):
