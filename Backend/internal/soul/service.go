@@ -607,12 +607,17 @@ func (s *Service) ApplyServerAbsorption(ctx context.Context, nodeKey string, eve
   return AbsorptionResult{}, ErrInvalidAbsorption
  }
  kindID := ""
- switch event.SourceEntityKind {
- case "wandering_wraith":
-  kindID = "ordinary_wraith"
- default:
-  return AbsorptionResult{}, ErrInvalidAbsorption
+ kindMap:=map[string]string{
+  "wandering_wraith":"ordinary_wraith",
+  "blazing_war_soul":"blazing_war_soul",
+  "ironbone_beast_soul":"ironbone_beast_soul",
+  "gale_wraith":"gale_wraith",
+  "spirit_scholar_wisp":"spirit_scholar_wisp",
+  "life_ancient_soul":"life_ancient_soul",
+  "faceless_essence":"faceless_essence",
  }
+ kindID=kindMap[event.SourceEntityKind]
+ if kindID=="" { return AbsorptionResult{},ErrInvalidAbsorption }
  tx, err := s.db.BeginTx(ctx, nil)
  if err != nil { return AbsorptionResult{}, fmt.Errorf("begin soul absorption: %w", err) }
  defer tx.Rollback()
@@ -650,9 +655,10 @@ func (s *Service) ApplyServerAbsorption(ctx context.Context, nodeKey string, eve
 
  var result AbsorptionResult
  var traitKey string
+ var inheritanceAttribute sql.NullString
  err=tx.QueryRowContext(ctx,
-  `SELECT id,name,base_energy,trait_key FROM soul_absorption_kinds WHERE id=$1 AND enabled=true`,
-  kindID).Scan(&result.KindID,&result.KindName,&result.EnergyGained,&traitKey)
+  `SELECT id,name,base_energy,trait_key,inheritance_attribute FROM soul_absorption_kinds WHERE id=$1 AND enabled=true`,
+  kindID).Scan(&result.KindID,&result.KindName,&result.EnergyGained,&traitKey,&inheritanceAttribute)
  if err!=nil{return AbsorptionResult{},fmt.Errorf("load absorption kind: %w",err)}
  var capacity, absorbed int64
  err=tx.QueryRowContext(ctx,
@@ -682,7 +688,41 @@ func (s *Service) ApplyServerAbsorption(ctx context.Context, nodeKey string, eve
    RETURNING absorbed_energy,absorption_capacity,absorbed_count,soul_power`,
   result.EnergyGained,soulID).Scan(&result.AbsorbedEnergy,&result.AbsorptionCapacity,&result.AbsorbedCount,&result.SoulPower)
  if err!=nil{return AbsorptionResult{},fmt.Errorf("apply soul essence absorption: %w",err)}
+ if inheritanceAttribute.Valid {
+  allowed:=map[string]bool{"strength":true,"constitution":true,"agility":true,"spirit":true,"vitality":true}
+  if !allowed[inheritanceAttribute.String] { return AbsorptionResult{},ErrInvalidAbsorption }
+  attribute:=inheritanceAttribute.String
+  query:=`UPDATE soul_inheritance_attributes SET `+attribute+`=`+attribute+`+1,updated_at=now() WHERE soul_id=$1`
+  if _,err:=tx.ExecContext(ctx,query,soulID);err!=nil{return AbsorptionResult{},fmt.Errorf("apply reincarnation attribute essence: %w",err)}
+ }
  result.Applied=true
  if err:=tx.Commit();err!=nil{return AbsorptionResult{},fmt.Errorf("commit soul absorption: %w",err)}
  return result,nil
+}
+
+
+// AllocateRareEssence converts one pending faceless essence into exactly one
+// player-selected reincarnation attribute. The record and attribute update are atomic.
+func (s *Service) AllocateRareEssence(ctx context.Context, accountID, recordID, attribute string) (InheritanceAttributes, error) {
+ if !validUUID(recordID) { return InheritanceAttributes{},ErrInvalidAbsorption }
+ allowed:=map[string]bool{"strength":true,"constitution":true,"agility":true,"spirit":true,"vitality":true}
+ if !allowed[attribute] { return InheritanceAttributes{},ErrInvalidAbsorption }
+ tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return InheritanceAttributes{},fmt.Errorf("begin rare essence allocation: %w",err)}
+ defer tx.Rollback()
+ var soulID string
+ if err:=tx.QueryRowContext(ctx,`SELECT id::text FROM souls WHERE account_id=$1 FOR UPDATE`,accountID).Scan(&soulID);err!=nil {
+  if errors.Is(err,sql.ErrNoRows){return InheritanceAttributes{},ErrNotFound}
+  return InheritanceAttributes{},fmt.Errorf("resolve soul for rare essence allocation: %w",err)
+ }
+ result,err:=tx.ExecContext(ctx,`UPDATE soul_absorption_records SET selected_attribute=$1,selected_at=now()
+  WHERE id=$2::uuid AND soul_id=$3::uuid AND absorption_kind_id='faceless_essence' AND selected_at IS NULL`,attribute,recordID,soulID)
+ if err!=nil{return InheritanceAttributes{},fmt.Errorf("claim rare essence record: %w",err)}
+ count,err:=result.RowsAffected();if err!=nil{return InheritanceAttributes{},fmt.Errorf("read rare essence claim result: %w",err)}
+ if count!=1{return InheritanceAttributes{},ErrAbsorptionChoiceUsed}
+ query:=`UPDATE soul_inheritance_attributes SET `+attribute+`=`+attribute+`+1,updated_at=now()
+  WHERE soul_id=$1 RETURNING strength,constitution,agility,spirit,vitality`
+ var attrs InheritanceAttributes
+ if err:=tx.QueryRowContext(ctx,query,soulID).Scan(&attrs.Strength,&attrs.Constitution,&attrs.Agility,&attrs.Spirit,&attrs.Vitality);err!=nil{return InheritanceAttributes{},fmt.Errorf("apply selected rare essence: %w",err)}
+ if err:=tx.Commit();err!=nil{return InheritanceAttributes{},fmt.Errorf("commit rare essence allocation: %w",err)}
+ return attrs,nil
 }
