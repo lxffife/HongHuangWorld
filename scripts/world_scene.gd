@@ -758,7 +758,13 @@ func _update_compact_hud(progression: Dictionary = {}) -> void:
 		var soul_stage := str(soul_essence_profile.get("form_name", "魂光载入中"))
 		var soul_power := int(soul_essence_profile.get("soul_power", 0))
 		var absorbed := int(soul_essence_profile.get("absorbed_count", 0))
+		var inheritance: Dictionary = soul_essence_profile.get("inheritance_attributes", {})
+		var pending_choices: Array = soul_essence_profile.get("pending_rare_choices", [])
 		compact_hud_label.text += "\n灵魂形态 · " + soul_stage + "  |  魂力 " + str(soul_power) + "  |  吞噬 " + str(absorbed)
+		compact_hud_label.text += "\n来世资质 · 力量 " + str(inheritance.get("strength", 0)) + " 体质 " + str(inheritance.get("constitution", 0)) + " 敏捷 " + str(inheritance.get("agility", 0))
+		compact_hud_label.text += "\n灵力 " + str(inheritance.get("spirit", 0)) + " 气血 " + str(inheritance.get("vitality", 0))
+		if pending_choices.size() > 0:
+			compact_hud_label.text += "  |  无相灵魄待分配 " + str(pending_choices.size())
 
 
 func _apply_world_player_form() -> void:
