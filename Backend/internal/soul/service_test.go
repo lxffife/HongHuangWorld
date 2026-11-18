@@ -116,3 +116,39 @@ func TestFiveElementsFusionRequiresAllFiveMutationAttributes(t *testing.T) {
 	}
 	if !found { t.Fatal("five elements fusion recipe missing") }
 }
+
+
+func TestSoulAttributeMilestonesDoubleRequiredAbsorptions(t *testing.T) {
+	cases := []struct {
+		absorbed int64
+		want int
+	}{
+		{0,0},{2,0},{3,1},{8,1},{9,2},{20,2},{21,3},
+		{44,3},{45,4},{92,4},{93,5},{188,5},{189,6},
+		{380,6},{381,7},{764,7},{765,8},{1532,8},
+		{1533,9},{3068,9},{3069,10},{100000,10},
+	}
+	for _, test := range cases {
+		if got := soulAttributeMilestones(test.absorbed); got != test.want {
+			t.Errorf("soulAttributeMilestones(%d) = %d, want %d", test.absorbed, got, test.want)
+		}
+	}
+}
+
+func TestSoulAttributeNextThreshold(t *testing.T) {
+	want := []int64{3,9,21,45,93,189,381,765,1533,3069,0}
+	for points, expected := range want {
+		if got := soulAttributeNextThreshold(points); got != expected {
+			t.Errorf("soulAttributeNextThreshold(%d) = %d, want %d", points, got, expected)
+		}
+	}
+}
+
+func TestSoulAttributeProgressNeverExceedsConfiguredCaps(t *testing.T) {
+	if soulAttributeMilestones(1<<40) != soulAbsorptionAttributeMaxPoints {
+		t.Fatal("absorption milestones exceeded their configured maximum")
+	}
+	if soulInheritanceAttributeCap != 20 {
+		t.Fatalf("unexpected total inheritance attribute cap: %d", soulInheritanceAttributeCap)
+	}
+}
