@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+ "context"
  "errors"
  "log/slog"
  "net"
