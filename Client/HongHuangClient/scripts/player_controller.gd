@@ -10,6 +10,15 @@ class_name HHPlayerController
 var camera_pivot: Node3D
 var camera: Camera3D
 var visual: MeshInstance3D
+var collision_shape: CollisionShape3D
+var base_visual_mesh: Mesh
+var base_visual_material: Material
+var base_collision_shape: Shape3D
+var soul_orb_core: MeshInstance3D
+var soul_orb_halo: MeshInstance3D
+var soul_form_enabled := false
+var soul_form_time := 0.0
+var soul_form_scale := 1.0
 var yaw := 0.0
 var pitch := -0.18
 var input_send_accumulator := 0.0
@@ -31,21 +40,24 @@ func _build_player() -> void:
 	visual = MeshInstance3D.new()
 	visual.name = "PlaceholderBody"
 	visual.mesh = capsule
+	base_visual_mesh = capsule
 	visual.position.y = 0.9
 	var material := StandardMaterial3D.new()
 	material.albedo_color = Color("#d5b47a")
 	material.metallic = 0.12
 	material.roughness = 0.48
 	visual.material_override = material
+	base_visual_material = material
 	add_child(visual)
 
-	var collision := CollisionShape3D.new()
+	collision_shape = CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
 	shape.radius = 0.42
 	shape.height = 1.8
-	collision.shape = shape
-	collision.position.y = 0.9
-	add_child(collision)
+	collision_shape.shape = shape
+	collision_shape.position.y = 0.9
+	base_collision_shape = shape
+	add_child(collision_shape)
 
 	camera_pivot = Node3D.new()
 	camera_pivot.name = "CameraPivot"
@@ -156,3 +168,79 @@ func _physics_process(delta: float) -> void:
 			last_send_error = send_error
 			if send_error != OK:
 				push_warning("World movement input send failed: " + str(send_error))
+
+
+func set_soul_form(enabled: bool, stage: int = 1, visual_scale: float = 0.35) -> void:
+	if not is_instance_valid(visual) or not is_instance_valid(collision_shape):
+		return
+	soul_form_enabled = enabled
+	if not enabled:
+		visual.mesh = base_visual_mesh
+		visual.material_override = base_visual_material
+		visual.position = Vector3(0.0, 0.9, 0.0)
+		visual.scale = Vector3.ONE
+		collision_shape.shape = base_collision_shape
+		collision_shape.position = Vector3(0.0, 0.9, 0.0)
+		camera_pivot.position.y = 1.45
+		move_speed = 5.5
+		if is_instance_valid(soul_orb_halo):
+			soul_orb_halo.visible = false
+		return
+
+	var orb := SphereMesh.new()
+	orb.radius = 0.34
+	orb.height = 0.68
+	orb.radial_segments = 24
+	orb.rings = 12
+	visual.mesh = orb
+	visual.position = Vector3(0.0, 0.42, 0.0)
+	visual.scale = Vector3.ONE * clampf(visual_scale / 0.35, 0.85, 3.8)
+	var spirit_material := StandardMaterial3D.new()
+	spirit_material.albedo_color = Color(0.30, 0.82, 1.0, 0.72)
+	spirit_material.emission_enabled = true
+	spirit_material.emission = Color(0.12, 0.62, 1.0)
+	spirit_material.emission_energy_multiplier = 2.4 + float(maxi(stage - 1, 0)) * 0.35
+	spirit_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	spirit_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	visual.material_override = spirit_material
+
+	var sphere_shape := SphereShape3D.new()
+	sphere_shape.radius = 0.3 * clampf(visual_scale / 0.35, 0.85, 3.0)
+	collision_shape.shape = sphere_shape
+	collision_shape.position = Vector3(0.0, 0.36, 0.0)
+	camera_pivot.position.y = 0.72
+	move_speed = 4.8
+
+	if not is_instance_valid(soul_orb_halo):
+		soul_orb_halo = MeshInstance3D.new()
+		soul_orb_halo.name = "SoulOrbHalo"
+		var torus := TorusMesh.new()
+		torus.inner_radius = 0.42
+		torus.outer_radius = 0.48
+		torus.rings = 32
+		torus.ring_segments = 8
+		soul_orb_halo.mesh = torus
+		var halo_material := StandardMaterial3D.new()
+		halo_material.albedo_color = Color(0.22, 0.72, 1.0, 0.55)
+		halo_material.emission_enabled = true
+		halo_material.emission = Color(0.08, 0.48, 1.0)
+		halo_material.emission_energy_multiplier = 1.6
+		halo_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		halo_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		soul_orb_halo.material_override = halo_material
+		soul_orb_halo.position = Vector3(0.0, 0.42, 0.0)
+		add_child(soul_orb_halo)
+	soul_orb_halo.visible = true
+	soul_orb_halo.scale = Vector3.ONE * clampf(visual_scale / 0.35, 0.85, 3.8)
+
+func _process(delta: float) -> void:
+	if not soul_form_enabled or not is_instance_valid(visual):
+		return
+	soul_form_time += delta
+	var bob := sin(soul_form_time * 2.4) * 0.055
+	visual.position.y = 0.42 + bob
+	if is_instance_valid(soul_orb_halo):
+		soul_orb_halo.position.y = 0.42 + bob
+		soul_orb_halo.rotation.y += delta * 0.65
+		var pulse := 1.0 + sin(soul_form_time * 2.0) * 0.035
+		soul_orb_halo.scale = Vector3.ONE * soul_form_scale * pulse
