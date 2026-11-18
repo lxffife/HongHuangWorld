@@ -127,7 +127,7 @@ bool DurableOutbox::enqueue(const OutboxEvent& event, std::string& error) {
             return false;
         }
         if (event.event_type == "nearby_chat") {
-            const auto chat_capacity = std::min<std::size_t>(capacity_ / 2, 2000);
+            const auto chat_capacity = std::min<std::size_t>(std::max<std::size_t>(1, capacity_ / 2), 2000);
             Stmt chat_count(db_, "SELECT COUNT(*) FROM world_event_outbox WHERE event_type='nearby_chat' AND status IN('pending','inflight')");
             if (sqlite3_step(chat_count.get()) != SQLITE_ROW) throw std::runtime_error(sqlite3_errmsg(db_));
             const auto active_chat_count = static_cast<std::size_t>(sqlite3_column_int64(chat_count.get(), 0));
