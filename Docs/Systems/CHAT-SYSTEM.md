@@ -93,7 +93,7 @@
 
 ### P0-C：Godot 聊天 HUD
 - P0-C1（已提交，待运行验证）：增加左下方可折叠聊天窗、附近/世界/跨界频道切换、输入发送和服务端错误提示；附近仍走 ENet，世界/跨界走独立 ChatServer WebSocket。
-- P0-C2（进行中）：ChatServer 新增 Bearer Token 认证的 WebSocket `/api/v1/chat/socket`；Godot 新增独立 `HHChatNetwork`，具备独立 20 秒心跳、Pong 超时检测和 4 秒重连。世界/跨界频道通过该连接发送与接收，附近频道暂时保留 ENet。WebSocket 连接成功后自动并行补拉两个频道最近 50 条历史，按消息 ID 去重并按 created_at 插入排序；断线重连会再次补拉，过期连接的历史响应会丢弃。当前实时广播仅限单个 ChatServer 进程，尚未接 NATS；更早历史分页、未读和离线投递仍待实现。
+- P0-C2（进行中）：ChatServer 新增 Bearer Token 认证的 WebSocket `/api/v1/chat/socket`；Godot 新增独立 `HHChatNetwork`，具备独立 20 秒心跳、Pong 超时检测和 4 秒重连。世界/跨界频道通过该连接发送与接收，附近频道暂时保留 ENet。WebSocket 连接成功后自动并行补拉两个频道最近 50 条历史，按消息 ID 去重并按 created_at 插入排序；断线重连会再次补拉，过期连接的历史响应会丢弃。已接入 NATS Core Pub/Sub：所有 ChatServer 订阅 `honghuang.chat.events.v1`，消息成功写库后先本机广播，再发布版本化事件；订阅端校验频道与 world_id 后按世界范围或全服范围扇出。使用 NoEcho 避免本机重复投递；NATS 断开时本机聊天继续，连接自动重试，最多缓存 4 MiB 待发事件。Core NATS 不保存离线订阅者的历史，跨节点断线期间的补发仍依赖后续历史同步/JetStream 阶段。
 - 验收：不遮挡基础移动与战斗操作，输入/发送/错误提示正常，重连后自动补拉最近 50 条世界/跨界历史，实时与历史消息按 ID 去重、按时间排序。
 
 ### P1：好友、陌生人申请、私聊和离线投递
@@ -110,9 +110,9 @@
 - 本次新增：ENet ChatSendCommand/ChatEvent 协议；WorldServer 当前实例附近频道 AOI 转发、服务端身份注入、200 字校验和 1 秒限流；Godot 网络层发送/接收接口；协议帧测试覆盖聊天消息类型；Godot 初版附近聊天 HUD（可折叠、输入发送、错误提示）。
 - 独立服务拆分第一步已提交：新增 Backend/cmd/chat 独立 Go 进程（默认 :8788）、httpapi.NewChatRouter（只注册聊天与健康检查路由）、CHAT_DATABASE_URL/CHAT_HTTP_ADDR 配置，以及 Windows/Linux 启动脚本。Godot 使用 `CHAT_API_BASE` 环境变量覆盖聊天服务地址；未设置时从游戏 API 的 `:8787` 推导 `:8788`。Game API 暂时保留原聊天路由作为迁移兼容入口。详见 Docs/Architecture/SERVICE-ISOLATION.md。
 - P0-B2 本次新增：WorldServer 节点认证的中心消息拉取和发布 API。发布接口校验活动会话确属该节点，服务端注入消息身份并做 3 秒世界/5 秒跨界限流与幂等；拉取接口按节点服务世界筛选 world 频道，cross_world 对所有 ready 节点可见，支持 1–100 条分页与 `(created_at,id)` 游标。仍未实现 WorldServer 调用发布/定时拉取、ENet 广播、消费游标持久化与断线补发确认。
-- 附近频道当前为 WorldServer 内存实时消息，不写入 PostgreSQL，因此暂不提供附近频道历史；世界/跨界历史 HTTP 接口已存在；世界/跨界实时消息现已接入 ChatServer WebSocket，但当前广播只覆盖单个 ChatServer 进程，尚未接 NATS 跨实例分发。
+- 附近频道当前为 WorldServer 内存实时消息，不写入 PostgreSQL，因此暂不提供附近频道历史；世界/跨界历史 HTTP 接口已存在；世界/跨界实时消息已接入 ChatServer WebSocket 与 NATS Core Pub/Sub，可跨 ChatServer 进程广播；NATS 断线不会阻塞本机聊天，但 Core NATS 不提供离线消费者重放。
 - 仍未实现：WorldServer 发布/拉取接口接入和 ENet 消息扇出、消费游标可靠保存/确认、好友/私聊 API、离线投递、队伍/宗门频道。
 - 独立 ChatServer 已增加 30 天消息保留清理调度：启动后执行一次，之后每小时执行；清理不再发生在玩家发送/查询请求路径，避免请求触发全表删除。清理失败仅记录日志并等待下一轮重试。
 - 聊天用户接口和 WorldServer 内部发布接口均强化幂等：相同 client_message_id + 相同频道/正文返回原消息；相同 ID 被用于不同频道或正文时返回 409，避免客户端错误重试覆盖/混淆消息。
-- 当前仍未实现 NATS 跨 ChatServer 实例广播、WorldServer 附近 AOI 到聊天服的异步事件接入、聊天数据物理数据库拆分和故障注入验收。
-- 本轮新增客户端历史补拉、消息去重、时间排序和旧连接响应丢弃；尚未运行 Go 测试、C++ 编译/CTest、Godot 解析/运行、数据库迁移或 GitHub Actions。不要把静态代码提交视为运行验收通过。
+- 当前仍未实现 JetStream 持久消费/离线节点重放、NATS 故障期间的在线客户端历史增量同步、WorldServer 附近 AOI 到聊天服的异步事件接入、聊天数据物理数据库拆分和故障注入验收。
+- 本轮新增 NATS 跨 ChatServer Core Pub/Sub、REST/WebSocket/WorldServer 发布统一扇出、事件版本与频道范围校验、NATS 断开自动重连及本机降级；尚未运行 Go 测试、C++ 编译/CTest、Godot 解析/运行、数据库迁移或 GitHub Actions。不要把静态代码提交视为运行验收通过。
