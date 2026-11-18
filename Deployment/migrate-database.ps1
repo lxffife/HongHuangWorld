@@ -41,7 +41,15 @@ try {
         '000020_reincarnation_birth_routes.up.sql',
         '000021_birth_route_region_metadata.up.sql',
         '000022_world_exploration_points.up.sql',
-        '000023_world_exploration_events.up.sql'
+        '000023_world_exploration_events.up.sql',
+        '000024_underworld_exploration.up.sql',
+        '000025_exploration_event_choices.up.sql',
+        '000026_exploration_causal_followups.up.sql',
+        '000027_soul_essence_foundation.up.sql',
+        '000028_soul_inheritance_essences.up.sql',
+        '000029_reincarnation_inheritance_snapshots.up.sql',
+        '000030_soul_mutation_records.up.sql',
+        '000031_soul_fusion_records.up.sql'
     )
 
     $existing = docker compose --env-file .env exec -T postgres psql -U $env:POSTGRES_USER -d $env:POSTGRES_DB -At -c "SELECT to_regclass('public.accounts') IS NOT NULL;"
