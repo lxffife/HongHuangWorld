@@ -16,10 +16,10 @@ log "准备独立 Chat 数据库 $CHAT_DB_NAME；不会修改 CHAT_DATABASE_URL�
 compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
   -v db_name="$CHAT_DB_NAME" -v db_user="$CHAT_DB_USER" -v db_password="$CHAT_DB_PASSWORD" <<'SQL'
 SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'db_user', :'db_password')
-WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'db_user')\\gexec
-SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', :'db_user', :'db_password')\\gexec
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'db_user')\gexec
+SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', :'db_user', :'db_password')\gexec
 SELECT format('CREATE DATABASE %I OWNER %I', :'db_name', :'db_user')
-WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'db_name')\\gexec
+WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'db_name')\gexec
 SQL
 
 compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$CHAT_DB_USER" -d "$CHAT_DB_NAME" <<'SQL'
