@@ -63,12 +63,6 @@ func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (
 
 	var worldScope any
 	if req.Channel == "world" { worldScope = worldID }
-	var allowed bool
-	if req.Channel == "world" {
-		err=s.db.QueryRowContext(ctx,`SELECT NOT EXISTS(SELECT 1 FROM chat_blocks b WHERE b.blocker_character_id<>$1::uuid AND b.blocked_character_id=$1::uuid)`,characterID).Scan(&allowed)
-		if err!=nil{return Message{},fmt.Errorf("check chat block state: %w",err)}
-		if !allowed{return Message{},ErrInvalidInput}
-	}
 	window:=3*time.Second
 	if req.Channel=="cross_world" { window=5*time.Second }
 	var recent int
