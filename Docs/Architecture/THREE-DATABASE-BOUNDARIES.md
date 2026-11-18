@@ -95,3 +95,25 @@
 - 不用跨库外键、跨库事务或共享数据库超级用户绕过服务边界。
 - 任何数据搬迁必须可重复、可核对、有备份、有回滚；迁移脚本默认 dry-run 或显式确认。
 - 本文档提交不代表运行时拆分已经完成；在每个阶段验收通过前，现有连接方式保持不变。
+
+## 已落地的迁移代码（尚未在生产执行）
+
+- `Backend/internal/auth/http_client.go`：Identity HTTP 客户端，实现注册、登录、Token introspection；服务端调用带独立服务凭据头。
+- Game API 与 ChatServer 的认证处理器改为依赖 `auth.Provider` 接口；设置 `IDENTITY_API_BASE` 后走 Identity HTTP API，未设置时仍保留旧数据库认证作为迁移回退。
+- `Backend/internal/auth/http_client_test.go`：新增 HTTP 客户端认证、401 与登录响应测试（尚未实际运行）。
+- `Deployment/raspberry-pi/07-build.sh`：同时构建 `honghuang-identity`。
+- `Deployment/raspberry-pi/08-install-services.sh`：新增 Identity systemd 服务安装、启动和 readiness 检查。
+- `Deployment/raspberry-pi/08-copy-identity-data.sh`：要求显式确认，目标账号表必须为空；通过单事务复制账号与会话数据，并核对行数。复制密码哈希与 Token 哈希，不复制明文凭据。
+- `Database/migrations/000042_detach_soul_account_identity_fk.up.sql`：在切换 Identity 前，解除 Game souls 对旧本地 accounts 表的外键依赖；旧账号表暂时保留，不删除。
+- `Deployment/raspberry-pi/04-configure.sh` 与 `.env.example` 已为全新安装增加 Identity API 客户端变量。现有树莓派环境文件不会自动更新。
+
+### 生产切换顺序（不要跳步）
+
+1. 备份当前 Game 数据库，并确认可恢复。
+2. 更新代码和构建；在 Identity 数据库执行 `07-migrate-identity.sh`。
+3. 确认 Identity 账号/会话表为空后，执行 `CONFIRM_IDENTITY_DATA_COPY=YES bash Deployment/raspberry-pi/08-copy-identity-data.sh`；检查源/目标行数一致。
+4. 在 Game 数据库应用 migration 000042，之后新注册账号才能创建 souls 而不要求旧 accounts 表存在同一账号行。
+5. 在现有 `/etc/honghuang-world.env` 中配置 `IDENTITY_API_BASE`、`IDENTITY_SERVICE_TOKEN`，并保证其值与 Identity 服务端 `IDENTITY_INTERNAL_API_KEY` 一致。不要把密钥发到聊天或日志。
+6. 启动并检查 Identity readiness，再启动 Game API；验证旧账号登录、Token、创建灵魂、角色与轮回流程。
+7. ChatServer 仍需独立迁移聊天 schema 和 Game 域角色/世界状态依赖；在完成前，不要把 `CHAT_DATABASE_URL` 指向空的 Chat DB。
+8. 所有验收通过后再做聊天数据搬迁与旧表清理。当前脚本不会自动执行生产迁移，也不会删除旧数据。
