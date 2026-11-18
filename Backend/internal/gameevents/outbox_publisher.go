@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -202,6 +203,7 @@ func claimBatch(ctx context.Context, db *sql.DB, worker string, limit int, lease
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	sort.Slice(events, func(i, j int) bool { return events[i].Sequence < events[j].Sequence })
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
