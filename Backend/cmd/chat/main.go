@@ -2,12 +2,12 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
-	"database/sql"
 	"strings"
 	"syscall"
 	"time"
