@@ -124,13 +124,21 @@ func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (
 	if req.Channel == "world" {
 		worldValue = worldID
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO chat_messages(channel_type,world_id,sender_character_id,client_message_id,sender_name,sender_race,sender_level,content)
-		VALUES($1,$2,$3::uuid,$4::uuid,$5,$6,$7,$8)`,
-		req.Channel, worldValue, characterID, req.ClientMessageID, characterName, raceID, level, req.Content)
+	var insertErr error
+	if s.projectionMode {
+		_, insertErr = tx.ExecContext(ctx, `INSERT INTO chat_messages(channel_type,world_id,sender_character_id,client_message_id,sender_name,sender_race,sender_level,content)
+			VALUES($1,$2,$3::uuid,$4::uuid,$5,$6,$7,$8)`,
+			req.Channel, worldValue, characterID, req.ClientMessageID, characterName, raceID, level, req.Content)
+	} else {
+		_, insertErr = tx.ExecContext(ctx, `INSERT INTO chat_messages(channel_type,world_id,sender_character_id,client_message_id,content)
+			VALUES($1,$2,$3::uuid,$4::uuid,$5)`,
+			req.Channel, worldValue, characterID, req.ClientMessageID, req.Content)
+	}
+	err = insertErr
 	if err != nil {
 		return Message{}, fmt.Errorf("store chat message: %w", err)
 	}
-	item, err := getChatMessageByClientID(ctx, tx, characterID, req.ClientMessageID)
+	item, err := getChatMessageByClientID(ctx, tx, characterID, req.ClientMessageID, s.projectionMode)
 	if err != nil {
 		return Message{}, err
 	}
@@ -157,13 +165,20 @@ func (s *Service) List(ctx context.Context, accountID, channel, before string, l
 		limit = 50
 	}
 	var characterID, worldID, instanceID string
-	err := s.db.QueryRowContext(ctx, `
-		SELECT c.character_id::text,c.world_id,COALESCE(ws.instance_id::text,'')
-		FROM chat_accounts account
-		JOIN chat_characters c ON c.character_id=account.current_character_id
-		LEFT JOIN chat_world_sessions ws ON ws.character_id=c.character_id AND ws.session_state='active'
-		WHERE account.account_id=$1::uuid AND c.status='alive'`, accountID).
-		Scan(&characterID, &worldID, &instanceID)
+	resolveQuery := `
+		SELECT c.id::text,c.world_id,COALESCE(ws.instance_id::text,'')
+		FROM souls soul JOIN characters c ON c.id=soul.current_character_id
+		LEFT JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
+		WHERE soul.account_id=$1 AND c.status='alive'`
+	if s.projectionMode {
+		resolveQuery = `
+			SELECT c.character_id::text,c.world_id,COALESCE(ws.instance_id::text,'')
+			FROM chat_accounts account
+			JOIN chat_characters c ON c.character_id=account.current_character_id
+			LEFT JOIN chat_world_sessions ws ON ws.character_id=c.character_id AND ws.session_state='active'
+			WHERE account.account_id=$1::uuid AND c.status='alive'`
+	}
+	err := s.db.QueryRowContext(ctx, resolveQuery, accountID).Scan(&characterID, &worldID, &instanceID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNoCharacter
 	}
@@ -175,9 +190,15 @@ func (s *Service) List(ctx context.Context, accountID, channel, before string, l
 	}
 
 	query := `SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),
-		m.sender_character_id::text,m.sender_name,m.sender_race,m.sender_level,m.content,m.created_at
-		FROM chat_messages m
+		m.sender_character_id::text,c.name,COALESCE(c.race_id,''),c.level,m.content,m.created_at
+		FROM chat_messages m JOIN characters c ON c.id=m.sender_character_id
 		WHERE m.created_at > now()-interval '30 days' AND `
+	if s.projectionMode {
+		query = `SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),
+			m.sender_character_id::text,m.sender_name,m.sender_race,m.sender_level,m.content,m.created_at
+			FROM chat_messages m
+			WHERE m.created_at > now()-interval '30 days' AND `
+	}
 	args := []any{}
 	switch channel {
 	case "world":
