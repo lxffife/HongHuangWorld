@@ -2,6 +2,7 @@
 
 #include <sqlite3.h>
 
+#include <algorithm>
 #include <stdexcept>
 #include <utility>
 
@@ -120,9 +121,23 @@ bool DurableOutbox::enqueue(const OutboxEvent& event, std::string& error) {
         const auto active_count = static_cast<std::size_t>(sqlite3_column_int64(count.get(), 0));
         if (active_count >= capacity_) {
             error = "durable outbox capacity reached";
-            execute("ROLLBACK", error);
+            std::string ignored;
+            execute("ROLLBACK", ignored);
             transaction_open = false;
             return false;
+        }
+        if (event.event_type == "nearby_chat") {
+            const auto chat_capacity = std::min<std::size_t>(capacity_ / 2, 2000);
+            Stmt chat_count(db_, "SELECT COUNT(*) FROM world_event_outbox WHERE event_type='nearby_chat' AND status IN('pending','inflight')");
+            if (sqlite3_step(chat_count.get()) != SQLITE_ROW) throw std::runtime_error(sqlite3_errmsg(db_));
+            const auto active_chat_count = static_cast<std::size_t>(sqlite3_column_int64(chat_count.get(), 0));
+            if (active_chat_count >= chat_capacity) {
+                error = "nearby chat outbox capacity reached";
+                std::string ignored;
+                execute("ROLLBACK", ignored);
+                transaction_open = false;
+                return false;
+            }
         }
 
         Stmt insert(db_,
