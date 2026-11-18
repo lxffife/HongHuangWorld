@@ -769,6 +769,22 @@ func _update_compact_hud(progression: Dictionary = {}) -> void:
 		compact_hud_label.text += "\n魂体成长 · " + growth_name + "（阶段 " + str(soul_essence_profile.get("growth_stage", 1)) + "/5）"
 		compact_hud_label.text += "\n来世资质 · 力量 " + str(inheritance.get("strength", 0)) + " 体质 " + str(inheritance.get("constitution", 0)) + " 敏捷 " + str(inheritance.get("agility", 0))
 		compact_hud_label.text += "\n灵力 " + str(inheritance.get("spirit", 0)) + " 气血 " + str(inheritance.get("vitality", 0))
+		var attribute_progress: Array = soul_essence_profile.get("attribute_progress", [])
+		var attribute_names := {"strength":"力量","constitution":"体质","agility":"敏捷","spirit":"灵力","vitality":"气血"}
+		compact_hud_label.text += "\n魂质修炼 · 每项资质上限 20"
+		for progress_variant in attribute_progress:
+			if not progress_variant is Dictionary:
+				continue
+			var progress: Dictionary = progress_variant
+			var attribute := str(progress.get("attribute", ""))
+			var attribute_name := str(attribute_names.get(attribute, attribute))
+			var current_count := int(progress.get("absorbed_count", 0))
+			var next_threshold := int(progress.get("next_threshold", 0))
+			var awarded := int(progress.get("awarded_points", 0))
+			var max_points := int(progress.get("max_points", 10))
+			var attribute_value := int(progress.get("attribute_value", 0))
+			var progress_text := "已达吞噬成长上限" if next_threshold <= 0 else ("下次突破 " + str(current_count) + "/" + str(next_threshold))
+			compact_hud_label.text += "\n" + attribute_name + " · " + progress_text + " · 吞噬成长 +" + str(awarded) + "/" + str(max_points) + " · 总资质 " + str(attribute_value) + "/20"
 		var affinities: Dictionary = soul_essence_profile.get("affinity_counts", {})
 		compact_hud_label.text += "\n魂质亲和 · 兽 " + str(affinities.get("beast", 0)) + " 战 " + str(affinities.get("battle", 0)) + " 风 " + str(affinities.get("gale", 0)) + " 灵 " + str(affinities.get("spirit", 0)) + " 生 " + str(affinities.get("life", 0))
 		var mutations: Array = soul_essence_profile.get("mutations", [])
