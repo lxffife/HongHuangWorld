@@ -112,3 +112,58 @@ func (s *Service) PruneExpiredPresenceLeases(ctx context.Context) (int64, error)
 	return count, nil
 }
 
+
+type FriendPresence struct {
+	CharacterID string `json:"character_id"`
+	Name string `json:"name"`
+	ChatOnline bool `json:"chat_online"`
+	Connections int `json:"connections"`
+}
+
+// ListFriendPresence exposes only accepted friendship rows already owned by
+// Chat. It uses the character ID stored on each live Chat lease and never
+// queries Identity or Game databases.
+func (s *Service) ListFriendPresence(ctx context.Context, accountID string) ([]FriendPresence, error) {
+	if !isUUID(accountID) {
+		return nil, ErrInvalidInput
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		WITH current_character AS (
+			SELECT current_character_id
+			FROM chat_accounts
+			WHERE account_id=$1::uuid AND current_character_id IS NOT NULL
+		),
+		friend_characters AS (
+			SELECT f.addressee_character_id AS character_id
+			FROM chat_friendships f
+			JOIN current_character c ON c.current_character_id=f.requester_character_id
+			UNION
+			SELECT f.requester_character_id AS character_id
+			FROM chat_friendships f
+			JOIN current_character c ON c.current_character_id=f.addressee_character_id
+		)
+		SELECT c.character_id::text,c.name,count(p.connection_id)::int
+		FROM friend_characters f
+		JOIN chat_characters c ON c.character_id=f.character_id AND c.status='alive'
+		LEFT JOIN chat_presence_sessions p
+			ON p.character_id=c.character_id AND p.expires_at>now()
+		GROUP BY c.character_id,c.name
+		ORDER BY c.name,c.character_id`, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("query friend chat presence: %w", err)
+	}
+	defer rows.Close()
+	items := make([]FriendPresence, 0)
+	for rows.Next() {
+		var item FriendPresence
+		if err := rows.Scan(&item.CharacterID, &item.Name, &item.Connections); err != nil {
+			return nil, fmt.Errorf("scan friend chat presence: %w", err)
+		}
+		item.ChatOnline = item.Connections > 0
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate friend chat presence: %w", err)
+	}
+	return items, nil
+}
