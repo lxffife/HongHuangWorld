@@ -78,3 +78,49 @@ func (h *chatServerHandlers) poll(w http.ResponseWriter, r *http.Request) {
 		"has_more": len(batch.Items) == limit,
 	})
 }
+
+type chatServerSendRequest struct {
+	SessionID string `json:"session_id"`
+	CharacterID string `json:"character_id"`
+	chat.SendRequest
+}
+
+// publish persists a public message after verifying the active session belongs
+// to the authenticated WorldServer node.
+func (h *chatServerHandlers) publish(w http.ResponseWriter, r *http.Request) {
+	provided := r.Header.Get("X-World-Server-Key")
+	if h.apiKey == "" || len(provided) != len(h.apiKey) ||
+		subtle.ConstantTimeCompare([]byte(provided), []byte(h.apiKey)) != 1 {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	nodeKey := strings.TrimSpace(r.Header.Get("X-World-Server-Node"))
+	if nodeKey == "" {
+		http.Error(w, "missing world server node identity", http.StatusBadRequest)
+		return
+	}
+	var req chatServerSendRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	item, err := h.service.SendFromServer(r.Context(), nodeKey, req.SessionID, req.CharacterID, req.SendRequest)
+	if err != nil {
+		switch {
+		case err == chat.ErrInvalidInput:
+			http.Error(w, "invalid chat request", http.StatusBadRequest)
+		case err == chat.ErrNoCharacter:
+			http.Error(w, "world session is not active for this node", http.StatusForbidden)
+		case err == chat.ErrRateLimited:
+			http.Error(w, "chat rate limit exceeded", http.StatusTooManyRequests)
+		case err == chat.ErrUnsupportedChannel:
+			http.Error(w, "chat channel is not available yet", http.StatusNotImplemented)
+		default:
+			h.logger.Error("publish world server chat message failed", "node_key", nodeKey, "error", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+		}
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"message": item})
+}
+
