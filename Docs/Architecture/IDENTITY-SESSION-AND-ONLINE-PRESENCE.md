@@ -44,9 +44,16 @@ A user can be chat-online without being in a world, and can be in a world while 
 - A stale lease must expire automatically. Disconnect cleanup alone is insufficient because processes can crash.
 - Presence is ephemeral operational state, not account history. It must not be stored as a permanent Identity login-session attribute.
 
-## Current implementation boundary
+## Current implementation
 
-The current Chat WebSocket authenticates its handshake through Identity and maintains a process-local socket hub for message fanout. The Game-to-Chat consumer projects world-session events into Chat-owned tables.
+- Chat WebSocket handshakes authenticate through the Identity HTTP API. Chat never reads Identity tables.
+- After a successful WebSocket upgrade, Chat creates one row in chat_presence_sessions for that connection.
+- Client WebSocket ping frames and the Chat JSON ping message refresh the lease. The lease lasts 90 seconds; the socket read deadline is 75 seconds.
+- A clean disconnect deletes that connection's lease. A process crash leaves a lease that becomes inactive automatically at expiry; a cleanup worker deletes expired rows once per minute.
+- Multiple devices and Chat nodes use independent connection IDs. The account remains chat-online while at least one unexpired lease exists.
+- GET /api/v1/chat/presence returns the authenticated caller's Chat-only presence and active connection count. It does not disclose other users' presence.
+- While the socket is active, Chat revalidates the Identity token at least every 30 seconds when frames are received. The Identity client also has its short introspection cache; revocation propagation is therefore bounded by the revalidation interval, cache TTL, and network behavior.
+- The Game-to-Chat consumer continues to project world-session events into Chat-owned tables. Game in-world status remains a separate state and is not included in chat_online.
 
-Chat migration 000003 now creates the durable chat_presence_sessions lease table, with one row per connection and automatic expiry timestamps. The runtime lifecycle (open, heartbeat refresh, close, and expiry cleanup), presence query API, and product-level online aggregation are not wired yet. The schema addition is not evidence that online status is already being tracked.
+The product-level aggregate online API (combining Chat connections and Game sessions), friend presence visibility, and richer presence fanout are intentionally separate follow-up work. Do not treat chat_online as proof that a player is in a Game world.
 
