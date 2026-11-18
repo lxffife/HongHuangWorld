@@ -287,7 +287,6 @@ func (h *chatHandlers) socket(w http.ResponseWriter, r *http.Request) {
 			_ = client.writeFrame(8, payload)
 			return
 		case 9:
-			if !client.validateIdentitySession(h, account.ID, strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")), &lastIdentityCheck) { return }
 			if !client.refreshPresence(client.currentCharacterID()) { return }
 			if client.writeFrame(10, payload) != nil { return }
 		case 10:
