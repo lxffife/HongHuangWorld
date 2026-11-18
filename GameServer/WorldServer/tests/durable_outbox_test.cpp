@@ -73,7 +73,7 @@ int main() {
         std::string error;
         const honghuang::persistence::OutboxEvent chat{
             "nearby-chat:client-1", "nearby_chat",
-            R"({"session_id":"s1","client_message_id":"client-1"})",
+            R"({"session_id":"s1","client_message_id":"client-1","content":"changed"})",
             0, 500, 500, {}
         };
         assert(box.enqueue(chat, error));
