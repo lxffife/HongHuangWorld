@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/liflife/HongHuangWorld/Backend/internal/chat"
 	"github.com/liflife/HongHuangWorld/Backend/internal/database"
 	"github.com/liflife/HongHuangWorld/Backend/internal/httpapi"
 )
@@ -45,6 +46,7 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	go runChatRetentionCleanup(ctx, chat.NewService(db), logger)
 
 	go func() {
 		logger.Info("chat service starting", "addr", addr)
@@ -61,4 +63,32 @@ func main() {
 		logger.Error("chat graceful shutdown failed", "error", err)
 	}
 	logger.Info("chat service stopped")
+}
+
+func runChatRetentionCleanup(ctx context.Context, service *chat.Service, logger *slog.Logger) {
+	cleanup := func() {
+		cleanupCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		deleted, err := service.PruneExpiredMessages(cleanupCtx)
+		if err != nil {
+			logger.Error("chat retention cleanup failed", "error", err)
+			return
+		}
+		if deleted > 0 {
+			logger.Info("expired chat messages removed", "count", deleted, "retention_days", 30)
+		}
+	}
+
+	// Run once after startup, then hourly. Cleanup never runs on a send/history request.
+	cleanup()
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			cleanup()
+		}
+	}
 }
