@@ -412,51 +412,93 @@ func _build_lobby_ui() -> void:
 	lobby_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	lobby_root.hide()
 	add_child(lobby_root)
+
 	var backdrop := ColorRect.new()
-	backdrop.color = Color("#090e18")
+	backdrop.color = Color("#080d18")
 	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	lobby_root.add_child(backdrop)
-	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	lobby_root.add_child(center)
-	var lobby_viewport_size := get_viewport_rect().size
+
+	var margins := MarginContainer.new()
+	margins.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margins.add_theme_constant_override("margin_left", 28)
+	margins.add_theme_constant_override("margin_top", 22)
+	margins.add_theme_constant_override("margin_right", 28)
+	margins.add_theme_constant_override("margin_bottom", 22)
+	lobby_root.add_child(margins)
+
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(minf(1080.0, lobby_viewport_size.x * 0.94), minf(760.0, lobby_viewport_size.y * 0.94))
-	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	center.add_child(panel)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color("#111a29")
+	panel_style.border_color = Color("#34445d")
+	panel_style.set_border_width_all(1)
+	panel_style.set_corner_radius_all(12)
+	panel.add_theme_stylebox_override("panel", panel_style)
+	margins.add_child(panel)
+
 	var layout := VBoxContainer.new()
-	layout.add_theme_constant_override("separation", 18)
+	layout.add_theme_constant_override("separation", 14)
 	panel.add_child(layout)
+
 	var header := HBoxContainer.new()
+	header.custom_minimum_size.y = 42
 	layout.add_child(header)
+	var heading_group := VBoxContainer.new()
+	heading_group.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading_group.add_theme_constant_override("separation", 1)
+	header.add_child(heading_group)
 	var heading := Label.new()
-	heading.text = "洪荒：诸天轮回"
-	heading.add_theme_font_size_override("font_size", 24)
-	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(heading)
+	heading.text = "洪荒 · 诸天轮回"
+	heading.add_theme_font_size_override("font_size", 23)
+	heading.add_theme_color_override("font_color", Color("#f0dfbd"))
+	heading_group.add_child(heading)
+	var subtitle := Label.new()
+	subtitle.text = "角色档案  /  踏入诸天之前"
+	subtitle.add_theme_font_size_override("font_size", 11)
+	subtitle.add_theme_color_override("font_color", Color("#8497b2"))
+	heading_group.add_child(subtitle)
 	var account := Label.new()
 	account.text = "角色大厅"
-	account.add_theme_color_override("font_color", Color("#b8c5d8"))
+	account.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	account.add_theme_color_override("font_color", Color("#c5a76d"))
 	header.add_child(account)
-	var separator := HSeparator.new()
-	layout.add_child(separator)
+	layout.add_child(HSeparator.new())
+
 	var body := HBoxContainer.new()
 	lobby_body_container = body
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 18)
-	body.custom_minimum_size.y = minf(430.0, lobby_viewport_size.y * 0.42)
 	layout.add_child(body)
-	var preview_width := clampf(lobby_viewport_size.x * 0.31, 220.0, 360.0)
-	var preview_height := minf(430.0, lobby_viewport_size.y * 0.42)
+
+	var preview_panel := PanelContainer.new()
+	preview_panel.custom_minimum_size = Vector2(300, 0)
+	preview_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	preview_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var preview_style := StyleBoxFlat.new()
+	preview_style.bg_color = Color("#0b1423")
+	preview_style.border_color = Color("#293b55")
+	preview_style.set_border_width_all(1)
+	preview_style.set_corner_radius_all(10)
+	preview_panel.add_theme_stylebox_override("panel", preview_style)
+	body.add_child(preview_panel)
+	var preview_column := VBoxContainer.new()
+	preview_column.add_theme_constant_override("separation", 8)
+	preview_panel.add_child(preview_column)
+	var preview_title := Label.new()
+	preview_title.text = "角色形象"
+	preview_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	preview_title.add_theme_font_size_override("font_size", 16)
+	preview_title.add_theme_color_override("font_color", Color("#d8bd83"))
+	preview_column.add_child(preview_title)
 	var preview_container := SubViewportContainer.new()
-	preview_container.custom_minimum_size = Vector2(preview_width, preview_height)
-	preview_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	preview_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	preview_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	preview_container.stretch = true
 	preview_container.mouse_filter = Control.MOUSE_FILTER_STOP
 	preview_container.gui_input.connect(_on_lobby_preview_input)
-	body.add_child(preview_container)
+	preview_column.add_child(preview_container)
 	var preview_viewport := SubViewport.new()
 	preview_viewport.size = Vector2i(560, 680)
 	preview_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
@@ -468,10 +510,10 @@ func _build_lobby_ui() -> void:
 	var preview_world := WorldEnvironment.new()
 	var preview_environment := Environment.new()
 	preview_environment.background_mode = Environment.BG_COLOR
-	preview_environment.background_color = Color("#101a2a")
+	preview_environment.background_color = Color("#0b1423")
 	preview_environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	preview_environment.ambient_light_color = Color("#8294ad")
-	preview_environment.ambient_light_energy = 0.65
+	preview_environment.ambient_light_color = Color("#9aabc4")
+	preview_environment.ambient_light_energy = 0.78
 	preview_world.environment = preview_environment
 	lobby_preview_root.add_child(preview_world)
 	var preview_camera := Camera3D.new()
@@ -490,12 +532,27 @@ func _build_lobby_ui() -> void:
 	rim_light.omni_range = 5.0
 	lobby_preview_root.add_child(rim_light)
 	_build_lobby_preview_model()
+	var preview_hint := Label.new()
+	preview_hint.text = "按住鼠标左键拖动旋转 · 自动展示角色外观"
+	preview_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	preview_hint.add_theme_font_size_override("font_size", 11)
+	preview_hint.add_theme_color_override("font_color", Color("#8497b2"))
+	preview_column.add_child(preview_hint)
+
+	var info_panel := PanelContainer.new()
+	info_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	info_panel.custom_minimum_size.x = 0
+	var info_style := StyleBoxFlat.new()
+	info_style.bg_color = Color("#151f30")
+	info_style.set_corner_radius_all(10)
+	info_panel.add_theme_stylebox_override("panel", info_style)
+	body.add_child(info_panel)
 	var info_scroll := ScrollContainer.new()
 	info_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	info_scroll.custom_minimum_size = Vector2(clampf(lobby_viewport_size.x * 0.46, 300.0, 520.0), 0)
 	info_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	body.add_child(info_scroll)
+	info_panel.add_child(info_scroll)
 	var info := VBoxContainer.new()
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.add_theme_constant_override("separation", 10)
@@ -503,11 +560,12 @@ func _build_lobby_ui() -> void:
 	var section := Label.new()
 	section.text = "此世命格"
 	section.add_theme_color_override("font_color", Color("#c5a76d"))
-	section.add_theme_font_size_override("font_size", 16)
+	section.add_theme_font_size_override("font_size", 13)
 	info.add_child(section)
 	lobby_name_label = Label.new()
 	lobby_name_label.text = "尚未创建角色"
-	lobby_name_label.add_theme_font_size_override("font_size", 30)
+	lobby_name_label.add_theme_font_size_override("font_size", 28)
+	lobby_name_label.add_theme_color_override("font_color", Color("#f0dfbd"))
 	info.add_child(lobby_name_label)
 	lobby_race_label = Label.new()
 	lobby_race_label.text = "种族：待定"
@@ -517,6 +575,7 @@ func _build_lobby_ui() -> void:
 	info.add_child(lobby_realm_label)
 	lobby_world_label = Label.new()
 	lobby_world_label.text = "出生世界：待载入"
+	lobby_world_label.add_theme_color_override("font_color", Color("#c5a76d"))
 	info.add_child(lobby_world_label)
 	lobby_level_label = Label.new()
 	lobby_level_label.text = "等级：—"
@@ -533,7 +592,7 @@ func _build_lobby_ui() -> void:
 	lobby_cultivation_label.add_theme_color_override("font_color", Color("#c5a76d"))
 	info.add_child(lobby_cultivation_label)
 	lobby_cultivation_bar = ProgressBar.new()
-	lobby_cultivation_bar.custom_minimum_size = Vector2(0, 12)
+	lobby_cultivation_bar.custom_minimum_size = Vector2(0, 14)
 	lobby_cultivation_bar.min_value = 0
 	lobby_cultivation_bar.max_value = 100
 	lobby_cultivation_bar.value = 0
@@ -544,41 +603,40 @@ func _build_lobby_ui() -> void:
 	lobby_points_label.add_theme_font_size_override("font_size", 12)
 	lobby_points_label.add_theme_color_override("font_color", Color("#9ed6b1"))
 	info.add_child(lobby_points_label)
+	var stats_heading := Label.new()
+	stats_heading.text = "基础属性"
+	stats_heading.add_theme_color_override("font_color", Color("#c5a76d"))
+	info.add_child(stats_heading)
 	lobby_stats_grid = GridContainer.new()
 	lobby_stats_grid.columns = 3
+	lobby_stats_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lobby_stats_grid.add_theme_constant_override("h_separation", 8)
-	lobby_stats_grid.add_theme_constant_override("v_separation", 6)
+	lobby_stats_grid.add_theme_constant_override("v_separation", 8)
 	info.add_child(lobby_stats_grid)
-	var preview_hint := Label.new()
-	preview_hint.text = "角色预览 · 按住鼠标左键拖动旋转"
-	preview_hint.add_theme_color_override("font_color", Color("#8fa4bd"))
-	preview_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	info.add_child(preview_hint)
 	lobby_status_label = Label.new()
 	lobby_status_label.text = "角色资料已准备就绪。"
 	lobby_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lobby_status_label.add_theme_color_override("font_color", Color("#aab6cc"))
-	lobby_status_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	info.add_child(lobby_status_label)
 	lobby_equipment_status_label = Label.new()
 	lobby_equipment_status_label.text = "装备外观：正在读取……"
 	lobby_equipment_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lobby_equipment_status_label.add_theme_color_override("font_color", Color("#c5a76d"))
 	info.add_child(lobby_equipment_status_label)
-	var footer_separator := HSeparator.new()
-	layout.add_child(footer_separator)
+
+	layout.add_child(HSeparator.new())
 	var footer := HBoxContainer.new()
-	footer.add_theme_constant_override("separation", 12)
-	footer.custom_minimum_size.y = 54
+	footer.custom_minimum_size.y = 52
+	footer.add_theme_constant_override("separation", 10)
 	layout.add_child(footer)
 	var archive_button := Button.new()
 	archive_button.text = "灵魂档案 / 轮回"
-	archive_button.custom_minimum_size = Vector2(180, 48)
+	archive_button.custom_minimum_size = Vector2(160, 46)
 	archive_button.pressed.connect(_toggle_lobby_details)
 	footer.add_child(archive_button)
 	var equipment_button := Button.new()
 	equipment_button.text = "装备管理"
-	equipment_button.custom_minimum_size = Vector2(140, 48)
+	equipment_button.custom_minimum_size = Vector2(120, 46)
 	equipment_button.pressed.connect(_toggle_lobby_equipment_panel)
 	footer.add_child(equipment_button)
 	var spacer := Control.new()
@@ -586,25 +644,28 @@ func _build_lobby_ui() -> void:
 	footer.add_child(spacer)
 	lobby_enter_button = Button.new()
 	lobby_enter_button.text = "进入世界"
-	lobby_enter_button.custom_minimum_size = Vector2(240, 52)
+	lobby_enter_button.custom_minimum_size = Vector2(220, 48)
 	lobby_enter_button.pressed.connect(_on_create_character_pressed)
 	footer.add_child(lobby_enter_button)
-	lobby_details_host = VBoxContainer.new()
-	lobby_details_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lobby_details_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	lobby_details_host.add_theme_constant_override("separation", 8)
+
 	lobby_equipment_panel = PanelContainer.new()
 	lobby_equipment_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lobby_equipment_panel.custom_minimum_size.y = 160
+	lobby_equipment_panel.custom_minimum_size.y = 150
 	lobby_equipment_panel.hide()
 	layout.add_child(lobby_equipment_panel)
 	var equipment_scroll := ScrollContainer.new()
-	equipment_scroll.custom_minimum_size.y = 160
+	equipment_scroll.custom_minimum_size.y = 145
 	equipment_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	equipment_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	lobby_equipment_panel.add_child(equipment_scroll)
 	lobby_equipment_list = VBoxContainer.new()
 	lobby_equipment_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	equipment_scroll.add_child(lobby_equipment_list)
+
+	lobby_details_host = VBoxContainer.new()
+	lobby_details_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lobby_details_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	lobby_details_host.add_theme_constant_override("separation", 8)
 	lobby_details_host.hide()
 	layout.add_child(lobby_details_host)
 	if is_instance_valid(details_toggle_button):
