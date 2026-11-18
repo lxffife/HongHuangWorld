@@ -1,124 +1,66 @@
 # Chat Database Isolation
 
-## Goal
+## Final architecture
 
-ChatServer and GameServer must fail independently:
+Identity, Game, and Chat are three independently operated services with three physically/logically separate PostgreSQL databases.
 
-- Game simulation and character actions never wait for ChatServer.
-- Chat history, cross-world chat, and chat socket fanout continue while Game API is unavailable.
-- Identity owns accounts and login sessions. Game owns souls, characters, world instances, and gameplay state. Chat owns messages, social/chat preferences, and read-optimized projections of the minimum Game facts required for routing.
-
-## Database ownership
-
-| Database | Owns | Must not own |
+| Database | Authoritative data | Must not own |
 |---|---|---|
-| Identity | accounts, credentials, login sessions, token lifecycle | characters, world state, chat history |
-| Game | souls, characters, gameplay, world instances, server registry, authoritative sessions | chat history and social preferences |
-| Chat | messages, preferences, friend/block/request state, Game projection tables, Chat outboxes/inboxes | authoritative accounts, characters, sessions, world instances |
+| Identity | player accounts, credentials, login sessions, token lifecycle | characters, world state, chat history |
+| Game | souls, characters, gameplay, world instances, server registry, authoritative world sessions | chat history, friends, blocks, chat preferences |
+| Chat | messages, preferences, friendships, private requests, blocks, Game read projections, Chat inbox/outbox | credentials and authoritative gameplay state |
 
-The Chat projection tables contain copied identifiers and selected display/routing fields only. They have no foreign keys into Identity or Game.
+Chat must never connect to or query the Game database. Game must never query Chat tables in gameplay request paths. Identity authentication is performed through the Identity service API.
 
-## Game -> Chat event contract
+## Runtime connections
 
-Game is the source of truth. It must write domain changes and a Game outbox row in the same Game DB transaction. A separate publisher sends outbox events to NATS JetStream. Game gameplay must not synchronously call ChatServer.
+- Game API: `DATABASE_URL` -> Game database.
+- Identity service: `IDENTITY_DATABASE_URL` -> Identity database.
+- Chat service: `CHAT_DATABASE_URL` -> dedicated Chat database.
+- Chat's Game projection consumer uses the same Chat database connection/pool as the Chat API. It does not open a second database or connect to Game.
+- Chat authentication requires `IDENTITY_API_BASE` and `IDENTITY_SERVICE_TOKEN`.
+- Game -> Chat events use `GAME_NATS_URL`, falling back to `NATS_URL`.
 
-Initial event types:
+The Chat process refuses to start if `CHAT_DATABASE_URL` is equal to `DATABASE_URL`. There is no legacy database mode, projection database switch, or runtime fallback to Game SQL.
 
-- `game.character.created.v1`
-- `game.character.updated.v1` (name, race, level, world, status)
-- `game.account.current_character_changed.v1`
-- `game.world_instance.upserted.v1`
-- `game.server_node.heartbeat.v1`
-- `game.world_session.opened.v1`
-- `game.world_session.updated.v1`
-- `game.world_session.closed.v1`
+## Game -> Chat projection
 
-Every event envelope carries `version`, `event_id` (UUID), `event_type`, `aggregate_id`, `occurred_at`, and a typed payload. Consumers must be idempotent by `event_id`. Projection handlers must reject unsupported versions and validate identifiers before applying an event.
+Game is the source of truth. Database triggers append domain events to `game_event_outbox` in the same Game DB transaction as the source change. The Game publisher sends those events to NATS JetStream subject `honghuang.game.events.v1` and marks them published only after JetStream acknowledges.
 
-The Chat consumer uses the durable JetStream consumer `CHAT_GAME_PROJECTION` and stores each event in `game_projection_inbox` before acknowledging it. Projection application, aggregate-version check/update, and inbox `processed_at` update occur in one Chat DB transaction. Replayed events are safe. Ordering-sensitive aggregates use `aggregate_version`; Chat ignores older versions.
+Events maintain these Chat-owned projections:
 
-## Chat request authority
+- `chat_accounts`: account to current-character mapping.
+- `chat_characters`: character display name, race, level, world, and status.
+- `chat_server_nodes`: node status and heartbeat.
+- `chat_world_instances`: instance/world/node routing.
+- `chat_world_sessions`: character/instance/node/session routing.
 
-- Player identity is authenticated through the Identity HTTP API. Chat does not query Identity tables or share Identity DB credentials.
-- Current character and world scope are resolved from `chat_accounts` + `chat_characters`.
-- Nearby recipient validation uses `chat_world_sessions` and `chat_world_instances`.
-- WorldServer node authorization uses the dedicated WorldServer API key; node/instance/session facts are checked against Chat projections.
-- Chat message history reads only Chat-owned tables.
+Chat's durable consumer `CHAT_GAME_PROJECTION` validates event envelopes, deduplicates by event UUID, applies projection updates and aggregate versions in one Chat DB transaction, then acknowledges JetStream. Redelivered events are safe. Chat rejects operations when required projection state is absent or stale; it never queries Game as a fallback.
 
-A short projection lag is acceptable and must be explicit. If the required projection is missing or stale, Chat rejects that chat operation safely; it does not fall back to querying Game DB.
+JetStream retains Game events for 30 days. Projection bootstrap/rebuild procedures must be provided before operating a consumer beyond that retention window.
 
 ## Chat -> Game delivery
 
-Chat's own message outbox publishes `honghuang.chat.events.v1` through JetStream. Game/WorldServer consumes these events independently. NATS outage delays cross-process delivery but must not roll back committed chat history. Local ChatServer delivery remains available.
+Chat persists a message and its fanout intent in the same Chat database transaction using `chat_event_outbox`. The Chat publisher sends events to `honghuang.chat.events.v1`. Game/WorldServer consumes those events independently. NATS outages may delay cross-service fanout but do not roll back committed chat history or block Game gameplay.
 
-## Migration
+## Fresh database initialization
 
-1. Back up the existing Game DB and preserve the current deployment configuration.
-2. Provision a physically/logically separate Chat PostgreSQL database and a least-privilege Chat role.
-3. Run `bash Deployment/raspberry-pi/09-migrate-chat.sh` to provision the dedicated Chat role/database and apply `Database/chat-migrations/000001_chat_schema.up.sql`. The script deliberately leaves `CHAT_DATABASE_URL` unchanged.
-4. Deploy the Game outbox publisher and Chat projection consumer before switching traffic.
-5. Backfill accounts' current-character mapping, character display/routing data, server nodes, instances, and active/recent sessions into Chat projections. Backfill must be repeatable and must not overwrite newer event versions.
-6. Copy the last 30 days of chat history and chat social data into Chat DB. Preserve message IDs, client IDs, timestamps, sender snapshots, and nearby recipient snapshots. Do not delete source rows during this step.
-7. Switch ChatServer to the new Chat DB only after projection lag is zero and consistency checks pass.
-8. Verify player send/history, WorldServer nearby/world/cross-world fanout, reconnect/replay, 30-day retention, and behavior while Game API is stopped.
-9. Only after acceptance remove the old Game DB chat tables and credentials from ChatServer.
+There is no legacy chat-data copy step because this project has not entered user testing and the standalone Chat database is the authoritative store from the beginning.
 
+1. Provision a dedicated PostgreSQL database `honghuang_chat` and role `chat_user`.
+2. Set `CHAT_DATABASE_URL` to that database. It must not equal `DATABASE_URL`.
+3. Run `bash Deployment/raspberry-pi/09-migrate-chat.sh` to apply every versioned migration in `Database/chat-migrations`.
+4. Start Identity, Game, NATS, and Chat services.
+5. Verify that the Game projection consumer is ready and that new characters, account-current-character changes, worlds, nodes, and sessions appear in Chat projection tables.
+6. Verify player chat send/history and WorldServer nearby/world/cross-world delivery.
+7. Stop Game API temporarily and confirm Chat history and cross-world chat remain available. Stop Chat temporarily and confirm Game movement/combat/world operations remain available.
 
-## Implemented Game transactional outbox (migration 000043)
+The old Game database's historical chat tables are not read by Chat and are not copied. They may be removed later with a deliberate Game migration after the independent Chat service is accepted.
 
-The Game database now has a transactional `game_event_outbox`. PostgreSQL triggers append events in the same transaction as these source changes:
+## Retention and operations
 
-- Character create/update: `game.character.created.v1`, `game.character.updated.v1`
-- Soul current-character change: `game.account.current_character_changed.v1`
-- World instance changes: `game.world_instance.upserted.v1`
-- Server registry heartbeat/status changes: `game.server_node.heartbeat.v1`
-- World session lifecycle changes: `game.world_session.opened.v1`, `game.world_session.updated.v1`, `game.world_session.closed.v1`
-
-Each event has a UUID, a globally increasing event/aggregate sequence, event type, aggregate ID, UTC occurrence time, and typed data. Trigger insertion is atomic with the source row transaction; a rollback removes both the domain change and its outbox event.
-
-The API process runs `internal/gameevents.RunOutboxPublisher` independently. It claims rows using `FOR UPDATE SKIP LOCKED`, leases them, publishes to JetStream subject `honghuang.game.events.v1`, and marks them published only after JetStream acknowledges. Retries use the same event UUID as the NATS message ID. NATS connection or stream setup failure does not prevent the API from starting; pending events remain in PostgreSQL. The publisher uses `GAME_NATS_URL`, falling back to `NATS_URL`.
-
-The current publisher is a single background worker per API process. If multiple API replicas are deployed, outbox leases prevent duplicate simultaneous claims, and consumers must still be idempotent because a crash after JetStream acknowledgement but before marking the row published causes a safe redelivery. The publisher orders each claimed batch by event sequence; consumers must use `aggregate_version` to ignore stale events. A background cleanup deletes acknowledged Game outbox rows older than seven days in bounded batches; pending/unpublished events are never deleted. JetStream retains accepted events for 30 days.
-
-Chat's `internal/chatprojection` consumer uses a separate `CHAT_PROJECTION_DATABASE_URL` connection and the target Chat schema. It records events idempotently, applies projections for accounts, characters, server nodes, world instances, and sessions, then acknowledges JetStream. The legacy Chat API continues to use `CHAT_DATABASE_URL` until the read/write cutover is completed. `09-migrate-chat.sh` applies all versioned Chat schema migrations; on a fresh install the projection URL points at the same dedicated target DB.\n\nJetStream currently retains the event stream for 30 days. Chat projection bootstrap/backfill remains required for a consumer that is offline beyond that window. No Chat cutover is implied by this migration.
-
-
-## Chat service dual-mode rollout
-
-The Chat service now has two explicit data-access modes:
-
-- `chat.NewService(db)` is the legacy compatibility mode. It continues using the existing Game-backed chat schema while the new database is populated.
-- `chat.NewProjectionService(db)` uses only `chat_accounts`, `chat_characters`, `chat_server_nodes`, `chat_world_instances`, `chat_world_sessions`, and Chat-owned message snapshots. Its send, history, and WorldServer routing queries do not read Game tables.
-
-The standalone Chat process keeps `CHAT_DATABASE_URL` as the legacy connection and always runs the Game event consumer against `CHAT_PROJECTION_DATABASE_URL`. The HTTP API switches to the projection database only when `CHAT_USE_PROJECTION_DATABASE=true`. The example deployment configuration keeps this flag false.
-
-Do not enable projection mode until:
-1. Game events have populated current account/character/world/session/server projections.
-2. Existing chat messages and any required retention-window history have been backfilled with sender snapshots into the target Chat database.
-3. Counts, channel scopes, cursor pagination, idempotency, rate limits, nearby AOI validation, and WorldServer polling have been reconciled.
-4. The operator has a tested rollback plan.
-
-Projection mode requires `CHAT_PROJECTION_DATABASE_URL` to be different from `CHAT_DATABASE_URL`. The Chat service exits rather than silently using one database for both modes.
-
-
-## Historical Chat data backfill
-
-`Deployment/raspberry-pi/10-copy-chat-data.sh` copies the existing Game-backed Chat data into the empty standalone Chat database. It transfers account/character/world/server/session projections, 30-day message history, preferences, friendships, private requests, blocks, and only unpublished Chat fanout outbox rows. Historical sender name/race/level are reconstructed from the current character row because the legacy message table did not store those snapshots.
-
-The script:
-- Requires `CONFIRM_CHAT_DATA_COPY=YES`.
-- Requires the Game event consumer paused, old Chat writes paused, and all Game writes paused.
-- Refuses a target containing any projection, message, social, inbox, or outbox rows.
-- Reads the source in one `REPEATABLE READ READ ONLY` snapshot and applies generated inserts to the target in one transaction.
-- Seeds each current projection aggregate at the Game outbox sequence high-water mark, so old retained JetStream events cannot overwrite the backfilled snapshot.
-- Verifies row counts and pending Chat outbox counts, and never deletes source data.
-
-The maintenance window is intentional: pause Game API/WorldServer writes and old Chat writes, stop the Chat projection consumer, run the backfill, then restart Game and Chat. Resume the consumer only after the backfill transaction succeeds. Do not enable projection API mode until the projection consumer has caught up and message/routing acceptance checks pass.
-
-## Current implementation status
-
-- Chat runs as a separate process and reads `CHAT_DATABASE_URL`.
-- Chat authentication can call the independent Identity service.
-- The legacy compatibility mode still reads the original Game-backed chat tables. The new projection mode contains separate SQL paths that use only Chat-owned tables; it must be selected explicitly after backfill.
-- The schema in `Database/chat-migrations` is the target standalone schema; the Game event publisher and Chat projection consumer are implemented. Chat has explicit legacy and projection modes. The projection mode reads only Chat-owned projections; the legacy mode remains the default until historical message backfill and cutover validation are complete.
-- Keep `CHAT_USE_PROJECTION_DATABASE=false` until backfill and acceptance. When enabled, the HTTP API uses `CHAT_PROJECTION_DATABASE_URL`; `CHAT_DATABASE_URL` remains the legacy connection for rollback and the migration window.
+- Chat message history is retained for 30 days.
+- Chat cleanup runs in the Chat process against Chat's own database.
+- Game outbox cleanup removes only acknowledged events older than seven days in bounded batches; unpublished events are retained.
+- Projection consumer and API share Chat's connection pool. A projection consumer failure must be visible in logs/metrics, but does not make Game depend on Chat.
+- Never point `CHAT_DATABASE_URL` at the Game or Identity database.
