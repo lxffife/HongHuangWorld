@@ -725,6 +725,18 @@ struct EnetServer::Impl {
                         2.4F, 10.0F, 24.0F, 13.0F, -7.0F);
             add_monster("wraith-003", "wandering_wraith", "游祟", 3, 80.0F, 12.0F, 4.0F,
                         2.4F, 10.0F, 24.0F, 0.0F, 17.0F);
+            add_monster("war-soul-001", "blazing_war_soul", "炽战残魂", 4, 105.0F, 16.0F, 5.0F,
+                        2.5F, 11.0F, 26.0F, -24.0F, -18.0F);
+            add_monster("ironbone-001", "ironbone_beast_soul", "铁骨兽魂", 4, 145.0F, 13.0F, 9.0F,
+                        1.8F, 10.0F, 25.0F, 25.0F, -19.0F);
+            add_monster("gale-wraith-001", "gale_wraith", "疾风游魂", 4, 75.0F, 15.0F, 3.0F,
+                        3.8F, 13.0F, 28.0F, -26.0F, 19.0F);
+            add_monster("spirit-wisp-001", "spirit_scholar_wisp", "灵识游魂", 5, 90.0F, 18.0F, 4.0F,
+                        2.2F, 12.0F, 27.0F, 26.0F, 18.0F);
+            add_monster("life-soul-001", "life_ancient_soul", "生机古魂", 6, 180.0F, 18.0F, 10.0F,
+                        1.6F, 10.0F, 25.0F, 0.0F, -30.0F);
+            add_monster("faceless-001", "faceless_essence", "无相灵魄", 8, 220.0F, 22.0F, 12.0F,
+                        1.4F, 9.0F, 24.0F, 0.0F, 31.0F);
         }
     }
 
@@ -972,8 +984,12 @@ struct EnetServer::Impl {
     }
 
     void enqueue_soul_absorption(const PlayerState& player, const MonsterRuntime& monster) {
-        if (config.world_id != "underworld_fengdu" ||
-            monster.definition.id != "wandering_wraith") return;
+        if (config.world_id != "underworld_fengdu") return;
+        const auto& kind = monster.definition.id;
+        if (kind != "wandering_wraith" && kind != "blazing_war_soul" &&
+            kind != "ironbone_beast_soul" && kind != "gale_wraith" &&
+            kind != "spirit_scholar_wisp" && kind != "life_ancient_soul" &&
+            kind != "faceless_essence") return;
         const auto event_id = make_event_uuid();
         const Json payload{
             {"session_id", player.session_id},
