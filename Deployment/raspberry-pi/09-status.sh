@@ -9,6 +9,8 @@ if [ -z "${BASH_VERSION:-}" ]; then
 fi
 set -Eeuo pipefail
 source "$(dirname "$0")/lib/common.sh"
+echo "=== Identity ==="; systemctl --no-pager --full status honghuang-identity || true
+echo "=== Identity readiness ==="; curl -i --max-time 5 http://127.0.0.1:8789/ready || true
 echo "=== API ==="; systemctl --no-pager --full status honghuang-api || true
 echo "=== WorldServer ==="; systemctl --no-pager --full status honghuang-world-server || true
 echo "=== API readiness ==="; curl -i --max-time 5 http://127.0.0.1:8787/ready || true
