@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"sort"
+	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -410,7 +410,8 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 			&existing.SenderCharacterID,&existing.SenderName,&existing.SenderRace,&existing.SenderLevel,
 			&existing.Content,&existing.CreatedAt,&existing.WorldInstanceID,&existingRecipients)
 	if err == nil {
-		if existing.Channel != req.Channel || existing.Content != req.Content {
+		if existing.Channel != req.Channel || existing.Content != req.Content ||
+			(req.Channel == "nearby" && (existing.WorldInstanceID != instanceID || existing.WorldID != worldID)) {
 			return Message{}, ErrIdempotencyConflict
 		}
 		if err := json.Unmarshal(existingRecipients, &existing.RecipientCharacterIDs); err != nil {
