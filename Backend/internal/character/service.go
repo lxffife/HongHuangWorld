@@ -68,6 +68,13 @@ type BirthInheritance struct {
 	InitialAgility int `json:"initial_agility"`
 	InitialSpirit int `json:"initial_spirit"`
 	InitialVitality int `json:"initial_vitality"`
+	InitialHealth int `json:"initial_health"`
+	InitialMaxHealth int `json:"initial_max_health"`
+	InitialMana int `json:"initial_mana"`
+	InitialMaxMana int `json:"initial_max_mana"`
+	InitialAttack int `json:"initial_attack"`
+	InitialDefense int `json:"initial_defense"`
+	InitialMovementSpeed float64 `json:"initial_movement_speed"`
 }
 
 type Character struct {
@@ -250,6 +257,10 @@ func (s *Service) loadBirthInheritance(ctx context.Context, tx *sql.Tx, soulID, 
 	result.AppliedAgility, result.AppliedSpirit, result.AppliedVitality = bonuses[2], bonuses[3], bonuses[4]
 	result.InitialStrength, result.InitialConstitution = 5+bonuses[0], 5+bonuses[1]
 	result.InitialAgility, result.InitialSpirit, result.InitialVitality = 5+bonuses[2], 5+bonuses[3], 5+bonuses[4]
+	result.InitialHealth, result.InitialMaxHealth = 100+bonuses[1]*10+bonuses[4]*5, 100+bonuses[1]*10+bonuses[4]*5
+	result.InitialMana, result.InitialMaxMana = 50+bonuses[3]*10, 50+bonuses[3]*10
+	result.InitialAttack, result.InitialDefense = 10+bonuses[0]*2, 5+bonuses[1]+bonuses[4]
+	result.InitialMovementSpeed = 5.0+float64(bonuses[2])*0.05
 	return result, weights, nil
 }
 
