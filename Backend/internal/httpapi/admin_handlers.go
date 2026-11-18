@@ -32,7 +32,7 @@ func (h *adminHandlers) authenticate(r *http.Request)(adminauth.User,error) {
 func hasPermission(u adminauth.User,key string) bool { if u.IsSuperAdmin{return true};for _,p:=range u.Permissions{if p==key{return true}};return false }
 func (h *adminHandlers) require(w http.ResponseWriter,r *http.Request,key string)(adminauth.User,bool) {
  u,err:=h.authenticate(r);if err!=nil{http.Error(w,"unauthorized",http.StatusUnauthorized);return adminauth.User{},false}
- if !hasPermission(u,key){http.Error(w,"forbidden",http.StatusForbidden);return adminauth.User{},false};return u,true
+ if key!="" && !hasPermission(u,key){http.Error(w,"forbidden",http.StatusForbidden);return adminauth.User{},false};return u,true
 }
 func (h *adminHandlers) me(w http.ResponseWriter,r *http.Request){u,ok:=h.require(w,r,"");if !ok{return};writeJSON(w,http.StatusOK,u)}
 func (h *adminHandlers) changePassword(w http.ResponseWriter,r *http.Request){
@@ -58,4 +58,4 @@ func (h *adminHandlers) setPermissions(w http.ResponseWriter,r *http.Request){
  if err!=nil{if errors.Is(err,adminauth.ErrInvalidInput){http.Error(w,"invalid target user or permission list",400);return};if errors.Is(err,adminauth.ErrForbidden){http.Error(w,"only a super administrator may grant administrator-management permission",403);return};h.logger.Error("set admin permissions failed","error",err);http.Error(w,"internal server error",500);return}
  writeJSON(w,200,map[string]string{"status":"updated"})
 }
-func remoteIP(r *http.Request) string { host,_,err:=net.SplitHostPort(r.RemoteAddr);if err==nil{return host};return r.RemoteAddr }
+func remoteIP(r *http.Request) string { host,_,err:=net.SplitHostPort(r.RemoteAddr);if err==nil{return host};return "" }
