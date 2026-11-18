@@ -15,6 +15,7 @@ type chatHandlers struct {
 	authService *auth.Service
 	service *chat.Service
 	hub *chatSocketHub
+	events *chatEventBus
 	logger *slog.Logger
 }
 
@@ -24,6 +25,7 @@ func (h *chatHandlers) send(w http.ResponseWriter,r *http.Request){
 	if err:=decodeJSON(w,r,&req);err!=nil{http.Error(w,"invalid request body",http.StatusBadRequest);return}
 	item,err:=h.service.Send(r.Context(),account.ID,req)
 	if err!=nil{h.writeError(w,err);return}
+	if h.events != nil { h.events.publish(item) } else if h.hub != nil { h.hub.broadcast(item) }
 	writeJSON(w,http.StatusCreated,map[string]any{"message":item})
 }
 
