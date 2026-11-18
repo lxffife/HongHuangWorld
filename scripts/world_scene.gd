@@ -36,6 +36,7 @@ var chat_input: LineEdit
 var chat_status: Label
 var chat_expanded := false
 var chat_lines_by_channel: Dictionary = {"nearby": [], "world": [], "cross_world": []}
+var chat_seen_ids: Dictionary = {}
 var selected_chat_channel := "nearby"
 
 var local_player: HHPlayerController
@@ -125,6 +126,8 @@ func _ready() -> void:
 	_build_chat_hud()
 	if not HHChatNetwork.message_received.is_connected(_on_chat_socket_message):
 		HHChatNetwork.message_received.connect(_on_chat_socket_message)
+	if not HHChatNetwork.history_received.is_connected(_on_chat_history_received):
+		HHChatNetwork.history_received.connect(_on_chat_history_received)
 	if not HHChatNetwork.connected.is_connected(_on_chat_socket_connected):
 		HHChatNetwork.connected.connect(_on_chat_socket_connected)
 	if not HHChatNetwork.connection_error.is_connected(_on_chat_socket_error):
@@ -1254,8 +1257,21 @@ func _select_chat_channel(channel: String) -> void:
 		chat_status.text = str(names[channel]) + "频道 · 正在连接独立聊天服务"
 
 func _on_chat_socket_connected() -> void:
+	HHChatNetwork.fetch_history("world", 50)
+	HHChatNetwork.fetch_history("cross_world", 50)
 	if selected_chat_channel != "nearby" and is_instance_valid(chat_status):
 		chat_status.text = "聊天服务已连接 · " + ("世界频道" if selected_chat_channel == "world" else "跨界频道")
+
+func _on_chat_history_received(channel: String, messages: Array) -> void:
+	if channel not in ["world", "cross_world"]:
+		return
+	for message in messages:
+		if not message is Dictionary:
+			continue
+		var sender := str(message.get("sender_name", "未知玩家"))
+		var content := str(message.get("content", ""))
+		if not content.is_empty():
+			_append_chat_line("[" + sender + "] " + content, channel, str(message.get("id", "")))
 
 func _on_chat_socket_error(message: String) -> void:
 	if is_instance_valid(chat_status) and selected_chat_channel != "nearby":
@@ -1272,7 +1288,7 @@ func _on_chat_socket_message(message: Dictionary) -> void:
 	var sender := str(message.get("sender_name", "未知玩家"))
 	var content := str(message.get("content", ""))
 	if not content.is_empty():
-		_append_chat_line("[" + sender + "] " + content, channel)
+		_append_chat_line("[" + sender + "] " + content, channel, str(message.get("id", "")))
 		if is_instance_valid(chat_status) and channel == selected_chat_channel:
 			chat_status.text = "聊天消息已送达"
 
@@ -1285,8 +1301,14 @@ func _on_chat_event(event: Dictionary) -> void:
 	_append_chat_line("[" + sender + "] " + content)
 	chat_status.text = "附近频道 · 消息已送达当前可见范围"
 
-func _append_chat_line(line: String, channel: String = "") -> void:
+func _append_chat_line(line: String, channel: String = "", message_id: String = "") -> void:
 	var target_channel := channel if not channel.is_empty() else selected_chat_channel
+	if not message_id.is_empty():
+		if chat_seen_ids.has(message_id):
+			return
+		chat_seen_ids[message_id] = true
+		while chat_seen_ids.size() > 1000:
+			chat_seen_ids.erase(chat_seen_ids.keys()[0])
 	if not chat_lines_by_channel.has(target_channel):
 		chat_lines_by_channel[target_channel] = []
 	var lines: Array = chat_lines_by_channel[target_channel]
