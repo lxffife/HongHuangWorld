@@ -734,6 +734,8 @@ struct EnetServer::Impl {
                         2.2F, 12.0F, 28.0F, -34.0F, 2.0F);
             add_monster("war-soul-ancient-001", "blazing_war_soul_ancient", "远古炽战残魂", 9, 360.0F, 30.0F, 14.0F,
                         1.9F, 13.0F, 30.0F, 34.0F, 3.0F);
+            add_monster("battlefield-god-soul-001", "ancient_battlefield_god_soul", "古战场·上古战神残魂", 12, 720.0F, 38.0F, 20.0F,
+                        1.7F, 15.0F, 32.0F, -43.0F, 27.0F);
             // Rare soul bodies are dormant spawn points. Resolve them by stable
             // runtime ID rather than vector position so future spawn additions
             // cannot silently assign the rare schedule to the wrong monsters.
@@ -755,6 +757,9 @@ struct EnetServer::Impl {
             };
             configure_rare_spawn("war-soul-elite-001", 35, 180, 60);
             configure_rare_spawn("war-soul-ancient-001", 12, 600, 240);
+            // The battlefield god soul is a distinct high-risk encounter. Its
+            // soul reward is still gated by the player's own causal choice.
+            configure_rare_spawn("battlefield-god-soul-001", 5, 900, 300);
             add_monster("ironbone-001", "ironbone_beast_soul", "铁骨兽魂", 4, 145.0F, 13.0F, 9.0F,
                         1.8F, 10.0F, 25.0F, 25.0F, -19.0F);
             add_monster("gale-wraith-001", "gale_wraith", "疾风游魂", 4, 75.0F, 15.0F, 3.0F,
@@ -1019,7 +1024,8 @@ struct EnetServer::Impl {
         const auto& kind = monster.definition.id;
         if (kind != "wandering_wraith" && kind != "blazing_war_soul" &&
             kind != "blazing_war_soul_elite" && kind != "blazing_war_soul_ancient" &&
-            kind != "blazing_war_soul_mythic" && kind != "ironbone_beast_soul" && kind != "gale_wraith" &&
+            kind != "blazing_war_soul_mythic" && kind != "ancient_battlefield_god_soul" &&
+            kind != "ironbone_beast_soul" && kind != "gale_wraith" &&
             kind != "spirit_scholar_wisp" && kind != "wangchuan_echo_wisp" && kind != "life_ancient_soul" &&
             kind != "faceless_essence") return;
         const auto event_id = make_event_uuid();
@@ -1421,6 +1427,8 @@ struct EnetServer::Impl {
                 respawn_delay = std::chrono::seconds(600);
             } else if (target->definition.id == "blazing_war_soul_elite") {
                 respawn_delay = std::chrono::seconds(180);
+            } else if (target->definition.id == "ancient_battlefield_god_soul") {
+                respawn_delay = std::chrono::seconds(900);
             } else if (target->definition.id == "faceless_essence") {
                 respawn_delay = std::chrono::seconds(300);
             } else if (target->definition.id == "life_ancient_soul") {
