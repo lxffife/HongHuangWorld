@@ -181,7 +181,10 @@ func chatEventDurableName() string {
 	var b strings.Builder
 	b.WriteString("CHAT_")
 	for _, r := range strings.ToUpper(node) {
-		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+		// JetStream durable names use a conservative identifier alphabet.
+		// Normalize separators (including hyphens and dots) to underscores
+		// so equivalent node IDs produce stable, portable consumer names.
+		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
 			b.WriteRune(r)
 		} else {
 			b.WriteByte('_')
