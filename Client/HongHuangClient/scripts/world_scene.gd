@@ -2172,6 +2172,20 @@ func _render_exploration_points(points: Variant) -> void:
 		exploration_point_data[point_id] = point.duplicate(true)
 
 
+func _exploration_percent(done: int, total: int) -> int:
+	if total <= 0:
+		return 0
+	return clampi(roundi(float(done) * 100.0 / float(total)), 0, 100)
+
+
+func _exploration_bar(percent: int) -> String:
+	var filled := roundi(float(percent) / 10.0)
+	var bar := ""
+	for index in range(10):
+		bar += "■" if index < filled else "□"
+	return bar
+
+
 func _render_exploration_progress(data: Dictionary) -> void:
 	if exploration_container == null:
 		return
@@ -2182,21 +2196,32 @@ func _render_exploration_progress(data: Dictionary) -> void:
 		exploration_progress_label.add_theme_font_size_override("font_size", 15)
 		exploration_container.add_child(exploration_progress_label)
 	exploration_container.move_child(exploration_progress_label, 0)
+	var total_points := int(data.get("total_points", 0))
+	var discovered_points := int(data.get("discovered_points", 0))
+	var total_events := int(data.get("total_events", 0))
+	var claimed_events := int(data.get("claimed_events", 0))
+	var point_percent := _exploration_percent(discovered_points, total_points)
+	var event_percent := _exploration_percent(claimed_events, total_events)
 	var lines: Array[String] = []
-	lines.append("【灵魂探索总览】地点 %d/%d · 奇遇 %d/%d" % [
-		int(data.get("discovered_points", 0)), int(data.get("total_points", 0)),
-		int(data.get("claimed_events", 0)), int(data.get("total_events", 0))
-	])
+	lines.append("【灵魂探索总览】地点 %d/%d · %d%%" % [discovered_points, total_points, point_percent])
+	lines.append(_exploration_bar(point_percent) + "  奇遇 %d/%d · %d%%" % [claimed_events, total_events, event_percent])
 	var regions: Variant = data.get("regions", [])
 	if regions is Array:
 		for region_variant in regions:
 			if not region_variant is Dictionary:
 				continue
 			var region: Dictionary = region_variant
-			lines.append("%s  地点 %d/%d · 奇遇 %d/%d" % [
+			var region_points := int(region.get("total_points", 0))
+			var region_discovered := int(region.get("discovered_points", 0))
+			var region_events := int(region.get("total_events", 0))
+			var region_claimed := int(region.get("claimed_events", 0))
+			var region_percent := _exploration_percent(region_discovered, region_points)
+			lines.append("%s  地点 %d/%d · %d%%" % [
 				str(region.get("region_name", region.get("region_id", "未知区域"))),
-				int(region.get("discovered_points", 0)), int(region.get("total_points", 0)),
-				int(region.get("claimed_events", 0)), int(region.get("total_events", 0))
+				region_discovered, region_points, region_percent
+			])
+			lines.append(_exploration_bar(region_percent) + "  奇遇 %d/%d（%d%%）" % [
+				region_claimed, region_events, _exploration_percent(region_claimed, region_events)
 			])
 	exploration_progress_label.text = "\n".join(PackedStringArray(lines))
 
@@ -2255,6 +2280,24 @@ func _discover_exploration_point(point_id: String) -> void:
 
 
 
+func _add_exploration_marker_mesh(marker: Node3D, node_name: String, mesh: Mesh, local_position: Vector3, color: Color, emissive: bool = false) -> MeshInstance3D:
+	var instance := MeshInstance3D.new()
+	instance.name = node_name
+	instance.mesh = mesh
+	instance.position = local_position
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = 0.72
+	if emissive:
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.emission_enabled = true
+		material.emission = color
+		material.emission_energy_multiplier = 1.6
+	instance.material_override = material
+	marker.add_child(instance)
+	return instance
+
+
 func _create_exploration_marker(point: Dictionary) -> void:
 	var point_id := str(point.get("id", ""))
 	if point_id.is_empty():
@@ -2267,40 +2310,80 @@ func _create_exploration_marker(point: Dictionary) -> void:
 		float(point.get("position_z", 0.0))
 	)
 	var discovered := bool(point.get("discovered", false))
-	var ring := MeshInstance3D.new()
+	var marker_color := Color("#79c8a4") if discovered else Color("#e7bd69")
+	var stone_color := Color("#52645e") if discovered else Color("#74634f")
 	var ring_mesh := TorusMesh.new()
 	ring_mesh.inner_radius = 0.72
 	ring_mesh.outer_radius = 0.9
-	ring.name = "Ring"
-	ring.mesh = ring_mesh
-	var ring_material := StandardMaterial3D.new()
-	ring_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	ring_material.albedo_color = Color("#79c8a4") if discovered else Color("#e7bd69")
-	ring_material.emission_enabled = true
-	ring_material.emission = ring_material.albedo_color
-	ring.material_override = ring_material
-	marker.add_child(ring)
-	var beacon := MeshInstance3D.new()
-	var beacon_mesh := CylinderMesh.new()
-	beacon_mesh.top_radius = 0.035
-	beacon_mesh.bottom_radius = 0.035
-	beacon_mesh.height = 1.35
-	beacon.name = "Beacon"
-	beacon.mesh = beacon_mesh
-	beacon.position.y = 0.72
-	var beacon_material := StandardMaterial3D.new()
-	beacon_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	beacon_material.albedo_color = ring_material.albedo_color
-	beacon_material.emission_enabled = true
-	beacon_material.emission = ring_material.albedo_color
-	beacon.material_override = beacon_material
-	marker.add_child(beacon)
+	var ring := _add_exploration_marker_mesh(marker, "Ring", ring_mesh, Vector3.ZERO, marker_color, true)
+
+	# Each authored point has its own silhouette; unknown future points retain a simple beacon.
+	match point_id:
+		"fengdu_gate_soul_lantern":
+			var post := CylinderMesh.new()
+			post.top_radius = 0.07
+			post.bottom_radius = 0.11
+			post.height = 1.15
+			_add_exploration_marker_mesh(marker, "LanternStand", post, Vector3(0, 0.58, 0), stone_color)
+			var body := BoxMesh.new()
+			body.size = Vector3(0.58, 0.58, 0.48)
+			_add_exploration_marker_mesh(marker, "LanternBody", body, Vector3(0, 1.35, 0), marker_color, true)
+			var roof := CylinderMesh.new()
+			roof.top_radius = 0.22
+			roof.bottom_radius = 0.42
+			roof.height = 0.18
+			_add_exploration_marker_mesh(marker, "LanternRoof", roof, Vector3(0, 1.73, 0), stone_color)
+			var flame := SphereMesh.new()
+			flame.radius = 0.14
+			flame.height = 0.3
+			_add_exploration_marker_mesh(marker, "SoulFlame", flame, Vector3(0, 1.36, 0), marker_color, true)
+		"forgotten_river_echo_stone":
+			var slab := BoxMesh.new()
+			slab.size = Vector3(0.82, 1.55, 0.34)
+			var stone := _add_exploration_marker_mesh(marker, "EchoStone", slab, Vector3(0, 0.82, 0), stone_color)
+			stone.rotation.z = -0.1
+			var echo_mesh := TorusMesh.new()
+			echo_mesh.inner_radius = 0.28
+			echo_mesh.outer_radius = 0.34
+			var echo := _add_exploration_marker_mesh(marker, "EchoEtching", echo_mesh, Vector3(0, 1.0, 0.2), marker_color, true)
+			echo.rotation.x = PI / 2.0
+		"naihe_bridge_soul_mark":
+			var seal := CylinderMesh.new()
+			seal.top_radius = 0.22
+			seal.bottom_radius = 0.3
+			seal.height = 0.16
+			_add_exploration_marker_mesh(marker, "SoulSeal", seal, Vector3(0, 0.12, 0), marker_color, true)
+			for pillar_index in range(3):
+				var angle := TAU * float(pillar_index) / 3.0
+				var pillar := CylinderMesh.new()
+				pillar.top_radius = 0.045
+				pillar.bottom_radius = 0.075
+				pillar.height = 0.62
+				_add_exploration_marker_mesh(marker, "SealPillar" + str(pillar_index), pillar, Vector3(cos(angle) * 0.48, 0.31, sin(angle) * 0.48), stone_color)
+		"reincarnation_hall_tablet":
+			var tablet_mesh := BoxMesh.new()
+			tablet_mesh.size = Vector3(0.9, 1.65, 0.28)
+			_add_exploration_marker_mesh(marker, "ReincarnationTablet", tablet_mesh, Vector3(0, 0.88, 0), stone_color)
+			var cap := BoxMesh.new()
+			cap.size = Vector3(1.08, 0.16, 0.38)
+			_add_exploration_marker_mesh(marker, "TabletCap", cap, Vector3(0, 1.78, 0), marker_color)
+			for line_index in range(3):
+				var inscription := BoxMesh.new()
+				inscription.size = Vector3(0.42, 0.035, 0.025)
+				_add_exploration_marker_mesh(marker, "Inscription" + str(line_index), inscription, Vector3(0, 1.28 - float(line_index) * 0.22, 0.16), marker_color, true)
+		_:
+			var beacon_mesh := CylinderMesh.new()
+			beacon_mesh.top_radius = 0.035
+			beacon_mesh.bottom_radius = 0.035
+			beacon_mesh.height = 1.35
+			_add_exploration_marker_mesh(marker, "Beacon", beacon_mesh, Vector3(0, 0.72, 0), marker_color, true)
+
 	var title := Label3D.new()
 	title.text = ("已发现 · " if discovered else "探索 · ") + str(point.get("name", "未知地点")) + ("" if discovered else "\nF · 靠近后调查")
-	title.position.y = 1.55
+	title.position.y = 2.15 if point_id == "reincarnation_hall_tablet" or point_id == "forgotten_river_echo_stone" else 2.0
 	title.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	title.font_size = 28
-	title.modulate = ring_material.albedo_color
+	title.modulate = marker_color
 	marker.add_child(title)
 	add_child(marker)
 	marker.set_meta("base_y", marker.position.y)
