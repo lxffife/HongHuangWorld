@@ -7,9 +7,5 @@ set -a
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 set +a
-if [[ -z "${ADMIN_BOOTSTRAP_USERNAME:-}" || -z "${ADMIN_BOOTSTRAP_PASSWORD:-}" ]]; then
-  echo "ADMIN_BOOTSTRAP_USERNAME and ADMIN_BOOTSTRAP_PASSWORD are required for first startup." >&2
-  exit 1
-fi
 cd "$ROOT_DIR/Backend"
 exec go run ./cmd/admin
