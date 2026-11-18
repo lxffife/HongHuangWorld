@@ -40,6 +40,7 @@ func TestChatRouterKeepsChatRoutesAndRejectsGameRoutes(t *testing.T) {
 	}{
 		{http.MethodPost, "/api/v1/chat/messages", http.StatusServiceUnavailable},
 		{http.MethodGet, "/api/v1/chat/messages", http.StatusServiceUnavailable},
+		{http.MethodGet, "/api/v1/chat/socket", http.StatusServiceUnavailable},
 		{http.MethodGet, "/api/v1/servers/chat/messages", http.StatusServiceUnavailable},
 		{http.MethodPost, "/api/v1/servers/chat/messages", http.StatusServiceUnavailable},
 		{http.MethodPost, "/api/v1/auth/login", http.StatusNotFound},
