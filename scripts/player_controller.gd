@@ -20,6 +20,9 @@ var soul_trait_ring: MeshInstance3D
 var soul_trait_shell: MeshInstance3D
 var soul_trait_rune_ring: MeshInstance3D
 var soul_trait_life_ring: MeshInstance3D
+var soul_growth_rings: Array[MeshInstance3D] = []
+var soul_growth_shell: MeshInstance3D
+var soul_growth_stage := 1
 var soul_form_enabled := false
 var soul_form_time := 0.0
 var soul_form_scale := 1.0
@@ -174,7 +177,7 @@ func _physics_process(delta: float) -> void:
 				push_warning("World movement input send failed: " + str(send_error))
 
 
-func set_soul_form(enabled: bool, stage: int = 1, visual_scale: float = 0.35, affinities: Dictionary = {}) -> void:
+func set_soul_form(enabled: bool, stage: int = 1, visual_scale: float = 0.35, affinities: Dictionary = {}, growth_stage: int = 1) -> void:
 	if not is_instance_valid(visual) or not is_instance_valid(collision_shape):
 		return
 	soul_form_enabled = enabled
@@ -190,9 +193,12 @@ func set_soul_form(enabled: bool, stage: int = 1, visual_scale: float = 0.35, af
 		move_speed = 5.5
 		if is_instance_valid(soul_orb_halo):
 			soul_orb_halo.visible = false
-		for trait_node in [soul_trait_ring, soul_trait_shell, soul_trait_rune_ring, soul_trait_life_ring]:
+		for trait_node in [soul_trait_ring, soul_trait_shell, soul_trait_rune_ring, soul_trait_life_ring, soul_growth_shell]:
 			if is_instance_valid(trait_node):
 				trait_node.visible = false
+		for growth_ring in soul_growth_rings:
+			if is_instance_valid(growth_ring):
+				growth_ring.visible = false
 		return
 
 	var orb := SphereMesh.new()
@@ -241,6 +247,44 @@ func set_soul_form(enabled: bool, stage: int = 1, visual_scale: float = 0.35, af
 	soul_orb_halo.visible = true
 	soul_orb_halo.scale = Vector3.ONE * clampf(visual_scale / 0.35, 0.85, 3.8)
 	_apply_soul_affinity_visuals(affinities)
+	_apply_soul_growth_visuals(growth_stage)
+
+
+func _apply_soul_growth_visuals(growth_stage: int) -> void:
+	soul_growth_stage = clampi(growth_stage, 1, 5)
+	while soul_growth_rings.size() < 3:
+		var ring_index := soul_growth_rings.size()
+		var ring := MeshInstance3D.new()
+		ring.name = "SoulGrowthRing" + str(ring_index + 1)
+		var torus := TorusMesh.new()
+		torus.inner_radius = 0.82 + float(ring_index) * 0.18
+		torus.outer_radius = torus.inner_radius + 0.045
+		torus.rings = 32
+		torus.ring_segments = 6
+		ring.mesh = torus
+		ring.position.y = 0.42
+		ring.rotation.x = [0.0, 0.68, -0.68][ring_index]
+		ring.material_override = _make_trait_material(Color(0.42, 0.82, 1.0), 0.42)
+		add_child(ring)
+		soul_growth_rings.append(ring)
+	for i in range(soul_growth_rings.size()):
+		var ring := soul_growth_rings[i]
+		ring.visible = soul_growth_stage >= i + 2
+		ring.scale = Vector3.ONE * soul_form_scale * (1.0 + float(i) * 0.08)
+	if not is_instance_valid(soul_growth_shell):
+		soul_growth_shell = MeshInstance3D.new()
+		soul_growth_shell.name = "SoulMatureShell"
+		var shell_mesh := SphereMesh.new()
+		shell_mesh.radius = 0.53
+		shell_mesh.height = 1.06
+		shell_mesh.radial_segments = 24
+		shell_mesh.rings = 12
+		soul_growth_shell.mesh = shell_mesh
+		soul_growth_shell.position.y = 0.42
+		soul_growth_shell.material_override = _make_trait_material(Color(0.42, 0.82, 1.0), 0.10)
+		add_child(soul_growth_shell)
+	soul_growth_shell.visible = soul_growth_stage >= 5
+	soul_growth_shell.scale = Vector3.ONE * soul_form_scale * 1.12
 
 func _make_trait_material(color: Color, alpha: float = 0.58) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
@@ -362,3 +406,12 @@ func _process(delta: float) -> void:
 	if is_instance_valid(soul_trait_life_ring) and soul_trait_life_ring.visible:
 		soul_trait_life_ring.position.y = 0.42 + bob
 		soul_trait_life_ring.rotation.y -= delta * 0.35
+	for i in range(soul_growth_rings.size()):
+		var growth_ring := soul_growth_rings[i]
+		if is_instance_valid(growth_ring) and growth_ring.visible:
+			growth_ring.position.y = 0.42 + bob
+			growth_ring.rotation.y += delta * (0.22 + float(i) * 0.12)
+	if is_instance_valid(soul_growth_shell) and soul_growth_shell.visible:
+		soul_growth_shell.position.y = 0.42 + bob
+		var mature_pulse := 1.0 + sin(soul_form_time * 1.35) * 0.018
+		soul_growth_shell.scale = Vector3.ONE * soul_form_scale * 1.12 * mature_pulse
