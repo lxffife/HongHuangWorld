@@ -21,7 +21,7 @@ var (
 	ErrIdempotencyConflict = errors.New("chat client message id was reused with different content")
 )
 
-type Service struct { db *sql.DB }
+type Service struct { db *sql.DB; projectionMode bool }
 
 type Message struct {
 	ID string `json:"id"`
@@ -46,6 +46,9 @@ type SendRequest struct {
 }
 
 func NewService(db *sql.DB) *Service { return &Service{db: db} }
+
+// NewProjectionService uses only Chat-owned projection tables and message snapshots.
+func NewProjectionService(db *sql.DB) *Service { return &Service{db: db, projectionMode: true} }
 
 func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (Message, error) {
 	req.Channel = strings.TrimSpace(req.Channel)
@@ -72,11 +75,16 @@ func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (
 	// remain correct when the same account submits concurrent requests.
 	var characterID, characterName, raceID, worldID string
 	var level int
-	err = tx.QueryRowContext(ctx, `SELECT c.character_id::text,c.name,COALESCE(c.race_id,''),c.world_id,c.level
+	characterQuery := `SELECT c.id::text,c.name,COALESCE(c.race_id,''),c.world_id,c.level
+		FROM souls soul JOIN characters c ON c.id=soul.current_character_id
+		WHERE soul.account_id=$1 AND c.status='alive'
+		FOR UPDATE OF c`
+	if s.projectionMode { characterQuery = `SELECT c.character_id::text,c.name,COALESCE(c.race_id,''),c.world_id,c.level
 		FROM chat_accounts account
 		JOIN chat_characters c ON c.character_id=account.current_character_id
 		WHERE account.account_id=$1::uuid AND c.status='alive'
-		FOR UPDATE OF account,c`, accountID).Scan(&characterID, &characterName, &raceID, &worldID, &level)
+		FOR UPDATE OF account,c` }
+	err = tx.QueryRowContext(ctx, characterQuery, accountID).Scan(&characterID, &characterName, &raceID, &worldID, &level)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Message{}, ErrNoCharacter
 	}
@@ -84,7 +92,7 @@ func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (
 		return Message{}, fmt.Errorf("resolve and lock chat character: %w", err)
 	}
 
-	existing, existingErr := getChatMessageByClientID(ctx, tx, characterID, req.ClientMessageID)
+	existing, existingErr := getChatMessageByClientID(ctx, tx, characterID, req.ClientMessageID, s.projectionMode)
 	if existingErr == nil {
 		if existing.Channel != req.Channel || existing.Content != req.Content {
 			return Message{}, ErrIdempotencyConflict
@@ -217,11 +225,11 @@ type chatRowQueryer interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
-func getChatMessageByClientID(ctx context.Context, queryer chatRowQueryer, characterID, clientID string) (Message, error) {
+func getChatMessageByClientID(ctx context.Context, queryer chatRowQueryer, characterID, clientID string, projection bool) (Message, error) {
 	var m Message
-	err := queryer.QueryRowContext(ctx, `SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),m.sender_character_id::text,m.sender_name,m.sender_race,m.sender_level,m.content,m.created_at
-		FROM chat_messages m
-		WHERE m.sender_character_id=$1::uuid AND m.client_message_id=$2::uuid`, characterID, clientID).
+	query := `SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),m.sender_character_id::text,c.name,COALESCE(c.race_id,''),c.level,m.content,m.created_at FROM chat_messages m JOIN characters c ON c.id=m.sender_character_id WHERE m.sender_character_id=$1::uuid AND m.client_message_id=$2::uuid`
+	if projection { query = `SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),m.sender_character_id::text,m.sender_name,m.sender_race,m.sender_level,m.content,m.created_at FROM chat_messages m WHERE m.sender_character_id=$1::uuid AND m.client_message_id=$2::uuid` }
+	err := queryer.QueryRowContext(ctx, query, characterID, clientID).
 		Scan(&m.ID,&m.ClientMessageID,&m.Channel,&m.WorldID,&m.SenderCharacterID,&m.SenderName,&m.SenderRace,&m.SenderLevel,&m.Content,&m.CreatedAt)
 	if err != nil {
 		return Message{}, fmt.Errorf("load stored chat message: %w", err)
@@ -230,7 +238,7 @@ func getChatMessageByClientID(ctx context.Context, queryer chatRowQueryer, chara
 }
 
 func (s *Service) getByClientID(ctx context.Context, characterID, clientID string) (Message, error) {
-	return getChatMessageByClientID(ctx, s.db, characterID, clientID)
+	return getChatMessageByClientID(ctx, s.db, characterID, clientID, s.projectionMode)
 }
 
 func insertChatEventOutbox(ctx context.Context, tx *sql.Tx, message Message) error {
