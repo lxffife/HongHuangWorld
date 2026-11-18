@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -15,6 +16,8 @@ class State:
     status = 201
     accepted: dict[str, str] = {}
     requests = 0
+    delay_ms = 0
+    drop_connection = False
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -43,8 +46,22 @@ class Handler(BaseHTTPRequestHandler):
             if code not in (201, 400, 401, 403, 404, 408, 409, 425, 429, 500, 502, 503, 504):
                 self._json(400, {"error": "unsupported status code"})
                 return
+            try:
+                delay_ms = int(params.get("delay_ms", ["0"])[0])
+            except ValueError:
+                self._json(400, {"error": "delay_ms must be an integer"})
+                return
+            if delay_ms < 0 or delay_ms > 30000:
+                self._json(400, {"error": "delay_ms must be between 0 and 30000"})
+                return
             State.status = code
-            self._json(200, {"status": State.status})
+            State.delay_ms = delay_ms
+            State.drop_connection = params.get("drop", ["0"])[0] == "1"
+            self._json(200, {
+                "status": State.status,
+                "delay_ms": State.delay_ms,
+                "drop_connection": State.drop_connection,
+            })
             return
         if parsed.path == "/__admin/stats":
             self._json(200, {
@@ -74,6 +91,13 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         State.requests += 1
+        if State.delay_ms:
+            time.sleep(State.delay_ms / 1000.0)
+        if State.drop_connection:
+            self.close_connection = True
+            self.connection.shutdown(1)
+            self.connection.close()
+            return
         if State.status != 201:
             self._json(State.status, {"error": "mock ChatServer rejection"})
             return
@@ -95,7 +119,7 @@ def main() -> None:
         parser.error("the mock server must bind to loopback only")
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"Fake ChatServer listening on http://{args.host}:{args.port}", flush=True)
-    print("Set status: GET /__admin/status?code=503 (or 201/401/429)", flush=True)
+    print("Configure: GET /__admin/status?code=503&delay_ms=0&drop=0", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
