@@ -33,6 +33,9 @@ func main() {
 	}
 	defer db.Close()
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	// During the database cutover period, the legacy Chat API can continue
 	// using CHAT_DATABASE_URL while this independent worker maintains the
 	// new Chat-owned projection database.
@@ -57,12 +60,7 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	go runChatRetentionCleanup(ctx, chat.NewService(db), logger)
-	if projectionDB != nil {
-		go chatprojection.Run(ctx, projectionDB, logger)
-	}
 
 	go func() {
 		logger.Info("chat service starting", "addr", addr)
