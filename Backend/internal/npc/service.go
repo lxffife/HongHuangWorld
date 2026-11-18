@@ -572,6 +572,10 @@ func (s *Service) ListAvailableExplorationEvents(ctx context.Context, accountID 
 		 LEFT JOIN soul_exploration_discoveries d ON d.point_id=p.id AND d.soul_id=soul.id
 		 LEFT JOIN soul_exploration_event_claims claim ON claim.soul_id=soul.id AND claim.event_id=e.id
 		 WHERE e.enabled=TRUE
+		   AND (p.required_event_id IS NULL OR EXISTS (
+		       SELECT 1 FROM soul_exploration_event_claims prior_claim
+		       WHERE prior_claim.soul_id=soul.id AND prior_claim.event_id=p.required_event_id
+		         AND prior_claim.choice_id=p.required_choice_id))
 		 ORDER BY p.region_id,e.id`,soulID,worldID)
 	if err!=nil { return nil,fmt.Errorf("query exploration events: %w",err) }
 	defer rows.Close()
