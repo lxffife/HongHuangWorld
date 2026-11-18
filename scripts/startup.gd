@@ -1030,6 +1030,12 @@ func _render_lobby_equipment_manager() -> void:
 			remove_button.disabled = lobby_equipment_busy
 			remove_button.pressed.connect(_request_lobby_unequip.bind(slot))
 			detail_row.add_child(remove_button)
+	for set_line in _equipment_set_effect_lines(equipped_by_slot):
+		var set_label := Label.new()
+		set_label.text = set_line
+		set_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		set_label.add_theme_color_override("font_color", Color("#d8bd83"))
+		lobby_equipment_list.add_child(set_label)
 	var divider := HSeparator.new()
 	lobby_equipment_list.add_child(divider)
 	var inventory_heading := Label.new()
@@ -1152,6 +1158,51 @@ func _select_lobby_equipment(item_id: String) -> void:
 			break
 	_render_lobby_equipment_manager()
 
+func _equipment_set_effect_lines(equipped_by_slot: Dictionary) -> Array[String]:
+	var set_counts: Dictionary = {}
+	var set_metadata: Dictionary = {}
+	for value in equipped_by_slot.values():
+		if not (value is Dictionary):
+			continue
+		var item: Dictionary = value
+		var set_id := str(item.get("set_id", ""))
+		if set_id.is_empty():
+			continue
+		set_counts[set_id] = int(set_counts.get(set_id, 0)) + 1
+		set_metadata[set_id] = item
+	var result: Array[String] = []
+	for set_id_variant in set_counts.keys():
+		var set_id := str(set_id_variant)
+		var item: Dictionary = set_metadata[set_id]
+		var set_name := str(item.get("set_name", set_id))
+		var piece_count := int(set_counts[set_id])
+		var tiers: Dictionary = item.get("set_bonus_tiers", {}) if item.get("set_bonus_tiers", {}) is Dictionary else {}
+		var tier_keys: Array[int] = []
+		for tier_key in tiers.keys():
+			var required_pieces := int(tier_key)
+			if required_pieces > 0:
+				tier_keys.append(required_pieces)
+		tier_keys.sort()
+		var active_parts: Array[String] = []
+		for required_pieces in tier_keys:
+			if piece_count < required_pieces:
+				continue
+			var stats: Dictionary = tiers.get(str(required_pieces), {}) if tiers.get(str(required_pieces), {}) is Dictionary else {}
+			active_parts.append(str(required_pieces) + "件：" + _format_equipment_stat_summary(stats))
+		var next_tier := 0
+		for required_pieces in tier_keys:
+			if piece_count < required_pieces:
+				next_tier = required_pieces
+				break
+		var progress_text := set_name + " · " + str(piece_count) + "件"
+		if next_tier > 0:
+			progress_text += " · 再需 " + str(next_tier - piece_count) + "件激活下一档"
+		if active_parts.is_empty():
+			result.append(progress_text + " · 尚未激活套装效果")
+		else:
+			result.append(progress_text + " · " + "；".join(active_parts))
+	return result
+
 func _render_lobby_equipment_comparison(equipped_by_slot: Dictionary) -> void:
 	if lobby_selected_equipment.is_empty():
 		return
@@ -1197,6 +1248,19 @@ func _render_lobby_equipment_comparison(equipped_by_slot: Dictionary) -> void:
 			line.text = _equipment_stat_display_name(key) + "： " + str(old_value) + "  →  " + str(new_value) + "    (" + delta_text + ")"
 			line.add_theme_color_override("font_color", Color("#55c98a") if delta > 0 else (Color("#e07878") if delta < 0 else Color("#aeb8c8")))
 			lobby_equipment_list.add_child(line)
+	var current_set_lines := _equipment_set_effect_lines(equipped_by_slot)
+	var after_equipment := equipped_by_slot.duplicate(true)
+	after_equipment[slot] = candidate
+	var preview_set_lines := _equipment_set_effect_lines(after_equipment)
+	var set_heading := Label.new()
+	set_heading.text = "套装效果预览"
+	set_heading.add_theme_color_override("font_color", Color("#d8bd83"))
+	lobby_equipment_list.add_child(set_heading)
+	var set_lines := Label.new()
+	set_lines.text = "当前：\n" + ("\n".join(current_set_lines) if not current_set_lines.is_empty() else "暂无已激活套装效果") + "\n试穿后：\n" + ("\n".join(preview_set_lines) if not preview_set_lines.is_empty() else "暂无已激活套装效果")
+	set_lines.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	set_lines.add_theme_color_override("font_color", Color("#9ed6b1"))
+	lobby_equipment_list.add_child(set_lines)
 	var actions := HBoxContainer.new()
 	lobby_equipment_list.add_child(actions)
 	var confirm_button := Button.new()
