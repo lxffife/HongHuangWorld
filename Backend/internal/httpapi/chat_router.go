@@ -59,10 +59,13 @@ func NewChatRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 
 	authService := auth.NewService(db)
 	chatService := chat.NewService(db)
-	chatAPI := &chatHandlers{authService: authService, service: chatService, hub: newChatSocketHub(), logger: logger}
+	chatHub := newChatSocketHub()
+	chatEvents := newChatEventBus(chatHub, logger)
+	chatAPI := &chatHandlers{authService: authService, service: chatService, hub: chatHub, events: chatEvents, logger: logger}
 	serverAPI := &chatServerHandlers{
 		service: chatService,
 		apiKey:  os.Getenv("WORLD_SERVER_API_KEY"),
+		events: chatEvents,
 		logger:  logger,
 	}
 	mux.HandleFunc("POST /api/v1/chat/messages", chatAPI.send)
