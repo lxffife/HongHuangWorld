@@ -170,8 +170,8 @@ func (h *npcHandlers) triggerExplorationEvent(w http.ResponseWriter,r *http.Requ
 		EventID string `json:"event_id"`
 		ChoiceID string `json:"choice_id"`
 	}
-	if err:=decodeJSON(w,r,&request);err!=nil || strings.TrimSpace(request.EventID)=="" || len(request.EventID)>96 || len(request.ChoiceID)>64 {
-		http.Error(w,"event_id and a valid optional choice_id are required",http.StatusBadRequest);return
+	if err:=decodeJSON(w,r,&request);err!=nil || strings.TrimSpace(request.EventID)=="" || strings.TrimSpace(request.ChoiceID)=="" || len(request.EventID)>96 || len(request.ChoiceID)>64 {
+		http.Error(w,"event_id and choice_id are required",http.StatusBadRequest);return
 	}
 	result,err:=h.service.TriggerExplorationEvent(r.Context(),account.ID,strings.TrimSpace(request.EventID),strings.TrimSpace(request.ChoiceID))
 	switch {
