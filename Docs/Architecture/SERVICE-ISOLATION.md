@@ -55,6 +55,6 @@
 - ChatServer 当前复用现有 chat service、账号 session 验证和节点内部接口；数据库仍是迁移期共享 PostgreSQL。
 - 30 天消息保留由 ChatServer 后台调度器负责：启动时执行一次，之后每小时执行；发送和历史查询请求不再触发过期消息删除，清理失败记录日志并在下一周期重试。
 - Game API 暂时保留原聊天路由，作为客户端/WorldServer 切换期间的兼容入口。
-- Godot 已建立独立 WebSocket 聊天连接：Bearer Token 握手、20 秒心跳、Pong 超时检测和断线自动重连；世界/跨界频道使用独立连接，附近频道仍走 ENet。每次连接/重连成功后自动拉取世界与跨界最近 50 条历史，按消息 ID 去重并按时间+ID排序；过期连接的历史响应会被丢弃。ChatServer 已通过 NATS Core Pub/Sub 跨进程广播世界/跨界消息；当前不是 JetStream 持久订阅，离线节点不会从 NATS 自动重放。
-- NATS Core Pub/Sub 跨 ChatServer 广播已提交；JetStream 持久消费/离线节点重放、在线状态订阅、聊天数据库物理拆分、完整历史分页/离线投递和故障注入测试尚未实现。
+- Godot 已建立独立 WebSocket 聊天连接：Bearer Token 握手、20 秒心跳、Pong 超时检测和断线自动重连；世界/跨界频道使用独立连接，附近频道仍走 ENet。每次连接/重连成功后自动拉取世界与跨界最近 50 条历史，按消息 ID 去重并按时间+ID排序；过期连接的历史响应会被丢弃。ChatServer 已通过 NATS Core Pub/Sub 跨进程广播世界/跨界消息；配置优先使用 `CHAT_NATS_URL`，未设置时回退到 `NATS_URL`。每个聊天节点都必须连接同一个 NATS 集群；本地单机开发可使用 `nats://localhost:4222`。当前不是 JetStream 持久订阅，离线节点不会从 NATS 自动重放。
+- NATS Core Pub/Sub 跨 ChatServer 广播已提交；JetStream 持久消费/离线节点重放、NATS 故障期间在线客户端历史增量同步、在线状态订阅、聊天数据库物理拆分、完整历史分页/离线投递和故障注入测试尚未实现。
 - 本轮增加 NATS Core Pub/Sub 跨 ChatServer 实时广播，并将 REST、WebSocket、WorldServer 发布统一接入事件总线；没有运行 Go 测试、构建、迁移、Godot 解析/运行或 GitHub Actions；所有新增代码仍待本地验证。
