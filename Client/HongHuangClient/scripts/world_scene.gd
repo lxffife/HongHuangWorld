@@ -886,7 +886,7 @@ func _update_hud() -> void:
 	var world_id := str(snapshot.get("world_id", ""))
 	var world_name := _world_display_name(world_id)
 	var character_name := str(snapshot.get("name", "初入洪荒"))
-	hud_label.text = "当前世界 · " + world_name + " · 所在区域 " + (current_region_name if not current_region_name.is_empty() else "区域载入中") + "\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\nF NPC交互 · E 拾取 · 鼠标左键攻击附近怪物 · 首次点击画面锁定鼠标"
+	hud_label.text = "当前世界 · " + world_name + " · 所在区域 " + (current_region_name if not current_region_name.is_empty() else "区域载入中") + "\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\nF NPC交互 · E 拾取 · I 背包 · C 聊天 · 鼠标左键攻击附近怪物 · 首次点击画面锁定鼠标"
 	_update_compact_hud()
 
 func _exit_tree() -> void:
@@ -1099,6 +1099,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.keycode == KEY_F:
 		_try_interact_nearest_npc()
+		return
+	if event.keycode == KEY_I:
+		_on_inventory_button_pressed()
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_C:
+		_set_chat_expanded(not chat_expanded)
+		if chat_expanded and is_instance_valid(chat_input):
+			chat_input.grab_focus()
+		get_viewport().set_input_as_handled()
 		return
 	if event.keycode != KEY_E:
 		return
