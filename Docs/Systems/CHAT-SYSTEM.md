@@ -87,7 +87,7 @@
 
 ### P0-B：实时传输与附近/世界/跨界频道
 - P0-B1（已提交，待运行验证）：为 ENet 协议分配聊天消息类型；Godot 网络层支持发送/接收；WorldServer 实现当前实例附近频道 AOI 转发、服务端身份注入、200 字校验与 1 秒限流。
-- P0-B2（后续）：世界频道按 world_id 跨实例路由；跨界频道通过中心消息网关/NATS 全服扇出。不得把单个 WorldServer 内广播冒充跨实例或全服频道。
+- P0-B2（进行中）：已增加受 `X-World-Server-Key` 与 `X-World-Server-Node` 保护的 `GET /api/v1/servers/chat/messages` 中心拉取接口。后端根据节点当前 ready 的 world_instances 返回该节点所服务世界的 world 消息，以及全服统一的 cross_world 消息；按 `(created_at,id)` 稳定游标分页，避免相同时间戳消息漏取。WorldServer 尚未接入轮询/广播，因此这只是中心持久化分发接口，不代表跨实例实时链路已完成。
 - 验收：B1 需两客户端同实例附近可见，超出 AOI 不可见，伪造 sender 字段无效，限流和长度校验生效；B2 需不同实例同世界可见世界频道、不同世界可见同一跨界频道。
 
 ### P0-C：Godot 聊天 HUD
@@ -107,6 +107,7 @@
 
 - 已有：迁移 000038 的基础表；Go chat service 支持 world/cross_world 文本写入和历史查询。
 - 本次新增：ENet ChatSendCommand/ChatEvent 协议；WorldServer 当前实例附近频道 AOI 转发、服务端身份注入、200 字校验和 1 秒限流；Godot 网络层发送/接收接口；协议帧测试覆盖聊天消息类型；Godot 初版附近聊天 HUD（可折叠、输入发送、错误提示）。
-- 仍未实现：世界频道跨实例实时扇出、跨界全服实时扇出、聊天持久化与 ENet 消息联动、好友/私聊 API、离线投递、清理调度器、队伍/宗门频道。
+- P0-B2 本次新增：WorldServer 节点认证的中心消息拉取 API；消息按节点服务世界筛选 world 频道，cross_world 对所有 ready 节点可见；支持 1–100 条分页与 `(created_at,id)` 游标。仍未实现 WorldServer 定时拉取、客户端实时推送、消费游标持久化与断线补发确认。
 - 附近频道当前为 WorldServer 内存实时消息，不写入 PostgreSQL，因此暂不提供附近频道历史；世界/跨界 HTTP 历史接口与 ENet 实时消息目前尚未接通。
+- 仍未实现：WorldServer 拉取接口接入和 ENet 消息扇出、消费游标可靠保存/确认、好友/私聊 API、离线投递、清理调度器、队伍/宗门频道。
 - 本阶段尚未运行 Go 测试、C++ 编译/CTest、Godot 解析/运行、数据库迁移或 GitHub Actions。不要把静态代码提交视为运行验收通过。
