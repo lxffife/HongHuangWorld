@@ -64,7 +64,7 @@ func NewChatRouterWithShutdown(logger *slog.Logger, db *sql.DB) (http.Handler, f
 		return requestLogger(logger, mux), func() {}
 	}
 
-	authService := auth.NewService(db)
+	authService := configuredAuthProvider(db)
 	chatService := chat.NewService(db)
 	chatHub := newChatSocketHub()
 	chatEvents := newChatEventBus(chatHub, chatService, logger)
