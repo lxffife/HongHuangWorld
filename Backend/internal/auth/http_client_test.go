@@ -62,3 +62,27 @@ func TestHTTPClientLoginPreservesSessionResponse(t *testing.T) {
 		t.Fatalf("unexpected login result: account=%+v token=%q expiry=%v", account, token, gotExpiry)
 	}
 }
+
+
+func TestHTTPClientUsesBriefCacheDuringIdentityOutage(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if requests == 1 {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(Account{ID:"account-1", Username:"player"})
+			return
+		}
+		http.Error(w, "temporarily unavailable", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	client := NewHTTPClient(server.URL, "service-secret")
+	first, err := client.Authenticate(context.Background(), "active-token")
+	if err != nil { t.Fatalf("first Authenticate() error = %v", err) }
+	second, err := client.Authenticate(context.Background(), "active-token")
+	if err != nil { t.Fatalf("cached Authenticate() error = %v", err) }
+	if first.ID != second.ID || requests != 1 {
+		t.Fatalf("expected cached identity result, requests=%d first=%+v second=%+v", requests, first, second)
+	}
+}
