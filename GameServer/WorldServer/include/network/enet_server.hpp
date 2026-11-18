@@ -11,6 +11,7 @@ struct ServerConfig {
     std::uint16_t port{7777};
     std::size_t max_clients{512};
     std::string backend_url;
+    std::string chat_backend_url;
     std::string node_key;
     std::string api_key;
     std::string advertise_host;
