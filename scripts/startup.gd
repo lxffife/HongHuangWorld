@@ -224,10 +224,10 @@ func _build_reincarnation_ui() -> void:
 	details_toggle_button.text = "展开灵魂档案与轮回功能"
 	details_toggle_button.visible = false
 	details_toggle_button.pressed.connect(_toggle_soul_details)
-	details_container.add_child(details_toggle_button)
+	content_box.add_child(details_toggle_button)
 	details_container = VBoxContainer.new()
 	details_container.add_theme_constant_override("separation", 10)
-	details_container.add_child(details_container)
+	content_box.add_child(details_container)
 	details_container.hide()
 	var separator := HSeparator.new()
 	details_container.add_child(separator)
