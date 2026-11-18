@@ -128,6 +128,22 @@ struct DropJobResult {
     std::string error;
 };
 
+struct ChatJob {
+    std::string session_id;
+    std::string character_id;
+    std::string client_message_id;
+    std::string content;
+    std::vector<std::string> recipient_character_ids;
+};
+
+struct ChatJobResult {
+    std::string session_id;
+    std::string client_message_id;
+    bool accepted{};
+    std::string message_id;
+    std::string reason;
+};
+
 struct CharacterRewardEvent {
     std::string event_id;
     std::string session_id;
@@ -663,6 +679,71 @@ void send_json(ENetPeer* peer, honghuang::protocol::MessageType type, const Json
     auto* packet = enet_packet_create(frame.data(), frame.size(), ENET_PACKET_FLAG_RELIABLE);
     if (packet != nullptr && enet_peer_send(peer, 0, packet) != 0) enet_packet_destroy(packet);
 }
+bool deliver_chat_message(const ServerConfig& config, const ChatJob& job,
+                          long& http_status, std::string& message_id, std::string& error) {
+    if (config.chat_backend_url.empty()) {
+        error = "CHAT_SERVER_URL is not configured";
+        return false;
+    }
+    CURL* curl = curl_easy_init();
+    if (curl == nullptr) {
+        error = "could not initialize ChatServer HTTP client";
+        return false;
+    }
+    const std::string url = config.chat_backend_url + "/api/v1/servers/chat/messages";
+    const std::string body = Json{
+        {"session_id", job.session_id},
+        {"character_id", job.character_id},
+        {"client_message_id", job.client_message_id},
+        {"channel", "nearby"},
+        {"content", job.content},
+        {"recipient_character_ids", job.recipient_character_ids}
+    }.dump();
+    std::string response_text;
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, "Accept: application/json");
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    const std::string auth_header = "X-World-Server-Key: " + config.api_key;
+    const std::string node_header = "X-World-Server-Node: " + config.node_key;
+    headers = curl_slist_append(headers, auth_header.c_str());
+    headers = curl_slist_append(headers, node_header.c_str());
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_POST, 1L);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body.size()));
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, collect_response);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_text);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 1500L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 4000L);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+    const auto result = curl_easy_perform(curl);
+    http_status = 0;
+    if (result == CURLE_OK) curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+    if (result != CURLE_OK) {
+        error = std::string("ChatServer request failed: ") + curl_easy_strerror(result);
+        return false;
+    }
+    if (http_status != 201) {
+        error = "ChatServer rejected nearby message (HTTP " + std::to_string(http_status) + ")";
+        return false;
+    }
+    try {
+        const auto response = Json::parse(response_text);
+        message_id = response.at("message").at("id").get<std::string>();
+        if (message_id.empty()) {
+            error = "ChatServer response did not contain a message ID";
+            return false;
+        }
+    } catch (const std::exception& exception) {
+        error = std::string("invalid ChatServer response: ") + exception.what();
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 struct EnetServer::Impl {
