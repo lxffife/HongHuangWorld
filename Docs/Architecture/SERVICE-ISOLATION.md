@@ -32,7 +32,7 @@
 1. 客户端维护独立游戏连接（ENet）和聊天连接（WebSocket）。聊天断线只重连聊天连接，不重新登录或重建游戏连接。当前 Godot 已接入独立 WebSocket 客户端，附近频道仍暂用 ENet。
 2. 游戏操作不依赖聊天请求成功；聊天服务超时、拒绝连接或宕机不能影响游戏操作。
 3. WorldServer 与 ChatServer 的消息交互必须异步、有界、可丢弃/重试策略明确；不得在 ENet 主循环中执行同步 HTTP。
-4. NATS 用于跨服务事件分发，不是游戏 tick 的前置依赖。ChatServer 使用 PostgreSQL 事务 Outbox + NATS JetStream：聊天消息与事件发件箱在同一事务提交，后台发布器通过 SKIP LOCKED 租约领取，收到 JetStream PubAck 后标记完成；失败或进程重启后可重试。每个 ChatServer 使用独立 durable pull consumer，广播后 AckSync。NATS 不可用时，游戏核心操作和本机聊天继续，Outbox 累积待发事件，JetStream 恢复后继续发布。
+4. NATS 用于跨服务事件分发，不是游戏 tick 的前置依赖。ChatServer 使用 PostgreSQL 事务 Outbox + NATS JetStream：聊天消息与事件发件箱在同一事务提交，后台发布器通过 SKIP LOCKED 租约领取，收到 JetStream PubAck 后标记完成；失败或进程重启后可重试。每个 ChatServer 使用独立 durable pull consumer，广播后 AckSync。WorldServer 的附近聊天由独立有界后台 worker 异步提交 ChatServer；ENet 主循环只计算 AOI 接收角色并入队，不等待网络。ChatServer 验证节点、会话和同一 world instance 的 AOI 接收者，再持久化并只向该接收集合广播。NATS 不可用时，游戏核心操作继续，ChatServer Outbox 累积已入库待发事件；WorldServer 网络队列会重试有限次数，队列耗尽时仅聊天发送失败，不影响游戏操作。
 5. 账号身份可共享验证，但服务令牌和服务端密钥不得下发客户端。
 6. 共享 PostgreSQL 只作为迁移期选择。服务使用独立连接池、独立数据库角色/权限；未来按数据所有权拆分 chat 数据库。游戏和聊天不得依赖跨库强事务。
 
