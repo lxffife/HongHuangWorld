@@ -14,6 +14,12 @@ fi
 if [[ "${CHAT_PROJECTION_CONSUMER_PAUSED:-}" != "YES" ]]; then
   die "复制期间必须暂停 ChatServer 的 Game 投影消费者。确认暂停后设置 CHAT_PROJECTION_CONSUMER_PAUSED=YES。"
 fi
+if [[ "${CHAT_WRITES_PAUSED:-}" != "YES" ]]; then
+  die "复制期间必须暂停旧 Chat 写入服务。确认停写后设置 CHAT_WRITES_PAUSED=YES。"
+fi
+if [[ "${GAME_WRITES_PAUSED:-}" != "YES" ]]; then
+  die "复制期间必须暂停 Game 写入服务，避免快照与事件序列高水位之间出现并发提交。确认停写后设置 GAME_WRITES_PAUSED=YES。"
+fi
 
 target_check="$(compose exec -T postgres psql -XAt -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$CHAT_DB_NAME" -c "
 SELECT
