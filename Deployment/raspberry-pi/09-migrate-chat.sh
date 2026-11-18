@@ -13,6 +13,9 @@ MIGRATION_DIR="$HH_PROJECT_DIR/Database/chat-migrations"
 [[ -d "$MIGRATION_DIR" ]] || die "找不到 Chat migrations: $MIGRATION_DIR"
 
 [[ "$CHAT_DATABASE_URL" != "${DATABASE_URL:-}" ]] || die "CHAT_DATABASE_URL 不能与 Game DATABASE_URL 相同"
+chat_url_path="${CHAT_DATABASE_URL%%\?*}"
+chat_url_db="${chat_url_path##*/}"
+[[ "$chat_url_db" == "$CHAT_DB_NAME" ]] || die "CHAT_DATABASE_URL 指向的数据库名 ($chat_url_db) 与 CHAT_DB_NAME ($CHAT_DB_NAME) 不一致"
 log "准备独立 Chat 数据库 $CHAT_DB_NAME；ChatServer 将直接使用 CHAT_DATABASE_URL"
 compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
   -v db_name="$CHAT_DB_NAME" -v db_user="$CHAT_DB_USER" -v db_password="$CHAT_DB_PASSWORD" <<'SQL'
