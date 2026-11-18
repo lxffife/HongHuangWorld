@@ -39,23 +39,19 @@ func (s *Service) GetPresenceSummary(ctx context.Context, accountID string) (Pre
 	}
 	var result PresenceSummary
 	err := s.db.QueryRowContext(ctx, `
-		WITH current_character AS (
-			SELECT current_character_id
-			FROM chat_accounts
-			WHERE account_id=$1::uuid AND current_character_id IS NOT NULL
-		)
 		SELECT
-			c.current_character_id::text,
+			COALESCE(a.current_character_id::text,''),
 			count(DISTINCT p.connection_id)::int,
 			count(DISTINCT ws.session_id) FILTER (WHERE ws.session_state='active')::int,
 			(SELECT max(received_at) FROM game_projection_inbox WHERE processed_at IS NOT NULL),
 			now()
-		FROM current_character c
+		FROM chat_accounts a
 		LEFT JOIN chat_presence_sessions p
-			ON p.character_id=c.current_character_id AND p.expires_at>now()
+			ON p.character_id=a.current_character_id AND p.expires_at>now()
 		LEFT JOIN chat_world_sessions ws
-			ON ws.character_id=c.current_character_id
-		GROUP BY c.current_character_id
+			ON ws.character_id=a.current_character_id
+		WHERE a.account_id=$1::uuid
+		GROUP BY a.current_character_id
 	`, accountID).Scan(
 		&result.CharacterID,
 		&result.ChatConnections,
