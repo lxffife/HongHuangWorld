@@ -60,6 +60,7 @@ func NewChatRouterWithServiceAndShutdown(logger *slog.Logger, db *sql.DB, chatSe
 			"POST /api/v1/chat/messages",
 			"GET /api/v1/chat/socket",
 			"GET /api/v1/chat/messages",
+			"GET /api/v1/chat/presence",
 			"GET /api/v1/servers/chat/messages",
 			"POST /api/v1/servers/chat/messages",
 		} {
@@ -81,6 +82,7 @@ func NewChatRouterWithServiceAndShutdown(logger *slog.Logger, db *sql.DB, chatSe
 	}
 	mux.HandleFunc("POST /api/v1/chat/messages", chatAPI.send)
 	mux.HandleFunc("GET /api/v1/chat/messages", chatAPI.list)
+	mux.HandleFunc("GET /api/v1/chat/presence", chatAPI.presence)
 	mux.HandleFunc("GET /api/v1/chat/socket", chatAPI.socket)
 	mux.HandleFunc("GET /api/v1/servers/chat/messages", serverAPI.poll)
 	mux.HandleFunc("POST /api/v1/servers/chat/messages", serverAPI.publish)
