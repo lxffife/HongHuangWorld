@@ -25,7 +25,6 @@ var (
 	ErrAbsorptionChoiceUsed = errors.New("rare soul essence choice is unavailable or already used")
 	ErrInsufficientExperience = errors.New("not enough soul experience for breakthrough")
 	ErrMaxRealm = errors.New("soul has reached the highest configured realm")
-	ErrAttributeCap = errors.New("soul inheritance attribute has reached its maximum")
 )
 
 type Soul struct {
