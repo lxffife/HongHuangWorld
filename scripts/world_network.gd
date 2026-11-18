@@ -22,6 +22,7 @@ var world_ready := false
 var heartbeat_timer: Timer
 var heartbeat_watchdog_timer: Timer
 var last_heartbeat_ack_msec := 0
+var pending_chat_frames: Dictionary = {}
 
 func _ready() -> void:
 	if not ClassDB.class_exists("EnetClient"):
@@ -71,6 +72,26 @@ func _on_connected() -> void:
 
 func is_world_ready() -> bool:
 	return world_ready
+
+func _process(_delta: float) -> void:
+	if not world_ready or transport == null or pending_chat_frames.is_empty():
+		return
+	var now := Time.get_ticks_msec()
+	for message_id in pending_chat_frames.keys():
+		var pending: Dictionary = pending_chat_frames[message_id]
+		var attempts := int(pending.get("attempts", 0))
+		var delay_msec := mini(30000, 2000 * (1 << mini(attempts, 4)))
+		if now - int(pending.get("last_sent_msec", now)) < delay_msec:
+			continue
+		var frame: PackedByteArray = pending.get("frame", PackedByteArray())
+		if frame.is_empty():
+			pending_chat_frames.erase(message_id)
+			continue
+		var send_error: Error = transport.send_frame(frame)
+		pending["last_sent_msec"] = now
+		if send_error == OK:
+			pending["attempts"] = attempts + 1
+		pending_chat_frames[message_id] = pending
 
 func send_input(move_x: float, move_z: float, sequence: int, jump: bool = false) -> Error:
 	if not world_ready or transport == null:
@@ -123,7 +144,16 @@ func send_chat(channel: String, content: String) -> Error:
 	var frame := HHProtocolCodec.encode_frame(HHProtocolCodec.MessageType.CHAT_SEND_COMMAND, payload)
 	if frame.is_empty():
 		return ERR_INVALID_DATA
-	return transport.send_frame(frame)
+	if pending_chat_frames.size() >= 128:
+		return ERR_BUSY
+	var send_error: Error = transport.send_frame(frame)
+	if send_error == OK:
+		pending_chat_frames[message_id] = {
+			"frame": frame,
+			"last_sent_msec": Time.get_ticks_msec(),
+			"attempts": 0
+		}
+	return send_error
 
 func _on_frame_received(bytes: PackedByteArray) -> void:
 	var decoded := HHProtocolCodec.decode_frame(bytes)
@@ -180,6 +210,9 @@ func _on_frame_received(bytes: PackedByteArray) -> void:
 		HHProtocolCodec.MessageType.CHAT_EVENT:
 			var chat: Variant = JSON.parse_string(payload.get_string_from_utf8())
 			if chat is Dictionary:
+				var acknowledged_id := str(chat.get("client_message_id", ""))
+				if not acknowledged_id.is_empty():
+					pending_chat_frames.erase(acknowledged_id)
 				chat_event.emit(chat)
 			else:
 				rejected.emit("收到无效的 ChatEvent。")
