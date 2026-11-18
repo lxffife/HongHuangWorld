@@ -201,7 +201,7 @@ func insertChatEventOutbox(ctx context.Context, tx *sql.Tx, message Message) err
 	if err != nil {
 		return fmt.Errorf("encode chat outbox payload: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO chat_event_outbox(message_id,payload) VALUES($1::uuid,$2::jsonb)`, message.ID, string(payload)); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO chat_event_outbox(message_id,payload) VALUES($1::uuid,$2::jsonb) ON CONFLICT(message_id) DO NOTHING`, message.ID, string(payload)); err != nil {
 		return fmt.Errorf("insert chat event outbox: %w", err)
 	}
 	return nil
@@ -388,6 +388,130 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 	}
 	if err := tx.Commit(); err != nil { return Message{}, fmt.Errorf("commit world server chat message and outbox: %w", err) }
 	return item,nil
+}
+
+
+type OutboxItem struct {
+	Message Message
+	Attempts int
+}
+
+// ClaimChatEventOutbox atomically leases pending rows to one publisher worker.
+// SKIP LOCKED allows multiple ChatServer processes to share the same database.
+func (s *Service) ClaimChatEventOutbox(ctx context.Context, workerID string, limit int, lease time.Duration) ([]OutboxItem, error) {
+	workerID = strings.TrimSpace(workerID)
+	if workerID == "" || len(workerID) > 96 {
+		return nil, ErrInvalidInput
+	}
+	if limit < 1 || limit > 100 {
+		limit = 32
+	}
+	if lease < 5*time.Second || lease > 5*time.Minute {
+		lease = time.Minute
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin chat outbox claim: %w", err)
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.QueryContext(ctx, `
+		WITH picked AS (
+			SELECT message_id
+			FROM chat_event_outbox
+			WHERE published_at IS NULL
+			  AND next_attempt_at <= now()
+			  AND (locked_until IS NULL OR locked_until < now())
+			ORDER BY created_at, message_id
+			FOR UPDATE SKIP LOCKED
+			LIMIT $1
+		)
+		UPDATE chat_event_outbox o
+		SET locked_until = now() + $2::interval,
+		    locked_by = $3,
+		    attempts = o.attempts + 1
+		FROM picked
+		WHERE o.message_id = picked.message_id
+		RETURNING o.payload, o.attempts`, limit, lease.String(), workerID)
+	if err != nil {
+		return nil, fmt.Errorf("claim chat event outbox: %w", err)
+	}
+	items := make([]OutboxItem, 0)
+	for rows.Next() {
+		var payload []byte
+		var item OutboxItem
+		if err := rows.Scan(&payload, &item.Attempts); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scan claimed chat outbox event: %w", err)
+		}
+		if err := json.Unmarshal(payload, &item.Message); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("decode claimed chat outbox event: %w", err)
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, fmt.Errorf("iterate claimed chat outbox events: %w", err)
+	}
+	rows.Close()
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit chat outbox claim: %w", err)
+	}
+	return items, nil
+}
+
+// MarkChatEventOutboxPublished acknowledges a successful JetStream PubAck.
+func (s *Service) MarkChatEventOutboxPublished(ctx context.Context, workerID, messageID string) error {
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE chat_event_outbox
+		SET published_at = now(), locked_until = NULL, locked_by = NULL, last_error = NULL
+		WHERE message_id = $1::uuid AND locked_by = $2 AND published_at IS NULL`, messageID, workerID)
+	if err != nil {
+		return fmt.Errorf("mark chat outbox event published: %w", err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("read chat outbox publish result: %w", err)
+	}
+	if count != 1 {
+		return fmt.Errorf("chat outbox lease lost for message %s", messageID)
+	}
+	return nil
+}
+
+// RetryChatEventOutbox releases a failed lease and schedules an asynchronous retry.
+func (s *Service) RetryChatEventOutbox(ctx context.Context, workerID, messageID string, delay time.Duration, publishErr error) error {
+	if delay < time.Second {
+		delay = time.Second
+	}
+	if delay > 5*time.Minute {
+		delay = 5 * time.Minute
+	}
+	reason := "unknown publish error"
+	if publishErr != nil {
+		reason = publishErr.Error()
+	}
+	if len(reason) > 1000 {
+		reason = reason[:1000]
+	}
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE chat_event_outbox
+		SET next_attempt_at = now() + $3::interval,
+		    locked_until = NULL, locked_by = NULL, last_error = $4
+		WHERE message_id = $1::uuid AND locked_by = $2 AND published_at IS NULL`,
+		messageID, workerID, delay.String(), reason)
+	if err != nil {
+		return fmt.Errorf("schedule chat outbox retry: %w", err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("read chat outbox retry result: %w", err)
+	}
+	if count != 1 {
+		return fmt.Errorf("chat outbox lease lost while retrying message %s", messageID)
+	}
+	return nil
 }
 
 
