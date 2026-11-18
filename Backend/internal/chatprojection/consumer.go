@@ -191,7 +191,7 @@ func consume(ctx context.Context, sub *nats.Subscription, db *sql.DB, logger *sl
 }
 
 func validEnvelope(event envelope) bool {
-	if event.Version != 1 || event.EventID == "" || event.EventType == "" ||
+	if event.Version != 1 || !validUUID(event.EventID) || event.EventType == "" ||
 		event.AggregateID == "" || event.AggregateVersion <= 0 ||
 		event.OccurredAt.IsZero() || len(event.Data) == 0 || !json.Valid(event.Data) {
 		return false
@@ -381,4 +381,22 @@ func wait(ctx context.Context, duration time.Duration) bool {
 	case <-timer.C:
 		return true
 	}
+}
+
+func validUUID(value string) bool {
+	if len(value) != 36 {
+		return false
+	}
+	for index, char := range value {
+		if index == 8 || index == 13 || index == 18 || index == 23 {
+			if char != '-' {
+				return false
+			}
+			continue
+		}
+		if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f') || (char >= 'A' && char <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
