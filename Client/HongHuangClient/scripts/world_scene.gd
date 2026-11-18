@@ -1210,13 +1210,18 @@ func _on_combat_event(event: Dictionary) -> void:
 	if bool(event.get("defeated", false)):
 		var experience := int(event.get("experience_reward", 0))
 		var cultivation := int(event.get("cultivation_reward", 0))
-		_show_notification(monster_name + " 已被击败！伤害 " + str(damage) + " · 经验 +" + str(experience) + " · 修为 +" + str(cultivation), 4.5)
+		var defeat_message := monster_name + " 已被击败！伤害 " + str(damage) + " · 经验 +" + str(experience) + " · 修为 +" + str(cultivation)
+		if str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu":
+			defeat_message += " · 魂魄正在归入魂光"
+		_show_notification(defeat_message, 4.5)
 		_refresh_reward_status_later()
 	else:
 		_show_notification("命中 " + monster_name + " · 造成 " + str(damage) + " 点伤害")
 
 func _refresh_reward_status_later() -> void:
-	await get_tree().create_timer(1.5).timeout
+	await get_tree().create_timer(2.0).timeout
+	if str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu":
+		_request_soul_essence()
 	if progression_request_context.is_empty():
 		_refresh_character_status()
 
