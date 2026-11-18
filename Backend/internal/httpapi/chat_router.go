@@ -22,6 +22,12 @@ func NewChatRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 // NewChatRouterWithShutdown also returns a cleanup function for long-lived
 // transports such as the NATS connection.
 func NewChatRouterWithShutdown(logger *slog.Logger, db *sql.DB) (http.Handler, func()) {
+	return NewChatRouterWithServiceAndShutdown(logger, db, chat.NewService(db))
+}
+
+// NewChatRouterWithServiceAndShutdown lets deployment select the legacy or
+// Chat-projection data access mode without changing HTTP handlers.
+func NewChatRouterWithServiceAndShutdown(logger *slog.Logger, db *sql.DB, chatService *chat.Service) (http.Handler, func()) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, healthResponse{
@@ -64,7 +70,7 @@ func NewChatRouterWithShutdown(logger *slog.Logger, db *sql.DB) (http.Handler, f
 	}
 
 	authService := configuredAuthProvider(db)
-	chatService := chat.NewService(db)
+	if chatService == nil { chatService = chat.NewService(db) }
 	chatHub := newChatSocketHub()
 	chatEvents := newChatEventBus(chatHub, chatService, logger)
 	chatAPI := &chatHandlers{authService: authService, service: chatService, hub: chatHub, events: chatEvents, logger: logger}
