@@ -818,10 +818,11 @@ func _on_soul_essence_request_completed(result: int, response_code: int, _header
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
 	if not (parsed is Dictionary):
 		return
+	var had_previous_essence_profile := soul_essence_profile.has("mutation_count")
 	var previous_mutation_count := int(soul_essence_profile.get("mutation_count", 0))
 	soul_essence_profile = parsed
 	var current_mutation_count := int(soul_essence_profile.get("mutation_count", 0))
-	if current_mutation_count > previous_mutation_count:
+	if had_previous_essence_profile and current_mutation_count > previous_mutation_count:
 		var mutations: Array = soul_essence_profile.get("mutations", [])
 		if mutations.size() > 0:
 			var latest: Dictionary = mutations[0]
