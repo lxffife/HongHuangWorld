@@ -6,7 +6,7 @@ INSERT INTO soul_absorption_kinds
     (id,name,description,base_energy,trait_key,inheritance_attribute,rarity,quality_tier,progress_units)
 SELECT 'ancient_battlefield_god_soul','古战场上古战神残魂',
        '古战场遗迹中沉睡的上古战神意志，只有选择召唤战神的灵魂才能承接其魂质，提供八倍力量资质成长进度',
-       base_energy,trait_key,'strength','mythic','mythic',8
+       base_energy,trait_key,'strength','rare','mythic',8
 FROM soul_absorption_kinds
 WHERE id='blazing_war_soul_mythic'
 ON CONFLICT (id) DO UPDATE SET
