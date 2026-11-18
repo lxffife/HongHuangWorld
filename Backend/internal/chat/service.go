@@ -387,7 +387,8 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 		  AND sr.last_heartbeat_at > now()-interval '30 seconds'
 		  AND wi.status='ready'
 		  AND (ws.session_state='active' OR
-		       (ws.session_state='closed' AND ws.disconnected_at > now()-interval '30 days'))
+		       (ws.session_state IN ('saving','closed') AND
+		        COALESCE(ws.disconnected_at,ws.updated_at) > now()-interval '30 days'))
 		  AND c.status='alive'
 		FOR UPDATE OF ws, c`, sessionID, characterID, nodeKey).
 		Scan(&name, &raceID, &worldID, &instanceID, &level)
@@ -447,7 +448,8 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 			WHERE ws.instance_id=$1::uuid AND ws.server_id=(
 				SELECT id FROM server_registry WHERE node_key=$3
 			) AND (ws.session_state='active' OR
-			      (ws.session_state='closed' AND ws.disconnected_at > now()-interval '30 days'))
+			      (ws.session_state IN ('saving','closed') AND
+			       COALESCE(ws.disconnected_at,ws.updated_at) > now()-interval '30 days'))
 			  AND c.status='alive'`,
 			instanceID, string(recipientsJSON), nodeKey).Scan(&validRecipients)
 		if err != nil {
