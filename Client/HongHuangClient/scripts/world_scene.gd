@@ -1657,14 +1657,15 @@ func _request_nearest_monster_attack() -> void:
 	var network := HHSession.world_network
 	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
 		return
-	var nearest_id := ""
+	var nearest_id := selected_monster_id if monsters.has(selected_monster_id) else ""
 	var nearest_distance := 4.5
-	for monster_id in monster_targets:
-		var target: Vector3 = monster_targets[monster_id]
-		var distance := Vector2(local_player.global_position.x, local_player.global_position.z).distance_to(Vector2(target.x, target.z))
-		if distance < nearest_distance:
-			nearest_distance = distance
-			nearest_id = str(monster_id)
+	if nearest_id.is_empty():
+		for monster_id in monster_targets:
+			var target: Vector3 = monster_targets[monster_id]
+			var distance := Vector2(local_player.global_position.x, local_player.global_position.z).distance_to(Vector2(target.x, target.z))
+			if distance < nearest_distance:
+				nearest_distance = distance
+				nearest_id = str(monster_id)
 	if nearest_id.is_empty():
 		hud_label.text = "附近没有可攻击的怪物。"
 		return
