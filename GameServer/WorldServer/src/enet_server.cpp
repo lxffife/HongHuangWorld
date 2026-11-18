@@ -727,6 +727,10 @@ struct EnetServer::Impl {
                         2.4F, 10.0F, 24.0F, 0.0F, 17.0F);
             add_monster("war-soul-001", "blazing_war_soul", "炽战残魂", 4, 105.0F, 16.0F, 5.0F,
                         2.5F, 11.0F, 26.0F, -24.0F, -18.0F);
+            add_monster("war-soul-elite-001", "blazing_war_soul_elite", "精英炽战残魂", 6, 190.0F, 22.0F, 8.0F,
+                        2.2F, 12.0F, 28.0F, -34.0F, 2.0F);
+            add_monster("war-soul-ancient-001", "blazing_war_soul_ancient", "远古炽战残魂", 9, 360.0F, 30.0F, 14.0F,
+                        1.9F, 13.0F, 30.0F, 34.0F, 3.0F);
             add_monster("ironbone-001", "ironbone_beast_soul", "铁骨兽魂", 4, 145.0F, 13.0F, 9.0F,
                         1.8F, 10.0F, 25.0F, 25.0F, -19.0F);
             add_monster("gale-wraith-001", "gale_wraith", "疾风游魂", 4, 75.0F, 15.0F, 3.0F,
