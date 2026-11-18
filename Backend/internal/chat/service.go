@@ -385,7 +385,10 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 		WHERE ws.id=$1::uuid AND ws.character_id=$2::uuid
 		  AND sr.node_key=$3 AND sr.status='ready'
 		  AND sr.last_heartbeat_at > now()-interval '30 seconds'
-		  AND wi.status='ready' AND ws.session_state='active' AND c.status='alive'
+		  AND wi.status='ready'
+		  AND (ws.session_state='active' OR
+		       (ws.session_state='closed' AND ws.disconnected_at > now()-interval '30 days'))
+		  AND c.status='alive'
 		FOR UPDATE OF ws, c`, sessionID, characterID, nodeKey).
 		Scan(&name, &raceID, &worldID, &instanceID, &level)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -443,7 +446,9 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 			JOIN characters c ON c.id=ws.character_id
 			WHERE ws.instance_id=$1::uuid AND ws.server_id=(
 				SELECT id FROM server_registry WHERE node_key=$3
-			) AND ws.session_state='active' AND c.status='alive'`,
+			) AND (ws.session_state='active' OR
+			      (ws.session_state='closed' AND ws.disconnected_at > now()-interval '30 days'))
+			  AND c.status='alive'`,
 			instanceID, string(recipientsJSON), nodeKey).Scan(&validRecipients)
 		if err != nil {
 			return Message{}, fmt.Errorf("validate nearby chat AOI recipients: %w", err)
