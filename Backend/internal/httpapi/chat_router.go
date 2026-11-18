@@ -62,6 +62,8 @@ func NewChatRouterWithServiceAndShutdown(logger *slog.Logger, db *sql.DB, chatSe
 			"GET /api/v1/chat/messages",
 			"GET /api/v1/chat/presence",
 			"GET /api/v1/chat/presence/friends",
+			"GET /api/v1/chat/presence/summary",
+			"GET /api/v1/chat/presence/friends/summary",
 			"GET /api/v1/servers/chat/messages",
 			"POST /api/v1/servers/chat/messages",
 		} {
@@ -71,7 +73,9 @@ func NewChatRouterWithServiceAndShutdown(logger *slog.Logger, db *sql.DB, chatSe
 	}
 
 	authService := configuredAuthProvider()
-	if chatService == nil { chatService = chat.NewService(db) }
+	if chatService == nil {
+		chatService = chat.NewService(db)
+	}
 	chatHub := newChatSocketHub()
 	chatEvents := newChatEventBus(chatHub, chatService, logger)
 	chatAPI := &chatHandlers{authService: authService, service: chatService, hub: chatHub, events: chatEvents, logger: logger}
@@ -79,12 +83,14 @@ func NewChatRouterWithServiceAndShutdown(logger *slog.Logger, db *sql.DB, chatSe
 		service: chatService,
 		apiKey:  os.Getenv("WORLD_SERVER_API_KEY"),
 		events: chatEvents,
-		logger:  logger,
+		logger: logger,
 	}
 	mux.HandleFunc("POST /api/v1/chat/messages", chatAPI.send)
 	mux.HandleFunc("GET /api/v1/chat/messages", chatAPI.list)
 	mux.HandleFunc("GET /api/v1/chat/presence", chatAPI.presence)
 	mux.HandleFunc("GET /api/v1/chat/presence/friends", chatAPI.friendPresence)
+	mux.HandleFunc("GET /api/v1/chat/presence/summary", chatAPI.presenceSummary)
+	mux.HandleFunc("GET /api/v1/chat/presence/friends/summary", chatAPI.friendPresenceSummary)
 	mux.HandleFunc("GET /api/v1/chat/socket", chatAPI.socket)
 	mux.HandleFunc("GET /api/v1/servers/chat/messages", serverAPI.poll)
 	mux.HandleFunc("POST /api/v1/servers/chat/messages", serverAPI.publish)
