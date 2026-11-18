@@ -1,6 +1,9 @@
 package httpapi
 
 import (
+	"bufio"
+	"fmt"
+	"net"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -153,6 +156,22 @@ type statusRecorder struct {
 	http.ResponseWriter
 	status int
 	bytes int
+}
+
+func (w *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hijacker, ok := w.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, fmt.Errorf("underlying response writer does not support hijacking")
+	}
+	conn, rw, err := hijacker.Hijack()
+	if err == nil && w.status == 0 {
+		w.status = http.StatusSwitchingProtocols
+	}
+	return conn, rw, err
+}
+
+func (w *statusRecorder) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
 }
 
 func (w *statusRecorder) WriteHeader(status int) {
