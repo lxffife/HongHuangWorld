@@ -1184,6 +1184,32 @@ func _render_lobby_character_stats(raw_attributes: Variant) -> void:
 		value_label.add_theme_font_size_override("font_size", 16)
 		value_label.add_theme_color_override("font_color", Color("#e7d4ae"))
 		content.add_child(value_label)
+		var equipment_bonus := _lobby_equipment_bonus_for(key)
+		if equipment_bonus != 0:
+			var bonus_label := Label.new()
+			bonus_label.text = "基础 " + _lobby_number_text(attributes.get(key, 0)) + "  ·  装备 +" + _lobby_number_text(equipment_bonus)
+			bonus_label.add_theme_font_size_override("font_size", 10)
+			bonus_label.add_theme_color_override("font_color", Color("#77c99a"))
+			content.add_child(bonus_label)
+		elif key == "health" or key == "mana":
+			var max_key := "max_health" if key == "health" else "max_mana"
+			var max_bonus := _lobby_equipment_bonus_for(max_key)
+			if max_bonus != 0:
+				var bonus_label := Label.new()
+				bonus_label.text = "装备上限 +" + _lobby_number_text(max_bonus)
+				bonus_label.add_theme_font_size_override("font_size", 10)
+				bonus_label.add_theme_color_override("font_color", Color("#77c99a"))
+				content.add_child(bonus_label)
+
+func _lobby_equipment_bonus_for(stat_key: String) -> int:
+	var total := 0
+	for item in lobby_equipment:
+		if not (item is Dictionary):
+			continue
+		var stats: Variant = item.get("base_stats", {})
+		if stats is Dictionary:
+			total += int(stats.get(stat_key, 0))
+	return total
 
 func _request_soul_fate() -> void:
 	if access_token.is_empty():
@@ -1604,6 +1630,7 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 		"lobby_equipment":
 			lobby_equipment = data.get("items", []) if data.get("items", []) is Array else []
 			_build_lobby_preview_model()
+			_render_lobby_character_stats(current_character.get("attributes", {}))
 			lobby_equipment_status_label.text = _format_lobby_equipment_summary()
 		"lobby_equip_action", "lobby_unequip_action":
 			lobby_equipment_busy = false
