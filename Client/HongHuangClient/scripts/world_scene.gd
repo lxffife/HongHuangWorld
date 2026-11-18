@@ -1298,8 +1298,9 @@ func _on_chat_event(event: Dictionary) -> void:
 		return
 	var sender := str(event.get("sender_name", "未知玩家"))
 	var content := str(event.get("content", ""))
-	_append_chat_line("[" + sender + "] " + content)
-	chat_status.text = "附近频道 · 消息已送达当前可见范围"
+	_append_chat_line("[" + sender + "] " + content, "nearby", str(event.get("message_id", "")))
+	if selected_chat_channel == "nearby":
+		chat_status.text = "附近频道 · 消息已送达当前可见范围"
 
 func _append_chat_line(line: String, channel: String = "", message_id: String = "", created_at: String = "") -> void:
 	var target_channel := channel if not channel.is_empty() else selected_chat_channel
