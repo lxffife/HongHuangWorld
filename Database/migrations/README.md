@@ -42,6 +42,7 @@
 - `000036_equipment_sets` 增加装备套装定义及装备与套装的关联字段。
 - `000037_qingyun_starter_equipment_set` 配置青云初修六件套。
 - `000038_chat_foundation` 创建聊天偏好、好友关系、私聊申请、屏蔽关系和消息持久化基础表；消息保留策略为 30 天。
+- `000039_chat_transactional_outbox` 创建聊天事件事务发件箱；每条公开聊天消息与待发布事件在同一 PostgreSQL 事务内提交，后台发布器通过 `FOR UPDATE SKIP LOCKED` 租约领取并在 JetStream PubAck 后标记完成。
 
 ## 当前迁移顺序
 
@@ -86,6 +87,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000035_ancient_ba
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000036_equipment_sets.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000037_qingyun_starter_equipment_set.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000038_chat_foundation.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000039_chat_transactional_outbox.up.sql
 ```
 
 回滚时按相反顺序执行对应的 `.down.sql`。不要在已运行的生产库上重复执行非幂等迁移；后续接入迁移工具后，应由工具记录每个已应用版本，避免人工重复执行。
