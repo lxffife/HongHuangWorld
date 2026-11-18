@@ -93,7 +93,7 @@
 
 ### P0-C：Godot 聊天 HUD
 - P0-C1（已提交，待运行验证）：增加左下方可折叠聊天窗、附近/世界/跨界频道切换、输入发送和服务端错误提示；附近仍走 ENet，世界/跨界走独立 ChatServer WebSocket。
-- P0-C2（进行中）：ChatServer 新增 Bearer Token 认证的 WebSocket `/api/v1/chat/socket`；Godot 新增独立 `HHChatNetwork`，具备独立 20 秒心跳、Pong 超时检测和 4 秒重连。世界/跨界频道通过该连接发送与接收，附近频道暂时保留 ENet。WebSocket 连接成功后自动并行补拉两个频道最近 50 条历史，按消息 ID 去重并按 created_at 插入排序；断线重连会再次补拉，过期连接的历史响应会丢弃。已建立 PostgreSQL 事务 Outbox（迁移 `000039_chat_transactional_outbox`）：玩家 HTTP/WS 与 WorldServer 发布入口均在同一数据库事务中写入 `chat_messages` 和 `chat_event_outbox`，事件 payload 保存当时的角色展示快照。后台 publisher 使用 `FOR UPDATE SKIP LOCKED` + 有效期租约领取待发事件，JetStream 返回 PubAck 后才标记 published；失败释放租约并指数退避重试，进程崩溃后租约过期可重新领取。NATS 不可用时 Outbox 保留待发事件，恢复 JetStream 后继续发送。JetStream 消息 ID 使用 chat message UUID，解决 PubAck 成功但数据库标记前崩溃造成的重复发布。每节点 durable pull consumer 仍负责离线 ChatServer 恢复；Outbox 与 JetStream 均保留 30 天。
+- P0-C2（进行中）：ChatServer 新增 Bearer Token 认证的 WebSocket `/api/v1/chat/socket`；Godot 新增独立 `HHChatNetwork`，具备独立 20 秒心跳、Pong 超时检测和 4 秒重连。世界/跨界频道通过该连接发送与接收，附近频道暂时保留 ENet。WebSocket 连接成功后自动并行补拉两个频道最近 50 条历史，按消息 ID 去重并按 created_at 插入排序；断线重连会再次补拉，过期连接的历史响应会丢弃。已建立 PostgreSQL 事务 Outbox（迁移 `000039_chat_transactional_outbox`）：玩家 HTTP/WS 与 WorldServer 发布入口均在同一数据库事务中写入 `chat_messages` 和 `chat_event_outbox`，事件 payload 保存当时的角色展示快照。后台 publisher 使用 `FOR UPDATE SKIP LOCKED` + 有效期租约领取待发事件，JetStream 返回 PubAck 后才标记 published；失败释放租约并指数退避重试，进程崩溃后租约过期可重新领取。NATS 不可用时 Outbox 保留待发事件，恢复 JetStream 后继续发送。JetStream 消息 ID 使用 chat message UUID，在 2 分钟去重窗口内抑制 PubAck 成功但数据库标记前崩溃造成的重复发布；超过去重窗口仍按至少一次投递处理，客户端继续按消息 ID 去重。每节点 durable pull consumer 仍负责离线 ChatServer 恢复；Outbox 与 JetStream 均保留 30 天。
 - 验收：不遮挡基础移动与战斗操作，输入/发送/错误提示正常，重连后自动补拉最近 50 条世界/跨界历史，实时与历史消息按 ID 去重、按时间排序。
 
 ### P1：好友、陌生人申请、私聊和离线投递
