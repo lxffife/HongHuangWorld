@@ -1112,6 +1112,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			soul_choice_button.visible = hud_visible and soul_essence_profile.get("pending_rare_choices", []).size() > 0
 		if is_instance_valid(vitals_panel):
 			vitals_panel.visible = hud_visible
+		if is_instance_valid(target_info_panel):
+			target_info_panel.visible = hud_visible and not selected_monster_id.is_empty()
 		if is_instance_valid(input_debug_panel):
 			input_debug_panel.visible = hud_visible
 		if is_instance_valid(notification_panel) and not hud_visible:
@@ -1694,8 +1696,18 @@ func _on_combat_event(event: Dictionary) -> void:
 		return
 	var monster_name := str(event.get("target_name", "目标"))
 	var damage := int(event.get("damage", 0))
+	if not selected_monster_id.is_empty() and monster_entities.has(selected_monster_id):
+		var selected_entity: Dictionary = monster_entities[selected_monster_id]
+		if event.has("health"):
+			selected_entity["health"] = int(event.get("health", 0))
+		if event.has("max_health"):
+			selected_entity["max_health"] = int(event.get("max_health", 0))
+		monster_entities[selected_monster_id] = selected_entity
+		_update_target_info()
 	_spawn_combat_number(damage, false, bool(event.get("critical", false)))
 	if bool(event.get("defeated", false)):
+		if str(event.get("target_id", "")) == selected_monster_id:
+			_clear_monster_target()
 		var experience := int(event.get("experience_reward", 0))
 		var cultivation := int(event.get("cultivation_reward", 0))
 		var defeat_message := monster_name + " 已被击败！伤害 " + str(damage) + " · 经验 +" + str(experience) + " · 修为 +" + str(cultivation)
