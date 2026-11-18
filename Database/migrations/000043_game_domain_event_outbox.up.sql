@@ -188,13 +188,13 @@ BEGIN
 
     IF NEW.session_state = 'closed' THEN
         v_event_type := 'game.world_session.closed.v1';
-    ELSIF TG_OP = 'INSERT' OR (TG_OP = 'UPDATE' AND OLD.session_state IS DISTINCT FROM NEW.session_state) THEN
+    ELSIF TG_OP = 'INSERT' OR OLD.session_state IS DISTINCT FROM NEW.session_state THEN
         v_event_type := 'game.world_session.updated.v1';
         IF NEW.session_state = 'active' THEN
             v_event_type := 'game.world_session.opened.v1';
         END IF;
     ELSE
-        RETURN NEW;
+        v_event_type := 'game.world_session.updated.v1';
     END IF;
 
     PERFORM emit_game_domain_event(
