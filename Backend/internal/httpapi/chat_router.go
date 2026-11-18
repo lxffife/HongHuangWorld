@@ -47,6 +47,7 @@ func NewChatRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		}
 		for _, route := range []string{
 			"POST /api/v1/chat/messages",
+			"GET /api/v1/chat/socket",
 			"GET /api/v1/chat/messages",
 			"GET /api/v1/servers/chat/messages",
 			"POST /api/v1/servers/chat/messages",
@@ -58,7 +59,7 @@ func NewChatRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 
 	authService := auth.NewService(db)
 	chatService := chat.NewService(db)
-	chatAPI := &chatHandlers{authService: authService, service: chatService, logger: logger}
+	chatAPI := &chatHandlers{authService: authService, service: chatService, hub: newChatSocketHub(), logger: logger}
 	serverAPI := &chatServerHandlers{
 		service: chatService,
 		apiKey:  os.Getenv("WORLD_SERVER_API_KEY"),
@@ -66,6 +67,7 @@ func NewChatRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 	}
 	mux.HandleFunc("POST /api/v1/chat/messages", chatAPI.send)
 	mux.HandleFunc("GET /api/v1/chat/messages", chatAPI.list)
+	mux.HandleFunc("GET /api/v1/chat/socket", chatAPI.socket)
 	mux.HandleFunc("GET /api/v1/servers/chat/messages", serverAPI.poll)
 	mux.HandleFunc("POST /api/v1/servers/chat/messages", serverAPI.publish)
 
