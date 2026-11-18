@@ -49,6 +49,7 @@ func (h *chatHandlers) writeError(w http.ResponseWriter,err error){
 	switch{
 	case errors.Is(err,chat.ErrInvalidInput):http.Error(w,"invalid chat request",http.StatusBadRequest)
 	case errors.Is(err,chat.ErrNoCharacter):http.Error(w,"no active character",http.StatusConflict)
+	case errors.Is(err,chat.ErrIdempotencyConflict):http.Error(w,"client_message_id already used with different content",http.StatusConflict)
 	case errors.Is(err,chat.ErrRateLimited):http.Error(w,"chat rate limit exceeded",http.StatusTooManyRequests)
 	case errors.Is(err,chat.ErrUnsupportedChannel):http.Error(w,"chat channel is not available yet",http.StatusNotImplemented)
 	default:
