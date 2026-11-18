@@ -35,7 +35,7 @@ Initial event types:
 
 Every event envelope carries `version`, `event_id` (UUID), `event_type`, `aggregate_id`, `occurred_at`, and a typed payload. Consumers must be idempotent by `event_id`. Projection handlers must reject unsupported versions and validate identifiers before applying an event.
 
-The Chat consumer uses a durable JetStream consumer and stores each event in `game_projection_inbox` before acknowledging it. Projection application and inbox `processed_at` update occur in one Chat DB transaction. Replayed events are safe. Ordering-sensitive aggregates must include an aggregate version/sequence in the payload; Chat ignores older versions.
+The Chat consumer uses the durable JetStream consumer `CHAT_GAME_PROJECTION` and stores each event in `game_projection_inbox` before acknowledging it. Projection application, aggregate-version check/update, and inbox `processed_at` update occur in one Chat DB transaction. Replayed events are safe. Ordering-sensitive aggregates use `aggregate_version`; Chat ignores older versions.
 
 ## Chat request authority
 
@@ -76,16 +76,16 @@ The Game database now has a transactional `game_event_outbox`. PostgreSQL trigge
 
 Each event has a UUID, a globally increasing event/aggregate sequence, event type, aggregate ID, UTC occurrence time, and typed data. Trigger insertion is atomic with the source row transaction; a rollback removes both the domain change and its outbox event.
 
-The API process runs `internal/gameevents.RunOutboxPublisher` independently. It claims rows using `FOR UPDATE SKIP LOCKED`, leases them, publishes to JetStream subject `honghuang.game.events.v1`, and marks them published only after JetStream acknowledges. Retries use the same event UUID as the NATS message ID. NATS connection or stream setup failure does not prevent the API from starting; pending events remain in PostgreSQL.
+The API process runs `internal/gameevents.RunOutboxPublisher` independently. It claims rows using `FOR UPDATE SKIP LOCKED`, leases them, publishes to JetStream subject `honghuang.game.events.v1`, and marks them published only after JetStream acknowledges. Retries use the same event UUID as the NATS message ID. NATS connection or stream setup failure does not prevent the API from starting; pending events remain in PostgreSQL. The publisher uses `GAME_NATS_URL`, falling back to `NATS_URL`.
 
 The current publisher is a single background worker per API process. If multiple API replicas are deployed, outbox leases prevent duplicate simultaneous claims, and consumers must still be idempotent because a crash after JetStream acknowledgement but before marking the row published causes a safe redelivery. The publisher orders each claimed batch by event sequence; consumers must use `aggregate_version` to ignore stale events.
 
-JetStream currently retains the event stream for 30 days. Chat projection bootstrap/backfill remains required for a consumer that is offline beyond that window. No Chat cutover is implied by this migration.
+Chat's `internal/chatprojection` consumer uses a separate `CHAT_PROJECTION_DATABASE_URL` connection and the target Chat schema. It records events idempotently, applies projections for accounts, characters, server nodes, world instances, and sessions, then acknowledges JetStream. The legacy Chat API continues to use `CHAT_DATABASE_URL` until the read/write cutover is completed. `09-migrate-chat.sh` applies all versioned Chat schema migrations; on a fresh install the projection URL points at the same dedicated target DB.\n\nJetStream currently retains the event stream for 30 days. Chat projection bootstrap/backfill remains required for a consumer that is offline beyond that window. No Chat cutover is implied by this migration.
 
 ## Current implementation status
 
 - Chat runs as a separate process and reads `CHAT_DATABASE_URL`.
 - Chat authentication can call the independent Identity service.
 - Chat still contains direct SQL reads of Game tables, and the existing Game DB chat tables still have foreign keys to Game entities.
-- The schema in `Database/chat-migrations` is the target standalone schema; Chat service code, event publisher/consumer, backfill, and cutover are not yet complete.
+- The schema in `Database/chat-migrations` is the target standalone schema; the Game event publisher and Chat projection consumer are implemented. Chat request/query SQL still uses legacy Game tables, and historical projection/message backfill plus traffic cutover are not yet complete.
 - Do not point production `CHAT_DATABASE_URL` at this schema yet. The current ChatServer SQL still expects the legacy Game DB layout.
