@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"os"
 	"strings"
@@ -12,6 +13,8 @@ import (
 )
 
 const chatEventSubject = "honghuang.chat.events.v1"
+
+var errInvalidChatEvent = errors.New("invalid chat event envelope")
 
 type chatEventEnvelope struct {
 	Version int          `json:"version"`
