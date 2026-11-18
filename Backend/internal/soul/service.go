@@ -25,6 +25,7 @@ var (
 	ErrAbsorptionChoiceUsed = errors.New("rare soul essence choice is unavailable or already used")
 	ErrInsufficientExperience = errors.New("not enough soul experience for breakthrough")
 	ErrMaxRealm = errors.New("soul has reached the highest configured realm")
+	ErrAttributeCap = errors.New("soul inheritance attribute has reached its maximum")
 )
 
 type Soul struct {
@@ -84,6 +85,14 @@ func (s *Service) Create(ctx context.Context, accountID, name, origin string) (S
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO soul_inheritance_attributes (soul_id) VALUES ($1)`, result.ID); err != nil {
 		return Soul{}, fmt.Errorf("initialize soul inheritance attributes: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO soul_absorption_attribute_progress (soul_id,attribute)
+		SELECT $1,attribute FROM (VALUES
+			('strength'),('constitution'),('agility'),('spirit'),('vitality')
+		) AS attributes(attribute)
+		ON CONFLICT (soul_id,attribute) DO NOTHING`, result.ID); err != nil {
+		return Soul{}, fmt.Errorf("initialize soul absorption attribute progress: %w", err)
 	}
 	if err := tx.Commit(); err != nil { return Soul{}, fmt.Errorf("commit soul creation: %w", err) }
 	if createdAt.Valid {
@@ -495,6 +504,17 @@ type EssenceProfile struct {
 	MutationCount int64 `json:"mutation_count"`
 	FusionNames []string `json:"fusion_names"`
 	FusionCount int64 `json:"fusion_count"`
+	AttributeProgress []SoulAttributeProgress `json:"attribute_progress"`
+}
+
+type SoulAttributeProgress struct {
+	Attribute string `json:"attribute"`
+	AbsorbedCount int64 `json:"absorbed_count"`
+	AwardedPoints int `json:"awarded_points"`
+	AppliedPoints int `json:"applied_points"`
+	MaxPoints int `json:"max_points"`
+	NextThreshold int64 `json:"next_threshold"`
+	AttributeValue int64 `json:"attribute_value"`
 }
 
 type InheritanceAttributes struct {
@@ -531,6 +551,93 @@ type AbsorptionKindProgress struct {
 	Rarity string `json:"rarity"`
 	InheritanceAttribute string `json:"inheritance_attribute,omitempty"`
 	AbsorbedCount int64 `json:"absorbed_count"`
+}
+
+const (
+	soulInheritanceAttributeCap int64 = 20
+	soulAbsorptionAttributeMaxPoints = 10
+	soulAbsorptionAttributeFirstThreshold int64 = 3
+)
+
+// Soul attribute milestones use cumulative counts 3, 9, 21, 45, ... 3069.
+func soulAttributeMilestones(absorbedCount int64) int {
+	points := 0
+	threshold := soulAbsorptionAttributeFirstThreshold
+	for points < soulAbsorptionAttributeMaxPoints && absorbedCount >= threshold {
+		points++
+		threshold = threshold*2 + soulAbsorptionAttributeFirstThreshold
+	}
+	return points
+}
+
+func soulAttributeNextThreshold(awardedPoints int) int64 {
+	if awardedPoints >= soulAbsorptionAttributeMaxPoints { return 0 }
+	threshold := soulAbsorptionAttributeFirstThreshold
+	for i := 0; i < awardedPoints; i++ {
+		threshold = threshold*2 + soulAbsorptionAttributeFirstThreshold
+	}
+	return threshold
+}
+
+// advanceSoulAbsorptionAttribute counts one matching soul essence and awards
+// only newly reached milestones. The total inheritance attribute is capped.
+func advanceSoulAbsorptionAttribute(ctx context.Context, tx *sql.Tx, soulID, attribute string) (SoulAttributeProgress, int64, error) {
+	allowed := map[string]bool{"strength":true,"constitution":true,"agility":true,"spirit":true,"vitality":true}
+	if !allowed[attribute] { return SoulAttributeProgress{}, 0, ErrInvalidAbsorption }
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO soul_absorption_attribute_progress (soul_id,attribute)
+		VALUES ($1,$2) ON CONFLICT (soul_id,attribute) DO NOTHING`, soulID, attribute); err != nil {
+		return SoulAttributeProgress{}, 0, fmt.Errorf("ensure soul attribute progress: %w", err)
+	}
+	var progress SoulAttributeProgress
+	var previousAwarded int
+	err := tx.QueryRowContext(ctx, `
+		UPDATE soul_absorption_attribute_progress
+		SET absorbed_count=absorbed_count+1,updated_at=now()
+		WHERE soul_id=$1 AND attribute=$2
+		RETURNING absorbed_count,awarded_points,applied_points,max_points`, soulID, attribute).Scan(
+		&progress.AbsorbedCount,&previousAwarded,&progress.AppliedPoints,&progress.MaxPoints)
+	if err != nil { return SoulAttributeProgress{}, 0, fmt.Errorf("advance soul attribute absorption count: %w", err) }
+	progress.Attribute = attribute
+	targetAwarded := soulAttributeMilestones(progress.AbsorbedCount)
+	if targetAwarded > progress.MaxPoints { targetAwarded = progress.MaxPoints }
+	newMilestones := targetAwarded - previousAwarded
+	var actualApplied int64
+	if newMilestones > 0 {
+		var currentValue int64
+		query := `SELECT ` + attribute + ` FROM soul_inheritance_attributes WHERE soul_id=$1 FOR UPDATE`
+		if err := tx.QueryRowContext(ctx, query, soulID).Scan(&currentValue); err != nil {
+			return SoulAttributeProgress{}, 0, fmt.Errorf("load soul inheritance attribute: %w", err)
+		}
+		actualApplied = int64(newMilestones)
+		if remaining := soulInheritanceAttributeCap-currentValue; actualApplied > remaining { actualApplied = remaining }
+		if actualApplied < 0 { actualApplied = 0 }
+		if actualApplied > 0 {
+			update := `UPDATE soul_inheritance_attributes SET ` + attribute + `=` + attribute + `+$1,updated_at=now() WHERE soul_id=$2`
+			if _, err := tx.ExecContext(ctx, update, actualApplied, soulID); err != nil {
+				return SoulAttributeProgress{}, 0, fmt.Errorf("apply soul absorption attribute milestone: %w", err)
+			}
+		}
+	}
+	progress.AwardedPoints = targetAwarded
+	progress.AppliedPoints += int(targetAwarded - previousAwarded)
+	// Applied points are the actual number that reached the inheritance sheet,
+	// not merely the number of milestones reached after the global cap.
+	progress.AppliedPoints -= int(newMilestones)
+	progress.AppliedPoints += int(actualApplied)
+	progress.NextThreshold = soulAttributeNextThreshold(targetAwarded)
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE soul_absorption_attribute_progress
+		SET awarded_points=$1,applied_points=applied_points+$2,next_threshold=$3,updated_at=now()
+		WHERE soul_id=$4 AND attribute=$5`, targetAwarded, actualApplied, progress.NextThreshold, soulID, attribute); err != nil {
+		return SoulAttributeProgress{}, 0, fmt.Errorf("save soul attribute milestone: %w", err)
+	}
+	progress.AttributeValue = 0
+	valueQuery := `SELECT ` + attribute + ` FROM soul_inheritance_attributes WHERE soul_id=$1`
+	if err := tx.QueryRowContext(ctx, valueQuery, soulID).Scan(&progress.AttributeValue); err != nil {
+		return SoulAttributeProgress{}, 0, fmt.Errorf("read updated soul attribute: %w", err)
+	}
+	return progress, actualApplied, nil
 }
 
 // CurrentEssence returns soul-owned essence and authored absorption categories.
