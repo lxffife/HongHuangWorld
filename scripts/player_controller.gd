@@ -101,7 +101,7 @@ func _add_key_action(action: String, keycode: int) -> void:
 	InputMap.action_add_event(action, logical_event)
 
 
-func _is_move_key_down(physical_key: Key, logical_key: Key) -> bool:
+func _is_move_key_down(physical_key: int, logical_key: int) -> bool:
 	# 直接查询当前键盘状态，按键松开后立即归零，不依赖释放事件是否被 UI/焦点吞掉。
 	return Input.is_physical_key_pressed(physical_key) or Input.is_key_pressed(logical_key)
 
