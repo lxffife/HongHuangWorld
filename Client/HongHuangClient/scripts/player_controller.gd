@@ -16,6 +16,10 @@ var base_visual_material: Material
 var base_collision_shape: Shape3D
 var soul_orb_core: MeshInstance3D
 var soul_orb_halo: MeshInstance3D
+var soul_trait_ring: MeshInstance3D
+var soul_trait_shell: MeshInstance3D
+var soul_trait_rune_ring: MeshInstance3D
+var soul_trait_life_ring: MeshInstance3D
 var soul_form_enabled := false
 var soul_form_time := 0.0
 var soul_form_scale := 1.0
@@ -170,7 +174,7 @@ func _physics_process(delta: float) -> void:
 				push_warning("World movement input send failed: " + str(send_error))
 
 
-func set_soul_form(enabled: bool, stage: int = 1, visual_scale: float = 0.35) -> void:
+func set_soul_form(enabled: bool, stage: int = 1, visual_scale: float = 0.35, affinities: Dictionary = {}) -> void:
 	if not is_instance_valid(visual) or not is_instance_valid(collision_shape):
 		return
 	soul_form_enabled = enabled
@@ -186,6 +190,9 @@ func set_soul_form(enabled: bool, stage: int = 1, visual_scale: float = 0.35) ->
 		move_speed = 5.5
 		if is_instance_valid(soul_orb_halo):
 			soul_orb_halo.visible = false
+		for trait_node in [soul_trait_ring, soul_trait_shell, soul_trait_rune_ring, soul_trait_life_ring]:
+			if is_instance_valid(trait_node):
+				trait_node.visible = false
 		return
 
 	var orb := SphereMesh.new()
@@ -233,6 +240,103 @@ func set_soul_form(enabled: bool, stage: int = 1, visual_scale: float = 0.35) ->
 		add_child(soul_orb_halo)
 	soul_orb_halo.visible = true
 	soul_orb_halo.scale = Vector3.ONE * clampf(visual_scale / 0.35, 0.85, 3.8)
+	_apply_soul_affinity_visuals(affinities)
+
+func _make_trait_material(color: Color, alpha: float = 0.58) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(color.r, color.g, color.b, alpha)
+	material.emission_enabled = true
+	material.emission = color
+	material.emission_energy_multiplier = 1.35
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	return material
+
+func _apply_soul_affinity_visuals(affinities: Dictionary) -> void:
+	var beast := int(affinities.get("beast", 0))
+	var battle := int(affinities.get("battle", 0))
+	var gale := int(affinities.get("gale", 0))
+	var spirit := int(affinities.get("spirit", 0)) + int(affinities.get("selected_spirit", 0))
+	var life := int(affinities.get("life", 0)) + int(affinities.get("selected_vitality", 0))
+	var strength := int(affinities.get("selected_strength", 0))
+	var constitution := int(affinities.get("selected_constitution", 0))
+	var agility := int(affinities.get("selected_agility", 0))
+	var vitality := int(affinities.get("selected_vitality", 0))
+	var primary := Color(0.12, 0.62, 1.0)
+	var highest := 0
+	var traits := [
+		{"count": beast, "color": Color(1.0, 0.68, 0.22)},
+		{"count": battle, "color": Color(1.0, 0.20, 0.16)},
+		{"count": gale, "color": Color(0.22, 0.92, 0.72)},
+		{"count": spirit, "color": Color(0.72, 0.42, 1.0)},
+		{"count": life, "color": Color(0.28, 1.0, 0.48)},
+		{"count": strength, "color": Color(1.0, 0.38, 0.22)},
+		{"count": constitution, "color": Color(0.86, 0.72, 0.38)},
+		{"count": agility, "color": Color(0.24, 0.88, 0.86)}
+	]
+	for trait in traits:
+		if int(trait["count"]) > highest:
+			highest = int(trait["count"])
+			primary = trait["color"]
+	if not is_instance_valid(soul_trait_ring):
+		soul_trait_ring = MeshInstance3D.new()
+		soul_trait_ring.name = "SoulAffinityRing"
+		var ring_mesh := TorusMesh.new()
+		ring_mesh.inner_radius = 0.55
+		ring_mesh.outer_radius = 0.59
+		ring_mesh.rings = 36
+		ring_mesh.ring_segments = 8
+		soul_trait_ring.mesh = ring_mesh
+		soul_trait_ring.position.y = 0.42
+		add_child(soul_trait_ring)
+	soul_trait_ring.material_override = _make_trait_material(primary, 0.72)
+	soul_trait_ring.visible = highest > 0
+	soul_trait_ring.scale = Vector3.ONE * soul_form_scale
+	if not is_instance_valid(soul_trait_shell):
+		soul_trait_shell = MeshInstance3D.new()
+		soul_trait_shell.name = "SoulBeastAura"
+		var shell_mesh := SphereMesh.new()
+		shell_mesh.radius = 0.43
+		shell_mesh.height = 0.86
+		shell_mesh.radial_segments = 20
+		shell_mesh.rings = 10
+		soul_trait_shell.mesh = shell_mesh
+		soul_trait_shell.position.y = 0.42
+		add_child(soul_trait_shell)
+	soul_trait_shell.material_override = _make_trait_material(Color(1.0, 0.64, 0.20), 0.16)
+	soul_trait_shell.visible = beast > 0
+	soul_trait_shell.scale = Vector3.ONE * soul_form_scale * 1.16
+	if not is_instance_valid(soul_trait_rune_ring):
+		soul_trait_rune_ring = MeshInstance3D.new()
+		soul_trait_rune_ring.name = "SoulSpiritRunes"
+		var rune_mesh := TorusMesh.new()
+		rune_mesh.inner_radius = 0.68
+		rune_mesh.outer_radius = 0.71
+		rune_mesh.rings = 32
+		rune_mesh.ring_segments = 6
+		soul_trait_rune_ring.mesh = rune_mesh
+		soul_trait_rune_ring.position.y = 0.42
+		soul_trait_rune_ring.rotation.x = 0.72
+		add_child(soul_trait_rune_ring)
+	soul_trait_rune_ring.material_override = _make_trait_material(Color(0.72, 0.38, 1.0), 0.72)
+	soul_trait_rune_ring.visible = spirit > 0
+	soul_trait_rune_ring.scale = Vector3.ONE * soul_form_scale
+	if not is_instance_valid(soul_trait_life_ring):
+		soul_trait_life_ring = MeshInstance3D.new()
+		soul_trait_life_ring.name = "SoulLifeHalo"
+		var life_mesh := TorusMesh.new()
+		life_mesh.inner_radius = 0.76
+		life_mesh.outer_radius = 0.79
+		life_mesh.rings = 32
+		life_mesh.ring_segments = 6
+		soul_trait_life_ring.mesh = life_mesh
+		soul_trait_life_ring.position.y = 0.42
+		soul_trait_life_ring.rotation.x = -0.72
+		add_child(soul_trait_life_ring)
+	soul_trait_life_ring.material_override = _make_trait_material(Color(0.28, 1.0, 0.48), 0.68)
+	soul_trait_life_ring.visible = life > 0
+	soul_trait_life_ring.scale = Vector3.ONE * soul_form_scale
+
 
 func _process(delta: float) -> void:
 	if not soul_form_enabled or not is_instance_valid(visual):
@@ -245,3 +349,14 @@ func _process(delta: float) -> void:
 		soul_orb_halo.rotation.y += delta * 0.65
 		var pulse := 1.0 + sin(soul_form_time * 2.0) * 0.035
 		soul_orb_halo.scale = Vector3.ONE * soul_form_scale * pulse
+	if is_instance_valid(soul_trait_ring) and soul_trait_ring.visible:
+		soul_trait_ring.position.y = 0.42 + bob
+		soul_trait_ring.rotation.y -= delta * 0.45
+	if is_instance_valid(soul_trait_shell) and soul_trait_shell.visible:
+		soul_trait_shell.position.y = 0.42 + bob
+	if is_instance_valid(soul_trait_rune_ring) and soul_trait_rune_ring.visible:
+		soul_trait_rune_ring.position.y = 0.42 + bob
+		soul_trait_rune_ring.rotation.y += delta * 0.9
+	if is_instance_valid(soul_trait_life_ring) and soul_trait_life_ring.visible:
+		soul_trait_life_ring.position.y = 0.42 + bob
+		soul_trait_life_ring.rotation.y -= delta * 0.35
