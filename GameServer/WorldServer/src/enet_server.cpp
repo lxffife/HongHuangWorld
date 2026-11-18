@@ -1384,7 +1384,15 @@ struct EnetServer::Impl {
         if (damage.defeated) {
             target->state.mode = honghuang::simulation::MonsterMode::Dead;
             target->state.target_id.clear();
-            target->respawn_at = now + kMonsterRespawnDelay;
+            auto respawn_delay = kMonsterRespawnDelay;
+            if (target->definition.id == "faceless_essence") {
+                respawn_delay = std::chrono::seconds(300);
+            } else if (target->definition.id == "life_ancient_soul") {
+                respawn_delay = std::chrono::seconds(120);
+            } else if (target->definition.id != "wandering_wraith") {
+                respawn_delay = std::chrono::seconds(45);
+            }
+            target->respawn_at = now + respawn_delay;
             experience_reward = 20 + static_cast<std::int64_t>(target->definition.level) * 10;
             cultivation_reward = 10 + static_cast<std::int64_t>(target->definition.level) * 5;
             enqueue_character_reward(CharacterRewardEvent{
