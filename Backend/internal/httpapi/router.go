@@ -46,7 +46,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 	})
 
 	if db != nil {
-		authService := auth.NewService(db)
+		authService := configuredAuthProvider(db)
 		handlers := &authHandlers{service: authService, logger: logger}
 		chatAPI := &chatHandlers{authService: authService, service: chat.NewService(db), logger: logger}
 		mux.HandleFunc("POST /api/v1/chat/messages", chatAPI.send)
