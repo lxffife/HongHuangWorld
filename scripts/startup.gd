@@ -1184,7 +1184,7 @@ func _render_lobby_character_stats(raw_attributes: Variant) -> void:
 		value_label.add_theme_font_size_override("font_size", 16)
 		value_label.add_theme_color_override("font_color", Color("#e7d4ae"))
 		content.add_child(value_label)
-		var equipment_bonus := _lobby_equipment_bonus_for(key)
+		var equipment_bonus := _lobby_equipment_bonus_for(key) if key != "health" and key != "mana" else 0
 		if equipment_bonus != 0:
 			var bonus_label := Label.new()
 			bonus_label.text = "基础 " + _lobby_number_text(attributes.get(key, 0)) + "  ·  装备 +" + _lobby_number_text(equipment_bonus)
