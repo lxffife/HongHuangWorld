@@ -343,11 +343,13 @@ bool DurableOutbox::move_to_dead_letter(const std::string& event_id, std::uint32
 }
 
 
-OutboxStats DurableOutbox::stats(std::int64_t now_ms, std::string& error) const {
+OutboxStats DurableOutbox::stats(std::int64_t now_ms, std::string& error, const std::string& event_type) const {
     std::lock_guard lock(mutex_);
     OutboxStats result;
     try {
-        Stmt counts(db_, "SELECT status,COUNT(*) FROM world_event_outbox GROUP BY status");
+        Stmt counts(db_, "SELECT status,COUNT(*) FROM world_event_outbox WHERE (?='' OR event_type=?) GROUP BY status");
+        bind_text(counts.get(), 1, event_type);
+        bind_text(counts.get(), 2, event_type);
         int step = SQLITE_ROW;
         while ((step = sqlite3_step(counts.get())) == SQLITE_ROW) {
             const auto status = column_text(counts.get(), 0);
@@ -363,9 +365,11 @@ OutboxStats DurableOutbox::stats(std::int64_t now_ms, std::string& error) const 
             "SELECT "
             "COALESCE(MAX(CASE WHEN status='pending' THEN ?-created_at_ms END),0),"
             "COALESCE(MAX(CASE WHEN status='dead_letter' THEN ?-created_at_ms END),0) "
-            "FROM world_event_outbox");
+            "FROM world_event_outbox WHERE (?='' OR event_type=?)");
         sqlite3_bind_int64(ages.get(), 1, now_ms);
         sqlite3_bind_int64(ages.get(), 2, now_ms);
+        bind_text(ages.get(), 3, event_type);
+        bind_text(ages.get(), 4, event_type);
         if (sqlite3_step(ages.get()) != SQLITE_ROW) throw std::runtime_error(sqlite3_errmsg(db_));
         result.oldest_pending_age_ms = std::max<std::int64_t>(0, sqlite3_column_int64(ages.get(), 0));
         result.oldest_dead_letter_age_ms = std::max<std::int64_t>(0, sqlite3_column_int64(ages.get(), 1));
@@ -426,7 +430,7 @@ bool DurableOutbox::retry_dead_letter(
         Stmt update(db_,
             "UPDATE world_event_outbox SET status='pending',next_retry_at_ms=?,"
             "updated_at_ms=?,last_error='manual retry requested' "
-            "WHERE event_id=? AND status='dead_letter'");
+            "WHERE event_id=? AND event_type='nearby_chat' AND status='dead_letter'");
         sqlite3_bind_int64(update.get(), 1, now_ms);
         sqlite3_bind_int64(update.get(), 2, now_ms);
         bind_text(update.get(), 3, event_id);
