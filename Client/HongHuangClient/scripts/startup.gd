@@ -717,9 +717,16 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 
 	if response_code == 404 and context == "character_check":
 		current_character = {}
+		character_title_label.text = "创建第一世角色"
+		character_input.editable = true
+		race_label_control.show()
+		race_select.show()
+		cultivation_preview.show()
+		world_label_control.show()
+		world_select.show()
 		action_button.disabled = false
 		action_button.text = "创建角色并进入世界"
-		_set_status("灵魂档案已存在，但尚无转世肉身。请选择出生世界并填写角色名。")
+		_set_status("灵魂档案已建立。设置角色名、种族与出生世界后，即可踏入洪荒。")
 		_process_queue()
 		return
 
@@ -799,7 +806,14 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 			var progression: Dictionary = data.get("progression", {})
 			var tier_text := str(progression.get("power_tier_name", "未知层级"))
 			var realm_text := str(progression.get("system_name", "")) + " · " + str(progression.get("realm_name", "")) + str(progression.get("realm_stage_name", ""))
-			_set_status("角色已存在：" + character_input.text + "\n修炼体系：" + realm_text + "\n跨族参考：" + tier_text + "。可以进入世界。")
+			character_title_label.text = "当前角色"
+			character_input.editable = false
+			race_label_control.hide()
+			race_select.hide()
+			cultivation_preview.hide()
+			world_label_control.hide()
+			world_select.hide()
+			_set_status("角色：" + character_input.text + "  ·  " + realm_text + "  ·  " + tier_text + "\n准备就绪，可以进入世界。")
 			_show_reincarnation_controls()
 		"life_history":
 			_render_life_history(data.get("items", []))
