@@ -30,6 +30,7 @@
 - `000024_underworld_exploration` 为冥界酆都增加鬼门关、忘川河、奈何桥、轮回殿四处服务端权威探索点及对应奇遇，发现记录与奖励仍按灵魂幂等保存。
 - `000025_exploration_event_choices` 为区域奇遇增加服务端配置的分支选项；客户端只提交选项 ID，中心服按可信 effect_key 计算功德/业力，并将所选 choice_id 与灵魂级领取记录一同保存，继续使用唯一约束防止重复选择。
 - `000026_exploration_causal_followups` 为区域奇遇增加灵魂级前置事件/分支条件；以已领取事件的 choice_id 解锁后续探索点与奇遇，首条链路为收取引魂灯火后发现魂灯旧影。
+- `000027_soul_essence_foundation` 建立跨轮回保留的灵魂核心属性、吞噬容量与能量统计、普通游魂/兽魂/战魂类别目录，以及按灵魂幂等的吞噬审计流水；为已有灵魂补齐初始魂体属性。
 
 ## 当前迁移顺序
 
@@ -62,6 +63,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000023_world_expl
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000024_underworld_exploration.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000025_exploration_event_choices.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000026_exploration_causal_followups.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000027_soul_essence_foundation.up.sql
 ```
 
 回滚时按相反顺序执行对应的 `.down.sql`。不要在已运行的生产库上重复执行非幂等迁移；后续接入迁移工具后，应由工具记录每个已应用版本，避免人工重复执行。
