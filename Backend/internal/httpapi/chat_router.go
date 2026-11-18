@@ -13,7 +13,7 @@ import (
 
 // NewChatRouter builds the standalone chat service HTTP surface. It deliberately
 // does not register game, account-login, world-entry, inventory, or character
-// mutation routes. Account tokens are verified against the shared session store.
+// mutation routes. Player tokens are verified by the independent Identity service.
 func NewChatRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 	handler, _ := NewChatRouterWithShutdown(logger, db)
 	return handler
