@@ -12,6 +12,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/liflife/HongHuangWorld/Backend/internal/auth"
 	"github.com/liflife/HongHuangWorld/Backend/internal/chat"
 	"github.com/liflife/HongHuangWorld/Backend/internal/character"
 	"github.com/liflife/HongHuangWorld/Backend/internal/inventory"
@@ -45,7 +46,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 	})
 
 	if db != nil {
-		authService := configuredAuthProvider(db)
+		authService := configuredAuthProvider()
 		handlers := &authHandlers{service: authService, logger: logger}
 		chatAPI := &chatHandlers{authService: authService, service: chat.NewService(db), logger: logger}
 		mux.HandleFunc("POST /api/v1/chat/messages", chatAPI.send)
