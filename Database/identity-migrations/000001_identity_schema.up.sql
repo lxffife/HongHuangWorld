@@ -1,6 +1,6 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
-CREATE TABLE accounts (
+CREATE TABLE IF NOT EXISTS accounts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     username VARCHAR(32) NOT NULL UNIQUE,
     email VARCHAR(254) UNIQUE,
@@ -10,7 +10,7 @@ CREATE TABLE accounts (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CHECK (length(username) >= 3)
 );
-CREATE TABLE account_sessions (
+CREATE TABLE IF NOT EXISTS account_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     token_hash BYTEA NOT NULL UNIQUE,
@@ -18,6 +18,6 @@ CREATE TABLE account_sessions (
     revoked_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX idx_account_sessions_account ON account_sessions(account_id);
-CREATE INDEX idx_account_sessions_expiry ON account_sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_account_sessions_account ON account_sessions(account_id);
+CREATE INDEX IF NOT EXISTS idx_account_sessions_expiry ON account_sessions(expires_at);
 COMMIT;
