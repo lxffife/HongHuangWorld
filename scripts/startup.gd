@@ -1200,7 +1200,7 @@ func _equipment_set_effect_lines(equipped_by_slot: Dictionary) -> Array[String]:
 		if active_parts.is_empty():
 			result.append(progress_text + " · 尚未激活套装效果")
 		else:
-			result.append(progress_text + " · " + "；".join(active_parts))
+			result.append(progress_text + " · " + "；".join(PackedStringArray(active_parts)))
 	return result
 
 func _render_lobby_equipment_comparison(equipped_by_slot: Dictionary) -> void:
@@ -1257,7 +1257,7 @@ func _render_lobby_equipment_comparison(equipped_by_slot: Dictionary) -> void:
 	set_heading.add_theme_color_override("font_color", Color("#d8bd83"))
 	lobby_equipment_list.add_child(set_heading)
 	var set_lines := Label.new()
-	set_lines.text = "当前：\n" + ("\n".join(current_set_lines) if not current_set_lines.is_empty() else "暂无已激活套装效果") + "\n试穿后：\n" + ("\n".join(preview_set_lines) if not preview_set_lines.is_empty() else "暂无已激活套装效果")
+	set_lines.text = "当前：\n" + ("\n".join(PackedStringArray(current_set_lines)) if not current_set_lines.is_empty() else "暂无已激活套装效果") + "\n试穿后：\n" + ("\n".join(PackedStringArray(preview_set_lines)) if not preview_set_lines.is_empty() else "暂无已激活套装效果")
 	set_lines.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	set_lines.add_theme_color_override("font_color", Color("#9ed6b1"))
 	lobby_equipment_list.add_child(set_lines)
