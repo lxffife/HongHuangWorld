@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"crypto/subtle"
 	"database/sql"
 	"log/slog"
 	"net/http"
@@ -39,7 +40,8 @@ func NewIdentityRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 	mux.HandleFunc("GET /api/v1/account/me", handlers.me)
 	internalKey := os.Getenv("IDENTITY_INTERNAL_API_KEY")
 	mux.HandleFunc("POST /api/v1/internal/auth/introspect", func(w http.ResponseWriter, r *http.Request) {
-		if internalKey == "" || r.Header.Get("X-Identity-Service-Key") != internalKey {
+		providedKey := r.Header.Get("X-Identity-Service-Key")
+		if internalKey == "" || len(providedKey) != len(internalKey) || subtle.ConstantTimeCompare([]byte(providedKey), []byte(internalKey)) != 1 {
 			http.Error(w, "unauthorized service", http.StatusUnauthorized)
 			return
 		}
