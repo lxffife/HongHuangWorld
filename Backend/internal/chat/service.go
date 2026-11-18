@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -45,30 +46,46 @@ func NewService(db *sql.DB) *Service { return &Service{db: db} }
 func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (Message, error) {
 	req.Channel = strings.TrimSpace(req.Channel)
 	req.Content = strings.TrimSpace(req.Content)
-	if accountID == "" || req.ClientMessageID == "" || len(req.ClientMessageID) > 36 || !isUUID(req.ClientMessageID) || utf8.RuneCountInString(req.Content) == 0 || utf8.RuneCountInString(req.Content) > 200 {
+	if accountID == "" || !isUUID(req.ClientMessageID) || utf8.RuneCountInString(req.Content) == 0 || utf8.RuneCountInString(req.Content) > 200 {
 		return Message{}, ErrInvalidInput
 	}
 	for _, r := range req.Content {
-		if unicode.IsControl(r) && r != '\n' && r != '\t' { return Message{}, ErrInvalidInput }
+		if unicode.IsControl(r) && r != '\n' && r != '\t' {
+			return Message{}, ErrInvalidInput
+		}
 	}
 	if req.Channel != "world" && req.Channel != "cross_world" {
 		return Message{}, ErrUnsupportedChannel
 	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Message{}, fmt.Errorf("begin chat send: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Serialize sends by active character so rate limiting and idempotency
+	// remain correct when the same account submits concurrent requests.
 	var characterID, characterName, raceID, worldID string
 	var level int
-	err := s.db.QueryRowContext(ctx, `SELECT c.id::text,c.name,COALESCE(c.race_id,''),c.world_id,c.level
+	err = tx.QueryRowContext(ctx, `SELECT c.id::text,c.name,COALESCE(c.race_id,''),c.world_id,c.level
 		FROM souls soul JOIN characters c ON c.id=soul.current_character_id
-		WHERE soul.account_id=$1 AND c.status='alive'`, accountID).Scan(&characterID,&characterName,&raceID,&worldID,&level)
-	if errors.Is(err,sql.ErrNoRows) { return Message{},ErrNoCharacter }
-	if err != nil { return Message{},fmt.Errorf("resolve chat character: %w",err) }
+		WHERE soul.account_id=$1 AND c.status='alive'
+		FOR UPDATE OF c`, accountID).Scan(&characterID, &characterName, &raceID, &worldID, &level)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Message{}, ErrNoCharacter
+	}
+	if err != nil {
+		return Message{}, fmt.Errorf("resolve and lock chat character: %w", err)
+	}
 
-	var worldScope any
-	if req.Channel == "world" { worldScope = worldID }
-	// Idempotent retries must return the original message before rate limiting.
-	existing, existingErr := s.getByClientID(ctx, characterID, req.ClientMessageID)
+	existing, existingErr := getChatMessageByClientID(ctx, tx, characterID, req.ClientMessageID)
 	if existingErr == nil {
 		if existing.Channel != req.Channel || existing.Content != req.Content {
 			return Message{}, ErrIdempotencyConflict
+		}
+		if err := tx.Commit(); err != nil {
+			return Message{}, fmt.Errorf("commit idempotent chat retry: %w", err)
 		}
 		return existing, nil
 	}
@@ -76,24 +93,42 @@ func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (
 		return Message{}, existingErr
 	}
 
-	window:=3*time.Second
-	if req.Channel=="cross_world" { window=5*time.Second }
+	window := 3 * time.Second
+	if req.Channel == "cross_world" {
+		window = 5 * time.Second
+	}
 	var recent int
-	if err:=s.db.QueryRowContext(ctx,`SELECT count(*) FROM chat_messages WHERE sender_character_id=$1::uuid AND created_at>now()-$2::interval AND channel_type=$3`,characterID,window.String(),req.Channel).Scan(&recent);err!=nil{return Message{},fmt.Errorf("check chat rate limit: %w",err)}
-	if recent>0 { return Message{},ErrRateLimited }
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM chat_messages
+		WHERE sender_character_id=$1::uuid AND created_at>now()-$2::interval AND channel_type=$3`,
+		characterID, window.String(), req.Channel).Scan(&recent); err != nil {
+		return Message{}, fmt.Errorf("check chat rate limit: %w", err)
+	}
+	if recent > 0 {
+		return Message{}, ErrRateLimited
+	}
 
 	var worldValue any
-	if req.Channel=="world" { worldValue=worldScope }
-	_,err=s.db.ExecContext(ctx,`INSERT INTO chat_messages(channel_type,world_id,sender_character_id,client_message_id,content)
-		VALUES($1,$2,$3::uuid,$4::uuid,$5) ON CONFLICT(sender_character_id,client_message_id) DO NOTHING`,
-		req.Channel,worldValue,characterID,req.ClientMessageID,req.Content)
-	if err!=nil{return Message{},fmt.Errorf("store chat message: %w",err)}
-	item, err := s.getByClientID(ctx, characterID, req.ClientMessageID)
+	if req.Channel == "world" {
+		worldValue = worldID
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO chat_messages(channel_type,world_id,sender_character_id,client_message_id,content)
+		VALUES($1,$2,$3::uuid,$4::uuid,$5)`,
+		req.Channel, worldValue, characterID, req.ClientMessageID, req.Content)
+	if err != nil {
+		return Message{}, fmt.Errorf("store chat message: %w", err)
+	}
+	item, err := getChatMessageByClientID(ctx, tx, characterID, req.ClientMessageID)
 	if err != nil {
 		return Message{}, err
 	}
 	if item.Channel != req.Channel || item.Content != req.Content {
 		return Message{}, ErrIdempotencyConflict
+	}
+	if err := insertChatEventOutbox(ctx, tx, item); err != nil {
+		return Message{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Message{}, fmt.Errorf("commit chat message and outbox: %w", err)
 	}
 	return item, nil
 }
@@ -141,14 +176,35 @@ func (s *Service) List(ctx context.Context, accountID, channel, before string, l
 	return items,nil
 }
 
-func (s *Service) getByClientID(ctx context.Context, characterID, clientID string)(Message,error){
+type chatRowQueryer interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func getChatMessageByClientID(ctx context.Context, queryer chatRowQueryer, characterID, clientID string) (Message, error) {
 	var m Message
-	err:=s.db.QueryRowContext(ctx,`SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),m.sender_character_id::text,c.name,COALESCE(c.race_id,''),c.level,m.content,m.created_at
+	err := queryer.QueryRowContext(ctx, `SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),m.sender_character_id::text,c.name,COALESCE(c.race_id,''),c.level,m.content,m.created_at
 		FROM chat_messages m JOIN characters c ON c.id=m.sender_character_id
-		WHERE m.sender_character_id=$1::uuid AND m.client_message_id=$2::uuid`,characterID,clientID).
+		WHERE m.sender_character_id=$1::uuid AND m.client_message_id=$2::uuid`, characterID, clientID).
 		Scan(&m.ID,&m.ClientMessageID,&m.Channel,&m.WorldID,&m.SenderCharacterID,&m.SenderName,&m.SenderRace,&m.SenderLevel,&m.Content,&m.CreatedAt)
-	if err!=nil{return Message{},fmt.Errorf("load stored chat message: %w",err)}
-	return m,nil
+	if err != nil {
+		return Message{}, fmt.Errorf("load stored chat message: %w", err)
+	}
+	return m, nil
+}
+
+func (s *Service) getByClientID(ctx context.Context, characterID, clientID string) (Message, error) {
+	return getChatMessageByClientID(ctx, s.db, characterID, clientID)
+}
+
+func insertChatEventOutbox(ctx context.Context, tx *sql.Tx, message Message) error {
+	payload, err := json.Marshal(message)
+	if err != nil {
+		return fmt.Errorf("encode chat outbox payload: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO chat_event_outbox(message_id,payload) VALUES($1::uuid,$2::jsonb)`, message.ID, string(payload)); err != nil {
+		return fmt.Errorf("insert chat event outbox: %w", err)
+	}
+	return nil
 }
 
 func isUUID(value string) bool {
@@ -327,7 +383,10 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 		Scan(&item.ID,&item.ClientMessageID,&item.Channel,&item.WorldID,&item.SenderCharacterID,
 			&item.SenderName,&item.SenderRace,&item.SenderLevel,&item.Content,&item.CreatedAt)
 	if err != nil { return Message{}, fmt.Errorf("load persisted world server chat message: %w", err) }
-	if err := tx.Commit(); err != nil { return Message{}, fmt.Errorf("commit world server chat message: %w", err) }
+	if err := insertChatEventOutbox(ctx, tx, item); err != nil {
+		return Message{}, err
+	}
+	if err := tx.Commit(); err != nil { return Message{}, fmt.Errorf("commit world server chat message and outbox: %w", err) }
 	return item,nil
 }
 
