@@ -1053,7 +1053,7 @@ struct EnetServer::Impl {
                 if (last_chat_outbox_metrics_at == Clock::time_point{} ||
                     metrics_now - last_chat_outbox_metrics_at >= std::chrono::seconds(60)) {
                     std::string metrics_error;
-                    const auto metrics = durable_outbox->stats(wall_clock_ms(), metrics_error);
+                    const auto metrics = durable_outbox->stats(wall_clock_ms(), metrics_error, "nearby_chat");
                     if (metrics_error.empty()) {
                         std::clog << "[ChatOutbox] pending=" << metrics.pending
                                   << " inflight=" << metrics.inflight
