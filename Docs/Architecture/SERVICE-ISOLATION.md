@@ -32,7 +32,7 @@
 1. 客户端维护独立游戏连接（ENet）和聊天连接（WebSocket）。聊天断线只重连聊天连接，不重新登录或重建游戏连接。当前 Godot 已接入独立 WebSocket 客户端，附近频道仍暂用 ENet。
 2. 游戏操作不依赖聊天请求成功；聊天服务超时、拒绝连接或宕机不能影响游戏操作。
 3. WorldServer 与 ChatServer 的消息交互必须异步、有界、可丢弃/重试策略明确；不得在 ENet 主循环中执行同步 HTTP。
-4. NATS 用于跨服务事件分发，不是游戏 tick 的前置依赖。NATS 不可用时，游戏核心操作继续；跨服务聊天消息可延迟、重试或暂存。
+4. NATS 用于跨服务事件分发，不是游戏 tick 的前置依赖。ChatServer 已接入 NATS Core Pub/Sub（`honghuang.chat.events.v1`）：写库成功后本机立即广播，并向其他 ChatServer 发布版本化事件；每个 ChatServer 独立订阅并按 world_id 过滤世界频道。NATS 不可用时，游戏核心操作和本机聊天继续，连接自动重试；Core Pub/Sub 不保留离线订阅者的消息，离线节点重放需后续 JetStream/历史同步实现。
 5. 账号身份可共享验证，但服务令牌和服务端密钥不得下发客户端。
 6. 共享 PostgreSQL 只作为迁移期选择。服务使用独立连接池、独立数据库角色/权限；未来按数据所有权拆分 chat 数据库。游戏和聊天不得依赖跨库强事务。
 
@@ -55,6 +55,6 @@
 - ChatServer 当前复用现有 chat service、账号 session 验证和节点内部接口；数据库仍是迁移期共享 PostgreSQL。
 - 30 天消息保留由 ChatServer 后台调度器负责：启动时执行一次，之后每小时执行；发送和历史查询请求不再触发过期消息删除，清理失败记录日志并在下一周期重试。
 - Game API 暂时保留原聊天路由，作为客户端/WorldServer 切换期间的兼容入口。
-- Godot 已建立独立 WebSocket 聊天连接：Bearer Token 握手、20 秒心跳、Pong 超时检测和断线自动重连；世界/跨界频道使用独立连接，附近频道仍走 ENet。每次连接/重连成功后自动拉取世界与跨界最近 50 条历史，按消息 ID 去重并按时间+ID排序；过期连接的历史响应会被丢弃。ChatServer 目前只在单进程内广播，跨实例 NATS 扇出未实现。
-- NATS 事件总线、跨 ChatServer 实例广播、在线状态订阅、聊天数据库物理拆分、完整历史分页/离线投递和故障注入测试尚未实现。
-- 本轮增加客户端自动历史补拉、实时/历史消息去重与时间排序；没有运行 Go 测试、构建、迁移、Godot 解析/运行或 GitHub Actions；所有新增代码仍待本地验证。
+- Godot 已建立独立 WebSocket 聊天连接：Bearer Token 握手、20 秒心跳、Pong 超时检测和断线自动重连；世界/跨界频道使用独立连接，附近频道仍走 ENet。每次连接/重连成功后自动拉取世界与跨界最近 50 条历史，按消息 ID 去重并按时间+ID排序；过期连接的历史响应会被丢弃。ChatServer 已通过 NATS Core Pub/Sub 跨进程广播世界/跨界消息；当前不是 JetStream 持久订阅，离线节点不会从 NATS 自动重放。
+- NATS Core Pub/Sub 跨 ChatServer 广播已提交；JetStream 持久消费/离线节点重放、在线状态订阅、聊天数据库物理拆分、完整历史分页/离线投递和故障注入测试尚未实现。
+- 本轮增加 NATS Core Pub/Sub 跨 ChatServer 实时广播，并将 REST、WebSocket、WorldServer 发布统一接入事件总线；没有运行 Go 测试、构建、迁移、Godot 解析/运行或 GitHub Actions；所有新增代码仍待本地验证。
