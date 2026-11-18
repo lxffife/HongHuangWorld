@@ -12,7 +12,8 @@ load_env
 MIGRATION_DIR="$HH_PROJECT_DIR/Database/chat-migrations"
 [[ -d "$MIGRATION_DIR" ]] || die "找不到 Chat migrations: $MIGRATION_DIR"
 
-[[ "$CHAT_DATABASE_URL" != "${DATABASE_URL:-}" ]] || die "CHAT_DATABASE_URL 不能与 Game DATABASE_URL 相同"\nlog "准备独立 Chat 数据库 $CHAT_DB_NAME；ChatServer 将直接使用 CHAT_DATABASE_URL"
+[[ "$CHAT_DATABASE_URL" != "${DATABASE_URL:-}" ]] || die "CHAT_DATABASE_URL 不能与 Game DATABASE_URL 相同"
+log "准备独立 Chat 数据库 $CHAT_DB_NAME；ChatServer 将直接使用 CHAT_DATABASE_URL"
 compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
   -v db_name="$CHAT_DB_NAME" -v db_user="$CHAT_DB_USER" -v db_password="$CHAT_DB_PASSWORD" <<'SQL'
 SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'db_user', :'db_password')
