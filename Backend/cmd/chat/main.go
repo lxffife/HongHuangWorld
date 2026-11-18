@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"database/sql"
+	"strings"
 	"syscall"
 	"time"
 
@@ -33,6 +35,28 @@ func main() {
 	}
 	defer db.Close()
 
+	apiDB := db
+	chatService := chat.NewService(db)
+	var projectionAPIDB *sql.DB
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("CHAT_USE_PROJECTION_DATABASE")), "true") {
+		projectionURL := strings.TrimSpace(os.Getenv("CHAT_PROJECTION_DATABASE_URL"))
+		if projectionURL == "" || projectionURL == databaseURL {
+			logger.Error("projection Chat mode requires a distinct CHAT_PROJECTION_DATABASE_URL")
+			os.Exit(1)
+		}
+		projectionCtx, projectionCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		projectionAPIDB, err = database.OpenPostgres(projectionCtx, projectionURL)
+		projectionCancel()
+		if err != nil {
+			logger.Error("Chat projection API database startup failed", "error", err)
+			os.Exit(1)
+		}
+		defer projectionAPIDB.Close()
+		apiDB = projectionAPIDB
+		chatService = chat.NewProjectionService(apiDB)
+		logger.Warn("Chat API is using Chat-owned projections; enable only after history backfill and acceptance")
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -51,7 +75,7 @@ func main() {
 		addr = ":8788"
 	}
 
-	handler, closeChatTransports := httpapi.NewChatRouterWithShutdown(logger, db)
+	handler, closeChatTransports := httpapi.NewChatRouterWithServiceAndShutdown(logger, apiDB, chatService)
 	defer closeChatTransports()
 	server := &http.Server{
 		Addr:              addr,
@@ -60,7 +84,7 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 	}
 
-	go runChatRetentionCleanup(ctx, chat.NewService(db), logger)
+	go runChatRetentionCleanup(ctx, chatService, logger)
 
 	go func() {
 		logger.Info("chat service starting", "addr", addr)
