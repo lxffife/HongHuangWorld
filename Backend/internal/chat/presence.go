@@ -2,7 +2,6 @@ package chat
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -113,4 +112,3 @@ func (s *Service) PruneExpiredPresenceLeases(ctx context.Context) (int64, error)
 	return count, nil
 }
 
-var _ = sql.ErrNoRows
