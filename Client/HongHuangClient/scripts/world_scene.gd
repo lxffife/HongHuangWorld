@@ -30,6 +30,12 @@ var progression_request_context := ""
 var reconnect_http: HTTPRequest
 var reconnect_network: HHWorldNetwork
 var reconnect_request_busy := false
+var chat_panel: PanelContainer
+var chat_log: VBoxContainer
+var chat_input: LineEdit
+var chat_status: Label
+var chat_expanded := false
+var chat_lines: Array[String] = []
 
 var local_player: HHPlayerController
 var hud_visible := true
@@ -115,6 +121,7 @@ func _ready() -> void:
 	_build_terrain()
 	_build_player()
 	_build_compact_hud()
+	_build_chat_hud()
 	_build_combat_hud()
 	_build_input_debug_hud()
 	if HHSession.world_network != null:
@@ -123,6 +130,7 @@ func _ready() -> void:
 		HHSession.world_network.player_left.connect(_on_player_left)
 		HHSession.world_network.combat_event.connect(_on_combat_event)
 		HHSession.world_network.pickup_event.connect(_on_pickup_event)
+		HHSession.world_network.chat_event.connect(_on_chat_event)
 		HHSession.world_network.disconnected.connect(_on_world_disconnected)
 		var spawn: Dictionary = HHSession.world_snapshot
 		local_target_position = Vector3(float(spawn.get("position_x", 0.0)), float(spawn.get("position_y", 0.15)), float(spawn.get("position_z", 0.0)))
@@ -1091,6 +1099,18 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if not (event is InputEventKey) or not event.pressed or event.echo:
 		return
+	if event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER:
+		if is_instance_valid(chat_input) and not chat_input.has_focus():
+			_set_chat_expanded(true)
+			chat_input.grab_focus()
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_ESCAPE and chat_expanded:
+		if is_instance_valid(chat_input):
+			chat_input.release_focus()
+		_set_chat_expanded(false)
+		get_viewport().set_input_as_handled()
+		return
 	if event.keycode == KEY_F:
 		_try_interact_nearest_npc()
 		return
@@ -1114,6 +1134,115 @@ func _unhandled_input(event: InputEvent) -> void:
 		hud_label.text = "正在拾取物品……"
 	else:
 		hud_label.text = "发送拾取请求失败，错误码：" + str(error)
+
+func _build_chat_hud() -> void:
+	var hud := get_node_or_null("HUD") as CanvasLayer
+	if hud == null:
+		return
+	chat_panel = PanelContainer.new()
+	chat_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	chat_panel.offset_left = 18.0
+	chat_panel.offset_top = -354.0
+	chat_panel.offset_right = 408.0
+	chat_panel.offset_bottom = -118.0
+	chat_panel.custom_minimum_size = Vector2(390.0, 236.0)
+	hud.add_child(chat_panel)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 5)
+	chat_panel.add_child(layout)
+	var heading := HBoxContainer.new()
+	layout.add_child(heading)
+	var title := Label.new()
+	title.text = "万界传音 · 附近"
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_child(title)
+	var toggle := Button.new()
+	toggle.text = "收起"
+	toggle.pressed.connect(func(): _set_chat_expanded(not chat_expanded))
+	heading.add_child(toggle)
+	var channels := HBoxContainer.new()
+	layout.add_child(channels)
+	for channel_data in [["nearby", "附近", true], ["world", "世界", false], ["cross_world", "跨界", false]]:
+		var channel_button := Button.new()
+		channel_button.text = channel_data[1] if channel_data[2] else channel_data[1] + " · 开发中"
+		channel_button.disabled = not channel_data[2]
+		channels.add_child(channel_button)
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(360.0, 132.0)
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	layout.add_child(scroll)
+	chat_log = VBoxContainer.new()
+	chat_log.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(chat_log)
+	var input_row := HBoxContainer.new()
+	layout.add_child(input_row)
+	chat_input = LineEdit.new()
+	chat_input.placeholder_text = "输入附近消息（最多 200 字）"
+	chat_input.max_length = 200
+	chat_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	chat_input.text_submitted.connect(_on_chat_input_submitted)
+	input_row.add_child(chat_input)
+	var send_button := Button.new()
+	send_button.text = "发送"
+	send_button.pressed.connect(func(): _on_chat_input_submitted(chat_input.text))
+	input_row.add_child(send_button)
+	chat_status = Label.new()
+	chat_status.text = "附近频道 · 仅同一实例、80 米范围内可见"
+	chat_status.modulate = Color(0.72, 0.78, 0.84)
+	layout.add_child(chat_status)
+	_set_chat_expanded(false)
+
+func _set_chat_expanded(expanded: bool) -> void:
+	chat_expanded = expanded
+	if not is_instance_valid(chat_panel):
+		return
+	chat_panel.custom_minimum_size.y = 236.0 if expanded else 48.0
+	for child in chat_panel.get_child(0).get_children():
+		if child is Control and child != chat_panel.get_child(0).get_child(0):
+			child.visible = expanded
+	var heading := chat_panel.get_child(0).get_child(0) as HBoxContainer
+	if heading != null and heading.get_child_count() > 1:
+		var toggle := heading.get_child(1) as Button
+		toggle.text = "收起" if expanded else "展开"
+
+func _on_chat_input_submitted(value: String) -> void:
+	var normalized := value.strip_edges()
+	if normalized.is_empty():
+		return
+	var network := HHSession.world_network
+	if network == null or not network.is_world_ready():
+		chat_status.text = "世界连接尚未就绪，消息未发送。"
+		return
+	var error: Error = network.send_chat("nearby", normalized)
+	if error != OK:
+		chat_status.text = "发送失败，错误码：" + str(error)
+		return
+	chat_input.clear()
+	chat_input.release_focus()
+
+func _on_chat_event(event: Dictionary) -> void:
+	if not bool(event.get("accepted", false)):
+		chat_status.text = str(event.get("reason", "消息发送失败。"))
+		return
+	var sender := str(event.get("sender_name", "未知玩家"))
+	var content := str(event.get("content", ""))
+	_append_chat_line("[" + sender + "] " + content)
+	chat_status.text = "附近频道 · 消息已送达当前可见范围"
+
+func _append_chat_line(line: String) -> void:
+	if not is_instance_valid(chat_log):
+		return
+	chat_lines.append(line)
+	while chat_lines.size() > 40:
+		chat_lines.pop_front()
+	for child in chat_log.get_children():
+		child.queue_free()
+	for value in chat_lines:
+		var label := Label.new()
+		label.text = value
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		chat_log.add_child(label)
 
 func _on_pickup_event(event: Dictionary) -> void:
 	if bool(event.get("pending", false)):
@@ -1608,6 +1737,8 @@ func _on_reconnected_welcomed(snapshot: Dictionary) -> void:
 		reconnect_network.combat_event.connect(_on_combat_event)
 	if not reconnect_network.pickup_event.is_connected(_on_pickup_event):
 		reconnect_network.pickup_event.connect(_on_pickup_event)
+	if not reconnect_network.chat_event.is_connected(_on_chat_event):
+		reconnect_network.chat_event.connect(_on_chat_event)
 	local_target_position = Vector3(
 		float(snapshot.get("position_x", 0.0)),
 		float(snapshot.get("position_y", 0.15)),
