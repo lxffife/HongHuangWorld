@@ -295,7 +295,7 @@ onMounted(restoreSession)
               <el-table-column label="已授予权限" min-width="260">
                 <template #default="{ row }">
                   <span v-if="row.is_super_admin" class="muted">全部权限</span>
-                  <div v-else class="permission-tags"><el-tag v-for="p in (row.permissions || []).slice(0, 3)" :key="p" size="small">{{ p }}</el-tag><span v-if="(row.permissions || []).length > 3" class="muted">+{{ row.permissions!.length - 3 }}</span><span v-if="!(row.permissions || []).length" class="muted">尚未授权</span></div>
+                  <div v-else class="permission-tags"><el-tag v-for="p in (row.permissions || []).slice(0, 3)" :key="p" size="small">{{ p }}</el-tag><span v-if="(row.permissions || []).length > 3" class="muted">+{{ (row.permissions || []).length - 3 }}</span><span v-if="!(row.permissions || []).length" class="muted">尚未授权</span></div>
                 </template>
               </el-table-column>
               <el-table-column label="操作" width="130" fixed="right">
