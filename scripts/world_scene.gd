@@ -1234,18 +1234,49 @@ func _on_player_left(character_id: String) -> void:
 func _create_remote_player(character_name: String) -> Node3D:
 	var remote := Node3D.new()
 	var body := MeshInstance3D.new()
-	var capsule := CapsuleMesh.new()
-	capsule.radius = 0.4
-	capsule.height = 1.75
-	body.mesh = capsule
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color("#79a9c9")
-	body.material_override = material
-	body.position.y = 0.88
+	var is_underworld := str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu"
+	if is_underworld:
+		var orb := SphereMesh.new()
+		orb.radius = 0.34
+		orb.height = 0.68
+		body.mesh = orb
+		var spirit_material := StandardMaterial3D.new()
+		spirit_material.albedo_color = Color(0.36, 0.72, 1.0, 0.72)
+		spirit_material.emission_enabled = true
+		spirit_material.emission = Color(0.12, 0.48, 1.0)
+		spirit_material.emission_energy_multiplier = 1.8
+		spirit_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		spirit_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		body.material_override = spirit_material
+		body.position.y = 0.42
+		var halo := MeshInstance3D.new()
+		var torus := TorusMesh.new()
+		torus.inner_radius = 0.42
+		torus.outer_radius = 0.47
+		halo.mesh = torus
+		var halo_material := StandardMaterial3D.new()
+		halo_material.albedo_color = Color(0.2, 0.62, 1.0, 0.45)
+		halo_material.emission_enabled = true
+		halo_material.emission = Color(0.08, 0.4, 1.0)
+		halo_material.emission_energy_multiplier = 1.2
+		halo_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		halo_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		halo.material_override = halo_material
+		halo.position.y = 0.42
+		remote.add_child(halo)
+	else:
+		var capsule := CapsuleMesh.new()
+		capsule.radius = 0.4
+		capsule.height = 1.75
+		body.mesh = capsule
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color("#79a9c9")
+		body.material_override = material
+		body.position.y = 0.88
 	remote.add_child(body)
 	var label := Label3D.new()
 	label.text = character_name
-	label.position.y = 2.0
+	label.position.y = 1.15 if is_underworld else 2.0
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	remote.add_child(label)
 	add_child(remote)
