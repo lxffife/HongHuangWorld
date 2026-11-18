@@ -32,7 +32,7 @@
 1. 客户端维护独立游戏连接（ENet）和聊天连接（WebSocket）。聊天断线只重连聊天连接，不重新登录或重建游戏连接。当前 Godot 已接入独立 WebSocket 客户端，附近频道仍暂用 ENet。
 2. 游戏操作不依赖聊天请求成功；聊天服务超时、拒绝连接或宕机不能影响游戏操作。
 3. WorldServer 与 ChatServer 的消息交互必须异步、有界、可丢弃/重试策略明确；不得在 ENet 主循环中执行同步 HTTP。
-4. NATS 用于跨服务事件分发，不是游戏 tick 的前置依赖。ChatServer 已接入 NATS JetStream：文件持久 Stream（30 天 MaxAge）+ 每节点独立 durable pull consumer；事件写库后通过后台 worker 发布，消费者本机广播后 AckSync，失败自动重投递。NATS 不可用时，游戏核心操作和本机聊天继续；JetStream 恢复后离线 ChatServer 可从 ack 位置继续消费。数据库事务 outbox 尚未实现，因此发布端进程崩溃窗口仍需后续补齐。
+4. NATS 用于跨服务事件分发，不是游戏 tick 的前置依赖。ChatServer 使用 PostgreSQL 事务 Outbox + NATS JetStream：聊天消息与事件发件箱在同一事务提交，后台发布器通过 SKIP LOCKED 租约领取，收到 JetStream PubAck 后标记完成；失败或进程重启后可重试。每个 ChatServer 使用独立 durable pull consumer，广播后 AckSync。NATS 不可用时，游戏核心操作和本机聊天继续，Outbox 累积待发事件，JetStream 恢复后继续发布。
 5. 账号身份可共享验证，但服务令牌和服务端密钥不得下发客户端。
 6. 共享 PostgreSQL 只作为迁移期选择。服务使用独立连接池、独立数据库角色/权限；未来按数据所有权拆分 chat 数据库。游戏和聊天不得依赖跨库强事务。
 
@@ -44,7 +44,7 @@
 | 聊天数据库不可用 | WorldServer 游戏 tick 继续 | 持久化发送/历史暂不可用 |
 | Game API 不可用 | 已连接 WorldServer 尽可能继续；新登录/角色管理受影响 | ChatServer 独立运行；已签发有效 token 可按策略继续验证 |
 | 单个 WorldServer 退出 | 该实例游戏暂不可用，其他实例继续 | 全局频道和私聊继续；该实例附近成员状态标记过期 |
-| NATS 不可用 | 游戏核心操作继续 | 本机聊天继续；JetStream 发布/消费暂时中断，恢复后 durable consumer 从 ack 位置重放；若发布端进程在入队前崩溃，事务 outbox 尚未覆盖该窗口 |
+| NATS 不可用 | 游戏核心操作继续 | 本机聊天继续；PostgreSQL Outbox 持久累积待发事件，JetStream 恢复后后台发布器继续发送；离线 ChatServer 从 durable consumer 的 ack 位置重放 |
 
 注意：若游戏和聊天仍共用同一物理 PostgreSQL，数据库主机整体故障仍可能同时影响两边的持久化和认证。要获得更强物理故障隔离，需要后续拆分数据库实例或至少独立数据库集群；WorldServer 的实时模拟仍应在短时数据库故障期间继续运行。
 
@@ -56,5 +56,5 @@
 - 30 天消息保留由 ChatServer 后台调度器负责：启动时执行一次，之后每小时执行；发送和历史查询请求不再触发过期消息删除，清理失败记录日志并在下一周期重试。
 - Game API 暂时保留原聊天路由，作为客户端/WorldServer 切换期间的兼容入口。
 - Godot 已建立独立 WebSocket 聊天连接：Bearer Token 握手、20 秒心跳、Pong 超时检测和断线自动重连；世界/跨界频道使用独立连接，附近频道仍走 ENet。每次连接/重连成功后自动拉取世界与跨界最近 50 条历史，按消息 ID 去重并按时间+ID排序；过期连接的历史响应会被丢弃。ChatServer 已通过 JetStream 跨进程广播世界/跨界消息；配置优先使用 `CHAT_NATS_URL`，未设置时回退到 `NATS_URL`。每个聊天节点必须连接同一启用 JetStream 的 NATS 集群，并配置稳定且唯一的 `CHAT_NODE_ID`；本地单机开发可使用 `nats://localhost:4222`。每节点 durable consumer 会在重启后从上次确认位置继续消费。
-- JetStream 持久流与每节点 durable consumer 已提交；PostgreSQL 事务 outbox、NATS 故障期间在线客户端历史增量同步、在线状态订阅、聊天数据库物理拆分、完整历史分页/离线投递和故障注入测试尚未实现。
+- PostgreSQL 事务 Outbox 与 JetStream 持久流/每节点 durable consumer 已提交；NATS 故障期间在线客户端历史增量同步、在线状态订阅、聊天数据库物理拆分、完整历史分页/离线投递和故障注入测试尚未实现。
 - 本轮增加 JetStream 持久流、每节点独立 durable pull consumer、消费确认/重投递、后台异步发布和消息 ID 去重；没有运行 Go 测试、构建、迁移、Godot 解析/运行或 GitHub Actions；所有新增代码仍待本地验证。
