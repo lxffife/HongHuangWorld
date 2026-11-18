@@ -1745,7 +1745,9 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			var event_karma_delta := int(data.get("karma_delta", 0))
 			var event_title := str(data.get("title", "未知奇遇"))
 			pending_exploration_event_id = ""
-			exploration_feedback = "奇遇「" + event_title + "」已完成。\n" + str(data.get("description", "")) + "\n功德 " + ("+" if event_merit_delta >= 0 else "") + str(event_merit_delta) + "，业力 " + ("+" if event_karma_delta >= 0 else "") + str(event_karma_delta) + "。"
+			var chosen_text := str(data.get("choice_text", ""))
+			var outcome_text := str(data.get("outcome", data.get("description", "")))
+			exploration_feedback = "奇遇「" + event_title + "」已完成。\n你的选择：" + chosen_text + "\n" + outcome_text + "\n功德 " + ("+" if event_merit_delta >= 0 else "") + str(event_merit_delta) + "，业力 " + ("+" if event_karma_delta >= 0 else "") + str(event_karma_delta) + "。"
 			_show_notification("奇遇完成 · " + event_title + "  因果已记录", 4.2)
 			npc_title_label.text = "因果已定 · " + event_title
 			npc_dialogue_label.text = exploration_feedback
@@ -2300,14 +2302,26 @@ func _open_exploration_event(event_id: String) -> void:
 	pending_exploration_event_id = event_id
 	_clear_npc_choice_buttons()
 	npc_title_label.text = "因果奇遇 · " + str(event.get("title", "未知奇遇"))
-	npc_dialogue_label.text = str(event.get("description", "一段因果正在等待你的回应。")) + "\n\n地点：" + str(event.get("point_name", "未知地点")) + "\n\n你将确认触发这段奇遇。领取结果后，此灵魂不能重复领取。"
-	var merit_reward := int(event.get("merit_reward", 0))
-	var karma_delta := int(event.get("karma_delta", 0))
-	npc_status_label.text = "因果预示：功德 +" + str(merit_reward) + " · 业力 " + ("+" if karma_delta >= 0 else "") + str(karma_delta) + "。最终结算以中心服返回为准。"
-	var confirm_button := Button.new()
-	confirm_button.text = "确认触发 · 将结果记入灵魂因果簿"
-	confirm_button.pressed.connect(_confirm_exploration_event)
-	npc_choice_container.add_child(confirm_button)
+	npc_dialogue_label.text = str(event.get("description", "一段因果正在等待你的回应。")) + "\n\n地点：" + str(event.get("point_name", "未知地点")) + "\n\n你的选择会影响功德与业力，并永久记入灵魂因果簿。每个奇遇只能选择一次。"
+	npc_status_label.text = "请选择你对这段因果的回应。不同选择会产生不同结果，具体结算由中心服裁定。"
+	var choices: Variant = event.get("choices", [])
+	var choice_count := 0
+	if choices is Array:
+		for choice_variant in choices:
+			if not choice_variant is Dictionary:
+				continue
+			var choice: Dictionary = choice_variant
+			var choice_id := str(choice.get("id", ""))
+			if choice_id.is_empty():
+				continue
+			var choice_button := Button.new()
+			choice_button.text = str(choice.get("text", "作出回应"))
+			choice_button.tooltip_text = str(choice.get("description", ""))
+			choice_button.pressed.connect(_confirm_exploration_event.bind(choice_id))
+			npc_choice_container.add_child(choice_button)
+			choice_count += 1
+	if choice_count == 0:
+		npc_status_label.text = "此奇遇尚未配置有效分支，暂时无法回应。"
 	var cancel_button := Button.new()
 	cancel_button.text = "暂不回应"
 	cancel_button.pressed.connect(_cancel_exploration_event)
@@ -2321,13 +2335,17 @@ func _open_exploration_event(event_id: String) -> void:
 	npc_panel.visible = true
 
 
-func _confirm_exploration_event() -> void:
-	if pending_exploration_event_id.is_empty() or npc_request_busy:
+func _confirm_exploration_event(choice_id: String) -> void:
+	if pending_exploration_event_id.is_empty() or choice_id.is_empty() or npc_request_busy:
 		return
 	var event_id := pending_exploration_event_id
-	npc_status_label.text = "正在向中心服验证位置、解锁条件并结算因果……"
+	npc_status_label.text = "正在向中心服验证你的选择、位置与因果资格……"
+	for child in npc_choice_container.get_children():
+		if child is Button:
+			child.disabled = true
 	_send_npc_request("POST", "/api/v1/worlds/current/exploration-events/trigger", "exploration_event", {
-		"event_id": event_id
+		"event_id": event_id,
+		"choice_id": choice_id
 	})
 
 
