@@ -247,3 +247,43 @@ func (h *soulHandlers) allocateRareEssence(w http.ResponseWriter, r *http.Reques
   http.Error(w,"internal server error",http.StatusInternalServerError)
  }
 }
+
+
+func (h *soulHandlers) fusions(w http.ResponseWriter, r *http.Request) {
+	account, ok := h.currentAccount(w, r)
+	if !ok { return }
+	recipes, err := h.soulService.FusionRecipes(r.Context(), account.ID)
+	if err != nil {
+		if errors.Is(err, soul.ErrNotFound) { http.Error(w, "soul not found", http.StatusNotFound); return }
+		h.logger.Error("load soul fusion recipes failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"recipes": recipes})
+}
+
+func (h *soulHandlers) fuse(w http.ResponseWriter, r *http.Request) {
+	account, ok := h.currentAccount(w, r)
+	if !ok { return }
+	var request struct {
+		RecipeID string `json:"recipe_id"`
+	}
+	if err := decodeJSON(w, r, &request); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	result, err := h.soulService.Fuse(r.Context(), account.ID, request.RecipeID)
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusOK, result)
+	case errors.Is(err, soul.ErrNotFound):
+		http.Error(w, "soul not found", http.StatusNotFound)
+	case errors.Is(err, soul.ErrFusionUnavailable):
+		http.Error(w, "fusion recipe or required soul mutations are unavailable", http.StatusConflict)
+	case errors.Is(err, soul.ErrFusionCompleted):
+		http.Error(w, "fusion recipe already completed", http.StatusConflict)
+	default:
+		h.logger.Error("fuse soul mutations failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
+}
