@@ -114,7 +114,7 @@ func _process(_delta: float) -> void:
 			_schedule_reconnect()
 
 func fetch_history(channel: String, limit: int = 50) -> void:
-	if channel not in ["world", "cross_world"] or access_token.is_empty() or http_base_url.is_empty():
+	if channel not in ["nearby", "world", "cross_world"] or access_token.is_empty() or http_base_url.is_empty():
 		return
 	var request := HTTPRequest.new()
 	request.timeout = 10.0
