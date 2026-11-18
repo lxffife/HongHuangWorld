@@ -192,3 +192,9 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 
 
 冥界稀有魂体刷新由 WorldServer 独立权威控制：精英炽战残魂在首个约 60 秒窗口以 35% 概率出现，失败后每 180 秒重试；远古炽战残魂在首个约 240 秒窗口以 12% 概率出现，失败后每 600 秒重试。击败后的复活等待时间分别为 180 秒和 600 秒。当前上古战神残魂不加入常规刷新池，吞噬仍需中心服验证魂灯旧影的指定因果选择。
+
+## Equipment set metadata
+
+Migrations `000036_equipment_sets` and `000037_qingyun_starter_equipment_set` add reusable equipment-set definitions. Item definitions reference an optional `equipment_set_id`; each set stores display metadata and JSONB `bonus_tiers`, keyed by required equipped-piece count (for example, `{"2":{"attack":2},"4":{"defense":3}}`). Inventory and current-equipment responses expose `set_id`, `set_name`, `set_description`, and `set_bonus_tiers` for lobby display and try-on comparison.
+
+The first configured example is the six-piece 青云初修套装: 2 pieces grant +2 attack, 4 pieces grant +3 defense, and 6 pieces add +2 defense and +20 max health. These fields are configuration/display metadata only. They do not alter combat calculations; equipment combat stats remain server-authoritative and must be integrated separately before any set bonus affects gameplay.
