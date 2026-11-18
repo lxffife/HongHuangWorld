@@ -826,14 +826,15 @@ func _build_lobby_preview_model() -> void:
 					weapon.rotation.z = -0.28
 					weapon.material_override = item_material
 					model.add_child(weapon)
-				var guard := MeshInstance3D.new()
-				var guard_mesh := BoxMesh.new()
-				guard_mesh.size = Vector3(0.28, 0.055, 0.07)
-				guard.mesh = guard_mesh
-				guard.position = Vector3(0.67, 0.73, 0.02)
-				guard.rotation.z = -0.28
-				guard.material_override = trim_material
-				model.add_child(guard)
+				if not (visual_key.contains("staff") or visual_key.contains("杖")):
+					var guard := MeshInstance3D.new()
+					var guard_mesh := BoxMesh.new()
+					guard_mesh.size = Vector3(0.28, 0.055, 0.07)
+					guard.mesh = guard_mesh
+					guard.position = Vector3(0.67, 0.73, 0.02)
+					guard.rotation.z = -0.28
+					guard.material_override = trim_material
+					model.add_child(guard)
 			"head":
 				var helm := MeshInstance3D.new()
 				var helm_mesh := SphereMesh.new()
