@@ -734,22 +734,27 @@ struct EnetServer::Impl {
                         2.2F, 12.0F, 28.0F, -34.0F, 2.0F);
             add_monster("war-soul-ancient-001", "blazing_war_soul_ancient", "远古炽战残魂", 9, 360.0F, 30.0F, 14.0F,
                         1.9F, 13.0F, 30.0F, 34.0F, 3.0F);
-            // Rare soul bodies are dormant spawn points. Their appearance is
-            // rolled by the world loop when each discovery window opens.
-            if (monsters.size() >= 2) {
-                auto& elite = monsters[monsters.size() - 2];
-                elite.rare_spawn = true;
-                elite.spawn_chance_percent = 35;
-                elite.retry_spawn_seconds = 180;
-                elite.state.mode = honghuang::simulation::MonsterMode::Dead;
-                elite.respawn_at = Clock::now() + std::chrono::seconds(60);
-                auto& ancient = monsters.back();
-                ancient.rare_spawn = true;
-                ancient.spawn_chance_percent = 12;
-                ancient.retry_spawn_seconds = 600;
-                ancient.state.mode = honghuang::simulation::MonsterMode::Dead;
-                ancient.respawn_at = Clock::now() + std::chrono::seconds(240);
-            }
+            // Rare soul bodies are dormant spawn points. Resolve them by stable
+            // runtime ID rather than vector position so future spawn additions
+            // cannot silently assign the rare schedule to the wrong monsters.
+            const auto configure_rare_spawn = [&](const std::string& runtime_id,
+                                                   int chance_percent,
+                                                   int retry_seconds,
+                                                   int first_delay_seconds) {
+                const auto found = std::find_if(monsters.begin(), monsters.end(),
+                    [&](const MonsterRuntime& monster) { return monster.runtime_id == runtime_id; });
+                if (found == monsters.end()) {
+                    std::cerr << "Rare soul spawn point missing: " << runtime_id << '\\n';
+                    return;
+                }
+                found->rare_spawn = true;
+                found->spawn_chance_percent = std::clamp(chance_percent, 1, 100);
+                found->retry_spawn_seconds = std::max(retry_seconds, 1);
+                found->state.mode = honghuang::simulation::MonsterMode::Dead;
+                found->respawn_at = Clock::now() + std::chrono::seconds(std::max(first_delay_seconds, 1));
+            };
+            configure_rare_spawn("war-soul-elite-001", 35, 180, 60);
+            configure_rare_spawn("war-soul-ancient-001", 12, 600, 240);
             add_monster("ironbone-001", "ironbone_beast_soul", "铁骨兽魂", 4, 145.0F, 13.0F, 9.0F,
                         1.8F, 10.0F, 25.0F, 25.0F, -19.0F);
             add_monster("gale-wraith-001", "gale_wraith", "疾风游魂", 4, 75.0F, 15.0F, 3.0F,
