@@ -25,8 +25,7 @@ func NewChatRouterWithShutdown(logger *slog.Logger, db *sql.DB) (http.Handler, f
 	return NewChatRouterWithServiceAndShutdown(logger, db, chat.NewService(db))
 }
 
-// NewChatRouterWithServiceAndShutdown lets deployment select the legacy or
-// Chat-projection data access mode without changing HTTP handlers.
+// NewChatRouterWithServiceAndShutdown injects the Chat-owned service and keeps HTTP transport setup independent.
 func NewChatRouterWithServiceAndShutdown(logger *slog.Logger, db *sql.DB, chatService *chat.Service) (http.Handler, func()) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
@@ -69,7 +68,7 @@ func NewChatRouterWithServiceAndShutdown(logger *slog.Logger, db *sql.DB, chatSe
 		return requestLogger(logger, mux), func() {}
 	}
 
-	authService := configuredAuthProvider(db)
+	authService := configuredAuthProvider()
 	if chatService == nil { chatService = chat.NewService(db) }
 	chatHub := newChatSocketHub()
 	chatEvents := newChatEventBus(chatHub, chatService, logger)
