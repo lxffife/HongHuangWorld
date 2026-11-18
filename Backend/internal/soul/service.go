@@ -591,12 +591,13 @@ func advanceSoulAbsorptionAttribute(ctx context.Context, tx *sql.Tx, soulID, att
 	}
 	var progress SoulAttributeProgress
 	var previousAwarded int
+	var previousApplied int
 	err := tx.QueryRowContext(ctx, `
 		UPDATE soul_absorption_attribute_progress
 		SET absorbed_count=absorbed_count+1,updated_at=now()
 		WHERE soul_id=$1 AND attribute=$2
 		RETURNING absorbed_count,awarded_points,applied_points,max_points`, soulID, attribute).Scan(
-		&progress.AbsorbedCount,&previousAwarded,&progress.AppliedPoints,&progress.MaxPoints)
+		&progress.AbsorbedCount,&previousAwarded,&previousApplied,&progress.MaxPoints)
 	if err != nil { return SoulAttributeProgress{}, 0, fmt.Errorf("advance soul attribute absorption count: %w", err) }
 	progress.Attribute = attribute
 	targetAwarded := soulAttributeMilestones(progress.AbsorbedCount)
@@ -620,11 +621,7 @@ func advanceSoulAbsorptionAttribute(ctx context.Context, tx *sql.Tx, soulID, att
 		}
 	}
 	progress.AwardedPoints = targetAwarded
-	progress.AppliedPoints += int(targetAwarded - previousAwarded)
-	// Applied points are the actual number that reached the inheritance sheet,
-	// not merely the number of milestones reached after the global cap.
-	progress.AppliedPoints -= int(newMilestones)
-	progress.AppliedPoints += int(actualApplied)
+	progress.AppliedPoints = previousApplied + int(actualApplied)
 	progress.NextThreshold = soulAttributeNextThreshold(targetAwarded)
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE soul_absorption_attribute_progress
@@ -722,6 +719,35 @@ func (s *Service) CurrentEssence(ctx context.Context, accountID string) (Essence
 		}
 	}
 	if err:=rows.Err();err!=nil { return EssenceProfile{},fmt.Errorf("iterate soul absorption kinds: %w",err) }
+	progressRows,progressErr:=s.db.QueryContext(ctx,`
+		SELECT progress.attribute,progress.absorbed_count,progress.awarded_points,
+		       progress.applied_points,progress.max_points,progress.next_threshold,
+		       CASE progress.attribute
+		         WHEN 'strength' THEN inheritance.strength
+		         WHEN 'constitution' THEN inheritance.constitution
+		         WHEN 'agility' THEN inheritance.agility
+		         WHEN 'spirit' THEN inheritance.spirit
+		         WHEN 'vitality' THEN inheritance.vitality
+		       END
+		FROM souls soul
+		JOIN soul_absorption_attribute_progress progress ON progress.soul_id=soul.id
+		JOIN soul_inheritance_attributes inheritance ON inheritance.soul_id=soul.id
+		WHERE soul.account_id=$1
+		ORDER BY CASE progress.attribute
+		  WHEN 'strength' THEN 1 WHEN 'constitution' THEN 2 WHEN 'agility' THEN 3
+		  WHEN 'spirit' THEN 4 WHEN 'vitality' THEN 5 END`,accountID)
+	if progressErr!=nil{return EssenceProfile{},fmt.Errorf("load soul attribute progress: %w",progressErr)}
+	defer progressRows.Close()
+	result.AttributeProgress=make([]SoulAttributeProgress,0,5)
+	for progressRows.Next(){
+		var item SoulAttributeProgress
+		if err:=progressRows.Scan(&item.Attribute,&item.AbsorbedCount,&item.AwardedPoints,
+			&item.AppliedPoints,&item.MaxPoints,&item.NextThreshold,&item.AttributeValue);err!=nil{
+			return EssenceProfile{},fmt.Errorf("scan soul attribute progress: %w",err)
+		}
+		result.AttributeProgress=append(result.AttributeProgress,item)
+	}
+	if err:=progressRows.Err();err!=nil{return EssenceProfile{},fmt.Errorf("iterate soul attribute progress: %w",err)}
 	pendingRows,pendingErr:=s.db.QueryContext(ctx, `SELECT records.id::text,kinds.id,kinds.name,records.created_at::text FROM soul_absorption_records records JOIN soul_absorption_kinds kinds ON kinds.id=records.absorption_kind_id WHERE records.soul_id=(SELECT id FROM souls WHERE account_id=$1) AND records.absorption_kind_id='faceless_essence' AND records.selected_at IS NULL ORDER BY records.created_at`,accountID)
 	if pendingErr!=nil{return EssenceProfile{},fmt.Errorf("load pending rare soul choices: %w",pendingErr)}
 	defer pendingRows.Close()
