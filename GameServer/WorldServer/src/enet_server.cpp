@@ -1500,7 +1500,7 @@ struct EnetServer::Impl {
                 ChatJobResult result;
                 result.session_id = job.session_id;
                 result.client_message_id = job.client_message_id;
-                const std::string event_id = "nearby-chat:" + job.client_message_id;
+                const std::string event_id = "nearby-chat:" + job.session_id + ":" + job.client_message_id;
                 const Json payload{
                     {"session_id", job.session_id},
                     {"character_id", job.character_id},
