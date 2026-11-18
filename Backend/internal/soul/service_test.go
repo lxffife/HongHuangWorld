@@ -152,3 +152,13 @@ func TestSoulAttributeProgressNeverExceedsConfiguredCaps(t *testing.T) {
 		t.Fatalf("unexpected total inheritance attribute cap: %d", soulInheritanceAttributeCap)
 	}
 }
+
+
+func TestSoulMutationAttributeBonusHasSeparateSmallCap(t *testing.T) {
+	if soulMutationAttributeCap != 2 {
+		t.Fatalf("random mutation bonus cap should remain 2 per attribute, got %d", soulMutationAttributeCap)
+	}
+	if soulMutationAttributeCap >= soulInheritanceAttributeCap {
+		t.Fatal("random mutation bonus cap must remain below the global inheritance cap")
+	}
+}
