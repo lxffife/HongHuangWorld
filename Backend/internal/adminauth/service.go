@@ -94,6 +94,13 @@ func (s *Service) loadPermissions(ctx context.Context,u User) (User,error) {
  return u,rows.Err()
 }
 
+func (s *Service) RevokeSession(ctx context.Context,token string) error {
+ if token==""||len(token)>128{return ErrUnauthorized}
+ sum:=sha256.Sum256([]byte(token))
+ _,err:=s.db.ExecContext(ctx,`UPDATE admin_sessions SET revoked_at=now() WHERE token_hash=$1 AND revoked_at IS NULL`,sum[:])
+ return err
+}
+
 func (s *Service) ChangePassword(ctx context.Context,u User,current,next,remote,agent string) (string,time.Time,error) {
  if len(next)<12 || len(next)>72 { return "",time.Time{},ErrInvalidInput }
  var oldHash string
