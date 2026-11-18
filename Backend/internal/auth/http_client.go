@@ -3,11 +3,13 @@ package auth
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -17,10 +19,17 @@ type Provider interface {
 	Authenticate(context.Context, string) (Account, error)
 }
 
+type identityCacheEntry struct {
+	account Account
+	expiresAt time.Time
+}
+
 type HTTPClient struct {
 	baseURL string
 	serviceKey string
 	client *http.Client
+	mu sync.Mutex
+	cache map[[32]byte]identityCacheEntry
 }
 
 func NewHTTPClient(baseURL, serviceKey string) *HTTPClient {
@@ -28,6 +37,7 @@ func NewHTTPClient(baseURL, serviceKey string) *HTTPClient {
 		baseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"),
 		serviceKey: strings.TrimSpace(serviceKey),
 		client: &http.Client{Timeout: 4 * time.Second},
+		cache: make(map[[32]byte]identityCacheEntry),
 	}
 }
 
@@ -73,10 +83,43 @@ func (c *HTTPClient) Authenticate(ctx context.Context, token string) (Account, e
 	if token == "" || len(token) > 128 || c.serviceKey == "" {
 		return Account{}, ErrUnauthorized
 	}
+	cacheKey := sha256.Sum256([]byte(token))
+	now := time.Now()
+	c.mu.Lock()
+	if cached, ok := c.cache[cacheKey]; ok && now.Before(cached.expiresAt) {
+		c.mu.Unlock()
+		return cached.account, nil
+	}
+	c.mu.Unlock()
+
 	var account Account
 	status, err := c.doJSON(ctx, http.MethodPost, "/api/v1/internal/auth/introspect", nil, token, &account)
-	if err != nil { return Account{}, err }
-	if status != http.StatusOK { return Account{}, ErrUnauthorized }
+	if err != nil {
+		c.mu.Lock()
+		cached, ok := c.cache[cacheKey]
+		c.mu.Unlock()
+		if ok && now.Before(cached.expiresAt) {
+			return cached.account, nil
+		}
+		return Account{}, err
+	}
+	if status != http.StatusOK {
+		c.mu.Lock()
+		delete(c.cache, cacheKey)
+		c.mu.Unlock()
+		return Account{}, ErrUnauthorized
+	}
+	c.mu.Lock()
+	if len(c.cache) >= 4096 {
+		for key, entry := range c.cache {
+			if !now.Before(entry.expiresAt) { delete(c.cache, key) }
+		}
+		if len(c.cache) >= 4096 {
+			for key := range c.cache { delete(c.cache, key); break }
+		}
+	}
+	c.cache[cacheKey] = identityCacheEntry{account: account, expiresAt: now.Add(15 * time.Second)}
+	c.mu.Unlock()
 	return account, nil
 }
 
