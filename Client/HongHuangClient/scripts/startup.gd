@@ -444,10 +444,10 @@ func _build_lobby_ui() -> void:
 	lobby_body_container = body
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 18)
-	body.custom_minimum_size.y = minf(430.0, lobby_viewport_size.y * 0.54)
+	body.custom_minimum_size.y = minf(430.0, lobby_viewport_size.y * 0.42)
 	layout.add_child(body)
 	var preview_width := clampf(lobby_viewport_size.x * 0.31, 220.0, 360.0)
-	var preview_height := minf(430.0, lobby_viewport_size.y * 0.54)
+	var preview_height := minf(430.0, lobby_viewport_size.y * 0.42)
 	var preview_container := SubViewportContainer.new()
 	preview_container.custom_minimum_size = Vector2(preview_width, preview_height)
 	preview_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
