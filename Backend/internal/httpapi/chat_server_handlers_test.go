@@ -35,3 +35,17 @@ func TestChatServerPollRejectsIncompleteCursor(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, res.Code)
 	}
 }
+
+func TestChatServerPublishRequiresWorldServerKey(t *testing.T) {
+	handler := &chatServerHandlers{
+		apiKey: "expected-secret",
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/servers/chat/messages", nil)
+	res := httptest.NewRecorder()
+	handler.publish(res, req)
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, res.Code)
+	}
+}
+
