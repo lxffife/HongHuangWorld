@@ -48,6 +48,8 @@ var lobby_details_host: VBoxContainer
 var lobby_body_container: HBoxContainer
 var lobby_enter_button: Button
 var lobby_preview_root: Node3D
+var lobby_equipment: Array = []
+var lobby_equipment_status_label: Label
 var lobby_preview_dragging := false
 var lobby_preview_last_mouse := Vector2.ZERO
 var reincarnation_name_input: LineEdit
@@ -503,6 +505,11 @@ func _build_lobby_ui() -> void:
 	lobby_status_label.add_theme_color_override("font_color", Color("#aab6cc"))
 	lobby_status_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	info.add_child(lobby_status_label)
+	lobby_equipment_status_label = Label.new()
+	lobby_equipment_status_label.text = "装备外观：正在读取……"
+	lobby_equipment_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lobby_equipment_status_label.add_theme_color_override("font_color", Color("#c5a76d"))
+	info.add_child(lobby_equipment_status_label)
 	var footer_separator := HSeparator.new()
 	layout.add_child(footer_separator)
 	var footer := HBoxContainer.new()
@@ -710,6 +717,103 @@ func _build_lobby_preview_model() -> void:
 	platform.material_override = trim_material
 	model.add_child(platform)
 
+	# Equipment is a visual-only lobby representation. Server inventory/equipment
+	# remains authoritative; no combat attributes are changed by this preview.
+	for equipped_variant in lobby_equipment:
+		if not (equipped_variant is Dictionary):
+			continue
+		var equipped: Dictionary = equipped_variant
+		var slot := str(equipped.get("slot", ""))
+		var quality := clampi(int(equipped.get("quality", 1)), 1, 5)
+		var item_material := StandardMaterial3D.new()
+		item_material.albedo_color = _equipment_quality_color(quality)
+		item_material.metallic = 0.58
+		item_material.roughness = 0.28
+		match slot:
+			"weapon":
+				var weapon := MeshInstance3D.new()
+				var blade := BoxMesh.new()
+				blade.size = Vector3(0.075, 0.92, 0.035)
+				weapon.mesh = blade
+				weapon.position = Vector3(0.67, 1.18, 0.02)
+				weapon.rotation.z = -0.28
+				weapon.material_override = item_material
+				model.add_child(weapon)
+				var guard := MeshInstance3D.new()
+				var guard_mesh := BoxMesh.new()
+				guard_mesh.size = Vector3(0.28, 0.055, 0.07)
+				guard.mesh = guard_mesh
+				guard.position = Vector3(0.67, 0.73, 0.02)
+				guard.rotation.z = -0.28
+				guard.material_override = trim_material
+				model.add_child(guard)
+			"head":
+				var helm := MeshInstance3D.new()
+				var helm_mesh := SphereMesh.new()
+				helm_mesh.radius = 0.255
+				helm_mesh.height = 0.19
+				helm.mesh = helm_mesh
+				helm.position.y = 2.22
+				helm.material_override = item_material
+				model.add_child(helm)
+			"chest":
+				var chest_guard := MeshInstance3D.new()
+				var chest_mesh := SphereMesh.new()
+				chest_mesh.radius = 0.34
+				chest_mesh.height = 0.68
+				chest_guard.mesh = chest_mesh
+				chest_guard.position = Vector3(0.0, 1.42, 0.17)
+				chest_guard.material_override = item_material
+				model.add_child(chest_guard)
+			"legs":
+				for side in [-1.0, 1.0]:
+					var leg_guard := MeshInstance3D.new()
+					var leg_mesh := CapsuleMesh.new()
+					leg_mesh.radius = 0.14
+					leg_mesh.height = 0.62
+					leg_guard.mesh = leg_mesh
+					leg_guard.position = Vector3(side * 0.17, 0.39, 0.015)
+					leg_guard.material_override = item_material
+					model.add_child(leg_guard)
+			"boots":
+				for side in [-1.0, 1.0]:
+					var boot := MeshInstance3D.new()
+					var boot_mesh := BoxMesh.new()
+					boot_mesh.size = Vector3(0.25, 0.2, 0.38)
+					boot.mesh = boot_mesh
+					boot.position = Vector3(side * 0.19, 0.12, 0.06)
+					boot.material_override = item_material
+					model.add_child(boot)
+			"accessory":
+				var accessory := MeshInstance3D.new()
+				var accessory_mesh := TorusMesh.new()
+				accessory_mesh.inner_radius = 0.37
+				accessory_mesh.outer_radius = 0.405
+				accessory.mesh = accessory_mesh
+				accessory.position.y = 1.55
+				accessory.rotation.x = 0.45
+				accessory.material_override = item_material
+				model.add_child(accessory)
+
+func _equipment_quality_color(quality: int) -> Color:
+	match quality:
+		1: return Color("#b8c0cc")
+		2: return Color("#55b879")
+		3: return Color("#4b91dc")
+		4: return Color("#a66be0")
+		_: return Color("#e7ad4d")
+
+func _format_lobby_equipment_summary() -> String:
+	if lobby_equipment.is_empty():
+		return "装备外观：当前未穿戴装备"
+	var slot_names := {"weapon": "武器", "head": "头饰", "chest": "护甲", "legs": "护腿", "boots": "靴子", "accessory": "饰品"}
+	var names: Array[String] = []
+	for item_variant in lobby_equipment:
+		if item_variant is Dictionary:
+			var item: Dictionary = item_variant
+			names.append(str(slot_names.get(str(item.get("slot", "")), "装备")) + "·" + str(item.get("name", "未知")))
+	return "已穿戴：" + " / ".join(names)
+
 func _on_lobby_preview_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		lobby_preview_dragging = event.pressed
@@ -772,8 +876,11 @@ func _show_character_lobby() -> void:
 			break
 	lobby_world_label.text = "当前世界：" + world_name
 	lobby_status_label.text = "角色资料已载入。准备好后，进入此世洪荒。"
+	lobby_equipment = []
+	lobby_equipment_status_label.text = "装备外观：正在读取当前穿戴……"
 	lobby_enter_button.disabled = false
 	lobby_root.show()
+	_enqueue(HTTPClient.METHOD_GET, "/api/v1/characters/current/equipment", {}, true, "lobby_equipment")
 
 func _request_soul_fate() -> void:
 	if access_token.is_empty():
@@ -1158,6 +1265,8 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 			soul_memory_status.text = "前世记忆读取失败（HTTP " + str(response_code) + "）：" + body_text
 		elif context == "soul_fate":
 			soul_fate_status.text = "因果簿读取失败（HTTP " + str(response_code) + "）：" + body_text
+		elif context == "lobby_equipment":
+			lobby_equipment_status_label.text = "装备外观读取失败；暂时显示基础服饰。"
 		elif context == "reincarnation_routes":
 			reincarnation_route_select.clear()
 			reincarnation_status_label.text = "出生路线读取失败（HTTP " + str(response_code) + "）：" + body_text
@@ -1179,6 +1288,10 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 		return
 
 	match context:
+		"lobby_equipment":
+			lobby_equipment = data.get("items", []) if data.get("items", []) is Array else []
+			_build_lobby_preview_model()
+			lobby_equipment_status_label.text = _format_lobby_equipment_summary()
 		"login", "register":
 			access_token = str(data.get("access_token", ""))
 			if access_token.is_empty():
