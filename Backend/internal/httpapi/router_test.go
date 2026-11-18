@@ -224,6 +224,7 @@ func TestChatEndpointsUnavailableWithoutDatabase(t *testing.T) {
 		{http.MethodPost, "/api/v1/chat/messages"},
 		{http.MethodGet, "/api/v1/chat/messages?channel=world"},
 		{http.MethodGet, "/api/v1/servers/chat/messages"},
+		{http.MethodPost, "/api/v1/servers/chat/messages"},
 	} {
 		req := httptest.NewRequest(route.method, route.path, strings.NewReader(`{}`))
 		res := httptest.NewRecorder()
