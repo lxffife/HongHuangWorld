@@ -247,6 +247,12 @@ func (b *chatEventBus) broadcastOnce(message chat.Message) {
 	}
 	if message.ID != "" {
 		b.seenMu.Lock()
+		// Tests and lightweight local-only buses may construct the bus without
+		// going through newChatEventBus. Initialize the dedupe map lazily so
+		// local delivery remains safe for those instances as well.
+		if b.seen == nil {
+			b.seen = make(map[string]struct{})
+		}
 		if _, exists := b.seen[message.ID]; exists {
 			b.seenMu.Unlock()
 			return
