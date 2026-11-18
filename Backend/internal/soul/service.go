@@ -851,6 +851,7 @@ func (s *Service) ApplyServerAbsorption(ctx context.Context, nodeKey string, eve
 		"ironbone_beast_soul": "ironbone_beast_soul",
 		"gale_wraith": "gale_wraith",
 		"spirit_scholar_wisp": "spirit_scholar_wisp",
+		"wangchuan_echo_wisp": "wangchuan_echo_wisp",
 		"life_ancient_soul": "life_ancient_soul",
 		"faceless_essence": "faceless_essence",
 	}
@@ -917,6 +918,18 @@ func (s *Service) ApplyServerAbsorption(ctx context.Context, nodeKey string, eve
 				  AND choice_id='follow_lantern_shadow'
 			)`, soulID).Scan(&unlocked); err != nil {
 			return AbsorptionResult{}, fmt.Errorf("verify mythic soul encounter prerequisite: %w", err)
+		}
+		if !unlocked { return AbsorptionResult{}, ErrInvalidAbsorption }
+	}
+	if kindID == "wangchuan_echo_wisp" {
+		var unlocked bool
+		if err := tx.QueryRowContext(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM soul_exploration_event_claims
+				WHERE soul_id=$1 AND event_id='wangchuan_past_echo'
+				  AND choice_id='accept_memory'
+			)`, soulID).Scan(&unlocked); err != nil {
+			return AbsorptionResult{}, fmt.Errorf("verify Wangchuan echo encounter prerequisite: %w", err)
 		}
 		if !unlocked { return AbsorptionResult{}, ErrInvalidAbsorption }
 	}
