@@ -67,11 +67,13 @@ func main() {
 	// During the database cutover period, the legacy Chat API can continue
 	// using CHAT_DATABASE_URL while this independent worker maintains the
 	// new Chat-owned projection database.
-	projectionURL := os.Getenv("CHAT_PROJECTION_DATABASE_URL")
-	if projectionURL != "" {
-		go runGameProjectionConsumer(ctx, projectionURL, logger)
-	} else {
+	projectionURL := strings.TrimSpace(os.Getenv("CHAT_PROJECTION_DATABASE_URL"))
+	if projectionURL == "" {
 		logger.Warn("CHAT_PROJECTION_DATABASE_URL is empty; Game projection consumer is disabled")
+	} else if projectionURL == databaseURL {
+		logger.Error("CHAT_PROJECTION_DATABASE_URL must be separate from CHAT_DATABASE_URL; Game projection consumer is disabled")
+	} else {
+		go runGameProjectionConsumer(ctx, projectionURL, logger)
 	}
 
 	addr := os.Getenv("CHAT_HTTP_ADDR")
