@@ -489,8 +489,9 @@ type ExplorationEventResult struct {
 	KarmaDelta int64 `json:"karma_delta"`
 }
 
-// ListAvailableExplorationEvents deliberately reveals an event only after its
-// associated point has been discovered by this soul.
+// ListAvailableExplorationEvents returns the active world's enabled events with
+// soul discovery/claim state and current-body eligibility. Reward fields are
+// previews only; TriggerExplorationEvent remains authoritative.
 func (s *Service) ListAvailableExplorationEvents(ctx context.Context, accountID string) ([]ExplorationEvent, error) {
 	var soulID, worldID string
 	err := s.db.QueryRowContext(ctx,
