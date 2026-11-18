@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sort"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -27,6 +28,8 @@ type Message struct {
 	ClientMessageID string `json:"client_message_id"`
 	Channel string `json:"channel"`
 	WorldID string `json:"world_id,omitempty"`
+	WorldInstanceID string `json:"world_instance_id,omitempty"`
+	RecipientCharacterIDs []string `json:"recipient_character_ids,omitempty"`
 	SenderCharacterID string `json:"sender_character_id"`
 	SenderName string `json:"sender_name"`
 	SenderRace string `json:"sender_race,omitempty"`
@@ -39,6 +42,7 @@ type SendRequest struct {
 	ClientMessageID string `json:"client_message_id"`
 	Channel string `json:"channel"`
 	Content string `json:"content"`
+	RecipientCharacterIDs []string `json:"recipient_character_ids,omitempty"`
 }
 
 func NewService(db *sql.DB) *Service { return &Service{db: db} }
@@ -295,7 +299,7 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 		utf8.RuneCountInString(req.Content) > 200 {
 		return Message{}, ErrInvalidInput
 	}
-	if req.Channel != "world" && req.Channel != "cross_world" {
+	if req.Channel != "nearby" && req.Channel != "world" && req.Channel != "cross_world" {
 		return Message{}, ErrUnsupportedChannel
 	}
 	for _, r := range req.Content {
@@ -304,25 +308,54 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 		}
 	}
 
+	recipientSet := make(map[string]struct{}, len(req.RecipientCharacterIDs))
+	for _, recipientID := range req.RecipientCharacterIDs {
+		recipientID = strings.TrimSpace(recipientID)
+		if !isUUID(recipientID) {
+			return Message{}, ErrInvalidInput
+		}
+		recipientSet[recipientID] = struct{}{}
+	}
+	if req.Channel == "nearby" {
+		if len(recipientSet) == 0 || len(recipientSet) > 128 {
+			return Message{}, ErrInvalidInput
+		}
+		if _, includesSender := recipientSet[characterID]; !includesSender {
+			return Message{}, ErrInvalidInput
+		}
+	} else if len(recipientSet) != 0 {
+		return Message{}, ErrInvalidInput
+	}
+	req.RecipientCharacterIDs = req.RecipientCharacterIDs[:0]
+	for recipientID := range recipientSet {
+		req.RecipientCharacterIDs = append(req.RecipientCharacterIDs, recipientID)
+	}
+	sort.Strings(req.RecipientCharacterIDs)
+	recipientsJSON, err := json.Marshal(req.RecipientCharacterIDs)
+	if err != nil {
+		return Message{}, fmt.Errorf("encode nearby chat recipients: %w", err)
+	}
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Message{}, fmt.Errorf("begin world server chat send: %w", err)
 	}
 	defer tx.Rollback()
 
-	var name, raceID, worldID string
+	var name, raceID, worldID, instanceID string
 	var level int
 	err = tx.QueryRowContext(ctx, `
-		SELECT c.name,COALESCE(c.race_id,''),c.world_id,c.level
+		SELECT c.name,COALESCE(c.race_id,''),c.world_id,wi.id::text,c.level
 		FROM world_sessions ws
 		JOIN server_registry sr ON sr.id=ws.server_id
+		JOIN world_instances wi ON wi.id=ws.instance_id AND wi.server_id=sr.id
 		JOIN characters c ON c.id=ws.character_id
 		WHERE ws.id=$1::uuid AND ws.character_id=$2::uuid
 		  AND sr.node_key=$3 AND sr.status='ready'
 		  AND sr.last_heartbeat_at > now()-interval '30 seconds'
-		  AND ws.session_state='active' AND c.status='alive'
+		  AND wi.status='ready' AND ws.session_state='active' AND c.status='alive'
 		FOR UPDATE OF ws, c`, sessionID, characterID, nodeKey).
-		Scan(&name,&raceID,&worldID,&level)
+		Scan(&name, &raceID, &worldID, &instanceID, &level)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Message{}, ErrNoCharacter
 	}
@@ -330,64 +363,118 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 		return Message{}, fmt.Errorf("verify world server chat session: %w", err)
 	}
 
+	if req.Channel == "nearby" {
+		var validRecipients int
+		err = tx.QueryRowContext(ctx, `
+			SELECT count(DISTINCT ws.character_id)
+			FROM jsonb_array_elements_text($2::jsonb) AS requested(character_id)
+			JOIN world_sessions ws ON ws.character_id=requested.character_id::uuid
+			JOIN characters c ON c.id=ws.character_id
+			WHERE ws.instance_id=$1::uuid AND ws.server_id=(
+				SELECT id FROM server_registry WHERE node_key=$3
+			) AND ws.session_state='active' AND c.status='alive'`,
+			instanceID, string(recipientsJSON), nodeKey).Scan(&validRecipients)
+		if err != nil {
+			return Message{}, fmt.Errorf("validate nearby chat AOI recipients: %w", err)
+		}
+		if validRecipients != len(req.RecipientCharacterIDs) {
+			return Message{}, ErrInvalidInput
+		}
+	}
+
 	// Retries with the same client ID return the original result and do not
 	// consume another rate-limit slot.
 	var existing Message
+	var existingRecipients []byte
 	err = tx.QueryRowContext(ctx, `
 		SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),
-		       m.sender_character_id::text,$2,$3,$4,m.content,m.created_at
+		       m.sender_character_id::text,$2,$3,$4,m.content,m.created_at,
+		       COALESCE(m.world_instance_id::text,''),m.nearby_recipient_character_ids
 		FROM chat_messages m
 		WHERE m.sender_character_id=$1::uuid AND m.client_message_id=$5::uuid`,
-		characterID,name,raceID,level,req.ClientMessageID).
+		characterID, name, raceID, level, req.ClientMessageID).
 		Scan(&existing.ID,&existing.ClientMessageID,&existing.Channel,&existing.WorldID,
 			&existing.SenderCharacterID,&existing.SenderName,&existing.SenderRace,&existing.SenderLevel,
-			&existing.Content,&existing.CreatedAt)
+			&existing.Content,&existing.CreatedAt,&existing.WorldInstanceID,&existingRecipients)
 	if err == nil {
 		if existing.Channel != req.Channel || existing.Content != req.Content {
 			return Message{}, ErrIdempotencyConflict
 		}
-		if err := tx.Commit(); err != nil { return Message{}, fmt.Errorf("commit idempotent chat lookup: %w", err) }
-		return existing,nil
+		if err := json.Unmarshal(existingRecipients, &existing.RecipientCharacterIDs); err != nil {
+			return Message{}, fmt.Errorf("decode existing nearby chat recipients: %w", err)
+		}
+		if err := tx.Commit(); err != nil {
+			return Message{}, fmt.Errorf("commit idempotent chat lookup: %w", err)
+		}
+		return existing, nil
 	}
-	if !errors.Is(err,sql.ErrNoRows) {
-		return Message{},fmt.Errorf("check duplicate world server chat message: %w",err)
+	if !errors.Is(err, sql.ErrNoRows) {
+		return Message{}, fmt.Errorf("check duplicate world server chat message: %w", err)
 	}
 
-	window := 3*time.Second
-	if req.Channel == "cross_world" { window = 5*time.Second }
+	window := 3 * time.Second
+	switch req.Channel {
+	case "nearby":
+		window = time.Second
+	case "cross_world":
+		window = 5 * time.Second
+	}
 	var recent int
-	if err := tx.QueryRowContext(ctx,`
+	if err := tx.QueryRowContext(ctx, `
 		SELECT count(*) FROM chat_messages
 		WHERE sender_character_id=$1::uuid AND channel_type=$2
-		  AND created_at > now()-$3::interval`, characterID,req.Channel,window.String()).Scan(&recent); err != nil {
+		  AND created_at > now()-$3::interval`, characterID, req.Channel, window.String()).Scan(&recent); err != nil {
 		return Message{}, fmt.Errorf("check world server chat rate limit: %w", err)
 	}
-	if recent > 0 { return Message{}, ErrRateLimited }
+	if recent > 0 {
+		return Message{}, ErrRateLimited
+	}
 
-	var worldValue any
-	if req.Channel == "world" { worldValue = worldID }
-	_, err = tx.ExecContext(ctx,`
-		INSERT INTO chat_messages(channel_type,world_id,sender_character_id,client_message_id,content)
-		VALUES($1,$2,$3::uuid,$4::uuid,$5)
+	var worldValue, instanceValue any
+	if req.Channel == "world" || req.Channel == "nearby" {
+		worldValue = worldID
+	}
+	if req.Channel == "nearby" {
+		instanceValue = instanceID
+	}
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO chat_messages(channel_type,world_id,world_instance_id,nearby_recipient_character_ids,
+			sender_character_id,client_message_id,content)
+		VALUES($1,$2,$3::uuid,$4::jsonb,$5::uuid,$6::uuid,$7)
 		ON CONFLICT(sender_character_id,client_message_id) DO NOTHING`,
-		req.Channel,worldValue,characterID,req.ClientMessageID,req.Content)
-	if err != nil { return Message{}, fmt.Errorf("persist world server chat message: %w", err) }
+		req.Channel, worldValue, instanceValue, string(recipientsJSON), characterID, req.ClientMessageID, req.Content)
+	if err != nil {
+		return Message{}, fmt.Errorf("persist world server chat message: %w", err)
+	}
 
 	var item Message
-	err = tx.QueryRowContext(ctx,`
+	var storedRecipients []byte
+	err = tx.QueryRowContext(ctx, `
 		SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),
-		       m.sender_character_id::text,$2,$3,$4,m.content,m.created_at
+		       m.sender_character_id::text,$2,$3,$4,m.content,m.created_at,
+		       COALESCE(m.world_instance_id::text,''),m.nearby_recipient_character_ids
 		FROM chat_messages m
 		WHERE m.sender_character_id=$1::uuid AND m.client_message_id=$5::uuid`,
-		characterID,name,raceID,level,req.ClientMessageID).
+		characterID, name, raceID, level, req.ClientMessageID).
 		Scan(&item.ID,&item.ClientMessageID,&item.Channel,&item.WorldID,&item.SenderCharacterID,
-			&item.SenderName,&item.SenderRace,&item.SenderLevel,&item.Content,&item.CreatedAt)
-	if err != nil { return Message{}, fmt.Errorf("load persisted world server chat message: %w", err) }
+			&item.SenderName,&item.SenderRace,&item.SenderLevel,&item.Content,&item.CreatedAt,
+			&item.WorldInstanceID,&storedRecipients)
+	if err != nil {
+		return Message{}, fmt.Errorf("load persisted world server chat message: %w", err)
+	}
+	if err := json.Unmarshal(storedRecipients, &item.RecipientCharacterIDs); err != nil {
+		return Message{}, fmt.Errorf("decode persisted nearby chat recipients: %w", err)
+	}
+	if item.Channel != req.Channel || item.Content != req.Content {
+		return Message{}, ErrIdempotencyConflict
+	}
 	if err := insertChatEventOutbox(ctx, tx, item); err != nil {
 		return Message{}, err
 	}
-	if err := tx.Commit(); err != nil { return Message{}, fmt.Errorf("commit world server chat message and outbox: %w", err) }
-	return item,nil
+	if err := tx.Commit(); err != nil {
+		return Message{}, fmt.Errorf("commit world server chat message and outbox: %w", err)
+	}
+	return item, nil
 }
 
 
