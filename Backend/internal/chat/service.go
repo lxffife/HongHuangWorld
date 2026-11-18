@@ -432,7 +432,7 @@ func (s *Service) ClaimChatEventOutbox(ctx context.Context, workerID string, lim
 		    attempts = o.attempts + 1
 		FROM picked
 		WHERE o.message_id = picked.message_id
-		RETURNING o.payload, o.attempts`, limit, lease.String(), workerID)
+		RETURNING o.payload, o.attempts`, limit, lease.Seconds(), workerID)
 	if err != nil {
 		return nil, fmt.Errorf("claim chat event outbox: %w", err)
 	}
