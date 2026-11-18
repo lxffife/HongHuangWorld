@@ -72,6 +72,7 @@ struct PlayerState {
     Clock::time_point last_movement_diagnostic_at{Clock::now()};
     Clock::time_point last_attack_at{};
     Clock::time_point last_pickup_at{};
+    Clock::time_point last_chat_at{};
 };
 
 struct MonsterRuntime {
@@ -1293,6 +1294,65 @@ struct EnetServer::Impl {
         }
     }
 
+    void handle_chat(ENetPeer* peer, const Json& command) {
+        const auto player_it = players.find(peer);
+        if (player_it == players.end()) return;
+        auto& sender = player_it->second;
+        const auto channel = command.value("channel", std::string("nearby"));
+        const auto client_message_id = command.value("client_message_id", std::string{});
+        const auto content = command.value("content", std::string{});
+        const auto reject = [&](const std::string& reason) {
+            send_json(peer, honghuang::protocol::MessageType::ChatEvent,
+                      Json{{"accepted", false}, {"client_message_id", client_message_id},
+                           {"channel", channel}, {"reason", reason}});
+        };
+        if (channel != "nearby") {
+            reject("该频道需要中心聊天路由，当前阶段暂未开放。");
+            return;
+        }
+        if (client_message_id.empty() || client_message_id.size() > 64 ||
+            content.empty() || content.size() > 800) {
+            reject("聊天消息格式无效。");
+            return;
+        }
+        std::size_t characters = 0;
+        for (const unsigned char byte : content) {
+            if ((byte & 0xC0U) != 0x80U) ++characters;
+            if (byte < 0x20U && byte != '\n' && byte != '\t') {
+                reject("消息包含不允许的控制字符。");
+                return;
+            }
+        }
+        if (characters == 0 || characters > 200) {
+            reject("聊天内容不能超过 200 个字符。");
+            return;
+        }
+        const auto now = Clock::now();
+        if (sender.last_chat_at.time_since_epoch().count() != 0 &&
+            now - sender.last_chat_at < std::chrono::seconds(1)) {
+            reject("发言过于频繁，请稍后再试。");
+            return;
+        }
+        sender.last_chat_at = now;
+        const Json message{
+            {"accepted", true},
+            {"client_message_id", client_message_id},
+            {"channel", "nearby"},
+            {"sender_character_id", sender.character_id},
+            {"sender_name", sender.name},
+            {"world_id", config.world_id},
+            {"content", content},
+            {"created_at_unix_ms", wall_clock_ms()}
+        };
+        for (const auto& [recipient_peer, recipient] : players) {
+            if (!honghuang::simulation::within_interest_radius(
+                    sender.x, sender.z, recipient.x, recipient.z, kInterestRadius)) {
+                continue;
+            }
+            send_json(recipient_peer, honghuang::protocol::MessageType::ChatEvent, message);
+        }
+    }
+
     void handle_pickup(ENetPeer* peer, const Json& command) {
         auto player_it = players.find(peer);
         if (player_it == players.end()) return;
@@ -1849,6 +1909,17 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                     honghuang::protocol::MessageType::HeartbeatAck, {});
                 auto* packet = enet_packet_create(response.data(), response.size(), ENET_PACKET_FLAG_RELIABLE);
                 if (packet != nullptr && enet_peer_send(event.peer, 0, packet) != 0) enet_packet_destroy(packet);
+            } else if (frame.type == honghuang::protocol::MessageType::ChatSendCommand &&
+                       impl_->players.contains(event.peer)) {
+                try {
+                    const std::string payload(frame.payload.begin(), frame.payload.end());
+                    const auto command = Json::parse(payload);
+                    if (!command.is_object()) throw std::runtime_error("chat payload must be an object");
+                    impl_->handle_chat(event.peer, command);
+                } catch (const std::exception&) {
+                    send_json(event.peer, honghuang::protocol::MessageType::ChatEvent,
+                              Json{{"accepted", false}, {"reason", "聊天请求格式无效。"}});
+                }
             } else if (frame.type == honghuang::protocol::MessageType::PickupCommand &&
                        impl_->players.contains(event.peer)) {
                 try {
