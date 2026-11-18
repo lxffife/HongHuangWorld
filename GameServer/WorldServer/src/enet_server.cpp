@@ -911,6 +911,7 @@ struct EnetServer::Impl {
                 }
 
                 long status = 0;
+                std::string message_id;
                 std::string delivery_error;
                 bool delivered = false;
                 bool is_drop = false;
@@ -1094,7 +1095,7 @@ struct EnetServer::Impl {
                     chat.client_message_id = payload.at("client_message_id").get<std::string>();
                     chat.content = payload.at("content").get<std::string>();
                     chat.recipient_character_ids = payload.at("recipient_character_ids").get<std::vector<std::string>>();
-                    delivered = deliver_chat_message(config, chat, status, delivery_error);
+                    delivered = deliver_chat_message(config, chat, status, message_id, delivery_error);
                 } catch (const std::exception& exception) {
                     status = 400;
                     delivery_error = std::string("invalid nearby chat outbox payload: ") + exception.what();
