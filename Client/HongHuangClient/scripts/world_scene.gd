@@ -721,6 +721,8 @@ func _region_for_position(world_id: String, position: Vector3) -> String:
 			return "忘川河畔"
 		if x >= -32.0 and x <= 32.0 and z >= -40.0 and z <= -26.0:
 			return "引魂石道"
+		if x <= -36.0 and z >= 10.0 and z <= 46.0:
+			return "古战场遗址"
 		return "酆都荒原"
 	if world_id == "qingyun_human":
 		if x >= -9.0 and x <= 9.0 and z >= -28.0 and z <= -16.0:
@@ -975,6 +977,7 @@ func _upsert_monster(entity: Dictionary) -> void:
 func _create_monster(monster_name: String, monster_level: int) -> Node3D:
 	var monster := Node3D.new()
 	var is_wraith := monster_name.contains("游祟") or monster_name.contains("幽魂")
+	var is_war_god := monster_name.contains("上古战神")
 	var body := MeshInstance3D.new()
 	var body_mesh: Mesh
 	if is_wraith:
@@ -989,9 +992,14 @@ func _create_monster(monster_name: String, monster_level: int) -> Node3D:
 		body_mesh = wolf_mesh
 	body.mesh = body_mesh
 	var material := StandardMaterial3D.new()
-	material.albedo_color = Color("#7897c7") if is_wraith else Color("#8b5140")
-	material.roughness = 0.72 if is_wraith else 0.9
-	if is_wraith:
+	material.albedo_color = Color("#d58b45") if is_war_god else (Color("#7897c7") if is_wraith else Color("#8b5140"))
+	material.roughness = 0.48 if is_war_god else (0.72 if is_wraith else 0.9)
+	if is_war_god:
+		material.metallic = 0.42
+		material.emission_enabled = true
+		material.emission = Color("#ff6b2e")
+		material.emission_energy_multiplier = 2.4
+	elif is_wraith:
 		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		material.albedo_color.a = 0.78
 		material.emission_enabled = true
@@ -1021,7 +1029,7 @@ func _create_monster(monster_name: String, monster_level: int) -> Node3D:
 	label.text = monster_name + " · Lv." + str(monster_level)
 	label.position.y = 1.65
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.modulate = Color("#b9d9ff") if is_wraith else Color("#ffd0a8")
+	label.modulate = Color("#ff9b55") if is_war_god else (Color("#b9d9ff") if is_wraith else Color("#ffd0a8"))
 	monster.add_child(label)
 	add_child(monster)
 	return monster
@@ -2751,6 +2759,20 @@ func _create_exploration_marker(point: Dictionary) -> void:
 				pillar.bottom_radius = 0.075
 				pillar.height = 0.62
 				_add_exploration_marker_mesh(marker, "SealPillar" + str(pillar_index), pillar, Vector3(cos(angle) * 0.48, 0.31, sin(angle) * 0.48), stone_color)
+		"fengdu_ancient_battlefield":
+			var altar := BoxMesh.new()
+			altar.size = Vector3(2.2, 0.32, 1.5)
+			_add_exploration_marker_mesh(marker, "BattlefieldAltar", altar, Vector3(0, 0.28, 0), stone_color)
+			for blade_index in range(3):
+				var blade := BoxMesh.new()
+				blade.size = Vector3(0.12, 1.25 + float(blade_index) * 0.18, 0.2)
+				var blade_node := _add_exploration_marker_mesh(marker, "BrokenWarBlade" + str(blade_index), blade, Vector3(-0.62 + float(blade_index) * 0.62, 0.95, 0.0), marker_color, true)
+				blade_node.rotation.z = -0.16 + float(blade_index) * 0.13
+			var battle_ring := TorusMesh.new()
+			battle_ring.inner_radius = 0.48
+			battle_ring.outer_radius = 0.55
+			var ring_node := _add_exploration_marker_mesh(marker, "BattlefieldSeal", battle_ring, Vector3(0, 0.56, 0), marker_color, true)
+			ring_node.rotation.x = PI / 2.0
 		"fengdu_lantern_shadow_trace":
 			var shadow_stone := CylinderMesh.new()
 			shadow_stone.top_radius = 0.24
