@@ -1271,7 +1271,7 @@ func _on_chat_history_received(channel: String, messages: Array) -> void:
 		var sender := str(message.get("sender_name", "未知玩家"))
 		var content := str(message.get("content", ""))
 		if not content.is_empty():
-			_append_chat_line("[" + sender + "] " + content, channel, str(message.get("id", "")))
+			_append_chat_line("[" + sender + "] " + content, channel, str(message.get("id", "")), str(message.get("created_at", "")))
 
 func _on_chat_socket_error(message: String) -> void:
 	if is_instance_valid(chat_status) and selected_chat_channel != "nearby":
@@ -1301,7 +1301,7 @@ func _on_chat_event(event: Dictionary) -> void:
 	_append_chat_line("[" + sender + "] " + content)
 	chat_status.text = "附近频道 · 消息已送达当前可见范围"
 
-func _append_chat_line(line: String, channel: String = "", message_id: String = "") -> void:
+func _append_chat_line(line: String, channel: String = "", message_id: String = "", created_at: String = "") -> void:
 	var target_channel := channel if not channel.is_empty() else selected_chat_channel
 	if not message_id.is_empty():
 		if chat_seen_ids.has(message_id):
@@ -1312,7 +1312,16 @@ func _append_chat_line(line: String, channel: String = "", message_id: String = 
 	if not chat_lines_by_channel.has(target_channel):
 		chat_lines_by_channel[target_channel] = []
 	var lines: Array = chat_lines_by_channel[target_channel]
-	lines.append(line)
+	var timestamp := created_at
+	if timestamp.is_empty():
+		timestamp = Time.get_datetime_string_from_system(true)
+	var entry := {"text": line, "id": message_id, "created_at": timestamp}
+	var insert_at := lines.size()
+	for index in range(lines.size()):
+		if str(lines[index].get("created_at", "")) > timestamp:
+			insert_at = index
+			break
+	lines.insert(insert_at, entry)
 	while lines.size() > 40:
 		lines.pop_front()
 	chat_lines_by_channel[target_channel] = lines
@@ -1325,9 +1334,9 @@ func _render_chat_lines() -> void:
 	var visible_lines: Array = chat_lines_by_channel.get(selected_chat_channel, [])
 	for child in chat_log.get_children():
 		child.queue_free()
-	for value in visible_lines:
+	for entry in visible_lines:
 		var label := Label.new()
-		label.text = value
+		label.text = str(entry.get("text", ""))
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		chat_log.add_child(label)
