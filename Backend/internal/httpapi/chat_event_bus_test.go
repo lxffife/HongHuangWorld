@@ -47,6 +47,7 @@ func TestChatEventBusPublishesLocallyWithoutNATS(t *testing.T) {
 		SenderCharacterID: "character-1", Content: "hello", CreatedAt: time.Now().UTC(),
 	}
 	bus.publish(message)
+	bus.publish(message) // A local publish followed by JetStream redelivery must not duplicate delivery.
 	if len(client.send) != 1 {
 		t.Fatalf("local event count = %d, want 1", len(client.send))
 	}
