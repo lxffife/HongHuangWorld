@@ -174,6 +174,7 @@ func set_soul_form(enabled: bool, stage: int = 1, visual_scale: float = 0.35) ->
 	if not is_instance_valid(visual) or not is_instance_valid(collision_shape):
 		return
 	soul_form_enabled = enabled
+	soul_form_scale = clampf(visual_scale / 0.35, 0.85, 3.8)
 	if not enabled:
 		visual.mesh = base_visual_mesh
 		visual.material_override = base_visual_material
