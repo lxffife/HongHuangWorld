@@ -38,6 +38,14 @@ var login_brand_controls: Array[Control] = []
 var details_container: VBoxContainer
 var details_toggle_button: Button
 var details_expanded := false
+var lobby_root: Control
+var lobby_name_label: Label
+var lobby_race_label: Label
+var lobby_realm_label: Label
+var lobby_world_label: Label
+var lobby_status_label: Label
+var lobby_details_host: VBoxContainer
+var lobby_enter_button: Button
 var reincarnation_name_input: LineEdit
 var reincarnation_race_select: OptionButton
 var reincarnation_route_select: OptionButton
@@ -67,6 +75,7 @@ func _ready() -> void:
 	_build_ui()
 	_load_client_config()
 	_build_reincarnation_ui()
+	_build_lobby_ui()
 	if not HHSession.access_token.is_empty():
 		api_base = HHSession.api_base
 		access_token = HHSession.access_token
@@ -358,6 +367,8 @@ func _show_login_screen() -> void:
 		control.show()
 	if is_instance_valid(right_panel_control):
 		right_panel_control.show()
+	if is_instance_valid(lobby_root):
+		lobby_root.hide()
 	account_label.hide()
 	character_title_label.hide()
 	character_input.hide()
@@ -371,6 +382,174 @@ func _show_login_screen() -> void:
 		details_toggle_button.hide()
 	if is_instance_valid(details_container):
 		details_container.hide()
+
+
+func _build_lobby_ui() -> void:
+	lobby_root = Control.new()
+	lobby_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	lobby_root.hide()
+	add_child(lobby_root)
+	var backdrop := ColorRect.new()
+	backdrop.color = Color("#090e18")
+	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	lobby_root.add_child(backdrop)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	lobby_root.add_child(center)
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(820, 520)
+	center.add_child(panel)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 18)
+	panel.add_child(layout)
+	var header := HBoxContainer.new()
+	layout.add_child(header)
+	var heading := Label.new()
+	heading.text = "洪荒：诸天轮回"
+	heading.add_theme_font_size_override("font_size", 24)
+	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(heading)
+	var account := Label.new()
+	account.text = "角色大厅"
+	account.add_theme_color_override("font_color", Color("#b8c5d8"))
+	header.add_child(account)
+	var separator := HSeparator.new()
+	layout.add_child(separator)
+	var body := HBoxContainer.new()
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_theme_constant_override("separation", 24)
+	layout.add_child(body)
+	var emblem_panel := PanelContainer.new()
+	emblem_panel.custom_minimum_size = Vector2(300, 300)
+	emblem_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	emblem_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(emblem_panel)
+	var emblem_center := CenterContainer.new()
+	emblem_panel.add_child(emblem_center)
+	var emblem := Label.new()
+	emblem.text = "灵"
+	emblem.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	emblem.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	emblem.add_theme_font_size_override("font_size", 112)
+	emblem.add_theme_color_override("font_color", Color("#d9c28e"))
+	emblem_center.add_child(emblem)
+	var info := VBoxContainer.new()
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	info.add_theme_constant_override("separation", 14)
+	body.add_child(info)
+	var section := Label.new()
+	section.text = "此世命格"
+	section.add_theme_color_override("font_color", Color("#c5a76d"))
+	section.add_theme_font_size_override("font_size", 16)
+	info.add_child(section)
+	lobby_name_label = Label.new()
+	lobby_name_label.text = "尚未创建角色"
+	lobby_name_label.add_theme_font_size_override("font_size", 30)
+	info.add_child(lobby_name_label)
+	lobby_race_label = Label.new()
+	lobby_race_label.text = "种族：待定"
+	info.add_child(lobby_race_label)
+	lobby_realm_label = Label.new()
+	lobby_realm_label.text = "修炼境界：待载入"
+	info.add_child(lobby_realm_label)
+	lobby_world_label = Label.new()
+	lobby_world_label.text = "出生世界：待载入"
+	info.add_child(lobby_world_label)
+	lobby_status_label = Label.new()
+	lobby_status_label.text = "角色资料已准备就绪。"
+	lobby_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lobby_status_label.add_theme_color_override("font_color", Color("#aab6cc"))
+	lobby_status_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	info.add_child(lobby_status_label)
+	var footer_separator := HSeparator.new()
+	layout.add_child(footer_separator)
+	var footer := HBoxContainer.new()
+	footer.add_theme_constant_override("separation", 12)
+	layout.add_child(footer)
+	var archive_button := Button.new()
+	archive_button.text = "灵魂档案 / 轮回"
+	archive_button.custom_minimum_size = Vector2(180, 48)
+	archive_button.pressed.connect(_toggle_lobby_details)
+	footer.add_child(archive_button)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	footer.add_child(spacer)
+	lobby_enter_button = Button.new()
+	lobby_enter_button.text = "进入世界"
+	lobby_enter_button.custom_minimum_size = Vector2(240, 52)
+	lobby_enter_button.pressed.connect(_on_create_character_pressed)
+	footer.add_child(lobby_enter_button)
+	lobby_details_host = VBoxContainer.new()
+	lobby_details_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lobby_details_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	lobby_details_host.add_theme_constant_override("separation", 8)
+	lobby_details_host.hide()
+	layout.add_child(lobby_details_host)
+	if is_instance_valid(details_toggle_button):
+		if details_toggle_button.get_parent() != null:
+			details_toggle_button.get_parent().remove_child(details_toggle_button)
+		lobby_details_host.add_child(details_toggle_button)
+	if is_instance_valid(details_container):
+		if details_container.get_parent() != null:
+			details_container.get_parent().remove_child(details_container)
+		lobby_details_host.add_child(details_container)
+
+func _toggle_lobby_details() -> void:
+	lobby_details_host.visible = not lobby_details_host.visible
+	if lobby_details_host.visible:
+		lobby_root.get_node("CenterContainer/PanelContainer/VBoxContainer/HBoxContainer").hide()
+		lobby_details_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	else:
+		lobby_root.get_node("CenterContainer/PanelContainer/VBoxContainer/HBoxContainer").show()
+		if details_container != null:
+			details_container.hide()
+		if details_toggle_button != null:
+			details_toggle_button.hide()
+
+func _show_character_lobby() -> void:
+	if not is_instance_valid(lobby_root):
+		return
+	for control in auth_controls:
+		control.hide()
+	for control in login_brand_controls:
+		control.hide()
+	if is_instance_valid(right_panel_control):
+		right_panel_control.hide()
+	account_label.hide()
+	character_title_label.hide()
+	character_input.hide()
+	race_label_control.hide()
+	race_select.hide()
+	cultivation_preview.hide()
+	world_label_control.hide()
+	world_select.hide()
+	action_button.hide()
+	details_toggle_button.hide()
+	details_container.hide()
+	lobby_details_host.hide()
+	var character_name := str(current_character.get("name", character_input.text.strip_edges()))
+	lobby_name_label.text = character_name if not character_name.is_empty() else "无名灵身"
+	var race_id := str(current_character.get("race_id", ""))
+	var race_name := race_id if not race_id.is_empty() else "未知种族"
+	for race in cultivation_races:
+		if race is Dictionary and str(race.get("race_id", "")) == race_id:
+			race_name = str(race.get("race_name", race_id))
+			break
+	lobby_race_label.text = "种族：" + race_name
+	var progression: Dictionary = current_character.get("progression", {})
+	var realm_text := str(progression.get("system_name", "")) + " · " + str(progression.get("realm_name", "待载入")) + str(progression.get("realm_stage_name", ""))
+	lobby_realm_label.text = "修炼境界：" + realm_text
+	var world_id := str(current_character.get("world_id", current_character.get("birth_world_id", "qingyun_human")))
+	var world_name := world_id
+	for world in worlds:
+		if world is Dictionary and str(world.get("id", "")) == world_id:
+			world_name = str(world.get("name", world_id))
+			break
+	lobby_world_label.text = "当前世界：" + world_name
+	lobby_status_label.text = "角色资料已载入。准备好后，进入此世洪荒。"
+	lobby_enter_button.disabled = false
+	lobby_root.show()
 
 func _request_soul_fate() -> void:
 	if access_token.is_empty():
@@ -821,8 +1000,10 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 			cultivation_preview.hide()
 			world_label_control.hide()
 			world_select.hide()
+			current_character["progression"] = progression
 			_set_status("角色：" + character_input.text + "  ·  " + realm_text + "  ·  " + tier_text + "\n准备就绪，可以进入世界。")
 			_show_reincarnation_controls()
+			_show_character_lobby()
 		"life_history":
 			_render_life_history(data.get("items", []))
 		"soul_memories":
@@ -856,8 +1037,8 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 			_enqueue(HTTPClient.METHOD_POST, "/api/v1/worlds/enter", {}, true, "enter")
 		"character_create":
 			current_character = data
-			_set_status("角色创建成功，正在申请世界入口……")
-			_enqueue(HTTPClient.METHOD_POST, "/api/v1/worlds/enter", {}, true, "enter")
+			_set_status("角色创建成功，正在载入角色大厅……")
+			_enqueue(HTTPClient.METHOD_GET, "/api/v1/characters/current/status", {}, true, "character_status")
 		"enter":
 			entry_data = data
 			_start_world_connection(
