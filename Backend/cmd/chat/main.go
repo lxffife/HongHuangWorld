@@ -2,13 +2,11 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -35,53 +33,26 @@ func main() {
 	}
 	defer db.Close()
 
-	apiDB := db
-	chatService := chat.NewService(db)
-	var projectionAPIDB *sql.DB
-	if strings.EqualFold(strings.TrimSpace(os.Getenv("CHAT_USE_PROJECTION_DATABASE")), "true") {
-		if strings.TrimSpace(os.Getenv("IDENTITY_API_BASE")) == "" || strings.TrimSpace(os.Getenv("IDENTITY_SERVICE_TOKEN")) == "" {
-			logger.Error("projection Chat mode requires IDENTITY_API_BASE and IDENTITY_SERVICE_TOKEN; Chat DB intentionally has no local account credentials")
-			os.Exit(1)
-		}
-		projectionURL := strings.TrimSpace(os.Getenv("CHAT_PROJECTION_DATABASE_URL"))
-		if projectionURL == "" || projectionURL == databaseURL {
-			logger.Error("projection Chat mode requires a distinct CHAT_PROJECTION_DATABASE_URL")
-			os.Exit(1)
-		}
-		projectionCtx, projectionCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		projectionAPIDB, err = database.OpenPostgres(projectionCtx, projectionURL)
-		projectionCancel()
-		if err != nil {
-			logger.Error("Chat projection API database startup failed", "error", err)
-			os.Exit(1)
-		}
-		defer projectionAPIDB.Close()
-		apiDB = projectionAPIDB
-		chatService = chat.NewProjectionService(apiDB)
-		logger.Warn("Chat API is using Chat-owned projections; enable only after history backfill and acceptance")
+
+	if gameDBURL := os.Getenv("DATABASE_URL"); gameDBURL != "" && gameDBURL == databaseURL {
+		logger.Error("CHAT_DATABASE_URL must point to the dedicated Chat database, not DATABASE_URL")
+		os.Exit(1)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// During the database cutover period, the legacy Chat API can continue
-	// using CHAT_DATABASE_URL while this independent worker maintains the
-	// new Chat-owned projection database.
-	projectionURL := strings.TrimSpace(os.Getenv("CHAT_PROJECTION_DATABASE_URL"))
-	if projectionURL == "" {
-		logger.Warn("CHAT_PROJECTION_DATABASE_URL is empty; Game projection consumer is disabled")
-	} else if projectionURL == databaseURL {
-		logger.Error("CHAT_PROJECTION_DATABASE_URL must be separate from CHAT_DATABASE_URL; Game projection consumer is disabled")
-	} else {
-		go runGameProjectionConsumer(ctx, projectionURL, logger)
-	}
+	// Chat always consumes Game domain events into its own database. Game and
+	// Chat remain independently available; no runtime SQL crosses DB boundaries.
+	go chatprojection.Run(ctx, db, logger)
+	chatService := chat.NewService(db)
 
 	addr := os.Getenv("CHAT_HTTP_ADDR")
 	if addr == "" {
 		addr = ":8788"
 	}
 
-	handler, closeChatTransports := httpapi.NewChatRouterWithServiceAndShutdown(logger, apiDB, chatService)
+	handler, closeChatTransports := httpapi.NewChatRouterWithServiceAndShutdown(logger, db, chatService)
 	defer closeChatTransports()
 	server := &http.Server{
 		Addr:              addr,
@@ -137,33 +108,3 @@ func runChatRetentionCleanup(ctx context.Context, service *chat.Service, logger 
 	}
 }
 
-func runGameProjectionConsumer(ctx context.Context, databaseURL string, logger *slog.Logger) {
-	for ctx.Err() == nil {
-		openCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		db, err := database.OpenPostgres(openCtx, databaseURL)
-		cancel()
-		if err != nil {
-			logger.Error("Chat projection database unavailable; retrying connection", "error", err)
-			if !waitForChatProjection(ctx, 5*time.Second) {
-				return
-			}
-			continue
-		}
-		chatprojection.Run(ctx, db, logger)
-		_ = db.Close()
-		if ctx.Err() == nil && !waitForChatProjection(ctx, 2*time.Second) {
-			return
-		}
-	}
-}
-
-func waitForChatProjection(ctx context.Context, duration time.Duration) bool {
-	timer := time.NewTimer(duration)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return false
-	case <-timer.C:
-		return true
-	}
-}
