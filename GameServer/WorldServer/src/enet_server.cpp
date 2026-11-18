@@ -841,7 +841,7 @@ struct EnetServer::Impl {
                 const auto found = std::find_if(monsters.begin(), monsters.end(),
                     [&](const MonsterRuntime& monster) { return monster.runtime_id == runtime_id; });
                 if (found == monsters.end()) {
-                    std::cerr << "Rare soul spawn point missing: " << runtime_id << '\\n';
+                    std::cerr << "Rare soul spawn point missing: " << runtime_id << '\n';
                     return;
                 }
                 found->rare_spawn = true;
@@ -1059,7 +1059,7 @@ struct EnetServer::Impl {
                 std::string storage_error;
                 auto event = durable_outbox->claim_due_type(wall_clock_ms(), "nearby_chat", storage_error);
                 if (!event) {
-                    if (!storage_error.empty()) std::cerr << "Chat outbox claim failed: " << storage_error << '\\n';
+                    if (!storage_error.empty()) std::cerr << "Chat outbox claim failed: " << storage_error << '\n';
                     std::unique_lock lock(chat_outbox_mutex);
                     if (chat_outbox_stop_requested) return;
                     chat_outbox_cv.wait_for(lock, std::chrono::milliseconds(500));
@@ -1087,7 +1087,7 @@ struct EnetServer::Impl {
                     std::string mark_error;
                     if (!durable_outbox->mark_delivered(event->event_id, mark_error)) {
                         std::cerr << "Nearby chat delivered marker failed; idempotent replay expected: "
-                                  << mark_error << '\\n';
+                                  << mark_error << '\n';
                     }
                     continue;
                 }
@@ -1095,10 +1095,10 @@ struct EnetServer::Impl {
                     std::string dead_error;
                     if (!durable_outbox->move_to_dead_letter(
                             event->event_id, event->attempts + 1, delivery_error, dead_error)) {
-                        std::cerr << "Nearby chat dead-letter update failed: " << dead_error << '\\n';
+                        std::cerr << "Nearby chat dead-letter update failed: " << dead_error << '\n';
                     } else {
                         std::cerr << "Nearby chat outbox event dead-lettered (HTTP " << status
-                                  << "): " << event->event_id << " " << delivery_error << '\\n';
+                                  << "): " << event->event_id << " " << delivery_error << '\n';
                     }
                     continue;
                 }
@@ -1110,7 +1110,7 @@ struct EnetServer::Impl {
                 if (!durable_outbox->schedule_retry(
                         event->event_id, attempts, wall_clock_ms() + delay_ms,
                         delivery_error, retry_error)) {
-                    std::cerr << "Nearby chat retry scheduling failed: " << retry_error << '\\n';
+                    std::cerr << "Nearby chat retry scheduling failed: " << retry_error << '\n';
                 }
             }
         });
