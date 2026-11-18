@@ -64,7 +64,7 @@ func TestHTTPClientLoginPreservesSessionResponse(t *testing.T) {
 }
 
 
-func TestHTTPClientUsesBriefCacheDuringIdentityOutage(t *testing.T) {
+func TestHTTPClientCachesSuccessfulIntrospectionBriefly(t *testing.T) {
 	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests++
