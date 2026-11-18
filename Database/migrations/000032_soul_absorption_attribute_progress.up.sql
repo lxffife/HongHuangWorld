@@ -49,9 +49,12 @@ counts AS (
     CROSS JOIN attributes
     LEFT JOIN soul_absorption_records records
       ON records.soul_id = soul.id
-    LEFT JOIN soul_absorption_kinds kinds
-      ON kinds.id = records.absorption_kind_id
-    WHERE COALESCE(kinds.inheritance_attribute, records.selected_attribute) = attributes.attribute
+     AND COALESCE(
+       (SELECT kinds.inheritance_attribute
+        FROM soul_absorption_kinds kinds
+        WHERE kinds.id = records.absorption_kind_id),
+       records.selected_attribute
+     ) = attributes.attribute
     GROUP BY soul.id, attributes.attribute
 ),
 earned AS (
