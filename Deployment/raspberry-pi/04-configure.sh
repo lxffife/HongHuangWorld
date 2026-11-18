@@ -1,9 +1,7 @@
 #!/bin/sh
 # Re-launch with Bash when invoked as: sh script.sh
 if [ -z "${BASH_VERSION:-}" ]; then
-  if command -v bash >/dev/null 2>&1; then
-    exec bash "$0" "$@"
-  fi
+  if command -v bash >/dev/null 2>&1; then exec bash "$0" "$@"; fi
   echo "[ERROR] 本脚本需要 Bash，请先安装 bash。" >&2
   exit 1
 fi
@@ -14,6 +12,8 @@ if [[ -f "$HH_ENV_FILE" ]]; then
   exit 0
 fi
 DBPASS="$(openssl rand -hex 24)"
+IDENTITY_DB_PASS="$(openssl rand -hex 24)"
+IDENTITY_API_KEY="$(openssl rand -hex 32)"
 REDISPASS="$(openssl rand -hex 24)"
 APIKEY="$(openssl rand -hex 32)"
 HOST="${HH_ADVERTISE_HOST:-$(hostname -I | awk '{print $1}')}"
@@ -24,6 +24,12 @@ POSTGRES_DB=honghuang
 POSTGRES_USER=honghuang
 POSTGRES_PASSWORD=$DBPASS
 POSTGRES_PORT=5432
+IDENTITY_DB_NAME=honghuang_identity
+IDENTITY_DB_USER=identity_user
+IDENTITY_DB_PASSWORD=$IDENTITY_DB_PASS
+IDENTITY_DATABASE_URL=postgres://identity_user:$IDENTITY_DB_PASS@127.0.0.1:5432/honghuang_identity?sslmode=disable
+IDENTITY_HTTP_ADDR=127.0.0.1:8789
+IDENTITY_INTERNAL_API_KEY=$IDENTITY_API_KEY
 REDIS_PASSWORD=$REDISPASS
 REDIS_PORT=6379
 NATS_PORT=4222
