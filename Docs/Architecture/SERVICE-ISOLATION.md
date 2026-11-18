@@ -53,6 +53,7 @@
 - 已新增 httpapi.NewChatRouter，只暴露聊天和健康检查路由。
 - 已新增 CHAT_DATABASE_URL / CHAT_HTTP_ADDR 配置与 Windows/Linux 启动脚本。
 - ChatServer 当前复用现有 chat service、账号 session 验证和节点内部接口；数据库仍是迁移期共享 PostgreSQL。
+- 30 天消息保留由 ChatServer 后台调度器负责：启动时执行一次，之后每小时执行；发送和历史查询请求不再触发过期消息删除，清理失败记录日志并在下一周期重试。
 - Game API 暂时保留原聊天路由，作为客户端/WorldServer 切换期间的兼容入口。
 - Godot 仍未建立独立聊天 WebSocket；当前附近聊天仍通过旧 ENet 协议，世界/跨界中心 API 尚未从 WorldServer 完整接通。
 - NATS 事件总线、在线状态订阅、聊天数据库物理拆分、故障注入测试尚未实现。
