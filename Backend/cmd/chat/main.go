@@ -37,9 +37,11 @@ func main() {
 		addr = ":8788"
 	}
 
+	handler, closeChatTransports := httpapi.NewChatRouterWithShutdown(logger, db)
+	defer closeChatTransports()
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           httpapi.NewChatRouter(logger, db),
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
