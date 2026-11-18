@@ -943,8 +943,9 @@ func _preview_lobby_equipment(item: Dictionary) -> void:
 	_render_lobby_equipment_manager()
 
 func _clear_lobby_equipment_preview() -> void:
+	var previewed_item_id := str(lobby_preview_equipment_item.get("item_id", ""))
 	lobby_preview_equipment_item.clear()
-	if not lobby_selected_equipment.is_empty() and str(lobby_selected_equipment.get("item_id", "")) == str(lobby_preview_equipment_item.get("item_id", "")):
+	if not lobby_selected_equipment.is_empty() and str(lobby_selected_equipment.get("item_id", "")) == previewed_item_id:
 		lobby_selected_equipment.clear()
 	_build_lobby_preview_model()
 	lobby_equipment_status_label.text = "已退出试穿预览，恢复当前实际穿戴外观。"
