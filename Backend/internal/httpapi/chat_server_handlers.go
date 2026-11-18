@@ -111,6 +111,8 @@ func (h *chatServerHandlers) publish(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid chat request", http.StatusBadRequest)
 		case err == chat.ErrNoCharacter:
 			http.Error(w, "world session is not active for this node", http.StatusForbidden)
+		case err == chat.ErrIdempotencyConflict:
+			http.Error(w, "client_message_id already used with different content", http.StatusConflict)
 		case err == chat.ErrRateLimited:
 			http.Error(w, "chat rate limit exceeded", http.StatusTooManyRequests)
 		case err == chat.ErrUnsupportedChannel:
