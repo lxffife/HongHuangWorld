@@ -1447,7 +1447,6 @@ func (s *Service) Reincarnate(ctx context.Context, accountID, name, raceID, rout
 	if err != nil {
 		return Character{}, fmt.Errorf("calculate reincarnation inheritance: %w", err)
 	}
-	result.BirthInheritance = &birthInheritance
 
 	newLifeIndex := oldLifeIndex + 1
 	fateAspect := "因果未定"
@@ -1460,6 +1459,7 @@ func (s *Service) Reincarnate(ctx context.Context, accountID, name, raceID, rout
 		fateAspect = "业障缠身"
 	}
 	var result Character
+	result.BirthInheritance = &birthInheritance
 	result.FateAspect, result.FateKarma, result.FateMerit = fateAspect, fateKarma, fateMerit
 	result.BirthRouteName = routeName
 	result.FateTraitID = currentFateTraitID(fateMerit, fateKarma)
