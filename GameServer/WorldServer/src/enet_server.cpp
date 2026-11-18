@@ -690,7 +690,10 @@ bool deliver_chat_message(const ServerConfig& config, const ChatJob& job,
         error = "could not initialize ChatServer HTTP client";
         return false;
     }
-    const std::string url = config.chat_backend_url + "/api/v1/servers/chat/messages";
+    const std::string base_url = config.chat_backend_url.back() == '/'
+        ? config.chat_backend_url.substr(0, config.chat_backend_url.size() - 1)
+        : config.chat_backend_url;
+    const std::string url = base_url + "/api/v1/servers/chat/messages";
     const std::string body = Json{
         {"session_id", job.session_id},
         {"character_id", job.character_id},
