@@ -39,8 +39,8 @@ func main() {
 	chatService := chat.NewService(db)
 	var projectionAPIDB *sql.DB
 	if strings.EqualFold(strings.TrimSpace(os.Getenv("CHAT_USE_PROJECTION_DATABASE")), "true") {
-		if strings.TrimSpace(os.Getenv("IDENTITY_API_BASE")) == "" {
-			logger.Error("projection Chat mode requires IDENTITY_API_BASE; Chat DB intentionally has no local account credentials")
+		if strings.TrimSpace(os.Getenv("IDENTITY_API_BASE")) == "" || strings.TrimSpace(os.Getenv("IDENTITY_SERVICE_TOKEN")) == "" {
+			logger.Error("projection Chat mode requires IDENTITY_API_BASE and IDENTITY_SERVICE_TOKEN; Chat DB intentionally has no local account credentials")
 			os.Exit(1)
 		}
 		projectionURL := strings.TrimSpace(os.Getenv("CHAT_PROJECTION_DATABASE_URL"))
