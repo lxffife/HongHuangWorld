@@ -2226,13 +2226,14 @@ func _render_exploration_progress(data: Dictionary) -> void:
 	exploration_progress_label.text = "\n".join(PackedStringArray(lines))
 
 
-func _exploration_event_state_text(event: Dictionary, in_range: bool) -> String:
+func _exploration_event_state_text(event: Dictionary, distance: float) -> String:
 	var status := str(event.get("status", "locked"))
+	var in_range := distance <= float(event.get("interaction_radius", 4.0))
 	match status:
 		"completed":
 			return "已完成"
 		"available":
-			return "触发奇遇" if in_range else "待触发 · 距离 %dm" % roundi(float(event.get("position_x", 0.0)))
+			return "触发奇遇" if in_range else "待触发 · 距离 %dm" % roundi(distance)
 		_:
 			return "未解锁 · 先发现地点"
 
@@ -2266,7 +2267,7 @@ func _render_exploration_events(events: Variant) -> void:
 		var distance := local_player.global_position.distance_to(target) if is_instance_valid(local_player) else INF
 		var in_range := distance <= float(event.get("interaction_radius", 4.0))
 		var status := str(event.get("status", "locked"))
-		var state_text := _exploration_event_state_text(event, in_range)
+		var state_text := _exploration_event_state_text(event, distance)
 		var event_button := Button.new()
 		event_button.text = str(event.get("point_name", "探索地点")) + " · " + str(event.get("title", "未知奇遇")) + " · " + state_text
 		event_button.tooltip_text = str(event.get("description", ""))
@@ -2462,4 +2463,4 @@ func _update_exploration_proximity() -> void:
 		var event_in_range := event_distance <= float(event.get("interaction_radius", 4.0))
 		var event_status := str(event.get("status", "locked"))
 		event_button.disabled = event_status != "available" or not event_in_range or npc_request_busy
-		event_button.text = str(event.get("point_name", "探索地点")) + " · " + str(event.get("title", "未知奇遇")) + " · " + _exploration_event_state_text(event, event_in_range)
+		event_button.text = str(event.get("point_name", "探索地点")) + " · " + str(event.get("title", "未知奇遇")) + " · " + _exploration_event_state_text(event, event_distance)
