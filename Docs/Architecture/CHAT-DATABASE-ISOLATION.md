@@ -55,7 +55,7 @@ Chat's own message outbox publishes `honghuang.chat.events.v1` through JetStream
 
 1. Back up the existing Game DB and preserve the current deployment configuration.
 2. Provision a physically/logically separate Chat PostgreSQL database and a least-privilege Chat role.
-3. Apply `Database/chat-migrations/000001_chat_schema.up.sql` to the empty Chat DB.
+3. Run `bash Deployment/raspberry-pi/09-migrate-chat.sh` to provision the dedicated Chat role/database and apply `Database/chat-migrations/000001_chat_schema.up.sql`. The script deliberately leaves `CHAT_DATABASE_URL` unchanged.
 4. Deploy the Game outbox publisher and Chat projection consumer before switching traffic.
 5. Backfill accounts' current-character mapping, character display/routing data, server nodes, instances, and active/recent sessions into Chat projections. Backfill must be repeatable and must not overwrite newer event versions.
 6. Copy the last 30 days of chat history and chat social data into Chat DB. Preserve message IDs, client IDs, timestamps, sender snapshots, and nearby recipient snapshots. Do not delete source rows during this step.
