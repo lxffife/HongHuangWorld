@@ -78,6 +78,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("GET /api/v1/cultivation/techniques", characters.techniques)
 		mux.HandleFunc("POST /api/v1/characters/first-life", characters.createFirstLife)
 		mux.HandleFunc("GET /api/v1/characters/current/reincarnation-routes", characters.reincarnationRoutes)
+		mux.HandleFunc("GET /api/v1/characters/current/reincarnation-preview", characters.reincarnationPreview)
 		mux.HandleFunc("POST /api/v1/characters/current/reincarnate", characters.reincarnate)
 		mux.HandleFunc("GET /api/v1/characters/current", characters.current)
 		mux.HandleFunc("GET /api/v1/souls/current/lives", characters.history)
@@ -117,7 +118,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 			"GET /api/v1/worlds/current/exploration-progress", "GET /api/v1/worlds/current/exploration-points", "POST /api/v1/worlds/current/exploration-points/discover", "GET /api/v1/worlds/current/exploration-events", "POST /api/v1/worlds/current/exploration-events/trigger",
 			"GET /api/v1/cultivation/systems", "GET /api/v1/cultivation/race-growth",
 			"GET /api/v1/cultivation/bloodlines", "GET /api/v1/cultivation/techniques",
-			"POST /api/v1/characters/first-life", "GET /api/v1/characters/current/reincarnation-routes", "GET /api/v1/characters/current", "POST /api/v1/characters/current/respawn", "POST /api/v1/characters/current/reincarnate",
+			"POST /api/v1/characters/first-life", "GET /api/v1/characters/current/reincarnation-routes", "GET /api/v1/characters/current/reincarnation-preview", "GET /api/v1/characters/current", "POST /api/v1/characters/current/respawn", "POST /api/v1/characters/current/reincarnate",
 			"GET /api/v1/characters/current/status", "POST /api/v1/characters/current/breakthrough",
 			"POST /api/v1/characters/current/bloodlines/awaken", "POST /api/v1/characters/current/techniques/train",
 			"POST /api/v1/characters/current/attributes/allocate", "GET /api/v1/items",
