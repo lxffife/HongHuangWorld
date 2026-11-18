@@ -957,14 +957,6 @@ struct EnetServer::Impl {
                         };
                         delivered_drop = pickup_drop;
                         delivered = deliver_ground_pickup(config, pickup_job, status, delivery_error);
-                    } else if (event->event_type == "nearby_chat") {
-                        ChatJob chat;
-                        chat.session_id = payload.at("session_id").get<std::string>();
-                        chat.character_id = payload.at("character_id").get<std::string>();
-                        chat.client_message_id = payload.at("client_message_id").get<std::string>();
-                        chat.content = payload.at("content").get<std::string>();
-                        chat.recipient_character_ids = payload.at("recipient_character_ids").get<std::vector<std::string>>();
-                        delivered = deliver_chat_message(config, chat, status, delivery_error);
                     } else if (event->event_type == "ground_drop_create") {
                         is_drop = true;
                         const auto expiry_ms = payload.at("expires_at_unix_ms").get<std::int64_t>();
