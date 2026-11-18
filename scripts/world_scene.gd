@@ -777,7 +777,7 @@ func _update_compact_hud(progression: Dictionary = {}) -> void:
 			var latest: Dictionary = mutations[0]
 			compact_hud_label.text += " · " + str(latest.get("name", "未知异变")) + "（" + str(latest.get("rarity", "uncommon")) + "）"
 		var fusion_names: Array = soul_essence_profile.get("fusion_names", [])
-		compact_hud_label.text += "\\n魂质融合 · 已凝成 " + str(soul_essence_profile.get("fusion_count", 0)) + " 道魂印"
+		compact_hud_label.text += "\n魂质融合 · 已凝成 " + str(soul_essence_profile.get("fusion_count", 0)) + " 道魂印"
 		if fusion_names.size() > 0:
 			compact_hud_label.text += " · " + ", ".join(PackedStringArray(fusion_names))
 		if pending_choices.size() > 0:
@@ -1427,7 +1427,7 @@ func _update_input_debug_hud() -> void:
 	var network_text := "已连接" if local_player.movement_network_ready else "未就绪"
 	var movement_text := "有移动输入" if local_player.current_move_input.length_squared() > 0.001 else "无移动输入"
 	var send_text := "发送正常" if local_player.last_send_error == OK else "发送错误 " + str(local_player.last_send_error)
-	input_debug_label.text = keys + "\\n" + movement_text + " · 网络：" + network_text + "\\n" + send_text + " · ESC 释放鼠标"
+	input_debug_label.text = keys + "\n" + movement_text + " · 网络：" + network_text + "\n" + send_text + " · ESC 释放鼠标"
 
 func _process(delta: float) -> void:
 	if is_instance_valid(local_player):
@@ -2068,9 +2068,12 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 				var required: Array = recipe.get("required_attributes", [])
 				var missing: Array = recipe.get("missing_attributes", [])
 				var required_names: Array[String] = []
+				var missing_names: Array[String] = []
 				for attribute in required:
 					required_names.append(str(attribute_names.get(str(attribute), str(attribute))))
-				var state := "已融合" if bool(recipe.get("completed", false)) else ("材料齐备" if bool(recipe.get("available", false)) else "缺少：" + ", ".join(PackedStringArray(missing.map(func(value): return str(attribute_names.get(str(value), str(value)))))))
+				for attribute in missing:
+					missing_names.append(str(attribute_names.get(str(attribute), str(attribute))))
+				var state := "已融合" if bool(recipe.get("completed", false)) else ("材料齐备" if bool(recipe.get("available", false)) else "缺少：" + ", ".join(PackedStringArray(missing_names)))
 				lines.append(recipe_name + "（" + ", ".join(PackedStringArray(required_names)) + "）· " + state)
 				lines.append(str(recipe.get("description", "")))
 				if bool(recipe.get("available", false)):
@@ -2079,15 +2082,13 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 					fuse_button.pressed.connect(_fuse_soul_recipe.bind(str(recipe.get("id", "")), recipe_name))
 					npc_choice_container.add_child(fuse_button)
 			npc_title_label.text = "魂质融合 · 灵魂本源"
-			npc_dialogue_label.text = "\\n".join(PackedStringArray(lines))
+			npc_dialogue_label.text = "\n".join(PackedStringArray(lines))
 			npc_status_label.text = "融合由中心服验证异变材料并结算来世资质；五种魂质异变齐全可尝试五行混元魂。"
 			npc_fusion_button.visible = true
 			npc_panel.visible = true
-		" soul_fusion_unused":
-			pass
 		"soul_fusion":
 			npc_title_label.text = "魂质融合成功 · " + str(data.get("name", "灵魂异变"))
-			npc_dialogue_label.text = str(data.get("description", "魂质已成功融合。")) + "\\n融合结果已永久写入灵魂，并强化来世五维资质。"
+			npc_dialogue_label.text = str(data.get("description", "魂质已成功融合。")) + "\n融合结果已永久写入灵魂，并强化来世五维资质。"
 			npc_status_label.text = "原始魂质异变仍完整保留；正在刷新灵魂档案。"
 			_show_notification("魂质融合成功 · " + str(data.get("name", "新魂印")), 5.0)
 			npc_fusion_button.visible = true
