@@ -90,7 +90,7 @@ int main() {
         honghuang::persistence::DurableOutbox recovered_box(path, 4);
         std::string error;
         auto gameplay_event = recovered_box.claim_due_excluding(500, "nearby_chat", error);
-        assert(!gameplay_event); // Gameplay workers never claim chat traffic.
+        assert(gameplay_event && gameplay_event->event_type != "nearby_chat"); // Gameplay workers never claim chat traffic.
         auto recovered_chat = recovered_box.claim_due_type(500, "nearby_chat", error);
         assert(recovered_chat && recovered_chat->event_id == "nearby-chat:client-1");
         assert(recovered_chat->payload.find("client-1") != std::string::npos);
