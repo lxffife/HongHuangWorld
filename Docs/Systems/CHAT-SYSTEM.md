@@ -96,6 +96,19 @@
 - P0-C2（进行中）：ChatServer 新增 Bearer Token 认证的 WebSocket `/api/v1/chat/socket`；Godot 新增独立 `HHChatNetwork`，具备独立 20 秒心跳、Pong 超时检测和 4 秒重连。世界/跨界频道通过该连接发送与接收；附近消息由 ENet 发送给 WorldServer，WorldServer 通过最多 256 条的有界内存入口队列，将消息异步写入现有 SQLite WAL/FULL 持久发件箱；收到 ENet accepted 回执前必须先完成本地持久化。独立 Chat Outbox worker 负责 HTTP 投递、指数退避和重启恢复，游戏奖励/掉落 worker 明确排除 nearby_chat 类型，聊天故障不会占用游戏事件投递线程。SQLite 聊天事件配额最多占总容量一半且不超过 2000 条，为奖励/掉落保留空间；客户端在收到持久化回执前使用相同 client_message_id 退避重发。ChatServer 最终再由独立 WebSocket 按 AOI 接收者集合投递。WebSocket 连接成功后自动补拉附近/世界/跨界频道最近 50 条历史，按消息 ID 去重并按 created_at 插入排序；断线重连会再次补拉，过期连接的历史响应会丢弃。已建立 PostgreSQL 事务 Outbox（迁移 `000039_chat_transactional_outbox`）：玩家 HTTP/WS 与 WorldServer 发布入口均在同一数据库事务中写入 `chat_messages` 和 `chat_event_outbox`，事件 payload 保存当时的角色展示快照。后台 publisher 使用 `FOR UPDATE SKIP LOCKED` + 有效期租约领取待发事件，JetStream 返回 PubAck 后才标记 published；失败释放租约并指数退避重试，进程崩溃后租约过期可重新领取。NATS 不可用时 Outbox 保留待发事件，恢复 JetStream 后继续发送。JetStream 消息 ID 使用 chat message UUID，在 2 分钟去重窗口内抑制 PubAck 成功但数据库标记前崩溃造成的重复发布；超过去重窗口仍按至少一次投递处理，客户端继续按消息 ID 去重。每节点 durable pull consumer 仍负责离线 ChatServer 恢复；Outbox 与 JetStream 均保留 30 天。
 - 验收：不遮挡基础移动与战斗操作，输入/发送/错误提示正常，重连后自动补拉最近 50 条世界/跨界历史，实时与历史消息按 ID 去重、按时间排序。
 
+### P0-D5：附近聊天发件箱运维
+- WorldServer 增加本机 `world_outbox_admin` 管理程序，不开放公网管理 API。支持 `stats` 查看队列状态/最老 pending 与 dead-letter 年龄，`dead-letters` 查询附近聊天死信，`retry <event_id>` 将指定 nearby_chat 死信重新排队。
+- 管理程序以非恢复模式打开 SQLite，不会把正在投递的 inflight 事件重置为 pending；人工重试只允许修改 event_type=nearby_chat 的 dead-letter，不能触碰经验、掉落等游戏事件。
+- Chat Outbox worker 每 60 秒输出独立指标：pending、inflight、dead_letter、最老 pending 年龄和最老死信年龄；永久 HTTP 4xx 仍进入死信并记录原因。
+- 本机使用示例：
+  ```sh
+  ./world_outbox_admin stats
+  ./world_outbox_admin dead-letters 50
+  ./world_outbox_admin retry nearby-chat:<session_id>:<client_message_id>
+  ```
+  也可在命令前显式传入 SQLite 文件路径。默认读取 `WORLD_SERVER_OUTBOX_PATH`，未设置时使用 `./data/worldserver-outbox.sqlite3`。
+- 验收：检查工具可在 WorldServer 运行期间安全读取状态；重试死信后由原 Chat Outbox worker 自动重新投递；管理工具不能重置 live inflight，也不能重试非 nearby_chat 事件。
+
 ### P1：好友、陌生人申请、私聊和离线投递
 - 好友申请/接受/拒绝、陌生人私聊申请开关、黑名单、离线消息、未读与回执。
 - 验收：陌生人关闭申请后不能建立新会话；好友可私聊；黑名单双方不能私聊；离线消息 30 天内可收取。
@@ -115,4 +128,5 @@
 - 独立 ChatServer 已增加 30 天消息保留清理调度：启动后执行一次，之后每小时执行；清理不再发生在玩家发送/查询请求路径，避免请求触发全表删除。清理失败仅记录日志并等待下一轮重试。
 - 聊天用户接口和 WorldServer 内部发布接口均强化幂等：相同 client_message_id + 相同频道/正文返回原消息；相同 ID 被用于不同频道或正文时返回 409，避免客户端错误重试覆盖/混淆消息。
 - 当前仍未实现 NATS 故障期间在线客户端历史增量同步、WorldServer 本地 SQLite 与 ChatServer/JetStream 的自动故障注入验收、聊天数据物理数据库拆分。
-- 本轮新增附近频道 SQLite 持久发件箱接入：复用 WorldServer 现有 WAL/FULL DurableOutbox，新增独立 nearby_chat claim worker；游戏事件 worker 排除聊天事件，聊天队列设置容量配额；客户端在持久化确认前使用相同 client_message_id 退避重发；服务端从已有 outbox 读取原始 AOI 快照以保证重试幂等；允许同节点最近 30 天处于 saving/closed 的会话完成延迟投递；新增重启恢复、类型隔离和容量配额测试。尚未运行 Go 测试、C++ 编译/CTest、Godot 解析/运行、数据库迁移或 GitHub Actions。不要把静态代码提交视为运行验收通过。
+- 本轮新增附近频道 SQLite 持久发件箱接入：复用 WorldServer 现有 WAL/FULL DurableOutbox，新增独立 nearby_chat claim worker；游戏事件 worker 排除聊天事件，聊天队列设置容量配额；客户端在持久化确认前使用相同 client_message_id 退避重发；服务端从已有 outbox 读取原始 AOI 快照以保证重试幂等；允许同节点最近 30 天处于 saving/closed 的会话完成延迟投递；新增重启恢复、类型隔离和容量配额测试。
+- P0-D5 新增本机 outbox 管理程序，可查询队列指标/死信并人工重试 nearby_chat 死信；管理进程不会重置运行中 inflight 事件，且无法重试游戏事件。Chat Outbox worker 每 60 秒输出独立健康指标。新增管理 API 与 SQLite 管理逻辑测试；尚未运行 C++ 编译/CTest。尚未运行 Go 测试、C++ 编译/CTest、Godot 解析/运行、数据库迁移或 GitHub Actions。不要把静态代码提交视为运行验收通过。
