@@ -45,14 +45,15 @@
 
 ## 5. 技术架构
 
-- Godot：聊天窗口、输入、历史展示、未读状态；不持有任何服务端密钥。
-- Go Backend：身份认证、权限判断、持久化、跨世界频道路由、好友/黑名单/申请、限流、保留期清理。
-- C++ WorldServer：附近频道的 AOI 过滤；负责当前实例内实时连接的消息收发，不信任客户端自报位置。
-- PostgreSQL：消息、会话、好友、申请、黑名单、偏好和回执持久化。
+- Godot：聊天窗口、输入、历史展示、未读状态；不持有任何服务端密钥。游戏 ENet 与聊天连接独立。
+- 独立 Go ChatServer：身份认证、权限判断、持久化、跨世界频道路由、好友/黑名单/申请、限流、保留期清理；默认监听 8788。
+- Go Game API：账号、角色和世界等游戏业务；聊天路由仅在迁移期保留兼容，不应成为游戏实时操作的依赖。
+- C++ WorldServer：权威游戏模拟和附近频道 AOI 数据源；不得在游戏主循环中同步等待 ChatServer、NATS 或聊天数据库。
+- PostgreSQL：消息、会话、好友、申请、黑名单、偏好和回执持久化；当前迁移期与游戏数据共用数据库，但 ChatServer 使用独立进程和连接池。
 - Redis：在线状态、角色到节点/会话路由缓存、短期限流计数。
-- NATS：跨 WorldServer 的消息分发事件；后续启用时采用消息 ID 幂等消费和失败重试。
+- NATS：跨服务事件总线；不可用不得阻塞游戏 tick，消息分发后续采用消息 ID 幂等消费和失败重试。
 
-消息链路：客户端 -> 当前 WorldServer（附近实时消息）或 Go Backend（全局/社交消息）-> 权限与限流校验 -> 持久化 -> 路由接收者 -> 客户端回执。跨界频道必须通过中心化路由扇出，不能让每台 WorldServer 各自维护互不相通的“跨界频道”。
+消息链路：客户端通过独立聊天连接访问 ChatServer；WorldServer 只提供权威 AOI/在线世界事件，并通过有界异步通道参与附近频道路由。ChatServer 负责权限与限流校验、持久化和路由接收者。跨界频道必须通过中心化路由扇出，不能让每台 WorldServer 各自维护互不相通的“跨界频道”。
 
 ## 6. 数据模型
 
@@ -107,7 +108,9 @@
 
 - 已有：迁移 000038 的基础表；Go chat service 支持 world/cross_world 文本写入和历史查询。
 - 本次新增：ENet ChatSendCommand/ChatEvent 协议；WorldServer 当前实例附近频道 AOI 转发、服务端身份注入、200 字校验和 1 秒限流；Godot 网络层发送/接收接口；协议帧测试覆盖聊天消息类型；Godot 初版附近聊天 HUD（可折叠、输入发送、错误提示）。
+- 独立服务拆分第一步已提交：新增 Backend/cmd/chat 独立 Go 进程（默认 :8788）、httpapi.NewChatRouter（只注册聊天与健康检查路由）、CHAT_DATABASE_URL/CHAT_HTTP_ADDR 配置，以及 Windows/Linux 启动脚本。Game API 暂时保留原聊天路由作为迁移兼容入口。详见 Docs/Architecture/SERVICE-ISOLATION.md。
 - P0-B2 本次新增：WorldServer 节点认证的中心消息拉取和发布 API。发布接口校验活动会话确属该节点，服务端注入消息身份并做 3 秒世界/5 秒跨界限流与幂等；拉取接口按节点服务世界筛选 world 频道，cross_world 对所有 ready 节点可见，支持 1–100 条分页与 `(created_at,id)` 游标。仍未实现 WorldServer 调用发布/定时拉取、ENet 广播、消费游标持久化与断线补发确认。
 - 附近频道当前为 WorldServer 内存实时消息，不写入 PostgreSQL，因此暂不提供附近频道历史；世界/跨界 HTTP 历史接口与 ENet 实时消息目前尚未接通。
 - 仍未实现：WorldServer 发布/拉取接口接入和 ENet 消息扇出、消费游标可靠保存/确认、好友/私聊 API、离线投递、聊天过期清理调度器、队伍/宗门频道。
+- 当前仍未实现独立聊天 WebSocket 客户端连接、WorldServer 到 ChatServer 的异步消息接入、NATS 在线/世界事件订阅、聊天数据物理数据库拆分和故障注入验收。
 - 本阶段尚未运行 Go 测试、C++ 编译/CTest、Godot 解析/运行、数据库迁移或 GitHub Actions。不要把静态代码提交视为运行验收通过。
