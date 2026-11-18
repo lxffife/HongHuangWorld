@@ -2449,6 +2449,21 @@ func _create_exploration_marker(point: Dictionary) -> void:
 				pillar.bottom_radius = 0.075
 				pillar.height = 0.62
 				_add_exploration_marker_mesh(marker, "SealPillar" + str(pillar_index), pillar, Vector3(cos(angle) * 0.48, 0.31, sin(angle) * 0.48), stone_color)
+		"fengdu_lantern_shadow_trace":
+			var shadow_stone := CylinderMesh.new()
+			shadow_stone.top_radius = 0.24
+			shadow_stone.bottom_radius = 0.34
+			shadow_stone.height = 0.42
+			_add_exploration_marker_mesh(marker, "ShadowStone", shadow_stone, Vector3(0, 0.24, 0), stone_color)
+			var shadow_flame := SphereMesh.new()
+			shadow_flame.radius = 0.22
+			shadow_flame.height = 0.62
+			_add_exploration_marker_mesh(marker, "ShadowFlame", shadow_flame, Vector3(0, 0.92, 0), marker_color, true)
+			var shadow_halo_mesh := TorusMesh.new()
+			shadow_halo_mesh.inner_radius = 0.32
+			shadow_halo_mesh.outer_radius = 0.38
+			var shadow_halo := _add_exploration_marker_mesh(marker, "ShadowHalo", shadow_halo_mesh, Vector3(0, 0.94, 0), marker_color, true)
+			shadow_halo.rotation.x = PI / 2.0
 		"reincarnation_hall_tablet":
 			var tablet_mesh := BoxMesh.new()
 			tablet_mesh.size = Vector3(0.9, 1.65, 0.28)
