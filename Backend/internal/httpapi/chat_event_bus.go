@@ -317,7 +317,12 @@ func (b *chatEventBus) publishOutbox() {
 		items, err := b.service.ClaimChatEventOutbox(ctx, b.workerID, 32, time.Minute)
 		cancel()
 		if err != nil {
-			b.logger.Warn("claim chat event outbox failed", "error", err)
+			b.logger.Warn("claim chat event outbox failed; retrying shortly", "error", err)
+			select {
+			case <-b.stop:
+				return
+			case <-time.After(5 * time.Second):
+			}
 			continue
 		}
 		for _, item := range items {
