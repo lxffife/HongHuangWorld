@@ -1481,7 +1481,7 @@ struct EnetServer::Impl {
                            {"channel", channel}, {"reason", reason}});
         };
         if (channel != "nearby") {
-            reject("该频道需要中心聊天路由，当前阶段暂未开放。");
+            reject("该频道请使用独立聊天连接发送。");
             return;
         }
         if (client_message_id.empty() || client_message_id.size() > 64 ||
@@ -1507,24 +1507,32 @@ struct EnetServer::Impl {
             reject("发言过于频繁，请稍后再试。");
             return;
         }
-        sender.last_chat_at = now;
-        const Json message{
-            {"accepted", true},
-            {"client_message_id", client_message_id},
-            {"channel", "nearby"},
-            {"sender_character_id", sender.character_id},
-            {"sender_name", sender.name},
-            {"world_id", config.world_id},
-            {"content", content},
-            {"created_at_unix_ms", wall_clock_ms()}
-        };
+
+        // The WorldServer is the authority for AOI. ChatServer receives only
+        // this server-computed recipient snapshot and verifies every character
+        // still has an active session on this exact world instance.
+        ChatJob job;
+        job.session_id = sender.session_id;
+        job.character_id = sender.character_id;
+        job.client_message_id = client_message_id;
+        job.content = content;
         for (const auto& [recipient_peer, recipient] : players) {
+            (void)recipient_peer;
             if (!honghuang::simulation::within_interest_radius(
                     sender.x, sender.z, recipient.x, recipient.z, kInterestRadius)) {
                 continue;
             }
-            send_json(recipient_peer, honghuang::protocol::MessageType::ChatEvent, message);
+            job.recipient_character_ids.push_back(recipient.character_id);
         }
+        if (job.recipient_character_ids.empty() || job.recipient_character_ids.size() > 512) {
+            reject("附近接收人数超出当前频道限制。");
+            return;
+        }
+        if (!enqueue_chat_job(std::move(job))) {
+            reject("聊天服务队列繁忙，请稍后重试。");
+            return;
+        }
+        sender.last_chat_at = now;
     }
 
     void handle_pickup(ENetPeer* peer, const Json& command) {
