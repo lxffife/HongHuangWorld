@@ -1091,7 +1091,7 @@ struct EnetServer::Impl {
                     }
                     continue;
                 }
-                if (status >= 300 && status < 500) {
+                if (status >= 400 && status < 500 && status != 408 && status != 425 && status != 429) {
                     std::string dead_error;
                     if (!durable_outbox->move_to_dead_letter(
                             event->event_id, event->attempts + 1, delivery_error, dead_error)) {
