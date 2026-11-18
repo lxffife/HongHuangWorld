@@ -638,6 +638,12 @@ func (s *Service) TriggerExplorationEvent(ctx context.Context, accountID,eventID
 		case "bridge_break": meritDelta,karmaDelta=1,2
 		case "tablet_record": meritDelta,karmaDelta=3,-1
 		case "tablet_conceal": meritDelta,karmaDelta=0,2
+		case "stream_attune": meritDelta,karmaDelta=2,-1
+		case "stream_purify": meritDelta,karmaDelta=1,0
+		case "bridge_repair": meritDelta,karmaDelta=2,-2
+		case "bridge_dismantle": meritDelta,karmaDelta=1,2
+		case "beast_honor": meritDelta,karmaDelta=3,-1
+		case "beast_awaken": meritDelta,karmaDelta=2,2
 		default: return ExplorationEventResult{},ErrExplorationEventUnavailable
 		}
 	} else if choiceID!="" {
