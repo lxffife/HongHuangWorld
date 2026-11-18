@@ -34,6 +34,7 @@
 - `000028_soul_inheritance_essences` 建立灵魂级力量/体质/敏捷/灵力/气血五项来世资质；扩展魂质类别的稀有度与固定属性映射，并为无相灵魄记录玩家选择的属性和分配时间。
 - `000029_reincarnation_inheritance_snapshots` 为每一世新肉身保存不可变的灵魂资质、吞噬成长阶段、种族成长权重与最终出生属性加成快照。
 - `000030_soul_mutation_records` 为每次成功吞噬保存唯一魂质异变记录，包含异变类型、稀有度、来世属性和加成值。
+- `000031_soul_fusion_records` 保存每个灵魂唯一的魂质融合结果；原始异变记录永久保留，融合奖励由服务端固定配方写入五维来世资质。
 
 ## 当前迁移顺序
 
@@ -70,6 +71,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000027_soul_essen
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000028_soul_inheritance_essences.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000029_reincarnation_inheritance_snapshots.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000030_soul_mutation_records.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000031_soul_fusion_records.up.sql
 ```
 
 回滚时按相反顺序执行对应的 `.down.sql`。不要在已运行的生产库上重复执行非幂等迁移；后续接入迁移工具后，应由工具记录每个已应用版本，避免人工重复执行。
