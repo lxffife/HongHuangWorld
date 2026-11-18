@@ -17,7 +17,7 @@ void usage() {
     std::cerr
         << "Usage:\n"
         << "  world_outbox_admin [db_path] stats\n"
-        << "  world_outbox_admin [db_path] dead-letters [limit] [event_type]\n"
+        << "  world_outbox_admin [db_path] dead-letters [limit] [event_type=nearby_chat]\n"
         << "  world_outbox_admin [db_path] retry <event_id>\n"
         << "If db_path is omitted, WORLD_SERVER_OUTBOX_PATH is used, then "
            "./data/worldserver-outbox.sqlite3.\n";
@@ -67,7 +67,7 @@ int main(int argc, char** argv) {
                 if (parsed == 0 || parsed > 500) throw std::invalid_argument("limit must be 1..500");
                 limit = static_cast<std::size_t>(parsed);
             }
-            const std::string event_type = argc > command_index + 2 ? argv[command_index + 2] : "";
+            const std::string event_type = argc > command_index + 2 ? argv[command_index + 2] : "nearby_chat";
             const auto events = outbox.list_dead_letters(limit, event_type, error);
             if (!error.empty()) throw std::runtime_error(error);
             for (const auto& event : events) {
