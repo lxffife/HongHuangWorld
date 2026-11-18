@@ -137,47 +137,79 @@ func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (
 	return item, nil
 }
 
-func (s *Service) List(ctx context.Context, accountID, channel, before string, limit int) ([]Message,error) {
-	if accountID=="" { return nil,ErrInvalidInput }
-	if channel!="world" && channel!="cross_world" { return nil,ErrUnsupportedChannel }
-	if limit<1 || limit>100 { limit=50 }
-	var characterID,worldID string
-	err:=s.db.QueryRowContext(ctx,`SELECT c.id::text,c.world_id FROM souls soul JOIN characters c ON c.id=soul.current_character_id WHERE soul.account_id=$1 AND c.status='alive'`,accountID).Scan(&characterID,&worldID)
-	if errors.Is(err,sql.ErrNoRows){return nil,ErrNoCharacter}
-	if err!=nil{return nil,fmt.Errorf("resolve chat history character: %w",err)}
-	var rows *sql.Rows
-	if channel=="world" {
-		if before!="" {
-			rows,err=s.db.QueryContext(ctx,`SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),m.sender_character_id::text,c.name,COALESCE(c.race_id,''),c.level,m.content,m.created_at
-				FROM chat_messages m JOIN characters c ON c.id=m.sender_character_id
-				WHERE m.channel_type='world' AND m.world_id=$1 AND m.created_at<$2 ORDER BY m.created_at DESC,m.id DESC LIMIT $3`,worldID,before,limit)
-		}else{
-			rows,err=s.db.QueryContext(ctx,`SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),m.sender_character_id::text,c.name,COALESCE(c.race_id,''),c.level,m.content,m.created_at
-				FROM chat_messages m JOIN characters c ON c.id=m.sender_character_id
-				WHERE m.channel_type='world' AND m.world_id=$1 ORDER BY m.created_at DESC,m.id DESC LIMIT $2`,worldID,limit)
-		}
-	}else{
-		if before!="" {
-			rows,err=s.db.QueryContext(ctx,`SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),m.sender_character_id::text,c.name,COALESCE(c.race_id,''),c.level,m.content,m.created_at
-				FROM chat_messages m JOIN characters c ON c.id=m.sender_character_id
-				WHERE m.channel_type='cross_world' AND m.created_at<$1 ORDER BY m.created_at DESC,m.id DESC LIMIT $2`,before,limit)
-		}else{
-			rows,err=s.db.QueryContext(ctx,`SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),m.sender_character_id::text,c.name,COALESCE(c.race_id,''),c.level,m.content,m.created_at
-				FROM chat_messages m JOIN characters c ON c.id=m.sender_character_id
-				WHERE m.channel_type='cross_world' ORDER BY m.created_at DESC,m.id DESC LIMIT $1`,limit)
-		}
+func (s *Service) List(ctx context.Context, accountID, channel, before string, limit int) ([]Message, error) {
+	if strings.TrimSpace(accountID) == "" {
+		return nil, ErrInvalidInput
 	}
-	if err!=nil{return nil,fmt.Errorf("query chat history: %w",err)}
+	if channel != "world" && channel != "cross_world" && channel != "nearby" {
+		return nil, ErrUnsupportedChannel
+	}
+	if limit < 1 || limit > 100 {
+		limit = 50
+	}
+	var characterID, worldID, instanceID string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT c.id::text,c.world_id,COALESCE(ws.instance_id::text,'')
+		FROM souls soul
+		JOIN characters c ON c.id=soul.current_character_id
+		LEFT JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
+		WHERE soul.account_id=$1 AND c.status='alive'`, accountID).
+		Scan(&characterID, &worldID, &instanceID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNoCharacter
+	}
+	if err != nil {
+		return nil, fmt.Errorf("resolve chat history character: %w", err)
+	}
+	if channel == "nearby" && instanceID == "" {
+		return []Message{}, nil
+	}
+
+	query := `SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),
+		m.sender_character_id::text,c.name,COALESCE(c.race_id,''),c.level,m.content,m.created_at
+		FROM chat_messages m JOIN characters c ON c.id=m.sender_character_id
+		WHERE m.created_at > now()-interval '30 days' AND `
+	args := []any{}
+	switch channel {
+	case "world":
+		query += "m.channel_type='world' AND m.world_id=$1"
+		args = append(args, worldID)
+	case "cross_world":
+		query += "m.channel_type='cross_world'"
+	case "nearby":
+		query += "m.channel_type='nearby' AND m.world_instance_id=$1::uuid AND m.nearby_recipient_character_ids @> jsonb_build_array($2::text)"
+		args = append(args, instanceID, characterID)
+	}
+	if before != "" {
+		query += fmt.Sprintf(" AND m.created_at < $%d", len(args)+1)
+		args = append(args, before)
+	}
+	query += " ORDER BY m.created_at DESC,m.id DESC"
+	query += fmt.Sprintf(" LIMIT $%d", len(args)+1)
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query chat history: %w", err)
+	}
 	defer rows.Close()
-	items:=make([]Message,0)
-	for rows.Next(){
-		var m Message
-		if err:=rows.Scan(&m.ID,&m.ClientMessageID,&m.Channel,&m.WorldID,&m.SenderCharacterID,&m.SenderName,&m.SenderRace,&m.SenderLevel,&m.Content,&m.CreatedAt);err!=nil{return nil,fmt.Errorf("scan chat message: %w",err)}
-		items=append(items,m)
+	items := make([]Message, 0)
+	for rows.Next() {
+		var message Message
+		if err := rows.Scan(&message.ID,&message.ClientMessageID,&message.Channel,&message.WorldID,
+			&message.SenderCharacterID,&message.SenderName,&message.SenderRace,&message.SenderLevel,
+			&message.Content,&message.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan chat message: %w", err)
+		}
+		items = append(items, message)
 	}
-	if err:=rows.Err();err!=nil{return nil,fmt.Errorf("iterate chat history: %w",err)}
-	for i,j:=0,len(items)-1;i<j;i,j=i+1,j-1{items[i],items[j]=items[j],items[i]}
-	return items,nil
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate chat history: %w", err)
+	}
+	for left, right := 0, len(items)-1; left < right; left, right = left+1, right-1 {
+		items[left], items[right] = items[right], items[left]
+	}
+	return items, nil
 }
 
 type chatRowQueryer interface {
