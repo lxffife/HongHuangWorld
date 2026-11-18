@@ -1060,9 +1060,9 @@ struct EnetServer::Impl {
                                   << " dead_letter=" << metrics.dead_letter
                                   << " oldest_pending_seconds=" << metrics.oldest_pending_age_ms / 1000
                                   << " oldest_dead_letter_seconds=" << metrics.oldest_dead_letter_age_ms / 1000
-                                  << '\\n';
+                                  << '\n';
                     } else {
-                        std::cerr << "[ChatOutbox] metrics failed: " << metrics_error << '\\n';
+                        std::cerr << "[ChatOutbox] metrics failed: " << metrics_error << '\n';
                     }
                     last_chat_outbox_metrics_at = metrics_now;
                 }
