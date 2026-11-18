@@ -10,6 +10,8 @@
 
 ## 服务端口
 
+- Game API：8787（HTTP_ADDR）
+- ChatServer：8788（CHAT_HTTP_ADDR，独立进程）
 - PostgreSQL：5432
 - Redis：6379（启用密码）
 - NATS：4222；监控端口 8222 仅供本地开发检查
@@ -49,9 +51,10 @@ WorldServer 启动后会立即调用中心服 `POST /api/v1/servers/heartbeat`�
 4. 启动基础设施：`.\Deployment\start-infra.bat`。
 5. 首次初始化数据库时执行 `.\Deployment\migrate-database.ps1`；脚本会创建迁移账本并按顺序执行尚未应用的迁移（当前共三十三个版本，包含冥界探索与因果奇遇、灵魂吞噬、来世五维资质、轮回出生属性快照、魂质异变、魂质融合、指数递增的魂质资质成长和魂质品质倍率；品质阶层迁移为 000033）；已记录的版本会自动跳过。若数据库已有 `accounts` 表但没有迁移账本，脚本会停止，避免猜测现有数据库版本。
 6. 在独立 PowerShell 窗口启动中心服：`.\Deployment\start-backend.ps1`。确认 `http://127.0.0.1:8787/ready` 返回 HTTP 200。
-7. 在仓库根目录构建 C++ 世界服务器：`.\Deployment\build-world-server.ps1`。首次运行会通过 vcpkg 安装依赖。
-8. 在另一个 PowerShell 窗口启动世界服务器：`.\Deployment\start-world-server.ps1`。日志出现 `WorldServer heartbeat accepted` 后，中心服才会把青云人界实例视为可用。
-9. 构建 Godot 原生 ENet 扩展：`powershell -ExecutionPolicy Bypass -File .\Client\NativeNet\build_windows.ps1`；然后用 Godot 4.3 打开 `Client/HongHuangClient/project.godot` 并运行项目。
+7. 在另一个独立 PowerShell 窗口启动聊天服：`.\Deployment\start-chat-server.ps1`。确认 `http://127.0.0.1:8788/ready` 返回 HTTP 200。聊天服必须配置 `CHAT_DATABASE_URL`；开发阶段可与 `DATABASE_URL` 指向同一个数据库，但进程、监听端口和连接池彼此独立。
+8. 在仓库根目录构建 C++ 世界服务器：`.\Deployment\build-world-server.ps1`。首次运行会通过 vcpkg 安装依赖。
+9. 在另一个 PowerShell 窗口启动世界服务器：`.\Deployment\start-world-server.ps1`。日志出现 `WorldServer heartbeat accepted` 后，中心服才会把青云人界实例视为可用。
+10. 构建 Godot 原生 ENet 扩展：`powershell -ExecutionPolicy Bypass -File .\Client\NativeNet\build_windows.ps1`；然后用 Godot 4.3 打开 `Client/HongHuangClient/project.godot` 并运行项目。
 
 本机测试时 `WORLD_SERVER_ADVERTISE_HOST=127.0.0.1`；跨设备联机时改为运行 WorldServer 的局域网 IP，并在 Windows 防火墙放行 `WORLD_SERVER_UDP_PORT` 对应的 UDP 入站端口。中心服 API 地址和游戏服务器广告地址是两回事：前者是 HTTP，后者是 ENet UDP。
 
