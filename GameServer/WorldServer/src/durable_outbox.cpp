@@ -98,12 +98,13 @@ bool DurableOutbox::enqueue(const OutboxEvent& event, std::string& error) {
         transaction_open = true;
 
         // A repeated event ID is idempotent only when it represents the exact same event.
-        Stmt existing(db_, "SELECT event_type,payload FROM world_event_outbox WHERE event_id=?");
+        Stmt existing(db_, "SELECT event_type,payload,status FROM world_event_outbox WHERE event_id=?");
         bind_text(existing.get(), 1, event.event_id);
         const int existing_result = sqlite3_step(existing.get());
         if (existing_result == SQLITE_ROW) {
             const bool same = column_text(existing.get(), 0) == event.event_type &&
-                              column_text(existing.get(), 1) == event.payload;
+                              column_text(existing.get(), 1) == event.payload &&
+                              column_text(existing.get(), 2) != "dead_letter";
             if (!execute("COMMIT", error)) {
                 std::string ignored;
                 execute("ROLLBACK", ignored);
@@ -167,6 +168,29 @@ bool DurableOutbox::enqueue(const OutboxEvent& event, std::string& error) {
         }
         error = exception.what();
         return false;
+    }
+}
+
+std::optional<OutboxEvent> DurableOutbox::find(const std::string& event_id, std::string& error) const {
+    if (event_id.empty()) { error = "event id is required"; return std::nullopt; }
+    std::lock_guard lock(mutex_);
+    try {
+        Stmt query(db_,
+            "SELECT event_id,event_type,payload,attempts,next_retry_at_ms,created_at_ms,last_error "
+            "FROM world_event_outbox WHERE event_id=?");
+        bind_text(query.get(), 1, event_id);
+        const int result = sqlite3_step(query.get());
+        if (result == SQLITE_DONE) return std::nullopt;
+        if (result != SQLITE_ROW) throw std::runtime_error(sqlite3_errmsg(db_));
+        return OutboxEvent{
+            column_text(query.get(), 0), column_text(query.get(), 1), column_text(query.get(), 2),
+            static_cast<std::uint32_t>(sqlite3_column_int64(query.get(), 3)),
+            sqlite3_column_int64(query.get(), 4), sqlite3_column_int64(query.get(), 5),
+            column_text(query.get(), 6)
+        };
+    } catch (const std::exception& exception) {
+        error = exception.what();
+        return std::nullopt;
     }
 }
 
