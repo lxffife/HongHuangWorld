@@ -1509,9 +1509,34 @@ struct EnetServer::Impl {
                     {"recipient_character_ids", job.recipient_character_ids}
                 };
                 std::string storage_error;
-                result.accepted = enqueue_durable_event(event_id, "nearby_chat", payload, storage_error);
-                if (!result.accepted) {
-                    result.reason = storage_error.empty() ? "附近聊天持久队列暂时不可用。" : storage_error;
+                const auto existing = durable_outbox->find(event_id, storage_error);
+                if (!storage_error.empty()) {
+                    result.reason = storage_error;
+                } else if (existing.has_value()) {
+                    try {
+                        const Json stored_payload = Json::parse(existing->payload);
+                        const bool same_request =
+                            existing->event_type == "nearby_chat" &&
+                            stored_payload.value("session_id", std::string{}) == job.session_id &&
+                            stored_payload.value("character_id", std::string{}) == job.character_id &&
+                            stored_payload.value("client_message_id", std::string{}) == job.client_message_id &&
+                            stored_payload.value("content", std::string{}) == job.content;
+                        if (!same_request) {
+                            result.reason = "client_message_id 已用于不同的聊天内容。";
+                        } else {
+                            result.accepted = enqueue_durable_event(
+                                event_id, "nearby_chat", stored_payload, storage_error);
+                        }
+                    } catch (const std::exception& exception) {
+                        storage_error = std::string("无法读取已有附近聊天事件：") + exception.what();
+                    }
+                    if (!result.accepted && result.reason.empty()) result.reason = storage_error;
+                } else {
+                    result.accepted = enqueue_durable_event(event_id, "nearby_chat", payload, storage_error);
+                    if (!result.accepted) result.reason = storage_error;
+                }
+                if (!result.accepted && result.reason.empty()) {
+                    result.reason = "附近聊天持久队列暂时不可用。";
                 }
                 {
                     std::lock_guard lock(chat_mutex);
