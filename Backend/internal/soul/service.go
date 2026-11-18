@@ -20,6 +20,7 @@ var (
 	ErrInvalidAbsorption = errors.New("invalid soul absorption")
 	ErrAbsorptionSession = errors.New("soul absorption session is not valid for this node")
 	ErrAbsorptionCapacity = errors.New("soul absorption capacity is full")
+	ErrAbsorptionChoiceUsed = errors.New("rare soul essence choice is unavailable or already used")
 	ErrInsufficientExperience = errors.New("not enough soul experience for breakthrough")
 	ErrMaxRealm = errors.New("soul has reached the highest configured realm")
 )
@@ -78,6 +79,9 @@ func (s *Service) Create(ctx context.Context, accountID, name, origin string) (S
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO soul_essence_attributes (soul_id) VALUES ($1)`, result.ID); err != nil {
 		return Soul{}, fmt.Errorf("initialize soul essence: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO soul_inheritance_attributes (soul_id) VALUES ($1)`, result.ID); err != nil {
+		return Soul{}, fmt.Errorf("initialize soul inheritance attributes: %w", err)
 	}
 	if err := tx.Commit(); err != nil { return Soul{}, fmt.Errorf("commit soul creation: %w", err) }
 	if createdAt.Valid {
@@ -470,6 +474,8 @@ type EssenceProfile struct {
 	SoulWisdom int64 `json:"soul_wisdom"`
 	SoulResilience int64 `json:"soul_resilience"`
 	SoulPerception int64 `json:"soul_perception"`
+	InheritanceAttributes InheritanceAttributes `json:"inheritance_attributes"`
+	PendingRareChoices []PendingRareChoice `json:"pending_rare_choices"`
 	AbsorptionCapacity int64 `json:"absorption_capacity"`
 	AbsorbedEnergy int64 `json:"absorbed_energy"`
 	AbsorbedCount int64 `json:"absorbed_count"`
@@ -482,12 +488,29 @@ type EssenceProfile struct {
 	AbsorptionKinds []AbsorptionKindProgress `json:"absorption_kinds"`
 }
 
+type InheritanceAttributes struct {
+ Strength int64 `json:"strength"`
+ Constitution int64 `json:"constitution"`
+ Agility int64 `json:"agility"`
+ Spirit int64 `json:"spirit"`
+ Vitality int64 `json:"vitality"`
+}
+
+type PendingRareChoice struct {
+ RecordID string `json:"record_id"`
+ KindID string `json:"kind_id"`
+ KindName string `json:"kind_name"`
+ CreatedAt string `json:"created_at"`
+}
+
 type AbsorptionKindProgress struct {
 	KindID string `json:"kind_id"`
 	Name string `json:"name"`
 	Description string `json:"description"`
 	BaseEnergy int64 `json:"base_energy"`
 	TraitKey string `json:"trait_key"`
+	Rarity string `json:"rarity"`
+	InheritanceAttribute string `json:"inheritance_attribute,omitempty"`
 	AbsorbedCount int64 `json:"absorbed_count"`
 }
 
@@ -497,14 +520,17 @@ func (s *Service) CurrentEssence(ctx context.Context, accountID string) (Essence
 	var result EssenceProfile
 	err := s.db.QueryRowContext(ctx,
 		`SELECT a.soul_power,a.soul_wisdom,a.soul_resilience,a.soul_perception,
-			       a.absorption_capacity,a.absorbed_energy,a.absorbed_count,
+		       inheritance.strength,inheritance.constitution,inheritance.agility,inheritance.spirit,inheritance.vitality,
+		       a.absorption_capacity,a.absorbed_energy,a.absorbed_count,
 			       realm.id,realm.name,realm.realm_order
 		 FROM souls soul
 		 JOIN soul_essence_attributes a ON a.soul_id=soul.id
+		 JOIN soul_inheritance_attributes inheritance ON inheritance.soul_id=soul.id
 		 JOIN soul_progression progression ON progression.soul_id=soul.id
 		 JOIN soul_realm_definitions realm ON realm.id=progression.realm_id
 		 WHERE soul.account_id=$1`, accountID).Scan(
 		&result.SoulPower,&result.SoulWisdom,&result.SoulResilience,&result.SoulPerception,
+		&result.InheritanceAttributes.Strength,&result.InheritanceAttributes.Constitution,&result.InheritanceAttributes.Agility,&result.InheritanceAttributes.Spirit,&result.InheritanceAttributes.Vitality,
 		&result.AbsorptionCapacity,&result.AbsorbedEnergy,&result.AbsorbedCount,
 		&result.RealmID,&result.RealmName,&result.RealmOrder)
 	if errors.Is(err,sql.ErrNoRows) { return EssenceProfile{},ErrNotFound }
@@ -524,26 +550,32 @@ func (s *Service) CurrentEssence(ctx context.Context, accountID string) (Essence
 	}
 
 	rows,err:=s.db.QueryContext(ctx,
-		`SELECT kinds.id,kinds.name,kinds.description,kinds.base_energy,kinds.trait_key,
+		`SELECT kinds.id,kinds.name,kinds.description,kinds.base_energy,kinds.trait_key,kinds.rarity,COALESCE(kinds.inheritance_attribute,''),
 			       COUNT(records.id)
 		 FROM soul_absorption_kinds kinds
 		 LEFT JOIN soul_absorption_records records
 		   ON records.absorption_kind_id=kinds.id
 		  AND records.soul_id=(SELECT id FROM souls WHERE account_id=$1)
 		 WHERE kinds.enabled=TRUE
-		 GROUP BY kinds.id,kinds.name,kinds.description,kinds.base_energy,kinds.trait_key
+		 GROUP BY kinds.id,kinds.name,kinds.description,kinds.base_energy,kinds.trait_key,kinds.rarity,kinds.inheritance_attribute
 		 ORDER BY kinds.id`,accountID)
 	if err!=nil { return EssenceProfile{},fmt.Errorf("load soul absorption kinds: %w",err) }
 	defer rows.Close()
 	result.AbsorptionKinds=make([]AbsorptionKindProgress,0)
 	for rows.Next() {
 		var item AbsorptionKindProgress
-		if err:=rows.Scan(&item.KindID,&item.Name,&item.Description,&item.BaseEnergy,&item.TraitKey,&item.AbsorbedCount);err!=nil {
+		if err:=rows.Scan(&item.KindID,&item.Name,&item.Description,&item.BaseEnergy,&item.TraitKey,&item.Rarity,&item.InheritanceAttribute,&item.AbsorbedCount);err!=nil {
 			return EssenceProfile{},fmt.Errorf("scan soul absorption kind: %w",err)
 		}
 		result.AbsorptionKinds=append(result.AbsorptionKinds,item)
 	}
 	if err:=rows.Err();err!=nil { return EssenceProfile{},fmt.Errorf("iterate soul absorption kinds: %w",err) }
+	pendingRows,pendingErr:=s.db.QueryContext(ctx, `SELECT records.id::text,kinds.id,kinds.name,records.created_at::text FROM soul_absorption_records records JOIN soul_absorption_kinds kinds ON kinds.id=records.absorption_kind_id WHERE records.soul_id=(SELECT id FROM souls WHERE account_id=$1) AND records.absorption_kind_id='faceless_essence' AND records.selected_at IS NULL ORDER BY records.created_at`,accountID)
+	if pendingErr!=nil{return EssenceProfile{},fmt.Errorf("load pending rare soul choices: %w",pendingErr)}
+	defer pendingRows.Close()
+	result.PendingRareChoices=make([]PendingRareChoice,0)
+	for pendingRows.Next(){var choice PendingRareChoice;if err:=pendingRows.Scan(&choice.RecordID,&choice.KindID,&choice.KindName,&choice.CreatedAt);err!=nil{return EssenceProfile{},fmt.Errorf("scan pending rare soul choice: %w",err)};result.PendingRareChoices=append(result.PendingRareChoices,choice)}
+	if err:=pendingRows.Err();err!=nil{return EssenceProfile{},fmt.Errorf("iterate pending rare soul choices: %w",err)}
 	return result,nil
 }
 
