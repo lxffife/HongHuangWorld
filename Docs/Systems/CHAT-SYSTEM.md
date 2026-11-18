@@ -93,7 +93,7 @@
 
 ### P0-C：Godot 聊天 HUD
 - P0-C1（已提交，待运行验证）：增加左下方可折叠聊天窗、附近/世界/跨界频道切换、输入发送和服务端错误提示；附近仍走 ENet，世界/跨界走独立 ChatServer WebSocket。
-- P0-C2（进行中）：ChatServer 新增 Bearer Token 认证的 WebSocket `/api/v1/chat/socket`；Godot 新增独立 `HHChatNetwork`，具备独立 20 秒心跳、Pong 超时检测和 4 秒重连。世界/跨界频道通过该连接发送与接收，附近频道暂时保留 ENet。WebSocket 连接成功后自动并行补拉两个频道最近 50 条历史，按消息 ID 去重并按 created_at 插入排序；断线重连会再次补拉，过期连接的历史响应会丢弃。已接入 NATS JetStream 持久事件流：Stream 为 `HONGHUANG_CHAT_EVENTS`，Subject 为 `honghuang.chat.events.v1`，文件存储、30 天 MaxAge、2 分钟消息 ID 去重；每个 ChatServer 使用稳定且唯一的 `CHAT_NODE_ID` 创建独立 durable pull consumer，从断线前的 ack 位置继续消费。消费者只在本机 WebSocket 广播后 AckSync，非法事件 Term，重投递由消息 ID 去重。发布由独立后台 worker 执行并等待 JetStream PubAck，失败退避重试；HTTP/WS 请求只进入有界队列，不等待 NATS。配置优先 `CHAT_NATS_URL`、回退 `NATS_URL`，所有节点必须指向同一 JetStream 集群。若 JetStream 初始化失败则降级 Core NATS。本阶段仍没有数据库事务 outbox：进程在数据库提交后、事件进入/成功发布 JetStream 前崩溃，或 4096 项发布队列满时，仍可能漏掉跨节点实时事件；下一步需要用 PostgreSQL outbox 原子解决。
+- P0-C2（进行中）：ChatServer 新增 Bearer Token 认证的 WebSocket `/api/v1/chat/socket`；Godot 新增独立 `HHChatNetwork`，具备独立 20 秒心跳、Pong 超时检测和 4 秒重连。世界/跨界频道通过该连接发送与接收，附近频道暂时保留 ENet。WebSocket 连接成功后自动并行补拉两个频道最近 50 条历史，按消息 ID 去重并按 created_at 插入排序；断线重连会再次补拉，过期连接的历史响应会丢弃。已建立 PostgreSQL 事务 Outbox（迁移 `000039_chat_transactional_outbox`）：玩家 HTTP/WS 与 WorldServer 发布入口均在同一数据库事务中写入 `chat_messages` 和 `chat_event_outbox`，事件 payload 保存当时的角色展示快照。后台 publisher 使用 `FOR UPDATE SKIP LOCKED` + 有效期租约领取待发事件，JetStream 返回 PubAck 后才标记 published；失败释放租约并指数退避重试，进程崩溃后租约过期可重新领取。NATS 不可用时 Outbox 保留待发事件，恢复 JetStream 后继续发送。JetStream 消息 ID 使用 chat message UUID，解决 PubAck 成功但数据库标记前崩溃造成的重复发布。每节点 durable pull consumer 仍负责离线 ChatServer 恢复；Outbox 与 JetStream 均保留 30 天。
 - 验收：不遮挡基础移动与战斗操作，输入/发送/错误提示正常，重连后自动补拉最近 50 条世界/跨界历史，实时与历史消息按 ID 去重、按时间排序。
 
 ### P1：好友、陌生人申请、私聊和离线投递
@@ -110,9 +110,9 @@
 - 本次新增：ENet ChatSendCommand/ChatEvent 协议；WorldServer 当前实例附近频道 AOI 转发、服务端身份注入、200 字校验和 1 秒限流；Godot 网络层发送/接收接口；协议帧测试覆盖聊天消息类型；Godot 初版附近聊天 HUD（可折叠、输入发送、错误提示）。
 - 独立服务拆分第一步已提交：新增 Backend/cmd/chat 独立 Go 进程（默认 :8788）、httpapi.NewChatRouter（只注册聊天与健康检查路由）、CHAT_DATABASE_URL/CHAT_HTTP_ADDR 配置，以及 Windows/Linux 启动脚本。Godot 使用 `CHAT_API_BASE` 环境变量覆盖聊天服务地址；未设置时从游戏 API 的 `:8787` 推导 `:8788`。Game API 暂时保留原聊天路由作为迁移兼容入口。详见 Docs/Architecture/SERVICE-ISOLATION.md。
 - P0-B2 本次新增：WorldServer 节点认证的中心消息拉取和发布 API。发布接口校验活动会话确属该节点，服务端注入消息身份并做 3 秒世界/5 秒跨界限流与幂等；拉取接口按节点服务世界筛选 world 频道，cross_world 对所有 ready 节点可见，支持 1–100 条分页与 `(created_at,id)` 游标。仍未实现 WorldServer 调用发布/定时拉取、ENet 广播、消费游标持久化与断线补发确认。
-- 附近频道当前为 WorldServer 内存实时消息，不写入 PostgreSQL，因此暂不提供附近频道历史；世界/跨界历史 HTTP 接口已存在；世界/跨界实时消息已接入 ChatServer WebSocket 与 NATS JetStream，可跨 ChatServer 进程广播；每个 ChatServer 使用独立 durable consumer，短暂离线后可从确认位置重放。发布端事务 outbox 尚待实现。
+- 附近频道当前为 WorldServer 内存实时消息，不写入 PostgreSQL，因此暂不提供附近频道历史；世界/跨界历史 HTTP 接口已存在；世界/跨界实时消息已接入 ChatServer WebSocket 与 NATS JetStream，可跨 ChatServer 进程广播；每个 ChatServer 使用独立 durable consumer，短暂离线后可从确认位置重放。发布端使用 PostgreSQL 事务 Outbox 持久化待发事件。
 - 仍未实现：WorldServer 发布/拉取接口接入和 ENet 消息扇出、消费游标可靠保存/确认、好友/私聊 API、离线投递、队伍/宗门频道。
 - 独立 ChatServer 已增加 30 天消息保留清理调度：启动后执行一次，之后每小时执行；清理不再发生在玩家发送/查询请求路径，避免请求触发全表删除。清理失败仅记录日志并等待下一轮重试。
 - 聊天用户接口和 WorldServer 内部发布接口均强化幂等：相同 client_message_id + 相同频道/正文返回原消息；相同 ID 被用于不同频道或正文时返回 409，避免客户端错误重试覆盖/混淆消息。
-- 当前仍未实现 PostgreSQL 事务 outbox、NATS 故障期间在线客户端历史增量同步、WorldServer 附近 AOI 到聊天服的异步事件接入、聊天数据物理数据库拆分和故障注入验收。
-- 本轮新增 JetStream 文件持久流、每节点 durable pull consumer、AckSync/Term、发布后台 worker、消息 ID 去重与 Core NATS 降级；尚未运行 Go 测试、C++ 编译/CTest、Godot 解析/运行、数据库迁移或 GitHub Actions。不要把静态代码提交视为运行验收通过。
+- 当前仍未实现 NATS 故障期间在线客户端历史增量同步、WorldServer 附近 AOI 到聊天服的异步事件接入、聊天数据物理数据库拆分和故障注入验收。
+- 本轮新增 PostgreSQL 事务 Outbox、JetStream PubAck 确认发布、租约领取、失败退避重试和进程重启恢复；尚未运行 Go 测试、C++ 编译/CTest、Godot 解析/运行、数据库迁移或 GitHub Actions。不要把静态代码提交视为运行验收通过。
