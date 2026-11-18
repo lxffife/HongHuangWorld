@@ -8,10 +8,6 @@ Get-Content $envFile | ForEach-Object {
         [Environment]::SetEnvironmentVariable($parts[0].Trim(), $parts[1].Trim(), 'Process')
     }
 }
-if (-not $env:ADMIN_BOOTSTRAP_USERNAME -or -not $env:ADMIN_BOOTSTRAP_PASSWORD) {
-    Write-Error 'ADMIN_BOOTSTRAP_USERNAME and ADMIN_BOOTSTRAP_PASSWORD are required for first startup.'
-    exit 1
-}
 $backendDir = Join-Path $PSScriptRoot '..\Backend'
 Set-Location $backendDir
 if (-not (Get-Command go -ErrorAction SilentlyContinue)) { Write-Error 'Go was not found in PATH.'; exit 1 }
