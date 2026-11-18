@@ -258,6 +258,26 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 		return Message{}, fmt.Errorf("verify world server chat session: %w", err)
 	}
 
+	// Retries with the same client ID return the original result and do not
+	// consume another rate-limit slot.
+	var existing Message
+	err = tx.QueryRowContext(ctx, `
+		SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),
+		       m.sender_character_id::text,$2,$3,$4,m.content,m.created_at
+		FROM chat_messages m
+		WHERE m.sender_character_id=$1::uuid AND m.client_message_id=$5::uuid`,
+		characterID,name,raceID,level,req.ClientMessageID).
+		Scan(&existing.ID,&existing.ClientMessageID,&existing.Channel,&existing.WorldID,
+			&existing.SenderCharacterID,&existing.SenderName,&existing.SenderRace,&existing.SenderLevel,
+			&existing.Content,&existing.CreatedAt)
+	if err == nil {
+		if err := tx.Commit(); err != nil { return Message{}, fmt.Errorf("commit idempotent chat lookup: %w", err) }
+		return existing,nil
+	}
+	if !errors.Is(err,sql.ErrNoRows) {
+		return Message{},fmt.Errorf("check duplicate world server chat message: %w",err)
+	}
+
 	window := 3*time.Second
 	if req.Channel == "cross_world" { window = 5*time.Second }
 	var recent int
