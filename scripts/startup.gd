@@ -476,6 +476,7 @@ func _build_lobby_ui() -> void:
 	preview_panel.custom_minimum_size = Vector2(300, 0)
 	preview_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	preview_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	preview_panel.size_flags_stretch_ratio = 0.82
 	var preview_style := StyleBoxFlat.new()
 	preview_style.bg_color = Color("#0b1423")
 	preview_style.border_color = Color("#293b55")
@@ -542,6 +543,7 @@ func _build_lobby_ui() -> void:
 	var info_panel := PanelContainer.new()
 	info_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	info_panel.size_flags_stretch_ratio = 1.18
 	info_panel.custom_minimum_size.x = 0
 	var info_style := StyleBoxFlat.new()
 	info_style.bg_color = Color("#151f30")
