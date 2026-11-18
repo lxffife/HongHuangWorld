@@ -93,7 +93,7 @@
 
 ### P0-C：Godot 聊天 HUD
 - P0-C1（已提交，待运行验证）：增加左下方可折叠聊天窗、附近/世界/跨界频道切换、输入发送和服务端错误提示；附近仍走 ENet，世界/跨界走独立 ChatServer WebSocket。
-- P0-C2（进行中）：ChatServer 新增 Bearer Token 认证的 WebSocket `/api/v1/chat/socket`；Godot 新增独立 `HHChatNetwork`，具备独立心跳、断线检测和 4 秒重连。世界/跨界频道通过该连接发送与接收，附近频道暂时保留 ENet。WebSocket 连接成功后自动并行补拉两个频道最近 50 条历史，按消息 ID 去重并按 created_at 插入排序；断线重连会再次补拉，过期连接的历史响应会丢弃。当前实时广播仅限单个 ChatServer 进程，尚未接 NATS；更早历史分页、未读和离线投递仍待实现。
+- P0-C2（进行中）：ChatServer 新增 Bearer Token 认证的 WebSocket `/api/v1/chat/socket`；Godot 新增独立 `HHChatNetwork`，具备独立 20 秒心跳、Pong 超时检测和 4 秒重连。世界/跨界频道通过该连接发送与接收，附近频道暂时保留 ENet。WebSocket 连接成功后自动并行补拉两个频道最近 50 条历史，按消息 ID 去重并按 created_at 插入排序；断线重连会再次补拉，过期连接的历史响应会丢弃。当前实时广播仅限单个 ChatServer 进程，尚未接 NATS；更早历史分页、未读和离线投递仍待实现。
 - 验收：不遮挡基础移动与战斗操作，输入/发送/错误提示正常，重连后自动补拉最近 50 条世界/跨界历史，实时与历史消息按 ID 去重、按时间排序。
 
 ### P1：好友、陌生人申请、私聊和离线投递
