@@ -854,6 +854,143 @@ func (s *Service) ApplyServerAbsorption(ctx context.Context, nodeKey string, eve
 }
 
 
+var (
+	ErrFusionUnavailable = errors.New("soul fusion materials are unavailable")
+	ErrFusionCompleted = errors.New("soul fusion recipe already completed")
+)
+
+type SoulFusionRecipe struct {
+	ID string `json:"id"`
+	Name string `json:"name"`
+	Description string `json:"description"`
+	RequiredAttributes []string `json:"required_attributes"`
+	MissingAttributes []string `json:"missing_attributes"`
+	Completed bool `json:"completed"`
+	Available bool `json:"available"`
+	Bonuses InheritanceAttributes `json:"bonuses"`
+}
+
+type soulFusionDefinition struct {
+	ID string
+	Name string
+	Description string
+	Required []string
+	Bonuses InheritanceAttributes
+}
+
+var soulFusionDefinitions = []soulFusionDefinition{
+	{ID:"battle_body_seal", Name:"战躯魂印", Description:"炽纹与铁骨印相合，凝成坚韧战躯，强化来世力量与体质", Required:[]string{"strength","constitution"}, Bonuses:InheritanceAttributes{Strength:2,Constitution:2}},
+	{ID:"wind_spirit_seal", Name:"风灵魂印", Description:"风痕与灵识回响相合，身随风动、神识通明", Required:[]string{"agility","spirit"}, Bonuses:InheritanceAttributes{Agility:2,Spirit:2}},
+	{ID:"undying_seed", Name:"不灭魂种", Description:"铁骨印与生机种相融，令来世体魄与气血更为绵长", Required:[]string{"constitution","vitality"}, Bonuses:InheritanceAttributes{Constitution:2,Vitality:2}},
+	{ID:"five_elements_origin", Name:"五行混元魂", Description:"五种魂质异变齐聚，归于混元，全面拓展来世先天资质", Required:[]string{"strength","constitution","agility","spirit","vitality"}, Bonuses:InheritanceAttributes{Strength:1,Constitution:1,Agility:1,Spirit:1,Vitality:1}},
+}
+
+// FusionRecipes returns immutable soul mutations as materials; fusion never deletes their history.
+func (s *Service) FusionRecipes(ctx context.Context, accountID string) ([]SoulFusionRecipe, error) {
+	var soulID string
+	if err := s.db.QueryRowContext(ctx, `SELECT id::text FROM souls WHERE account_id=$1`, accountID).Scan(&soulID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) { return nil, ErrNotFound }
+		return nil, fmt.Errorf("resolve soul for fusion recipes: %w", err)
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT attribute FROM soul_mutation_records WHERE soul_id=$1`, soulID)
+	if err != nil { return nil, fmt.Errorf("load soul fusion materials: %w", err) }
+	defer rows.Close()
+	owned := map[string]bool{}
+	for rows.Next() {
+		var attribute string
+		if err := rows.Scan(&attribute); err != nil { return nil, fmt.Errorf("scan soul fusion material: %w", err) }
+		owned[attribute] = true
+	}
+	if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate soul fusion materials: %w", err) }
+
+	doneRows, err := s.db.QueryContext(ctx, `SELECT recipe_id FROM soul_fusion_records WHERE soul_id=$1`, soulID)
+	if err != nil { return nil, fmt.Errorf("load completed soul fusions: %w", err) }
+	defer doneRows.Close()
+	completed := map[string]bool{}
+	for doneRows.Next() {
+		var recipeID string
+		if err := doneRows.Scan(&recipeID); err != nil { return nil, fmt.Errorf("scan completed soul fusion: %w", err) }
+		completed[recipeID] = true
+	}
+	if err := doneRows.Err(); err != nil { return nil, fmt.Errorf("iterate completed soul fusions: %w", err) }
+
+	result := make([]SoulFusionRecipe, 0, len(soulFusionDefinitions))
+	for _, definition := range soulFusionDefinitions {
+		item := SoulFusionRecipe{
+			ID:definition.ID, Name:definition.Name, Description:definition.Description,
+			RequiredAttributes:append([]string(nil), definition.Required...),
+			Completed:completed[definition.ID], Bonuses:definition.Bonuses,
+			MissingAttributes:make([]string, 0),
+		}
+		for _, required := range definition.Required {
+			if !owned[required] { item.MissingAttributes = append(item.MissingAttributes, required) }
+		}
+		item.Available = !item.Completed && len(item.MissingAttributes) == 0
+		result = append(result, item)
+	}
+	return result, nil
+}
+
+// Fuse validates materials from immutable soul mutation records and applies server-defined bonuses once.
+func (s *Service) Fuse(ctx context.Context, accountID, recipeID string) (SoulFusionRecipe, error) {
+	var definition *soulFusionDefinition
+	for i := range soulFusionDefinitions {
+		if soulFusionDefinitions[i].ID == recipeID { definition = &soulFusionDefinitions[i]; break }
+	}
+	if definition == nil { return SoulFusionRecipe{}, ErrFusionUnavailable }
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil { return SoulFusionRecipe{}, fmt.Errorf("begin soul fusion: %w", err) }
+	defer tx.Rollback()
+	var soulID string
+	if err := tx.QueryRowContext(ctx, `SELECT id::text FROM souls WHERE account_id=$1 FOR UPDATE`, accountID).Scan(&soulID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) { return SoulFusionRecipe{}, ErrNotFound }
+		return SoulFusionRecipe{}, fmt.Errorf("lock soul for fusion: %w", err)
+	}
+
+	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT attribute FROM soul_mutation_records WHERE soul_id=$1`, soulID)
+	if err != nil { return SoulFusionRecipe{}, fmt.Errorf("load fusion materials: %w", err) }
+	owned := map[string]bool{}
+	for rows.Next() {
+		var attribute string
+		if err := rows.Scan(&attribute); err != nil { rows.Close(); return SoulFusionRecipe{}, fmt.Errorf("scan fusion material: %w", err) }
+		owned[attribute] = true
+	}
+	if err := rows.Err(); err != nil { rows.Close(); return SoulFusionRecipe{}, fmt.Errorf("iterate fusion materials: %w", err) }
+	rows.Close()
+	for _, required := range definition.Required {
+		if !owned[required] { return SoulFusionRecipe{}, ErrFusionUnavailable }
+	}
+
+	b := definition.Bonuses
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO soul_fusion_records
+			(soul_id,recipe_id,fusion_name,description,strength_bonus,constitution_bonus,agility_bonus,spirit_bonus,vitality_bonus)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+		soulID, definition.ID, definition.Name, definition.Description,
+		b.Strength, b.Constitution, b.Agility, b.Spirit, b.Vitality)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" { return SoulFusionRecipe{}, ErrFusionCompleted }
+		return SoulFusionRecipe{}, fmt.Errorf("record soul fusion: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE soul_inheritance_attributes
+		SET strength=strength+$1, constitution=constitution+$2, agility=agility+$3,
+		    spirit=spirit+$4, vitality=vitality+$5, updated_at=now()
+		WHERE soul_id=$6`,
+		b.Strength,b.Constitution,b.Agility,b.Spirit,b.Vitality,soulID); err != nil {
+		return SoulFusionRecipe{}, fmt.Errorf("apply soul fusion inheritance: %w", err)
+	}
+	if err := tx.Commit(); err != nil { return SoulFusionRecipe{}, fmt.Errorf("commit soul fusion: %w", err) }
+	return SoulFusionRecipe{
+		ID:definition.ID, Name:definition.Name, Description:definition.Description,
+		RequiredAttributes:append([]string(nil),definition.Required...),
+		Completed:true, Available:false, Bonuses:b, MissingAttributes:[]string{},
+	}, nil
+}
+
+
 // AllocateRareEssence converts one pending faceless essence into exactly one
 // player-selected reincarnation attribute. The record and attribute update are atomic.
 func (s *Service) AllocateRareEssence(ctx context.Context, accountID, recordID, attribute string) (InheritanceAttributes, error) {
