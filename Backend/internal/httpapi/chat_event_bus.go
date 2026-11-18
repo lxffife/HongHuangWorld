@@ -125,3 +125,13 @@ func (b *chatEventBus) publish(message chat.Message) {
 		b.logger.Warn("publish chat event to NATS failed; local delivery succeeded", "message_id", message.ID, "error", err)
 	}
 }
+
+func (b *chatEventBus) close() {
+	if b == nil || b.conn == nil {
+		return
+	}
+	if err := b.conn.FlushTimeout(1 * time.Second); err != nil {
+		b.logger.Warn("flush chat NATS connection during shutdown failed", "error", err)
+	}
+	b.conn.Close()
+}
