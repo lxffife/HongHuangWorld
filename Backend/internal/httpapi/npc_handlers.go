@@ -166,11 +166,14 @@ func (h *npcHandlers) listExplorationEvents(w http.ResponseWriter,r *http.Reques
 
 func (h *npcHandlers) triggerExplorationEvent(w http.ResponseWriter,r *http.Request) {
 	account,ok:=h.currentAccount(w,r); if !ok{return}
-	var request struct { EventID string `json:"event_id"` }
-	if err:=decodeJSON(w,r,&request);err!=nil || strings.TrimSpace(request.EventID)=="" || len(request.EventID)>96 {
-		http.Error(w,"event_id is required",http.StatusBadRequest);return
+	var request struct {
+		EventID string `json:"event_id"`
+		ChoiceID string `json:"choice_id"`
 	}
-	result,err:=h.service.TriggerExplorationEvent(r.Context(),account.ID,strings.TrimSpace(request.EventID))
+	if err:=decodeJSON(w,r,&request);err!=nil || strings.TrimSpace(request.EventID)=="" || len(request.EventID)>96 || len(request.ChoiceID)>64 {
+		http.Error(w,"event_id and a valid optional choice_id are required",http.StatusBadRequest);return
+	}
+	result,err:=h.service.TriggerExplorationEvent(r.Context(),account.ID,strings.TrimSpace(request.EventID),strings.TrimSpace(request.ChoiceID))
 	switch {
 	case err==nil: writeJSON(w,http.StatusOK,result)
 	case errors.Is(err,npc.ErrNoActiveSession): http.Error(w,"active world session required",http.StatusConflict)
