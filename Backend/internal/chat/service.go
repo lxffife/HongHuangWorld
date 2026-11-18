@@ -317,7 +317,7 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 		recipientSet[recipientID] = struct{}{}
 	}
 	if req.Channel == "nearby" {
-		if len(recipientSet) == 0 || len(recipientSet) > 128 {
+		if len(recipientSet) == 0 || len(recipientSet) > 512 {
 			return Message{}, ErrInvalidInput
 		}
 		if _, includesSender := recipientSet[characterID]; !includesSender {
@@ -402,6 +402,14 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 		}
 		if err := json.Unmarshal(existingRecipients, &existing.RecipientCharacterIDs); err != nil {
 			return Message{}, fmt.Errorf("decode existing nearby chat recipients: %w", err)
+		}
+		if len(existing.RecipientCharacterIDs) != len(req.RecipientCharacterIDs) {
+			return Message{}, ErrIdempotencyConflict
+		}
+		for index := range existing.RecipientCharacterIDs {
+			if existing.RecipientCharacterIDs[index] != req.RecipientCharacterIDs[index] {
+				return Message{}, ErrIdempotencyConflict
+			}
 		}
 		if err := tx.Commit(); err != nil {
 			return Message{}, fmt.Errorf("commit idempotent chat lookup: %w", err)
