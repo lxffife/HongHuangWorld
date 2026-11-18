@@ -117,3 +117,8 @@
 6. 启动并检查 Identity readiness，再启动 Game API；验证旧账号登录、Token、创建灵魂、角色与轮回流程。
 7. ChatServer 仍需独立迁移聊天 schema 和 Game 域角色/世界状态依赖；在完成前，不要把 `CHAT_DATABASE_URL` 指向空的 Chat DB。
 8. 所有验收通过后再做聊天数据搬迁与旧表清理。当前脚本不会自动执行生产迁移，也不会删除旧数据。
+
+
+### Identity 故障容忍策略
+
+Game API 与 ChatServer 的 Identity HTTP 客户端对成功的 Token introspection 结果做进程内缓存，缓存有效期 15 秒、最多保留 4096 个 Token 哈希条目。Identity 短时网络/服务错误时，仅在缓存尚未过期的窗口内允许已验证账号继续请求；Identity 明确返回 401 时立即清除对应缓存。该策略降低短暂故障对游戏/聊天的影响，但不代表 Identity 可长期离线；账号禁用/Token 撤销在缓存窗口内最多有 15 秒传播延迟。缓存键是 Token 的 SHA-256，不保存明文 Token。
