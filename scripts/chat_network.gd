@@ -5,6 +5,7 @@ signal connected
 signal disconnected
 signal connection_error(message: String)
 signal message_received(message: Dictionary)
+signal history_received(channel: String, messages: Array)
 signal send_failed(reason: String)
 
 const SOCKET_PATH := "/api/v1/chat/socket"
@@ -13,6 +14,7 @@ const RECONNECT_DELAY := 4.0
 
 var socket := WebSocketPeer.new()
 var socket_url := ""
+var http_base_url := ""
 var access_token := ""
 var reconnect_timer: Timer
 var heartbeat_timer: Timer
@@ -52,6 +54,7 @@ func connect_chat(api_base: String, token: String) -> Error:
 	socket = WebSocketPeer.new()
 	connecting = false
 	was_open = false
+	http_base_url = base
 	access_token = token
 	manually_closed = false
 	_connect_socket()
@@ -103,6 +106,33 @@ func _process(_delta: float) -> void:
 			if not manually_closed:
 				connection_error.emit("聊天服务器连接已断开，稍后自动重试。")
 			_schedule_reconnect()
+
+func fetch_history(channel: String, limit: int = 50) -> void:
+	if channel not in ["world", "cross_world"] or access_token.is_empty() or http_base_url.is_empty():
+		return
+	var request := HTTPRequest.new()
+	request.timeout = 10.0
+	request.set_meta("chat_channel", channel)
+	request.request_completed.connect(_on_history_request_completed.bind(request))
+	add_child(request)
+	var headers := PackedStringArray(["Authorization: Bearer " + access_token])
+	var url := http_base_url + "/api/v1/chat/messages?channel=" + channel.uri_encode() + "&limit=" + str(clampi(limit, 1, 100))
+	var error := request.request(url, headers, HTTPClient.METHOD_GET)
+	if error != OK:
+		request.queue_free()
+		connection_error.emit("聊天历史请求失败：" + str(error))
+
+func _on_history_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray, request: HTTPRequest) -> void:
+	var channel := str(request.get_meta("chat_channel", ""))
+	request.queue_free()
+	if result != HTTPRequest.RESULT_SUCCESS or response_code != 200:
+		connection_error.emit("聊天历史暂时无法获取（HTTP " + str(response_code) + "）")
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if not parsed is Dictionary or not parsed.get("items", []) is Array:
+		connection_error.emit("聊天历史响应格式错误。")
+		return
+	history_received.emit(channel, parsed.get("items", []))
 
 func send_message(channel: String, content: String, client_message_id: String) -> Error:
 	if socket.get_ready_state() != WebSocketPeer.STATE_OPEN:
