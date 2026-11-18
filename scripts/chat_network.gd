@@ -20,6 +20,7 @@ var manually_closed := false
 var connecting := false
 var was_open := false
 var connection_generation := 0
+var last_pong_msec := 0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -88,6 +89,7 @@ func _process(_delta: float) -> void:
 			was_open = true
 			connection_generation += 1
 			reconnect_timer.stop()
+			last_pong_msec = Time.get_ticks_msec()
 			heartbeat_timer.start()
 			connected.emit()
 		while socket.get_available_packet_count() > 0:
@@ -97,7 +99,10 @@ func _process(_delta: float) -> void:
 				continue
 			var parsed: Variant = JSON.parse_string(packet.get_string_from_utf8())
 			if parsed is Dictionary:
-				message_received.emit(parsed)
+				if str(parsed.get("type", "")) == "pong":
+					last_pong_msec = Time.get_ticks_msec()
+				else:
+					message_received.emit(parsed)
 	elif state == WebSocketPeer.STATE_CLOSED:
 		if connecting or was_open:
 			connecting = false
@@ -154,6 +159,10 @@ func send_message(channel: String, content: String, client_message_id: String) -
 
 func _send_heartbeat() -> void:
 	if socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
+		if Time.get_ticks_msec() - last_pong_msec > 65000:
+			connection_error.emit("聊天心跳超时，正在重连。")
+			socket.close(1001, "chat heartbeat timeout")
+			return
 		var error := socket.send_text(JSON.stringify({"type": "ping"}))
 		if error != OK:
 			connection_error.emit("聊天心跳发送失败：" + str(error))
