@@ -867,7 +867,7 @@ func _on_soul_essence_request_completed(result: int, response_code: int, _header
 				var attribute_name := str({"strength":"力量","constitution":"体质","agility":"敏捷","spirit":"灵力","vitality":"气血"}.get(attribute, attribute))
 				growth_notifications.append(attribute_name + "资质突破 +" + str(new_points - old_points))
 	if growth_notifications.size() > 0:
-		_show_notification("魂质成长 · " + "；".join(growth_notifications), 5.0)
+		_show_notification("魂质成长 · " + "；".join(PackedStringArray(growth_notifications)), 5.0)
 	_apply_world_player_form()
 	_update_compact_hud()
 	var pending: Array = soul_essence_profile.get("pending_rare_choices", [])
