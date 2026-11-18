@@ -130,7 +130,7 @@ func _ready() -> void:
 	if not HHChatNetwork.connection_error.is_connected(_on_chat_socket_error):
 		HHChatNetwork.connection_error.connect(_on_chat_socket_error)
 	if not HHSession.access_token.is_empty():
-		HHChatNetwork.connect_chat(HHSession.api_base, HHSession.access_token)
+		HHChatNetwork.connect_chat(HHSession.get_chat_api_base(), HHSession.access_token)
 	_build_combat_hud()
 	_build_input_debug_hud()
 	if HHSession.world_network != null:
