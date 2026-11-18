@@ -418,8 +418,9 @@ func _build_lobby_ui() -> void:
 	var center := CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	lobby_root.add_child(center)
+	var lobby_viewport_size := get_viewport_rect().size
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(1080, 700)
+	panel.custom_minimum_size = Vector2(minf(1080.0, lobby_viewport_size.x * 0.94), minf(760.0, lobby_viewport_size.y * 0.94))
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	center.add_child(panel)
@@ -443,10 +444,12 @@ func _build_lobby_ui() -> void:
 	lobby_body_container = body
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 18)
-	body.custom_minimum_size.y = 430
+	body.custom_minimum_size.y = minf(430.0, lobby_viewport_size.y * 0.54)
 	layout.add_child(body)
+	var preview_width := clampf(lobby_viewport_size.x * 0.31, 220.0, 360.0)
+	var preview_height := minf(430.0, lobby_viewport_size.y * 0.54)
 	var preview_container := SubViewportContainer.new()
-	preview_container.custom_minimum_size = Vector2(360, 430)
+	preview_container.custom_minimum_size = Vector2(preview_width, preview_height)
 	preview_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	preview_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	preview_container.stretch = true
@@ -489,7 +492,7 @@ func _build_lobby_ui() -> void:
 	var info_scroll := ScrollContainer.new()
 	info_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	info_scroll.custom_minimum_size = Vector2(520, 0)
+	info_scroll.custom_minimum_size = Vector2(clampf(lobby_viewport_size.x * 0.46, 300.0, 520.0), 0)
 	info_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	body.add_child(info_scroll)
 	var info := VBoxContainer.new()
@@ -591,11 +594,11 @@ func _build_lobby_ui() -> void:
 	lobby_details_host.add_theme_constant_override("separation", 8)
 	lobby_equipment_panel = PanelContainer.new()
 	lobby_equipment_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lobby_equipment_panel.custom_minimum_size.y = 180
+	lobby_equipment_panel.custom_minimum_size.y = 160
 	lobby_equipment_panel.hide()
 	layout.add_child(lobby_equipment_panel)
 	var equipment_scroll := ScrollContainer.new()
-	equipment_scroll.custom_minimum_size.y = 180
+	equipment_scroll.custom_minimum_size.y = 160
 	equipment_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lobby_equipment_panel.add_child(equipment_scroll)
 	lobby_equipment_list = VBoxContainer.new()
