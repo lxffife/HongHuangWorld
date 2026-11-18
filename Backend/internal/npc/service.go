@@ -645,8 +645,8 @@ func (s *Service) TriggerExplorationEvent(ctx context.Context, accountID,eventID
 	}
 	var fateEventID string
 	err=tx.QueryRowContext(ctx,
-		`INSERT INTO soul_exploration_event_claims(soul_id,event_id)
-		 VALUES($1,$2) ON CONFLICT(soul_id,event_id) DO NOTHING RETURNING fate_event_id::text`,soulID,event.ID).Scan(&fateEventID)
+		`INSERT INTO soul_exploration_event_claims(soul_id,event_id,choice_id)
+		 VALUES($1,$2,$3) ON CONFLICT(soul_id,event_id) DO NOTHING RETURNING fate_event_id::text`,soulID,event.ID,choiceID).Scan(&fateEventID)
 	if errors.Is(err,sql.ErrNoRows) { return ExplorationEventResult{},ErrExplorationEventResolved }
 	if err!=nil { return ExplorationEventResult{},fmt.Errorf("claim exploration event: %w",err) }
 	if meritDelta!=0 || karmaDelta!=0 {
