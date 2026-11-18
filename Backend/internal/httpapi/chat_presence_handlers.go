@@ -2,8 +2,6 @@ package httpapi
 
 import (
 	"net/http"
-
-	"github.com/liflife/HongHuangWorld/Backend/internal/chat"
 )
 
 // presence reports the authenticated account's Chat connection state only.
@@ -26,4 +24,3 @@ func (h *chatHandlers) presence(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-var _ = chat.PresenceStatus{}
