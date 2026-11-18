@@ -785,20 +785,47 @@ func _build_lobby_preview_model() -> void:
 		var equipped: Dictionary = equipped_variant
 		var slot := str(equipped.get("slot", ""))
 		var quality := clampi(int(equipped.get("quality", 1)), 1, 5)
+		var visual_key := (str(equipped.get("icon_key", "")) + " " + str(equipped.get("name", ""))).to_lower()
 		var item_material := StandardMaterial3D.new()
 		item_material.albedo_color = _equipment_quality_color(quality)
 		item_material.metallic = 0.58
 		item_material.roughness = 0.28
 		match slot:
 			"weapon":
-				var weapon := MeshInstance3D.new()
-				var blade := BoxMesh.new()
-				blade.size = Vector3(0.075, 0.92, 0.035)
-				weapon.mesh = blade
-				weapon.position = Vector3(0.67, 1.18, 0.02)
-				weapon.rotation.z = -0.28
-				weapon.material_override = item_material
-				model.add_child(weapon)
+				if visual_key.contains("staff") or visual_key.contains("杖"):
+					var staff := MeshInstance3D.new()
+					var staff_mesh := CylinderMesh.new()
+					staff_mesh.top_radius = 0.035
+					staff_mesh.bottom_radius = 0.055
+					staff_mesh.height = 1.38
+					staff.mesh = staff_mesh
+					staff.position = Vector3(0.67, 1.12, 0.02)
+					staff.material_override = item_material
+					model.add_child(staff)
+					var staff_gem := MeshInstance3D.new()
+					var gem_mesh := SphereMesh.new()
+					gem_mesh.radius = 0.13
+					gem_mesh.height = 0.18
+					staff_gem.mesh = gem_mesh
+					staff_gem.position = Vector3(0.67, 1.88, 0.02)
+					staff_gem.material_override = trim_material
+					model.add_child(staff_gem)
+				else:
+					var weapon := MeshInstance3D.new()
+					var blade := BoxMesh.new()
+					if visual_key.contains("axe") or visual_key.contains("斧"):
+						blade.size = Vector3(0.24, 0.48, 0.075)
+					elif visual_key.contains("spear") or visual_key.contains("槍") or visual_key.contains("枪"):
+						blade.size = Vector3(0.055, 1.22, 0.045)
+					elif visual_key.contains("heavy") or visual_key.contains("重剑") or visual_key.contains("great"):
+						blade.size = Vector3(0.14, 1.08, 0.065)
+					else:
+						blade.size = Vector3(0.075, 0.92, 0.035)
+					weapon.mesh = blade
+					weapon.position = Vector3(0.67, 1.18, 0.02)
+					weapon.rotation.z = -0.28
+					weapon.material_override = item_material
+					model.add_child(weapon)
 				var guard := MeshInstance3D.new()
 				var guard_mesh := BoxMesh.new()
 				guard_mesh.size = Vector3(0.28, 0.055, 0.07)
@@ -816,6 +843,18 @@ func _build_lobby_preview_model() -> void:
 				helm.position.y = 2.22
 				helm.material_override = item_material
 				model.add_child(helm)
+				if visual_key.contains("crown") or visual_key.contains("冠") or visual_key.contains("王"):
+					for side in [-1.0, 1.0]:
+						var crown_spike := MeshInstance3D.new()
+						var spike_mesh := CylinderMesh.new()
+						spike_mesh.top_radius = 0.008
+						spike_mesh.bottom_radius = 0.045
+						spike_mesh.height = 0.24
+						crown_spike.mesh = spike_mesh
+						crown_spike.position = Vector3(side * 0.14, 2.4, 0.0)
+						crown_spike.rotation.z = side * -0.22
+						crown_spike.material_override = trim_material
+						model.add_child(crown_spike)
 			"chest":
 				var chest_guard := MeshInstance3D.new()
 				var chest_mesh := SphereMesh.new()
@@ -825,6 +864,15 @@ func _build_lobby_preview_model() -> void:
 				chest_guard.position = Vector3(0.0, 1.42, 0.17)
 				chest_guard.material_override = item_material
 				model.add_child(chest_guard)
+				if visual_key.contains("heavy") or visual_key.contains("重甲") or visual_key.contains("plate"):
+					for side in [-1.0, 1.0]:
+						var shoulder_plate := MeshInstance3D.new()
+						var plate_mesh := BoxMesh.new()
+						plate_mesh.size = Vector3(0.34, 0.2, 0.28)
+						shoulder_plate.mesh = plate_mesh
+						shoulder_plate.position = Vector3(side * 0.37, 1.62, 0.04)
+						shoulder_plate.material_override = item_material
+						model.add_child(shoulder_plate)
 			"legs":
 				for side in [-1.0, 1.0]:
 					var leg_guard := MeshInstance3D.new()
