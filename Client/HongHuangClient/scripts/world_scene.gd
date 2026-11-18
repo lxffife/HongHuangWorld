@@ -20,6 +20,12 @@ var progression_http: HTTPRequest
 var soul_essence_http: HTTPRequest
 var soul_essence_profile: Dictionary = {}
 var soul_essence_request_busy := false
+var soul_choice_http: HTTPRequest
+var soul_choice_request_busy := false
+var pending_rare_choice_dialog: ConfirmationDialog
+var pending_rare_choice_option: OptionButton
+var pending_rare_choice_record_id := ""
+var soul_choice_button: Button
 var progression_request_context := ""
 var reconnect_http: HTTPRequest
 var reconnect_network: HHWorldNetwork
@@ -130,6 +136,11 @@ func _ready() -> void:
 	soul_essence_http.timeout = 10.0
 	add_child(soul_essence_http)
 	soul_essence_http.request_completed.connect(_on_soul_essence_request_completed)
+	soul_choice_http = HTTPRequest.new()
+	soul_choice_http.timeout = 10.0
+	add_child(soul_choice_http)
+	soul_choice_http.request_completed.connect(_on_soul_choice_request_completed)
+	_build_soul_choice_ui()
 	_apply_world_player_form()
 	_request_soul_essence()
 	respawn_http = HTTPRequest.new()
@@ -569,6 +580,57 @@ func _build_compact_hud() -> void:
 	details_toggle_button.custom_minimum_size = Vector2(112.0, 36.0)
 	details_toggle_button.pressed.connect(_toggle_details_panel)
 	hud.add_child(details_toggle_button)
+	soul_choice_button = Button.new()
+	soul_choice_button.text = "分配无相灵魄"
+	soul_choice_button.position = Vector2(140.0, 98.0)
+	soul_choice_button.custom_minimum_size = Vector2(150.0, 36.0)
+	soul_choice_button.visible = false
+	soul_choice_button.pressed.connect(_open_pending_rare_choice)
+	hud.add_child(soul_choice_button)
+
+func _build_soul_choice_ui() -> void:
+	pending_rare_choice_dialog = ConfirmationDialog.new()
+	pending_rare_choice_dialog.title = "无相灵魄 · 选择来世资质"
+	pending_rare_choice_dialog.dialog_text = "选择一项属性，永久记入灵魂的来世资质。每枚无相灵魄只能分配一次。"
+	pending_rare_choice_dialog.min_size = Vector2i(420, 190)
+	pending_rare_choice_option = OptionButton.new()
+	pending_rare_choice_option.add_item("力量 · 攻击成长")
+	pending_rare_choice_option.add_item("体质 · 防御成长")
+	pending_rare_choice_option.add_item("敏捷 · 身法成长")
+	pending_rare_choice_option.add_item("灵力 · 法术成长")
+	pending_rare_choice_option.add_item("气血 · 生命成长")
+	pending_rare_choice_dialog.add_child(pending_rare_choice_option)
+	pending_rare_choice_dialog.confirmed.connect(_submit_rare_essence_choice)
+	add_child(pending_rare_choice_dialog)
+
+func _open_pending_rare_choice() -> void:
+	var pending: Array = soul_essence_profile.get("pending_rare_choices", [])
+	if pending.is_empty():
+		return
+	pending_rare_choice_record_id = str(pending[0].get("record_id", ""))
+	pending_rare_choice_option.select(0)
+	pending_rare_choice_dialog.popup_centered()
+
+func _submit_rare_essence_choice() -> void:
+	if pending_rare_choice_record_id.is_empty() or soul_choice_request_busy or HHSession.access_token.is_empty():
+		return
+	var attributes := ["strength", "constitution", "agility", "spirit", "vitality"]
+	var payload := {"record_id": pending_rare_choice_record_id, "attribute": attributes[pending_rare_choice_option.selected]}
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token, "Content-Type: application/json"])
+	soul_choice_request_busy = true
+	var error := soul_choice_http.request(HHSession.api_base + "/api/v1/souls/current/essence/allocate", headers, HTTPClient.METHOD_POST, JSON.stringify(payload))
+	if error != OK:
+		soul_choice_request_busy = false
+		_show_notification("无相灵魄分配请求失败：" + str(error), 4.0)
+
+func _on_soul_choice_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	soul_choice_request_busy = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		_show_notification("无相灵魄分配失败（HTTP " + str(response_code) + "）", 4.0)
+		return
+	pending_rare_choice_record_id = ""
+	_show_notification("无相灵魄已融入来世资质", 4.0)
+	_request_soul_essence()
 
 func _build_combat_hud() -> void:
 	var hud := get_node_or_null("HUD") as CanvasLayer
@@ -737,6 +799,12 @@ func _on_soul_essence_request_completed(result: int, response_code: int, _header
 	soul_essence_profile = parsed
 	_apply_world_player_form()
 	_update_compact_hud()
+	var pending: Array = soul_essence_profile.get("pending_rare_choices", [])
+	if is_instance_valid(soul_choice_button):
+		soul_choice_button.visible = pending.size() > 0 and str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu"
+	if pending.size() > 0 and pending_rare_choice_record_id.is_empty():
+		pending_rare_choice_record_id = str(pending[0].get("record_id", ""))
+		_show_notification("获得无相灵魄！可在左上方选择一项来世属性", 6.0)
 
 func _update_hud() -> void:
 	var snapshot: Dictionary = HHSession.world_snapshot
