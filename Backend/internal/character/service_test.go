@@ -134,3 +134,39 @@ func TestCurrentFateTraitID(t *testing.T) {
 		})
 	}
 }
+
+func TestGrowthStageForAbsorptions(t *testing.T) {
+	tests := []struct { count int64; stage int; name string }{
+		{0, 1, "初生魂团"}, {2, 1, "初生魂团"}, {3, 2, "魂光凝实"},
+		{8, 3, "聚魄成形"}, {20, 4, "灵体初成"}, {40, 5, "魂魄圆融"},
+	}
+	for _, test := range tests {
+		stage, name := growthStageForAbsorptions(test.count)
+		if stage != test.stage || name != test.name {
+			t.Errorf("growthStageForAbsorptions(%d) = (%d,%q), want (%d,%q)", test.count, stage, name, test.stage, test.name)
+		}
+	}
+}
+
+func TestInheritanceBonusCapsAndRaceAffinity(t *testing.T) {
+	tests := []struct { potential int64; weight int; want int }{
+		{0, 3000, 0}, {2, 3000, 0}, {3, 1800, 1},
+		{6, 1800, 2}, {6, 2600, 3}, {9, 1800, 3}, {1000000000, 3000, 3},
+	}
+	for _, test := range tests {
+		if got := inheritanceBonus(test.potential, test.weight); got != test.want {
+			t.Errorf("inheritanceBonus(%d,%d) = %d, want %d", test.potential, test.weight, got, test.want)
+		}
+	}
+}
+
+func TestDominantInheritanceAttributeUsesRaceWeightForTies(t *testing.T) {
+	values := [5]int64{6, 6, 0, 0, 0}
+	weights := [5]int{1800, 2800, 2000, 2000, 2000}
+	if got := dominantInheritanceAttribute(values, weights); got != "constitution" {
+		t.Fatalf("dominant attribute = %q, want constitution", got)
+	}
+	if got := dominantInheritanceAttribute([5]int64{}, weights); got != "" {
+		t.Fatalf("empty inheritance dominant attribute = %q, want empty", got)
+	}
+}
