@@ -787,6 +787,16 @@ func _update_compact_hud(progression: Dictionary = {}) -> void:
 			compact_hud_label.text += "\n" + attribute_name + " · " + progress_text + " · 吞噬成长 +" + str(awarded) + "/" + str(max_points) + " · 总资质 " + str(attribute_value) + "/20"
 		var affinities: Dictionary = soul_essence_profile.get("affinity_counts", {})
 		compact_hud_label.text += "\n魂质亲和 · 兽 " + str(affinities.get("beast", 0)) + " 战 " + str(affinities.get("battle", 0)) + " 风 " + str(affinities.get("gale", 0)) + " 灵 " + str(affinities.get("spirit", 0)) + " 生 " + str(affinities.get("life", 0))
+		var absorption_kinds: Array = soul_essence_profile.get("absorption_kinds", [])
+		for kind_variant in absorption_kinds:
+			if not kind_variant is Dictionary:
+				continue
+			var kind: Dictionary = kind_variant
+			var quality := str(kind.get("quality_tier", "common"))
+			if quality == "common":
+				continue
+			var quality_names := {"elite":"精英","ancient":"远古","mythic":"上古"}
+			compact_hud_label.text += "\n稀有魂质 · " + str(kind.get("name", "未知魂质")) + "（" + str(quality_names.get(quality, quality)) + " · 成长进度 ×" + str(kind.get("progress_units", 1)) + "）"
 		var mutations: Array = soul_essence_profile.get("mutations", [])
 		compact_hud_label.text += "\n魂质异变 · 已觉醒 " + str(soul_essence_profile.get("mutation_count", 0)) + " 次"
 		if mutations.size() > 0:
