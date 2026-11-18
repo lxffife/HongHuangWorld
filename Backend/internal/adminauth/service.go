@@ -45,7 +45,7 @@ func (s *Service) Bootstrap(ctx context.Context, username,email,password string)
  if err:=s.db.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM admin_users WHERE is_super_admin=true)`).Scan(&exists); err!=nil { return false,fmt.Errorf("check bootstrap administrator: %w",err) }
  if exists { return false,nil }
  if username=="" || password=="" { return false,ErrBootstrapRequired }
- if !adminUsernamePattern.MatchString(username) || len(password)<12 || len(password)>72 || (email!="" && (len(email)>254 || !strings.Contains(email,"@"))) { return false,ErrInvalidInput }
+ if !adminUsernamePattern.MatchString(username) || len(password)<12 || len(password)>72 || strings.Contains(strings.ToLower(password),"replace-with") || (email!="" && (len(email)>254 || !strings.Contains(email,"@"))) { return false,ErrInvalidInput }
  hash,err:=bcrypt.GenerateFromPassword([]byte(password),bcrypt.DefaultCost); if err!=nil { return false,fmt.Errorf("hash bootstrap password: %w",err) }
  tx,err:=s.db.BeginTx(ctx,nil); if err!=nil { return false,err }; defer tx.Rollback()
  if _,err=tx.ExecContext(ctx,`SELECT pg_advisory_xact_lock(7419202601)`); err!=nil { return false,fmt.Errorf("lock admin bootstrap: %w",err) }
