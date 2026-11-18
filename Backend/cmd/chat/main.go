@@ -24,6 +24,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if os.Getenv("IDENTITY_API_BASE") == "" || os.Getenv("IDENTITY_SERVICE_TOKEN") == "" {
+		logger.Error("IDENTITY_API_BASE and IDENTITY_SERVICE_TOKEN are required; Chat authentication is owned by Identity")
+		os.Exit(1)
+	}
+
 	startupCtx, startupCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	db, err := database.OpenPostgres(startupCtx, databaseURL)
 	startupCancel()
@@ -32,7 +37,6 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
-
 
 	if gameDBURL := os.Getenv("DATABASE_URL"); gameDBURL != "" && gameDBURL == databaseURL {
 		logger.Error("CHAT_DATABASE_URL must point to the dedicated Chat database, not DATABASE_URL")
