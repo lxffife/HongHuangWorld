@@ -19,7 +19,7 @@ func (s *Service) RecoverOrphanedSessions(ctx context.Context) (int64, error) {
 		`UPDATE server_registry
 		 SET status = 'offline', updated_at = now()
 		 WHERE status <> 'offline'
-		   AND last_heartbeat_at < now() - INTERVAL '45 seconds'`,
+		   AND (last_heartbeat_at IS NULL OR last_heartbeat_at < now() - INTERVAL '45 seconds')`,
 	); err != nil {
 		return 0, fmt.Errorf("mark stale world servers offline: %w", err)
 	}
@@ -30,7 +30,7 @@ func (s *Service) RecoverOrphanedSessions(ctx context.Context) (int64, error) {
 		 FROM server_registry sr
 		 WHERE ws.server_id = sr.id
 		   AND sr.status = 'offline'
-		   AND sr.last_heartbeat_at < now() - INTERVAL '45 seconds'
+		   AND (sr.last_heartbeat_at IS NULL OR sr.last_heartbeat_at < now() - INTERVAL '45 seconds')
 		   AND ws.updated_at < now() - INTERVAL '45 seconds'
 		   AND ws.session_state IN ('connecting', 'active', 'saving')`,
 	)
