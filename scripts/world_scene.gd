@@ -582,29 +582,40 @@ func _build_compact_hud() -> void:
 	var hud := get_node_or_null("HUD") as CanvasLayer
 	if hud == null:
 		return
-	# 完整修炼面板保留原有功能，默认收起，减少对 3D 画面的遮挡。
 	$HUD/Panel.visible = false
 	$HUD/Panel.offset_top = 146.0
 	$HUD/Panel.offset_bottom = 548.0
 	compact_hud_panel = PanelContainer.new()
 	compact_hud_panel.position = Vector2(18.0, 18.0)
-	compact_hud_panel.custom_minimum_size = Vector2(360.0, 145.0)
+	compact_hud_panel.custom_minimum_size = Vector2(340.0, 92.0)
+	var compact_style := StyleBoxFlat.new()
+	compact_style.bg_color = Color(0.035, 0.055, 0.085, 0.88)
+	compact_style.border_color = Color("#526783")
+	compact_style.set_border_width_all(1)
+	compact_style.set_corner_radius_all(9)
+	compact_style.content_margin_left = 12.0
+	compact_style.content_margin_top = 9.0
+	compact_style.content_margin_right = 12.0
+	compact_style.content_margin_bottom = 9.0
+	compact_hud_panel.add_theme_stylebox_override("panel", compact_style)
 	hud.add_child(compact_hud_panel)
 	compact_hud_label = Label.new()
 	compact_hud_label.text = "洪荒 · 正在载入角色状态……"
 	compact_hud_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	compact_hud_label.custom_minimum_size = Vector2(340.0, 126.0)
+	compact_hud_label.custom_minimum_size = Vector2(316.0, 72.0)
+	compact_hud_label.add_theme_font_size_override("font_size", 13)
+	compact_hud_label.add_theme_color_override("font_color", Color("#e2e8f0"))
 	compact_hud_panel.add_child(compact_hud_label)
 	details_toggle_button = Button.new()
 	details_toggle_button.text = "角色 · 修炼"
-	details_toggle_button.position = Vector2(18.0, 150.0)
-	details_toggle_button.custom_minimum_size = Vector2(112.0, 36.0)
+	details_toggle_button.position = Vector2(18.0, 118.0)
+	details_toggle_button.custom_minimum_size = Vector2(112.0, 34.0)
 	details_toggle_button.pressed.connect(_toggle_details_panel)
 	hud.add_child(details_toggle_button)
 	soul_choice_button = Button.new()
 	soul_choice_button.text = "分配无相灵魄"
-	soul_choice_button.position = Vector2(140.0, 150.0)
-	soul_choice_button.custom_minimum_size = Vector2(150.0, 36.0)
+	soul_choice_button.position = Vector2(140.0, 118.0)
+	soul_choice_button.custom_minimum_size = Vector2(150.0, 34.0)
 	soul_choice_button.visible = false
 	soul_choice_button.pressed.connect(_open_pending_rare_choice)
 	hud.add_child(soul_choice_button)
@@ -768,7 +779,7 @@ func _refresh_current_region(show_entry_notice: bool) -> void:
 		_show_notification("已进入「" + next_region + "」", 2.8)
 
 func _update_compact_hud(progression: Dictionary = {}) -> void:
-	if compact_hud_label == null:
+	if not is_instance_valid(compact_hud_label):
 		return
 	var snapshot: Dictionary = HHSession.world_snapshot
 	var world_id := str(snapshot.get("world_id", ""))
@@ -779,58 +790,19 @@ func _update_compact_hud(progression: Dictionary = {}) -> void:
 	var stage_name := str(progression.get("realm_stage_name", ""))
 	var cultivation := int(progression.get("cultivation", 0))
 	var region_name := current_region_name if not current_region_name.is_empty() else "区域载入中"
-	compact_hud_label.text = "当前世界 · " + world_name + "\n所在区域 · " + region_name + "\n" + character_name + "  |  " + system_name + " · " + realm_name + stage_name + "  |  修为 " + str(cultivation)
+	var lines := [
+		world_name + "  /  " + region_name,
+		character_name + "  ·  " + system_name + " " + realm_name + stage_name,
+		"修为 " + str(cultivation)
+	]
 	if world_id == "underworld_fengdu":
-		var soul_stage := str(soul_essence_profile.get("form_name", "魂光载入中"))
-		var growth_name := str(soul_essence_profile.get("growth_name", "初生魂团"))
-		var soul_power := int(soul_essence_profile.get("soul_power", 0))
-		var absorbed := int(soul_essence_profile.get("absorbed_count", 0))
-		var inheritance: Dictionary = soul_essence_profile.get("inheritance_attributes", {})
+		lines.append("魂力 " + str(soul_essence_profile.get("soul_power", 0)) + "  ·  吞噬 " + str(soul_essence_profile.get("absorbed_count", 0)) + "  ·  " + str(soul_essence_profile.get("growth_name", "初生魂团")))
 		var pending_choices: Array = soul_essence_profile.get("pending_rare_choices", [])
-		compact_hud_label.text += "\n灵魂形态 · " + soul_stage + "  |  魂力 " + str(soul_power) + "  |  吞噬 " + str(absorbed)
-		compact_hud_label.text += "\n魂体成长 · " + growth_name + "（阶段 " + str(soul_essence_profile.get("growth_stage", 1)) + "/5）"
-		compact_hud_label.text += "\n来世资质 · 力量 " + str(inheritance.get("strength", 0)) + " 体质 " + str(inheritance.get("constitution", 0)) + " 敏捷 " + str(inheritance.get("agility", 0))
-		compact_hud_label.text += "\n灵力 " + str(inheritance.get("spirit", 0)) + " 气血 " + str(inheritance.get("vitality", 0))
-		var attribute_progress: Array = soul_essence_profile.get("attribute_progress", [])
-		var attribute_names := {"strength":"力量","constitution":"体质","agility":"敏捷","spirit":"灵力","vitality":"气血"}
-		compact_hud_label.text += "\n魂质修炼 · 每项资质上限 20"
-		for progress_variant in attribute_progress:
-			if not progress_variant is Dictionary:
-				continue
-			var progress: Dictionary = progress_variant
-			var attribute := str(progress.get("attribute", ""))
-			var attribute_name := str(attribute_names.get(attribute, attribute))
-			var current_count := int(progress.get("absorbed_count", 0))
-			var next_threshold := int(progress.get("next_threshold", 0))
-			var awarded := int(progress.get("awarded_points", 0))
-			var max_points := int(progress.get("max_points", 10))
-			var attribute_value := int(progress.get("attribute_value", 0))
-			var progress_text := "已达吞噬成长上限" if next_threshold <= 0 else ("下次突破 " + str(current_count) + "/" + str(next_threshold))
-			compact_hud_label.text += "\n" + attribute_name + " · " + progress_text + " · 吞噬成长 +" + str(awarded) + "/" + str(max_points) + " · 总资质 " + str(attribute_value) + "/20"
-		var affinities: Dictionary = soul_essence_profile.get("affinity_counts", {})
-		compact_hud_label.text += "\n魂质亲和 · 兽 " + str(affinities.get("beast", 0)) + " 战 " + str(affinities.get("battle", 0)) + " 风 " + str(affinities.get("gale", 0)) + " 灵 " + str(affinities.get("spirit", 0)) + " 生 " + str(affinities.get("life", 0))
-		var absorption_kinds: Array = soul_essence_profile.get("absorption_kinds", [])
-		for kind_variant in absorption_kinds:
-			if not kind_variant is Dictionary:
-				continue
-			var kind: Dictionary = kind_variant
-			var quality := str(kind.get("quality_tier", "common"))
-			if quality == "common":
-				continue
-			var quality_names := {"elite":"精英","ancient":"远古","mythic":"上古"}
-			compact_hud_label.text += "\n稀有魂质 · " + str(kind.get("name", "未知魂质")) + "（" + str(quality_names.get(quality, quality)) + " · 成长进度 ×" + str(kind.get("progress_units", 1)) + "）"
-		var mutations: Array = soul_essence_profile.get("mutations", [])
-		compact_hud_label.text += "\n魂质异变 · 已觉醒 " + str(soul_essence_profile.get("mutation_count", 0)) + " 次"
-		if mutations.size() > 0:
-			var latest: Dictionary = mutations[0]
-			compact_hud_label.text += " · " + str(latest.get("name", "未知异变")) + "（" + str(latest.get("rarity", "uncommon")) + "）"
-		var fusion_names: Array = soul_essence_profile.get("fusion_names", [])
-		compact_hud_label.text += "\n魂质融合 · 已凝成 " + str(soul_essence_profile.get("fusion_count", 0)) + " 道魂印"
-		if fusion_names.size() > 0:
-			compact_hud_label.text += " · " + ", ".join(PackedStringArray(fusion_names))
-		if pending_choices.size() > 0:
-			compact_hud_label.text += "  |  无相灵魄待分配 " + str(pending_choices.size())
-
+		if is_instance_valid(soul_choice_button):
+			soul_choice_button.visible = not pending_choices.is_empty()
+			if not pending_choices.is_empty():
+				soul_choice_button.text = "分配无相灵魄 · " + str(pending_choices.size())
+	compact_hud_label.text = "\n".join(PackedStringArray(lines))
 
 func _apply_world_player_form() -> void:
 	if not is_instance_valid(local_player):
@@ -1154,12 +1126,18 @@ func _build_chat_hud() -> void:
 	if hud == null:
 		return
 	chat_panel = PanelContainer.new()
-	chat_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	chat_panel.offset_left = 18.0
-	chat_panel.offset_top = -354.0
-	chat_panel.offset_right = 408.0
-	chat_panel.offset_bottom = -118.0
-	chat_panel.custom_minimum_size = Vector2(390.0, 236.0)
+	chat_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	chat_panel.offset_left = -408.0
+	chat_panel.offset_top = -66.0
+	chat_panel.offset_right = -18.0
+	chat_panel.offset_bottom = -18.0
+	chat_panel.custom_minimum_size = Vector2(390.0, 48.0)
+	var chat_style := StyleBoxFlat.new()
+	chat_style.bg_color = Color(0.035, 0.055, 0.085, 0.90)
+	chat_style.border_color = Color("#526783")
+	chat_style.set_border_width_all(1)
+	chat_style.set_corner_radius_all(9)
+	chat_panel.add_theme_stylebox_override("panel", chat_style)
 	hud.add_child(chat_panel)
 	var layout := VBoxContainer.new()
 	layout.add_theme_constant_override("separation", 5)
@@ -1171,7 +1149,7 @@ func _build_chat_hud() -> void:
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	heading.add_child(title)
 	var toggle := Button.new()
-	toggle.text = "收起"
+	toggle.text = "展开"
 	toggle.pressed.connect(func(): _set_chat_expanded(not chat_expanded))
 	heading.add_child(toggle)
 	var channels := HBoxContainer.new()
@@ -1210,8 +1188,9 @@ func _set_chat_expanded(expanded: bool) -> void:
 	chat_expanded = expanded
 	if not is_instance_valid(chat_panel):
 		return
-	chat_panel.offset_top = -354.0 if expanded else -166.0
-	chat_panel.custom_minimum_size.y = 236.0 if expanded else 48.0
+	chat_panel.offset_top = -270.0 if expanded else -66.0
+	chat_panel.offset_bottom = -18.0
+	chat_panel.custom_minimum_size.y = 252.0 if expanded else 48.0
 	for child in chat_panel.get_child(0).get_children():
 		if child is Control and child != chat_panel.get_child(0).get_child(0):
 			child.visible = expanded
