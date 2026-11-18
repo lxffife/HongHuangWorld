@@ -937,12 +937,15 @@ func _preview_lobby_equipment(item: Dictionary) -> void:
 		return
 	lobby_preview_equipment_item = item.duplicate(true)
 	lobby_preview_equipment_item["equipment_slot"] = slot
+	lobby_selected_equipment = item.duplicate(true)
 	_build_lobby_preview_model()
 	lobby_equipment_status_label.text = "试穿预览中：" + str(item.get("name", "未知装备")) + "。仅改变大厅外观，不会穿戴或修改属性。"
 	_render_lobby_equipment_manager()
 
 func _clear_lobby_equipment_preview() -> void:
 	lobby_preview_equipment_item.clear()
+	if not lobby_selected_equipment.is_empty() and str(lobby_selected_equipment.get("item_id", "")) == str(lobby_preview_equipment_item.get("item_id", "")):
+		lobby_selected_equipment.clear()
 	_build_lobby_preview_model()
 	lobby_equipment_status_label.text = "已退出试穿预览，恢复当前实际穿戴外观。"
 	_render_lobby_equipment_manager()
@@ -1164,6 +1167,11 @@ func _render_lobby_equipment_comparison(equipped_by_slot: Dictionary) -> void:
 	names.text = "当前：" + str(current.get("name", "未装备")) + "    →    候选：" + str(candidate.get("name", "未知装备"))
 	names.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lobby_equipment_list.add_child(names)
+	var preview_state := Label.new()
+	var is_previewing := not lobby_preview_equipment_item.is_empty() and str(lobby_preview_equipment_item.get("item_id", "")) == str(candidate.get("item_id", ""))
+	preview_state.text = "3D 外观：正在试穿此装备 · 属性数据仅作比较" if is_previewing else "3D 外观：当前角色实际穿戴 · 尚未试穿候选装备"
+	preview_state.add_theme_color_override("font_color", Color("#9ed6b1") if is_previewing else Color("#9eafc5"))
+	lobby_equipment_list.add_child(preview_state)
 	var current_stats: Dictionary = current.get("base_stats", {}) if current.get("base_stats", {}) is Dictionary else {}
 	var candidate_stats: Dictionary = candidate.get("base_stats", {}) if candidate.get("base_stats", {}) is Dictionary else {}
 	var stat_keys: Array = []
@@ -1191,7 +1199,7 @@ func _render_lobby_equipment_comparison(equipped_by_slot: Dictionary) -> void:
 	var actions := HBoxContainer.new()
 	lobby_equipment_list.add_child(actions)
 	var confirm_button := Button.new()
-	confirm_button.text = "确认穿戴"
+	confirm_button.text = "确认穿戴（将正式更换装备）"
 	confirm_button.disabled = lobby_equipment_busy
 	confirm_button.pressed.connect(_request_lobby_equip.bind(str(candidate.get("item_id", "")), slot))
 	actions.add_child(confirm_button)
