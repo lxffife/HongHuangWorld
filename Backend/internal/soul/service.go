@@ -17,6 +17,9 @@ var (
 	ErrInvalid  = errors.New("invalid soul name")
 	ErrInvalidReward = errors.New("invalid soul reward")
 	ErrRewardSession = errors.New("soul reward session is not valid for this node")
+	ErrInvalidAbsorption = errors.New("invalid soul absorption")
+	ErrAbsorptionSession = errors.New("soul absorption session is not valid for this node")
+	ErrAbsorptionCapacity = errors.New("soul absorption capacity is full")
 	ErrInsufficientExperience = errors.New("not enough soul experience for breakthrough")
 	ErrMaxRealm = errors.New("soul has reached the highest configured realm")
 )
@@ -542,4 +545,112 @@ func (s *Service) CurrentEssence(ctx context.Context, accountID string) (Essence
 	}
 	if err:=rows.Err();err!=nil { return EssenceProfile{},fmt.Errorf("iterate soul absorption kinds: %w",err) }
 	return result,nil
+}
+
+
+type Absorption struct {
+ EventID string `json:"event_id"`
+ SessionID string `json:"session_id"`
+ CharacterID string `json:"character_id"`
+ SourceEntityID string `json:"source_entity_id"`
+ SourceEntityKind string `json:"source_entity_kind"`
+}
+type AbsorptionResult struct {
+ Applied bool `json:"applied"`
+ KindID string `json:"kind_id,omitempty"`
+ KindName string `json:"kind_name,omitempty"`
+ EnergyGained int64 `json:"energy_gained,omitempty"`
+ AbsorbedEnergy int64 `json:"absorbed_energy"`
+ AbsorptionCapacity int64 `json:"absorption_capacity"`
+ AbsorbedCount int64 `json:"absorbed_count"`
+ SoulPower int64 `json:"soul_power"`
+}
+
+// ApplyServerAbsorption accepts only a trusted world-server event. The entity kind
+// is mapped through the server-owned catalogue; clients never submit energy or traits.
+func (s *Service) ApplyServerAbsorption(ctx context.Context, nodeKey string, event Absorption) (AbsorptionResult, error) {
+ if nodeKey == "" || !validUUID(event.EventID) || !validUUID(event.SessionID) ||
+    !validUUID(event.CharacterID) || strings.TrimSpace(event.SourceEntityID) == "" ||
+    len(event.SourceEntityID) > 96 || len(event.SourceEntityKind) > 48 {
+  return AbsorptionResult{}, ErrInvalidAbsorption
+ }
+ kindID := ""
+ switch event.SourceEntityKind {
+ case "wandering_wraith":
+  kindID = "ordinary_wraith"
+ default:
+  return AbsorptionResult{}, ErrInvalidAbsorption
+ }
+ tx, err := s.db.BeginTx(ctx, nil)
+ if err != nil { return AbsorptionResult{}, fmt.Errorf("begin soul absorption: %w", err) }
+ defer tx.Rollback()
+ var serverID string
+ err = tx.QueryRowContext(ctx, `SELECT id::text FROM server_registry WHERE node_key=$1`, nodeKey).Scan(&serverID)
+ if errors.Is(err, sql.ErrNoRows) { return AbsorptionResult{}, ErrAbsorptionSession }
+ if err != nil { return AbsorptionResult{}, fmt.Errorf("resolve absorption node: %w", err) }
+
+ var soulID string
+ err = tx.QueryRowContext(ctx,
+  `SELECT soul.id::text
+   FROM world_sessions ws
+   JOIN world_instances instance ON instance.id=ws.instance_id
+   JOIN world_definitions world ON world.id=instance.world_id
+   JOIN characters character ON character.id=ws.character_id
+   JOIN souls soul ON soul.id=character.soul_id
+   WHERE ws.id=$1::uuid AND ws.server_id=$2 AND character.id=$3::uuid
+     AND character.status='alive' AND world.id='underworld_fengdu'
+     AND (ws.session_state='active' OR (ws.session_state='closed' AND ws.updated_at>=now()-INTERVAL '10 minutes'))
+   FOR UPDATE OF ws,soul`, event.SessionID, serverID, event.CharacterID).Scan(&soulID)
+ if errors.Is(err, sql.ErrNoRows) {
+  var duplicate bool
+  checkErr := tx.QueryRowContext(ctx,
+   `SELECT EXISTS (SELECT 1 FROM soul_absorption_records
+      WHERE soul_id=(SELECT soul_id FROM characters WHERE id=$1::uuid) AND event_id=$2::uuid)`,
+   event.CharacterID,event.EventID).Scan(&duplicate)
+  if checkErr != nil { return AbsorptionResult{}, fmt.Errorf("check duplicate absorption: %w",checkErr) }
+  if duplicate {
+   if err:=tx.Commit();err!=nil{return AbsorptionResult{},fmt.Errorf("commit duplicate absorption: %w",err)}
+   return AbsorptionResult{Applied:false},nil
+  }
+  return AbsorptionResult{},ErrAbsorptionSession
+ }
+ if err != nil { return AbsorptionResult{},fmt.Errorf("verify absorption session: %w",err) }
+
+ var result AbsorptionResult
+ var traitKey string
+ err=tx.QueryRowContext(ctx,
+  `SELECT id,name,base_energy,trait_key FROM soul_absorption_kinds WHERE id=$1 AND enabled=true`,
+  kindID).Scan(&result.KindID,&result.KindName,&result.EnergyGained,&traitKey)
+ if err!=nil{return AbsorptionResult{},fmt.Errorf("load absorption kind: %w",err)}
+ var capacity, absorbed int64
+ err=tx.QueryRowContext(ctx,
+  `SELECT absorption_capacity,absorbed_energy FROM soul_essence_attributes WHERE soul_id=$1 FOR UPDATE`,
+  soulID).Scan(&capacity,&absorbed)
+ if err!=nil{return AbsorptionResult{},fmt.Errorf("lock soul essence: %w",err)}
+ if capacity<=absorbed{return AbsorptionResult{},ErrAbsorptionCapacity}
+ remaining:=capacity-absorbed
+ if result.EnergyGained>remaining { result.EnergyGained=remaining }
+ inserted,err:=tx.ExecContext(ctx,
+  `INSERT INTO soul_absorption_records
+    (soul_id,event_id,source_entity_id,absorption_kind_id,energy_gained,trait_key,trait_value)
+   VALUES ($1,$2::uuid,$3,$4,$5,$6,1) ON CONFLICT (soul_id,event_id) DO NOTHING`,
+  soulID,event.EventID,event.SourceEntityID,result.KindID,result.EnergyGained,traitKey)
+ if err!=nil{return AbsorptionResult{},fmt.Errorf("record soul absorption: %w",err)}
+ rows,err:=inserted.RowsAffected()
+ if err!=nil{return AbsorptionResult{},fmt.Errorf("read absorption insert result: %w",err)}
+ if rows==0 {
+  if err:=tx.Commit();err!=nil{return AbsorptionResult{},fmt.Errorf("commit duplicate absorption: %w",err)}
+  return AbsorptionResult{Applied:false},nil
+ }
+ err=tx.QueryRowContext(ctx,
+  `UPDATE soul_essence_attributes
+   SET absorbed_energy=absorbed_energy+$1,absorbed_count=absorbed_count+1,
+       soul_power=soul_power+$1,updated_at=now()
+   WHERE soul_id=$2
+   RETURNING absorbed_energy,absorption_capacity,absorbed_count,soul_power`,
+  result.EnergyGained,soulID).Scan(&result.AbsorbedEnergy,&result.AbsorptionCapacity,&result.AbsorbedCount,&result.SoulPower)
+ if err!=nil{return AbsorptionResult{},fmt.Errorf("apply soul essence absorption: %w",err)}
+ result.Applied=true
+ if err:=tx.Commit();err!=nil{return AbsorptionResult{},fmt.Errorf("commit soul absorption: %w",err)}
+ return result,nil
 }
