@@ -2340,9 +2340,8 @@ func _confirm_exploration_event(choice_id: String) -> void:
 		return
 	var event_id := pending_exploration_event_id
 	npc_status_label.text = "正在向中心服验证你的选择、位置与因果资格……"
-	for child in npc_choice_container.get_children():
-		if child is Button:
-			child.disabled = true
+	# npc_request_busy prevents duplicate submissions while preserving the
+	# ability to cancel or retry if the center server rejects the request.
 	_send_npc_request("POST", "/api/v1/worlds/current/exploration-events/trigger", "exploration_event", {
 		"event_id": event_id,
 		"choice_id": choice_id
