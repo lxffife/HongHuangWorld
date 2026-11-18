@@ -44,6 +44,7 @@ func RunOutboxPublisher(ctx context.Context, db *sql.DB, logger *slog.Logger) {
 
 	var conn *nats.Conn
 	var js nats.JetStreamContext
+	lastCleanup := time.Time{}
 	for {
 		if ctx.Err() != nil {
 			break
@@ -79,6 +80,16 @@ func RunOutboxPublisher(ctx context.Context, db *sql.DB, logger *slog.Logger) {
 				continue
 			}
 			logger.Info("Game domain event publisher connected", "stream", streamName, "subject", subject)
+		}
+
+		if time.Since(lastCleanup) >= time.Hour {
+			deleted, cleanupErr := cleanupPublished(ctx, db, 5000)
+			if cleanupErr != nil {
+				logger.Warn("clean published Game event outbox failed", "error", cleanupErr)
+			} else if deleted > 0 {
+				logger.Info("published Game event outbox rows pruned", "count", deleted)
+			}
+			lastCleanup = time.Now()
 		}
 
 		events, err := claimBatch(ctx, db, publisherID(), batchSize, time.Minute)
@@ -270,4 +281,23 @@ func wait(ctx context.Context, duration time.Duration) bool {
 	case <-timer.C:
 		return true
 	}
+}
+
+func cleanupPublished(ctx context.Context, db *sql.DB, limit int) (int64, error) {
+	result, err := db.ExecContext(ctx, `
+		WITH expired AS (
+			SELECT event_sequence
+			FROM game_event_outbox
+			WHERE published_at < now() - interval '7 days'
+			ORDER BY published_at, event_sequence
+			LIMIT $1
+		)
+		DELETE FROM game_event_outbox outbox
+		USING expired
+		WHERE outbox.event_sequence=expired.event_sequence
+	`, limit)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
