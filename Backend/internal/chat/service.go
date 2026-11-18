@@ -309,21 +309,38 @@ func (s *Service) ListForServer(ctx context.Context, nodeKey string, after time.
 
 	// A node may host multiple instances, but only messages for worlds it currently
 	// serves are visible. cross_world deliberately has no world filter.
-	rows, err := s.db.QueryContext(ctx, `
+	serverQuery := `
 		SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),
 		       m.sender_character_id::text,c.name,COALESCE(c.race_id,''),c.level,m.content,m.created_at
 		FROM chat_messages m
-		JOIN chat_characters c ON c.character_id=m.sender_character_id
+		JOIN characters c ON c.id=m.sender_character_id
 		WHERE m.channel_type IN ('world','cross_world')
 		  AND (m.channel_type='cross_world' OR m.world_id IN (
 			SELECT DISTINCT wi.world_id
-			FROM chat_world_instances wi
-			JOIN chat_server_nodes sr ON sr.node_key=wi.node_key
+			FROM world_instances wi
+			JOIN server_registry sr ON sr.id=wi.server_id
 			WHERE sr.node_key=$1 AND sr.status='ready' AND wi.status='ready'
 		  ))
 		  AND (m.created_at > $2 OR (m.created_at = $2 AND m.id > $3::uuid))
 		ORDER BY m.created_at ASC,m.id ASC
-		LIMIT $4`, nodeKey, after, afterID, limit)
+		LIMIT $4`
+	if s.projectionMode {
+		serverQuery = `
+			SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),
+			       m.sender_character_id::text,m.sender_name,m.sender_race,m.sender_level,m.content,m.created_at
+			FROM chat_messages m
+			WHERE m.channel_type IN ('world','cross_world')
+			  AND (m.channel_type='cross_world' OR m.world_id IN (
+				SELECT DISTINCT wi.world_id
+				FROM chat_world_instances wi
+				JOIN chat_server_nodes sr ON sr.node_key=wi.node_key
+				WHERE sr.node_key=$1 AND sr.status='ready' AND wi.status='ready'
+			  ))
+			  AND (m.created_at > $2 OR (m.created_at = $2 AND m.id > $3::uuid))
+			ORDER BY m.created_at ASC,m.id ASC
+			LIMIT $4`
+	}
+	rows, err := s.db.QueryContext(ctx, serverQuery, nodeKey, after, afterID, limit)
 	if err != nil {
 		return ServerBatch{}, fmt.Errorf("query server chat messages: %w", err)
 	}
