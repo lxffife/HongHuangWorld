@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
                 << " dead_letter=" << value.dead_letter
                 << " oldest_pending_age_seconds=" << value.oldest_pending_age_ms / 1000
                 << " oldest_dead_letter_age_seconds=" << value.oldest_dead_letter_age_ms / 1000
-                << '\\n';
+                << '\n';
             return 0;
         }
 
@@ -75,9 +75,9 @@ int main(int argc, char** argv) {
                           << " type=" << event.event_type
                           << " attempts=" << event.attempts
                           << " created_at_ms=" << event.created_at_ms
-                          << " error=" << std::quoted(event.last_error) << '\\n';
+                          << " error=" << std::quoted(event.last_error) << '\n';
             }
-            std::cout << "listed=" << events.size() << '\\n';
+            std::cout << "listed=" << events.size() << '\n';
             return 0;
         }
 
@@ -90,14 +90,14 @@ int main(int argc, char** argv) {
             if (!outbox.retry_dead_letter(event_id, now_ms(), error)) {
                 throw std::runtime_error(error);
             }
-            std::cout << "requeued=" << event_id << '\\n';
+            std::cout << "requeued=" << event_id << '\n';
             return 0;
         }
 
         usage();
         return 2;
     } catch (const std::exception& exception) {
-        std::cerr << "outbox admin failed: " << exception.what() << '\\n';
+        std::cerr << "outbox admin failed: " << exception.what() << '\n';
         return 1;
     }
 }
