@@ -618,6 +618,33 @@ func (s *Service) PruneExpiredMessages(ctx context.Context) (int64, error) {
 
 // CurrentWorldID resolves the active character's world for chat-only routing.
 // It intentionally reads identity state but never mutates game state.
+type ChatScope struct {
+	CharacterID string
+	WorldID string
+	WorldInstanceID string
+}
+
+func (s *Service) CurrentChatScope(ctx context.Context, accountID string) (ChatScope, error) {
+	if strings.TrimSpace(accountID) == "" {
+		return ChatScope{}, ErrInvalidInput
+	}
+	var scope ChatScope
+	err := s.db.QueryRowContext(ctx, `
+		SELECT c.id::text,c.world_id,COALESCE(ws.instance_id::text,'')
+		FROM souls soul
+		JOIN characters c ON c.id=soul.current_character_id
+		LEFT JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
+		WHERE soul.account_id=$1 AND c.status='alive'`, accountID).
+		Scan(&scope.CharacterID,&scope.WorldID,&scope.WorldInstanceID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ChatScope{}, ErrNoCharacter
+	}
+	if err != nil {
+		return ChatScope{}, fmt.Errorf("resolve current chat scope: %w", err)
+	}
+	return scope, nil
+}
+
 func (s *Service) CurrentWorldID(ctx context.Context, accountID string) (string, error) {
 	if strings.TrimSpace(accountID) == "" {
 		return "", ErrInvalidInput
