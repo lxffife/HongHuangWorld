@@ -36,6 +36,7 @@
 - `000030_soul_mutation_records` 为每次成功吞噬保存唯一魂质异变记录，包含异变类型、稀有度、来世属性和加成值。
 - `000031_soul_fusion_records` 保存每个灵魂唯一的魂质融合结果；原始异变记录永久保留，融合奖励由服务端固定配方写入五维来世资质。
 - `000032_soul_absorption_attribute_progress` 建立五项资质各自的吞噬成长进度；同属性魂质累计吞噬门槛为 3、9、21、45、93、189、381、765、1533、3069 次，每达到一个门槛获得 1 点，普通吞噬最多贡献 10 点；随机异变每项属性最多贡献 2 点；所有来源的单项来世资质统一封顶 20 点，并为已有吞噬记录回填历史进度。
+- `000033_soul_absorption_quality_tiers` 为魂质目录增加服务端配置的品质阶层与成长进度倍率（普通/精英/远古/上古分别为 ×1/×2/×4/×8）；首批为炽战残魂配置精英、远古、上古变体，倍率写入吞噬流水并在同一事务中推进多个成长档位。
 
 ## 当前迁移顺序
 
@@ -74,6 +75,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000029_reincarnat
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000030_soul_mutation_records.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000031_soul_fusion_records.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000032_soul_absorption_attribute_progress.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000033_soul_absorption_quality_tiers.up.sql
 ```
 
 回滚时按相反顺序执行对应的 `.down.sql`。不要在已运行的生产库上重复执行非幂等迁移；后续接入迁移工具后，应由工具记录每个已应用版本，避免人工重复执行。
