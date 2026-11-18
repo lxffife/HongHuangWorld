@@ -41,5 +41,18 @@
 ## 000041 后台基础表
 迁移 000041_admin_console_foundation 新增后台用户、角色、权限、用户角色、角色权限、用户直接权限、独立后台会话和审计日志。初始权限目录与系统角色在迁移中建立；首个超级管理员由部署时的一次性引导逻辑创建，绝不在迁移中写入默认密码。
 
+## P0-A 当前代码状态
+
+已提交到 feature/p0-foundation：
+- 迁移 000041：独立后台用户、角色、权限、会话和审计表；超级管理员角色获得完整权限目录。
+- Backend/cmd/admin：独立管理 API 进程，默认端口 8790。
+- ADMIN_BOOTSTRAP_USERNAME / ADMIN_BOOTSTRAP_EMAIL / ADMIN_BOOTSTRAP_PASSWORD：首次启动时创建超级管理员；若已有活动超级管理员则不重置密码。没有管理员且未配置引导凭据时拒绝启动。
+- 后台登录使用独立 12 小时会话，数据库仅保存 token SHA-256；密码使用 bcrypt。
+- 当前 API：POST /api/v1/admin/auth/login、GET /api/v1/admin/auth/me、POST /api/v1/admin/auth/password、GET/POST /api/v1/admin/users、GET /api/v1/admin/permissions、PUT /api/v1/admin/users/{id}/permissions。
+- 普通用户由后台管理员创建；权限以直接授权方式分配。普通管理员管理权限不能由非超级管理员授予。
+- Windows / Linux 启动脚本已加入 Deployment。
+
+当前阶段仍需完成代码审查、Go 测试/构建和数据库迁移验证；这些命令尚未执行，也没有触发 GitHub Actions。前端登录页面和完整用户管理界面属于 P0-B，尚未实现。
+
 ## 暂不宣称已实现
 服务控制代理、玩家封禁/踢下线、在线统计、怪物管理、聊天管理和配置发布/回滚均需后续阶段实现；仅建立基础权限与审计模型不代表这些业务操作已经可用。
