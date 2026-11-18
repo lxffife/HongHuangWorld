@@ -762,13 +762,20 @@ func (s *Service) CurrentChatScope(ctx context.Context, accountID string) (ChatS
 		return ChatScope{}, ErrInvalidInput
 	}
 	var scope ChatScope
-	err := s.db.QueryRowContext(ctx, `
-		SELECT c.character_id::text,c.world_id,COALESCE(ws.instance_id::text,'')
-		FROM chat_accounts account
-		JOIN chat_characters c ON c.character_id=account.current_character_id
-		LEFT JOIN chat_world_sessions ws ON ws.character_id=c.character_id AND ws.session_state='active'
-		WHERE account.account_id=$1::uuid AND c.status='alive'`, accountID).
-		Scan(&scope.CharacterID,&scope.WorldID,&scope.WorldInstanceID)
+	scopeQuery := `
+		SELECT c.id::text,c.world_id,COALESCE(ws.instance_id::text,'')
+		FROM souls soul JOIN characters c ON c.id=soul.current_character_id
+		LEFT JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
+		WHERE soul.account_id=$1 AND c.status='alive'`
+	if s.projectionMode {
+		scopeQuery = `
+			SELECT c.character_id::text,c.world_id,COALESCE(ws.instance_id::text,'')
+			FROM chat_accounts account
+			JOIN chat_characters c ON c.character_id=account.current_character_id
+			LEFT JOIN chat_world_sessions ws ON ws.character_id=c.character_id AND ws.session_state='active'
+			WHERE account.account_id=$1::uuid AND c.status='alive'`
+	}
+	err := s.db.QueryRowContext(ctx, scopeQuery, accountID).Scan(&scope.CharacterID,&scope.WorldID,&scope.WorldInstanceID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ChatScope{}, ErrNoCharacter
 	}
@@ -783,11 +790,17 @@ func (s *Service) CurrentWorldID(ctx context.Context, accountID string) (string,
 		return "", ErrInvalidInput
 	}
 	var worldID string
-	err := s.db.QueryRowContext(ctx, `
-		SELECT c.world_id
-		FROM chat_accounts account
-		JOIN chat_characters c ON c.character_id = account.current_character_id
-		WHERE account.account_id = $1::uuid AND c.status = 'alive'`, accountID).Scan(&worldID)
+	worldQuery := `
+		SELECT c.world_id FROM souls soul
+		JOIN characters c ON c.id=soul.current_character_id
+		WHERE soul.account_id=$1 AND c.status='alive'`
+	if s.projectionMode {
+		worldQuery = `
+			SELECT c.world_id FROM chat_accounts account
+			JOIN chat_characters c ON c.character_id=account.current_character_id
+			WHERE account.account_id=$1::uuid AND c.status='alive'`
+	}
+	err := s.db.QueryRowContext(ctx, worldQuery, accountID).Scan(&worldID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", ErrNoCharacter
 	}
