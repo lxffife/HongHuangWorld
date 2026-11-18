@@ -83,7 +83,7 @@ int main() {
             "{\\"session_id\\":\\"s1\\",\\"client_message_id\\":\\"client-1\\",\\"content\\":\\"changed\\"}",
             0, 500, 500, {}
         }, error));
-        auto pending_chat = box.claim_due(500, error);
+        auto pending_chat = box.claim_due_type(500, "nearby_chat", error);
         assert(pending_chat && pending_chat->event_type == "nearby_chat");
     }
     {
