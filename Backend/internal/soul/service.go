@@ -483,6 +483,8 @@ type EssenceProfile struct {
 	RealmName string `json:"realm_name"`
 	RealmOrder int `json:"realm_order"`
 	FormStage int `json:"form_stage"`
+	GrowthStage int `json:"growth_stage"`
+	GrowthName string `json:"growth_name"`
 	FormName string `json:"form_name"`
 	VisualScale float64 `json:"visual_scale"`
 	AbsorptionKinds []AbsorptionKindProgress `json:"absorption_kinds"`
@@ -536,6 +538,19 @@ func (s *Service) CurrentEssence(ctx context.Context, accountID string) (Essence
 		&result.RealmID,&result.RealmName,&result.RealmOrder)
 	if errors.Is(err,sql.ErrNoRows) { return EssenceProfile{},ErrNotFound }
 	if err!=nil { return EssenceProfile{},fmt.Errorf("load soul essence: %w",err) }
+
+	switch {
+	case result.AbsorbedCount >= 40:
+		result.GrowthStage,result.GrowthName=5,"魂魄圆融"
+	case result.AbsorbedCount >= 20:
+		result.GrowthStage,result.GrowthName=4,"灵体初成"
+	case result.AbsorbedCount >= 8:
+		result.GrowthStage,result.GrowthName=3,"聚魄成形"
+	case result.AbsorbedCount >= 3:
+		result.GrowthStage,result.GrowthName=2,"魂光凝实"
+	default:
+		result.GrowthStage,result.GrowthName=1,"初生魂团"
+	}
 
 	switch {
 	case result.RealmOrder <= 1:
