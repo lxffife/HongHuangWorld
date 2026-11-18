@@ -275,16 +275,20 @@ func (h *chatHandlers) socket(w http.ResponseWriter, r *http.Request) {
 	defer h.hub.remove(client)
 	defer client.closePresenceLease()
 
+	accessToken := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+	lastIdentityCheck := time.Now()
 	for {
 		_ = conn.SetReadDeadline(time.Now().Add(75 * time.Second))
 		opcode, payload, readErr := readChatSocketFrame(client.reader)
 		if readErr != nil { return }
+		if !client.validateIdentitySession(h, account.ID, accessToken, &lastIdentityCheck) { return }
 		switch opcode {
 		case 8:
 			_ = client.writeFrame(8, payload)
 			return
 		case 9:
-			if !client.refreshPresence(scope.CharacterID) { return }
+			if !client.validateIdentitySession(h, account.ID, strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")), &lastIdentityCheck) { return }
+			if !client.refreshPresence(client.currentCharacterID()) { return }
 			if client.writeFrame(10, payload) != nil { return }
 		case 10:
 			continue
@@ -384,4 +388,25 @@ func (c *chatSocketClient) closePresenceLease() {
 	if err := c.service.ClosePresenceLease(ctx, c.presenceID); err != nil {
 		c.logger.Warn("close chat presence lease failed", "account_id", c.accountID, "connection_id", c.presenceID, "error", err)
 	}
+}
+
+func (c *chatSocketClient) currentCharacterID() string {
+	c.scopeMu.RLock()
+	defer c.scopeMu.RUnlock()
+	return c.characterID
+}
+
+func (c *chatSocketClient) validateIdentitySession(h *chatHandlers, expectedAccountID, accessToken string, lastChecked *time.Time) bool {
+	if time.Since(*lastChecked) < 30*time.Second {
+		return true
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	account, err := h.authService.Authenticate(ctx, accessToken)
+	if err != nil || account.ID != expectedAccountID {
+		c.logger.Warn("chat websocket identity session is no longer valid", "account_id", expectedAccountID, "error", err)
+		return false
+	}
+	*lastChecked = time.Now()
+	return true
 }
