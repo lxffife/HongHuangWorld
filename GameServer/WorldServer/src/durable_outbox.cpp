@@ -35,7 +35,7 @@ std::string column_text(sqlite3_stmt* stmt, int index) {
 }
 } // namespace
 
-DurableOutbox::DurableOutbox(const std::string& path, std::size_t capacity)
+DurableOutbox::DurableOutbox(const std::string& path, std::size_t capacity, bool recover_inflight)
     : capacity_(capacity) {
     if (path.empty() || capacity_ == 0) {
         throw std::invalid_argument("invalid outbox path or capacity");
@@ -69,6 +69,15 @@ DurableOutbox::DurableOutbox(const std::string& path, std::size_t capacity)
         sqlite3_close(db_);
         db_ = nullptr;
         throw std::runtime_error(error);
+    }
+    if (recover_inflight) {
+        if (sqlite3_exec(db_, "UPDATE world_event_outbox SET status='pending' WHERE status='inflight';", nullptr, nullptr, &message) != SQLITE_OK) {
+            const std::string error = message ? message : sqlite3_errmsg(db_);
+            sqlite3_free(message);
+            sqlite3_close(db_);
+            db_ = nullptr;
+            throw std::runtime_error(error);
+        }
     }
 }
 
