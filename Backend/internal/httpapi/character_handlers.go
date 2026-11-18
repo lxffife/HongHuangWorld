@@ -12,7 +12,7 @@ import (
 )
 
 type characterHandlers struct {
-	authService      *auth.Service
+	authService      auth.Provider
 	characterService *character.Service
 	logger           *slog.Logger
 }
