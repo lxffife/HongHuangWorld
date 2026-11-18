@@ -46,4 +46,7 @@ A user can be chat-online without being in a world, and can be in a world while 
 
 ## Current implementation boundary
 
-The current Chat WebSocket authenticates its handshake through Identity and maintains a process-local socket hub for message fanout. The Game-to-Chat consumer projects world-session events into Chat-owned tables. A durable, multi-instance Chat presence lease and a product-level aggregate online API are follow-up implementation work; they must not be represented as already implemented.
+The current Chat WebSocket authenticates its handshake through Identity and maintains a process-local socket hub for message fanout. The Game-to-Chat consumer projects world-session events into Chat-owned tables.
+
+Chat migration 000003 now creates the durable chat_presence_sessions lease table, with one row per connection and automatic expiry timestamps. The runtime lifecycle (open, heartbeat refresh, close, and expiry cleanup), presence query API, and product-level online aggregation are not wired yet. The schema addition is not evidence that online status is already being tracked.
+
