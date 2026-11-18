@@ -58,3 +58,13 @@
 - Godot 已建立独立 WebSocket 聊天连接：Bearer Token 握手、20 秒心跳、Pong 超时检测和断线自动重连；世界/跨界频道使用独立连接，附近频道由 ENet 上行、WebSocket 下行。每次连接/重连成功后自动拉取附近/世界/跨界最近 50 条历史，按消息 ID 去重并按时间+ID排序；过期连接的历史响应会被丢弃。ChatServer 已通过 JetStream 跨进程广播世界/跨界消息；配置优先使用 `CHAT_NATS_URL`，未设置时回退到 `NATS_URL`。每个聊天节点必须连接同一启用 JetStream 的 NATS 集群，并配置稳定且唯一的 `CHAT_NODE_ID`；本地单机开发可使用 `nats://localhost:4222`。每节点 durable consumer 会在重启后从上次确认位置继续消费；附近消息按实例与 AOI 接收者快照过滤，WebSocket 心跳会刷新当前角色的世界实例绑定。
 - PostgreSQL 事务 Outbox 与 JetStream 持久流/每节点 durable consumer 已提交；WorldServer 附近频道 SQLite 持久发件箱和独立投递 worker 已提交；本机 `world_outbox_admin` 仅通过 SQLite 文件权限提供队列统计、附近聊天死信查询和手动重试，不开放网络管理端点；管理进程不会重置运行中 inflight 事件，且不能重试游戏事件；Chat Outbox 每 60 秒记录独立健康指标；NATS 故障期间在线客户端历史增量同步、在线状态订阅、聊天数据库物理拆分、完整历史分页/离线投递和故障注入测试尚未实现。
 - 本轮增加 JetStream 持久流、每节点独立 durable pull consumer、消费确认/重投递、后台异步发布和消息 ID 去重；没有运行 Go 测试、构建、迁移、Godot 解析/运行或 GitHub Actions；所有新增代码仍待本地验证。
+
+## 三数据库与 Identity 服务（迁移进行中）
+
+目标数据边界、API、迁移门槛以 `Docs/Architecture/THREE-DATABASE-BOUNDARIES.md` 为准：
+- Identity 数据库拥有玩家凭据和登录会话；Game 数据库拥有灵魂/角色/世界；Chat 数据库拥有聊天数据。
+- 新增 Identity Service 进程（`Backend/cmd/identity`，默认 `127.0.0.1:8789`），连接 `IDENTITY_DATABASE_URL`；新增内部 Token introspection 接口，使用独立 `X-Identity-Service-Key` 保护。
+- 新增 Identity schema migration、树莓派独立初始化脚本 `07-migrate-identity.sh` 和启动脚本 `Deployment/start-identity-server.sh`。
+- 现阶段 Game API 和 ChatServer 仍使用旧账号表/旧认证路径，ChatServer 仍需要 Game 域角色与世界会话数据；**尚未完成账号搬迁，也尚未把 Game/Chat 连接串切换到独立数据库**。
+- 树莓派现有 `/etc/honghuang-world.env` 不会被 `04-configure.sh` 覆盖。该脚本只为全新安装生成 Identity 配置；已有部署必须在备份后手动追加 Identity 专属变量，不能重跑配置脚本来覆盖现有配置。
+- Identity 初始化脚本只创建新空数据库和账号表，不会复制旧玩家数据。执行前必须先部署新版本、补齐环境变量并确认 PostgreSQL 备份；禁止把“新库建好”误认为“玩家账号已迁移”。
