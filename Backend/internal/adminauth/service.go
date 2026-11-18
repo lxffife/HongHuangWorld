@@ -5,6 +5,7 @@ import (
  "crypto/rand"
  "crypto/sha256"
  "database/sql"
+ "encoding/json"
  "encoding/base64"
  "errors"
  "fmt"
@@ -129,7 +130,8 @@ func (s *Service) SetPermissions(ctx context.Context,actor User,targetID string,
  if err=tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM admin_users WHERE id=$1 AND status='active' AND is_super_admin=false)`,targetID).Scan(&targetExists); err!=nil { return err }; if !targetExists { return ErrInvalidInput }
  if _,err=tx.ExecContext(ctx,`DELETE FROM admin_user_permissions WHERE user_id=$1`,targetID); err!=nil { return err }
  for p:=range seen { if _,err=tx.ExecContext(ctx,`INSERT INTO admin_user_permissions(user_id,permission_key,granted_by) VALUES($1,$2,$3)`,targetID,p,actor.ID); err!=nil { var pgErr *pgconn.PgError; if errors.As(err,&pgErr)&&pgErr.Code=="23503" { return ErrInvalidInput }; return err } }
- if _,err=tx.ExecContext(ctx,`INSERT INTO admin_audit_logs(actor_user_id,action,resource_type,resource_id,result,details) VALUES($1,'admin.permissions.set','admin_user',$2,'success',jsonb_build_object('permissions',$3::jsonb))`,actor.ID,targetID,permissions); err!=nil { return err }
+ details,marshalErr:=json.Marshal(map[string][]string{"permissions":permissions}); if marshalErr!=nil{return marshalErr}
+ if _,err=tx.ExecContext(ctx,`INSERT INTO admin_audit_logs(actor_user_id,action,resource_type,resource_id,result,details) VALUES($1,'admin.permissions.set','admin_user',$2,'success',$3::jsonb)`,actor.ID,targetID,string(details)); err!=nil { return err }
  return tx.Commit()
 }
 
