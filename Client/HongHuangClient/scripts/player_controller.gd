@@ -261,7 +261,6 @@ func _apply_soul_affinity_visuals(affinities: Dictionary) -> void:
 	var strength := int(affinities.get("selected_strength", 0))
 	var constitution := int(affinities.get("selected_constitution", 0))
 	var agility := int(affinities.get("selected_agility", 0))
-	var vitality := int(affinities.get("selected_vitality", 0))
 	var primary := Color(0.12, 0.62, 1.0)
 	var highest := 0
 	var traits := [
@@ -278,6 +277,9 @@ func _apply_soul_affinity_visuals(affinities: Dictionary) -> void:
 		if int(trait["count"]) > highest:
 			highest = int(trait["count"])
 			primary = trait["color"]
+	var core_material := _make_trait_material(primary, 0.72)
+	core_material.emission_energy_multiplier = 2.4
+	visual.material_override = core_material
 	if not is_instance_valid(soul_trait_ring):
 		soul_trait_ring = MeshInstance3D.new()
 		soul_trait_ring.name = "SoulAffinityRing"
