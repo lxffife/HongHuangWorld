@@ -65,6 +65,11 @@ var remote_targets: Dictionary = {}
 var remote_yaws: Dictionary = {}
 var monsters: Dictionary = {}
 var monster_targets: Dictionary = {}
+var monster_entities: Dictionary = {}
+var selected_monster_id := ""
+var target_info_panel: PanelContainer
+var target_info_label: Label
+var target_selection_ring: MeshInstance3D
 var floating_combat_labels: Dictionary = {}
 var floating_combat_lifetimes: Dictionary = {}
 var drops: Dictionary = {}
@@ -707,6 +712,17 @@ func _build_combat_hud() -> void:
 	notification_timer.timeout.connect(func(): notification_panel.visible = false)
 	add_child(notification_timer)
 
+	target_info_panel = PanelContainer.new()
+	target_info_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	target_info_panel.position = Vector2(-150.0, 18.0)
+	target_info_panel.custom_minimum_size = Vector2(300.0, 66.0)
+	target_info_panel.visible = false
+	hud.add_child(target_info_panel)
+	target_info_label = Label.new()
+	target_info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	target_info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	target_info_panel.add_child(target_info_label)
+
 func _show_notification(message: String, duration: float = 3.2) -> void:
 	if not is_instance_valid(notification_panel) or not is_instance_valid(notification_label):
 		return
@@ -937,6 +953,9 @@ func _on_entities_updated(entities: Array) -> void:
 			monsters[monster_id].queue_free()
 			monsters.erase(monster_id)
 			monster_targets.erase(monster_id)
+			monster_entities.erase(monster_id)
+			if monster_id == selected_monster_id:
+				_clear_monster_target()
 	for drop_id in drops.keys():
 		if not seen_drops.has(drop_id):
 			drops[drop_id].queue_free()
@@ -967,6 +986,9 @@ func _upsert_monster(entity: Dictionary) -> void:
 		float(entity.get("y", 0.0)),
 		float(entity.get("z", 0.0))
 	)
+	monster_entities[monster_id] = entity.duplicate(true)
+	if monster_id == selected_monster_id:
+		_update_target_info()
 	var monster := monsters[monster_id] as Node3D
 	var nameplate := monster.get_node_or_null("Nameplate") as Label3D
 	if nameplate != null:
@@ -1108,6 +1130,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		if is_instance_valid(chat_input):
 			chat_input.release_focus()
 		_set_chat_expanded(false)
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_TAB:
+		_cycle_monster_target()
 		get_viewport().set_input_as_handled()
 		return
 	if event.keycode == KEY_F:
@@ -1556,6 +1582,76 @@ func _show_item_details(item: Dictionary) -> void:
 	dialog.confirmed.connect(dialog.queue_free)
 	dialog.close_requested.connect(dialog.queue_free)
 	dialog.popup_centered(Vector2i(440, 300))
+
+
+func _cycle_monster_target() -> void:
+	if monsters.is_empty():
+		_clear_monster_target()
+		_show_notification("附近没有可锁定的目标")
+		return
+	var candidates: Array[String] = []
+	for monster_id in monsters.keys():
+		var monster_key := str(monster_id)
+		if monster_targets.has(monster_key):
+			candidates.append(monster_key)
+	candidates.sort()
+	if candidates.is_empty():
+		return
+	var next_index := 0
+	var current_index := candidates.find(selected_monster_id)
+	if current_index >= 0:
+		next_index = (current_index + 1) % candidates.size()
+	_set_monster_target(candidates[next_index])
+
+func _set_monster_target(monster_id: String) -> void:
+	if not monsters.has(monster_id):
+		return
+	_clear_target_ring()
+	selected_monster_id = monster_id
+	var target := monsters[monster_id] as Node3D
+	var ring := MeshInstance3D.new()
+	ring.name = "TargetSelectionRing"
+	var torus := TorusMesh.new()
+	torus.inner_radius = 0.62
+	torus.outer_radius = 0.72
+	ring.mesh = torus
+	ring.position.y = 0.06
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#f0c66e")
+	material.emission_enabled = true
+	material.emission = Color("#d99b35")
+	material.emission_energy_multiplier = 1.6
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring.material_override = material
+	target.add_child(ring)
+	target_selection_ring = ring
+	_update_target_info()
+	_show_notification("目标锁定：" + str(monster_entities.get(monster_id, {}).get("name", "怪物")))
+
+func _clear_target_ring() -> void:
+	if is_instance_valid(target_selection_ring):
+		target_selection_ring.queue_free()
+	target_selection_ring = null
+
+func _clear_monster_target() -> void:
+	_clear_target_ring()
+	selected_monster_id = ""
+	if is_instance_valid(target_info_panel):
+		target_info_panel.visible = false
+
+func _update_target_info() -> void:
+	if not is_instance_valid(target_info_panel) or not is_instance_valid(target_info_label):
+		return
+	if selected_monster_id.is_empty() or not monsters.has(selected_monster_id):
+		target_info_panel.visible = false
+		return
+	var entity: Dictionary = monster_entities.get(selected_monster_id, {})
+	var title := str(entity.get("name", "怪物")) + "  ·  Lv." + str(int(entity.get("level", 1)))
+	var hp_line := "目标已锁定"
+	if entity.has("health") and entity.has("max_health"):
+		hp_line = "生命 " + str(int(entity.get("health", 0))) + " / " + str(int(entity.get("max_health", 0)))
+	target_info_label.text = title + "\n" + hp_line + "    ·    Tab 切换目标"
+	target_info_panel.visible = hud_visible
 
 func _request_nearest_monster_attack() -> void:
 	var network := HHSession.world_network
