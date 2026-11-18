@@ -795,6 +795,7 @@ struct EnetServer::Impl {
     std::condition_variable chat_outbox_cv;
     bool chat_outbox_stop_requested{false};
     std::thread chat_outbox_thread;
+    Clock::time_point last_chat_outbox_metrics_at{};
 
     explicit Impl(ServerConfig value) : config(std::move(value)) {
         const auto add_monster = [this](std::string runtime_id, std::string definition_id,
@@ -1047,6 +1048,23 @@ struct EnetServer::Impl {
                 {
                     std::lock_guard lock(chat_outbox_mutex);
                     if (chat_outbox_stop_requested) return;
+                }
+                const auto metrics_now = Clock::now();
+                if (last_chat_outbox_metrics_at == Clock::time_point{} ||
+                    metrics_now - last_chat_outbox_metrics_at >= std::chrono::seconds(60)) {
+                    std::string metrics_error;
+                    const auto metrics = durable_outbox->stats(wall_clock_ms(), metrics_error);
+                    if (metrics_error.empty()) {
+                        std::clog << "[ChatOutbox] pending=" << metrics.pending
+                                  << " inflight=" << metrics.inflight
+                                  << " dead_letter=" << metrics.dead_letter
+                                  << " oldest_pending_seconds=" << metrics.oldest_pending_age_ms / 1000
+                                  << " oldest_dead_letter_seconds=" << metrics.oldest_dead_letter_age_ms / 1000
+                                  << '\\n';
+                    } else {
+                        std::cerr << "[ChatOutbox] metrics failed: " << metrics_error << '\\n';
+                    }
+                    last_chat_outbox_metrics_at = metrics_now;
                 }
                 std::string storage_error;
                 auto event = durable_outbox->claim_due_type(wall_clock_ms(), "nearby_chat", storage_error);
