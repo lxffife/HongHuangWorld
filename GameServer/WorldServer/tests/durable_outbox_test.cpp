@@ -89,7 +89,9 @@ int main() {
     {
         honghuang::persistence::DurableOutbox recovered_box(path, 4);
         std::string error;
-        auto recovered_chat = recovered_box.claim_due(500, error);
+        auto gameplay_event = recovered_box.claim_due_excluding(500, "nearby_chat", error);
+        assert(!gameplay_event); // Gameplay workers never claim chat traffic.
+        auto recovered_chat = recovered_box.claim_due_type(500, "nearby_chat", error);
         assert(recovered_chat && recovered_chat->event_id == "nearby-chat:client-1");
         assert(recovered_chat->payload.find("client-1") != std::string::npos);
         assert(recovered_box.mark_delivered(recovered_chat->event_id, error));
