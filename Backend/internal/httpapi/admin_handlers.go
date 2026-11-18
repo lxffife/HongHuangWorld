@@ -34,6 +34,12 @@ func (h *adminHandlers) require(w http.ResponseWriter,r *http.Request,key string
  u,err:=h.authenticate(r);if err!=nil{http.Error(w,"unauthorized",http.StatusUnauthorized);return adminauth.User{},false}
  if key!="" && !hasPermission(u,key){http.Error(w,"forbidden",http.StatusForbidden);return adminauth.User{},false};return u,true
 }
+func (h *adminHandlers) logout(w http.ResponseWriter,r *http.Request) {
+ if _,ok:=h.require(w,r,"");!ok{return}
+ token:=strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"),"Bearer "))
+ if err:=h.service.RevokeSession(r.Context(),token);err!=nil{h.logger.Error("admin logout failed","error",err);http.Error(w,"internal server error",http.StatusInternalServerError);return}
+ writeJSON(w,http.StatusOK,map[string]string{"status":"logged_out"})
+}
 func (h *adminHandlers) me(w http.ResponseWriter,r *http.Request){u,ok:=h.require(w,r,"");if !ok{return};writeJSON(w,http.StatusOK,u)}
 func (h *adminHandlers) changePassword(w http.ResponseWriter,r *http.Request){
  u,ok:=h.require(w,r,"");if !ok{return};var req adminPasswordRequest
