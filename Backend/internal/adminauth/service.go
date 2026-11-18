@@ -147,6 +147,29 @@ func (s *Service) ListPermissions(ctx context.Context) ([]map[string]string,erro
  out:=[]map[string]string{}; for rows.Next(){var k,n string;if err:=rows.Scan(&k,&n);err!=nil{return nil,err};out=append(out,map[string]string{"key":k,"name":n})};return out,rows.Err()
 }
 
+type Dashboard struct {
+ TotalSouls int64 `json:"total_souls"`
+ TotalCharacters int64 `json:"total_characters"`
+ EnabledWorlds int64 `json:"enabled_worlds"`
+ ReadyInstances int64 `json:"ready_instances"`
+ OnlinePlayers int64 `json:"online_players"`
+ ReadyServers int64 `json:"ready_servers"`
+}
+
+func (s *Service) Dashboard(ctx context.Context) (Dashboard,error) {
+ var out Dashboard
+ queries:=[]struct{query string;dest *int64}{
+  {`SELECT count(*) FROM souls`,&out.TotalSouls},
+  {`SELECT count(*) FROM characters`,&out.TotalCharacters},
+  {`SELECT count(*) FROM world_definitions WHERE enabled=true`,&out.EnabledWorlds},
+  {`SELECT count(*) FROM world_instances WHERE status='ready'`,&out.ReadyInstances},
+  {`SELECT count(*) FROM world_sessions WHERE session_state='active'`,&out.OnlinePlayers},
+  {`SELECT count(*) FROM server_registry WHERE status='ready'`,&out.ReadyServers},
+ }
+ for _,q:=range queries { if err:=s.db.QueryRowContext(ctx,q.query).Scan(q.dest);err!=nil{return Dashboard{},err} }
+ return out,nil
+}
+
 func (s *Service) ListUsers(ctx context.Context) ([]User,error) {
  rows,err:=s.db.QueryContext(ctx,`SELECT id::text,username,email,is_super_admin FROM admin_users ORDER BY created_at DESC`)
  if err!=nil{return nil,err}
