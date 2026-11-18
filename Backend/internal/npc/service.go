@@ -471,6 +471,8 @@ type ExplorationEvent struct {
 	PositionZ float64 `json:"position_z"`
 	InteractionRadius float64 `json:"interaction_radius"`
 	DangerLevel int `json:"danger_level"`
+	MeritReward int64 `json:"merit_reward"`
+	KarmaDelta int64 `json:"karma_delta"`
 	Status string `json:"status"`
 	Discovered bool `json:"discovered"`
 	Unlocked bool `json:"unlocked"`
@@ -505,6 +507,7 @@ func (s *Service) ListAvailableExplorationEvents(ctx context.Context, accountID 
 	rows,err:=s.db.QueryContext(ctx,
 		`SELECT e.id,e.point_id,p.name,e.title,e.description,e.event_type,
 		        p.position_x,p.position_y,p.position_z,p.interaction_radius,p.danger_level,
+		        e.merit_reward,e.karma_delta,
 		        (d.point_id IS NOT NULL),
 		        (d.point_id IS NOT NULL
 		          AND (e.required_race_id IS NULL OR e.required_race_id=c.race_id)
@@ -534,7 +537,7 @@ func (s *Service) ListAvailableExplorationEvents(ctx context.Context, accountID 
 		var item ExplorationEvent
 		if err:=rows.Scan(&item.ID,&item.PointID,&item.PointName,&item.Title,&item.Description,&item.EventType,
 			&item.PositionX,&item.PositionY,&item.PositionZ,&item.InteractionRadius,&item.DangerLevel,
-			&item.Discovered,&item.Unlocked,&item.Completed,&item.Status);err!=nil {
+			&item.MeritReward,&item.KarmaDelta,&item.Discovered,&item.Unlocked,&item.Completed,&item.Status);err!=nil {
 			return nil,fmt.Errorf("scan exploration event: %w",err)
 		}
 		items=append(items,item)
