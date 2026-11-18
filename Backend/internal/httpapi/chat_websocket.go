@@ -114,9 +114,18 @@ func (c *chatSocketClient) writeFrame(opcode byte, payload []byte) error {
 		header = append(header, 127)
 		header = append(header, extended[:]...)
 	}
-	if _, err := c.conn.Write(header); err != nil { return err }
-	_, err := c.conn.Write(payload)
-	return err
+	if err := writeChatSocketBytes(c.conn, header); err != nil { return err }
+	return writeChatSocketBytes(c.conn, payload)
+}
+
+func writeChatSocketBytes(conn net.Conn, data []byte) error {
+	for len(data) > 0 {
+		written, err := conn.Write(data)
+		if err != nil { return err }
+		if written == 0 { return io.ErrShortWrite }
+		data = data[written:]
+	}
+	return nil
 }
 
 func (c *chatSocketClient) writer() {
