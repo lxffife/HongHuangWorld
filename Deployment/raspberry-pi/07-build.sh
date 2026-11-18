@@ -18,9 +18,9 @@ if ! pkg-config --exists sqlite3; then
   exit 1
 fi
 mkdir -p "$HH_PROJECT_DIR/bin"
-(cd "$HH_PROJECT_DIR/Backend" && go mod tidy && go mod download && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o "$HH_PROJECT_DIR/bin/honghuang-api" ./cmd/api && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o "$HH_PROJECT_DIR/bin/honghuang-identity" ./cmd/identity)
+(cd "$HH_PROJECT_DIR/Backend" && go mod tidy && go mod download && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o "$HH_PROJECT_DIR/bin/honghuang-api" ./cmd/api && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o "$HH_PROJECT_DIR/bin/honghuang-identity" ./cmd/identity && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o "$HH_PROJECT_DIR/bin/honghuang-admin" ./cmd/admin)
 cmake -S "$HH_PROJECT_DIR/GameServer/WorldServer" -B "$HH_PROJECT_DIR/build/world-server" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
 cmake --build "$HH_PROJECT_DIR/build/world-server" --parallel "${HH_BUILD_JOBS:-2}"
 ctest --test-dir "$HH_PROJECT_DIR/build/world-server" --output-on-failure
 install -m 755 "$HH_PROJECT_DIR/build/world-server/world_server" "$HH_PROJECT_DIR/bin/world_server"
-log "Go API、Identity Service 与 WorldServer 构建、CTest 完成"
+log "Go API、Identity、Admin 与 WorldServer 构建、CTest 完成"
