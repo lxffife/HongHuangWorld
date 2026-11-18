@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,8 +19,7 @@ const (
 	chatEventSubject = "honghuang.chat.events.v1"
 	chatEventStream  = "HONGHUANG_CHAT_EVENTS"
 	chatEventMaxAge  = 30 * 24 * time.Hour
-	chatEventQueue   = 4096
-	chatEventSeenMax = 10000
+		chatEventSeenMax = 10000
 )
 
 var errInvalidChatEvent = errors.New("invalid chat event envelope")
@@ -39,7 +39,9 @@ type chatEventBus struct {
 	sub       *nats.Subscription
 	coreSub   *nats.Subscription
 	logger    *slog.Logger
-	publishQ  chan chatEventEnvelope
+	service   *chat.Service
+	workerID  string
+	wake      chan struct{}
 	stop      chan struct{}
 	workers   sync.WaitGroup
 	seenMu    sync.Mutex
@@ -47,9 +49,10 @@ type chatEventBus struct {
 	seenOrder []string
 }
 
-func newChatEventBus(hub *chatSocketHub, logger *slog.Logger) *chatEventBus {
+func newChatEventBus(hub *chatSocketHub, service *chat.Service, logger *slog.Logger) *chatEventBus {
 	bus := &chatEventBus{
-		hub: hub, logger: logger, stop: make(chan struct{}),
+		hub: hub, service: service, logger: logger, stop: make(chan struct{}), wake: make(chan struct{}, 1),
+		workerID: chatEventPublisherID(),
 		seen: make(map[string]struct{}),
 	}
 	url := strings.TrimSpace(os.Getenv("CHAT_NATS_URL"))
@@ -106,10 +109,10 @@ func newChatEventBus(hub *chatSocketHub, logger *slog.Logger) *chatEventBus {
 	}
 
 	bus.js = js
-	bus.publishQ = make(chan chatEventEnvelope, chatEventQueue)
 	bus.workers.Add(2)
 	go bus.consumeJetStream()
-	go bus.publishJetStream()
+	go bus.publishOutbox()
+	bus.signalOutbox()
 	logger.Info("chat JetStream durable consumer ready",
 		"stream", chatEventStream, "subject", chatEventSubject, "consumer", durable,
 		"max_age", chatEventMaxAge.String())
@@ -260,63 +263,103 @@ func (b *chatEventBus) publish(message chat.Message) {
 	if b == nil {
 		return
 	}
-	// The database write has already succeeded. Local delivery never waits for
-	// NATS, JetStream acknowledgements, or another ChatServer.
+	// Local delivery is immediate. The durable event itself was committed to
+	// PostgreSQL in the same transaction as chat_messages.
 	b.broadcastOnce(message)
-	envelope := chatEventEnvelope{Version: 1, Message: message}
 	if b.js != nil {
-		select {
-		case b.publishQ <- envelope:
-		default:
-			b.logger.Error("chat JetStream publish queue is full; event requires history/outbox recovery", "message_id", message.ID)
-		}
+		b.signalOutbox()
 		return
 	}
 	if b.conn == nil {
 		return
 	}
-	payload, err := json.Marshal(envelope)
+	payload, err := json.Marshal(chatEventEnvelope{Version: 1, Message: message})
 	if err != nil {
-		b.logger.Error("encode chat event failed", "message_id", message.ID, "error", err)
+		b.logger.Error("encode fallback Core NATS chat event failed", "message_id", message.ID, "error", err)
 		return
 	}
 	if err := b.conn.Publish(chatEventSubject, payload); err != nil {
-		b.logger.Warn("publish chat event to Core NATS failed; local delivery succeeded", "message_id", message.ID, "error", err)
+		b.logger.Warn("publish fallback Core NATS chat event failed; local delivery succeeded", "message_id", message.ID, "error", err)
 	}
 }
 
-func (b *chatEventBus) publishJetStream() {
+func chatEventPublisherID() string {
+	host, _ := os.Hostname()
+	if host == "" {
+		host = "chat"
+	}
+	return fmt.Sprintf("%s-%d", host, os.Getpid())
+}
+
+func (b *chatEventBus) signalOutbox() {
+	if b == nil || b.wake == nil {
+		return
+	}
+	select {
+	case b.wake <- struct{}{}:
+	default:
+	}
+}
+
+func (b *chatEventBus) publishOutbox() {
 	defer b.workers.Done()
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-b.stop:
 			return
-		case envelope := <-b.publishQ:
-			payload, err := json.Marshal(envelope)
-			if err != nil {
-				b.logger.Error("encode JetStream chat event failed", "message_id", envelope.Message.ID, "error", err)
+		case <-b.wake:
+		case <-ticker.C:
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		items, err := b.service.ClaimChatEventOutbox(ctx, b.workerID, 32, time.Minute)
+		cancel()
+		if err != nil {
+			b.logger.Warn("claim chat event outbox failed", "error", err)
+			continue
+		}
+		for _, item := range items {
+			payload, encodeErr := json.Marshal(chatEventEnvelope{Version: 1, Message: item.Message})
+			if encodeErr != nil {
+				b.retryOutbox(item, encodeErr)
 				continue
 			}
-			delay := time.Second
-			for {
-				_, err = b.js.Publish(chatEventSubject, payload, nats.MsgId(envelope.Message.ID), nats.AckWait(5*time.Second))
-				if err == nil {
-					break
-				}
-				b.logger.Warn("JetStream chat publish failed; retrying asynchronously", "message_id", envelope.Message.ID, "error", err)
-				timer := time.NewTimer(delay)
-				select {
-				case <-b.stop:
-					timer.Stop()
-					return
-				case <-timer.C:
-				}
-				if delay < 30*time.Second {
-					delay *= 2
-				}
+			_, publishErr := b.js.Publish(chatEventSubject, payload, nats.MsgId(item.Message.ID))
+			if publishErr != nil {
+				b.retryOutbox(item, publishErr)
+				continue
+			}
+			markCtx, markCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			markErr := b.service.MarkChatEventOutboxPublished(markCtx, b.workerID, item.Message.ID)
+			markCancel()
+			if markErr != nil {
+				// JetStream already acknowledged the message. Leave the lease to
+				// expire; retrying with the same NATS MsgId is safe and deduped.
+				b.logger.Error("mark chat outbox event published failed", "message_id", item.Message.ID, "error", markErr)
 			}
 		}
 	}
+}
+
+func (b *chatEventBus) retryOutbox(item chat.OutboxItem, publishErr error) {
+	exponent := item.Attempts - 1
+	if exponent < 0 {
+		exponent = 0
+	}
+	if exponent > 5 {
+		exponent = 5
+	}
+	delay := time.Duration(1<<exponent) * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	err := b.service.RetryChatEventOutbox(ctx, b.workerID, item.Message.ID, delay, publishErr)
+	cancel()
+	if err != nil {
+		b.logger.Error("schedule chat outbox retry failed", "message_id", item.Message.ID, "publish_error", publishErr, "error", err)
+		return
+	}
+	b.logger.Warn("chat event publish failed; durable outbox retry scheduled", "message_id", item.Message.ID, "attempts", item.Attempts, "retry_in", delay, "error", publishErr)
 }
 
 func (b *chatEventBus) consumeJetStream() {
