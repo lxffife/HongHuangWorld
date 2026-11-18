@@ -90,6 +90,7 @@ var npc_interact_button: Button
 var npc_trial_button: Button
 var npc_eligibility_button: Button
 var npc_soul_button: Button
+var npc_fusion_button: Button
 var npc_soul_breakthrough_button: Button
 var npc_reincarnation_leave_button: Button
 var npc_fate_encounter_button: Button
@@ -775,6 +776,10 @@ func _update_compact_hud(progression: Dictionary = {}) -> void:
 		if mutations.size() > 0:
 			var latest: Dictionary = mutations[0]
 			compact_hud_label.text += " · " + str(latest.get("name", "未知异变")) + "（" + str(latest.get("rarity", "uncommon")) + "）"
+		var fusion_names: Array = soul_essence_profile.get("fusion_names", [])
+		compact_hud_label.text += "\\n魂质融合 · 已凝成 " + str(soul_essence_profile.get("fusion_count", 0)) + " 道魂印"
+		if fusion_names.size() > 0:
+			compact_hud_label.text += " · " + ", ".join(PackedStringArray(fusion_names))
 		if pending_choices.size() > 0:
 			compact_hud_label.text += "  |  无相灵魄待分配 " + str(pending_choices.size())
 
@@ -1817,6 +1822,11 @@ func _build_npc_ui() -> void:
 	npc_soul_button.text = "查看灵魂境界"
 	npc_soul_button.pressed.connect(_request_soul_progression)
 	layout.add_child(npc_soul_button)
+	npc_fusion_button = Button.new()
+	npc_fusion_button.text = "查看魂质融合"
+	npc_fusion_button.visible = false
+	npc_fusion_button.pressed.connect(_request_soul_fusions)
+	layout.add_child(npc_fusion_button)
 	npc_soul_breakthrough_button = Button.new()
 	npc_soul_breakthrough_button.text = "主动突破灵魂境界"
 	npc_soul_breakthrough_button.visible = false
@@ -1981,6 +1991,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_eligibility_button.visible = str(npc_data.get("interaction_type", "")) == "reincarnation_guidance"
 			npc_soul_button.visible = true
 			npc_soul_breakthrough_button.visible = false
+			npc_fusion_button.visible = str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu"
 			npc_panel.visible = true
 		"fate_encounter":
 			npc_title_label.text = "命格奇遇 · " + str(data.get("title", "未知奇遇"))
@@ -2044,6 +2055,45 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_eligibility_button.visible = false
 			npc_panel.visible = true
 			_request_soul_progression()
+		"soul_fusions":
+			_clear_npc_choice_buttons()
+			var recipes: Array = data.get("recipes", [])
+			var lines: Array[String] = ["魂质融合 · 灵魂永久传承", "融合不会消耗或删除原始异变记录；每种配方每个灵魂只能完成一次。"]
+			var attribute_names := {"strength":"力量","constitution":"体质","agility":"敏捷","spirit":"灵力","vitality":"气血"}
+			for recipe_variant in recipes:
+				if not recipe_variant is Dictionary:
+					continue
+				var recipe: Dictionary = recipe_variant
+				var recipe_name := str(recipe.get("name", "未知融合"))
+				var required: Array = recipe.get("required_attributes", [])
+				var missing: Array = recipe.get("missing_attributes", [])
+				var required_names: Array[String] = []
+				for attribute in required:
+					required_names.append(str(attribute_names.get(str(attribute), str(attribute))))
+				var state := "已融合" if bool(recipe.get("completed", false)) else ("材料齐备" if bool(recipe.get("available", false)) else "缺少：" + ", ".join(PackedStringArray(missing.map(func(value): return str(attribute_names.get(str(value), str(value)))))))
+				lines.append(recipe_name + "（" + ", ".join(PackedStringArray(required_names)) + "）· " + state)
+				lines.append(str(recipe.get("description", "")))
+				if bool(recipe.get("available", false)):
+					var fuse_button := Button.new()
+					fuse_button.text = "融合 · " + recipe_name
+					fuse_button.pressed.connect(_fuse_soul_recipe.bind(str(recipe.get("id", "")), recipe_name))
+					npc_choice_container.add_child(fuse_button)
+			npc_title_label.text = "魂质融合 · 灵魂本源"
+			npc_dialogue_label.text = "\\n".join(PackedStringArray(lines))
+			npc_status_label.text = "融合由中心服验证异变材料并结算来世资质；五种魂质异变齐全可尝试五行混元魂。"
+			npc_fusion_button.visible = true
+			npc_panel.visible = true
+		" soul_fusion_unused":
+			pass
+		"soul_fusion":
+			npc_title_label.text = "魂质融合成功 · " + str(data.get("name", "灵魂异变"))
+			npc_dialogue_label.text = str(data.get("description", "魂质已成功融合。")) + "\\n融合结果已永久写入灵魂，并强化来世五维资质。"
+			npc_status_label.text = "原始魂质异变仍完整保留；正在刷新灵魂档案。"
+			_show_notification("魂质融合成功 · " + str(data.get("name", "新魂印")), 5.0)
+			npc_fusion_button.visible = true
+			npc_panel.visible = true
+			_request_soul_essence()
+			_request_soul_fusions()
 		"eligibility":
 			var realm := str(data.get("current_realm_name", "未知"))
 			var required := str(data.get("required_realm_name", "聚灵境"))
@@ -2291,6 +2341,18 @@ func _try_interact_nearest_npc() -> void:
 			nearest_point_id = str(point_id)
 	if not nearest_point_id.is_empty():
 		_discover_exploration_point(nearest_point_id)
+
+func _request_soul_fusions() -> void:
+	if npc_request_busy:
+		return
+	npc_status_label.text = "正在核验灵魂已觉醒的魂质异变……"
+	_send_npc_request("GET", "/api/v1/souls/current/fusions", "soul_fusions")
+
+func _fuse_soul_recipe(recipe_id: String, recipe_name: String) -> void:
+	if npc_request_busy or recipe_id.is_empty():
+		return
+	npc_status_label.text = "正在融合「" + recipe_name + "」，由中心服校验材料与来世资质……"
+	_send_npc_request("POST", "/api/v1/souls/current/fusions", "soul_fusion", {"recipe_id": recipe_id})
 
 func _request_soul_trials() -> void:
 	if npc_request_busy:
