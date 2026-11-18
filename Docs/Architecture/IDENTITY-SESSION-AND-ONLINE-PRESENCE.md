@@ -51,9 +51,10 @@ A user can be chat-online without being in a world, and can be in a world while 
 - Client WebSocket ping frames and the Chat JSON ping message refresh the lease. The lease lasts 90 seconds; the socket read deadline is 75 seconds.
 - A clean disconnect deletes that connection's lease. A process crash leaves a lease that becomes inactive automatically at expiry; a cleanup worker deletes expired rows once per minute.
 - Multiple devices and Chat nodes use independent connection IDs. The account remains chat-online while at least one unexpired lease exists.
-- GET /api/v1/chat/presence returns the authenticated caller's Chat-only presence and active connection count. It does not disclose other users' presence.
+- GET /api/v1/chat/presence returns the authenticated caller's Chat-only presence and active connection count.
+- GET /api/v1/chat/presence/friends returns Chat presence only for characters connected through the caller's friendship rows; it does not provide arbitrary account-ID lookup.
 - While the socket is active, Chat revalidates the Identity token at least every 30 seconds when frames are received. The Identity client also has its short introspection cache; revocation propagation is therefore bounded by the revalidation interval, cache TTL, and network behavior.
 - The Game-to-Chat consumer continues to project world-session events into Chat-owned tables. Game in-world status remains a separate state and is not included in chat_online.
 
-The product-level aggregate online API (combining Chat connections and Game sessions), friend presence visibility, and richer presence fanout are intentionally separate follow-up work. Do not treat chat_online as proof that a player is in a Game world.
+The product-level aggregate online API (combining Chat connections and Game sessions) and richer presence fanout are intentionally separate follow-up work. Do not treat chat_online as proof that a player is in a Game world.
 
