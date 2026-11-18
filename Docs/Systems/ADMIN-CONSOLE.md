@@ -48,7 +48,7 @@
 - Backend/cmd/admin：独立管理 API 进程，默认端口 8790。
 - ADMIN_BOOTSTRAP_USERNAME / ADMIN_BOOTSTRAP_EMAIL / ADMIN_BOOTSTRAP_PASSWORD：首次启动时创建超级管理员；若已有活动超级管理员则不重置密码。没有管理员且未配置引导凭据时拒绝启动。
 - 后台登录使用独立 12 小时会话，数据库仅保存 token SHA-256；密码使用 bcrypt。
-- 当前 API：POST /api/v1/admin/auth/login、GET /api/v1/admin/auth/me、POST /api/v1/admin/auth/password、GET/POST /api/v1/admin/users、GET /api/v1/admin/permissions、PUT /api/v1/admin/users/{id}/permissions。
+- 当前 API：POST /api/v1/admin/auth/login、GET /api/v1/admin/auth/me、POST /api/v1/admin/auth/logout、POST /api/v1/admin/auth/password、GET/POST /api/v1/admin/users、GET /api/v1/admin/permissions、PUT /api/v1/admin/users/{id}/permissions。
 - 普通用户由后台管理员创建；权限以直接授权方式分配。普通管理员管理权限不能由非超级管理员授予。
 - Windows / Linux 启动脚本已加入 Deployment。
 
