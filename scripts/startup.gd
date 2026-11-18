@@ -359,6 +359,14 @@ func _show_login_screen() -> void:
 	if is_instance_valid(right_panel_control):
 		right_panel_control.show()
 	account_label.hide()
+	character_title_label.hide()
+	character_input.hide()
+	race_label_control.hide()
+	race_select.hide()
+	cultivation_preview.hide()
+	world_label_control.hide()
+	world_select.hide()
+	action_button.hide()
 	if is_instance_valid(details_toggle_button):
 		details_toggle_button.hide()
 	if is_instance_valid(details_container):
