@@ -12,7 +12,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/liflife/HongHuangWorld/Backend/internal/auth"
 	"github.com/liflife/HongHuangWorld/Backend/internal/chat"
 	"github.com/liflife/HongHuangWorld/Backend/internal/character"
 	"github.com/liflife/HongHuangWorld/Backend/internal/inventory"
