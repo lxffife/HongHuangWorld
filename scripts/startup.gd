@@ -33,6 +33,11 @@ var world_label_control: Label
 var auth_controls: Array[Control] = []
 var account_label: Label
 var right_info_label: Label
+var right_panel_control: PanelContainer
+var login_brand_controls: Array[Control] = []
+var details_container: VBoxContainer
+var details_toggle_button: Button
+var details_expanded := false
 var reincarnation_name_input: LineEdit
 var reincarnation_race_select: OptionButton
 var reincarnation_route_select: OptionButton
@@ -66,10 +71,7 @@ func _ready() -> void:
 		api_base = HHSession.api_base
 		access_token = HHSession.access_token
 		api_input.text = api_base
-		for control in auth_controls:
-			control.hide()
-		account_label.text = "已登录账号：" + username_input.text.strip_edges()
-		account_label.show()
+		_show_authenticated_workspace()
 		_set_status("已恢复登录会话，正在重新读取灵魂与角色数据……")
 		_enqueue(HTTPClient.METHOD_GET, "/api/v1/souls/current", {}, true, "soul_check")
 	else:
@@ -86,7 +88,7 @@ func _build_ui() -> void:
 	add_child(center)
 
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(960, 600)
+	panel.custom_minimum_size = Vector2(900, 580)
 	center.add_child(panel)
 
 	var main_layout := HBoxContainer.new()
@@ -106,6 +108,7 @@ func _build_ui() -> void:
 	left_scroll.add_child(content_box)
 
 	var right_panel := PanelContainer.new()
+	right_panel_control = right_panel
 	right_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	main_layout.add_child(right_panel)
@@ -133,12 +136,14 @@ func _build_ui() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 30)
 	content_box.add_child(title)
+	login_brand_controls.append(title)
 
 	var subtitle := Label.new()
 	subtitle.text = "中心服登录 · 灵魂档案 · 转世角色 · 世界入口"
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.add_theme_color_override("font_color", Color("#aab6cc"))
 	content_box.add_child(subtitle)
+	login_brand_controls.append(subtitle)
 
 	api_input = _add_line_edit("中心服 API 地址", DEFAULT_API)
 	username_input = _add_line_edit("账号", "")
@@ -206,7 +211,7 @@ func _build_ui() -> void:
 
 	status_label = Label.new()
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	status_label.custom_minimum_size.y = 110
+	status_label.custom_minimum_size.y = 42
 	content_box.add_child(status_label)
 
 	http = HTTPRequest.new()
@@ -215,49 +220,58 @@ func _build_ui() -> void:
 	http.request_completed.connect(_on_http_completed)
 
 func _build_reincarnation_ui() -> void:
+	details_toggle_button = Button.new()
+	details_toggle_button.text = "展开灵魂档案与轮回功能"
+	details_toggle_button.visible = false
+	details_toggle_button.pressed.connect(_toggle_soul_details)
+	details_container.add_child(details_toggle_button)
+	details_container = VBoxContainer.new()
+	details_container.add_theme_constant_override("separation", 10)
+	details_container.add_child(details_container)
+	details_container.hide()
 	var separator := HSeparator.new()
-	content_box.add_child(separator)
+	details_container.add_child(separator)
 	var title := Label.new()
 	title.text = "主动轮回 · 创建下一世肉身"
 	title.add_theme_font_size_override("font_size", 18)
-	content_box.add_child(title)
+	details_container.add_child(title)
 	reincarnation_status_label = Label.new()
 	reincarnation_status_label.text = "完成冥界试炼并达到聚灵境后，可在轮回殿申请投胎。"
 	reincarnation_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	content_box.add_child(reincarnation_status_label)
+	details_container.add_child(reincarnation_status_label)
 	reincarnation_name_input = LineEdit.new()
 	reincarnation_name_input.placeholder_text = "新肉身名称（2–24 个字符）"
 	reincarnation_name_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	content_box.add_child(reincarnation_name_input)
+	details_container.add_child(reincarnation_name_input)
 	reincarnation_race_select = OptionButton.new()
 	reincarnation_race_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	reincarnation_race_select.item_selected.connect(_on_reincarnation_race_selected)
-	content_box.add_child(reincarnation_race_select)
+	details_container.add_child(reincarnation_race_select)
 	reincarnation_route_label = Label.new()
 	reincarnation_route_label.text = "选择出生路线（由中心服配置）"
-	content_box.add_child(reincarnation_route_label)
+	details_container.add_child(reincarnation_route_label)
 	reincarnation_route_select = OptionButton.new()
 	reincarnation_route_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	reincarnation_route_select.item_selected.connect(_update_reincarnation_route_description)
-	content_box.add_child(reincarnation_route_select)
+	details_container.add_child(reincarnation_route_select)
 	reincarnation_route_description = Label.new()
 	reincarnation_route_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	reincarnation_route_description.add_theme_color_override("font_color", Color("#aab6cc"))
-	content_box.add_child(reincarnation_route_description)
+	details_container.add_child(reincarnation_route_description)
 	reincarnation_inheritance_label = Label.new()
 	reincarnation_inheritance_label.text = "选择种族后，将显示灵魂吞噬资质对下一世出生属性的影响。"
 	reincarnation_inheritance_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	reincarnation_inheritance_label.add_theme_color_override("font_color", Color("#d7c59a"))
-	content_box.add_child(reincarnation_inheritance_label)
+	details_container.add_child(reincarnation_inheritance_label)
 	reincarnation_check_button = Button.new()
 	reincarnation_check_button.text = "查询投胎资格"
 	reincarnation_check_button.pressed.connect(_check_reincarnation_eligibility)
-	content_box.add_child(reincarnation_check_button)
+	details_container.add_child(reincarnation_check_button)
 	reincarnation_submit_button = Button.new()
 	reincarnation_submit_button.text = "确认创建新肉身"
 	reincarnation_submit_button.disabled = true
 	reincarnation_submit_button.pressed.connect(func(): reincarnation_confirm.popup_centered())
-	content_box.add_child(reincarnation_submit_button)
+	details_container.add_child(reincarnation_submit_button)
 	reincarnation_confirm = ConfirmationDialog.new()
 	reincarnation_confirm.title = "确认主动轮回"
 	reincarnation_confirm.dialog_text = "此操作不可撤销：当前肉身将归档为前世，并为同一灵魂创建新的肉身。灵魂经验、功德、业力会保留。是否继续？"
@@ -268,54 +282,87 @@ func _build_reincarnation_ui() -> void:
 	life_history_title = Label.new()
 	life_history_title.text = "灵魂历世档案"
 	life_history_title.add_theme_font_size_override("font_size", 18)
-	content_box.add_child(life_history_title)
+	details_container.add_child(life_history_title)
 	life_history_status = Label.new()
 	life_history_status.text = "登录后读取同一灵魂的历世记录。"
 	life_history_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	content_box.add_child(life_history_status)
+	details_container.add_child(life_history_status)
 	life_history_box = VBoxContainer.new()
 	life_history_box.add_theme_constant_override("separation", 8)
-	content_box.add_child(life_history_box)
+	details_container.add_child(life_history_box)
 	life_history_refresh_button = Button.new()
 	life_history_refresh_button.text = "刷新历世档案"
 	life_history_refresh_button.pressed.connect(_request_life_history)
-	content_box.add_child(life_history_refresh_button)
+	details_container.add_child(life_history_refresh_button)
 	for control in [life_history_title, life_history_status, life_history_box, life_history_refresh_button]:
 		control.hide()
 	soul_memory_title = Label.new()
 	soul_memory_title.text = "前世记忆 · 灵魂深处"
 	soul_memory_title.add_theme_font_size_override("font_size", 18)
-	content_box.add_child(soul_memory_title)
+	details_container.add_child(soul_memory_title)
 	soul_memory_status = Label.new()
 	soul_memory_status.text = "部分前世记忆需要更高的灵魂境界才能稳定显现。"
 	soul_memory_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	content_box.add_child(soul_memory_status)
+	details_container.add_child(soul_memory_status)
 	soul_memory_box = VBoxContainer.new()
 	soul_memory_box.add_theme_constant_override("separation", 8)
-	content_box.add_child(soul_memory_box)
+	details_container.add_child(soul_memory_box)
 	soul_memory_refresh_button = Button.new()
 	soul_memory_refresh_button.text = "感知前世记忆"
 	soul_memory_refresh_button.pressed.connect(_request_soul_memories)
-	content_box.add_child(soul_memory_refresh_button)
+	details_container.add_child(soul_memory_refresh_button)
 	for control in [soul_memory_title, soul_memory_status, soul_memory_box, soul_memory_refresh_button]:
 		control.hide()
 	soul_fate_title = Label.new()
 	soul_fate_title.text = "因果簿 · 功德与业力"
 	soul_fate_title.add_theme_font_size_override("font_size", 18)
-	content_box.add_child(soul_fate_title)
+	details_container.add_child(soul_fate_title)
 	soul_fate_status = Label.new()
 	soul_fate_status.text = "功德与业力属于灵魂，轮回后不会清零。"
 	soul_fate_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	content_box.add_child(soul_fate_status)
+	details_container.add_child(soul_fate_status)
 	soul_fate_box = VBoxContainer.new()
 	soul_fate_box.add_theme_constant_override("separation", 4)
-	content_box.add_child(soul_fate_box)
+	details_container.add_child(soul_fate_box)
 	soul_fate_refresh_button = Button.new()
 	soul_fate_refresh_button.text = "查看因果记录"
 	soul_fate_refresh_button.pressed.connect(_request_soul_fate)
-	content_box.add_child(soul_fate_refresh_button)
+	details_container.add_child(soul_fate_refresh_button)
 	for control in [soul_fate_title, soul_fate_status, soul_fate_box, soul_fate_refresh_button]:
 		control.hide()
+
+func _toggle_soul_details() -> void:
+	details_expanded = not details_expanded
+	details_container.visible = details_expanded
+	details_toggle_button.text = "收起灵魂档案与轮回功能" if details_expanded else "展开灵魂档案与轮回功能"
+
+func _show_authenticated_workspace() -> void:
+	for control in auth_controls:
+		control.hide()
+	for control in login_brand_controls:
+		control.hide()
+	if is_instance_valid(right_panel_control):
+		right_panel_control.hide()
+	account_label.text = "当前账号  ·  " + username_input.text.strip_edges()
+	account_label.show()
+	if is_instance_valid(details_toggle_button):
+		details_toggle_button.hide()
+	if is_instance_valid(details_container):
+		details_container.hide()
+	details_expanded = false
+
+func _show_login_screen() -> void:
+	for control in auth_controls:
+		control.show()
+	for control in login_brand_controls:
+		control.show()
+	if is_instance_valid(right_panel_control):
+		right_panel_control.show()
+	account_label.hide()
+	if is_instance_valid(details_toggle_button):
+		details_toggle_button.hide()
+	if is_instance_valid(details_container):
+		details_container.hide()
 
 func _request_soul_fate() -> void:
 	if access_token.is_empty():
@@ -654,6 +701,8 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 	var data: Dictionary = parsed if parsed is Dictionary else {}
 
 	if result != HTTPRequest.RESULT_SUCCESS:
+		login_button.disabled = false
+		login_button.text = "登录"
 		_set_status("网络请求失败，请检查中心服地址和服务状态。")
 		_process_queue()
 		return
@@ -675,14 +724,15 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 		return
 
 	if response_code < 200 or response_code >= 300:
+		if context == "login" or context == "register":
+			login_button.disabled = false
+			login_button.text = "登录"
 		if context == "register" and response_code == 400:
 			_set_status("注册失败：账号必须为 3–32 位英文字母、数字或下划线；密码必须为 12–72 个字符。邮箱可以填写有效邮箱。")
 		elif context == "soul_check" and response_code == 401:
 			access_token = ""
 			HHSession.access_token = ""
-			for control in auth_controls:
-				control.show()
-			account_label.hide()
+			_show_login_screen()
 			_set_status("登录会话已过期，请重新登录后继续办理轮回。")
 		elif context == "life_history":
 			life_history_status.text = "历世档案读取失败（HTTP " + str(response_code) + "）：" + body_text
@@ -716,11 +766,10 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 			if access_token.is_empty():
 				_set_status("认证响应缺少 access_token。")
 			else:
+				login_button.disabled = false
+				login_button.text = "登录"
 				_save_client_config()
-				for control in auth_controls:
-					control.hide()
-				account_label.text = "已登录账号：" + username_input.text.strip_edges()
-				account_label.show()
+				_show_authenticated_workspace()
 				right_info_label.text = "身份验证成功。正在读取灵魂档案与世界目录……"
 				_set_status("账号认证成功，正在读取灵魂档案……")
 				_enqueue(HTTPClient.METHOD_GET, "/api/v1/souls/current", {}, true, "soul_check")
@@ -809,6 +858,8 @@ func _on_login_pressed() -> void:
 	access_token = ""
 	current_character = {}
 	worlds.clear()
+	login_button.disabled = true
+	login_button.text = "正在登录…"
 	_set_status("正在登录中心服……")
 	_enqueue(HTTPClient.METHOD_POST, "/api/v1/auth/login", {
 		"username": username_input.text.strip_edges(),
@@ -818,6 +869,7 @@ func _on_login_pressed() -> void:
 func _show_reincarnation_controls() -> void:
 	for control in [reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_route_label, reincarnation_route_select, reincarnation_route_description, reincarnation_inheritance_label, reincarnation_check_button, reincarnation_submit_button, life_history_title, life_history_status, life_history_box, life_history_refresh_button, soul_memory_title, soul_memory_status, soul_memory_box, soul_memory_refresh_button, soul_fate_title, soul_fate_status, soul_fate_box, soul_fate_refresh_button]:
 		control.show()
+	details_toggle_button.show()
 	reincarnation_name_input.text = ""
 	reincarnation_eligible = false
 	reincarnation_submit_button.disabled = true
