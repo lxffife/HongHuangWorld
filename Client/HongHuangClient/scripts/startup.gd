@@ -419,7 +419,9 @@ func _build_lobby_ui() -> void:
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	lobby_root.add_child(center)
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(820, 520)
+	panel.custom_minimum_size = Vector2(1080, 700)
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	center.add_child(panel)
 	var layout := VBoxContainer.new()
 	layout.add_theme_constant_override("separation", 18)
@@ -440,18 +442,19 @@ func _build_lobby_ui() -> void:
 	var body := HBoxContainer.new()
 	lobby_body_container = body
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body.add_theme_constant_override("separation", 24)
+	body.add_theme_constant_override("separation", 18)
+	body.custom_minimum_size.y = 430
 	layout.add_child(body)
 	var preview_container := SubViewportContainer.new()
-	preview_container.custom_minimum_size = Vector2(300, 340)
-	preview_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	preview_container.custom_minimum_size = Vector2(360, 430)
+	preview_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	preview_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	preview_container.stretch = true
 	preview_container.mouse_filter = Control.MOUSE_FILTER_STOP
 	preview_container.gui_input.connect(_on_lobby_preview_input)
 	body.add_child(preview_container)
 	var preview_viewport := SubViewport.new()
-	preview_viewport.size = Vector2i(480, 560)
+	preview_viewport.size = Vector2i(560, 680)
 	preview_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	preview_viewport.transparent_bg = false
 	preview_container.add_child(preview_viewport)
@@ -468,8 +471,8 @@ func _build_lobby_ui() -> void:
 	preview_world.environment = preview_environment
 	lobby_preview_root.add_child(preview_world)
 	var preview_camera := Camera3D.new()
-	preview_camera.position = Vector3(0.0, 1.45, 4.4)
-	preview_camera.look_at(Vector3(0.0, 1.05, 0.0), Vector3.UP)
+	preview_camera.position = Vector3(0.0, 1.48, 4.7)
+	preview_camera.look_at(Vector3(0.0, 1.12, 0.0), Vector3.UP)
 	preview_camera.current = true
 	lobby_preview_root.add_child(preview_camera)
 	var key_light := DirectionalLight3D.new()
@@ -483,11 +486,16 @@ func _build_lobby_ui() -> void:
 	rim_light.omni_range = 5.0
 	lobby_preview_root.add_child(rim_light)
 	_build_lobby_preview_model()
+	var info_scroll := ScrollContainer.new()
+	info_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	info_scroll.custom_minimum_size = Vector2(520, 0)
+	info_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body.add_child(info_scroll)
 	var info := VBoxContainer.new()
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	info.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	info.add_theme_constant_override("separation", 14)
-	body.add_child(info)
+	info.add_theme_constant_override("separation", 10)
+	info_scroll.add_child(info)
 	var section := Label.new()
 	section.text = "此世命格"
 	section.add_theme_color_override("font_color", Color("#c5a76d"))
@@ -557,6 +565,7 @@ func _build_lobby_ui() -> void:
 	layout.add_child(footer_separator)
 	var footer := HBoxContainer.new()
 	footer.add_theme_constant_override("separation", 12)
+	footer.custom_minimum_size.y = 54
 	layout.add_child(footer)
 	var archive_button := Button.new()
 	archive_button.text = "灵魂档案 / 轮回"
