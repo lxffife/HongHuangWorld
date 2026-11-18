@@ -47,8 +47,6 @@ type SendRequest struct {
 
 func NewService(db *sql.DB) *Service { return &Service{db: db} }
 
-func NewProjectionService(db *sql.DB) *Service { return NewService(db) }
-
 func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (Message, error) {
 	req.Channel = strings.TrimSpace(req.Channel)
 	req.Content = strings.TrimSpace(req.Content)
