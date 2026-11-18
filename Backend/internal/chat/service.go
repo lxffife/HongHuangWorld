@@ -427,7 +427,7 @@ func (s *Service) ClaimChatEventOutbox(ctx context.Context, workerID string, lim
 			LIMIT $1
 		)
 		UPDATE chat_event_outbox o
-		SET locked_until = now() + $2::interval,
+		SET locked_until = now() + make_interval(secs => $2::double precision),
 		    locked_by = $3,
 		    attempts = o.attempts + 1
 		FROM picked
@@ -497,10 +497,10 @@ func (s *Service) RetryChatEventOutbox(ctx context.Context, workerID, messageID 
 	}
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE chat_event_outbox
-		SET next_attempt_at = now() + $3::interval,
+		SET next_attempt_at = now() + make_interval(secs => $3::double precision),
 		    locked_until = NULL, locked_by = NULL, last_error = $4
 		WHERE message_id = $1::uuid AND locked_by = $2 AND published_at IS NULL`,
-		messageID, workerID, delay.String(), reason)
+		messageID, workerID, delay.Seconds(), reason)
 	if err != nil {
 		return fmt.Errorf("schedule chat outbox retry: %w", err)
 	}
