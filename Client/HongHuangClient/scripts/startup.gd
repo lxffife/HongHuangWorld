@@ -47,6 +47,9 @@ var lobby_status_label: Label
 var lobby_details_host: VBoxContainer
 var lobby_body_container: HBoxContainer
 var lobby_enter_button: Button
+var lobby_preview_root: Node3D
+var lobby_preview_dragging := false
+var lobby_preview_last_mouse := Vector2.ZERO
 var reincarnation_name_input: LineEdit
 var reincarnation_race_select: OptionButton
 var reincarnation_route_select: OptionButton
@@ -421,20 +424,47 @@ func _build_lobby_ui() -> void:
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 24)
 	layout.add_child(body)
-	var emblem_panel := PanelContainer.new()
-	emblem_panel.custom_minimum_size = Vector2(300, 300)
-	emblem_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	emblem_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body.add_child(emblem_panel)
-	var emblem_center := CenterContainer.new()
-	emblem_panel.add_child(emblem_center)
-	var emblem := Label.new()
-	emblem.text = "灵"
-	emblem.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	emblem.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	emblem.add_theme_font_size_override("font_size", 112)
-	emblem.add_theme_color_override("font_color", Color("#d9c28e"))
-	emblem_center.add_child(emblem)
+	var preview_container := SubViewportContainer.new()
+	preview_container.custom_minimum_size = Vector2(300, 340)
+	preview_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	preview_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	preview_container.stretch = true
+	preview_container.mouse_filter = Control.MOUSE_FILTER_STOP
+	preview_container.gui_input.connect(_on_lobby_preview_input)
+	body.add_child(preview_container)
+	var preview_viewport := SubViewport.new()
+	preview_viewport.size = Vector2i(480, 560)
+	preview_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	preview_viewport.transparent_bg = false
+	preview_container.add_child(preview_viewport)
+	lobby_preview_root = Node3D.new()
+	lobby_preview_root.name = "CharacterPreview"
+	preview_viewport.add_child(lobby_preview_root)
+	var preview_world := WorldEnvironment.new()
+	var preview_environment := Environment.new()
+	preview_environment.background_mode = Environment.BG_COLOR
+	preview_environment.background_color = Color("#101a2a")
+	preview_environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	preview_environment.ambient_light_color = Color("#8294ad")
+	preview_environment.ambient_light_energy = 0.65
+	preview_world.environment = preview_environment
+	lobby_preview_root.add_child(preview_world)
+	var preview_camera := Camera3D.new()
+	preview_camera.position = Vector3(0.0, 1.45, 4.4)
+	preview_camera.look_at(Vector3(0.0, 1.05, 0.0), Vector3.UP)
+	preview_camera.current = true
+	lobby_preview_root.add_child(preview_camera)
+	var key_light := DirectionalLight3D.new()
+	key_light.rotation_degrees = Vector3(-28.0, -32.0, 0.0)
+	key_light.light_energy = 1.4
+	lobby_preview_root.add_child(key_light)
+	var rim_light := OmniLight3D.new()
+	rim_light.position = Vector3(-1.6, 2.2, -1.0)
+	rim_light.light_color = Color("#4b9acb")
+	rim_light.light_energy = 1.8
+	rim_light.omni_range = 5.0
+	lobby_preview_root.add_child(rim_light)
+	_build_lobby_preview_model()
 	var info := VBoxContainer.new()
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -497,6 +527,120 @@ func _build_lobby_ui() -> void:
 			details_container.get_parent().remove_child(details_container)
 		lobby_details_host.add_child(details_container)
 
+
+func _build_lobby_preview_model() -> void:
+	if not is_instance_valid(lobby_preview_root):
+		return
+	for child in lobby_preview_root.get_children():
+		if child is MeshInstance3D or child.name == "CharacterModel":
+			child.queue_free()
+	var model := Node3D.new()
+	model.name = "CharacterModel"
+	lobby_preview_root.add_child(model)
+	var robe_color := Color("#243d59")
+	var trim_color := Color("#c9a86b")
+	var race_id := str(current_character.get("race_id", "human"))
+	if race_id.contains("demon") or race_id.contains("yao"):
+		robe_color = Color("#512d3d")
+		trim_color = Color("#d18a58")
+	elif race_id.contains("dragon"):
+		robe_color = Color("#24504b")
+		trim_color = Color("#d7bd72")
+	elif race_id.contains("spirit"):
+		robe_color = Color("#344b67")
+		trim_color = Color("#80c9df")
+	var robe_material := StandardMaterial3D.new()
+	robe_material.albedo_color = robe_color
+	robe_material.metallic = 0.22
+	robe_material.roughness = 0.42
+	var skin_material := StandardMaterial3D.new()
+	skin_material.albedo_color = Color("#d6b59a")
+	skin_material.roughness = 0.72
+	var trim_material := StandardMaterial3D.new()
+	trim_material.albedo_color = trim_color
+	trim_material.metallic = 0.48
+	trim_material.roughness = 0.3
+	var hair_material := StandardMaterial3D.new()
+	hair_material.albedo_color = Color("#171c2b")
+	var robe := MeshInstance3D.new()
+	var robe_mesh := CylinderMesh.new()
+	robe_mesh.top_radius = 0.28
+	robe_mesh.bottom_radius = 0.48
+	robe_mesh.height = 1.25
+	robe.mesh = robe_mesh
+	robe.position.y = 0.78
+	robe.material_override = robe_material
+	model.add_child(robe)
+	var torso := MeshInstance3D.new()
+	var torso_mesh := CapsuleMesh.new()
+	torso_mesh.radius = 0.31
+	torso_mesh.height = 0.9
+	torso.mesh = torso_mesh
+	torso.position.y = 1.36
+	torso.material_override = robe_material
+	model.add_child(torso)
+	var head := MeshInstance3D.new()
+	var head_mesh := SphereMesh.new()
+	head_mesh.radius = 0.22
+	head_mesh.height = 0.44
+	head.mesh = head_mesh
+	head.position.y = 2.0
+	head.material_override = skin_material
+	model.add_child(head)
+	var hair := MeshInstance3D.new()
+	var hair_mesh := SphereMesh.new()
+	hair_mesh.radius = 0.235
+	hair_mesh.height = 0.25
+	hair.mesh = hair_mesh
+	hair.position = Vector3(0.0, 2.16, -0.025)
+	hair.material_override = hair_material
+	model.add_child(hair)
+	for side in [-1.0, 1.0]:
+		var arm := MeshInstance3D.new()
+		var arm_mesh := CapsuleMesh.new()
+		arm_mesh.radius = 0.105
+		arm_mesh.height = 0.78
+		arm.mesh = arm_mesh
+		arm.position = Vector3(side * 0.39, 1.32, 0.0)
+		arm.rotation.z = side * -0.18
+		arm.material_override = robe_material
+		model.add_child(arm)
+		var cuff := MeshInstance3D.new()
+		var cuff_mesh := SphereMesh.new()
+		cuff_mesh.radius = 0.12
+		cuff_mesh.height = 0.12
+		cuff.mesh = cuff_mesh
+		cuff.position = Vector3(side * 0.45, 0.98, 0.0)
+		cuff.material_override = trim_material
+		model.add_child(cuff)
+	var sash := MeshInstance3D.new()
+	var sash_mesh := TorusMesh.new()
+	sash_mesh.inner_radius = 0.285
+	sash_mesh.outer_radius = 0.32
+	sash.mesh = sash_mesh
+	sash.position.y = 1.05
+	sash.rotation.x = PI / 2.0
+	sash.material_override = trim_material
+	model.add_child(sash)
+	var platform := MeshInstance3D.new()
+	var platform_mesh := CylinderMesh.new()
+	platform_mesh.top_radius = 0.82
+	platform_mesh.bottom_radius = 0.82
+	platform_mesh.height = 0.08
+	platform.mesh = platform_mesh
+	platform.position.y = 0.02
+	platform.material_override = trim_material
+	model.add_child(platform)
+
+func _on_lobby_preview_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		lobby_preview_dragging = event.pressed
+		lobby_preview_last_mouse = event.position
+	elif event is InputEventMouseMotion and lobby_preview_dragging and is_instance_valid(lobby_preview_root):
+		var delta := event.position - lobby_preview_last_mouse
+		lobby_preview_root.rotation.y += delta.x * 0.012
+		lobby_preview_last_mouse = event.position
+
 func _toggle_lobby_details() -> void:
 	lobby_details_host.visible = not lobby_details_host.visible
 	if lobby_details_host.visible:
@@ -532,6 +676,7 @@ func _show_character_lobby() -> void:
 	var character_name := str(current_character.get("name", character_input.text.strip_edges()))
 	lobby_name_label.text = character_name if not character_name.is_empty() else "无名灵身"
 	var race_id := str(current_character.get("race_id", ""))
+	_build_lobby_preview_model()
 	var race_name := race_id if not race_id.is_empty() else "未知种族"
 	for race in cultivation_races:
 		if race is Dictionary and str(race.get("race_id", "")) == race_id:
