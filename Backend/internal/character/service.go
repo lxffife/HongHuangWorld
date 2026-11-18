@@ -48,7 +48,25 @@ type ReincarnationRoute struct {
 	InitialBoon json.RawMessage `json:"-"`
 }
 
+type BirthInheritance struct {
+	SourceAbsorbedCount int64 `json:"source_absorbed_count"`
+	SourceGrowthStage int `json:"source_growth_stage"`
+	SourceGrowthName string `json:"source_growth_name"`
+	SourceStrength int64 `json:"source_strength"`
+	SourceConstitution int64 `json:"source_constitution"`
+	SourceAgility int64 `json:"source_agility"`
+	SourceSpirit int64 `json:"source_spirit"`
+	SourceVitality int64 `json:"source_vitality"`
+	AppliedStrength int `json:"applied_strength"`
+	AppliedConstitution int `json:"applied_constitution"`
+	AppliedAgility int `json:"applied_agility"`
+	AppliedSpirit int `json:"applied_spirit"`
+	AppliedVitality int `json:"applied_vitality"`
+	DominantAttribute string `json:"dominant_attribute"`
+}
+
 type Character struct {
+	BirthInheritance *BirthInheritance `json:"birth_inheritance,omitempty"`
 	ID        string  `json:"id"`
 	PositionX float64 `json:"-"`
 	PositionY float64 `json:"-"`
@@ -137,6 +155,117 @@ type Service struct {
 
 func NewService(db *sql.DB) *Service {
 	return &Service{db: db}
+}
+
+func growthStageForAbsorptions(count int64) (int, string) {
+	switch {
+	case count >= 40:
+		return 5, "魂魄圆融"
+	case count >= 20:
+		return 4, "灵体初成"
+	case count >= 8:
+		return 3, "聚魄成形"
+	case count >= 3:
+		return 2, "魂光凝实"
+	default:
+		return 1, "初生魂团"
+	}
+}
+
+func inheritanceBonus(potential int64, raceWeight int) int {
+	bonus := int(potential / 3)
+	if bonus > 3 { bonus = 3 }
+	// A race's strongest natural growth affinity can resonate with matching
+	// soul potential, but the total inherited bonus remains capped at +3.
+	if potential >= 6 && raceWeight >= 2600 && bonus < 3 {
+		bonus++
+	}
+	return bonus
+}
+
+func dominantInheritanceAttribute(values [5]int64, weights [5]int) string {
+	names := [5]string{"strength", "constitution", "agility", "spirit", "vitality"}
+	best := int64(0)
+	index := -1
+	for i, value := range values {
+		if value > best || (value == best && value > 0 && index >= 0 && weights[i] > weights[index]) {
+			best, index = value, i
+		}
+	}
+	if index < 0 { return "" }
+	return names[index]
+}
+
+func (s *Service) loadBirthInheritance(ctx context.Context, tx *sql.Tx, soulID, raceID string) (BirthInheritance, [5]int, error) {
+	var result BirthInheritance
+	var weights [5]int
+	err := tx.QueryRowContext(ctx,
+		`SELECT COALESCE(inheritance.strength,0), COALESCE(inheritance.constitution,0),
+		        COALESCE(inheritance.agility,0), COALESCE(inheritance.spirit,0),
+		        COALESCE(inheritance.vitality,0), COALESCE(essence.absorbed_count,0),
+		        growth.strength_weight, growth.constitution_weight, growth.agility_weight,
+		        growth.spirit_weight, growth.vitality_weight
+		 FROM soul_inheritance_attributes inheritance
+		 JOIN souls soul ON soul.id=inheritance.soul_id
+		 LEFT JOIN soul_essence_attributes essence ON essence.soul_id=soul.id
+		 JOIN race_attribute_growth_profiles growth ON growth.race_id=$2
+		 WHERE inheritance.soul_id=$1`,
+		soulID, raceID,
+	).Scan(&result.SourceStrength, &result.SourceConstitution, &result.SourceAgility,
+		&result.SourceSpirit, &result.SourceVitality, &result.SourceAbsorbedCount,
+		&weights[0], &weights[1], &weights[2], &weights[3], &weights[4])
+	if err != nil {
+		return BirthInheritance{}, weights, fmt.Errorf("load soul inheritance for birth: %w", err)
+	}
+	result.SourceGrowthStage, result.SourceGrowthName = growthStageForAbsorptions(result.SourceAbsorbedCount)
+	values := [5]int64{result.SourceStrength, result.SourceConstitution, result.SourceAgility, result.SourceSpirit, result.SourceVitality}
+	bonuses := [5]int{
+		inheritanceBonus(values[0], weights[0]),
+		inheritanceBonus(values[1], weights[1]),
+		inheritanceBonus(values[2], weights[2]),
+		inheritanceBonus(values[3], weights[3]),
+		inheritanceBonus(values[4], weights[4]),
+	}
+	result.DominantAttribute = dominantInheritanceAttribute(values, weights)
+	// A mature soul concentrates its additional birth resonance into its
+	// strongest inherited affinity rather than inflating every base stat.
+	if result.DominantAttribute != "" && result.SourceGrowthStage >= 3 {
+		stageBonus := 1
+		if result.SourceGrowthStage >= 5 { stageBonus = 2 }
+		for i, name := range [5]string{"strength", "constitution", "agility", "spirit", "vitality"} {
+			if name == result.DominantAttribute {
+				bonuses[i] += stageBonus
+				if bonuses[i] > 3 { bonuses[i] = 3 }
+				break
+			}
+		}
+	}
+	result.AppliedStrength, result.AppliedConstitution = bonuses[0], bonuses[1]
+	result.AppliedAgility, result.AppliedSpirit, result.AppliedVitality = bonuses[2], bonuses[3], bonuses[4]
+	return result, weights, nil
+}
+
+// ReincarnationPreview computes a read-only preview using the same server-side
+// inheritance formula as Reincarnate. The client never submits stat values.
+func (s *Service) ReincarnationPreview(ctx context.Context, accountID, raceID string) (BirthInheritance, error) {
+	raceID = strings.TrimSpace(raceID)
+	if raceID == "" || len(raceID) > 64 { return BirthInheritance{}, ErrInvalidRace }
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil { return BirthInheritance{}, fmt.Errorf("begin inheritance preview: %w", err) }
+	defer tx.Rollback()
+	var soulID string
+	if err := tx.QueryRowContext(ctx, `SELECT id::text FROM souls WHERE account_id=$1`, accountID).Scan(&soulID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) { return BirthInheritance{}, ErrSoulRequired }
+		return BirthInheritance{}, fmt.Errorf("load soul for inheritance preview: %w", err)
+	}
+	var exists bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM race_attribute_growth_profiles WHERE race_id=$1)`, raceID).Scan(&exists); err != nil {
+		return BirthInheritance{}, fmt.Errorf("validate race for inheritance preview: %w", err)
+	}
+	if !exists { return BirthInheritance{}, ErrInvalidRace }
+	preview, _, err := s.loadBirthInheritance(ctx, tx, soulID, raceID)
+	if err != nil { return BirthInheritance{}, err }
+	return preview, nil
 }
 
 func (s *Service) CreateFirstLife(ctx context.Context, accountID, name, worldID, raceID string) (Character, error) {
@@ -1314,6 +1443,12 @@ func (s *Service) Reincarnate(ctx context.Context, accountID, name, raceID, rout
 		return Character{}, fmt.Errorf("resolve reincarnated race cultivation: %w", err)
 	}
 
+	birthInheritance, raceWeights, err := s.loadBirthInheritance(ctx, tx, soulID, raceID)
+	if err != nil {
+		return Character{}, fmt.Errorf("calculate reincarnation inheritance: %w", err)
+	}
+	result.BirthInheritance = &birthInheritance
+
 	newLifeIndex := oldLifeIndex + 1
 	fateAspect := "因果未定"
 	switch {
@@ -1357,6 +1492,36 @@ func (s *Service) Reincarnate(ctx context.Context, accountID, name, raceID, rout
 
 	if _, err := tx.ExecContext(ctx, `INSERT INTO character_attributes (character_id) VALUES ($1)`, result.ID); err != nil {
 		return Character{}, fmt.Errorf("initialize reincarnated attributes: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE character_attributes
+		 SET strength=strength+$2, constitution=constitution+$3, agility=agility+$4,
+		     spirit=spirit+$5, vitality=vitality+$6,
+		     attack=attack+($2*2), defense=defense+$3+$6,
+		     max_health=max_health+($3*10)+($6*5), health=max_health+($3*10)+($6*5),
+		     max_mana=max_mana+($5*10), mana=max_mana+($5*10),
+		     movement_speed=movement_speed+($4*0.05), updated_at=now()
+		 WHERE character_id=$1`,
+		result.ID, birthInheritance.AppliedStrength, birthInheritance.AppliedConstitution,
+		birthInheritance.AppliedAgility, birthInheritance.AppliedSpirit, birthInheritance.AppliedVitality,
+	); err != nil {
+		return Character{}, fmt.Errorf("apply reincarnation birth attributes: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO character_birth_inheritance
+		 (character_id,soul_id,life_index,source_absorbed_count,source_growth_stage,source_growth_name,
+		  source_strength,source_constitution,source_agility,source_spirit,source_vitality,
+		  race_strength_weight,race_constitution_weight,race_agility_weight,race_spirit_weight,race_vitality_weight,
+		  applied_strength,applied_constitution,applied_agility,applied_spirit,applied_vitality,dominant_attribute)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
+		result.ID,soulID,newLifeIndex,birthInheritance.SourceAbsorbedCount,birthInheritance.SourceGrowthStage,
+		birthInheritance.SourceGrowthName,birthInheritance.SourceStrength,birthInheritance.SourceConstitution,
+		birthInheritance.SourceAgility,birthInheritance.SourceSpirit,birthInheritance.SourceVitality,
+		raceWeights[0],raceWeights[1],raceWeights[2],raceWeights[3],raceWeights[4],
+		birthInheritance.AppliedStrength,birthInheritance.AppliedConstitution,birthInheritance.AppliedAgility,
+		birthInheritance.AppliedSpirit,birthInheritance.AppliedVitality,birthInheritance.DominantAttribute,
+	); err != nil {
+		return Character{}, fmt.Errorf("record reincarnation birth inheritance: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO character_progression (character_id, system_id, realm_id) VALUES ($1, $2, $3)`,
