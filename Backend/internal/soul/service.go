@@ -1228,13 +1228,13 @@ func (s *Service) AllocateRareEssence(ctx context.Context, accountID, recordID, 
 		if errors.Is(err,sql.ErrNoRows){return InheritanceAttributes{},ErrNotFound}
 		return InheritanceAttributes{},fmt.Errorf("resolve soul for rare essence allocation: %w",err)
 	}
-	result,err:=tx.ExecContext(ctx,`UPDATE soul_absorption_records SET selected_attribute=$1,selected_at=now()
-		WHERE id=$2::uuid AND soul_id=$3::uuid AND absorption_kind_id='faceless_essence' AND selected_at IS NULL`,attribute,recordID,soulID)
+	var progressUnits int
+	err=tx.QueryRowContext(ctx,`UPDATE soul_absorption_records SET selected_attribute=$1,selected_at=now()
+		WHERE id=$2::uuid AND soul_id=$3::uuid AND absorption_kind_id='faceless_essence' AND selected_at IS NULL
+		RETURNING progress_units`,attribute,recordID,soulID).Scan(&progressUnits)
+	if errors.Is(err,sql.ErrNoRows){return InheritanceAttributes{},ErrAbsorptionChoiceUsed}
 	if err!=nil{return InheritanceAttributes{},fmt.Errorf("claim rare essence record: %w",err)}
-	count,err:=result.RowsAffected()
-	if err!=nil{return InheritanceAttributes{},fmt.Errorf("read rare essence claim result: %w",err)}
-	if count!=1{return InheritanceAttributes{},ErrAbsorptionChoiceUsed}
-	if _,_,err:=advanceSoulAbsorptionAttribute(ctx,tx,soulID,attribute);err!=nil{return InheritanceAttributes{},err}
+	if _,_,err:=advanceSoulAbsorptionAttribute(ctx,tx,soulID,attribute,progressUnits);err!=nil{return InheritanceAttributes{},err}
 	var attrs InheritanceAttributes
 	if err:=tx.QueryRowContext(ctx,`SELECT strength,constitution,agility,spirit,vitality
 		FROM soul_inheritance_attributes WHERE soul_id=$1`,soulID).Scan(
