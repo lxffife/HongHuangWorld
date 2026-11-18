@@ -11,7 +11,7 @@ import (
 )
 
 type npcHandlers struct {
-	authService *auth.Service
+	authService auth.Provider
 	service *npc.Service
 	logger *slog.Logger
 }
