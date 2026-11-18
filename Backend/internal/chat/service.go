@@ -209,3 +209,86 @@ func (s *Service) ListForServer(ctx context.Context, nodeKey string, after time.
 	return batch, nil
 }
 
+// SendFromServer accepts a public-channel message only when the supplied active
+// world session belongs to this registered node. Sender identity and world scope
+// are always resolved from PostgreSQL, never from the request body.
+func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, characterID string, req SendRequest) (Message, error) {
+	nodeKey = strings.TrimSpace(nodeKey)
+	sessionID = strings.TrimSpace(sessionID)
+	characterID = strings.TrimSpace(characterID)
+	req.Channel = strings.TrimSpace(req.Channel)
+	req.Content = strings.TrimSpace(req.Content)
+	if nodeKey == "" || len(nodeKey) > 96 || !isUUID(sessionID) || !isUUID(characterID) ||
+		!isUUID(req.ClientMessageID) || utf8.RuneCountInString(req.Content) == 0 ||
+		utf8.RuneCountInString(req.Content) > 200 {
+		return Message{}, ErrInvalidInput
+	}
+	if req.Channel != "world" && req.Channel != "cross_world" {
+		return Message{}, ErrUnsupportedChannel
+	}
+	for _, r := range req.Content {
+		if unicode.IsControl(r) && r != '\n' && r != '\t' {
+			return Message{}, ErrInvalidInput
+		}
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Message{}, fmt.Errorf("begin world server chat send: %w", err)
+	}
+	defer tx.Rollback()
+
+	var name, raceID, worldID string
+	var level int
+	err = tx.QueryRowContext(ctx, `
+		SELECT c.name,COALESCE(c.race_id,''),c.world_id,c.level
+		FROM world_sessions ws
+		JOIN server_registry sr ON sr.id=ws.server_id
+		JOIN characters c ON c.id=ws.character_id
+		WHERE ws.id=$1::uuid AND ws.character_id=$2::uuid
+		  AND sr.node_key=$3 AND sr.status='ready'
+		  AND sr.last_heartbeat_at > now()-interval '30 seconds'
+		  AND ws.session_state='active' AND c.status='alive'
+		FOR UPDATE OF ws`, sessionID, characterID, nodeKey).
+		Scan(&name,&raceID,&worldID,&level)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Message{}, ErrNoCharacter
+	}
+	if err != nil {
+		return Message{}, fmt.Errorf("verify world server chat session: %w", err)
+	}
+
+	window := 3*time.Second
+	if req.Channel == "cross_world" { window = 5*time.Second }
+	var recent int
+	if err := tx.QueryRowContext(ctx,`
+		SELECT count(*) FROM chat_messages
+		WHERE sender_character_id=$1::uuid AND channel_type=$2
+		  AND created_at > now()-$3::interval`, characterID,req.Channel,window.String()).Scan(&recent); err != nil {
+		return Message{}, fmt.Errorf("check world server chat rate limit: %w", err)
+	}
+	if recent > 0 { return Message{}, ErrRateLimited }
+
+	var worldValue any
+	if req.Channel == "world" { worldValue = worldID }
+	_, err = tx.ExecContext(ctx,`
+		INSERT INTO chat_messages(channel_type,world_id,sender_character_id,client_message_id,content)
+		VALUES($1,$2,$3::uuid,$4::uuid,$5)
+		ON CONFLICT(sender_character_id,client_message_id) DO NOTHING`,
+		req.Channel,worldValue,characterID,req.ClientMessageID,req.Content)
+	if err != nil { return Message{}, fmt.Errorf("persist world server chat message: %w", err) }
+
+	var item Message
+	err = tx.QueryRowContext(ctx,`
+		SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),
+		       m.sender_character_id::text,$2,$3,$4,m.content,m.created_at
+		FROM chat_messages m
+		WHERE m.sender_character_id=$1::uuid AND m.client_message_id=$5::uuid`,
+		characterID,name,raceID,level,req.ClientMessageID).
+		Scan(&item.ID,&item.ClientMessageID,&item.Channel,&item.WorldID,&item.SenderCharacterID,
+			&item.SenderName,&item.SenderRace,&item.SenderLevel,&item.Content,&item.CreatedAt)
+	if err != nil { return Message{}, fmt.Errorf("load persisted world server chat message: %w", err) }
+	if err := tx.Commit(); err != nil { return Message{}, fmt.Errorf("commit world server chat message: %w", err) }
+	return item,nil
+}
+
