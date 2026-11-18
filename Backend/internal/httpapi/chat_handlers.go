@@ -14,6 +14,7 @@ import (
 type chatHandlers struct {
 	authService *auth.Service
 	service *chat.Service
+	hub *chatSocketHub
 	logger *slog.Logger
 }
 
