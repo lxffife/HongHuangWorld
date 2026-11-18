@@ -19,6 +19,8 @@ enum MessageType {
 	COMBAT_EVENT = 15,
 	PICKUP_COMMAND = 16,
 	PICKUP_EVENT = 17,
+	CHAT_SEND_COMMAND = 18,
+	CHAT_EVENT = 19,
 }
 
 static func _u16(value: int) -> PackedByteArray:
