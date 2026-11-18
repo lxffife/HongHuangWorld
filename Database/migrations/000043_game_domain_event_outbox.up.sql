@@ -28,6 +28,9 @@ CREATE INDEX idx_game_event_outbox_pending
 CREATE INDEX idx_game_event_outbox_expired_locks
     ON game_event_outbox(locked_until)
     WHERE published_at IS NULL AND locked_until IS NOT NULL;
+CREATE INDEX idx_game_event_outbox_published
+    ON game_event_outbox(published_at, event_sequence)
+    WHERE published_at IS NOT NULL;
 
 CREATE OR REPLACE FUNCTION emit_game_domain_event(
     p_event_type VARCHAR,
