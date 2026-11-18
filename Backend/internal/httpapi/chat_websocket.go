@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/liflife/HongHuangWorld/Backend/internal/chat"
 )
@@ -152,6 +153,7 @@ func readChatSocketFrame(reader *bufio.Reader) (byte, []byte, error) {
 		if length>>63 != 0 { return 0, nil, errors.New("invalid websocket frame length") }
 	}
 	if length > maxChatSocketFrame { return 0, nil, errors.New("websocket frame too large") }
+	if first&0x08 != 0 && length > 125 { return 0, nil, errors.New("websocket control frame too large") }
 	var mask [4]byte
 	if _, err := io.ReadFull(reader, mask[:]); err != nil { return 0, nil, err }
 	payload := make([]byte, int(length))
@@ -226,6 +228,7 @@ func (h *chatHandlers) socket(w http.ResponseWriter, r *http.Request) {
 		case 10:
 			continue
 		case 1:
+			if !utf8.Valid(payload) { client.sendError("websocket text must be valid UTF-8"); continue }
 			var request chatSocketRequest
 			if err := json.Unmarshal(payload, &request); err != nil {
 				client.sendError("invalid websocket message")
