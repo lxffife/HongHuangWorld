@@ -364,6 +364,10 @@ func (s *Service) ListExplorationPoints(ctx context.Context, accountID string) (
 		 LEFT JOIN reincarnation_birth_routes route ON route.world_id=p.world_id AND route.region_id=p.region_id AND route.enabled=TRUE
 		 LEFT JOIN soul_exploration_discoveries d ON d.point_id=p.id AND d.soul_id=$1::uuid
 		 WHERE p.world_id=$2 AND p.enabled=TRUE
+		   AND (p.required_event_id IS NULL OR EXISTS (
+		       SELECT 1 FROM soul_exploration_event_claims prior_claim
+		       WHERE prior_claim.soul_id=$1::uuid AND prior_claim.event_id=p.required_event_id
+		         AND prior_claim.choice_id=p.required_choice_id))
 		 ORDER BY p.region_id,p.id`, soulID, worldID)
 	if err != nil { return nil, fmt.Errorf("query exploration points: %w", err) }
 	defer rows.Close()
@@ -401,6 +405,10 @@ func (s *Service) DiscoverExplorationPoint(ctx context.Context, accountID, point
 		 JOIN world_instances wi ON wi.id=ws.instance_id AND wi.world_id=c.world_id
 		 JOIN world_exploration_points p ON p.world_id=wi.world_id AND p.id=$2 AND p.enabled=TRUE
 		 WHERE soul.account_id=$1
+		   AND (p.required_event_id IS NULL OR EXISTS (
+		       SELECT 1 FROM soul_exploration_event_claims prior_claim
+		       WHERE prior_claim.soul_id=soul.id AND prior_claim.event_id=p.required_event_id
+		         AND prior_claim.choice_id=p.required_choice_id))
 		   AND SQRT(POWER(c.position_x-p.position_x,2)+POWER(c.position_y-p.position_y,2)+POWER(c.position_z-p.position_z,2)) <= p.interaction_radius
 		 ORDER BY ws.connected_at DESC NULLS LAST LIMIT 1
 		 FOR UPDATE OF soul,c,ws`, accountID, pointID).Scan(
@@ -420,7 +428,11 @@ func (s *Service) DiscoverExplorationPoint(ctx context.Context, accountID, point
 		checkErr = tx.QueryRowContext(ctx,
 			`SELECT EXISTS(SELECT 1 FROM souls soul JOIN characters c ON c.id=soul.current_character_id
 			 JOIN world_exploration_points p ON p.world_id=c.world_id AND p.id=$2 AND p.enabled=TRUE
-			 WHERE soul.account_id=$1)`, accountID, pointID).Scan(&exists)
+			 WHERE soul.account_id=$1
+			   AND (p.required_event_id IS NULL OR EXISTS (
+			       SELECT 1 FROM soul_exploration_event_claims prior_claim
+			       WHERE prior_claim.soul_id=soul.id AND prior_claim.event_id=p.required_event_id
+			         AND prior_claim.choice_id=p.required_choice_id)))`, accountID, pointID).Scan(&exists)
 		if checkErr != nil { return ExplorationResult{}, fmt.Errorf("check exploration point: %w", checkErr) }
 		if !exists { return ExplorationResult{}, ErrExplorationUnavailable }
 		return ExplorationResult{}, ErrTooFar
@@ -758,6 +770,10 @@ func (s *Service) GetExplorationProgress(ctx context.Context, accountID string) 
 		 LEFT JOIN soul_exploration_event_claims claim
 		   ON claim.event_id=e.id AND claim.soul_id=$1::uuid
 		 WHERE p.world_id=$2 AND p.enabled=TRUE
+		   AND (p.required_event_id IS NULL OR EXISTS (
+		       SELECT 1 FROM soul_exploration_event_claims prior_claim
+		       WHERE prior_claim.soul_id=$1::uuid AND prior_claim.event_id=p.required_event_id
+		         AND prior_claim.choice_id=p.required_choice_id))
 		 GROUP BY p.region_id,route.region_name
 		 ORDER BY p.region_id`, soulID,worldID,raceID,traitID)
 	if err != nil { return ExplorationProgress{},fmt.Errorf("query exploration region progress: %w",err) }
