@@ -12,7 +12,7 @@ import (
 )
 
 type soulHandlers struct {
-	authService *auth.Service
+	authService auth.Provider
 	soulService *soul.Service
 	logger      *slog.Logger
 	apiKey      string
