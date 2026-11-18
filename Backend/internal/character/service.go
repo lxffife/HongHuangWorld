@@ -63,6 +63,11 @@ type BirthInheritance struct {
 	AppliedSpirit int `json:"applied_spirit"`
 	AppliedVitality int `json:"applied_vitality"`
 	DominantAttribute string `json:"dominant_attribute"`
+	InitialStrength int `json:"initial_strength"`
+	InitialConstitution int `json:"initial_constitution"`
+	InitialAgility int `json:"initial_agility"`
+	InitialSpirit int `json:"initial_spirit"`
+	InitialVitality int `json:"initial_vitality"`
 }
 
 type Character struct {
@@ -173,8 +178,8 @@ func growthStageForAbsorptions(count int64) (int, string) {
 }
 
 func inheritanceBonus(potential int64, raceWeight int) int {
-	bonus := int(potential / 3)
-	if bonus > 3 { bonus = 3 }
+	bonus := 0
+	if potential >= 9 { bonus = 3 } else { bonus = int(potential / 3) }
 	// A race's strongest natural growth affinity can resonate with matching
 	// soul potential, but the total inherited bonus remains capped at +3.
 	if potential >= 6 && raceWeight >= 2600 && bonus < 3 {
@@ -203,12 +208,13 @@ func (s *Service) loadBirthInheritance(ctx context.Context, tx *sql.Tx, soulID, 
 		`SELECT COALESCE(inheritance.strength,0), COALESCE(inheritance.constitution,0),
 		        COALESCE(inheritance.agility,0), COALESCE(inheritance.spirit,0),
 		        COALESCE(inheritance.vitality,0), COALESCE(essence.absorbed_count,0),
-		        growth.strength_weight, growth.constitution_weight, growth.agility_weight,
-		        growth.spirit_weight, growth.vitality_weight
+		        COALESCE(growth.strength_weight,1800), COALESCE(growth.constitution_weight,1800),
+		        COALESCE(growth.agility_weight,1800), COALESCE(growth.spirit_weight,2800),
+		        COALESCE(growth.vitality_weight,1800)
 		 FROM soul_inheritance_attributes inheritance
 		 JOIN souls soul ON soul.id=inheritance.soul_id
 		 LEFT JOIN soul_essence_attributes essence ON essence.soul_id=soul.id
-		 JOIN race_attribute_growth_profiles growth ON growth.race_id=$2
+		 LEFT JOIN race_attribute_growth_profiles growth ON growth.race_id=$2
 		 WHERE inheritance.soul_id=$1`,
 		soulID, raceID,
 	).Scan(&result.SourceStrength, &result.SourceConstitution, &result.SourceAgility,
@@ -242,6 +248,8 @@ func (s *Service) loadBirthInheritance(ctx context.Context, tx *sql.Tx, soulID, 
 	}
 	result.AppliedStrength, result.AppliedConstitution = bonuses[0], bonuses[1]
 	result.AppliedAgility, result.AppliedSpirit, result.AppliedVitality = bonuses[2], bonuses[3], bonuses[4]
+	result.InitialStrength, result.InitialConstitution = 5+bonuses[0], 5+bonuses[1]
+	result.InitialAgility, result.InitialSpirit, result.InitialVitality = 5+bonuses[2], 5+bonuses[3], 5+bonuses[4]
 	return result, weights, nil
 }
 
@@ -1500,7 +1508,7 @@ func (s *Service) Reincarnate(ctx context.Context, accountID, name, raceID, rout
 		     attack=attack+($2*2), defense=defense+$3+$6,
 		     max_health=max_health+($3*10)+($6*5), health=max_health+($3*10)+($6*5),
 		     max_mana=max_mana+($5*10), mana=max_mana+($5*10),
-		     movement_speed=movement_speed+($4*0.05), updated_at=now()
+		     movement_speed=movement_speed+($4*0.05::real), updated_at=now()
 		 WHERE character_id=$1`,
 		result.ID, birthInheritance.AppliedStrength, birthInheritance.AppliedConstitution,
 		birthInheritance.AppliedAgility, birthInheritance.AppliedSpirit, birthInheritance.AppliedVitality,
