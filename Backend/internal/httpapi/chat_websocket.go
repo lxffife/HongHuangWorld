@@ -5,7 +5,6 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/liflife/HongHuangWorld/Backend/internal/auth"
 	"github.com/liflife/HongHuangWorld/Backend/internal/chat"
 )
 
@@ -278,5 +276,3 @@ func chatSocketErrorText(err error) string {
 	}
 }
 
-var _ = hex.EncodeToString
-var _ = auth.Account{}
