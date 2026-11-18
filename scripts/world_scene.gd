@@ -1283,7 +1283,7 @@ func _on_chat_socket_message(message: Dictionary) -> void:
 			chat_status.text = str(message.get("reason", "聊天消息未送达。"))
 		return
 	var channel := str(message.get("channel", selected_chat_channel))
-	if channel not in ["world", "cross_world"]:
+	if channel not in ["nearby", "world", "cross_world"]:
 		return
 	var sender := str(message.get("sender_name", "未知玩家"))
 	var content := str(message.get("content", ""))
@@ -1296,9 +1296,9 @@ func _on_chat_event(event: Dictionary) -> void:
 	if not bool(event.get("accepted", false)):
 		chat_status.text = str(event.get("reason", "消息发送失败。"))
 		return
-	var sender := str(event.get("sender_name", "未知玩家"))
-	var content := str(event.get("content", ""))
-	_append_chat_line("[" + sender + "] " + content, "nearby", str(event.get("message_id", "")))
+	# ENet returns only the delivery acknowledgement. The full nearby message
+	# arrives through the authenticated ChatServer WebSocket and is deduplicated
+	# by its persisted message ID.
 	if selected_chat_channel == "nearby":
 		chat_status.text = "附近频道 · 消息已送达当前可见范围"
 
