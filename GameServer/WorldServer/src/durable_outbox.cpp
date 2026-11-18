@@ -171,17 +171,43 @@ bool DurableOutbox::enqueue(const OutboxEvent& event, std::string& error) {
 }
 
 std::optional<OutboxEvent> DurableOutbox::claim_due(std::int64_t now_ms, std::string& error) {
+    return claim_due_filtered(now_ms, {}, false, error);
+}
+
+std::optional<OutboxEvent> DurableOutbox::claim_due_type(
+    std::int64_t now_ms, const std::string& event_type, std::string& error) {
+    if (event_type.empty()) { error = "event type is required"; return std::nullopt; }
+    return claim_due_filtered(now_ms, event_type, false, error);
+}
+
+std::optional<OutboxEvent> DurableOutbox::claim_due_excluding(
+    std::int64_t now_ms, const std::string& event_type, std::string& error) {
+    if (event_type.empty()) { error = "event type is required"; return std::nullopt; }
+    return claim_due_filtered(now_ms, event_type, true, error);
+}
+
+std::optional<OutboxEvent> DurableOutbox::claim_due_filtered(
+    std::int64_t now_ms, const std::string& event_type, bool exclude, std::string& error) {
     std::lock_guard lock(mutex_);
     bool transaction_open = false;
     try {
         if (!execute("BEGIN IMMEDIATE", error)) return std::nullopt;
         transaction_open = true;
 
-        Stmt query(db_,
-            "SELECT event_id,event_type,payload,attempts,next_retry_at_ms,created_at_ms,last_error "
-            "FROM world_event_outbox WHERE status='pending' AND next_retry_at_ms<=? "
-            "ORDER BY created_at_ms,event_id LIMIT 1");
+        const char* query_sql = event_type.empty()
+            ? "SELECT event_id,event_type,payload,attempts,next_retry_at_ms,created_at_ms,last_error "
+              "FROM world_event_outbox WHERE status='pending' AND next_retry_at_ms<=? "
+              "ORDER BY created_at_ms,event_id LIMIT 1"
+            : (exclude
+                ? "SELECT event_id,event_type,payload,attempts,next_retry_at_ms,created_at_ms,last_error "
+                  "FROM world_event_outbox WHERE status='pending' AND next_retry_at_ms<=? AND event_type<>? "
+                  "ORDER BY created_at_ms,event_id LIMIT 1"
+                : "SELECT event_id,event_type,payload,attempts,next_retry_at_ms,created_at_ms,last_error "
+                  "FROM world_event_outbox WHERE status='pending' AND next_retry_at_ms<=? AND event_type=? "
+                  "ORDER BY created_at_ms,event_id LIMIT 1");
+        Stmt query(db_, query_sql);
         sqlite3_bind_int64(query.get(), 1, now_ms);
+        if (!event_type.empty()) bind_text(query.get(), 2, event_type);
         const int result = sqlite3_step(query.get());
         if (result == SQLITE_DONE) {
             if (!execute("COMMIT", error)) {
