@@ -29,6 +29,15 @@ int main() {
     assert(hello.ticket == "abc");
     assert(hello.client_build == "test");
 
+    const std::vector<std::uint8_t> chat_payload{'{', '"', 'c', 'h', 'a', 'n', 'n', 'e', 'l', '"', ':', '"', 'n', 'e', 'a', 'r', 'b', 'y', '"', '}'};
+    for (const auto chat_type : {MessageType::ChatSendCommand, MessageType::ChatEvent}) {
+        const auto chat_frame = encode_frame(chat_type, chat_payload);
+        Frame chat_decoded{};
+        assert(decode_frame(chat_frame, chat_decoded, error));
+        assert(chat_decoded.type == chat_type);
+        assert(chat_decoded.payload == chat_payload);
+    }
+
     const std::vector<std::uint8_t> lifecycle_payload{'{', '}'};
     for (const auto event_type : {MessageType::PlayerJoined, MessageType::PlayerLeft}) {
         const auto event_frame = encode_frame(event_type, lifecycle_payload);
