@@ -12,7 +12,7 @@ import (
 )
 
 type chatHandlers struct {
-	authService *auth.Service
+	authService auth.Provider
 	service *chat.Service
 	hub *chatSocketHub
 	events *chatEventBus
