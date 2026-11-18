@@ -88,7 +88,7 @@
 
 ### P0-B：实时传输与附近/世界/跨界频道
 - P0-B1（已提交，待运行验证）：为 ENet 协议分配聊天消息类型；Godot 网络层支持发送/接收；WorldServer 负责计算当前实例附近频道 AOI，服务端身份由 ChatServer 根据活动会话注入，ChatServer 执行 200 字校验与 1 秒限流。
-- P0-B2（进行中）：已增加受 `X-World-Server-Key` 与 `X-World-Server-Node` 保护的 `GET /api/v1/servers/chat/messages` 拉取接口，以及 `POST /api/v1/servers/chat/messages` 发布接口；现已同时挂载到独立 ChatServer，Game API 暂保留兼容入口。发布时必须验证 world_sessions + server_registry + character 三者关系、节点心跳、会话 active 状态；发送者名称/境界/世界由数据库注入，客户端不能伪造。客户端消息 ID 重试返回原消息，限流在幂等检查之后执行。拉取按节点当前 ready 的 world_instances 返回其 world 消息，以及全服统一 cross_world 消息；按 `(created_at,id)` 稳定游标分页。WorldServer 已将附近消息通过独立后台 worker 异步 POST 到 ChatServer；ChatServer 验证节点和会话归属；考虑到 WorldServer 的异步发件箱可能在玩家断线后才投递，允许同节点最近 30 天内已关闭的会话完成原消息投递。AOI 接收者快照必须属于该实例的活动或最近 30 天内关闭的会话，再持久化并经 JetStream 扇出。世界/跨界消息仍由玩家独立 WebSocket 连接发送；WorldServer 的世界/跨界定时拉取链路暂不承担客户端广播。
+- P0-B2（进行中）：已增加受 `X-World-Server-Key` 与 `X-World-Server-Node` 保护的 `GET /api/v1/servers/chat/messages` 拉取接口，以及 `POST /api/v1/servers/chat/messages` 发布接口；现已同时挂载到独立 ChatServer，Game API 暂保留兼容入口。发布时必须验证 world_sessions + server_registry + character 三者关系、节点心跳、会话归属与状态；发送者名称/境界/世界由数据库注入，客户端不能伪造。客户端消息 ID 重试返回原消息，限流在幂等检查之后执行。拉取按节点当前 ready 的 world_instances 返回其 world 消息，以及全服统一 cross_world 消息；按 `(created_at,id)` 稳定游标分页。WorldServer 已将附近消息通过独立后台 worker 异步 POST 到 ChatServer；ChatServer 验证节点和会话归属；考虑到 WorldServer 的异步发件箱可能在玩家断线后才投递，允许同节点最近 30 天内处于 saving 或 closed 的会话完成原消息投递。AOI 接收者快照必须属于该实例的活动或最近 30 天内关闭的会话，再持久化并经 JetStream 扇出。世界/跨界消息仍由玩家独立 WebSocket 连接发送；WorldServer 的世界/跨界定时拉取链路暂不承担客户端广播。
 - 验收：B1 需两客户端同实例附近可见，超出 AOI 不可见，伪造 sender 字段无效，限流和长度校验生效；B2 需不同实例同世界可见世界频道、不同世界可见同一跨界频道。
 
 ### P0-C：Godot 聊天 HUD
@@ -115,4 +115,4 @@
 - 独立 ChatServer 已增加 30 天消息保留清理调度：启动后执行一次，之后每小时执行；清理不再发生在玩家发送/查询请求路径，避免请求触发全表删除。清理失败仅记录日志并等待下一轮重试。
 - 聊天用户接口和 WorldServer 内部发布接口均强化幂等：相同 client_message_id + 相同频道/正文返回原消息；相同 ID 被用于不同频道或正文时返回 409，避免客户端错误重试覆盖/混淆消息。
 - 当前仍未实现 NATS 故障期间在线客户端历史增量同步、WorldServer 本地 SQLite 与 ChatServer/JetStream 的自动故障注入验收、聊天数据物理数据库拆分。
-- 本轮新增附近频道 SQLite 持久发件箱接入：复用 WorldServer 现有 WAL/FULL DurableOutbox，新增独立 nearby_chat claim worker；游戏事件 worker 排除聊天事件，聊天队列设置容量配额；客户端在持久化确认前使用相同 client_message_id 退避重发；服务端从已有 outbox 读取原始 AOI 快照以保证重试幂等；允许同节点最近 30 天已关闭会话完成延迟投递；新增重启恢复、类型隔离和容量配额测试。尚未运行 Go 测试、C++ 编译/CTest、Godot 解析/运行、数据库迁移或 GitHub Actions。不要把静态代码提交视为运行验收通过。
+- 本轮新增附近频道 SQLite 持久发件箱接入：复用 WorldServer 现有 WAL/FULL DurableOutbox，新增独立 nearby_chat claim worker；游戏事件 worker 排除聊天事件，聊天队列设置容量配额；客户端在持久化确认前使用相同 client_message_id 退避重发；服务端从已有 outbox 读取原始 AOI 快照以保证重试幂等；允许同节点最近 30 天处于 saving/closed 的会话完成延迟投递；新增重启恢复、类型隔离和容量配额测试。尚未运行 Go 测试、C++ 编译/CTest、Godot 解析/运行、数据库迁移或 GitHub Actions。不要把静态代码提交视为运行验收通过。
