@@ -51,8 +51,9 @@ try {
         '000030_soul_mutation_records.up.sql',
         '000031_soul_fusion_records.up.sql',
         '000032_soul_absorption_attribute_progress.up.sql',
-        '000033_soul_absorption_quality_tiers.up.sql'
-        '000034_wangchuan_echo_soul.up.sql'
+        '000033_soul_absorption_quality_tiers.up.sql',
+        '000034_wangchuan_echo_soul.up.sql',
+        '000035_ancient_battlefield_god_soul.up.sql'
     )
 
     $existing = docker compose --env-file .env exec -T postgres psql -U $env:POSTGRES_USER -d $env:POSTGRES_DB -At -c "SELECT to_regclass('public.accounts') IS NOT NULL;"
