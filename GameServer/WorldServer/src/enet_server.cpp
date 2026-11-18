@@ -80,6 +80,9 @@ struct MonsterRuntime {
     std::string runtime_id;
     Clock::time_point respawn_at{};
     Clock::time_point last_attack_at{};
+    bool rare_spawn{false};
+    int spawn_chance_percent{100};
+    int retry_spawn_seconds{60};
 };
 
 
@@ -731,6 +734,22 @@ struct EnetServer::Impl {
                         2.2F, 12.0F, 28.0F, -34.0F, 2.0F);
             add_monster("war-soul-ancient-001", "blazing_war_soul_ancient", "远古炽战残魂", 9, 360.0F, 30.0F, 14.0F,
                         1.9F, 13.0F, 30.0F, 34.0F, 3.0F);
+            // Rare soul bodies are dormant spawn points. Their appearance is
+            // rolled by the world loop when each discovery window opens.
+            if (monsters.size() >= 2) {
+                auto& elite = monsters[monsters.size() - 2];
+                elite.rare_spawn = true;
+                elite.spawn_chance_percent = 35;
+                elite.retry_spawn_seconds = 180;
+                elite.state.mode = honghuang::simulation::MonsterMode::Dead;
+                elite.respawn_at = Clock::now() + std::chrono::seconds(60);
+                auto& ancient = monsters.back();
+                ancient.rare_spawn = true;
+                ancient.spawn_chance_percent = 12;
+                ancient.retry_spawn_seconds = 600;
+                ancient.state.mode = honghuang::simulation::MonsterMode::Dead;
+                ancient.respawn_at = Clock::now() + std::chrono::seconds(240);
+            }
             add_monster("ironbone-001", "ironbone_beast_soul", "铁骨兽魂", 4, 145.0F, 13.0F, 9.0F,
                         1.8F, 10.0F, 25.0F, 25.0F, -19.0F);
             add_monster("gale-wraith-001", "gale_wraith", "疾风游魂", 4, 75.0F, 15.0F, 3.0F,
@@ -1390,7 +1409,11 @@ struct EnetServer::Impl {
             target->state.mode = honghuang::simulation::MonsterMode::Dead;
             target->state.target_id.clear();
             auto respawn_delay = kMonsterRespawnDelay;
-            if (target->definition.id == "faceless_essence") {
+            if (target->definition.id == "blazing_war_soul_ancient") {
+                respawn_delay = std::chrono::seconds(600);
+            } else if (target->definition.id == "blazing_war_soul_elite") {
+                respawn_delay = std::chrono::seconds(180);
+            } else if (target->definition.id == "faceless_essence") {
                 respawn_delay = std::chrono::seconds(300);
             } else if (target->definition.id == "life_ancient_soul") {
                 respawn_delay = std::chrono::seconds(120);
@@ -1539,6 +1562,14 @@ struct EnetServer::Impl {
         for (auto& monster : monsters) {
             if (monster.state.mode == honghuang::simulation::MonsterMode::Dead) {
                 if (monster.respawn_at.time_since_epoch().count() != 0 && now >= monster.respawn_at) {
+                    if (monster.rare_spawn) {
+                        static thread_local std::mt19937 generator(std::random_device{}());
+                        std::uniform_int_distribution<int> roll(1, 100);
+                        if (roll(generator) > monster.spawn_chance_percent) {
+                            monster.respawn_at = now + std::chrono::seconds(monster.retry_spawn_seconds);
+                            continue;
+                        }
+                    }
                     monster.state = {monster.definition.spawn_x, monster.definition.spawn_z,
                                      monster.definition.max_health};
                     monster.respawn_at = Clock::time_point{};
