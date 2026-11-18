@@ -471,6 +471,10 @@ type ExplorationEvent struct {
 	PositionZ float64 `json:"position_z"`
 	InteractionRadius float64 `json:"interaction_radius"`
 	DangerLevel int `json:"danger_level"`
+	Status string `json:"status"`
+	Discovered bool `json:"discovered"`
+	Unlocked bool `json:"unlocked"`
+	Completed bool `json:"completed"`
 }
 
 type ExplorationEventResult struct {
@@ -497,24 +501,40 @@ func (s *Service) ListAvailableExplorationEvents(ctx context.Context, accountID 
 		 ORDER BY ws.connected_at DESC NULLS LAST LIMIT 1`, accountID).Scan(&soulID,&worldID)
 	if errors.Is(err,sql.ErrNoRows) { return nil,ErrNoActiveSession }
 	if err!=nil { return nil,fmt.Errorf("resolve exploration event session: %w",err) }
+
 	rows,err:=s.db.QueryContext(ctx,
 		`SELECT e.id,e.point_id,p.name,e.title,e.description,e.event_type,
-		        p.position_x,p.position_y,p.position_z,p.interaction_radius,p.danger_level
+		        p.position_x,p.position_y,p.position_z,p.interaction_radius,p.danger_level,
+		        (d.point_id IS NOT NULL),
+		        (d.point_id IS NOT NULL
+		          AND (e.required_race_id IS NULL OR e.required_race_id=c.race_id)
+		          AND (e.required_fate_trait_id IS NULL OR e.required_fate_trait_id=COALESCE(trait.trait_id,'unmarked_fate'))),
+		        (claim.event_id IS NOT NULL),
+		        CASE
+		          WHEN claim.event_id IS NOT NULL THEN 'completed'
+		          WHEN d.point_id IS NOT NULL
+		            AND (e.required_race_id IS NULL OR e.required_race_id=c.race_id)
+		            AND (e.required_fate_trait_id IS NULL OR e.required_fate_trait_id=COALESCE(trait.trait_id,'unmarked_fate'))
+		            THEN 'available'
+		          ELSE 'locked'
+		        END
 		 FROM world_exploration_events e
 		 JOIN world_exploration_points p ON p.id=e.point_id AND p.world_id=$2 AND p.enabled=TRUE
-		 JOIN soul_exploration_discoveries d ON d.point_id=p.id AND d.soul_id=$1::uuid
-		 LEFT JOIN soul_exploration_event_claims claim ON claim.soul_id=$1::uuid AND claim.event_id=e.id
-		 WHERE e.enabled=TRUE AND claim.event_id IS NULL
-		   AND (e.required_race_id IS NULL OR e.required_race_id=(SELECT race_id FROM characters WHERE id=(SELECT current_character_id FROM souls WHERE id=$1::uuid)))
-		   AND (e.required_fate_trait_id IS NULL OR e.required_fate_trait_id=COALESCE((SELECT trait_id FROM character_fate_traits WHERE character_id=(SELECT current_character_id FROM souls WHERE id=$1::uuid)),'unmarked_fate'))
+		 JOIN souls soul ON soul.id=$1::uuid
+		 JOIN characters c ON c.id=soul.current_character_id
+		 LEFT JOIN character_fate_traits trait ON trait.character_id=c.id
+		 LEFT JOIN soul_exploration_discoveries d ON d.point_id=p.id AND d.soul_id=soul.id
+		 LEFT JOIN soul_exploration_event_claims claim ON claim.soul_id=soul.id AND claim.event_id=e.id
+		 WHERE e.enabled=TRUE
 		 ORDER BY p.region_id,e.id`,soulID,worldID)
-	if err!=nil { return nil,fmt.Errorf("query available exploration events: %w",err) }
+	if err!=nil { return nil,fmt.Errorf("query exploration events: %w",err) }
 	defer rows.Close()
 	items:=make([]ExplorationEvent,0)
 	for rows.Next() {
 		var item ExplorationEvent
 		if err:=rows.Scan(&item.ID,&item.PointID,&item.PointName,&item.Title,&item.Description,&item.EventType,
-			&item.PositionX,&item.PositionY,&item.PositionZ,&item.InteractionRadius,&item.DangerLevel);err!=nil {
+			&item.PositionX,&item.PositionY,&item.PositionZ,&item.InteractionRadius,&item.DangerLevel,
+			&item.Discovered,&item.Unlocked,&item.Completed,&item.Status);err!=nil {
 			return nil,fmt.Errorf("scan exploration event: %w",err)
 		}
 		items=append(items,item)
@@ -523,8 +543,6 @@ func (s *Service) ListAvailableExplorationEvents(ctx context.Context, accountID 
 	return items,nil
 }
 
-// TriggerExplorationEvent accepts only an event identifier. Position, unlock
-// state, one-time claim, and reward values are all checked inside this transaction.
 func (s *Service) TriggerExplorationEvent(ctx context.Context, accountID,eventID string) (ExplorationEventResult,error) {
 	if eventID=="" || len(eventID)>96 { return ExplorationEventResult{},ErrExplorationEventUnavailable }
 	tx,err:=s.db.BeginTx(ctx,nil)
