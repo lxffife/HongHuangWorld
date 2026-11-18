@@ -19,6 +19,23 @@ ctest --test-dir build/worldserver --output-on-failure
 
 `durable_outbox_test` 覆盖 SQLite 重启恢复、相同事件 ID 幂等、附近聊天与游戏事件独立 claim、聊天容量配额、死信和人工重试权限。单元测试通过不等于完整网络链路已验收。
 
+### 1.1 假服务 HTTP 故障注入自动化测试
+
+在 Python 3 环境运行（仅标准库）：
+
+```sh
+python3 Deployment/scripts/test-chat-fake-server.py
+```
+
+该测试会启动独立 loopback 假服务并自动验证：
+- 同一个 `client_message_id` 重复 POST 返回相同模拟消息 ID。
+- 401、429、503 能被客户端观察为对应 HTTP 错误。
+- 服务端延迟响应可触发客户端超时。
+- 服务端主动关闭连接可模拟无 HTTP 响应的网络中断。
+- 不支持的管理状态码会被拒绝。
+
+测试结束会关闭它启动的子进程。它不启动 WorldServer，也不修改任何游戏数据库。
+
 ## 2. 启动本地假 ChatServer
 
 需要 Python 3，无第三方依赖：
@@ -33,12 +50,14 @@ python3 Deployment/scripts/chat-fake-server.py
 curl http://127.0.0.1:8788/health
 ```
 
-切换模拟响应码（另开终端）：
+切换模拟响应码（另开终端）。也可以注入延迟或断开连接：
 
 ```sh
 curl "http://127.0.0.1:8788/__admin/status?code=503"
 curl "http://127.0.0.1:8788/__admin/status?code=201"
 curl "http://127.0.0.1:8788/__admin/status?code=401"
+curl "http://127.0.0.1:8788/__admin/status?code=503&delay_ms=1500"
+curl "http://127.0.0.1:8788/__admin/status?code=201&drop=1"
 curl http://127.0.0.1:8788/__admin/stats
 ```
 
@@ -113,6 +132,7 @@ WorldServer 仍需配置有效的游戏 API、节点密钥和世界实例，并�
 
 ## 5. 当前边界
 
+- 假服务的 Python 自动化测试只验证模拟 HTTP 端点的响应、幂等键和故障注入能力；仍需连接 WorldServer + 独立测试 SQLite 才能验收真实发件箱重试。
 - 本地假服务只验证 WorldServer -> HTTP -> 持久发件箱重试，不代表 ChatServer 的 PostgreSQL/Outbox/JetStream/WebSocket 已端到端验收。
 - 真实 ChatServer 的节点鉴权、AOI 快照校验、消息持久化、NATS 故障恢复仍需在隔离测试环境验收。
 - 本计划不触发或依赖 GitHub Actions。当前新增测试与脚本尚未在本轮实际运行。
