@@ -45,7 +45,7 @@ func TestReadChatSocketFrameRejectsUnmaskedClientFrame(t *testing.T) {
 }
 
 func TestReadChatSocketFrameRejectsOversizedPayload(t *testing.T) {
-	frame := []byte{0x81, 0xff, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0}
+	frame := []byte{0x81, 0xff, 0, 0, 0, 0, 0, 1, 0, 1}
 	reader := bufio.NewReader(bytes.NewReader(frame))
 	if _, _, err := readChatSocketFrame(reader); err == nil {
 		t.Fatal("expected oversized client frame to be rejected")
