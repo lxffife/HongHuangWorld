@@ -92,7 +92,7 @@
 - 验收：B1 需两客户端同实例附近可见，超出 AOI 不可见，伪造 sender 字段无效，限流和长度校验生效；B2 需不同实例同世界可见世界频道、不同世界可见同一跨界频道。
 
 ### P0-C：Godot 聊天 HUD
-- P0-C1（已提交，待运行验证）：增加左下方可折叠聊天窗、附近频道消息列表、输入发送和服务端错误提示；世界/跨界入口先显示开发中，避免误导玩家。
+- P0-C1（已提交，待运行验证）：增加左下方可折叠聊天窗、附近/世界/跨界频道切换、输入发送和服务端错误提示；附近仍走 ENet，世界/跨界走独立 ChatServer WebSocket。
 - P0-C2（进行中）：ChatServer 新增 Bearer Token 认证的 WebSocket `/api/v1/chat/socket`；Godot 新增独立 `HHChatNetwork`，具备独立心跳、断线检测和 4 秒重连。世界/跨界频道通过该连接发送与接收，附近频道暂时保留 ENet。当前实时广播仅限单个 ChatServer 进程，尚未接 NATS；历史补拉、未读和消息恢复仍待实现。
 - 验收：不遮挡基础移动与战斗操作，输入/发送/错误提示正常，重连后能恢复频道历史。
 
@@ -108,7 +108,7 @@
 
 - 已有：迁移 000038 的基础表；Go chat service 支持 world/cross_world 文本写入和历史查询。
 - 本次新增：ENet ChatSendCommand/ChatEvent 协议；WorldServer 当前实例附近频道 AOI 转发、服务端身份注入、200 字校验和 1 秒限流；Godot 网络层发送/接收接口；协议帧测试覆盖聊天消息类型；Godot 初版附近聊天 HUD（可折叠、输入发送、错误提示）。
-- 独立服务拆分第一步已提交：新增 Backend/cmd/chat 独立 Go 进程（默认 :8788）、httpapi.NewChatRouter（只注册聊天与健康检查路由）、CHAT_DATABASE_URL/CHAT_HTTP_ADDR 配置，以及 Windows/Linux 启动脚本。Game API 暂时保留原聊天路由作为迁移兼容入口。详见 Docs/Architecture/SERVICE-ISOLATION.md。
+- 独立服务拆分第一步已提交：新增 Backend/cmd/chat 独立 Go 进程（默认 :8788）、httpapi.NewChatRouter（只注册聊天与健康检查路由）、CHAT_DATABASE_URL/CHAT_HTTP_ADDR 配置，以及 Windows/Linux 启动脚本。Godot 使用 `CHAT_API_BASE` 环境变量覆盖聊天服务地址；未设置时从游戏 API 的 `:8787` 推导 `:8788`。Game API 暂时保留原聊天路由作为迁移兼容入口。详见 Docs/Architecture/SERVICE-ISOLATION.md。
 - P0-B2 本次新增：WorldServer 节点认证的中心消息拉取和发布 API。发布接口校验活动会话确属该节点，服务端注入消息身份并做 3 秒世界/5 秒跨界限流与幂等；拉取接口按节点服务世界筛选 world 频道，cross_world 对所有 ready 节点可见，支持 1–100 条分页与 `(created_at,id)` 游标。仍未实现 WorldServer 调用发布/定时拉取、ENet 广播、消费游标持久化与断线补发确认。
 - 附近频道当前为 WorldServer 内存实时消息，不写入 PostgreSQL，因此暂不提供附近频道历史；世界/跨界 HTTP 历史接口与 ENet 实时消息目前尚未接通。
 - 仍未实现：WorldServer 发布/拉取接口接入和 ENet 消息扇出、消费游标可靠保存/确认、好友/私聊 API、离线投递、队伍/宗门频道。
