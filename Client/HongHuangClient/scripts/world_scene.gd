@@ -1257,13 +1257,14 @@ func _select_chat_channel(channel: String) -> void:
 		chat_status.text = str(names[channel]) + "频道 · 正在连接独立聊天服务"
 
 func _on_chat_socket_connected() -> void:
+	HHChatNetwork.fetch_history("nearby", 50)
 	HHChatNetwork.fetch_history("world", 50)
 	HHChatNetwork.fetch_history("cross_world", 50)
 	if selected_chat_channel != "nearby" and is_instance_valid(chat_status):
 		chat_status.text = "聊天服务已连接 · " + ("世界频道" if selected_chat_channel == "world" else "跨界频道")
 
 func _on_chat_history_received(channel: String, messages: Array) -> void:
-	if channel not in ["world", "cross_world"]:
+	if channel not in ["nearby", "world", "cross_world"]:
 		return
 	for message in messages:
 		if not message is Dictionary:
