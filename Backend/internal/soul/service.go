@@ -875,10 +875,11 @@ func (s *Service) ApplyServerAbsorption(ctx context.Context, nodeKey string, eve
 
 	var result AbsorptionResult
 	var traitKey string
+	var inheritanceAttribute sql.NullString
 	err = tx.QueryRowContext(ctx, `
-		SELECT id,name,base_energy,trait_key
+		SELECT id,name,base_energy,trait_key,inheritance_attribute
 		FROM soul_absorption_kinds WHERE id=$1 AND enabled=true`, kindID).
-		Scan(&result.KindID, &result.KindName, &result.EnergyGained, &traitKey)
+		Scan(&result.KindID, &result.KindName, &result.EnergyGained, &traitKey, &inheritanceAttribute)
 	if err != nil {
 		return AbsorptionResult{}, fmt.Errorf("load absorption kind: %w", err)
 	}
@@ -932,33 +933,55 @@ func (s *Service) ApplyServerAbsorption(ctx context.Context, nodeKey string, eve
 		return AbsorptionResult{}, fmt.Errorf("update soul essence: %w", err)
 	}
 
+	if inheritanceAttribute.Valid && inheritanceAttribute.String != "" {
+		progress, applied, progressErr := advanceSoulAbsorptionAttribute(ctx, tx, soulID, inheritanceAttribute.String)
+		if progressErr != nil { return AbsorptionResult{}, progressErr }
+		result.AttributeProgress = &progress
+		if applied > 0 {
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE soul_absorption_records SET attribute_points_awarded=1
+				WHERE soul_id=$1 AND event_id=$2::uuid`, soulID, event.EventID); err != nil {
+				return AbsorptionResult{}, fmt.Errorf("audit soul attribute milestone: %w", err)
+			}
+		}
+	}
+
 	if mutation := rollSoulMutation(event.EventID); mutation != nil {
-		err = tx.QueryRowContext(ctx, `
-			INSERT INTO soul_mutation_records
+		allowed := map[string]bool{
+			"strength": true, "constitution": true, "agility": true,
+			"spirit": true, "vitality": true,
+		}
+		if !allowed[mutation.Attribute] { return AbsorptionResult{}, ErrInvalidAbsorption }
+		var currentValue int64
+		valueQuery := `SELECT ` + mutation.Attribute + ` FROM soul_inheritance_attributes WHERE soul_id=$1 FOR UPDATE`
+		if err := tx.QueryRowContext(ctx, valueQuery, soulID).Scan(&currentValue); err != nil {
+			return AbsorptionResult{}, fmt.Errorf("load mutation target attribute: %w", err)
+		}
+		actualBonus := int64(mutation.AttributeBonus)
+		if remaining := soulInheritanceAttributeCap-currentValue; actualBonus > remaining { actualBonus = remaining }
+		if actualBonus < 0 { actualBonus = 0 }
+		if actualBonus > 0 {
+			mutation.AttributeBonus = int(actualBonus)
+			err = tx.QueryRowContext(ctx, `
+				INSERT INTO soul_mutation_records
 				(soul_id,event_id,mutation_key,mutation_name,description,rarity,attribute,attribute_bonus)
 			VALUES ($1,$2::uuid,$3,$4,$5,$6,$7,$8)
 			ON CONFLICT (soul_id,event_id) DO NOTHING
 			RETURNING created_at::text`,
 			soulID, event.EventID, mutation.MutationKey, mutation.Name, mutation.Description,
 			mutation.Rarity, mutation.Attribute, mutation.AttributeBonus).Scan(&mutation.CreatedAt)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return AbsorptionResult{}, fmt.Errorf("record soul mutation: %w", err)
-		}
-		if err == nil {
-			allowed := map[string]bool{
-				"strength": true, "constitution": true, "agility": true,
-				"spirit": true, "vitality": true,
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return AbsorptionResult{}, fmt.Errorf("record soul mutation: %w", err)
 			}
-			if !allowed[mutation.Attribute] {
-				return AbsorptionResult{}, ErrInvalidAbsorption
+			if err == nil {
+				query := `UPDATE soul_inheritance_attributes
+					SET ` + mutation.Attribute + `=` + mutation.Attribute + `+$1,updated_at=now()
+					WHERE soul_id=$2`
+				if _, err := tx.ExecContext(ctx, query, mutation.AttributeBonus, soulID); err != nil {
+					return AbsorptionResult{}, fmt.Errorf("apply soul mutation inheritance: %w", err)
+				}
+				result.Mutation = mutation
 			}
-			query := `UPDATE soul_inheritance_attributes
-				SET ` + mutation.Attribute + `=` + mutation.Attribute + `+$1,updated_at=now()
-				WHERE soul_id=$2`
-			if _, err := tx.ExecContext(ctx, query, mutation.AttributeBonus, soulID); err != nil {
-				return AbsorptionResult{}, fmt.Errorf("apply soul mutation inheritance: %w", err)
-			}
-			result.Mutation = mutation
 		}
 	}
 
