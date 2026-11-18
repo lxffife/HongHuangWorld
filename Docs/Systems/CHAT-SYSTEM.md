@@ -104,7 +104,7 @@
   ```sh
   ./world_outbox_admin stats
   ./world_outbox_admin dead-letters 50
-  ./world_outbox_admin retry nearby-chat:<session_id>:<client_message_id>
+  ./world_outbox_admin retry nearby-chat:SESSION_UUID:CLIENT_MESSAGE_UUID
   ```
   也可在命令前显式传入 SQLite 文件路径。默认读取 `WORLD_SERVER_OUTBOX_PATH`，未设置时使用 `./data/worldserver-outbox.sqlite3`。
 - 验收：检查工具可在 WorldServer 运行期间安全读取状态；重试死信后由原 Chat Outbox worker 自动重新投递；管理工具不能重置 live inflight，也不能重试非 nearby_chat 事件。
