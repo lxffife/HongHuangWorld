@@ -1381,6 +1381,93 @@ struct EnetServer::Impl {
         }
     }
 
+    bool enqueue_chat_job(ChatJob job) {
+        std::lock_guard lock(chat_mutex);
+        if (chat_stop_requested || pending_chat_jobs.size() >= 256) return false;
+        pending_chat_jobs.push_back(std::move(job));
+        chat_cv.notify_one();
+        return true;
+    }
+
+    void start_chat_worker() {
+        chat_stop_requested = false;
+        if (config.chat_backend_url.empty()) {
+            std::cerr << "CHAT_SERVER_URL is empty; nearby chat delivery is disabled\n";
+            return;
+        }
+        chat_thread = std::thread([this] {
+            while (true) {
+                ChatJob job;
+                {
+                    std::unique_lock lock(chat_mutex);
+                    chat_cv.wait(lock, [this] { return chat_stop_requested || !pending_chat_jobs.empty(); });
+                    if (chat_stop_requested && pending_chat_jobs.empty()) return;
+                    job = std::move(pending_chat_jobs.front());
+                    pending_chat_jobs.pop_front();
+                }
+
+                ChatJobResult result;
+                result.session_id = job.session_id;
+                result.client_message_id = job.client_message_id;
+                long status = 0;
+                for (unsigned int attempt = 0; attempt < 5; ++attempt) {
+                    std::string message_id;
+                    std::string error;
+                    if (deliver_chat_message(config, job, status, message_id, error)) {
+                        result.accepted = true;
+                        result.message_id = std::move(message_id);
+                        break;
+                    }
+                    result.reason = std::move(error);
+                    const bool retryable = status == 0 || status == 429 || status >= 500;
+                    if (!retryable || attempt == 4) break;
+                    const auto delay = std::chrono::seconds(1U << attempt);
+                    std::unique_lock lock(chat_mutex);
+                    if (chat_cv.wait_for(lock, delay, [this] { return chat_stop_requested; })) break;
+                }
+                {
+                    std::lock_guard lock(chat_mutex);
+                    if (completed_chat_jobs.size() >= 512) completed_chat_jobs.pop_front();
+                    completed_chat_jobs.push_back(std::move(result));
+                }
+            }
+        });
+    }
+
+    void stop_chat_worker() {
+        {
+            std::lock_guard lock(chat_mutex);
+            chat_stop_requested = true;
+        }
+        chat_cv.notify_all();
+        if (chat_thread.joinable()) chat_thread.join();
+    }
+
+    void drain_chat_results() {
+        std::deque<ChatJobResult> completed;
+        {
+            std::lock_guard lock(chat_mutex);
+            completed.swap(completed_chat_jobs);
+        }
+        for (const auto& result : completed) {
+            const auto player = std::find_if(players.begin(), players.end(), [&](const auto& entry) {
+                return entry.second.session_id == result.session_id;
+            });
+            if (player == players.end()) continue;
+            Json response{
+                {"accepted", result.accepted},
+                {"client_message_id", result.client_message_id},
+                {"channel", "nearby"}
+            };
+            if (result.accepted) {
+                response["message_id"] = result.message_id;
+            } else {
+                response["reason"] = result.reason.empty() ? "聊天服务暂时不可用。" : result.reason;
+            }
+            send_json(player->first, honghuang::protocol::MessageType::ChatEvent, response);
+        }
+    }
+
     void handle_chat(ENetPeer* peer, const Json& command) {
         const auto player_it = players.find(peer);
         if (player_it == players.end()) return;
