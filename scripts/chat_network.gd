@@ -21,6 +21,7 @@ var heartbeat_timer: Timer
 var manually_closed := false
 var connecting := false
 var was_open := false
+var connection_generation := 0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -54,6 +55,7 @@ func connect_chat(api_base: String, token: String) -> Error:
 	socket = WebSocketPeer.new()
 	connecting = false
 	was_open = false
+	connection_generation += 1
 	http_base_url = base
 	access_token = token
 	manually_closed = false
@@ -86,6 +88,7 @@ func _process(_delta: float) -> void:
 		if connecting:
 			connecting = false
 			was_open = true
+			connection_generation += 1
 			reconnect_timer.stop()
 			heartbeat_timer.start()
 			connected.emit()
@@ -113,6 +116,7 @@ func fetch_history(channel: String, limit: int = 50) -> void:
 	var request := HTTPRequest.new()
 	request.timeout = 10.0
 	request.set_meta("chat_channel", channel)
+	request.set_meta("generation", connection_generation)
 	request.request_completed.connect(_on_history_request_completed.bind(request))
 	add_child(request)
 	var headers := PackedStringArray(["Authorization: Bearer " + access_token])
@@ -124,7 +128,10 @@ func fetch_history(channel: String, limit: int = 50) -> void:
 
 func _on_history_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray, request: HTTPRequest) -> void:
 	var channel := str(request.get_meta("chat_channel", ""))
+	var generation := int(request.get_meta("generation", -1))
 	request.queue_free()
+	if generation != connection_generation:
+		return
 	if result != HTTPRequest.RESULT_SUCCESS or response_code != 200:
 		connection_error.emit("聊天历史暂时无法获取（HTTP " + str(response_code) + "）")
 		return
