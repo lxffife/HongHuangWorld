@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -35,18 +34,11 @@ func main() {
 	defer db.Close()
 
 	// During the database cutover period, the legacy Chat API can continue
-	// using CHAT_DATABASE_URL while this independent connection builds the
+	// using CHAT_DATABASE_URL while this independent worker maintains the
 	// new Chat-owned projection database.
-	var projectionDB *sql.DB
-	if projectionURL := os.Getenv("CHAT_PROJECTION_DATABASE_URL"); projectionURL != "" {
-		projectionCtx, projectionCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		projectionDB, err = database.OpenPostgres(projectionCtx, projectionURL)
-		projectionCancel()
-		if err != nil {
-			logger.Error("Chat projection database unavailable; event projection consumer is disabled", "error", err)
-		} else {
-			defer projectionDB.Close()
-		}
+	projectionURL := os.Getenv("CHAT_PROJECTION_DATABASE_URL")
+	if projectionURL != "" {
+		go runGameProjectionConsumer(ctx, projectionURL, logger)
 	} else {
 		logger.Warn("CHAT_PROJECTION_DATABASE_URL is empty; Game projection consumer is disabled")
 	}
@@ -114,5 +106,36 @@ func runChatRetentionCleanup(ctx context.Context, service *chat.Service, logger 
 		case <-ticker.C:
 			cleanup()
 		}
+	}
+}
+
+func runGameProjectionConsumer(ctx context.Context, databaseURL string, logger *slog.Logger) {
+	for ctx.Err() == nil {
+		openCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		db, err := database.OpenPostgres(openCtx, databaseURL)
+		cancel()
+		if err != nil {
+			logger.Error("Chat projection database unavailable; retrying connection", "error", err)
+			if !waitForChatProjection(ctx, 5*time.Second) {
+				return
+			}
+			continue
+		}
+		chatprojection.Run(ctx, db, logger)
+		_ = db.Close()
+		if ctx.Err() == nil && !waitForChatProjection(ctx, 2*time.Second) {
+			return
+		}
+	}
+}
+
+func waitForChatProjection(ctx context.Context, duration time.Duration) bool {
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
 	}
 }
