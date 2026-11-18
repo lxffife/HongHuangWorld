@@ -67,6 +67,34 @@ int main() {
         assert(!box.schedule_retry("e2", 2, 400, "must not revive dead letter", error));
     }
 
+    {
+        // Nearby chat uses the same durable outbox and survives process restart.
+        honghuang::persistence::DurableOutbox box(path, 4);
+        std::string error;
+        const honghuang::persistence::OutboxEvent chat{
+            "nearby-chat:client-1", "nearby_chat",
+            "{\\"session_id\\":\\"s1\\",\\"client_message_id\\":\\"client-1\\"}",
+            0, 500, 500, {}
+        };
+        assert(box.enqueue(chat, error));
+        assert(box.enqueue(chat, error));
+        assert(!box.enqueue({
+            "nearby-chat:client-1", "nearby_chat",
+            "{\\"session_id\\":\\"s1\\",\\"client_message_id\\":\\"client-1\\",\\"content\\":\\"changed\\"}",
+            0, 500, 500, {}
+        }, error));
+        auto pending_chat = box.claim_due(500, error);
+        assert(pending_chat && pending_chat->event_type == "nearby_chat");
+    }
+    {
+        honghuang::persistence::DurableOutbox recovered_box(path, 4);
+        std::string error;
+        auto recovered_chat = recovered_box.claim_due(500, error);
+        assert(recovered_chat && recovered_chat->event_id == "nearby-chat:client-1");
+        assert(recovered_chat->payload.find("client-1") != std::string::npos);
+        assert(recovered_box.mark_delivered(recovered_chat->event_id, error));
+    }
+
     remove_database(path);
 
     // Two independent connections must still respect one shared capacity limit.
