@@ -8,7 +8,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/liflife/HongHuangWorld/Backend/internal/auth"
 	"github.com/liflife/HongHuangWorld/Backend/internal/chat"
 )
 
