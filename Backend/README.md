@@ -22,7 +22,7 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 - `POST /api/v1/worlds/current/npcs/choose`：提交 NPC 因果分支 ID；中心服重新校验会话、世界和交互距离，从 NPC 数据配置读取选项，并由可信规则计算功德/业力。每个灵魂对同一 NPC 只能作出一次选择，幂等与数值更新在同一事务完成。
 - `GET /api/v1/worlds/current/exploration-points`：读取当前世界探索点及当前灵魂的已发现状态；返回区域、危险等级、位置和交互半径。
 - `GET /api/v1/worlds/current/exploration-progress`：按区域汇总当前世界探索点发现数、适用奇遇总数和已领取数；发现与领取进度按灵魂跨轮回保留。
-- `GET /api/v1/worlds/current/exploration-events`：读取当前世界全部启用的区域奇遇，并返回 `status`（`locked`/`available`/`completed`）、`discovered`、`unlocked`、`completed`；解锁与领取状态按灵魂及当前肉身种族/命格计算。
+- `GET /api/v1/worlds/current/exploration-events`：读取当前世界全部启用的区域奇遇，并返回 `status`（`locked`/`available`/`completed`）、`discovered`、`unlocked`、`completed`，以及 `merit_reward`、`karma_delta` 预览；解锁与领取状态按灵魂及当前肉身种族/命格计算，奖励预览不代替触发接口结算。客户端展示剧情说明并二次确认后，才调用触发接口。
 - `POST /api/v1/worlds/current/exploration-events/trigger`：请求体仅包含 `event_id`；中心服校验活跃会话、服务端角色位置、探索点发现状态和灵魂级一次性领取，并在同一事务中写入因果账簿及奖励。
 - `POST /api/v1/worlds/current/exploration-points/discover`：请求体仅包含 `point_id`；中心服按活跃会话和数据库中的角色位置验证距离，再以灵魂为单位幂等记录发现，并在同一事务中结算功德/业力因果事件。发现跨越轮回保留。
 - `GET /api/v1/cultivation/systems`：读取种族、默认修炼体系、各自境界和跨种族实力参考层级。
