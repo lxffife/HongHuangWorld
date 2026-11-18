@@ -22,6 +22,7 @@ var soul_trait_rune_ring: MeshInstance3D
 var soul_trait_life_ring: MeshInstance3D
 var soul_growth_rings: Array[MeshInstance3D] = []
 var soul_growth_shell: MeshInstance3D
+var soul_fusion_ring: MeshInstance3D
 var soul_growth_stage := 1
 var soul_form_enabled := false
 var soul_form_time := 0.0
@@ -177,7 +178,7 @@ func _physics_process(delta: float) -> void:
 				push_warning("World movement input send failed: " + str(send_error))
 
 
-func set_soul_form(enabled: bool, stage: int = 1, visual_scale: float = 0.35, affinities: Dictionary = {}, growth_stage: int = 1) -> void:
+func set_soul_form(enabled: bool, stage: int = 1, visual_scale: float = 0.35, affinities: Dictionary = {}, growth_stage: int = 1, fusion_names: Array = []) -> void:
 	if not is_instance_valid(visual) or not is_instance_valid(collision_shape):
 		return
 	soul_form_enabled = enabled
@@ -193,7 +194,7 @@ func set_soul_form(enabled: bool, stage: int = 1, visual_scale: float = 0.35, af
 		move_speed = 5.5
 		if is_instance_valid(soul_orb_halo):
 			soul_orb_halo.visible = false
-		for trait_node in [soul_trait_ring, soul_trait_shell, soul_trait_rune_ring, soul_trait_life_ring, soul_growth_shell]:
+		for trait_node in [soul_trait_ring, soul_trait_shell, soul_trait_rune_ring, soul_trait_life_ring, soul_growth_shell, soul_fusion_ring]:
 			if is_instance_valid(trait_node):
 				trait_node.visible = false
 		for growth_ring in soul_growth_rings:
@@ -248,6 +249,7 @@ func set_soul_form(enabled: bool, stage: int = 1, visual_scale: float = 0.35, af
 	soul_orb_halo.scale = Vector3.ONE * clampf(visual_scale / 0.35, 0.85, 3.8)
 	_apply_soul_affinity_visuals(affinities)
 	_apply_soul_growth_visuals(growth_stage)
+	_apply_soul_fusion_visuals(fusion_names)
 
 
 func _apply_soul_growth_visuals(growth_stage: int) -> void:
@@ -285,6 +287,32 @@ func _apply_soul_growth_visuals(growth_stage: int) -> void:
 		add_child(soul_growth_shell)
 	soul_growth_shell.visible = soul_growth_stage >= 5
 	soul_growth_shell.scale = Vector3.ONE * soul_form_scale * 1.12
+
+func _apply_soul_fusion_visuals(fusion_names: Array) -> void:
+	if not is_instance_valid(soul_fusion_ring):
+		soul_fusion_ring = MeshInstance3D.new()
+		soul_fusion_ring.name = "SoulFusionSealRing"
+		var ring_mesh := TorusMesh.new()
+		ring_mesh.inner_radius = 0.94
+		ring_mesh.outer_radius = 1.015
+		ring_mesh.rings = 40
+		ring_mesh.ring_segments = 8
+		soul_fusion_ring.mesh = ring_mesh
+		soul_fusion_ring.position.y = 0.42
+		soul_fusion_ring.rotation.x = 0.34
+		add_child(soul_fusion_ring)
+	var fusion_color := Color(0.92, 0.78, 0.42)
+	if fusion_names.has("战躯魂印"):
+		fusion_color = Color(1.0, 0.34, 0.18)
+	if fusion_names.has("风灵魂印"):
+		fusion_color = Color(0.28, 0.82, 1.0)
+	if fusion_names.has("不灭魂种"):
+		fusion_color = Color(0.30, 1.0, 0.48)
+	if fusion_names.has("五行混元魂"):
+		fusion_color = Color(1.0, 0.82, 0.34)
+	soul_fusion_ring.material_override = _make_trait_material(fusion_color, 0.82)
+	soul_fusion_ring.visible = fusion_names.size() > 0
+	soul_fusion_ring.scale = Vector3.ONE * soul_form_scale * 1.28
 
 func _make_trait_material(color: Color, alpha: float = 0.58) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
