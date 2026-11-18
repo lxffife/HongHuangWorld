@@ -27,7 +27,13 @@ ctest --test-dir build/worldserver --output-on-failure
 python3 Deployment/scripts/test-chat-fake-server.py
 ```
 
-该测试会启动独立 loopback 假服务并自动验证：
+该测试会启动独立 loopback 假服务并自动验证。配置 CMake 时若检测到 Python 3，WorldServer 的 CTest 会自动注册 `chat_fake_server_test`；也可单独运行：
+
+```sh
+ctest --test-dir build/worldserver -R chat_fake_server_test --output-on-failure
+```
+
+该测试覆盖：
 - 同一个 `client_message_id` 重复 POST 返回相同模拟消息 ID。
 - 401、429、503 能被客户端观察为对应 HTTP 错误。
 - 服务端延迟响应可触发客户端超时。
