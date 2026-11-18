@@ -30,6 +30,10 @@ type ItemStack struct {
 	ItemType string `json:"item_type"`
 	EquipmentSlot string `json:"equipment_slot,omitempty"`
 	BaseStats map[string]int `json:"base_stats,omitempty"`
+	SetID string `json:"set_id,omitempty"`
+	SetName string `json:"set_name,omitempty"`
+	SetDescription string `json:"set_description,omitempty"`
+	SetBonusTiers map[int]map[string]int `json:"set_bonus_tiers,omitempty"`
 }
 
 
@@ -92,19 +96,20 @@ type Service struct { db *sql.DB }
 func NewService(db *sql.DB) *Service { return &Service{db: db} }
 
 func (s *Service) ListItems(ctx context.Context) ([]ItemStack, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, category, quality, max_stack, icon_key, description, item_type, COALESCE(equipment_slot, ''), base_stats
-		FROM item_definitions WHERE enabled ORDER BY quality DESC, category, id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT i.id, i.name, i.category, i.quality, i.max_stack, i.icon_key, i.description, i.item_type, COALESCE(i.equipment_slot, ''), i.base_stats, COALESCE(es.id, ''), COALESCE(es.name, ''), COALESCE(es.description, ''), COALESCE(es.bonus_tiers, '{}'::jsonb)
+		FROM item_definitions i LEFT JOIN equipment_sets es ON es.id=i.equipment_set_id WHERE i.enabled ORDER BY i.quality DESC, i.category, i.id`)
 	if err != nil { return nil, fmt.Errorf("list item definitions: %w", err) }
 	defer rows.Close()
 	items := make([]ItemStack, 0)
 	for rows.Next() {
 		var item ItemStack
-		var stats []byte
-		if err := rows.Scan(&item.ItemID, &item.Name, &item.Category, &item.Quality, &item.MaxStack, &item.IconKey, &item.Description, &item.ItemType, &item.EquipmentSlot, &stats); err != nil {
+		var stats, setTiers []byte
+		if err := rows.Scan(&item.ItemID, &item.Name, &item.Category, &item.Quality, &item.MaxStack, &item.IconKey, &item.Description, &item.ItemType, &item.EquipmentSlot, &stats, &item.SetID, &item.SetName, &item.SetDescription, &setTiers); err != nil {
 			return nil, fmt.Errorf("scan item definition: %w", err)
 		}
 		item.BaseStats = map[string]int{}
 		if len(stats) > 0 { if err := json.Unmarshal(stats, &item.BaseStats); err != nil { return nil, fmt.Errorf("decode item stats: %w", err) } }
+		if len(setTiers)>0 { if err:=json.Unmarshal(setTiers,&item.SetBonusTiers); err!=nil { return nil,fmt.Errorf("decode equipment set tiers: %w",err) } }
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate item definitions: %w", err) }
@@ -135,11 +140,12 @@ func (s *Service) ListLootTable(ctx context.Context) ([]LootEntry, error) {
 }
 
 func (s *Service) CurrentInventory(ctx context.Context, accountID string) ([]ItemStack, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT i.id, i.name, i.category, i.quality, ci.quantity, i.max_stack, i.icon_key, i.description, i.item_type, COALESCE(i.equipment_slot, ''), i.base_stats
+	rows, err := s.db.QueryContext(ctx, `SELECT i.id, i.name, i.category, i.quality, ci.quantity, i.max_stack, i.icon_key, i.description, i.item_type, COALESCE(i.equipment_slot, ''), i.base_stats, COALESCE(es.id, ''), COALESCE(es.name, ''), COALESCE(es.description, ''), COALESCE(es.bonus_tiers, '{}'::jsonb)
 		FROM souls soul
 		JOIN characters c ON c.id = soul.current_character_id
 		JOIN character_inventory ci ON ci.character_id = c.id
 		JOIN item_definitions i ON i.id = ci.item_id
+		LEFT JOIN equipment_sets es ON es.id=i.equipment_set_id
 		WHERE soul.account_id = $1 AND c.status = 'alive'
 		ORDER BY i.quality DESC, i.name`, accountID)
 	if err != nil { return nil, fmt.Errorf("load current character inventory: %w", err) }
@@ -147,12 +153,13 @@ func (s *Service) CurrentInventory(ctx context.Context, accountID string) ([]Ite
 	items := make([]ItemStack, 0)
 	for rows.Next() {
 		var item ItemStack
-		var stats []byte
-		if err := rows.Scan(&item.ItemID, &item.Name, &item.Category, &item.Quality, &item.Quantity, &item.MaxStack, &item.IconKey, &item.Description, &item.ItemType, &item.EquipmentSlot, &stats); err != nil {
+		var stats, setTiers []byte
+		if err := rows.Scan(&item.ItemID, &item.Name, &item.Category, &item.Quality, &item.Quantity, &item.MaxStack, &item.IconKey, &item.Description, &item.ItemType, &item.EquipmentSlot, &stats, &item.SetID, &item.SetName, &item.SetDescription, &setTiers); err != nil {
 			return nil, fmt.Errorf("scan inventory stack: %w", err)
 		}
 		item.BaseStats = map[string]int{}
 		if len(stats) > 0 { if err := json.Unmarshal(stats, &item.BaseStats); err != nil { return nil, fmt.Errorf("decode inventory item stats: %w", err) } }
+		if len(setTiers)>0 { if err:=json.Unmarshal(setTiers,&item.SetBonusTiers); err!=nil { return nil,fmt.Errorf("decode inventory set tiers: %w",err) } }
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate inventory: %w", err) }
@@ -348,23 +355,29 @@ type EquippedItem struct {
 	IconKey string `json:"icon_key"`
 	Description string `json:"description"`
 	BaseStats map[string]int `json:"base_stats"`
+	SetID string `json:"set_id,omitempty"`
+	SetName string `json:"set_name,omitempty"`
+	SetDescription string `json:"set_description,omitempty"`
+	SetBonusTiers map[int]map[string]int `json:"set_bonus_tiers,omitempty"`
 }
 type EquipmentRequest struct { ItemID string; Slot string }
 var validEquipmentSlots = map[string]bool{"weapon":true,"head":true,"chest":true,"legs":true,"boots":true,"accessory":true}
 
 func (s *Service) CurrentEquipment(ctx context.Context, accountID string) ([]EquippedItem, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT e.slot, i.id, i.name, i.quality, i.icon_key, i.description, i.base_stats
+	rows, err := s.db.QueryContext(ctx, `SELECT e.slot, i.id, i.name, i.quality, i.icon_key, i.description, i.base_stats, COALESCE(es.id, ''), COALESCE(es.name, ''), COALESCE(es.description, ''), COALESCE(es.bonus_tiers, '{}'::jsonb)
 		FROM souls soul JOIN characters c ON c.id=soul.current_character_id
 		JOIN character_equipment e ON e.character_id=c.id JOIN item_definitions i ON i.id=e.item_id
+		LEFT JOIN equipment_sets es ON es.id=i.equipment_set_id
 		WHERE soul.account_id=$1 AND c.status='alive' ORDER BY e.slot`, accountID)
 	if err != nil { return nil, fmt.Errorf("load current equipment: %w",err) }
 	defer rows.Close()
 	items:=make([]EquippedItem,0)
 	for rows.Next() {
-		var item EquippedItem; var stats []byte
-		if err:=rows.Scan(&item.Slot,&item.ItemID,&item.Name,&item.Quality,&item.IconKey,&item.Description,&stats); err!=nil { return nil,fmt.Errorf("scan equipped item: %w",err) }
+		var item EquippedItem; var stats, setTiers []byte
+		if err:=rows.Scan(&item.Slot,&item.ItemID,&item.Name,&item.Quality,&item.IconKey,&item.Description,&stats,&item.SetID,&item.SetName,&item.SetDescription,&setTiers); err!=nil { return nil,fmt.Errorf("scan equipped item: %w",err) }
 		item.BaseStats=map[string]int{}
 		if len(stats)>0 { if err:=json.Unmarshal(stats,&item.BaseStats); err!=nil { return nil,fmt.Errorf("decode equipment stats: %w",err) } }
+		if len(setTiers)>0 { if err:=json.Unmarshal(setTiers,&item.SetBonusTiers); err!=nil { return nil,fmt.Errorf("decode equipped set tiers: %w",err) } }
 		items=append(items,item)
 	}
 	if err:=rows.Err(); err!=nil { return nil,fmt.Errorf("iterate current equipment: %w",err) }
