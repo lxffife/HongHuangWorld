@@ -102,9 +102,9 @@ bool DurableOutbox::enqueue(const OutboxEvent& event, std::string& error) {
         bind_text(existing.get(), 1, event.event_id);
         const int existing_result = sqlite3_step(existing.get());
         if (existing_result == SQLITE_ROW) {
+            const bool dead_letter = column_text(existing.get(), 2) == "dead_letter";
             const bool same = column_text(existing.get(), 0) == event.event_type &&
-                              column_text(existing.get(), 1) == event.payload &&
-                              column_text(existing.get(), 2) != "dead_letter";
+                              column_text(existing.get(), 1) == event.payload && !dead_letter;
             if (!execute("COMMIT", error)) {
                 std::string ignored;
                 execute("ROLLBACK", ignored);
@@ -112,7 +112,7 @@ bool DurableOutbox::enqueue(const OutboxEvent& event, std::string& error) {
                 return false;
             }
             transaction_open = false;
-            if (!same) error = "event id already exists with a different type or payload";
+            if (!same) error = dead_letter ? "event is in the dead-letter queue" : "event id already exists with a different type or payload";
             return same;
         }
         if (existing_result != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
