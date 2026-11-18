@@ -49,6 +49,10 @@ var lobby_body_container: HBoxContainer
 var lobby_enter_button: Button
 var lobby_preview_root: Node3D
 var lobby_equipment: Array = []
+var lobby_inventory: Array = []
+var lobby_equipment_panel: PanelContainer
+var lobby_equipment_list: VBoxContainer
+var lobby_equipment_busy := false
 var lobby_equipment_status_label: Label
 var lobby_preview_dragging := false
 var lobby_preview_last_mouse := Vector2.ZERO
@@ -520,6 +524,11 @@ func _build_lobby_ui() -> void:
 	archive_button.custom_minimum_size = Vector2(180, 48)
 	archive_button.pressed.connect(_toggle_lobby_details)
 	footer.add_child(archive_button)
+	var equipment_button := Button.new()
+	equipment_button.text = "装备管理"
+	equipment_button.custom_minimum_size = Vector2(140, 48)
+	equipment_button.pressed.connect(_toggle_lobby_equipment_panel)
+	footer.add_child(equipment_button)
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	footer.add_child(spacer)
@@ -532,6 +541,18 @@ func _build_lobby_ui() -> void:
 	lobby_details_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lobby_details_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	lobby_details_host.add_theme_constant_override("separation", 8)
+	lobby_equipment_panel = PanelContainer.new()
+	lobby_equipment_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lobby_equipment_panel.custom_minimum_size.y = 180
+	lobby_equipment_panel.hide()
+	layout.add_child(lobby_equipment_panel)
+	var equipment_scroll := ScrollContainer.new()
+	equipment_scroll.custom_minimum_size.y = 180
+	equipment_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lobby_equipment_panel.add_child(equipment_scroll)
+	lobby_equipment_list = VBoxContainer.new()
+	lobby_equipment_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	equipment_scroll.add_child(lobby_equipment_list)
 	lobby_details_host.hide()
 	layout.add_child(lobby_details_host)
 	if is_instance_valid(details_toggle_button):
@@ -795,6 +816,89 @@ func _build_lobby_preview_model() -> void:
 				accessory.material_override = item_material
 				model.add_child(accessory)
 
+func _toggle_lobby_equipment_panel() -> void:
+	if not is_instance_valid(lobby_equipment_panel):
+		return
+	lobby_equipment_panel.visible = not lobby_equipment_panel.visible
+	if lobby_equipment_panel.visible:
+		_enqueue(HTTPClient.METHOD_GET, "/api/v1/characters/current/inventory", {}, true, "lobby_inventory")
+		_enqueue(HTTPClient.METHOD_GET, "/api/v1/characters/current/equipment", {}, true, "lobby_equipment")
+
+func _render_lobby_equipment_manager() -> void:
+	if not is_instance_valid(lobby_equipment_list):
+		return
+	for child in lobby_equipment_list.get_children():
+		child.queue_free()
+	var heading := Label.new()
+	heading.text = "装备与背包 · 更换装备需要先退出当前世界"
+	heading.add_theme_color_override("font_color", Color("#d8bd83"))
+	lobby_equipment_list.add_child(heading)
+	var slot_names := {"weapon": "武器", "head": "头饰", "chest": "护甲", "legs": "护腿", "boots": "靴子", "accessory": "饰品"}
+	var equipped_by_slot := {}
+	for value in lobby_equipment:
+		if value is Dictionary:
+			var item: Dictionary = value
+			equipped_by_slot[str(item.get("slot", ""))] = item
+	for slot in ["weapon", "head", "chest", "legs", "boots", "accessory"]:
+		var row := HBoxContainer.new()
+		lobby_equipment_list.add_child(row)
+		var current_label := Label.new()
+		var equipped: Dictionary = equipped_by_slot.get(slot, {})
+		current_label.text = str(slot_names[slot]) + "：" + (str(equipped.get("name", "未装备")) if not equipped.is_empty() else "未装备")
+		current_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(current_label)
+		if not equipped.is_empty():
+			var remove_button := Button.new()
+			remove_button.text = "卸下"
+			remove_button.disabled = lobby_equipment_busy
+			remove_button.pressed.connect(_request_lobby_unequip.bind(slot))
+			row.add_child(remove_button)
+	var divider := HSeparator.new()
+	lobby_equipment_list.add_child(divider)
+	var inventory_heading := Label.new()
+	inventory_heading.text = "背包装备"
+	lobby_equipment_list.add_child(inventory_heading)
+	var found := false
+	for value in lobby_inventory:
+		if not (value is Dictionary):
+			continue
+		var item: Dictionary = value
+		if str(item.get("item_type", "")) != "equipment":
+			continue
+		found = true
+		var item_row := HBoxContainer.new()
+		lobby_equipment_list.add_child(item_row)
+		var item_label := Label.new()
+		item_label.text = str(item.get("name", "未知装备")) + " ×" + str(item.get("quantity", 1)) + "  " + str(slot_names.get(str(item.get("equipment_slot", "")), "装备"))
+		item_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		item_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		item_row.add_child(item_label)
+		var equip_button := Button.new()
+		equip_button.text = "穿戴"
+		equip_button.disabled = lobby_equipment_busy
+		equip_button.pressed.connect(_request_lobby_equip.bind(str(item.get("item_id", "")), str(item.get("equipment_slot", ""))))
+		item_row.add_child(equip_button)
+	if not found:
+		var empty := Label.new()
+		empty.text = "背包中暂无可穿戴装备。"
+		lobby_equipment_list.add_child(empty)
+
+func _request_lobby_equip(item_id: String, slot: String) -> void:
+	if lobby_equipment_busy or item_id.is_empty() or slot.is_empty():
+		return
+	lobby_equipment_busy = true
+	lobby_equipment_status_label.text = "正在穿戴装备……"
+	_render_lobby_equipment_manager()
+	_enqueue(HTTPClient.METHOD_POST, "/api/v1/characters/current/equipment/equip", {"item_id": item_id, "slot": slot}, true, "lobby_equip_action")
+
+func _request_lobby_unequip(slot: String) -> void:
+	if lobby_equipment_busy or slot.is_empty():
+		return
+	lobby_equipment_busy = true
+	lobby_equipment_status_label.text = "正在卸下装备……"
+	_render_lobby_equipment_manager()
+	_enqueue(HTTPClient.METHOD_POST, "/api/v1/characters/current/equipment/unequip", {"slot": slot}, true, "lobby_unequip_action")
+
 func _equipment_quality_color(quality: int) -> Color:
 	match quality:
 		1: return Color("#b8c0cc")
@@ -877,10 +981,13 @@ func _show_character_lobby() -> void:
 	lobby_world_label.text = "当前世界：" + world_name
 	lobby_status_label.text = "角色资料已载入。准备好后，进入此世洪荒。"
 	lobby_equipment = []
+	lobby_inventory = []
+	lobby_equipment_panel.hide()
 	lobby_equipment_status_label.text = "装备外观：正在读取当前穿戴……"
 	lobby_enter_button.disabled = false
 	lobby_root.show()
 	_enqueue(HTTPClient.METHOD_GET, "/api/v1/characters/current/equipment", {}, true, "lobby_equipment")
+	_enqueue(HTTPClient.METHOD_GET, "/api/v1/characters/current/inventory", {}, true, "lobby_inventory")
 
 func _request_soul_fate() -> void:
 	if access_token.is_empty():
@@ -1267,6 +1374,13 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 			soul_fate_status.text = "因果簿读取失败（HTTP " + str(response_code) + "）：" + body_text
 		elif context == "lobby_equipment":
 			lobby_equipment_status_label.text = "装备外观读取失败；暂时显示基础服饰。"
+		elif context == "lobby_inventory":
+			lobby_equipment_status_label.text = "背包读取失败（HTTP " + str(response_code) + "）"
+		elif context == "lobby_equip_action" or context == "lobby_unequip_action":
+			lobby_equipment_busy = false
+			var action_error := "角色仍在世界中，请先退出世界后再更换装备。" if response_code == 409 else "装备操作失败（HTTP " + str(response_code) + "）：" + body_text
+			lobby_equipment_status_label.text = action_error
+			_render_lobby_equipment_manager()
 		elif context == "reincarnation_routes":
 			reincarnation_route_select.clear()
 			reincarnation_status_label.text = "出生路线读取失败（HTTP " + str(response_code) + "）：" + body_text
@@ -1288,10 +1402,18 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 		return
 
 	match context:
+		"lobby_inventory":
+			lobby_inventory = data.get("items", []) if data.get("items", []) is Array else []
+			_render_lobby_equipment_manager()
 		"lobby_equipment":
 			lobby_equipment = data.get("items", []) if data.get("items", []) is Array else []
 			_build_lobby_preview_model()
 			lobby_equipment_status_label.text = _format_lobby_equipment_summary()
+		"lobby_equip_action", "lobby_unequip_action":
+			lobby_equipment_busy = false
+			lobby_equipment_status_label.text = "装备已更新，正在刷新背包与外观……"
+			_enqueue(HTTPClient.METHOD_GET, "/api/v1/characters/current/equipment", {}, true, "lobby_equipment")
+			_enqueue(HTTPClient.METHOD_GET, "/api/v1/characters/current/inventory", {}, true, "lobby_inventory")
 		"login", "register":
 			access_token = str(data.get("access_token", ""))
 			if access_token.is_empty():
