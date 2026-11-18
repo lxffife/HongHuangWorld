@@ -214,3 +214,21 @@ func TestReincarnationRoutesUnavailableWithoutDatabase(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, res.Code)
 	}
 }
+
+func TestChatEndpointsUnavailableWithoutDatabase(t *testing.T) {
+	handler := NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	for _, route := range []struct {
+		method string
+		path   string
+	}{
+		{http.MethodPost, "/api/v1/chat/messages"},
+		{http.MethodGet, "/api/v1/chat/messages?channel=world"},
+	} {
+		req := httptest.NewRequest(route.method, route.path, strings.NewReader(`{}`))
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		if res.Code != http.StatusServiceUnavailable {
+			t.Fatalf("%s %s: expected status %d, got %d", route.method, route.path, http.StatusServiceUnavailable, res.Code)
+		}
+	}
+}
