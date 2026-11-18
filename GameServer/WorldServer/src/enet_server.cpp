@@ -761,6 +761,9 @@ struct EnetServer::Impl {
                         3.8F, 13.0F, 28.0F, -26.0F, 19.0F);
             add_monster("spirit-wisp-001", "spirit_scholar_wisp", "灵识游魂", 5, 90.0F, 18.0F, 4.0F,
                         2.2F, 12.0F, 27.0F, 26.0F, 18.0F);
+            add_monster("wangchuan-echo-wisp-001", "wangchuan_echo_wisp", "忘川回音灵识", 8, 245.0F, 24.0F, 12.0F,
+                        1.8F, 11.0F, 26.0F, 23.0F, -20.0F);
+            configure_rare_spawn("wangchuan-echo-wisp-001", 20, 300, 90);
             add_monster("life-soul-001", "life_ancient_soul", "生机古魂", 6, 180.0F, 18.0F, 10.0F,
                         1.6F, 10.0F, 25.0F, 0.0F, -30.0F);
             add_monster("faceless-001", "faceless_essence", "无相灵魄", 8, 220.0F, 22.0F, 12.0F,
@@ -1017,7 +1020,7 @@ struct EnetServer::Impl {
         if (kind != "wandering_wraith" && kind != "blazing_war_soul" &&
             kind != "blazing_war_soul_elite" && kind != "blazing_war_soul_ancient" &&
             kind != "blazing_war_soul_mythic" && kind != "ironbone_beast_soul" && kind != "gale_wraith" &&
-            kind != "spirit_scholar_wisp" && kind != "life_ancient_soul" &&
+            kind != "spirit_scholar_wisp" && kind != "wangchuan_echo_wisp" && kind != "life_ancient_soul" &&
             kind != "faceless_essence") return;
         const auto event_id = make_event_uuid();
         const Json payload{
