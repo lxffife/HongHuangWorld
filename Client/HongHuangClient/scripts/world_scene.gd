@@ -812,7 +812,7 @@ func _on_soul_essence_request_completed(result: int, response_code: int, _header
 	_update_compact_hud()
 	var pending: Array = soul_essence_profile.get("pending_rare_choices", [])
 	if is_instance_valid(soul_choice_button):
-		soul_choice_button.visible = pending.size() > 0 and str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu"
+		soul_choice_button.visible = pending.size() > 0 and hud_visible and str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu"
 	if pending.size() > 0 and pending_rare_choice_record_id.is_empty():
 		pending_rare_choice_record_id = str(pending[0].get("record_id", ""))
 		_show_notification("获得无相灵魄！可在左上方选择一项来世属性", 6.0)
@@ -1002,7 +1002,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if is_instance_valid(details_toggle_button):
 			details_toggle_button.visible = hud_visible
 		if is_instance_valid(soul_choice_button):
-			soul_choice_button.visible = hud_visible and str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu" and not (soul_essence_profile.get("pending_rare_choices", []) as Array).is_empty()
+			soul_choice_button.visible = hud_visible and str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu" and soul_essence_profile.get("pending_rare_choices", []).size() > 0
 		if is_instance_valid(vitals_panel):
 			vitals_panel.visible = hud_visible
 		if is_instance_valid(input_debug_panel):
