@@ -1383,7 +1383,7 @@ struct EnetServer::Impl {
 
     bool enqueue_chat_job(ChatJob job) {
         std::lock_guard lock(chat_mutex);
-        if (chat_stop_requested || pending_chat_jobs.size() >= 256) return false;
+        if (chat_stop_requested || !chat_thread.joinable() || pending_chat_jobs.size() >= 256) return false;
         pending_chat_jobs.push_back(std::move(job));
         chat_cv.notify_one();
         return true;
@@ -1409,6 +1409,15 @@ struct EnetServer::Impl {
                 ChatJobResult result;
                 result.session_id = job.session_id;
                 result.client_message_id = job.client_message_id;
+                {
+                    std::lock_guard lock(chat_mutex);
+                    if (chat_stop_requested) {
+                        result.reason = "WorldServer is shutting down.";
+                        if (completed_chat_jobs.size() >= 512) completed_chat_jobs.pop_front();
+                        completed_chat_jobs.push_back(std::move(result));
+                        continue;
+                    }
+                }
                 long status = 0;
                 for (unsigned int attempt = 0; attempt < 5; ++attempt) {
                     std::string message_id;
