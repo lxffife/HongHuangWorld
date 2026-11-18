@@ -12,13 +12,13 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 - `POST /api/v1/souls`：为当前账号创建唯一灵魂档案。
 - `GET /api/v1/souls/current`：读取当前账号的灵魂档案。
 - `GET /api/v1/souls/current/progression`：读取跨世保留的灵魂经验与灵魂境界。
-- `GET /api/v1/souls/current/essence`：读取跨轮回灵魂本体、当前魂体阶段、各类魂质统计、力量/体质/敏捷/灵力/气血五项来世资质，以及待分配的无相灵魄。
+- `GET /api/v1/souls/current/essence`：读取跨轮回灵魂本体、当前魂体阶段、各类魂质统计、力量/体质/敏捷/灵力/气血五项来世资质、各属性吞噬成长进度/下一门槛/当前上限，以及待分配的无相灵魄。
 - `POST /api/v1/souls/current/breakthrough`：达到下一灵魂境界经验门槛后主动突破；灵魂经验奖励不会自动提升境界。
 - `GET /api/v1/souls/current/trials`：读取当前灵魂可见的冥界试炼目标、进度和奖励状态。
 - `GET /api/v1/souls/current/reincarnation-eligibility`：查询当前灵魂是否满足首次投胎门槛（聚灵境、完成酆都首个试炼），并返回未满足条件。
 - `POST /api/v1/servers/souls/rewards`：可信世界节点提交灵魂经验奖励；校验节点密钥、节点标识、角色世界会话和事件幂等性。单次奖励限制为 1–100000 灵魂经验。
-- `POST /api/v1/servers/souls/absorptions`：可信世界节点提交吞噬事件；中心服校验节点密钥、节点标识、角色会话、存活肉身与冥界世界归属，按服务端怪物类别目录结算魂力、容量和对应来世资质，以 `(soul_id,event_id)` 幂等。
-- `POST /api/v1/souls/current/essence/allocate`：玩家为一枚待分配无相灵魄选择 `strength`、`constitution`、`agility`、`spirit` 或 `vitality`；服务端确认记录属于当前灵魂且未分配，在同一事务中只增加一项来世资质，不能重复使用。
+- `POST /api/v1/servers/souls/absorptions`：可信世界节点提交吞噬事件；中心服校验节点密钥、节点标识、角色会话、存活肉身与冥界世界归属，按服务端怪物类别目录结算魂力和容量；属性魂按同属性累计吞噬门槛逐级提升来世资质，以 `(soul_id,event_id)` 幂等。每项属性的累计门槛为 3、9、21、45、93、189、381、765、1533、3069 次，每达到一档 +1，普通吞噬最多 +10。
+- `POST /api/v1/souls/current/essence/allocate`：玩家为一枚待分配无相灵魄选择 `strength`、`constitution`、`agility`、`spirit` 或 `vitality`；服务端确认记录属于当前灵魂且未分配，将其计入所选属性的吞噬成长进度，不能重复使用。
 - `GET /api/v1/worlds`：读取已启用的世界目录。
 - `GET /api/v1/worlds/current/npcs`：按当前角色活跃世界会话读取该世界启用的 NPC 目录和交互配置。
 - `POST /api/v1/worlds/current/npcs/interact`：与当前世界 NPC 交互；中心服根据当前活跃会话和已保存角色坐标校验世界归属及交互半径，不接受客户端自报坐标。
@@ -94,7 +94,7 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 ## 本地运行
 
 1. 按 `Deployment/README.md` 启动 PostgreSQL。
-2. 按编号执行 `Database/migrations/` 中全部 `.up.sql` 迁移；当前需依次执行 `000001` 至 `000030`（每个编号只执行 `.up.sql` 一次；已部署数据库只执行尚未应用的迁移）。
+2. 按编号执行 `Database/migrations/` 中全部 `.up.sql` 迁移；当前需依次执行 `000001` 至 `000032`（每个编号只执行 `.up.sql` 一次；已部署数据库只执行尚未应用的迁移）。
 3. 在 `Deployment/.env` 配置 `DATABASE_URL` 和 `HTTP_ADDR`。
 4. Windows PowerShell 执行 `../Deployment/start-backend.ps1`；或在本目录执行 `go test ./...`、`go run ./cmd/api`（需先设置环境变量）。
 
@@ -161,11 +161,12 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 - 当前 NPC 交互返回数据驱动对白/功能类型；正式对话树、NPC 动画、任务接取按钮和客户端 UI 尚待接入。
 
 
-## 灵魂本体、魂质、异变、融合与来世资质（000027–000031）
+## 灵魂本体、魂质、异变、融合与来世资质（000027–000032）
 - 迁移 `000030_soul_mutation_records` 增加灵魂异变流水。每次有效吞噬由服务端使用可信 `event_id` 的 SHA-256 哈希固定抽取：10% 触发异变，其中 2% 为稀有异变；普通异变对应来世五维资质 +1，稀有异变 +2。
 - 异变名称包括炽纹、铁骨印、风痕、灵识回响、生机种；异变记录和五维资质增加在同一事务提交。相同事件重试不会重新抽取或重复加成。
 - `GET /api/v1/souls/current/essence` 返回累计异变次数及最近 8 条异变，客户端 HUD 展示最新发现。异变只改变灵魂来世资质，不直接提高当前肉身战斗属性。
 - 迁移 `000031_soul_fusion_records` 增加灵魂级融合档案。固定配方包括战躯魂印（力量+2、体质+2）、风灵魂印（敏捷+2、灵力+2）、不灭魂种（体质+2、气血+2）和五行混元魂（五维各+1）。融合要求拥有对应属性的魂质异变记录，每个配方每个灵魂只能完成一次；融合不消耗或删除异变档案，结果在事务中永久增加来世资质。
+- 迁移 `000032_soul_absorption_attribute_progress` 为五项来世资质分别建立吞噬进度。同属性魂质累计吞噬 3、9、21、45、93、189、381、765、1533、3069 次时，依次获得 +1，普通吞噬每项最多贡献 +10；每项来世资质总值统一封顶 20，稀有异变、无相灵魄分配和融合也受该上限约束。迁移会为已有吞噬记录回填进度和已达到的成长档位。普通游魂只提供魂力，不推进五维属性。
 - `GET /api/v1/souls/current/fusions` 返回配方、材料缺口和完成状态；`POST /api/v1/souls/current/fusions` 仅接收 `recipe_id`。材料、属性加成与重复融合校验全部由中心服计算，客户端不能提交奖励值。
 
 
