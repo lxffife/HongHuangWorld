@@ -36,6 +36,7 @@ var chat_input: LineEdit
 var chat_status: Label
 var chat_expanded := false
 var chat_lines: Array[String] = []
+var selected_chat_channel := "nearby"
 
 var local_player: HHPlayerController
 var hud_visible := true
@@ -122,6 +123,14 @@ func _ready() -> void:
 	_build_player()
 	_build_compact_hud()
 	_build_chat_hud()
+	if not HHChatNetwork.message_received.is_connected(_on_chat_socket_message):
+		HHChatNetwork.message_received.connect(_on_chat_socket_message)
+	if not HHChatNetwork.connected.is_connected(_on_chat_socket_connected):
+		HHChatNetwork.connected.connect(_on_chat_socket_connected)
+	if not HHChatNetwork.connection_error.is_connected(_on_chat_socket_error):
+		HHChatNetwork.connection_error.connect(_on_chat_socket_error)
+	if not HHSession.access_token.is_empty():
+		HHChatNetwork.connect_chat(HHSession.api_base, HHSession.access_token)
 	_build_combat_hud()
 	_build_input_debug_hud()
 	if HHSession.world_network != null:
@@ -1164,10 +1173,10 @@ func _build_chat_hud() -> void:
 	heading.add_child(toggle)
 	var channels := HBoxContainer.new()
 	layout.add_child(channels)
-	for channel_data in [["nearby", "附近", true], ["world", "世界", false], ["cross_world", "跨界", false]]:
+	for channel_data in [["nearby", "附近"], ["world", "世界"], ["cross_world", "跨界"]]:
 		var channel_button := Button.new()
-		channel_button.text = channel_data[1] if channel_data[2] else channel_data[1] + " · 开发中"
-		channel_button.disabled = not channel_data[2]
+		channel_button.text = channel_data[1]
+		channel_button.pressed.connect(_select_chat_channel.bind(str(channel_data[0])))
 		channels.add_child(channel_button)
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size = Vector2(360.0, 132.0)
@@ -1212,16 +1221,58 @@ func _on_chat_input_submitted(value: String) -> void:
 	var normalized := value.strip_edges()
 	if normalized.is_empty():
 		return
-	var network := HHSession.world_network
-	if network == null or not network.is_world_ready():
-		chat_status.text = "世界连接尚未就绪，消息未发送。"
-		return
-	var error: Error = network.send_chat("nearby", normalized)
+	var error: Error
+	if selected_chat_channel == "nearby":
+		var network := HHSession.world_network
+		if network == null or not network.is_world_ready():
+			chat_status.text = "世界连接尚未就绪，消息未发送。"
+			return
+		error = network.send_chat("nearby", normalized)
+	else:
+		var message_id := Crypto.new().generate_random_bytes(16).hex_encode()
+		error = HHChatNetwork.send_message(selected_chat_channel, normalized, message_id)
 	if error != OK:
-		chat_status.text = "发送失败，错误码：" + str(error)
+		chat_status.text = "发送失败：" + str(error)
 		return
 	chat_input.clear()
 	chat_input.release_focus()
+
+
+func _select_chat_channel(channel: String) -> void:
+	if channel not in ["nearby", "world", "cross_world"]:
+		return
+	selected_chat_channel = channel
+	var names := {"nearby": "附近", "world": "世界", "cross_world": "跨界"}
+	chat_input.placeholder_text = "输入" + str(names[channel]) + "消息（最多 200 字）"
+	if channel == "nearby":
+		chat_status.text = "附近频道 · 仅当前实例 AOI 范围内可见"
+	elif HHChatNetwork.socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
+		chat_status.text = str(names[channel]) + "频道 · 独立聊天连接已建立"
+	else:
+		chat_status.text = str(names[channel]) + "频道 · 正在连接独立聊天服务"
+
+func _on_chat_socket_connected() -> void:
+	if selected_chat_channel != "nearby" and is_instance_valid(chat_status):
+		chat_status.text = "聊天服务已连接 · " + ("世界频道" if selected_chat_channel == "world" else "跨界频道")
+
+func _on_chat_socket_error(message: String) -> void:
+	if is_instance_valid(chat_status) and selected_chat_channel != "nearby":
+		chat_status.text = message + "（游戏连接不受影响）"
+
+func _on_chat_socket_message(message: Dictionary) -> void:
+	if not bool(message.get("accepted", true)):
+		if is_instance_valid(chat_status):
+			chat_status.text = str(message.get("reason", "聊天消息未送达。"))
+		return
+	var channel := str(message.get("channel", selected_chat_channel))
+	if channel != selected_chat_channel:
+		return
+	var sender := str(message.get("sender_name", "未知玩家"))
+	var content := str(message.get("content", ""))
+	if not content.is_empty():
+		_append_chat_line("[" + sender + "] " + content)
+		if is_instance_valid(chat_status):
+			chat_status.text = "聊天消息已送达"
 
 func _on_chat_event(event: Dictionary) -> void:
 	if not bool(event.get("accepted", false)):
