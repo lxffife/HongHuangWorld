@@ -548,6 +548,8 @@ type AbsorptionKindProgress struct {
 	BaseEnergy int64 `json:"base_energy"`
 	TraitKey string `json:"trait_key"`
 	Rarity string `json:"rarity"`
+	QualityTier string `json:"quality_tier"`
+	ProgressUnits int `json:"progress_units"`
 	InheritanceAttribute string `json:"inheritance_attribute,omitempty"`
 	AbsorbedCount int64 `json:"absorbed_count"`
 }
@@ -581,9 +583,9 @@ func soulAttributeNextThreshold(awardedPoints int) int64 {
 
 // advanceSoulAbsorptionAttribute counts one matching soul essence and awards
 // only newly reached milestones. The total inheritance attribute is capped.
-func advanceSoulAbsorptionAttribute(ctx context.Context, tx *sql.Tx, soulID, attribute string) (SoulAttributeProgress, int64, error) {
+func advanceSoulAbsorptionAttribute(ctx context.Context, tx *sql.Tx, soulID, attribute string, progressUnits int) (SoulAttributeProgress, int64, error) {
 	allowed := map[string]bool{"strength":true,"constitution":true,"agility":true,"spirit":true,"vitality":true}
-	if !allowed[attribute] { return SoulAttributeProgress{}, 0, ErrInvalidAbsorption }
+	if !allowed[attribute] || progressUnits < 1 || progressUnits > 8 { return SoulAttributeProgress{}, 0, ErrInvalidAbsorption }
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO soul_absorption_attribute_progress (soul_id,attribute)
 		VALUES ($1,$2) ON CONFLICT (soul_id,attribute) DO NOTHING`, soulID, attribute); err != nil {
@@ -594,9 +596,9 @@ func advanceSoulAbsorptionAttribute(ctx context.Context, tx *sql.Tx, soulID, att
 	var previousApplied int
 	err := tx.QueryRowContext(ctx, `
 		UPDATE soul_absorption_attribute_progress
-		SET absorbed_count=absorbed_count+1,updated_at=now()
+		SET absorbed_count=absorbed_count+$3,updated_at=now()
 		WHERE soul_id=$1 AND attribute=$2
-		RETURNING absorbed_count,awarded_points,applied_points,max_points`, soulID, attribute).Scan(
+		RETURNING absorbed_count,awarded_points,applied_points,max_points`, soulID, attribute, progressUnits).Scan(
 		&progress.AbsorbedCount,&previousAwarded,&previousApplied,&progress.MaxPoints)
 	if err != nil { return SoulAttributeProgress{}, 0, fmt.Errorf("advance soul attribute absorption count: %w", err) }
 	progress.Attribute = attribute
@@ -686,14 +688,14 @@ func (s *Service) CurrentEssence(ctx context.Context, accountID string) (Essence
 	}
 
 	rows,err:=s.db.QueryContext(ctx,
-		`SELECT kinds.id,kinds.name,kinds.description,kinds.base_energy,kinds.trait_key,kinds.rarity,COALESCE(kinds.inheritance_attribute,''),
+		`SELECT kinds.id,kinds.name,kinds.description,kinds.base_energy,kinds.trait_key,kinds.rarity,kinds.quality_tier,kinds.progress_units,COALESCE(kinds.inheritance_attribute,''),
 			       COUNT(records.id)
 		 FROM soul_absorption_kinds kinds
 		 LEFT JOIN soul_absorption_records records
 		   ON records.absorption_kind_id=kinds.id
 		  AND records.soul_id=(SELECT id FROM souls WHERE account_id=$1)
 		 WHERE kinds.enabled=TRUE
-		 GROUP BY kinds.id,kinds.name,kinds.description,kinds.base_energy,kinds.trait_key,kinds.rarity,kinds.inheritance_attribute
+		 GROUP BY kinds.id,kinds.name,kinds.description,kinds.base_energy,kinds.trait_key,kinds.rarity,kinds.quality_tier,kinds.progress_units,kinds.inheritance_attribute
 		 ORDER BY kinds.id`,accountID)
 	if err!=nil { return EssenceProfile{},fmt.Errorf("load soul absorption kinds: %w",err) }
 	defer rows.Close()
@@ -701,7 +703,7 @@ func (s *Service) CurrentEssence(ctx context.Context, accountID string) (Essence
 	result.AffinityCounts=map[string]int64{"beast":0,"battle":0,"gale":0,"spirit":0,"life":0,"selected_strength":0,"selected_constitution":0,"selected_agility":0,"selected_spirit":0,"selected_vitality":0}
 	for rows.Next() {
 		var item AbsorptionKindProgress
-		if err:=rows.Scan(&item.KindID,&item.Name,&item.Description,&item.BaseEnergy,&item.TraitKey,&item.Rarity,&item.InheritanceAttribute,&item.AbsorbedCount);err!=nil {
+		if err:=rows.Scan(&item.KindID,&item.Name,&item.Description,&item.BaseEnergy,&item.TraitKey,&item.Rarity,&item.QualityTier,&item.ProgressUnits,&item.InheritanceAttribute,&item.AbsorbedCount);err!=nil {
 			return EssenceProfile{},fmt.Errorf("scan soul absorption kind: %w",err)
 		}
 		result.AbsorptionKinds=append(result.AbsorptionKinds,item)
@@ -826,6 +828,8 @@ type AbsorptionResult struct {
  SoulPower int64 `json:"soul_power"`
  Mutation *SoulMutation `json:"mutation,omitempty"`
 	AttributeProgress *SoulAttributeProgress `json:"attribute_progress,omitempty"`
+	QualityTier string `json:"quality_tier,omitempty"`
+	ProgressUnits int `json:"progress_units,omitempty"`
 }
 
 // ApplyServerAbsorption accepts only a trusted world-server event. The entity kind
@@ -838,6 +842,9 @@ func (s *Service) ApplyServerAbsorption(ctx context.Context, nodeKey string, eve
 	}
 	kindMap := map[string]string{
 		"wandering_wraith": "ordinary_wraith",
+		"blazing_war_soul_elite": "blazing_war_soul_elite",
+		"blazing_war_soul_ancient": "blazing_war_soul_ancient",
+		"blazing_war_soul_mythic": "blazing_war_soul_mythic",
 		"blazing_war_soul": "blazing_war_soul",
 		"ironbone_beast_soul": "ironbone_beast_soul",
 		"gale_wraith": "gale_wraith",
@@ -903,10 +910,14 @@ func (s *Service) ApplyServerAbsorption(ctx context.Context, nodeKey string, eve
 	var result AbsorptionResult
 	var traitKey string
 	var inheritanceAttribute sql.NullString
+	var progressUnits int
+	var qualityTier string
 	err = tx.QueryRowContext(ctx, `
-		SELECT id,name,base_energy,trait_key,inheritance_attribute
+		SELECT id,name,base_energy,trait_key,inheritance_attribute,quality_tier,progress_units
 		FROM soul_absorption_kinds WHERE id=$1 AND enabled=true`, kindID).
-		Scan(&result.KindID, &result.KindName, &result.EnergyGained, &traitKey, &inheritanceAttribute)
+		Scan(&result.KindID, &result.KindName, &result.EnergyGained, &traitKey, &inheritanceAttribute, &qualityTier, &progressUnits)
+	result.QualityTier = qualityTier
+	result.ProgressUnits = progressUnits
 	if err != nil {
 		return AbsorptionResult{}, fmt.Errorf("load absorption kind: %w", err)
 	}
@@ -928,10 +939,10 @@ func (s *Service) ApplyServerAbsorption(ctx context.Context, nodeKey string, eve
 
 	inserted, err := tx.ExecContext(ctx, `
 		INSERT INTO soul_absorption_records
-			(soul_id,event_id,source_entity_id,absorption_kind_id,energy_gained,trait_key,trait_value)
-		VALUES ($1,$2::uuid,$3,$4,$5,$6,1)
+			(soul_id,event_id,source_entity_id,absorption_kind_id,energy_gained,trait_key,trait_value,progress_units)
+		VALUES ($1,$2::uuid,$3,$4,$5,$6,1,$7)
 		ON CONFLICT (soul_id,event_id) DO NOTHING`,
-		soulID, event.EventID, event.SourceEntityID, result.KindID, result.EnergyGained, traitKey)
+		soulID, event.EventID, event.SourceEntityID, result.KindID, result.EnergyGained, traitKey, progressUnits)
 	if err != nil {
 		return AbsorptionResult{}, fmt.Errorf("record soul absorption: %w", err)
 	}
@@ -961,13 +972,13 @@ func (s *Service) ApplyServerAbsorption(ctx context.Context, nodeKey string, eve
 	}
 
 	if inheritanceAttribute.Valid && inheritanceAttribute.String != "" {
-		progress, applied, progressErr := advanceSoulAbsorptionAttribute(ctx, tx, soulID, inheritanceAttribute.String)
+		progress, applied, progressErr := advanceSoulAbsorptionAttribute(ctx, tx, soulID, inheritanceAttribute.String, progressUnits)
 		if progressErr != nil { return AbsorptionResult{}, progressErr }
 		result.AttributeProgress = &progress
 		if applied > 0 {
 			if _, err := tx.ExecContext(ctx, `
-				UPDATE soul_absorption_records SET attribute_points_awarded=1
-				WHERE soul_id=$1 AND event_id=$2::uuid`, soulID, event.EventID); err != nil {
+				UPDATE soul_absorption_records SET attribute_points_awarded=$3
+				WHERE soul_id=$1 AND event_id=$2::uuid`, soulID, event.EventID, applied); err != nil {
 				return AbsorptionResult{}, fmt.Errorf("audit soul attribute milestone: %w", err)
 			}
 		}
