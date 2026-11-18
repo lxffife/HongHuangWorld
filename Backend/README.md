@@ -12,6 +12,7 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 - `POST /api/v1/souls`：为当前账号创建唯一灵魂档案。
 - `GET /api/v1/souls/current`：读取当前账号的灵魂档案。
 - `GET /api/v1/souls/current/progression`：读取跨世保留的灵魂经验与灵魂境界。
+- `GET /api/v1/souls/current/essence`：读取跨轮回保留的灵魂核心属性、当前魂体阶段/视觉体型系数，以及普通游魂、兽魂、战魂类别与该灵魂的吞噬次数；该接口只读，吞噬奖励尚未开放客户端写入，后续必须由可信世界战斗事件结算。
 - `POST /api/v1/souls/current/breakthrough`：达到下一灵魂境界经验门槛后主动突破；灵魂经验奖励不会自动提升境界。
 - `GET /api/v1/souls/current/trials`：读取当前灵魂可见的冥界试炼目标、进度和奖励状态。
 - `GET /api/v1/souls/current/reincarnation-eligibility`：查询当前灵魂是否满足首次投胎门槛（聚灵境、完成酆都首个试炼），并返回未满足条件。
@@ -153,3 +154,10 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 - 轮回殿守卫交互配置告知首次投胎要求；客户端随后读取 `GET /api/v1/souls/current/reincarnation-eligibility` 展示灵魂境界和试炼条件。
 - `POST /api/v1/characters/current/reincarnate` 在创建新肉身的同一事务中再次校验：灵魂境界至少为聚灵境（realm_order >= 3），且 `fengdu_first_exorcism` 已完成。普通死亡复活不受此门槛影响。
 - 当前 NPC 交互返回数据驱动对白/功能类型；正式对话树、NPC 动画、任务接取按钮和客户端 UI 尚待接入。
+
+
+## 灵魂本体与吞噬基础（000027）
+
+`soul_essence_attributes` 以 `soul_id` 为主键，保存魂力、灵性、魂韧、神识、吞噬容量和累计吸收能量/次数；这些数据属于灵魂，不属于某一世肉身。`soul_absorption_kinds` 当前预置普通游魂、兽魂、战魂三类；`soul_absorption_records` 是带 `(soul_id,event_id)` 唯一约束的不可变审计流水。
+
+当前阶段只开放读取 `GET /api/v1/souls/current/essence`。类别目录中的基础能量和特质键是服务端设计数据，不代表客户端可自行发放奖励。真正吞噬接口将在 WorldServer 的战斗目标、距离、存活状态、一次性事件 ID 和容量校验接入后开放，避免客户端伪造吞噬或重复刷取。
