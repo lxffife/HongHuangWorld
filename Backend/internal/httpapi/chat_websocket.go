@@ -282,12 +282,12 @@ func (h *chatHandlers) socket(w http.ResponseWriter, r *http.Request) {
 		opcode, payload, readErr := readChatSocketFrame(client.reader)
 		if readErr != nil { return }
 		if !client.validateIdentitySession(h, account.ID, accessToken, &lastIdentityCheck) { return }
+		if opcode != 8 && !client.refreshPresence(client.currentCharacterID()) { return }
 		switch opcode {
 		case 8:
 			_ = client.writeFrame(8, payload)
 			return
 		case 9:
-			if !client.refreshPresence(client.currentCharacterID()) { return }
 			if client.writeFrame(10, payload) != nil { return }
 		case 10:
 			continue
