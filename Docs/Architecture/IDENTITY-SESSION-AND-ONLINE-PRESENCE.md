@@ -45,8 +45,8 @@ A user can be chat-online without being in a world, and can be in a world while 
 - Each WebSocket connection has an independent 90-second lease; the cleanup worker removes expired rows once per minute.
 - GET /api/v1/chat/presence returns only the caller's Chat connection state.
 - GET /api/v1/chat/presence/friends returns Chat presence for accepted friend characters only.
-- GET /api/v1/chat/presence/summary returns the caller's current character's Chat connection count and projected active Game session count.
-- GET /api/v1/chat/presence/friends/summary returns those two presence dimensions for accepted friend characters only.
+- GET /api/v1/chat/presence/summary returns the caller's current character's observed `online` aggregate, Chat connection count, projected active Game session count, and latest successfully processed Game-event receive time. The aggregate is `chat_online OR in_game` and is explicitly projection-derived.
+- GET /api/v1/chat/presence/friends/summary returns the same observed aggregate and both component dimensions for accepted friend characters only.
 - The summary includes game_projection_last_event_at as diagnostic metadata. It is the receive time of the latest successfully processed Game event, not a guarantee that every Game node is currently healthy. Clients should display Game presence as projection-derived and avoid treating delayed projection as authoritative real-time state.
 - Chat's Game projection uses the Chat database only. It does not query Game or Identity databases.
 
