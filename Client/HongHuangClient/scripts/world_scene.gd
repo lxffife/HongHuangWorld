@@ -93,6 +93,7 @@ var exploration_buttons: Dictionary = {}
 var exploration_point_data: Dictionary = {}
 var exploration_event_buttons: Dictionary = {}
 var exploration_event_data: Dictionary = {}
+var pending_exploration_event_id := ""
 var exploration_animation_time := 0.0
 var npc_current_interaction_id := ""
 var leaving_for_reincarnation := false
@@ -1723,8 +1724,8 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 		"exploration_list":
 			_render_exploration_points(data.get("points", []))
 			npc_title_label.text = "区域探索 · 已发现记录"
-			npc_dialogue_label.text = "探索点由中心服依据角色实际位置验证。发现记录属于灵魂，轮回后仍会保留。"
-			npc_status_label.text = exploration_feedback if not exploration_feedback.is_empty() else "先调查地点，再寻找地点中解锁的奇遇。"
+			npc_dialogue_label.text = exploration_feedback if not exploration_feedback.is_empty() else "探索点由中心服依据角色实际位置验证。发现记录属于灵魂，轮回后仍会保留。"
+			npc_status_label.text = "探索进度已同步。先调查地点，再回应已解锁的奇遇。"
 			npc_panel.visible = true
 			_send_npc_request("GET", "/api/v1/worlds/current/exploration-events", "exploration_events")
 		"exploration_events_bootstrap", "exploration_events":
@@ -1743,8 +1744,14 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			var event_merit_delta := int(data.get("merit_delta", 0))
 			var event_karma_delta := int(data.get("karma_delta", 0))
 			var event_title := str(data.get("title", "未知奇遇"))
-			exploration_feedback = "奇遇「" + event_title + "」已完成。功德 " + ("+" if event_merit_delta >= 0 else "") + str(event_merit_delta) + "，业力 " + ("+" if event_karma_delta >= 0 else "") + str(event_karma_delta) + "。"
+			pending_exploration_event_id = ""
+			exploration_feedback = "奇遇「" + event_title + "」已完成。\n" + str(data.get("description", "")) + "\n功德 " + ("+" if event_merit_delta >= 0 else "") + str(event_merit_delta) + "，业力 " + ("+" if event_karma_delta >= 0 else "") + str(event_karma_delta) + "。"
 			_show_notification("奇遇完成 · " + event_title + "  因果已记录", 4.2)
+			npc_title_label.text = "因果已定 · " + event_title
+			npc_dialogue_label.text = exploration_feedback
+			npc_status_label.text = "本次结果已由中心服写入灵魂因果簿。"
+			_clear_npc_choice_buttons()
+			npc_panel.visible = true
 			_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_list")
 		"interact":
 			_clear_npc_choice_buttons()
@@ -2273,19 +2280,66 @@ func _render_exploration_events(events: Variant) -> void:
 		event_button.tooltip_text = str(event.get("description", ""))
 		event_button.disabled = status != "available" or not in_range or npc_request_busy
 		if status == "available":
-			event_button.pressed.connect(_trigger_exploration_event.bind(event_id))
+			event_button.pressed.connect(_open_exploration_event.bind(event_id))
 		exploration_container.add_child(event_button)
 		exploration_event_buttons[event_id] = event_button
 		exploration_event_data[event_id] = event.duplicate(true)
 
 
-func _trigger_exploration_event(event_id: String) -> void:
-	if npc_request_busy or event_id.is_empty():
+func _open_exploration_event(event_id: String) -> void:
+	if not exploration_event_data.has(event_id):
 		return
-	npc_status_label.text = "正在验证奇遇触发条件……"
+	var event: Dictionary = exploration_event_data[event_id]
+	if str(event.get("status", "locked")) != "available":
+		return
+	var target := Vector3(float(event.get("position_x", 0.0)), float(event.get("position_y", 0.0)), float(event.get("position_z", 0.0)))
+	var distance := local_player.global_position.distance_to(target) if is_instance_valid(local_player) else INF
+	if distance > float(event.get("interaction_radius", 4.0)):
+		npc_status_label.text = "尚未抵达奇遇地点，距离约 %dm。" % roundi(distance)
+		return
+	pending_exploration_event_id = event_id
+	_clear_npc_choice_buttons()
+	npc_title_label.text = "因果奇遇 · " + str(event.get("title", "未知奇遇"))
+	npc_dialogue_label.text = str(event.get("description", "一段因果正在等待你的回应。")) + "\n\n地点：" + str(event.get("point_name", "未知地点")) + "\n\n你将确认触发这段奇遇。领取结果后，此灵魂不能重复领取。"
+	var merit_reward := int(event.get("merit_reward", 0))
+	var karma_delta := int(event.get("karma_delta", 0))
+	npc_status_label.text = "因果预示：功德 +" + str(merit_reward) + " · 业力 " + ("+" if karma_delta >= 0 else "") + str(karma_delta) + "。最终结算以中心服返回为准。"
+	var confirm_button := Button.new()
+	confirm_button.text = "确认触发 · 将结果记入灵魂因果簿"
+	confirm_button.pressed.connect(_confirm_exploration_event)
+	npc_choice_container.add_child(confirm_button)
+	var cancel_button := Button.new()
+	cancel_button.text = "暂不回应"
+	cancel_button.pressed.connect(_cancel_exploration_event)
+	npc_choice_container.add_child(cancel_button)
+	npc_trial_button.visible = false
+	npc_eligibility_button.visible = false
+	npc_fate_encounter_button.visible = false
+	npc_soul_button.visible = false
+	npc_soul_breakthrough_button.visible = false
+	npc_reincarnation_leave_button.visible = false
+	npc_panel.visible = true
+
+
+func _confirm_exploration_event() -> void:
+	if pending_exploration_event_id.is_empty() or npc_request_busy:
+		return
+	var event_id := pending_exploration_event_id
+	npc_status_label.text = "正在向中心服验证位置、解锁条件并结算因果……"
 	_send_npc_request("POST", "/api/v1/worlds/current/exploration-events/trigger", "exploration_event", {
 		"event_id": event_id
 	})
+
+
+func _cancel_exploration_event() -> void:
+	pending_exploration_event_id = ""
+	_clear_npc_choice_buttons()
+	npc_panel.visible = false
+
+
+func _trigger_exploration_event(event_id: String) -> void:
+	# Kept as a compatibility entry point for any older scene binding.
+	_open_exploration_event(event_id)
 
 
 func _discover_exploration_point(point_id: String) -> void:
