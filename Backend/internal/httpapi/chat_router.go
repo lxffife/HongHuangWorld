@@ -16,6 +16,13 @@ import (
 // does not register game, account-login, world-entry, inventory, or character
 // mutation routes. Account tokens are verified against the shared session store.
 func NewChatRouter(logger *slog.Logger, db *sql.DB) http.Handler {
+	handler, _ := NewChatRouterWithShutdown(logger, db)
+	return handler
+}
+
+// NewChatRouterWithShutdown also returns a cleanup function for long-lived
+// transports such as the NATS connection.
+func NewChatRouterWithShutdown(logger *slog.Logger, db *sql.DB) (http.Handler, func()) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, healthResponse{
@@ -54,7 +61,7 @@ func NewChatRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		} {
 			mux.HandleFunc(route, unavailable)
 		}
-		return requestLogger(logger, mux)
+		return requestLogger(logger, mux), func() {}
 	}
 
 	authService := auth.NewService(db)
@@ -74,5 +81,5 @@ func NewChatRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 	mux.HandleFunc("GET /api/v1/servers/chat/messages", serverAPI.poll)
 	mux.HandleFunc("POST /api/v1/servers/chat/messages", serverAPI.publish)
 
-	return requestLogger(logger, mux)
+	return requestLogger(logger, mux), chatEvents.close
 }
