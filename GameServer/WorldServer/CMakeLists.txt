@@ -31,6 +31,10 @@ add_executable(world_server
 )
 
 target_include_directories(world_server PRIVATE include)
+
+add_executable(world_outbox_admin src/outbox_admin.cpp src/durable_outbox.cpp)
+target_include_directories(world_outbox_admin PRIVATE include)
+target_link_libraries(world_outbox_admin PRIVATE SQLite::SQLite3 Threads::Threads)
 target_link_libraries(world_server PRIVATE
     ${HH_ENET_TARGET}
     ${HH_CURL_TARGET}
