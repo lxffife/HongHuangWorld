@@ -22,6 +22,7 @@ int main() {
     honghuang::network::ServerConfig config;
     config.bind_host = env_or("WORLD_SERVER_BIND", "0.0.0.0");
     config.backend_url = env_or("BACKEND_URL", "");
+    config.chat_backend_url = env_or("CHAT_SERVER_URL", "http://127.0.0.1:8788");
     config.node_key = env_or("WORLD_SERVER_NODE_KEY", "");
     config.api_key = env_or("WORLD_SERVER_API_KEY", "");
     config.advertise_host = env_or("WORLD_SERVER_ADVERTISE_HOST", "");
