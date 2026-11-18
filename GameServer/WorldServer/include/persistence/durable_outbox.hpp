@@ -23,7 +23,7 @@ public:
  bool schedule_retry(const std::string& event_id, std::uint32_t attempts, std::int64_t next_retry_at_ms, const std::string& error_text, std::string& error);
  bool move_to_dead_letter(const std::string& event_id, std::uint32_t attempts, const std::string& error_text, std::string& error);
  std::size_t pending_count(std::string& error) const;
- OutboxStats stats(std::int64_t now_ms, std::string& error) const;
+ OutboxStats stats(std::int64_t now_ms, std::string& error, const std::string& event_type = {}) const;
  std::vector<OutboxEvent> list_dead_letters(std::size_t limit, const std::string& event_type, std::string& error) const;
  bool retry_dead_letter(const std::string& event_id, std::int64_t now_ms, std::string& error);
 private:
