@@ -46,7 +46,7 @@ func RunOutboxPublisher(ctx context.Context, db *sql.DB, logger *slog.Logger) {
 	var js nats.JetStreamContext
 	for {
 		if ctx.Err() != nil {
-			return
+			break
 		}
 		if conn == nil || conn.IsClosed() {
 			var err error
@@ -176,12 +176,12 @@ func claimBatch(ctx context.Context, db *sql.DB, worker string, limit int, lease
 			FOR UPDATE SKIP LOCKED
 		)
 		UPDATE game_event_outbox AS outbox
-		SET locked_by=$2, locked_until=now()+$3::interval, attempts=attempts+1
+		SET locked_by=$2, locked_until=now()+($3 * interval '1 second'), attempts=attempts+1
 		FROM picked
 		WHERE outbox.event_sequence=picked.event_sequence
 		RETURNING outbox.event_sequence,outbox.event_id::text,outbox.event_type,
 		          outbox.payload::text,outbox.attempts
-	`, limit, worker, lease.String())
+	`, limit, worker, lease.Seconds())
 	if err != nil {
 		return nil, fmt.Errorf("claim rows: %w", err)
 	}
@@ -240,9 +240,9 @@ func retryEvent(ctx context.Context, db *sql.DB, worker string, event OutboxEven
 	delay := time.Duration(1<<exponent) * time.Second
 	_, err := db.ExecContext(ctx, `
 		UPDATE game_event_outbox
-		SET next_attempt_at=now()+$3::interval,locked_until=NULL,locked_by=NULL,last_error=$4
+		SET next_attempt_at=now()+($3 * interval '1 second'),locked_until=NULL,locked_by=NULL,last_error=$4
 		WHERE event_id=$1::uuid AND locked_by=$2 AND published_at IS NULL
-	`, event.ID, worker, delay.String(), truncateError(publishErr.Error(), 2000))
+	`, event.ID, worker, delay.Seconds(), truncateError(publishErr.Error(), 2000))
 	return err
 }
 
