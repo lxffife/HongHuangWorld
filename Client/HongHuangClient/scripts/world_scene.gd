@@ -1315,10 +1315,10 @@ func _append_chat_line(line: String, channel: String = "", message_id: String = 
 	var timestamp := created_at
 	if timestamp.is_empty():
 		timestamp = Time.get_datetime_string_from_system(true)
-	var entry := {"text": line, "id": message_id, "created_at": timestamp}
+	var entry := {"text": line, "id": message_id, "created_at": timestamp, "sort_key": timestamp + message_id}
 	var insert_at := lines.size()
 	for index in range(lines.size()):
-		if str(lines[index].get("created_at", "")) > timestamp:
+		if str(lines[index].get("sort_key", "")) > str(entry["sort_key"]):
 			insert_at = index
 			break
 	lines.insert(insert_at, entry)
