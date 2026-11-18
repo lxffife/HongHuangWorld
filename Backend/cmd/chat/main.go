@@ -67,6 +67,7 @@ func main() {
 	}
 
 	go runChatRetentionCleanup(ctx, chatService, logger)
+	go runChatPresenceCleanup(ctx, chatService, logger)
 
 	go func() {
 		logger.Info("chat service starting", "addr", addr)
@@ -113,3 +114,30 @@ func runChatRetentionCleanup(ctx context.Context, service *chat.Service, logger 
 	}
 }
 
+
+func runChatPresenceCleanup(ctx context.Context, service *chat.Service, logger *slog.Logger) {
+	cleanup := func() {
+		cleanupCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		deleted, err := service.PruneExpiredPresenceLeases(cleanupCtx)
+		if err != nil {
+			logger.Error("chat presence lease cleanup failed", "error", err)
+			return
+		}
+		if deleted > 0 {
+			logger.Info("expired chat presence leases removed", "count", deleted)
+		}
+	}
+
+	cleanup()
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			cleanup()
+		}
+	}
+}
