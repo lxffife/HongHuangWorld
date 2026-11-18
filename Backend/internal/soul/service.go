@@ -3,6 +3,7 @@ package soul
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -645,7 +646,7 @@ func (s *Service) CurrentEssence(ctx context.Context, accountID string) (Essence
 
 func rollSoulMutation(eventID string) *SoulMutation {
 	roll := sha256.Sum256([]byte(eventID))
-	chance := int(roll[0]) % 100
+	chance := int(binary.BigEndian.Uint16(roll[:2]) % 100)
 	if chance >= 10 { return nil }
 	attributes := []string{"strength", "constitution", "agility", "spirit", "vitality"}
 	names := map[string]string{
