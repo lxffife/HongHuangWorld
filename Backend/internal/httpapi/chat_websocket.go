@@ -37,6 +37,7 @@ type chatSocketClient struct {
 	send chan []byte
 	done chan struct{}
 	closeOnce sync.Once
+	scopeMu sync.RWMutex
 	worldID string
 	worldInstanceID string
 	characterID string
@@ -77,11 +78,16 @@ func (h *chatSocketHub) broadcast(message chat.Message) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	for client := range h.clients {
-		if message.Channel == "world" && client.worldID != message.WorldID {
+		client.scopeMu.RLock()
+		worldID := client.worldID
+		worldInstanceID := client.worldInstanceID
+		characterID := client.characterID
+		client.scopeMu.RUnlock()
+		if message.Channel == "world" && worldID != message.WorldID {
 			continue
 		}
 		if message.Channel == "nearby" {
-			if client.worldInstanceID == "" || client.worldInstanceID != message.WorldInstanceID || !hasRecipient(message.RecipientCharacterIDs, client.characterID) {
+			if worldInstanceID == "" || worldInstanceID != message.WorldInstanceID || !hasRecipient(message.RecipientCharacterIDs, characterID) {
 				continue
 			}
 		}
@@ -258,6 +264,13 @@ func (h *chatHandlers) socket(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			if request.Type == "ping" {
+				if scope, scopeErr := h.service.CurrentChatScope(r.Context(), account.ID); scopeErr == nil {
+					client.scopeMu.Lock()
+					client.characterID = scope.CharacterID
+					client.worldID = scope.WorldID
+					client.worldInstanceID = scope.WorldInstanceID
+					client.scopeMu.Unlock()
+				}
 				client.sendJSON(map[string]any{"type":"pong"})
 				continue
 			}
