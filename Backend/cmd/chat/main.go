@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/liflife/HongHuangWorld/Backend/internal/chat"
+	"github.com/liflife/HongHuangWorld/Backend/internal/chatprojection"
 	"github.com/liflife/HongHuangWorld/Backend/internal/database"
 	"github.com/liflife/HongHuangWorld/Backend/internal/httpapi"
 )
@@ -32,6 +34,23 @@ func main() {
 	}
 	defer db.Close()
 
+	// During the database cutover period, the legacy Chat API can continue
+	// using CHAT_DATABASE_URL while this independent connection builds the
+	// new Chat-owned projection database.
+	var projectionDB *sql.DB
+	if projectionURL := os.Getenv("CHAT_PROJECTION_DATABASE_URL"); projectionURL != "" {
+		projectionCtx, projectionCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		projectionDB, err = database.OpenPostgres(projectionCtx, projectionURL)
+		projectionCancel()
+		if err != nil {
+			logger.Error("Chat projection database unavailable; event projection consumer is disabled", "error", err)
+		} else {
+			defer projectionDB.Close()
+		}
+	} else {
+		logger.Warn("CHAT_PROJECTION_DATABASE_URL is empty; Game projection consumer is disabled")
+	}
+
 	addr := os.Getenv("CHAT_HTTP_ADDR")
 	if addr == "" {
 		addr = ":8788"
@@ -49,6 +68,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go runChatRetentionCleanup(ctx, chat.NewService(db), logger)
+	if projectionDB != nil {
+		go chatprojection.Run(ctx, projectionDB, logger)
+	}
 
 	go func() {
 		logger.Info("chat service starting", "addr", addr)
