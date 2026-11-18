@@ -766,6 +766,8 @@ func _update_compact_hud(progression: Dictionary = {}) -> void:
 		compact_hud_label.text += "\n灵魂形态 · " + soul_stage + "  |  魂力 " + str(soul_power) + "  |  吞噬 " + str(absorbed)
 		compact_hud_label.text += "\n来世资质 · 力量 " + str(inheritance.get("strength", 0)) + " 体质 " + str(inheritance.get("constitution", 0)) + " 敏捷 " + str(inheritance.get("agility", 0))
 		compact_hud_label.text += "\n灵力 " + str(inheritance.get("spirit", 0)) + " 气血 " + str(inheritance.get("vitality", 0))
+		var affinities: Dictionary = soul_essence_profile.get("affinity_counts", {})
+		compact_hud_label.text += "\n魂质亲和 · 兽 " + str(affinities.get("beast", 0)) + " 战 " + str(affinities.get("battle", 0)) + " 风 " + str(affinities.get("gale", 0)) + " 灵 " + str(affinities.get("spirit", 0)) + " 生 " + str(affinities.get("life", 0))
 		if pending_choices.size() > 0:
 			compact_hud_label.text += "  |  无相灵魄待分配 " + str(pending_choices.size())
 
@@ -775,9 +777,11 @@ func _apply_world_player_form() -> void:
 		return
 	var is_underworld := str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu"
 	if is_underworld:
+		var affinities: Dictionary = soul_essence_profile.get("affinity_counts", {})
 		local_player.set_soul_form(true,
 			int(soul_essence_profile.get("form_stage", 1)),
-			float(soul_essence_profile.get("visual_scale", 0.35)))
+			float(soul_essence_profile.get("visual_scale", 0.35)),
+			affinities)
 	else:
 		local_player.set_soul_form(false)
 	if is_instance_valid(soul_choice_button):
