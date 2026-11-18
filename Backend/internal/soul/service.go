@@ -847,6 +847,7 @@ func (s *Service) ApplyServerAbsorption(ctx context.Context, nodeKey string, eve
 		"blazing_war_soul_elite": "blazing_war_soul_elite",
 		"blazing_war_soul_ancient": "blazing_war_soul_ancient",
 		"blazing_war_soul_mythic": "blazing_war_soul_mythic",
+		"ancient_battlefield_god_soul": "ancient_battlefield_god_soul",
 		"blazing_war_soul": "blazing_war_soul",
 		"ironbone_beast_soul": "ironbone_beast_soul",
 		"gale_wraith": "gale_wraith",
@@ -918,6 +919,18 @@ func (s *Service) ApplyServerAbsorption(ctx context.Context, nodeKey string, eve
 				  AND choice_id='follow_lantern_shadow'
 			)`, soulID).Scan(&unlocked); err != nil {
 			return AbsorptionResult{}, fmt.Errorf("verify mythic soul encounter prerequisite: %w", err)
+		}
+		if !unlocked { return AbsorptionResult{}, ErrInvalidAbsorption }
+	}
+	if kindID == "ancient_battlefield_god_soul" {
+		var unlocked bool
+		if err := tx.QueryRowContext(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM soul_exploration_event_claims
+				WHERE soul_id=$1 AND event_id='fengdu_ancient_battlefield'
+				  AND choice_id='summon_war_god'
+			)`, soulID).Scan(&unlocked); err != nil {
+			return AbsorptionResult{}, fmt.Errorf("verify ancient battlefield war god prerequisite: %w", err)
 		}
 		if !unlocked { return AbsorptionResult{}, ErrInvalidAbsorption }
 	}
