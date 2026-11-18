@@ -81,14 +81,14 @@
 ## 8. 分阶段实施与验收
 
 ### P0-A：激活现有聊天后端
-- 注册已存在的 POST/GET /api/v1/chat/messages 路由。
+- 在独立 ChatServer 注册 POST/GET /api/v1/chat/messages 路由（迁移期 Game API 保留兼容路由）。
 - 保留 world 与 cross_world 两类持久化消息；跨界历史全服共享。
 - 修正屏蔽逻辑：屏蔽不能导致被屏蔽者无法在公开世界频道发言。
 - 验收：Bearer Token 认证、200 字校验、3/5 秒限流、幂等写入、历史分页。
 
 ### P0-B：实时传输与附近/世界/跨界频道
 - P0-B1（已提交，待运行验证）：为 ENet 协议分配聊天消息类型；Godot 网络层支持发送/接收；WorldServer 实现当前实例附近频道 AOI 转发、服务端身份注入、200 字校验与 1 秒限流。
-- P0-B2（进行中）：已增加受 `X-World-Server-Key` 与 `X-World-Server-Node` 保护的 `GET /api/v1/servers/chat/messages` 中心拉取接口，以及 `POST /api/v1/servers/chat/messages` 发布接口。发布时必须验证 world_sessions + server_registry + character 三者关系、节点心跳、会话 active 状态；发送者名称/境界/世界由数据库注入，客户端不能伪造。客户端消息 ID 重试返回原消息，限流在幂等检查之后执行。拉取按节点当前 ready 的 world_instances 返回其 world 消息，以及全服统一 cross_world 消息；按 `(created_at,id)` 稳定游标分页。WorldServer 尚未接入发布/轮询/广播，因此跨实例实时链路仍未完成。
+- P0-B2（进行中）：已增加受 `X-World-Server-Key` 与 `X-World-Server-Node` 保护的 `GET /api/v1/servers/chat/messages` 拉取接口，以及 `POST /api/v1/servers/chat/messages` 发布接口；现已同时挂载到独立 ChatServer，Game API 暂保留兼容入口。发布时必须验证 world_sessions + server_registry + character 三者关系、节点心跳、会话 active 状态；发送者名称/境界/世界由数据库注入，客户端不能伪造。客户端消息 ID 重试返回原消息，限流在幂等检查之后执行。拉取按节点当前 ready 的 world_instances 返回其 world 消息，以及全服统一 cross_world 消息；按 `(created_at,id)` 稳定游标分页。WorldServer 尚未接入发布/轮询/广播，因此跨实例实时链路仍未完成。
 - 验收：B1 需两客户端同实例附近可见，超出 AOI 不可见，伪造 sender 字段无效，限流和长度校验生效；B2 需不同实例同世界可见世界频道、不同世界可见同一跨界频道。
 
 ### P0-C：Godot 聊天 HUD
