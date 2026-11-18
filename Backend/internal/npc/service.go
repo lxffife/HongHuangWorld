@@ -463,6 +463,12 @@ type ExplorationEventChoice struct {
 	ID string `json:"id"`
 	Text string `json:"text"`
 	Description string `json:"description"`
+}
+
+type explorationEventChoiceConfig struct {
+	ID string `json:"id"`
+	Text string `json:"text"`
+	Description string `json:"description"`
 	Result string `json:"result"`
 	EffectKey string `json:"effect_key"`
 }
@@ -555,7 +561,10 @@ func (s *Service) ListAvailableExplorationEvents(ctx context.Context, accountID 
 			return nil,fmt.Errorf("scan exploration event: %w",err)
 		}
 		if len(choicesJSON)>0 {
-			if err:=json.Unmarshal(choicesJSON,&item.Choices);err!=nil { return nil,fmt.Errorf("decode exploration event choices: %w",err) }
+			var configured []explorationEventChoiceConfig
+			if err:=json.Unmarshal(choicesJSON,&configured);err!=nil { return nil,fmt.Errorf("decode exploration event choices: %w",err) }
+			item.Choices=make([]ExplorationEventChoice,0,len(configured))
+			for _,choice:=range configured { item.Choices=append(item.Choices,ExplorationEventChoice{ID:choice.ID,Text:choice.Text,Description:choice.Description}) }
 		}
 		items=append(items,item)
 	}
@@ -613,11 +622,12 @@ func (s *Service) TriggerExplorationEvent(ctx context.Context, accountID,eventID
 		return ExplorationEventResult{},ErrTooFar
 	}
 	if err!=nil { return ExplorationEventResult{},fmt.Errorf("validate exploration event: %w",err) }
-	var selected *ExplorationEventChoice
+	var selected *explorationEventChoiceConfig
 	if len(choicesJSON)>0 {
-		if err:=json.Unmarshal(choicesJSON,&event.Choices);err!=nil { return ExplorationEventResult{},fmt.Errorf("decode exploration event choices: %w",err) }
+		var configured []explorationEventChoiceConfig
+		if err:=json.Unmarshal(choicesJSON,&configured);err!=nil { return ExplorationEventResult{},fmt.Errorf("decode exploration event choices: %w",err) }
 		if choiceID=="" { return ExplorationEventResult{},ErrExplorationEventUnavailable }
-		for i:=range event.Choices { if event.Choices[i].ID==choiceID { selected=&event.Choices[i]; break } }
+		for i:=range configured { if configured[i].ID==choiceID { selected=&configured[i]; break } }
 		if selected==nil { return ExplorationEventResult{},ErrExplorationEventUnavailable }
 		switch selected.EffectKey {
 		case "lantern_keep": meritDelta,karmaDelta=2,-1
