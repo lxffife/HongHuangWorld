@@ -770,6 +770,11 @@ func _update_compact_hud(progression: Dictionary = {}) -> void:
 		compact_hud_label.text += "\n灵力 " + str(inheritance.get("spirit", 0)) + " 气血 " + str(inheritance.get("vitality", 0))
 		var affinities: Dictionary = soul_essence_profile.get("affinity_counts", {})
 		compact_hud_label.text += "\n魂质亲和 · 兽 " + str(affinities.get("beast", 0)) + " 战 " + str(affinities.get("battle", 0)) + " 风 " + str(affinities.get("gale", 0)) + " 灵 " + str(affinities.get("spirit", 0)) + " 生 " + str(affinities.get("life", 0))
+		var mutations: Array = soul_essence_profile.get("mutations", [])
+		compact_hud_label.text += "\n魂质异变 · 已觉醒 " + str(soul_essence_profile.get("mutation_count", 0)) + " 次"
+		if mutations.size() > 0:
+			var latest: Dictionary = mutations[0]
+			compact_hud_label.text += " · " + str(latest.get("name", "未知异变")) + "（" + str(latest.get("rarity", "uncommon")) + "）"
 		if pending_choices.size() > 0:
 			compact_hud_label.text += "  |  无相灵魄待分配 " + str(pending_choices.size())
 
@@ -813,7 +818,14 @@ func _on_soul_essence_request_completed(result: int, response_code: int, _header
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
 	if not (parsed is Dictionary):
 		return
+	var previous_mutation_count := int(soul_essence_profile.get("mutation_count", 0))
 	soul_essence_profile = parsed
+	var current_mutation_count := int(soul_essence_profile.get("mutation_count", 0))
+	if current_mutation_count > previous_mutation_count:
+		var mutations: Array = soul_essence_profile.get("mutations", [])
+		if mutations.size() > 0:
+			var latest: Dictionary = mutations[0]
+			_show_notification("魂质异变 · " + str(latest.get("name", "未知异变")) + "，来世" + str({"strength":"力量","constitution":"体质","agility":"敏捷","spirit":"灵力","vitality":"气血"}.get(str(latest.get("attribute", "")), "资质")) + " +" + str(latest.get("attribute_bonus", 1)), 5.0)
 	_apply_world_player_form()
 	_update_compact_hud()
 	var pending: Array = soul_essence_profile.get("pending_rare_choices", [])
