@@ -443,3 +443,8 @@ func _process(delta: float) -> void:
 		soul_growth_shell.position.y = 0.42 + bob
 		var mature_pulse := 1.0 + sin(soul_form_time * 1.35) * 0.018
 		soul_growth_shell.scale = Vector3.ONE * soul_form_scale * 1.12 * mature_pulse
+	if is_instance_valid(soul_fusion_ring) and soul_fusion_ring.visible:
+		soul_fusion_ring.position.y = 0.42 + bob
+		soul_fusion_ring.rotation.y += delta * 0.32
+		var seal_pulse := 1.0 + sin(soul_form_time * 1.8) * 0.025
+		soul_fusion_ring.scale = Vector3.ONE * soul_form_scale * 1.28 * seal_pulse
