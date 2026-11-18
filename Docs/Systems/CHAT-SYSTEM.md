@@ -93,7 +93,7 @@
 
 ### P0-C：Godot 聊天 HUD
 - P0-C1（已提交，待运行验证）：增加左下方可折叠聊天窗、附近/世界/跨界频道切换、输入发送和服务端错误提示；附近仍走 ENet，世界/跨界走独立 ChatServer WebSocket。
-- P0-C2（进行中）：ChatServer 新增 Bearer Token 认证的 WebSocket `/api/v1/chat/socket`；Godot 新增独立 `HHChatNetwork`，具备独立 20 秒心跳、Pong 超时检测和 4 秒重连。世界/跨界频道通过该连接发送与接收，附近频道暂时保留 ENet。WebSocket 连接成功后自动并行补拉两个频道最近 50 条历史，按消息 ID 去重并按 created_at 插入排序；断线重连会再次补拉，过期连接的历史响应会丢弃。已接入 NATS Core Pub/Sub：所有 ChatServer 订阅 `honghuang.chat.events.v1`，消息成功写库后先本机广播，再发布版本化事件；订阅端校验频道与 world_id 后按世界范围或全服范围扇出。使用 NoEcho 避免本机重复投递；`CHAT_NATS_URL` 优先、`NATS_URL` 作为回退，所有 ChatServer 节点必须指向同一 NATS 集群。NATS 断开时本机聊天继续，连接自动重试，最多缓存 4 MiB 待发事件。Core NATS 不保存离线订阅者的历史，跨节点断线期间的补发仍依赖后续历史同步/JetStream 阶段。
+- P0-C2（进行中）：ChatServer 新增 Bearer Token 认证的 WebSocket `/api/v1/chat/socket`；Godot 新增独立 `HHChatNetwork`，具备独立 20 秒心跳、Pong 超时检测和 4 秒重连。世界/跨界频道通过该连接发送与接收，附近频道暂时保留 ENet。WebSocket 连接成功后自动并行补拉两个频道最近 50 条历史，按消息 ID 去重并按 created_at 插入排序；断线重连会再次补拉，过期连接的历史响应会丢弃。已接入 NATS JetStream 持久事件流：Stream 为 `HONGHUANG_CHAT_EVENTS`，Subject 为 `honghuang.chat.events.v1`，文件存储、30 天 MaxAge、2 分钟消息 ID 去重；每个 ChatServer 使用稳定且唯一的 `CHAT_NODE_ID` 创建独立 durable pull consumer，从断线前的 ack 位置继续消费。消费者只在本机 WebSocket 广播后 AckSync，非法事件 Term，重投递由消息 ID 去重。发布由独立后台 worker 执行并等待 JetStream PubAck，失败退避重试；HTTP/WS 请求只进入有界队列，不等待 NATS。配置优先 `CHAT_NATS_URL`、回退 `NATS_URL`，所有节点必须指向同一 JetStream 集群。若 JetStream 初始化失败则降级 Core NATS。本阶段仍没有数据库事务 outbox：进程在数据库提交后、事件进入/成功发布 JetStream 前崩溃，或 4096 项发布队列满时，仍可能漏掉跨节点实时事件；下一步需要用 PostgreSQL outbox 原子解决。
 - 验收：不遮挡基础移动与战斗操作，输入/发送/错误提示正常，重连后自动补拉最近 50 条世界/跨界历史，实时与历史消息按 ID 去重、按时间排序。
 
 ### P1：好友、陌生人申请、私聊和离线投递
@@ -114,5 +114,5 @@
 - 仍未实现：WorldServer 发布/拉取接口接入和 ENet 消息扇出、消费游标可靠保存/确认、好友/私聊 API、离线投递、队伍/宗门频道。
 - 独立 ChatServer 已增加 30 天消息保留清理调度：启动后执行一次，之后每小时执行；清理不再发生在玩家发送/查询请求路径，避免请求触发全表删除。清理失败仅记录日志并等待下一轮重试。
 - 聊天用户接口和 WorldServer 内部发布接口均强化幂等：相同 client_message_id + 相同频道/正文返回原消息；相同 ID 被用于不同频道或正文时返回 409，避免客户端错误重试覆盖/混淆消息。
-- 当前仍未实现 JetStream 持久消费/离线节点重放、NATS 故障期间的在线客户端历史增量同步、WorldServer 附近 AOI 到聊天服的异步事件接入、聊天数据物理数据库拆分和故障注入验收。
-- 本轮新增 NATS 跨 ChatServer Core Pub/Sub、REST/WebSocket/WorldServer 发布统一扇出、事件版本与频道范围校验、NATS 断开自动重连及本机降级；尚未运行 Go 测试、C++ 编译/CTest、Godot 解析/运行、数据库迁移或 GitHub Actions。不要把静态代码提交视为运行验收通过。
+- 当前仍未实现 PostgreSQL 事务 outbox、NATS 故障期间在线客户端历史增量同步、WorldServer 附近 AOI 到聊天服的异步事件接入、聊天数据物理数据库拆分和故障注入验收。
+- 本轮新增 JetStream 文件持久流、每节点 durable pull consumer、AckSync/Term、发布后台 worker、消息 ID 去重与 Core NATS 降级；尚未运行 Go 测试、C++ 编译/CTest、Godot 解析/运行、数据库迁移或 GitHub Actions。不要把静态代码提交视为运行验收通过。
