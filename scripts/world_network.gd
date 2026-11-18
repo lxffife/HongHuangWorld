@@ -113,7 +113,7 @@ func send_chat(channel: String, content: String) -> Error:
 		return ERR_INVALID_PARAMETER
 	if channel not in ["nearby", "world", "cross_world"]:
 		return ERR_INVALID_PARAMETER
-	var message_id := Crypto.generate_random_bytes(16).hex_encode()
+	var message_id := Crypto.new().generate_random_bytes(16).hex_encode()
 	var payload := JSON.stringify({
 		"client_message_id": message_id,
 		"channel": channel,
