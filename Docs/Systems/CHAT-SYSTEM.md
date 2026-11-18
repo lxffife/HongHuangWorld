@@ -87,13 +87,13 @@
 - 验收：Bearer Token 认证、200 字校验、3/5 秒限流、幂等写入、历史分页。
 
 ### P0-B：实时传输与附近/世界/跨界频道
-- P0-B1（已提交，待运行验证）：为 ENet 协议分配聊天消息类型；Godot 网络层支持发送/接收；WorldServer 实现当前实例附近频道 AOI 转发、服务端身份注入、200 字校验与 1 秒限流。
+- P0-B1（已提交，待运行验证）：为 ENet 协议分配聊天消息类型；Godot 网络层支持发送/接收；WorldServer 负责计算当前实例附近频道 AOI，服务端身份由 ChatServer 根据活动会话注入，ChatServer 执行 200 字校验与 1 秒限流。
 - P0-B2（进行中）：已增加受 `X-World-Server-Key` 与 `X-World-Server-Node` 保护的 `GET /api/v1/servers/chat/messages` 拉取接口，以及 `POST /api/v1/servers/chat/messages` 发布接口；现已同时挂载到独立 ChatServer，Game API 暂保留兼容入口。发布时必须验证 world_sessions + server_registry + character 三者关系、节点心跳、会话 active 状态；发送者名称/境界/世界由数据库注入，客户端不能伪造。客户端消息 ID 重试返回原消息，限流在幂等检查之后执行。拉取按节点当前 ready 的 world_instances 返回其 world 消息，以及全服统一 cross_world 消息；按 `(created_at,id)` 稳定游标分页。WorldServer 已将附近消息通过独立后台 worker 异步 POST 到 ChatServer；ChatServer 验证节点、活动会话和 AOI 接收者均属于同一 world instance 后持久化并经 JetStream 扇出。世界/跨界消息仍由玩家独立 WebSocket 连接发送；WorldServer 的世界/跨界定时拉取链路暂不承担客户端广播。
 - 验收：B1 需两客户端同实例附近可见，超出 AOI 不可见，伪造 sender 字段无效，限流和长度校验生效；B2 需不同实例同世界可见世界频道、不同世界可见同一跨界频道。
 
 ### P0-C：Godot 聊天 HUD
 - P0-C1（已提交，待运行验证）：增加左下方可折叠聊天窗、附近/世界/跨界频道切换、输入发送和服务端错误提示；附近仍走 ENet，世界/跨界走独立 ChatServer WebSocket。
-- P0-C2（进行中）：ChatServer 新增 Bearer Token 认证的 WebSocket `/api/v1/chat/socket`；Godot 新增独立 `HHChatNetwork`，具备独立 20 秒心跳、Pong 超时检测和 4 秒重连。世界/跨界频道通过该连接发送与接收；附近消息由 ENet 发送给 WorldServer，WorldServer 通过有界异步 worker 提交 ChatServer，再由同一独立 WebSocket 按 AOI 接收者集合投递。WebSocket 连接成功后自动补拉附近/世界/跨界频道最近 50 条历史，按消息 ID 去重并按 created_at 插入排序；断线重连会再次补拉，过期连接的历史响应会丢弃。已建立 PostgreSQL 事务 Outbox（迁移 `000039_chat_transactional_outbox`）：玩家 HTTP/WS 与 WorldServer 发布入口均在同一数据库事务中写入 `chat_messages` 和 `chat_event_outbox`，事件 payload 保存当时的角色展示快照。后台 publisher 使用 `FOR UPDATE SKIP LOCKED` + 有效期租约领取待发事件，JetStream 返回 PubAck 后才标记 published；失败释放租约并指数退避重试，进程崩溃后租约过期可重新领取。NATS 不可用时 Outbox 保留待发事件，恢复 JetStream 后继续发送。JetStream 消息 ID 使用 chat message UUID，在 2 分钟去重窗口内抑制 PubAck 成功但数据库标记前崩溃造成的重复发布；超过去重窗口仍按至少一次投递处理，客户端继续按消息 ID 去重。每节点 durable pull consumer 仍负责离线 ChatServer 恢复；Outbox 与 JetStream 均保留 30 天。
+- P0-C2（进行中）：ChatServer 新增 Bearer Token 认证的 WebSocket `/api/v1/chat/socket`；Godot 新增独立 `HHChatNetwork`，具备独立 20 秒心跳、Pong 超时检测和 4 秒重连。世界/跨界频道通过该连接发送与接收；附近消息由 ENet 发送给 WorldServer，WorldServer 通过最多 256 条的有界异步队列与独立 worker 提交 ChatServer；网络失败有限重试，WorldServer 进程崩溃或队列满仍可能丢弃尚未提交的消息，SQLite 持久重试队列列为后续工作，再由同一独立 WebSocket 按 AOI 接收者集合投递。WebSocket 连接成功后自动补拉附近/世界/跨界频道最近 50 条历史，按消息 ID 去重并按 created_at 插入排序；断线重连会再次补拉，过期连接的历史响应会丢弃。已建立 PostgreSQL 事务 Outbox（迁移 `000039_chat_transactional_outbox`）：玩家 HTTP/WS 与 WorldServer 发布入口均在同一数据库事务中写入 `chat_messages` 和 `chat_event_outbox`，事件 payload 保存当时的角色展示快照。后台 publisher 使用 `FOR UPDATE SKIP LOCKED` + 有效期租约领取待发事件，JetStream 返回 PubAck 后才标记 published；失败释放租约并指数退避重试，进程崩溃后租约过期可重新领取。NATS 不可用时 Outbox 保留待发事件，恢复 JetStream 后继续发送。JetStream 消息 ID 使用 chat message UUID，在 2 分钟去重窗口内抑制 PubAck 成功但数据库标记前崩溃造成的重复发布；超过去重窗口仍按至少一次投递处理，客户端继续按消息 ID 去重。每节点 durable pull consumer 仍负责离线 ChatServer 恢复；Outbox 与 JetStream 均保留 30 天。
 - 验收：不遮挡基础移动与战斗操作，输入/发送/错误提示正常，重连后自动补拉最近 50 条世界/跨界历史，实时与历史消息按 ID 去重、按时间排序。
 
 ### P1：好友、陌生人申请、私聊和离线投递
@@ -109,7 +109,7 @@
 - 已有：迁移 000038 的基础表；Go chat service 支持 world/cross_world 文本写入和历史查询。
 - 本次新增：ENet ChatSendCommand/ChatEvent 协议；WorldServer 当前实例附近频道 AOI 转发、服务端身份注入、200 字校验和 1 秒限流；Godot 网络层发送/接收接口；协议帧测试覆盖聊天消息类型；Godot 初版附近聊天 HUD（可折叠、输入发送、错误提示）。
 - 独立服务拆分第一步已提交：新增 Backend/cmd/chat 独立 Go 进程（默认 :8788）、httpapi.NewChatRouter（只注册聊天与健康检查路由）、CHAT_DATABASE_URL/CHAT_HTTP_ADDR 配置，以及 Windows/Linux 启动脚本。Godot 使用 `CHAT_API_BASE` 环境变量覆盖聊天服务地址；未设置时从游戏 API 的 `:8787` 推导 `:8788`。Game API 暂时保留原聊天路由作为迁移兼容入口。详见 Docs/Architecture/SERVICE-ISOLATION.md。
-- P0-B2 本次新增：WorldServer 节点认证的中心消息拉取和发布 API。发布接口校验活动会话确属该节点，服务端注入消息身份并做 3 秒世界/5 秒跨界限流与幂等；拉取接口按节点服务世界筛选 world 频道，cross_world 对所有 ready 节点可见，支持 1–100 条分页与 `(created_at,id)` 游标。仍未实现 WorldServer 调用发布/定时拉取、ENet 广播、消费游标持久化与断线补发确认。
+- P0-B2 本次新增：WorldServer 节点认证的中心消息拉取和发布 API。发布接口校验活动会话确属该节点，服务端注入消息身份并做附近 1 秒/世界 3 秒/跨界 5 秒限流与幂等；附近消息还验证 AOI 接收者属于同一活动实例。拉取接口按节点服务世界筛选 world 频道，cross_world 对所有 ready 节点可见，支持 1–100 条分页与 `(created_at,id)` 游标。WorldServer 附近发布已接入；WorldServer 世界/跨界定时拉取仍未接入（客户端直接使用 ChatServer WebSocket）。
 - 附近频道已由 WorldServer 计算 AOI 接收者，通过有界异步 worker 提交 ChatServer；ChatServer 校验接收者属于同一活动世界实例后写入 PostgreSQL，并将接收者快照写入消息与事务 Outbox。ChatServer WebSocket 仅向同实例且在 AOI 列表中的角色投递，附近历史查询也按接收者和当前实例过滤。世界/跨界实时消息通过 ChatServer WebSocket 与 NATS JetStream 跨 ChatServer 进程广播；每个 ChatServer 使用独立 durable consumer，短暂离线后可从确认位置重放。
 - 仍未实现：WorldServer 世界/跨界轮询接口（目前由玩家 WebSocket 直接收发，无需 WorldServer 中转）、附近消息本地 SQLite 持久重试队列、跨世界实例的附近 AOI（当前定义为同一 world instance）、好友/私聊 API、离线私聊投递、队伍/宗门频道。
 - 独立 ChatServer 已增加 30 天消息保留清理调度：启动后执行一次，之后每小时执行；清理不再发生在玩家发送/查询请求路径，避免请求触发全表删除。清理失败仅记录日志并等待下一轮重试。
