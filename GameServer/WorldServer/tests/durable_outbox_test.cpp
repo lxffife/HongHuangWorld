@@ -154,6 +154,10 @@ int main() {
         assert(worker_box.enqueue({"chat-live", "nearby_chat", "live payload", 0, 0, 20, {}}, error));
         auto inflight = worker_box.claim_due_type(20, "nearby_chat", error);
         assert(inflight && inflight->event_id == "chat-live");
+        assert(worker_box.enqueue({"game-dead", "character_reward", "reward payload", 0, 0, 30, {}}, error));
+        auto game_event = worker_box.claim_due_excluding(30, "nearby_chat", error);
+        assert(game_event && game_event->event_id == "game-dead");
+        assert(worker_box.move_to_dead_letter("game-dead", 1, "game API rejected event", error));
 
         {
             // An operator inspection must not reset a live worker's inflight row.
@@ -166,6 +170,7 @@ int main() {
             snapshot = inspector.stats(1000, error, "nearby_chat");
             assert(snapshot.pending == 1 && snapshot.inflight == 1 && snapshot.dead_letter == 0);
             assert(!inspector.retry_dead_letter("chat-live", 1000, error));
+            assert(!inspector.retry_dead_letter("game-dead", 1000, error));
         }
 
         auto retried = worker_box.claim_due_type(1000, "nearby_chat", error);
