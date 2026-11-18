@@ -69,8 +69,8 @@ func _connect_socket() -> void:
 	socket = WebSocketPeer.new()
 	socket.inbound_buffer_size = 65536
 	socket.outbound_buffer_size = 65536
-	var headers := PackedStringArray(["Authorization: Bearer " + access_token])
-	var error: Error = socket.connect_to_url(socket_url, TLSOptions.client(), PackedStringArray(), headers)
+	socket.handshake_headers = PackedStringArray(["Authorization: Bearer " + access_token])
+	var error: Error = socket.connect_to_url(socket_url, TLSOptions.client())
 	if error != OK:
 		connecting = false
 		connection_error.emit("聊天连接初始化失败：" + str(error))
