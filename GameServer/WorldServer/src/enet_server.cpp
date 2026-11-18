@@ -1061,6 +1061,12 @@ struct EnetServer::Impl {
                                   << " oldest_pending_seconds=" << metrics.oldest_pending_age_ms / 1000
                                   << " oldest_dead_letter_seconds=" << metrics.oldest_dead_letter_age_ms / 1000
                                   << '\n';
+                        if (metrics.dead_letter > 0 || metrics.oldest_pending_age_ms >= 60000) {
+                            std::cerr << "[ChatOutbox][WARN] delivery attention required: dead_letter="
+                                      << metrics.dead_letter
+                                      << " oldest_pending_seconds=" << metrics.oldest_pending_age_ms / 1000
+                                      << '\n';
+                        }
                     } else {
                         std::cerr << "[ChatOutbox] metrics failed: " << metrics_error << '\n';
                     }
