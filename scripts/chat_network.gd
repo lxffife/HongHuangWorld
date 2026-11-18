@@ -129,7 +129,7 @@ func _on_history_request_completed(result: int, response_code: int, _headers: Pa
 		connection_error.emit("聊天历史暂时无法获取（HTTP " + str(response_code) + "）")
 		return
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
-	if not parsed is Dictionary or not parsed.get("items", []) is Array:
+	if not (parsed is Dictionary) or not (parsed.get("items", []) is Array):
 		connection_error.emit("聊天历史响应格式错误。")
 		return
 	history_received.emit(channel, parsed.get("items", []))
