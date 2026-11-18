@@ -17,6 +17,9 @@ var respawn_http: HTTPRequest
 var respawn_button: Button
 var respawn_busy := false
 var progression_http: HTTPRequest
+var soul_essence_http: HTTPRequest
+var soul_essence_profile: Dictionary = {}
+var soul_essence_request_busy := false
 var progression_request_context := ""
 var reconnect_http: HTTPRequest
 var reconnect_network: HHWorldNetwork
@@ -123,6 +126,12 @@ func _ready() -> void:
 	progression_http.timeout = 10.0
 	add_child(progression_http)
 	progression_http.request_completed.connect(_on_progression_request_completed)
+	soul_essence_http = HTTPRequest.new()
+	soul_essence_http.timeout = 10.0
+	add_child(soul_essence_http)
+	soul_essence_http.request_completed.connect(_on_soul_essence_request_completed)
+	_apply_world_player_form()
+	_request_soul_essence()
 	respawn_http = HTTPRequest.new()
 	respawn_http.timeout = 12.0
 	add_child(respawn_http)
@@ -683,6 +692,51 @@ func _update_compact_hud(progression: Dictionary = {}) -> void:
 	var cultivation := int(progression.get("cultivation", 0))
 	var region_name := current_region_name if not current_region_name.is_empty() else "区域载入中"
 	compact_hud_label.text = "当前世界 · " + world_name + "\n所在区域 · " + region_name + "\n" + character_name + "  |  " + system_name + " · " + realm_name + stage_name + "  |  修为 " + str(cultivation)
+	if world_id == "underworld_fengdu":
+		var soul_stage := str(soul_essence_profile.get("form_name", "魂光载入中"))
+		var soul_power := int(soul_essence_profile.get("soul_power", 0))
+		var absorbed := int(soul_essence_profile.get("absorbed_count", 0))
+		compact_hud_label.text += "\n灵魂形态 · " + soul_stage + "  |  魂力 " + str(soul_power) + "  |  吞噬 " + str(absorbed)
+
+
+func _apply_world_player_form() -> void:
+	if not is_instance_valid(local_player):
+		return
+	var is_underworld := str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu"
+	if is_underworld:
+		local_player.set_soul_form(true,
+			int(soul_essence_profile.get("form_stage", 1)),
+			float(soul_essence_profile.get("visual_scale", 0.35)))
+	else:
+		local_player.set_soul_form(false)
+
+func _request_soul_essence() -> void:
+	if str(HHSession.world_snapshot.get("world_id", "")) != "underworld_fengdu":
+		return
+	if soul_essence_http == null or HHSession.access_token.is_empty() or soul_essence_request_busy:
+		return
+	soul_essence_request_busy = true
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token])
+	var error := soul_essence_http.request(
+		HHSession.api_base + "/api/v1/souls/current/essence",
+		headers,
+		HTTPClient.METHOD_GET
+	)
+	if error != OK:
+		soul_essence_request_busy = false
+		_show_notification("灵魂状态暂时无法读取，错误码：" + str(error), 4.0)
+
+func _on_soul_essence_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	soul_essence_request_busy = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		_show_notification("灵魂状态读取失败（HTTP " + str(response_code) + "），请确认已执行 000027 迁移", 5.0)
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if not (parsed is Dictionary):
+		return
+	soul_essence_profile = parsed
+	_apply_world_player_form()
+	_update_compact_hud()
 
 func _update_hud() -> void:
 	var snapshot: Dictionary = HHSession.world_snapshot
@@ -1365,6 +1419,9 @@ func _on_reconnected_welcomed(snapshot: Dictionary) -> void:
 		float(snapshot.get("position_z", 0.0))
 	)
 	local_player.position = local_target_position
+	soul_essence_profile.clear()
+	_apply_world_player_form()
+	_request_soul_essence()
 	for character_id in remote_players.keys():
 		remote_players[character_id].queue_free()
 	remote_players.clear()
