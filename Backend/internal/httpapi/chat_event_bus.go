@@ -224,11 +224,15 @@ func decodeChatEvent(data []byte) (chatEventEnvelope, error) {
 	}
 	switch message.Channel {
 	case "world":
-		if message.WorldID == "" {
+		if message.WorldID == "" || message.WorldInstanceID != "" || len(message.RecipientCharacterIDs) != 0 {
 			return chatEventEnvelope{}, errInvalidChatEvent
 		}
 	case "cross_world":
-		if message.WorldID != "" {
+		if message.WorldID != "" || message.WorldInstanceID != "" || len(message.RecipientCharacterIDs) != 0 {
+			return chatEventEnvelope{}, errInvalidChatEvent
+		}
+	case "nearby":
+		if message.WorldID == "" || message.WorldInstanceID == "" || len(message.RecipientCharacterIDs) == 0 || len(message.RecipientCharacterIDs) > 128 {
 			return chatEventEnvelope{}, errInvalidChatEvent
 		}
 	default:
