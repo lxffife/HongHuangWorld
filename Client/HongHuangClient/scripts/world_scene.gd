@@ -36,6 +36,7 @@ var chat_input: LineEdit
 var chat_status: Label
 var chat_expanded := false
 var chat_lines: Array[String] = []
+var chat_lines_by_channel: Dictionary = {"nearby": [], "world": [], "cross_world": []}
 var selected_chat_channel := "nearby"
 
 var local_player: HHPlayerController
@@ -1245,6 +1246,7 @@ func _select_chat_channel(channel: String) -> void:
 	selected_chat_channel = channel
 	var names := {"nearby": "附近", "world": "世界", "cross_world": "跨界"}
 	chat_input.placeholder_text = "输入" + str(names[channel]) + "消息（最多 200 字）"
+	_render_chat_lines()
 	if channel == "nearby":
 		chat_status.text = "附近频道 · 仅当前实例 AOI 范围内可见"
 	elif HHChatNetwork.socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
@@ -1266,13 +1268,13 @@ func _on_chat_socket_message(message: Dictionary) -> void:
 			chat_status.text = str(message.get("reason", "聊天消息未送达。"))
 		return
 	var channel := str(message.get("channel", selected_chat_channel))
-	if channel != selected_chat_channel:
+	if channel not in ["world", "cross_world"]:
 		return
 	var sender := str(message.get("sender_name", "未知玩家"))
 	var content := str(message.get("content", ""))
 	if not content.is_empty():
-		_append_chat_line("[" + sender + "] " + content)
-		if is_instance_valid(chat_status):
+		_append_chat_line("[" + sender + "] " + content, channel)
+		if is_instance_valid(chat_status) and channel == selected_chat_channel:
 			chat_status.text = "聊天消息已送达"
 
 func _on_chat_event(event: Dictionary) -> void:
@@ -1284,12 +1286,22 @@ func _on_chat_event(event: Dictionary) -> void:
 	_append_chat_line("[" + sender + "] " + content)
 	chat_status.text = "附近频道 · 消息已送达当前可见范围"
 
-func _append_chat_line(line: String) -> void:
+func _append_chat_line(line: String, channel: String = "") -> void:
+	var target_channel := channel if not channel.is_empty() else selected_chat_channel
+	if not chat_lines_by_channel.has(target_channel):
+		chat_lines_by_channel[target_channel] = []
+	var lines: Array = chat_lines_by_channel[target_channel]
+	lines.append(line)
+	while lines.size() > 40:
+		lines.pop_front()
+	chat_lines_by_channel[target_channel] = lines
+	if target_channel == selected_chat_channel:
+		_render_chat_lines()
+
+func _render_chat_lines() -> void:
 	if not is_instance_valid(chat_log):
 		return
-	chat_lines.append(line)
-	while chat_lines.size() > 40:
-		chat_lines.pop_front()
+	chat_lines = chat_lines_by_channel.get(selected_chat_channel, [])
 	for child in chat_log.get_children():
 		child.queue_free()
 	for value in chat_lines:
