@@ -2,6 +2,9 @@ package httpapi
 
 import (
 	"bufio"
+	"context"
+	"crypto/rand"
+	"os"
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/binary"
@@ -21,6 +24,7 @@ import (
 )
 
 const (
+	chatPresenceLease = 90 * time.Second
 	chatWebSocketGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 	maxChatSocketFrame = 64 * 1024
 )
@@ -41,6 +45,9 @@ type chatSocketClient struct {
 	worldID string
 	worldInstanceID string
 	characterID string
+	accountID string
+	presenceID string
+	service *chat.Service
 	logger *slog.Logger
 }
 
@@ -236,13 +243,37 @@ func (h *chatHandlers) socket(w http.ResponseWriter, r *http.Request) {
 	if err == nil { err = rw.Flush() }
 	if err != nil { _ = conn.Close(); return }
 
+	presenceID, err := newChatPresenceConnectionID()
+	if err != nil {
+		_ = conn.Close()
+		return
+	}
+	nodeID := strings.TrimSpace(os.Getenv("CHAT_NODE_ID"))
+	if nodeID == "" {
+		nodeID, _ = os.Hostname()
+	}
+	if nodeID == "" {
+		nodeID = "chat-node"
+	}
+	presenceCtx, presenceCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	presenceErr := h.service.OpenPresenceLease(presenceCtx, presenceID, account.ID, scope.CharacterID, nodeID, chatPresenceLease)
+	presenceCancel()
+	if presenceErr != nil {
+		h.logger.Error("open chat presence lease failed", "account_id", account.ID, "error", presenceErr)
+		_ = conn.Close()
+		return
+	}
+
 	client := &chatSocketClient{
 		conn: conn, reader: rw.Reader, send: make(chan []byte, 64),
-		done: make(chan struct{}), worldID: scope.WorldID, worldInstanceID: scope.WorldInstanceID, characterID: scope.CharacterID, logger: h.logger,
+		done: make(chan struct{}), worldID: scope.WorldID, worldInstanceID: scope.WorldInstanceID,
+		characterID: scope.CharacterID, accountID: account.ID, presenceID: presenceID,
+		service: h.service, logger: h.logger,
 	}
 	h.hub.add(client)
 	go client.writer()
 	defer h.hub.remove(client)
+	defer client.closePresenceLease()
 
 	for {
 		_ = conn.SetReadDeadline(time.Now().Add(75 * time.Second))
@@ -253,6 +284,7 @@ func (h *chatHandlers) socket(w http.ResponseWriter, r *http.Request) {
 			_ = client.writeFrame(8, payload)
 			return
 		case 9:
+			if !client.refreshPresence(scope.CharacterID) { return }
 			if client.writeFrame(10, payload) != nil { return }
 		case 10:
 			continue
@@ -270,6 +302,10 @@ func (h *chatHandlers) socket(w http.ResponseWriter, r *http.Request) {
 					client.worldID = scope.WorldID
 					client.worldInstanceID = scope.WorldInstanceID
 					client.scopeMu.Unlock()
+					if !client.refreshPresence(scope.CharacterID) { return }
+				} else {
+					client.sendError("chat presence refresh failed")
+					return
 				}
 				client.sendJSON(map[string]any{"type":"pong"})
 				continue
@@ -315,3 +351,37 @@ func chatSocketErrorText(err error) string {
 	}
 }
 
+
+func newChatPresenceConnectionID() (string, error) {
+	var value [16]byte
+	if _, err := rand.Read(value[:]); err != nil {
+		return "", fmt.Errorf("generate chat connection id: %w", err)
+	}
+	value[6] = (value[6] & 0x0f) | 0x40
+	value[8] = (value[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		value[0:4], value[4:6], value[6:8], value[8:10], value[10:16]), nil
+}
+
+func (c *chatSocketClient) refreshPresence(characterID string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	refreshed, err := c.service.RefreshPresenceLease(ctx, c.presenceID, characterID, chatPresenceLease)
+	if err != nil {
+		c.logger.Warn("chat presence heartbeat failed", "account_id", c.accountID, "error", err)
+		return false
+	}
+	if !refreshed {
+		c.logger.Info("chat presence lease expired; closing socket", "account_id", c.accountID, "connection_id", c.presenceID)
+		return false
+	}
+	return true
+}
+
+func (c *chatSocketClient) closePresenceLease() {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := c.service.ClosePresenceLease(ctx, c.presenceID); err != nil {
+		c.logger.Warn("close chat presence lease failed", "account_id", c.accountID, "connection_id", c.presenceID, "error", err)
+	}
+}
