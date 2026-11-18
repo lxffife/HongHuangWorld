@@ -185,3 +185,17 @@ func (h *soulHandlers) reincarnationEligibility(w http.ResponseWriter,r *http.Re
  }
  writeJSON(w,http.StatusOK,result)
 }
+
+
+func (h *soulHandlers) essence(w http.ResponseWriter, r *http.Request) {
+	account, ok := h.currentAccount(w, r)
+	if !ok { return }
+	profile, err := h.soulService.CurrentEssence(r.Context(), account.ID)
+	if err != nil {
+		if errors.Is(err, soul.ErrNotFound) { http.Error(w, "soul essence not found", http.StatusNotFound); return }
+		h.logger.Error("load soul essence failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, profile)
+}
