@@ -7,12 +7,12 @@ load_env
 : "${CHAT_DB_NAME:=honghuang_chat}"
 : "${CHAT_DB_USER:=chat_user}"
 : "${CHAT_DB_PASSWORD:?Set CHAT_DB_PASSWORD in $HH_ENV_FILE}"
-: "${CHAT_TARGET_DATABASE_URL:?Set CHAT_TARGET_DATABASE_URL in $HH_ENV_FILE}"
+: "${CHAT_DATABASE_URL:?Set CHAT_DATABASE_URL in $HH_ENV_FILE}"
 
 MIGRATION_DIR="$HH_PROJECT_DIR/Database/chat-migrations"
 [[ -d "$MIGRATION_DIR" ]] || die "找不到 Chat migrations: $MIGRATION_DIR"
 
-log "准备独立 Chat 数据库 $CHAT_DB_NAME；不会修改 CHAT_DATABASE_URL，也不会切换现有 ChatServer"
+[[ "$CHAT_DATABASE_URL" != "${DATABASE_URL:-}" ]] || die "CHAT_DATABASE_URL 不能与 Game DATABASE_URL 相同"\nlog "准备独立 Chat 数据库 $CHAT_DB_NAME；ChatServer 将直接使用 CHAT_DATABASE_URL"
 compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
   -v db_name="$CHAT_DB_NAME" -v db_user="$CHAT_DB_USER" -v db_password="$CHAT_DB_PASSWORD" <<'SQL'
 SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'db_user', :'db_password')
@@ -53,4 +53,4 @@ for migration in "${migrations[@]}"; do
     -c "INSERT INTO schema_migrations(version) VALUES ('$version') ON CONFLICT DO NOTHING;"
 done
 
-log "独立 Chat 数据库结构已创建。现有 ChatServer 仍使用 CHAT_DATABASE_URL 指向的旧库；不要手动切换，等待代码迁移与数据回填完成。"
+log "独立 Chat 数据库结构已创建。ChatServer 直接连接 CHAT_DATABASE_URL；Game 状态通过 NATS 投影进入 Chat 数据库。"
