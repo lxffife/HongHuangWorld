@@ -779,6 +779,9 @@ func _apply_world_player_form() -> void:
 			float(soul_essence_profile.get("visual_scale", 0.35)))
 	else:
 		local_player.set_soul_form(false)
+	if is_instance_valid(soul_choice_button):
+		var pending: Array = soul_essence_profile.get("pending_rare_choices", [])
+		soul_choice_button.visible = is_underworld and hud_visible and pending.size() > 0
 
 func _request_soul_essence() -> void:
 	if str(HHSession.world_snapshot.get("world_id", "")) != "underworld_fengdu":
@@ -998,6 +1001,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			compact_hud_panel.visible = hud_visible
 		if is_instance_valid(details_toggle_button):
 			details_toggle_button.visible = hud_visible
+		if is_instance_valid(soul_choice_button):
+			soul_choice_button.visible = hud_visible and str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu" and not (soul_essence_profile.get("pending_rare_choices", []) as Array).is_empty()
 		if is_instance_valid(vitals_panel):
 			vitals_panel.visible = hud_visible
 		if is_instance_valid(input_debug_panel):
