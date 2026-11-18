@@ -100,6 +100,21 @@ Do not enable projection mode until:
 
 Projection mode requires `CHAT_PROJECTION_DATABASE_URL` to be different from `CHAT_DATABASE_URL`. The Chat service exits rather than silently using one database for both modes.
 
+
+## Historical Chat data backfill
+
+`Deployment/raspberry-pi/10-copy-chat-data.sh` copies the existing Game-backed Chat data into the empty standalone Chat database. It transfers account/character/world/server/session projections, 30-day message history, preferences, friendships, private requests, blocks, and only unpublished Chat fanout outbox rows. Historical sender name/race/level are reconstructed from the current character row because the legacy message table did not store those snapshots.
+
+The script:
+- Requires `CONFIRM_CHAT_DATA_COPY=YES`.
+- Requires the Game event consumer paused, old Chat writes paused, and all Game writes paused.
+- Refuses a target containing any projection, message, social, inbox, or outbox rows.
+- Reads the source in one `REPEATABLE READ READ ONLY` snapshot and applies generated inserts to the target in one transaction.
+- Seeds each current projection aggregate at the Game outbox sequence high-water mark, so old retained JetStream events cannot overwrite the backfilled snapshot.
+- Verifies row counts and pending Chat outbox counts, and never deletes source data.
+
+The maintenance window is intentional: pause Game API/WorldServer writes and old Chat writes, stop the Chat projection consumer, run the backfill, then restart Game and Chat. Resume the consumer only after the backfill transaction succeeds. Do not enable projection API mode until the projection consumer has caught up and message/routing acceptance checks pass.
+
 ## Current implementation status
 
 - Chat runs as a separate process and reads `CHAT_DATABASE_URL`.
