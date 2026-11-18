@@ -1275,8 +1275,8 @@ func _on_chat_history_received(channel: String, messages: Array) -> void:
 			_append_chat_line("[" + sender + "] " + content, channel, str(message.get("id", "")), str(message.get("created_at", "")))
 
 func _on_chat_socket_error(message: String) -> void:
-	if is_instance_valid(chat_status) and selected_chat_channel != "nearby":
-		chat_status.text = message + "（游戏连接不受影响）"
+	if is_instance_valid(chat_status):
+		chat_status.text = message + "（游戏操作不受影响）"
 
 func _on_chat_socket_message(message: Dictionary) -> void:
 	if not bool(message.get("accepted", true)):
