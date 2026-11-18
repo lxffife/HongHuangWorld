@@ -18,6 +18,7 @@ var reconnect_timer: Timer
 var heartbeat_timer: Timer
 var manually_closed := false
 var connecting := false
+var was_open := false
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -72,6 +73,7 @@ func _process(_delta: float) -> void:
 	if state == WebSocketPeer.STATE_OPEN:
 		if connecting:
 			connecting = false
+			was_open = true
 			reconnect_timer.stop()
 			heartbeat_timer.start()
 			connected.emit()
@@ -84,10 +86,13 @@ func _process(_delta: float) -> void:
 			if parsed is Dictionary:
 				message_received.emit(parsed)
 	elif state == WebSocketPeer.STATE_CLOSED:
-		if connecting:
+		if connecting or was_open:
 			connecting = false
+			was_open = false
 			heartbeat_timer.stop()
-			connection_error.emit("聊天服务器连接失败，稍后自动重试。")
+			disconnected.emit()
+			if not manually_closed:
+				connection_error.emit("聊天服务器连接已断开，稍后自动重试。")
 			_schedule_reconnect()
 
 func send_message(channel: String, content: String, client_message_id: String) -> Error:
@@ -118,6 +123,7 @@ func _schedule_reconnect() -> void:
 func close_chat() -> void:
 	manually_closed = true
 	connecting = false
+	was_open = false
 	if reconnect_timer != null:
 		reconnect_timer.stop()
 	if heartbeat_timer != null:
