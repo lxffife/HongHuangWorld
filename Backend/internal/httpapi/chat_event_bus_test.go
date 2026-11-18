@@ -3,6 +3,7 @@ package httpapi
 import (
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -50,5 +51,20 @@ func TestChatEventBusPublishesLocallyWithoutNATS(t *testing.T) {
 	bus.publish(message) // A local publish followed by JetStream redelivery must not duplicate delivery.
 	if len(client.send) != 1 {
 		t.Fatalf("local event count = %d, want 1", len(client.send))
+	}
+}
+
+func TestChatEventDurableNameUsesStableNodeIdentity(t *testing.T) {
+	t.Setenv("CHAT_NODE_ID", "asia.chat-node-02")
+	if got, want := chatEventDurableName(), "CHAT_ASIA_CHAT_NODE_02"; got != want {
+		t.Fatalf("durable name = %q, want %q", got, want)
+	}
+}
+
+func TestChatEventDurableNameHasSafeFallback(t *testing.T) {
+	t.Setenv("CHAT_NODE_ID", "node.with spaces")
+	got := chatEventDurableName()
+	if got == "" || strings.ContainsAny(got, ". *>/\\\\") {
+		t.Fatalf("durable name contains invalid characters: %q", got)
 	}
 }
