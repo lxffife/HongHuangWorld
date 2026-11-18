@@ -333,6 +333,106 @@ bool DurableOutbox::move_to_dead_letter(const std::string& event_id, std::uint32
     }
 }
 
+
+OutboxStats DurableOutbox::stats(std::int64_t now_ms, std::string& error) const {
+    std::lock_guard lock(mutex_);
+    OutboxStats result;
+    try {
+        Stmt counts(db_, "SELECT status,COUNT(*) FROM world_event_outbox GROUP BY status");
+        int step = SQLITE_ROW;
+        while ((step = sqlite3_step(counts.get())) == SQLITE_ROW) {
+            const auto status = column_text(counts.get(), 0);
+            const auto count = static_cast<std::size_t>(sqlite3_column_int64(counts.get(), 1));
+            if (status == "pending") result.pending = count;
+            else if (status == "inflight") result.inflight = count;
+            else if (status == "delivered") result.delivered = count;
+            else if (status == "dead_letter") result.dead_letter = count;
+        }
+        if (step != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+
+        Stmt ages(db_,
+            "SELECT "
+            "COALESCE(MAX(CASE WHEN status='pending' THEN ?-created_at_ms END),0),"
+            "COALESCE(MAX(CASE WHEN status='dead_letter' THEN ?-created_at_ms END),0) "
+            "FROM world_event_outbox");
+        sqlite3_bind_int64(ages.get(), 1, now_ms);
+        sqlite3_bind_int64(ages.get(), 2, now_ms);
+        if (sqlite3_step(ages.get()) != SQLITE_ROW) throw std::runtime_error(sqlite3_errmsg(db_));
+        result.oldest_pending_age_ms = std::max<std::int64_t>(0, sqlite3_column_int64(ages.get(), 0));
+        result.oldest_dead_letter_age_ms = std::max<std::int64_t>(0, sqlite3_column_int64(ages.get(), 1));
+        return result;
+    } catch (const std::exception& exception) {
+        error = exception.what();
+        return {};
+    }
+}
+
+std::vector<OutboxEvent> DurableOutbox::list_dead_letters(
+    std::size_t limit, const std::string& event_type, std::string& error) const {
+    std::lock_guard lock(mutex_);
+    std::vector<OutboxEvent> result;
+    if (limit == 0 || limit > 500) {
+        error = "dead-letter limit must be between 1 and 500";
+        return result;
+    }
+    try {
+        const char* sql = event_type.empty()
+            ? "SELECT event_id,event_type,payload,attempts,next_retry_at_ms,created_at_ms,last_error "
+              "FROM world_event_outbox WHERE status='dead_letter' ORDER BY updated_at_ms DESC,event_id LIMIT ?"
+            : "SELECT event_id,event_type,payload,attempts,next_retry_at_ms,created_at_ms,last_error "
+              "FROM world_event_outbox WHERE status='dead_letter' AND event_type=? "
+              "ORDER BY updated_at_ms DESC,event_id LIMIT ?";
+        Stmt query(db_, sql);
+        if (event_type.empty()) {
+            sqlite3_bind_int64(query.get(), 1, static_cast<sqlite3_int64>(limit));
+        } else {
+            bind_text(query.get(), 1, event_type);
+            sqlite3_bind_int64(query.get(), 2, static_cast<sqlite3_int64>(limit));
+        }
+        int step = SQLITE_ROW;
+        while ((step = sqlite3_step(query.get())) == SQLITE_ROW) {
+            result.push_back(OutboxEvent{
+                column_text(query.get(), 0), column_text(query.get(), 1), column_text(query.get(), 2),
+                static_cast<std::uint32_t>(sqlite3_column_int64(query.get(), 3)),
+                sqlite3_column_int64(query.get(), 4), sqlite3_column_int64(query.get(), 5),
+                column_text(query.get(), 6)
+            });
+        }
+        if (step != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+        return result;
+    } catch (const std::exception& exception) {
+        error = exception.what();
+        return {};
+    }
+}
+
+bool DurableOutbox::retry_dead_letter(
+    const std::string& event_id, std::int64_t now_ms, std::string& error) {
+    if (event_id.empty()) {
+        error = "event id is required";
+        return false;
+    }
+    std::lock_guard lock(mutex_);
+    try {
+        Stmt update(db_,
+            "UPDATE world_event_outbox SET status='pending',next_retry_at_ms=?,"
+            "updated_at_ms=?,last_error='manual retry requested' "
+            "WHERE event_id=? AND status='dead_letter'");
+        sqlite3_bind_int64(update.get(), 1, now_ms);
+        sqlite3_bind_int64(update.get(), 2, now_ms);
+        bind_text(update.get(), 3, event_id);
+        if (sqlite3_step(update.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+        if (sqlite3_changes(db_) != 1) {
+            error = "event was not found in dead-letter queue";
+            return false;
+        }
+        return true;
+    } catch (const std::exception& exception) {
+        error = exception.what();
+        return false;
+    }
+}
+
 std::size_t DurableOutbox::pending_count(std::string& error) const {
     std::lock_guard lock(mutex_);
     try {
