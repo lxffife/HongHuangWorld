@@ -109,6 +109,12 @@
   也可在命令前显式传入 SQLite 文件路径。默认读取 `WORLD_SERVER_OUTBOX_PATH`，未设置时使用 `./data/worldserver-outbox.sqlite3`。
 - 验收：检查工具可在 WorldServer 运行期间安全读取状态；重试死信后由原 Chat Outbox worker 自动重新投递；管理工具不能重置 live inflight，也不能重试非 nearby_chat 事件。
 
+### P0-E：附近聊天可靠性验收准备（已提交，待运行验证）
+- 抽出可单元测试的 HTTP 错误分类策略：普通永久 4xx（如 401/403/409）进入 dead-letter；408/425/429、连接失败和 5xx 保持退避重试。
+- 新增 `chat_delivery_policy_test`，覆盖永久错误与临时错误分类；新增本地 loopback 假 ChatServer `Deployment/scripts/chat-fake-server.py`，可切换 201/401/429/503 并按 client_message_id 返回稳定模拟消息 ID。
+- 新增 `Docs/Testing/CHAT-RELIABILITY-TEST-PLAN.md`，覆盖服务不可用、恢复投递、WorldServer 重启恢复、401 死信人工重试、聊天队列配额与游戏事件隔离的本机验收步骤。
+- 尚未执行 CMake/CTest、假服务联调或真实 ChatServer 验收；本阶段不触发 GitHub Actions。
+
 ### P1：好友、陌生人申请、私聊和离线投递
 - 好友申请/接受/拒绝、陌生人私聊申请开关、黑名单、离线消息、未读与回执。
 - 验收：陌生人关闭申请后不能建立新会话；好友可私聊；黑名单双方不能私聊；离线消息 30 天内可收取。
@@ -129,4 +135,5 @@
 - 聊天用户接口和 WorldServer 内部发布接口均强化幂等：相同 client_message_id + 相同频道/正文返回原消息；相同 ID 被用于不同频道或正文时返回 409，避免客户端错误重试覆盖/混淆消息。
 - 当前仍未实现 NATS 故障期间在线客户端历史增量同步、WorldServer 本地 SQLite 与 ChatServer/JetStream 的自动故障注入验收、聊天数据物理数据库拆分。
 - 本轮新增附近频道 SQLite 持久发件箱接入：复用 WorldServer 现有 WAL/FULL DurableOutbox，新增独立 nearby_chat claim worker；游戏事件 worker 排除聊天事件，聊天队列设置容量配额；客户端在持久化确认前使用相同 client_message_id 退避重发；服务端从已有 outbox 读取原始 AOI 快照以保证重试幂等；允许同节点最近 30 天处于 saving/closed 的会话完成延迟投递；新增重启恢复、类型隔离和容量配额测试。
-- P0-D5 新增本机 outbox 管理程序，可查询队列指标/死信并人工重试 nearby_chat 死信；管理进程不会重置运行中 inflight 事件，且无法重试游戏事件。Chat Outbox worker 每 60 秒输出独立健康指标。新增本机 CLI 与 SQLite 管理逻辑测试；尚未运行 C++ 编译/CTest。尚未运行 Go 测试、C++ 编译/CTest、Godot 解析/运行、数据库迁移或 GitHub Actions。不要把静态代码提交视为运行验收通过。
+- P0-D5 新增本机 outbox 管理程序，可查询队列指标/死信并人工重试 nearby_chat 死信；管理进程不会重置运行中 inflight 事件，且无法重试游戏事件。Chat Outbox worker 每 60 秒输出独立健康指标。新增本机 CLI 与 SQLite 管理逻辑测试。
+- P0-E 新增 HTTP 错误分类单元测试、本地假 ChatServer 和端到端可靠性验收计划；尚未运行 C++ 编译/CTest、假服务联调、Go 测试、Godot 解析/运行、数据库迁移或 GitHub Actions。不要把静态代码提交视为运行验收通过。
