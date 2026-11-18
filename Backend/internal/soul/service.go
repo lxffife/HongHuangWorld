@@ -554,6 +554,7 @@ type AbsorptionKindProgress struct {
 
 const (
 	soulInheritanceAttributeCap int64 = 20
+	soulMutationAttributeCap int64 = 2
 	soulAbsorptionAttributeMaxPoints = 10
 	soulAbsorptionAttributeFirstThreshold int64 = 3
 )
@@ -978,12 +979,18 @@ func (s *Service) ApplyServerAbsorption(ctx context.Context, nodeKey string, eve
 			"spirit": true, "vitality": true,
 		}
 		if !allowed[mutation.Attribute] { return AbsorptionResult{}, ErrInvalidAbsorption }
-		var currentValue int64
+		var currentValue, existingMutationBonus int64
 		valueQuery := `SELECT ` + mutation.Attribute + ` FROM soul_inheritance_attributes WHERE soul_id=$1 FOR UPDATE`
 		if err := tx.QueryRowContext(ctx, valueQuery, soulID).Scan(&currentValue); err != nil {
 			return AbsorptionResult{}, fmt.Errorf("load mutation target attribute: %w", err)
 		}
+		if err := tx.QueryRowContext(ctx, `
+			SELECT COALESCE(SUM(attribute_bonus),0) FROM soul_mutation_records
+			WHERE soul_id=$1 AND attribute=$2`, soulID, mutation.Attribute).Scan(&existingMutationBonus); err != nil {
+			return AbsorptionResult{}, fmt.Errorf("load existing soul mutation bonuses: %w", err)
+		}
 		actualBonus := int64(mutation.AttributeBonus)
+		if remaining := soulMutationAttributeCap-existingMutationBonus; actualBonus > remaining { actualBonus = remaining }
 		if remaining := soulInheritanceAttributeCap-currentValue; actualBonus > remaining { actualBonus = remaining }
 		if actualBonus < 0 { actualBonus = 0 }
 		if actualBonus > 0 {
