@@ -486,6 +486,7 @@ type EssenceProfile struct {
 	FormName string `json:"form_name"`
 	VisualScale float64 `json:"visual_scale"`
 	AbsorptionKinds []AbsorptionKindProgress `json:"absorption_kinds"`
+	AffinityCounts map[string]int64 `json:"affinity_counts"`
 }
 
 type InheritanceAttributes struct {
@@ -562,12 +563,25 @@ func (s *Service) CurrentEssence(ctx context.Context, accountID string) (Essence
 	if err!=nil { return EssenceProfile{},fmt.Errorf("load soul absorption kinds: %w",err) }
 	defer rows.Close()
 	result.AbsorptionKinds=make([]AbsorptionKindProgress,0)
+	result.AffinityCounts=map[string]int64{"beast":0,"battle":0,"gale":0,"spirit":0,"life":0,"selected_strength":0,"selected_constitution":0,"selected_agility":0,"selected_spirit":0,"selected_vitality":0}
 	for rows.Next() {
 		var item AbsorptionKindProgress
 		if err:=rows.Scan(&item.KindID,&item.Name,&item.Description,&item.BaseEnergy,&item.TraitKey,&item.Rarity,&item.InheritanceAttribute,&item.AbsorbedCount);err!=nil {
 			return EssenceProfile{},fmt.Errorf("scan soul absorption kind: %w",err)
 		}
 		result.AbsorptionKinds=append(result.AbsorptionKinds,item)
+		switch item.KindID {
+		case "ironbone_beast_soul", "beast_spirit":
+			result.AffinityCounts["beast"] = item.AbsorbedCount
+		case "blazing_war_soul", "battle_spirit":
+			result.AffinityCounts["battle"] = item.AbsorbedCount
+		case "gale_wraith":
+			result.AffinityCounts["gale"] = item.AbsorbedCount
+		case "spirit_scholar_wisp":
+			result.AffinityCounts["spirit"] = item.AbsorbedCount
+		case "life_ancient_soul":
+			result.AffinityCounts["life"] = item.AbsorbedCount
+		}
 	}
 	if err:=rows.Err();err!=nil { return EssenceProfile{},fmt.Errorf("iterate soul absorption kinds: %w",err) }
 	pendingRows,pendingErr:=s.db.QueryContext(ctx, `SELECT records.id::text,kinds.id,kinds.name,records.created_at::text FROM soul_absorption_records records JOIN soul_absorption_kinds kinds ON kinds.id=records.absorption_kind_id WHERE records.soul_id=(SELECT id FROM souls WHERE account_id=$1) AND records.absorption_kind_id='faceless_essence' AND records.selected_at IS NULL ORDER BY records.created_at`,accountID)
