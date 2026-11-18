@@ -567,22 +567,22 @@ func _build_compact_hud() -> void:
 	$HUD/Panel.offset_bottom = 548.0
 	compact_hud_panel = PanelContainer.new()
 	compact_hud_panel.position = Vector2(18.0, 18.0)
-	compact_hud_panel.custom_minimum_size = Vector2(360.0, 92.0)
+	compact_hud_panel.custom_minimum_size = Vector2(360.0, 145.0)
 	hud.add_child(compact_hud_panel)
 	compact_hud_label = Label.new()
 	compact_hud_label.text = "洪荒 · 正在载入角色状态……"
 	compact_hud_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	compact_hud_label.custom_minimum_size = Vector2(340.0, 74.0)
+	compact_hud_label.custom_minimum_size = Vector2(340.0, 126.0)
 	compact_hud_panel.add_child(compact_hud_label)
 	details_toggle_button = Button.new()
 	details_toggle_button.text = "角色 · 修炼"
-	details_toggle_button.position = Vector2(18.0, 98.0)
+	details_toggle_button.position = Vector2(18.0, 150.0)
 	details_toggle_button.custom_minimum_size = Vector2(112.0, 36.0)
 	details_toggle_button.pressed.connect(_toggle_details_panel)
 	hud.add_child(details_toggle_button)
 	soul_choice_button = Button.new()
 	soul_choice_button.text = "分配无相灵魄"
-	soul_choice_button.position = Vector2(140.0, 98.0)
+	soul_choice_button.position = Vector2(140.0, 150.0)
 	soul_choice_button.custom_minimum_size = Vector2(150.0, 36.0)
 	soul_choice_button.visible = false
 	soul_choice_button.pressed.connect(_open_pending_rare_choice)
@@ -599,6 +599,8 @@ func _build_soul_choice_ui() -> void:
 	pending_rare_choice_option.add_item("敏捷 · 身法成长")
 	pending_rare_choice_option.add_item("灵力 · 法术成长")
 	pending_rare_choice_option.add_item("气血 · 生命成长")
+	pending_rare_choice_option.custom_minimum_size = Vector2(360.0, 38.0)
+	pending_rare_choice_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pending_rare_choice_dialog.add_child(pending_rare_choice_option)
 	pending_rare_choice_dialog.confirmed.connect(_submit_rare_essence_choice)
 	add_child(pending_rare_choice_dialog)
@@ -797,7 +799,7 @@ func _request_soul_essence() -> void:
 func _on_soul_essence_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	soul_essence_request_busy = false
 	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
-		_show_notification("灵魂状态读取失败（HTTP " + str(response_code) + "），请确认已执行 000027 迁移", 5.0)
+		_show_notification("灵魂状态读取失败（HTTP " + str(response_code) + "），请确认已执行 000027 和 000028 迁移", 5.0)
 		return
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
 	if not (parsed is Dictionary):
