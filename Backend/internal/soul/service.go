@@ -908,6 +908,18 @@ func (s *Service) ApplyServerAbsorption(ctx context.Context, nodeKey string, eve
 	if err != nil {
 		return AbsorptionResult{}, fmt.Errorf("verify absorption session: %w", err)
 	}
+	if kindID == "blazing_war_soul_mythic" {
+		var unlocked bool
+		if err := tx.QueryRowContext(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM soul_exploration_event_claims
+				WHERE soul_id=$1 AND event_id='fengdu_lantern_old_shadow'
+				  AND choice_id='follow_lantern_shadow'
+			)`, soulID).Scan(&unlocked); err != nil {
+			return AbsorptionResult{}, fmt.Errorf("verify mythic soul encounter prerequisite: %w", err)
+		}
+		if !unlocked { return AbsorptionResult{}, ErrInvalidAbsorption }
+	}
 
 	var result AbsorptionResult
 	var traitKey string
@@ -918,11 +930,11 @@ func (s *Service) ApplyServerAbsorption(ctx context.Context, nodeKey string, eve
 		SELECT id,name,base_energy,trait_key,inheritance_attribute,quality_tier,progress_units
 		FROM soul_absorption_kinds WHERE id=$1 AND enabled=true`, kindID).
 		Scan(&result.KindID, &result.KindName, &result.EnergyGained, &traitKey, &inheritanceAttribute, &qualityTier, &progressUnits)
-	result.QualityTier = qualityTier
-	result.ProgressUnits = progressUnits
 	if err != nil {
 		return AbsorptionResult{}, fmt.Errorf("load absorption kind: %w", err)
 	}
+	result.QualityTier = qualityTier
+	result.ProgressUnits = progressUnits
 
 	var capacity, absorbed int64
 	err = tx.QueryRowContext(ctx, `
