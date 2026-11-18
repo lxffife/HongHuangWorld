@@ -143,3 +143,69 @@ func isUUID(value string) bool {
 	}
 	return true
 }
+
+// ServerBatch is a durable page of public messages visible to a WorldServer node.
+// The cursor is the (created_at, id) pair, so messages sharing a timestamp are not skipped.
+type ServerBatch struct {
+	Items []Message
+	NextCreatedAt time.Time
+	NextID string
+}
+
+var ErrInvalidServerCursor = errors.New("invalid chat server cursor")
+
+func (s *Service) ListForServer(ctx context.Context, nodeKey string, after time.Time, afterID string, limit int) (ServerBatch, error) {
+	nodeKey = strings.TrimSpace(nodeKey)
+	if nodeKey == "" {
+		return ServerBatch{}, ErrInvalidInput
+	}
+	if limit < 1 || limit > 100 {
+		limit = 50
+	}
+	if afterID == "" {
+		afterID = "00000000-0000-0000-0000-000000000000"
+	}
+	if !isUUID(afterID) {
+		return ServerBatch{}, ErrInvalidServerCursor
+	}
+
+	// A node may host multiple instances, but only messages for worlds it currently
+	// serves are visible. cross_world deliberately has no world filter.
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),
+		       m.sender_character_id::text,c.name,COALESCE(c.race_id,''),c.level,m.content,m.created_at
+		FROM chat_messages m
+		JOIN characters c ON c.id=m.sender_character_id
+		WHERE m.channel_type IN ('world','cross_world')
+		  AND (m.channel_type='cross_world' OR m.world_id IN (
+			SELECT DISTINCT wi.world_id
+			FROM world_instances wi
+			JOIN server_registry sr ON sr.id=wi.server_id
+			WHERE sr.node_key=$1 AND sr.status='ready' AND wi.status='ready'
+		  ))
+		  AND (m.created_at > $2 OR (m.created_at = $2 AND m.id > $3::uuid))
+		ORDER BY m.created_at ASC,m.id ASC
+		LIMIT $4`, nodeKey, after, afterID, limit)
+	if err != nil {
+		return ServerBatch{}, fmt.Errorf("query server chat messages: %w", err)
+	}
+	defer rows.Close()
+
+	batch := ServerBatch{Items: make([]Message, 0)}
+	for rows.Next() {
+		var item Message
+		if err := rows.Scan(&item.ID,&item.ClientMessageID,&item.Channel,&item.WorldID,
+			&item.SenderCharacterID,&item.SenderName,&item.SenderRace,&item.SenderLevel,
+			&item.Content,&item.CreatedAt); err != nil {
+			return ServerBatch{}, fmt.Errorf("scan server chat message: %w", err)
+		}
+		batch.Items = append(batch.Items, item)
+		batch.NextCreatedAt = item.CreatedAt
+		batch.NextID = item.ID
+	}
+	if err := rows.Err(); err != nil {
+		return ServerBatch{}, fmt.Errorf("iterate server chat messages: %w", err)
+	}
+	return batch, nil
+}
+
