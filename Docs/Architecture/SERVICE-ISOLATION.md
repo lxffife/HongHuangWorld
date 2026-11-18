@@ -23,7 +23,7 @@
 ### ChatServer（独立 Go 进程）
 - 默认监听 :8788（CHAT_HTTP_ADDR），入口为 Backend/cmd/chat。
 - 使用独立 HTTP server、独立生命周期、独立数据库连接池和健康检查。
-- 只注册聊天用户接口与受 WorldServer 节点密钥保护的内部聊天接口；不注册登录、世界入口、角色修改、背包或游戏业务路由。
+- 只注册聊天用户 HTTP/WebSocket 接口与受 WorldServer 节点密钥保护的内部聊天接口；不注册登录、世界入口、角色修改、背包或游戏业务路由。
 - 使用账号 session token 验证聊天用户；客户端不得持有 WorldServer API key。
 - 使用 CHAT_DATABASE_URL，必须显式配置。开发阶段可指向现有 PostgreSQL 数据库，以读取账号 session、角色和世界会话数据；这只是迁移期共享存储，不代表运行时服务耦合。
 - ChatServer 不得控制角色位置、生命、背包、战斗或其他游戏状态。
@@ -51,7 +51,7 @@
 ## 当前落地状态
 - 已新增 Backend/cmd/chat 独立进程，默认监听 :8788。
 - 已新增 httpapi.NewChatRouter，只暴露聊天和健康检查路由。
-- 已新增 CHAT_DATABASE_URL / CHAT_HTTP_ADDR 配置与 Windows/Linux 启动脚本。
+- 已新增 CHAT_DATABASE_URL / CHAT_HTTP_ADDR 配置与 Windows/Linux 启动脚本。客户端可通过 `CHAT_API_BASE` 单独指定 ChatServer 地址；默认将游戏 API `:8787` 推导为聊天服务 `:8788`。
 - ChatServer 当前复用现有 chat service、账号 session 验证和节点内部接口；数据库仍是迁移期共享 PostgreSQL。
 - 30 天消息保留由 ChatServer 后台调度器负责：启动时执行一次，之后每小时执行；发送和历史查询请求不再触发过期消息删除，清理失败记录日志并在下一周期重试。
 - Game API 暂时保留原聊天路由，作为客户端/WorldServer 切换期间的兼容入口。
