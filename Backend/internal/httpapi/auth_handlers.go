@@ -13,7 +13,7 @@ import (
 )
 
 type authHandlers struct {
-	service *auth.Service
+	service auth.Provider
 	logger  *slog.Logger
 }
 
