@@ -19,7 +19,7 @@ const (
 	chatEventSubject = "honghuang.chat.events.v1"
 	chatEventStream  = "HONGHUANG_CHAT_EVENTS"
 	chatEventMaxAge  = 30 * 24 * time.Hour
-		chatEventSeenMax = 10000
+	chatEventSeenMax = 10000
 )
 
 var errInvalidChatEvent = errors.New("invalid chat event envelope")
@@ -284,11 +284,14 @@ func (b *chatEventBus) publish(message chat.Message) {
 }
 
 func chatEventPublisherID() string {
-	host, _ := os.Hostname()
-	if host == "" {
-		host = "chat"
+	node := strings.TrimSpace(os.Getenv("CHAT_NODE_ID"))
+	if node == "" {
+		node, _ = os.Hostname()
 	}
-	return fmt.Sprintf("%s-%d", host, os.Getpid())
+	if node == "" {
+		node = "chat"
+	}
+	return fmt.Sprintf("%s-%d", node, os.Getpid())
 }
 
 func (b *chatEventBus) signalOutbox() {
