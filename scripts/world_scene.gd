@@ -599,8 +599,9 @@ func _build_soul_choice_ui() -> void:
 	pending_rare_choice_option.add_item("敏捷 · 身法成长")
 	pending_rare_choice_option.add_item("灵力 · 法术成长")
 	pending_rare_choice_option.add_item("气血 · 生命成长")
+	pending_rare_choice_option.position = Vector2(24.0, 82.0)
 	pending_rare_choice_option.custom_minimum_size = Vector2(360.0, 38.0)
-	pending_rare_choice_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pending_rare_choice_option.size = Vector2(360.0, 38.0)
 	pending_rare_choice_dialog.add_child(pending_rare_choice_option)
 	pending_rare_choice_dialog.confirmed.connect(_submit_rare_essence_choice)
 	add_child(pending_rare_choice_dialog)
