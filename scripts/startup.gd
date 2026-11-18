@@ -46,6 +46,9 @@ var lobby_world_label: Label
 var lobby_status_label: Label
 var lobby_level_label: Label
 var lobby_progress_label: Label
+var lobby_cultivation_label: Label
+var lobby_cultivation_bar: ProgressBar
+var lobby_points_label: Label
 var lobby_stats_grid: GridContainer
 var lobby_details_host: VBoxContainer
 var lobby_body_container: HBoxContainer
@@ -511,6 +514,23 @@ func _build_lobby_ui() -> void:
 	lobby_progress_label.add_theme_font_size_override("font_size", 12)
 	lobby_progress_label.add_theme_color_override("font_color", Color("#9eafc5"))
 	info.add_child(lobby_progress_label)
+	lobby_cultivation_label = Label.new()
+	lobby_cultivation_label.text = "境界修炼进度：等待载入"
+	lobby_cultivation_label.add_theme_font_size_override("font_size", 12)
+	lobby_cultivation_label.add_theme_color_override("font_color", Color("#c5a76d"))
+	info.add_child(lobby_cultivation_label)
+	lobby_cultivation_bar = ProgressBar.new()
+	lobby_cultivation_bar.custom_minimum_size = Vector2(0, 12)
+	lobby_cultivation_bar.min_value = 0
+	lobby_cultivation_bar.max_value = 100
+	lobby_cultivation_bar.value = 0
+	lobby_cultivation_bar.show_percentage = false
+	info.add_child(lobby_cultivation_bar)
+	lobby_points_label = Label.new()
+	lobby_points_label.text = "可分配属性点：—"
+	lobby_points_label.add_theme_font_size_override("font_size", 12)
+	lobby_points_label.add_theme_color_override("font_color", Color("#9ed6b1"))
+	info.add_child(lobby_points_label)
 	lobby_stats_grid = GridContainer.new()
 	lobby_stats_grid.columns = 3
 	lobby_stats_grid.add_theme_constant_override("h_separation", 8)
@@ -1077,6 +1097,8 @@ func _show_character_lobby() -> void:
 	lobby_level_label.text = "角色等级  Lv." + str(level)
 	var progression_data: Dictionary = current_character.get("progression", {})
 	lobby_progress_label.text = "经验：" + _lobby_number_text(progression_data.get("experience", 0)) + "  ·  修为：" + _lobby_number_text(progression_data.get("cultivation", 0)) + "  ·  " + str(progression_data.get("power_tier_name", "未定阶"))
+	_render_lobby_cultivation_progress(progression_data)
+	lobby_points_label.text = "可分配属性点：" + str(int(progression_data.get("unspent_attribute_points", 0)))
 	_render_lobby_character_stats(current_character.get("attributes", {}))
 	lobby_status_label.text = "角色资料已载入。准备好后，进入此世洪荒。"
 	lobby_equipment = []
@@ -1087,6 +1109,31 @@ func _show_character_lobby() -> void:
 	lobby_root.show()
 	_enqueue(HTTPClient.METHOD_GET, "/api/v1/characters/current/equipment", {}, true, "lobby_equipment")
 	_enqueue(HTTPClient.METHOD_GET, "/api/v1/characters/current/inventory", {}, true, "lobby_inventory")
+
+func _render_lobby_cultivation_progress(progression: Dictionary) -> void:
+	if not is_instance_valid(lobby_cultivation_bar) or not is_instance_valid(lobby_cultivation_label):
+		return
+	var cultivation := int(progression.get("cultivation", 0))
+	var next_stage_value: Variant = progression.get("required_for_next_stage", null)
+	var next_realm_value: Variant = progression.get("required_for_next_realm", null)
+	var target := 0
+	var target_name := ""
+	if next_stage_value != null and int(next_stage_value) > 0:
+		target = int(next_stage_value)
+		target_name = "下一境界阶段"
+	elif next_realm_value != null and int(next_realm_value) > 0:
+		target = int(next_realm_value)
+		target_name = "下一修炼境界"
+	if target <= 0:
+		lobby_cultivation_label.text = "境界修炼进度：当前境界已达最高阶段"
+		lobby_cultivation_bar.max_value = 100
+		lobby_cultivation_bar.value = 100
+		return
+	var ratio := clampf(float(cultivation) / float(target), 0.0, 1.0)
+	lobby_cultivation_bar.max_value = 100
+	lobby_cultivation_bar.value = ratio * 100.0
+	var remaining := maxi(0, target - cultivation)
+	lobby_cultivation_label.text = target_name + "：" + _lobby_number_text(cultivation) + " / " + _lobby_number_text(target) + "（还需 " + _lobby_number_text(remaining) + "）"
 
 func _lobby_number_text(value: Variant) -> String:
 	if value is float:
