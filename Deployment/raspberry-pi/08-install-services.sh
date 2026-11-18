@@ -11,12 +11,34 @@ set -Eeuo pipefail
 source "$(dirname "$0")/lib/common.sh"
 load_env
 [[ -x "$HH_PROJECT_DIR/bin/honghuang-api" ]] || die "API 二进制不存在，请先运行 07-build.sh"
+[[ -x "$HH_PROJECT_DIR/bin/honghuang-identity" ]] || die "Identity 二进制不存在，请先运行 07-build.sh"
+: "${IDENTITY_DATABASE_URL:?请先在 $HH_ENV_FILE 配置 IDENTITY_DATABASE_URL}"
+: "${IDENTITY_INTERNAL_API_KEY:?请先在 $HH_ENV_FILE 配置 IDENTITY_INTERNAL_API_KEY}"
+: "${IDENTITY_API_BASE:?请先在 $HH_ENV_FILE 配置 IDENTITY_API_BASE}"
+: "${IDENTITY_SERVICE_TOKEN:?请先在 $HH_ENV_FILE 配置 IDENTITY_SERVICE_TOKEN}"
 [[ -x "$HH_PROJECT_DIR/bin/world_server" ]] || die "WorldServer 二进制不存在，请先运行 07-build.sh"
+sudo tee /etc/systemd/system/honghuang-identity.service >/dev/null <<EOF
+[Unit]
+Description=HongHuangWorld Identity Service
+After=network-online.target docker.service
+Wants=network-online.target
+[Service]
+Type=simple
+User=$USER
+WorkingDirectory=$HH_PROJECT_DIR
+EnvironmentFile=$HH_ENV_FILE
+ExecStart=$HH_PROJECT_DIR/bin/honghuang-identity
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+[Install]
+WantedBy=multi-user.target
+EOF
 sudo tee /etc/systemd/system/honghuang-api.service >/dev/null <<EOF
 [Unit]
 Description=HongHuangWorld Go API
-After=network-online.target docker.service
-Wants=network-online.target
+After=network-online.target docker.service honghuang-identity.service
+Wants=network-online.target honghuang-identity.service
 [Service]
 Type=simple
 User=$USER
@@ -47,7 +69,13 @@ NoNewPrivileges=true
 WantedBy=multi-user.target
 EOF
 sudo systemctl daemon-reload
-sudo systemctl enable honghuang-api honghuang-world-server
+sudo systemctl enable honghuang-identity honghuang-api honghuang-world-server
+sudo systemctl restart honghuang-identity
+for n in $(seq 1 30); do
+  curl -fsS http://127.0.0.1:8789/ready >/dev/null && break
+  [[ $n -lt 30 ]] || die "Identity 未就绪；确认已执行 07-migrate-identity.sh，查看 sudo journalctl -u honghuang-identity"
+  sleep 2
+done
 sudo systemctl restart honghuang-api
 for n in $(seq 1 30); do
   curl -fsS http://127.0.0.1:8787/ready >/dev/null && break
@@ -55,6 +83,7 @@ for n in $(seq 1 30); do
   sleep 2
 done
 sudo systemctl restart honghuang-world-server
-log "服务安装并启动完成"
+log "Identity、API 与 WorldServer 服务安装并启动完成"
+systemctl is-active honghuang-identity
 systemctl is-active honghuang-api
 systemctl is-active honghuang-world-server
