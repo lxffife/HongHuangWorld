@@ -2,6 +2,7 @@ package soul
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -489,6 +490,8 @@ type EssenceProfile struct {
 	VisualScale float64 `json:"visual_scale"`
 	AbsorptionKinds []AbsorptionKindProgress `json:"absorption_kinds"`
 	AffinityCounts map[string]int64 `json:"affinity_counts"`
+	Mutations []SoulMutation `json:"mutations"`
+	MutationCount int64 `json:"mutation_count"`
 }
 
 type InheritanceAttributes struct {
@@ -504,6 +507,16 @@ type PendingRareChoice struct {
  KindID string `json:"kind_id"`
  KindName string `json:"kind_name"`
  CreatedAt string `json:"created_at"`
+}
+
+type SoulMutation struct {
+	MutationKey string `json:"mutation_key"`
+	Name string `json:"name"`
+	Description string `json:"description"`
+	Rarity string `json:"rarity"`
+	Attribute string `json:"attribute"`
+	AttributeBonus int `json:"attribute_bonus"`
+	CreatedAt string `json:"created_at"`
 }
 
 type AbsorptionKindProgress struct {
@@ -610,6 +623,21 @@ func (s *Service) CurrentEssence(ctx context.Context, accountID string) (Essence
 	defer rareRows.Close()
 	for rareRows.Next(){var attribute string;var count int64;if err:=rareRows.Scan(&attribute,&count);err!=nil{return EssenceProfile{},fmt.Errorf("scan allocated rare soul affinity: %w",err)};key:="selected_"+attribute;if _,ok:=result.AffinityCounts[key];ok{result.AffinityCounts[key]=count}}
 	if err:=rareRows.Err();err!=nil{return EssenceProfile{},fmt.Errorf("iterate allocated rare soul affinities: %w",err)}
+	mutationRows,mutationErr:=s.db.QueryContext(ctx,
+		`SELECT mutation_key,mutation_name,description,rarity,attribute,attribute_bonus,created_at::text
+		 FROM soul_mutation_records
+		 WHERE soul_id=(SELECT id FROM souls WHERE account_id=$1)
+		 ORDER BY created_at DESC LIMIT 8`,accountID)
+	if mutationErr!=nil{return EssenceProfile{},fmt.Errorf("load soul mutations: %w",mutationErr)}
+	defer mutationRows.Close()
+	result.Mutations=make([]SoulMutation,0)
+	for mutationRows.Next(){
+		var mutation SoulMutation
+		if err:=mutationRows.Scan(&mutation.MutationKey,&mutation.Name,&mutation.Description,&mutation.Rarity,&mutation.Attribute,&mutation.AttributeBonus,&mutation.CreatedAt);err!=nil{return EssenceProfile{},fmt.Errorf("scan soul mutation: %w",err)}
+		result.Mutations=append(result.Mutations,mutation)
+	}
+	if err:=mutationRows.Err();err!=nil{return EssenceProfile{},fmt.Errorf("iterate soul mutations: %w",err)}
+	if err:=s.db.QueryRowContext(ctx,`SELECT COUNT(*) FROM soul_mutation_records WHERE soul_id=(SELECT id FROM souls WHERE account_id=$1)`,accountID).Scan(&result.MutationCount);err!=nil{return EssenceProfile{},fmt.Errorf("count soul mutations: %w",err)}
 	return result,nil
 }
 
@@ -630,6 +658,7 @@ type AbsorptionResult struct {
  AbsorptionCapacity int64 `json:"absorption_capacity"`
  AbsorbedCount int64 `json:"absorbed_count"`
  SoulPower int64 `json:"soul_power"`
+ Mutation *SoulMutation `json:"mutation,omitempty"`
 }
 
 // ApplyServerAbsorption accepts only a trusted world-server event. The entity kind
@@ -728,6 +757,48 @@ func (s *Service) ApplyServerAbsorption(ctx context.Context, nodeKey string, eve
   attribute:=inheritanceAttribute.String
   query:=`UPDATE soul_inheritance_attributes SET `+attribute+`=`+attribute+`+1,updated_at=now() WHERE soul_id=$1`
   if _,err:=tx.ExecContext(ctx,query,soulID);err!=nil{return AbsorptionResult{},fmt.Errorf("apply reincarnation attribute essence: %w",err)}
+ }
+ // Derive mutation rolls from the trusted, unique server event ID. Retries always
+ // reproduce the same result and cannot reroll a better mutation.
+ roll := sha256.Sum256([]byte(event.EventID))
+ mutationChance := int(roll[0]) % 100
+ if mutationChance < 10 {
+  attributes := []string{"strength","constitution","agility","spirit","vitality"}
+  names := map[string]string{
+   "strength":"炽纹", "constitution":"铁骨印", "agility":"风痕",
+   "spirit":"灵识回响", "vitality":"生机种",
+  }
+  descriptions := map[string]string{
+   "strength":"吞噬时残留的战意凝成魂纹，提升来世力量资质",
+   "constitution":"兽魂余韵凝成铁骨印，提升来世体质资质",
+   "agility":"游魂风痕融入魂光，提升来世敏捷资质",
+   "spirit":"古老灵识留下回响，提升来世灵力资质",
+   "vitality":"残存生机化为魂种，提升来世气血资质",
+  }
+  attribute := attributes[int(roll[1])%len(attributes)]
+  rarity := "uncommon"
+  bonus := 1
+  mutationKey := "soul_mutation_" + attribute
+  if mutationChance < 2 {
+   rarity = "rare"
+   bonus = 2
+   mutationKey = "ancestral_" + attribute
+  }
+  mutation := SoulMutation{MutationKey:mutationKey,Name:names[attribute],Description:descriptions[attribute],Rarity:rarity,Attribute:attribute,AttributeBonus:bonus}
+  query := `INSERT INTO soul_mutation_records
+   (soul_id,event_id,mutation_key,mutation_name,description,rarity,attribute,attribute_bonus)
+   VALUES ($1,$2::uuid,$3,$4,$5,$6,$7,$8)
+   ON CONFLICT (soul_id,event_id) DO NOTHING
+   RETURNING created_at::text`
+  if err:=tx.QueryRowContext(ctx,query,soulID,event.EventID,mutation.MutationKey,mutation.Name,mutation.Description,mutation.Rarity,mutation.Attribute,mutation.AttributeBonus).Scan(&mutation.CreatedAt);err!=nil {
+   if !errors.Is(err,sql.ErrNoRows) { return AbsorptionResult{},fmt.Errorf("record soul mutation: %w",err) }
+  } else {
+   safeAttribute := map[string]bool{"strength":true,"constitution":true,"agility":true,"spirit":true,"vitality":true}
+   if !safeAttribute[attribute] { return AbsorptionResult{},ErrInvalidAbsorption }
+   update := `UPDATE soul_inheritance_attributes SET `+attribute+`=`+attribute+`+$1,updated_at=now() WHERE soul_id=$2`
+   if _,err:=tx.ExecContext(ctx,update,bonus,soulID);err!=nil{return AbsorptionResult{},fmt.Errorf("apply soul mutation inheritance: %w",err)}
+   result.Mutation=&mutation
+  }
  }
  result.Applied=true
  if err:=tx.Commit();err!=nil{return AbsorptionResult{},fmt.Errorf("commit soul absorption: %w",err)}
