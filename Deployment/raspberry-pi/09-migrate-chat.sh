@@ -9,8 +9,8 @@ load_env
 : "${CHAT_DB_PASSWORD:?Set CHAT_DB_PASSWORD in $HH_ENV_FILE}"
 : "${CHAT_TARGET_DATABASE_URL:?Set CHAT_TARGET_DATABASE_URL in $HH_ENV_FILE}"
 
-MIGRATION="$HH_PROJECT_DIR/Database/chat-migrations/000001_chat_schema.up.sql"
-[[ -f "$MIGRATION" ]] || die "找不到 Chat schema migration: $MIGRATION"
+MIGRATION_DIR="$HH_PROJECT_DIR/Database/chat-migrations"
+[[ -d "$MIGRATION_DIR" ]] || die "找不到 Chat migrations: $MIGRATION_DIR"
 
 log "准备独立 Chat 数据库 $CHAT_DB_NAME；不会修改 CHAT_DATABASE_URL，也不会切换现有 ChatServer"
 compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
@@ -30,18 +30,27 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 );
 SQL
 
-applied="$(compose exec -T postgres psql -At -U "$CHAT_DB_USER" -d "$CHAT_DB_NAME" \
-  -c "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='000001');")"
-if [[ "$applied" == "t" ]]; then
-  log "Chat migration 000001 已应用，跳过"
-else
-  count="$(compose exec -T postgres psql -At -U "$CHAT_DB_USER" -d "$CHAT_DB_NAME" \
-    -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='chat_messages';")"
-  [[ "$count" == "0" ]] || die "目标 Chat 数据库已有 chat_messages 但无迁移记录；为防止覆盖数据已停止"
-  log "执行独立 Chat schema migration 000001"
-  compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$CHAT_DB_USER" -d "$CHAT_DB_NAME" < "$MIGRATION"
+shopt -s nullglob
+migrations=("$MIGRATION_DIR"/*.up.sql)
+(("${#migrations[@]}" > 0)) || die "没有找到 Chat *.up.sql 迁移文件"
+for migration in "${migrations[@]}"; do
+  version="$(basename "$migration" | cut -d_ -f1)"
+  [[ "$version" =~ ^[0-9]+$ ]] || die "无法识别 Chat 迁移版本：$migration"
+  applied="$(compose exec -T postgres psql -At -U "$CHAT_DB_USER" -d "$CHAT_DB_NAME" \
+    -c "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='$version');")"
+  if [[ "$applied" == "t" ]]; then
+    log "跳过已应用 Chat migration $version"
+    continue
+  fi
+  if [[ "$version" == "000001" ]]; then
+    table_exists="$(compose exec -T postgres psql -At -U "$CHAT_DB_USER" -d "$CHAT_DB_NAME" \
+      -c "SELECT to_regclass('public.chat_messages') IS NOT NULL;")"
+    [[ "$table_exists" == "f" ]] || die "目标 Chat 数据库已有 chat_messages 但无迁移记录；为防止覆盖数据已停止"
+  fi
+  log "执行 Chat migration $version"
+  compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$CHAT_DB_USER" -d "$CHAT_DB_NAME" < "$migration"
   compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$CHAT_DB_USER" -d "$CHAT_DB_NAME" \
-    -c "INSERT INTO schema_migrations(version) VALUES ('000001') ON CONFLICT DO NOTHING;"
-fi
+    -c "INSERT INTO schema_migrations(version) VALUES ('$version') ON CONFLICT DO NOTHING;"
+done
 
 log "独立 Chat 数据库结构已创建。现有 ChatServer 仍使用 CHAT_DATABASE_URL 指向的旧库；不要手动切换，等待代码迁移与数据回填完成。"
