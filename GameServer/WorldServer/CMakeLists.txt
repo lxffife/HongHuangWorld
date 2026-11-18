@@ -64,6 +64,10 @@ if(BUILD_TESTING)
     target_include_directories(monster_test PRIVATE include)
     add_test(NAME monster_test COMMAND monster_test)
 
+    add_executable(chat_delivery_policy_test tests/chat_delivery_policy_test.cpp)
+    target_include_directories(chat_delivery_policy_test PRIVATE include)
+    add_test(NAME chat_delivery_policy_test COMMAND chat_delivery_policy_test)
+
     add_executable(durable_outbox_test tests/durable_outbox_test.cpp src/durable_outbox.cpp)
     target_include_directories(durable_outbox_test PRIVATE include)
     target_link_libraries(durable_outbox_test PRIVATE SQLite::SQLite3 Threads::Threads)
