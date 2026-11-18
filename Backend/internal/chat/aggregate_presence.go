@@ -12,6 +12,7 @@ import (
 // definitive real-time Game-offline signal.
 type PresenceSummary struct {
 	CharacterID              string     `json:"character_id"`
+	Online                    bool       `json:"online"`
 	ChatOnline                bool       `json:"chat_online"`
 	ChatConnections           int        `json:"chat_connections"`
 	InGame                    bool       `json:"in_game"`
@@ -23,6 +24,7 @@ type PresenceSummary struct {
 
 type FriendPresenceSummary struct {
 	CharacterID    string `json:"character_id"`
+	Online         bool   `json:"online"`
 	Name           string `json:"name"`
 	ChatOnline     bool   `json:"chat_online"`
 	ChatConnections int   `json:"chat_connections"`
@@ -64,6 +66,7 @@ func (s *Service) GetPresenceSummary(ctx context.Context, accountID string) (Pre
 	}
 	result.ChatOnline = result.ChatConnections > 0
 	result.InGame = result.GameSessions > 0
+	result.Online = result.ChatOnline || result.InGame
 	result.PresenceScope = "chat+game_projection"
 	return result, nil
 }
@@ -114,6 +117,7 @@ func (s *Service) ListFriendPresenceSummary(ctx context.Context, accountID strin
 		}
 		item.ChatOnline = item.ChatConnections > 0
 		item.InGame = item.GameSessions > 0
+		item.Online = item.ChatOnline || item.InGame
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
