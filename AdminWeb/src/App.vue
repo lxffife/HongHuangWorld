@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { api, getToken, setToken } from './api'
 import {
-  DataAnalysis, User, Setting, Monitor, ChatDotRound, Warning, Lock, SwitchButton,
-  Refresh, Plus, Key, World
+  DataAnalysis, User, Setting, Monitor, ChatDotRound, Warning, SwitchButton,
+  Refresh, Plus, Key, Location
 } from '@element-plus/icons-vue'
 
 type AdminUser = {
@@ -39,7 +39,7 @@ const menu = [
   { id: 'overview', label: '运营总览', icon: DataAnalysis },
   { id: 'users', label: '后台用户与权限', icon: User, permission: 'admin_users.read' },
   { id: 'players', label: '玩家管理', icon: User, soon: true },
-  { id: 'worlds', label: '世界管理', icon: World, soon: true },
+  { id: 'worlds', label: '世界管理', icon: Location, soon: true },
   { id: 'servers', label: '服务器监控', icon: Monitor, soon: true },
   { id: 'monsters', label: '怪物管理', icon: Setting, soon: true },
   { id: 'chat', label: '聊天管理', icon: ChatDotRound, soon: true },
