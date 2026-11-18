@@ -1301,7 +1301,7 @@ func _on_chat_event(event: Dictionary) -> void:
 	# arrives through the authenticated ChatServer WebSocket and is deduplicated
 	# by its persisted message ID.
 	if selected_chat_channel == "nearby":
-		chat_status.text = "附近频道 · 消息已送达当前可见范围"
+		chat_status.text = "附近频道 · 消息已写入本地持久队列，正在投递"
 
 func _append_chat_line(line: String, channel: String = "", message_id: String = "", created_at: String = "") -> void:
 	var target_channel := channel if not channel.is_empty() else selected_chat_channel
