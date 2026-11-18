@@ -68,6 +68,17 @@ if(BUILD_TESTING)
     target_include_directories(chat_delivery_policy_test PRIVATE include)
     add_test(NAME chat_delivery_policy_test COMMAND chat_delivery_policy_test)
 
+    # The HTTP fault-injection fixture uses only Python's standard library.
+    # Keep it optional so native WorldServer builds do not require Python.
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_test(
+            NAME chat_fake_server_test
+            COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/../../Deployment/scripts/test-chat-fake-server.py
+        )
+    endif()
+
     add_executable(durable_outbox_test tests/durable_outbox_test.cpp src/durable_outbox.cpp)
     target_include_directories(durable_outbox_test PRIVATE include)
     target_link_libraries(durable_outbox_test PRIVATE SQLite::SQLite3 Threads::Threads)
