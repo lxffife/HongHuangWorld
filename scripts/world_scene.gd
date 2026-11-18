@@ -967,6 +967,16 @@ func _upsert_monster(entity: Dictionary) -> void:
 		float(entity.get("y", 0.0)),
 		float(entity.get("z", 0.0))
 	)
+	var monster := monsters[monster_id] as Node3D
+	var nameplate := monster.get_node_or_null("Nameplate") as Label3D
+	if nameplate != null:
+		var base_text := str(entity.get("name", "野兽")) + " · Lv." + str(int(entity.get("level", 1)))
+		if entity.has("health") and entity.has("max_health"):
+			var hp := int(entity.get("health", 0))
+			var max_hp := int(entity.get("max_health", 0))
+			if max_hp > 0:
+				base_text += "\n生命 " + str(maxi(hp, 0)) + " / " + str(max_hp)
+		nameplate.text = base_text
 
 func _create_monster(monster_name: String, monster_level: int) -> Node3D:
 	var monster := Node3D.new()
@@ -1020,6 +1030,7 @@ func _create_monster(monster_name: String, monster_level: int) -> Node3D:
 		monster.add_child(wisp)
 
 	var label := Label3D.new()
+	label.name = "Nameplate"
 	label.text = monster_name + " · Lv." + str(monster_level)
 	label.position.y = 1.65
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
