@@ -52,7 +52,7 @@ WorldServer 启动后会立即调用中心服 `POST /api/v1/servers/heartbeat`�
 4. 启动基础设施：`.\Deployment\start-infra.bat`。
 5. 首次初始化数据库时执行 `.\Deployment\migrate-database.ps1`；脚本会创建迁移账本并按顺序执行尚未应用的迁移（当前迁移版本为 000041，包含游戏基础、轮回成长、聊天和后台管理基础表）；已记录的版本会自动跳过。若数据库已有 `accounts` 表但没有迁移账本，脚本会停止，避免猜测现有数据库版本。
 6. 在独立 PowerShell 窗口启动中心服：`.\Deployment\start-backend.ps1`。确认 `http://127.0.0.1:8787/ready` 返回 HTTP 200。
-7. 配置后台首次初始化账号：在 Deployment/.env 中设置 ADMIN_BOOTSTRAP_USERNAME、ADMIN_BOOTSTRAP_EMAIL 和唯一的 ADMIN_BOOTSTRAP_PASSWORD（至少 12 位，不要使用示例密码）。首次启动管理 API 时会创建超级管理员；后续重启检测到已有超级管理员后不会重置密码。启动命令：Windows `\\Deployment\\start-admin-server.ps1`；Linux/macOS `bash Deployment/start-admin-server.sh`。后台 API 默认监听 8790，检查 `http://127.0.0.1:8790/ready`。
+7. 配置后台首次初始化账号：在 Deployment/.env 中设置 ADMIN_BOOTSTRAP_USERNAME、ADMIN_BOOTSTRAP_EMAIL 和唯一的 ADMIN_BOOTSTRAP_PASSWORD（至少 12 位，不要使用示例密码）。首次启动管理 API 时会创建超级管理员；后续重启检测到已有超级管理员后不会重置密码。启动命令：Windows `./Deployment/start-admin-server.ps1`；Linux/macOS `bash Deployment/start-admin-server.sh`。后台 API 默认仅监听本机 127.0.0.1:8790；需要远程访问时应通过 HTTPS 反向代理或 VPN，不要直接暴露管理端口，检查 `http://127.0.0.1:8790/ready`。
 8. 在另一个独立 PowerShell 窗口启动聊天服：`.\Deployment\start-chat-server.ps1`。确认 `http://127.0.0.1:8788/ready` 返回 HTTP 200。聊天服必须配置 `CHAT_DATABASE_URL`；开发阶段可与 `DATABASE_URL` 指向同一个数据库，但进程、监听端口和连接池彼此独立。Linux/macOS 在仓库根目录运行 `bash Deployment/start-chat-server.sh`。
 9. 在仓库根目录构建 C++ 世界服务器：`.\Deployment\build-world-server.ps1`。首次运行会通过 vcpkg 安装依赖。
 10. 在另一个 PowerShell 窗口启动世界服务器：`.\Deployment\start-world-server.ps1`。日志出现 `WorldServer heartbeat accepted` 后，中心服才会把青云人界实例视为可用。
