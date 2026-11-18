@@ -67,3 +67,52 @@ func TestRollSoulMutationProducesOnlyConfiguredResults(t *testing.T) {
 	}
 	if !seenMutation || !seenRare { t.Fatal("expected deterministic sample to include common and rare mutations") }
 }
+
+
+func TestSoulFusionDefinitionsAreServerAuthoredAndValid(t *testing.T) {
+	seen := map[string]bool{}
+	allowed := map[string]bool{
+		"strength": true, "constitution": true, "agility": true,
+		"spirit": true, "vitality": true,
+	}
+	for _, recipe := range soulFusionDefinitions {
+		if recipe.ID == "" || recipe.Name == "" || seen[recipe.ID] {
+			t.Fatalf("invalid or duplicate fusion recipe: %#v", recipe)
+		}
+		seen[recipe.ID] = true
+		if len(recipe.Required) < 2 {
+			t.Fatalf("fusion recipe must require at least two mutation attributes: %s", recipe.ID)
+		}
+		required := map[string]bool{}
+		for _, attribute := range recipe.Required {
+			if !allowed[attribute] || required[attribute] {
+				t.Fatalf("invalid or duplicate required attribute %q in %s", attribute, recipe.ID)
+			}
+			required[attribute] = true
+		}
+		bonuses := recipe.Bonuses
+		if bonuses.Strength < 0 || bonuses.Constitution < 0 || bonuses.Agility < 0 ||
+			bonuses.Spirit < 0 || bonuses.Vitality < 0 ||
+			bonuses.Strength+bonuses.Constitution+bonuses.Agility+bonuses.Spirit+bonuses.Vitality == 0 {
+			t.Fatalf("invalid fusion bonuses in %s: %#v", recipe.ID, bonuses)
+		}
+	}
+	if len(seen) != 4 {
+		t.Fatalf("expected four authored fusion recipes, got %d", len(seen))
+	}
+}
+
+func TestFiveElementsFusionRequiresAllFiveMutationAttributes(t *testing.T) {
+	var found bool
+	for _, recipe := range soulFusionDefinitions {
+		if recipe.ID != "five_elements_origin" { continue }
+		found = true
+		if len(recipe.Required) != 5 {
+			t.Fatalf("five elements fusion must require five attributes, got %v", recipe.Required)
+		}
+		if recipe.Bonuses != (InheritanceAttributes{Strength:1,Constitution:1,Agility:1,Spirit:1,Vitality:1}) {
+			t.Fatalf("unexpected five elements reward: %#v", recipe.Bonuses)
+		}
+	}
+	if !found { t.Fatal("five elements fusion recipe missing") }
+}
