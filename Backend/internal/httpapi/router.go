@@ -49,7 +49,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/chat/messages", chatAPI.send)
 		mux.HandleFunc("GET /api/v1/chat/messages", chatAPI.list)
 		chatServerAPI := &chatServerHandlers{service: chat.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
-		mux.HandleFunc("GET /api/v1/servers/chat/messages", "POST /api/v1/servers/chat/messages", chatServerAPI.poll)
+		mux.HandleFunc("GET /api/v1/servers/chat/messages", chatServerAPI.poll)
 		mux.HandleFunc("POST /api/v1/servers/chat/messages", chatServerAPI.publish)
 		mux.HandleFunc("POST /api/v1/auth/register", handlers.register)
 		mux.HandleFunc("POST /api/v1/auth/login", handlers.login)
