@@ -140,5 +140,39 @@ int main() {
         assert(!box.enqueue({"game-3", "character_reward", "payload", 0, 0, 6, {}}, error));
     }
     remove_database(quota_path);
+
+    const std::string admin_path = "world_outbox_admin_test.sqlite";
+    remove_database(admin_path);
+    {
+        honghuang::persistence::DurableOutbox worker_box(admin_path, 8);
+        std::string error;
+        assert(worker_box.enqueue({"chat-dead", "nearby_chat", "chat payload", 0, 0, 10, {}}, error));
+        auto dead = worker_box.claim_due_type(10, "nearby_chat", error);
+        assert(dead && dead->event_id == "chat-dead");
+        assert(worker_box.move_to_dead_letter("chat-dead", 1, "HTTP 401", error));
+
+        assert(worker_box.enqueue({"chat-live", "nearby_chat", "live payload", 0, 0, 20, {}}, error));
+        auto inflight = worker_box.claim_due_type(20, "nearby_chat", error);
+        assert(inflight && inflight->event_id == "chat-live");
+
+        {
+            // An operator inspection must not reset a live worker's inflight row.
+            honghuang::persistence::DurableOutbox inspector(admin_path, 8, false);
+            auto snapshot = inspector.stats(1000, error, "nearby_chat");
+            assert(snapshot.dead_letter == 1 && snapshot.inflight == 1);
+            auto dead_letters = inspector.list_dead_letters(10, "nearby_chat", error);
+            assert(dead_letters.size() == 1 && dead_letters.front().event_id == "chat-dead");
+            assert(inspector.retry_dead_letter("chat-dead", 1000, error));
+            snapshot = inspector.stats(1000, error, "nearby_chat");
+            assert(snapshot.pending == 1 && snapshot.inflight == 1 && snapshot.dead_letter == 0);
+            assert(!inspector.retry_dead_letter("chat-live", 1000, error));
+        }
+
+        auto retried = worker_box.claim_due_type(1000, "nearby_chat", error);
+        assert(retried && retried->event_id == "chat-dead");
+        assert(worker_box.mark_delivered("chat-dead", error));
+        assert(worker_box.mark_delivered("chat-live", error));
+    }
+    remove_database(admin_path);
     return 0;
 }
