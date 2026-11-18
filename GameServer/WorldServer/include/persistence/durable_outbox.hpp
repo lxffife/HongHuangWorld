@@ -14,12 +14,15 @@ public:
  DurableOutbox(const DurableOutbox&) = delete; DurableOutbox& operator=(const DurableOutbox&) = delete;
  bool enqueue(const OutboxEvent& event, std::string& error);
  std::optional<OutboxEvent> claim_due(std::int64_t now_ms, std::string& error);
+ std::optional<OutboxEvent> claim_due_type(std::int64_t now_ms, const std::string& event_type, std::string& error);
+ std::optional<OutboxEvent> claim_due_excluding(std::int64_t now_ms, const std::string& event_type, std::string& error);
  bool mark_delivered(const std::string& event_id, std::string& error);
  bool schedule_retry(const std::string& event_id, std::uint32_t attempts, std::int64_t next_retry_at_ms, const std::string& error_text, std::string& error);
  bool move_to_dead_letter(const std::string& event_id, std::uint32_t attempts, const std::string& error_text, std::string& error);
  std::size_t pending_count(std::string& error) const;
 private:
  sqlite3* db_{}; std::size_t capacity_{}; mutable std::mutex mutex_;
+ std::optional<OutboxEvent> claim_due_filtered(std::int64_t now_ms, const std::string& event_type, bool exclude, std::string& error);
  bool execute(const char* sql, std::string& error) const;
 };
 }
