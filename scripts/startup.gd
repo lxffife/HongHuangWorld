@@ -57,6 +57,7 @@ var lobby_preview_root: Node3D
 var lobby_equipment: Array = []
 var lobby_inventory: Array = []
 var lobby_selected_equipment: Dictionary = {}
+var lobby_preview_equipment_item: Dictionary = {}
 var lobby_equipment_detail: Dictionary = {}
 var lobby_equipment_panel: PanelContainer
 var lobby_equipment_list: VBoxContainer
@@ -790,8 +791,21 @@ func _build_lobby_preview_model() -> void:
 	model.add_child(platform)
 
 	# Equipment is a visual-only lobby representation. Server inventory/equipment
-	# remains authoritative; no combat attributes are changed by this preview.
+	# remains authoritative; preview overrides exist only in this local lobby view.
+	var preview_equipment: Array = []
+	var preview_slot := str(lobby_preview_equipment_item.get("equipment_slot", lobby_preview_equipment_item.get("slot", "")))
 	for equipped_variant in lobby_equipment:
+		if not (equipped_variant is Dictionary):
+			continue
+		var equipped_slot := str(equipped_variant.get("slot", ""))
+		if not lobby_preview_equipment_item.is_empty() and equipped_slot == preview_slot:
+			continue
+		preview_equipment.append(equipped_variant)
+	if not lobby_preview_equipment_item.is_empty() and not preview_slot.is_empty():
+		var preview_item := lobby_preview_equipment_item.duplicate(true)
+		preview_item["slot"] = preview_slot
+		preview_equipment.append(preview_item)
+	for equipped_variant in preview_equipment:
 		if not (equipped_variant is Dictionary):
 			continue
 		var equipped: Dictionary = equipped_variant
@@ -916,6 +930,23 @@ func _build_lobby_preview_model() -> void:
 				accessory.material_override = item_material
 				model.add_child(accessory)
 
+func _preview_lobby_equipment(item: Dictionary) -> void:
+	var slot := str(item.get("equipment_slot", item.get("slot", "")))
+	if slot.is_empty():
+		lobby_equipment_status_label.text = "该装备缺少部位信息，无法试穿。"
+		return
+	lobby_preview_equipment_item = item.duplicate(true)
+	lobby_preview_equipment_item["equipment_slot"] = slot
+	_build_lobby_preview_model()
+	lobby_equipment_status_label.text = "试穿预览中：" + str(item.get("name", "未知装备")) + "。仅改变大厅外观，不会穿戴或修改属性。"
+	_render_lobby_equipment_manager()
+
+func _clear_lobby_equipment_preview() -> void:
+	lobby_preview_equipment_item.clear()
+	_build_lobby_preview_model()
+	lobby_equipment_status_label.text = "已退出试穿预览，恢复当前实际穿戴外观。"
+	_render_lobby_equipment_manager()
+
 func _toggle_lobby_equipment_panel() -> void:
 	if not is_instance_valid(lobby_equipment_panel):
 		return
@@ -929,10 +960,22 @@ func _render_lobby_equipment_manager() -> void:
 		return
 	for child in lobby_equipment_list.get_children():
 		child.queue_free()
+	var heading_row := HBoxContainer.new()
+	lobby_equipment_list.add_child(heading_row)
 	var heading := Label.new()
 	heading.text = "装备与背包 · 更换装备需要先退出当前世界"
+	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	heading.add_theme_color_override("font_color", Color("#d8bd83"))
-	lobby_equipment_list.add_child(heading)
+	heading_row.add_child(heading)
+	if not lobby_preview_equipment_item.is_empty():
+		var clear_preview_button := Button.new()
+		clear_preview_button.text = "退出试穿"
+		clear_preview_button.pressed.connect(_clear_lobby_equipment_preview)
+		heading_row.add_child(clear_preview_button)
+		var preview_note := Label.new()
+		preview_note.text = "当前试穿：" + str(lobby_preview_equipment_item.get("name", "未知装备"))
+		preview_note.add_theme_color_override("font_color", Color("#9ed6b1"))
+		lobby_equipment_list.add_child(preview_note)
 	var slot_names := {"weapon": "武器", "head": "头饰", "chest": "护甲", "legs": "护腿", "boots": "靴子", "accessory": "饰品"}
 	var equipped_by_slot := {}
 	for value in lobby_equipment:
@@ -1008,6 +1051,11 @@ func _render_lobby_equipment_manager() -> void:
 		detail_button.disabled = lobby_equipment_busy
 		detail_button.pressed.connect(_show_lobby_equipment_detail.bind(item))
 		item_row.add_child(detail_button)
+		var preview_button := Button.new()
+		preview_button.text = "试穿" if str(item.get("item_id", "")) != str(lobby_preview_equipment_item.get("item_id", "")) else "预览中"
+		preview_button.disabled = lobby_equipment_busy or str(item.get("item_id", "")) == str(lobby_preview_equipment_item.get("item_id", ""))
+		preview_button.pressed.connect(_preview_lobby_equipment.bind(item))
+		item_row.add_child(preview_button)
 		var compare_button := Button.new()
 		compare_button.text = "属性对比"
 		compare_button.disabled = lobby_equipment_busy
@@ -1297,6 +1345,7 @@ func _show_character_lobby() -> void:
 	lobby_status_label.text = "角色资料已载入。准备好后，进入此世洪荒。"
 	lobby_equipment = []
 	lobby_inventory = []
+	lobby_preview_equipment_item.clear()
 	lobby_equipment_panel.hide()
 	lobby_equipment_status_label.text = "装备外观：正在读取当前穿戴……"
 	lobby_enter_button.disabled = false
@@ -1828,6 +1877,7 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 			lobby_equipment_status_label.text = _format_lobby_equipment_summary()
 		"lobby_equip_action", "lobby_unequip_action":
 			lobby_equipment_busy = false
+			lobby_preview_equipment_item.clear()
 			lobby_selected_equipment = {}
 			lobby_equipment_status_label.text = "装备已更新，正在刷新背包与外观……"
 			_enqueue(HTTPClient.METHOD_GET, "/api/v1/characters/current/equipment", {}, true, "lobby_equipment")
