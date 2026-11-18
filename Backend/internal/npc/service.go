@@ -530,13 +530,25 @@ func (s *Service) ListAvailableExplorationEvents(ctx context.Context, accountID 
 		        (d.point_id IS NOT NULL),
 		        (d.point_id IS NOT NULL
 		          AND (e.required_race_id IS NULL OR e.required_race_id=c.race_id)
-		          AND (e.required_fate_trait_id IS NULL OR e.required_fate_trait_id=COALESCE(trait.trait_id,'unmarked_fate'))),
+		          AND (e.required_fate_trait_id IS NULL OR e.required_fate_trait_id=COALESCE(trait.trait_id,'unmarked_fate'))
+		          AND (e.required_event_id IS NULL OR EXISTS (
+		              SELECT 1 FROM soul_exploration_event_claims prior_claim
+		              WHERE prior_claim.soul_id=soul.id AND prior_claim.event_id=e.required_event_id
+		                AND prior_claim.choice_id=e.required_choice_id))),
 		        (claim.event_id IS NOT NULL),
 		        CASE
 		          WHEN claim.event_id IS NOT NULL THEN 'completed'
+		          WHEN e.required_event_id IS NOT NULL AND NOT EXISTS (
+		              SELECT 1 FROM soul_exploration_event_claims prior_claim
+		              WHERE prior_claim.soul_id=soul.id AND prior_claim.event_id=e.required_event_id
+		                AND prior_claim.choice_id=e.required_choice_id) THEN 'locked'
 		          WHEN d.point_id IS NOT NULL
 		            AND (e.required_race_id IS NULL OR e.required_race_id=c.race_id)
 		            AND (e.required_fate_trait_id IS NULL OR e.required_fate_trait_id=COALESCE(trait.trait_id,'unmarked_fate'))
+		            AND (e.required_event_id IS NULL OR EXISTS (
+		                SELECT 1 FROM soul_exploration_event_claims prior_claim
+		                WHERE prior_claim.soul_id=soul.id AND prior_claim.event_id=e.required_event_id
+		                  AND prior_claim.choice_id=e.required_choice_id))
 		            THEN 'available'
 		          ELSE 'locked'
 		        END
@@ -595,6 +607,11 @@ func (s *Service) TriggerExplorationEvent(ctx context.Context, accountID,eventID
 		 WHERE soul.account_id=$1
 		   AND (e.required_race_id IS NULL OR e.required_race_id=c.race_id)
 		   AND (e.required_fate_trait_id IS NULL OR e.required_fate_trait_id=COALESCE((SELECT trait_id FROM character_fate_traits WHERE character_id=c.id),'unmarked_fate'))
+		   AND (e.required_event_id IS NULL OR EXISTS (
+		       SELECT 1 FROM soul_exploration_event_claims prior_claim
+		       WHERE prior_claim.soul_id=soul.id
+		         AND prior_claim.event_id=e.required_event_id
+		         AND prior_claim.choice_id=e.required_choice_id))
 		   AND SQRT(POWER(c.position_x-p.position_x,2)+POWER(c.position_y-p.position_y,2)+POWER(c.position_z-p.position_z,2))<=p.interaction_radius
 		 ORDER BY ws.connected_at DESC NULLS LAST LIMIT 1
 		 FOR UPDATE OF soul,c,ws`,accountID,eventID).Scan(
@@ -616,7 +633,11 @@ func (s *Service) TriggerExplorationEvent(ctx context.Context, accountID,eventID
 			 LEFT JOIN character_fate_traits trait ON trait.character_id=c.id
 			 WHERE soul.account_id=$1
 			   AND (e.required_race_id IS NULL OR e.required_race_id=c.race_id)
-			   AND (e.required_fate_trait_id IS NULL OR e.required_fate_trait_id=COALESCE(trait.trait_id,'unmarked_fate')) )`,accountID,eventID).Scan(&known)
+			   AND (e.required_fate_trait_id IS NULL OR e.required_fate_trait_id=COALESCE(trait.trait_id,'unmarked_fate'))
+			   AND (e.required_event_id IS NULL OR EXISTS (
+			       SELECT 1 FROM soul_exploration_event_claims prior_claim
+			       WHERE prior_claim.soul_id=soul.id AND prior_claim.event_id=e.required_event_id
+			         AND prior_claim.choice_id=e.required_choice_id)) )`,accountID,eventID).Scan(&known)
 		if checkErr!=nil { return ExplorationEventResult{},fmt.Errorf("check exploration event unlock: %w",checkErr) }
 		if !known { return ExplorationEventResult{},ErrExplorationEventUnavailable }
 		return ExplorationEventResult{},ErrTooFar
@@ -644,6 +665,8 @@ func (s *Service) TriggerExplorationEvent(ctx context.Context, accountID,eventID
 		case "bridge_dismantle": meritDelta,karmaDelta=1,2
 		case "beast_honor": meritDelta,karmaDelta=3,-1
 		case "beast_awaken": meritDelta,karmaDelta=2,2
+		case "lantern_shadow_follow": meritDelta,karmaDelta=3,-1
+		case "lantern_shadow_release": meritDelta,karmaDelta=1,-1
 		default: return ExplorationEventResult{},ErrExplorationEventUnavailable
 		}
 	} else if choiceID!="" {
