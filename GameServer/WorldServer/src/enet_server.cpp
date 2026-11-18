@@ -141,6 +141,14 @@ struct SoulRewardEvent {
     std::string source;
 };
 
+struct SoulAbsorptionEvent {
+    std::string event_id;
+    std::string session_id;
+    std::string character_id;
+    std::string source_entity_id;
+    std::string source_entity_kind;
+};
+
 std::string make_event_uuid() {
     static thread_local std::mt19937_64 generator(std::random_device{}());
     std::array<std::uint8_t, 16> bytes{};
@@ -428,6 +436,22 @@ bool deliver_character_reward(const ServerConfig& config, const CharacterRewardE
     return true;
 }
 
+
+bool backend_inventory_request(const ServerConfig& config, const std::string& path,
+                               const Json* body, long& http_status, Json& response,
+                               std::string& error);
+
+bool deliver_soul_absorption(const ServerConfig& config, const SoulAbsorptionEvent& event,
+                             long& status, std::string& error) {
+    const Json body{
+        {"event_id", event.event_id}, {"session_id", event.session_id},
+        {"character_id", event.character_id}, {"source_entity_id", event.source_entity_id},
+        {"source_entity_kind", event.source_entity_kind}
+    };
+    Json response;
+    return backend_inventory_request(config, "/api/v1/servers/souls/absorptions",
+                                     &body, status, response, error);
+}
 
 bool deliver_soul_reward(const ServerConfig& config, const SoulRewardEvent& reward,
                           long& http_status, std::string& error) {
@@ -761,6 +785,14 @@ struct EnetServer::Impl {
                             payload.at("source").get<std::string>()
                         };
                         delivered = deliver_soul_reward(config, reward, status, delivery_error);
+                    } else if (event->event_type == "soul_absorption") {
+                        SoulAbsorptionEvent absorption{
+                            event->event_id, payload.at("session_id").get<std::string>(),
+                            payload.at("character_id").get<std::string>(),
+                            payload.at("source_entity_id").get<std::string>(),
+                            payload.at("source_entity_kind").get<std::string>()
+                        };
+                        delivered = deliver_soul_absorption(config, absorption, status, delivery_error);
                     } else if (event->event_type == "ground_drop_pickup") {
                         is_drop = true;
                         GroundDropRuntime pickup_drop{
@@ -937,6 +969,21 @@ struct EnetServer::Impl {
         std::string error;
         if (!enqueue_durable_event(event_id, "soul_reward", payload, error))
             std::cerr << "Could not persist soul reward: " << error << '\n';
+    }
+
+    void enqueue_soul_absorption(const PlayerState& player, const MonsterRuntime& monster) {
+        if (config.world_id != "underworld_fengdu" ||
+            monster.definition.id != "wandering_wraith") return;
+        const auto event_id = make_event_uuid();
+        const Json payload{
+            {"session_id", player.session_id},
+            {"character_id", player.character_id},
+            {"source_entity_id", monster.runtime_id},
+            {"source_entity_kind", monster.definition.id}
+        };
+        std::string error;
+        if (!enqueue_durable_event(event_id, "soul_absorption", payload, error))
+            std::cerr << "Could not persist soul absorption: " << error << '\\n';
     }
 
     void stop_reward_worker() {
@@ -1332,6 +1379,7 @@ struct EnetServer::Impl {
                 config.world_id == "underworld_fengdu" ? 5 : 0;
             if (soul_experience_reward > 0)
                 enqueue_soul_reward(player, soul_experience_reward, "underworld_trial:monster_hunt");
+            enqueue_soul_absorption(player, *target);
             enqueue_monster_drops(*target, player);
         }
         const Json event{
