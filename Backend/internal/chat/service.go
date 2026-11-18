@@ -395,25 +395,6 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 		return Message{}, fmt.Errorf("verify world server chat session: %w", err)
 	}
 
-	if req.Channel == "nearby" {
-		var validRecipients int
-		err = tx.QueryRowContext(ctx, `
-			SELECT count(DISTINCT ws.character_id)
-			FROM jsonb_array_elements_text($2::jsonb) AS requested(character_id)
-			JOIN world_sessions ws ON ws.character_id=requested.character_id::uuid
-			JOIN characters c ON c.id=ws.character_id
-			WHERE ws.instance_id=$1::uuid AND ws.server_id=(
-				SELECT id FROM server_registry WHERE node_key=$3
-			) AND ws.session_state='active' AND c.status='alive'`,
-			instanceID, string(recipientsJSON), nodeKey).Scan(&validRecipients)
-		if err != nil {
-			return Message{}, fmt.Errorf("validate nearby chat AOI recipients: %w", err)
-		}
-		if validRecipients != len(req.RecipientCharacterIDs) {
-			return Message{}, ErrInvalidInput
-		}
-	}
-
 	// Retries with the same client ID return the original result and do not
 	// consume another rate-limit slot.
 	var existing Message
@@ -450,6 +431,25 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return Message{}, fmt.Errorf("check duplicate world server chat message: %w", err)
+	}
+
+	if req.Channel == "nearby" {
+		var validRecipients int
+		err = tx.QueryRowContext(ctx, `
+			SELECT count(DISTINCT ws.character_id)
+			FROM jsonb_array_elements_text($2::jsonb) AS requested(character_id)
+			JOIN world_sessions ws ON ws.character_id=requested.character_id::uuid
+			JOIN characters c ON c.id=ws.character_id
+			WHERE ws.instance_id=$1::uuid AND ws.server_id=(
+				SELECT id FROM server_registry WHERE node_key=$3
+			) AND ws.session_state='active' AND c.status='alive'`,
+			instanceID, string(recipientsJSON), nodeKey).Scan(&validRecipients)
+		if err != nil {
+			return Message{}, fmt.Errorf("validate nearby chat AOI recipients: %w", err)
+		}
+		if validRecipients != len(req.RecipientCharacterIDs) {
+			return Message{}, ErrInvalidInput
+		}
 	}
 
 	window := 3 * time.Second
