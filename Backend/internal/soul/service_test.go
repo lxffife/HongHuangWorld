@@ -162,3 +162,24 @@ func TestSoulMutationAttributeBonusHasSeparateSmallCap(t *testing.T) {
 		t.Fatal("random mutation bonus cap must remain below the global inheritance cap")
 	}
 }
+
+
+func TestSoulQualityProgressUnitsAreBounded(t *testing.T) {
+	cases := []struct { units int; valid bool }{
+		{1,true},{2,true},{4,true},{8,true},
+		{0,false},{3,false},{5,false},{16,false},{-1,false},
+	}
+	for _, test := range cases {
+		if got := validSoulProgressUnits(test.units); got != test.valid {
+			t.Errorf("validSoulProgressUnits(%d) = %v, want %v", test.units, got, test.valid)
+		}
+	}
+}
+
+func TestHigherQualitySoulCrossesMultipleMilestones(t *testing.T) {
+	// From zero progress, one ancient (4x) soul reaches the first milestone;
+	// a mythic (8x) soul can cross two milestones when the prior count is 3.
+	if got := soulAttributeMilestones(4); got != 1 { t.Fatalf("4 units should award 1 point, got %d", got) }
+	if got := soulAttributeMilestones(11); got != 2 { t.Fatalf("3 + 8 units should award 2 points, got %d", got) }
+	if got := soulAttributeMilestones(21); got != 3 { t.Fatalf("3 + 8 + 10 units should award 3 points, got %d", got) }
+}
