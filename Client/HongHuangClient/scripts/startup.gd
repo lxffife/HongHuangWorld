@@ -548,22 +548,35 @@ func _build_lobby_preview_model() -> void:
 	lobby_preview_root.add_child(model)
 	var robe_color := Color("#243d59")
 	var trim_color := Color("#c9a86b")
-	var race_id := str(current_character.get("race_id", "human"))
-	if race_id.contains("demon") or race_id.contains("yao"):
+	var skin_color := Color("#d6b59a")
+	var race_id := str(current_character.get("race_id", "human")).to_lower()
+	var race_kind := "human"
+	if race_id == "demon" or race_id.contains("yao"):
+		race_kind = "demon"
 		robe_color = Color("#512d3d")
 		trim_color = Color("#d18a58")
-	elif race_id.contains("dragon"):
+		skin_color = Color("#a97870")
+	elif race_id == "dragon" or race_id.contains("long"):
+		race_kind = "dragon"
 		robe_color = Color("#24504b")
 		trim_color = Color("#d7bd72")
-	elif race_id.contains("spirit"):
+		skin_color = Color("#8bb8a7")
+	elif race_id == "witch" or race_id.contains("wu"):
+		race_kind = "witch"
+		robe_color = Color("#493b2b")
+		trim_color = Color("#b58b50")
+		skin_color = Color("#b99579")
+	elif race_id.contains("spirit") or race_id.contains("ling"):
+		race_kind = "spirit"
 		robe_color = Color("#344b67")
 		trim_color = Color("#80c9df")
+		skin_color = Color("#b8d3dc")
 	var robe_material := StandardMaterial3D.new()
 	robe_material.albedo_color = robe_color
 	robe_material.metallic = 0.22
 	robe_material.roughness = 0.42
 	var skin_material := StandardMaterial3D.new()
-	skin_material.albedo_color = Color("#d6b59a")
+	skin_material.albedo_color = skin_color
 	skin_material.roughness = 0.72
 	var trim_material := StandardMaterial3D.new()
 	trim_material.albedo_color = trim_color
@@ -584,6 +597,11 @@ func _build_lobby_preview_model() -> void:
 	var torso_mesh := CapsuleMesh.new()
 	torso_mesh.radius = 0.31
 	torso_mesh.height = 0.9
+	if race_kind == "witch":
+		torso_mesh.radius = 0.39
+		torso_mesh.height = 0.98
+	elif race_kind == "dragon":
+		torso_mesh.radius = 0.34
 	torso.mesh = torso_mesh
 	torso.position.y = 1.36
 	torso.material_override = robe_material
@@ -604,6 +622,57 @@ func _build_lobby_preview_model() -> void:
 	hair.position = Vector3(0.0, 2.16, -0.025)
 	hair.material_override = hair_material
 	model.add_child(hair)
+	if race_kind == "demon" or race_kind == "dragon":
+		for side in [-1.0, 1.0]:
+			var horn := MeshInstance3D.new()
+			var horn_mesh := CylinderMesh.new()
+			horn_mesh.top_radius = 0.015
+			horn_mesh.bottom_radius = 0.105 if race_kind == "demon" else 0.085
+			horn_mesh.height = 0.42 if race_kind == "demon" else 0.32
+			horn.mesh = horn_mesh
+			horn.position = Vector3(side * 0.16, 2.34, -0.015)
+			horn.rotation.z = side * -0.32
+			horn.material_override = trim_material
+			model.add_child(horn)
+	if race_kind == "dragon":
+		for side in [-1.0, 1.0]:
+			var scale_plate := MeshInstance3D.new()
+			var scale_mesh := SphereMesh.new()
+			scale_mesh.radius = 0.16
+			scale_mesh.height = 0.09
+			scale_plate.mesh = scale_mesh
+			scale_plate.position = Vector3(side * 0.29, 1.55, 0.12)
+			scale_plate.material_override = trim_material
+			model.add_child(scale_plate)
+		var tail := MeshInstance3D.new()
+		var tail_mesh := CapsuleMesh.new()
+		tail_mesh.radius = 0.11
+		tail_mesh.height = 0.92
+		tail.mesh = tail_mesh
+		tail.position = Vector3(0.0, 0.42, -0.52)
+		tail.rotation.x = -0.9
+		tail.material_override = robe_material
+		model.add_child(tail)
+	if race_kind == "witch":
+		for side in [-1.0, 1.0]:
+			var shoulder := MeshInstance3D.new()
+			var shoulder_mesh := SphereMesh.new()
+			shoulder_mesh.radius = 0.25
+			shoulder_mesh.height = 0.22
+			shoulder.mesh = shoulder_mesh
+			shoulder.position = Vector3(side * 0.34, 1.63, 0.0)
+			shoulder.material_override = trim_material
+			model.add_child(shoulder)
+	if race_kind == "spirit":
+		var spirit_aura := MeshInstance3D.new()
+		var aura_mesh := TorusMesh.new()
+		aura_mesh.inner_radius = 0.52
+		aura_mesh.outer_radius = 0.56
+		spirit_aura.mesh = aura_mesh
+		spirit_aura.position.y = 1.28
+		spirit_aura.rotation.x = 0.35
+		spirit_aura.material_override = trim_material
+		model.add_child(spirit_aura)
 	for side in [-1.0, 1.0]:
 		var arm := MeshInstance3D.new()
 		var arm_mesh := CapsuleMesh.new()
