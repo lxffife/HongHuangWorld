@@ -782,6 +782,12 @@ struct EnetServer::Impl {
     std::deque<CharacterRewardEvent> pending_rewards;
     bool reward_stop_requested{false};
     std::thread reward_thread;
+    std::mutex chat_mutex;
+    std::condition_variable chat_cv;
+    std::deque<ChatJob> pending_chat_jobs;
+    std::deque<ChatJobResult> completed_chat_jobs;
+    bool chat_stop_requested{false};
+    std::thread chat_thread;
 
     explicit Impl(ServerConfig value) : config(std::move(value)) {
         const auto add_monster = [this](std::string runtime_id, std::string definition_id,
