@@ -38,6 +38,8 @@ type chatSocketClient struct {
 	done chan struct{}
 	closeOnce sync.Once
 	worldID string
+	worldInstanceID string
+	characterID string
 	logger *slog.Logger
 }
 
@@ -78,6 +80,11 @@ func (h *chatSocketHub) broadcast(message chat.Message) {
 		if message.Channel == "world" && client.worldID != message.WorldID {
 			continue
 		}
+		if message.Channel == "nearby" {
+			if client.worldInstanceID == "" || client.worldInstanceID != message.WorldInstanceID || !hasRecipient(message.RecipientCharacterIDs, client.characterID) {
+				continue
+			}
+		}
 		select {
 		case client.send <- encoded:
 		default:
@@ -86,6 +93,13 @@ func (h *chatSocketHub) broadcast(message chat.Message) {
 			go h.remove(client)
 		}
 	}
+}
+
+func hasRecipient(recipients []string, characterID string) bool {
+	for _, recipient := range recipients {
+		if recipient == characterID { return true }
+	}
+	return false
 }
 
 func (c *chatSocketClient) close() {
@@ -201,7 +215,7 @@ func (h *chatHandlers) socket(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	worldID, err := h.service.CurrentWorldID(r.Context(), account.ID)
+	scope, err := h.service.CurrentChatScope(r.Context(), account.ID)
 	if err != nil {
 		h.writeError(w, err)
 		return
@@ -218,7 +232,7 @@ func (h *chatHandlers) socket(w http.ResponseWriter, r *http.Request) {
 
 	client := &chatSocketClient{
 		conn: conn, reader: rw.Reader, send: make(chan []byte, 64),
-		done: make(chan struct{}), worldID: worldID, logger: h.logger,
+		done: make(chan struct{}), worldID: scope.WorldID, worldInstanceID: scope.WorldInstanceID, characterID: scope.CharacterID, logger: h.logger,
 	}
 	h.hub.add(client)
 	go client.writer()
