@@ -16,6 +16,7 @@ var (
 	ErrNoCharacter = errors.New("no active character")
 	ErrRateLimited = errors.New("chat rate limit exceeded")
 	ErrUnsupportedChannel = errors.New("chat channel is not available in this phase")
+	ErrIdempotencyConflict = errors.New("chat client message id was reused with different content")
 )
 
 type Service struct { db *sql.DB }
@@ -63,6 +64,18 @@ func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (
 
 	var worldScope any
 	if req.Channel == "world" { worldScope = worldID }
+	// Idempotent retries must return the original message before rate limiting.
+	existing, existingErr := s.getByClientID(ctx, characterID, req.ClientMessageID)
+	if existingErr == nil {
+		if existing.Channel != req.Channel || existing.Content != req.Content {
+			return Message{}, ErrIdempotencyConflict
+		}
+		return existing, nil
+	}
+	if !errors.Is(existingErr, sql.ErrNoRows) {
+		return Message{}, existingErr
+	}
+
 	window:=3*time.Second
 	if req.Channel=="cross_world" { window=5*time.Second }
 	var recent int
@@ -75,7 +88,14 @@ func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (
 		VALUES($1,$2,$3::uuid,$4::uuid,$5) ON CONFLICT(sender_character_id,client_message_id) DO NOTHING`,
 		req.Channel,worldValue,characterID,req.ClientMessageID,req.Content)
 	if err!=nil{return Message{},fmt.Errorf("store chat message: %w",err)}
-	return s.getByClientID(ctx,characterID,req.ClientMessageID)
+	item, err := s.getByClientID(ctx, characterID, req.ClientMessageID)
+	if err != nil {
+		return Message{}, err
+	}
+	if item.Channel != req.Channel || item.Content != req.Content {
+		return Message{}, ErrIdempotencyConflict
+	}
+	return item, nil
 }
 
 func (s *Service) List(ctx context.Context, accountID, channel, before string, limit int) ([]Message,error) {
@@ -267,6 +287,9 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 			&existing.SenderCharacterID,&existing.SenderName,&existing.SenderRace,&existing.SenderLevel,
 			&existing.Content,&existing.CreatedAt)
 	if err == nil {
+		if existing.Channel != req.Channel || existing.Content != req.Content {
+			return Message{}, ErrIdempotencyConflict
+		}
 		if err := tx.Commit(); err != nil { return Message{}, fmt.Errorf("commit idempotent chat lookup: %w", err) }
 		return existing,nil
 	}
