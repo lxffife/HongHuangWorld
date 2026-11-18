@@ -1229,7 +1229,8 @@ func _on_chat_input_submitted(value: String) -> void:
 			return
 		error = network.send_chat("nearby", normalized)
 	else:
-		var message_id := Crypto.new().generate_random_bytes(16).hex_encode()
+		var raw_id := Crypto.new().generate_random_bytes(16).hex_encode()
+		var message_id := "%s-%s-%s-%s-%s" % [raw_id.substr(0, 8), raw_id.substr(8, 4), raw_id.substr(12, 4), raw_id.substr(16, 4), raw_id.substr(20, 12)]
 		error = HHChatNetwork.send_message(selected_chat_channel, normalized, message_id)
 	if error != OK:
 		chat_status.text = "发送失败：" + str(error)
