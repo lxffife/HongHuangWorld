@@ -45,6 +45,7 @@ var lobby_realm_label: Label
 var lobby_world_label: Label
 var lobby_status_label: Label
 var lobby_details_host: VBoxContainer
+var lobby_body_container: HBoxContainer
 var lobby_enter_button: Button
 var reincarnation_name_input: LineEdit
 var reincarnation_race_select: OptionButton
@@ -416,6 +417,7 @@ func _build_lobby_ui() -> void:
 	var separator := HSeparator.new()
 	layout.add_child(separator)
 	var body := HBoxContainer.new()
+	lobby_body_container = body
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 24)
 	layout.add_child(body)
@@ -498,18 +500,17 @@ func _build_lobby_ui() -> void:
 func _toggle_lobby_details() -> void:
 	lobby_details_host.visible = not lobby_details_host.visible
 	if lobby_details_host.visible:
-		lobby_root.get_node("CenterContainer/PanelContainer/VBoxContainer/HBoxContainer").hide()
-		lobby_details_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		details_toggle_button.show()
+		details_container.hide()
 	else:
-		lobby_root.get_node("CenterContainer/PanelContainer/VBoxContainer/HBoxContainer").show()
-		if details_container != null:
-			details_container.hide()
-		if details_toggle_button != null:
-			details_toggle_button.hide()
+		details_container.hide()
+		details_toggle_button.hide()
 
 func _show_character_lobby() -> void:
 	if not is_instance_valid(lobby_root):
 		return
+	if is_instance_valid(lobby_body_container):
+		lobby_body_container.show()
 	for control in auth_controls:
 		control.hide()
 	for control in login_brand_controls:
@@ -1092,6 +1093,8 @@ func _show_reincarnation_controls() -> void:
 	_request_soul_fate()
 
 func _show_character_setup() -> void:
+	if is_instance_valid(lobby_root):
+		lobby_root.hide()
 	right_info_label.text = "灵魂档案已载入。请在左侧完成角色名、种族修炼体系与出生世界的选择。"
 	character_title_label.show()
 	character_input.show()
