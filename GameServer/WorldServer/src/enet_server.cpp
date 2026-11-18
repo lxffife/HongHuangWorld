@@ -950,6 +950,14 @@ struct EnetServer::Impl {
                         };
                         delivered_drop = pickup_drop;
                         delivered = deliver_ground_pickup(config, pickup_job, status, delivery_error);
+                    } else if (event->event_type == "nearby_chat") {
+                        ChatJob chat;
+                        chat.session_id = payload.at("session_id").get<std::string>();
+                        chat.character_id = payload.at("character_id").get<std::string>();
+                        chat.client_message_id = payload.at("client_message_id").get<std::string>();
+                        chat.content = payload.at("content").get<std::string>();
+                        chat.recipient_character_ids = payload.at("recipient_character_ids").get<std::vector<std::string>>();
+                        delivered = deliver_chat_message(config, chat, status, delivery_error);
                     } else if (event->event_type == "ground_drop_create") {
                         is_drop = true;
                         const auto expiry_ms = payload.at("expires_at_unix_ms").get<std::int64_t>();
@@ -1394,10 +1402,6 @@ struct EnetServer::Impl {
 
     void start_chat_worker() {
         chat_stop_requested = false;
-        if (config.chat_backend_url.empty()) {
-            std::cerr << "CHAT_SERVER_URL is empty; nearby chat delivery is disabled\n";
-            return;
-        }
         chat_thread = std::thread([this] {
             while (true) {
                 ChatJob job;
@@ -1412,30 +1416,18 @@ struct EnetServer::Impl {
                 ChatJobResult result;
                 result.session_id = job.session_id;
                 result.client_message_id = job.client_message_id;
-                {
-                    std::lock_guard lock(chat_mutex);
-                    if (chat_stop_requested) {
-                        result.reason = "WorldServer is shutting down.";
-                        if (completed_chat_jobs.size() >= 512) completed_chat_jobs.pop_front();
-                        completed_chat_jobs.push_back(std::move(result));
-                        continue;
-                    }
-                }
-                long status = 0;
-                for (unsigned int attempt = 0; attempt < 5; ++attempt) {
-                    std::string message_id;
-                    std::string error;
-                    if (deliver_chat_message(config, job, status, message_id, error)) {
-                        result.accepted = true;
-                        result.message_id = std::move(message_id);
-                        break;
-                    }
-                    result.reason = std::move(error);
-                    const bool retryable = status == 0 || status == 429 || status >= 500;
-                    if (!retryable || attempt == 4) break;
-                    const auto delay = std::chrono::seconds(1U << attempt);
-                    std::unique_lock lock(chat_mutex);
-                    if (chat_cv.wait_for(lock, delay, [this] { return chat_stop_requested; })) break;
+                const std::string event_id = "nearby-chat:" + job.client_message_id;
+                const Json payload{
+                    {"session_id", job.session_id},
+                    {"character_id", job.character_id},
+                    {"client_message_id", job.client_message_id},
+                    {"content", job.content},
+                    {"recipient_character_ids", job.recipient_character_ids}
+                };
+                std::string storage_error;
+                result.accepted = enqueue_durable_event(event_id, "nearby_chat", payload, storage_error);
+                if (!result.accepted) {
+                    result.reason = storage_error.empty() ? "附近聊天持久队列暂时不可用。" : storage_error;
                 }
                 {
                     std::lock_guard lock(chat_mutex);
