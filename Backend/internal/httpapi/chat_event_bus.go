@@ -55,7 +55,7 @@ func newChatEventBus(hub *chatSocketHub, logger *slog.Logger) *chatEventBus {
 			logger.Info("chat NATS reconnected", "server", nc.ConnectedUrl())
 		}),
 		nats.ClosedHandler(func(nc *nats.Conn) {
-			logger.Error("chat NATS connection closed", "error", nc.LastError())
+			logger.Info("chat NATS connection closed", "error", nc.LastError())
 		}),
 	)
 	if err != nil {
