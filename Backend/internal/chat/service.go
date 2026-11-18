@@ -72,10 +72,11 @@ func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (
 	// remain correct when the same account submits concurrent requests.
 	var characterID, characterName, raceID, worldID string
 	var level int
-	err = tx.QueryRowContext(ctx, `SELECT c.id::text,c.name,COALESCE(c.race_id,''),c.world_id,c.level
-		FROM souls soul JOIN characters c ON c.id=soul.current_character_id
-		WHERE soul.account_id=$1 AND c.status='alive'
-		FOR UPDATE OF c`, accountID).Scan(&characterID, &characterName, &raceID, &worldID, &level)
+	err = tx.QueryRowContext(ctx, `SELECT c.character_id::text,c.name,COALESCE(c.race_id,''),c.world_id,c.level
+		FROM chat_accounts account
+		JOIN chat_characters c ON c.character_id=account.current_character_id
+		WHERE account.account_id=$1::uuid AND c.status='alive'
+		FOR UPDATE OF account,c`, accountID).Scan(&characterID, &characterName, &raceID, &worldID, &level)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Message{}, ErrNoCharacter
 	}
@@ -115,9 +116,9 @@ func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (
 	if req.Channel == "world" {
 		worldValue = worldID
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO chat_messages(channel_type,world_id,sender_character_id,client_message_id,content)
-		VALUES($1,$2,$3::uuid,$4::uuid,$5)`,
-		req.Channel, worldValue, characterID, req.ClientMessageID, req.Content)
+	_, err = tx.ExecContext(ctx, `INSERT INTO chat_messages(channel_type,world_id,sender_character_id,client_message_id,sender_name,sender_race,sender_level,content)
+		VALUES($1,$2,$3::uuid,$4::uuid,$5,$6,$7,$8)`,
+		req.Channel, worldValue, characterID, req.ClientMessageID, characterName, raceID, level, req.Content)
 	if err != nil {
 		return Message{}, fmt.Errorf("store chat message: %w", err)
 	}
@@ -149,11 +150,11 @@ func (s *Service) List(ctx context.Context, accountID, channel, before string, l
 	}
 	var characterID, worldID, instanceID string
 	err := s.db.QueryRowContext(ctx, `
-		SELECT c.id::text,c.world_id,COALESCE(ws.instance_id::text,'')
-		FROM souls soul
-		JOIN characters c ON c.id=soul.current_character_id
-		LEFT JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
-		WHERE soul.account_id=$1 AND c.status='alive'`, accountID).
+		SELECT c.character_id::text,c.world_id,COALESCE(ws.instance_id::text,'')
+		FROM chat_accounts account
+		JOIN chat_characters c ON c.character_id=account.current_character_id
+		LEFT JOIN chat_world_sessions ws ON ws.character_id=c.character_id AND ws.session_state='active'
+		WHERE account.account_id=$1::uuid AND c.status='alive'`, accountID).
 		Scan(&characterID, &worldID, &instanceID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNoCharacter
@@ -166,8 +167,8 @@ func (s *Service) List(ctx context.Context, accountID, channel, before string, l
 	}
 
 	query := `SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),
-		m.sender_character_id::text,c.name,COALESCE(c.race_id,''),c.level,m.content,m.created_at
-		FROM chat_messages m JOIN characters c ON c.id=m.sender_character_id
+		m.sender_character_id::text,m.sender_name,m.sender_race,m.sender_level,m.content,m.created_at
+		FROM chat_messages m
 		WHERE m.created_at > now()-interval '30 days' AND `
 	args := []any{}
 	switch channel {
@@ -218,8 +219,8 @@ type chatRowQueryer interface {
 
 func getChatMessageByClientID(ctx context.Context, queryer chatRowQueryer, characterID, clientID string) (Message, error) {
 	var m Message
-	err := queryer.QueryRowContext(ctx, `SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),m.sender_character_id::text,c.name,COALESCE(c.race_id,''),c.level,m.content,m.created_at
-		FROM chat_messages m JOIN characters c ON c.id=m.sender_character_id
+	err := queryer.QueryRowContext(ctx, `SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),m.sender_character_id::text,m.sender_name,m.sender_race,m.sender_level,m.content,m.created_at
+		FROM chat_messages m
 		WHERE m.sender_character_id=$1::uuid AND m.client_message_id=$2::uuid`, characterID, clientID).
 		Scan(&m.ID,&m.ClientMessageID,&m.Channel,&m.WorldID,&m.SenderCharacterID,&m.SenderName,&m.SenderRace,&m.SenderLevel,&m.Content,&m.CreatedAt)
 	if err != nil {
@@ -283,12 +284,12 @@ func (s *Service) ListForServer(ctx context.Context, nodeKey string, after time.
 		SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),
 		       m.sender_character_id::text,c.name,COALESCE(c.race_id,''),c.level,m.content,m.created_at
 		FROM chat_messages m
-		JOIN characters c ON c.id=m.sender_character_id
+		JOIN chat_characters c ON c.character_id=m.sender_character_id
 		WHERE m.channel_type IN ('world','cross_world')
 		  AND (m.channel_type='cross_world' OR m.world_id IN (
 			SELECT DISTINCT wi.world_id
-			FROM world_instances wi
-			JOIN server_registry sr ON sr.id=wi.server_id
+			FROM chat_world_instances wi
+			JOIN chat_server_nodes sr ON sr.node_key=wi.node_key
 			WHERE sr.node_key=$1 AND sr.status='ready' AND wi.status='ready'
 		  ))
 		  AND (m.created_at > $2 OR (m.created_at = $2 AND m.id > $3::uuid))
@@ -377,12 +378,12 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 	var name, raceID, worldID, instanceID string
 	var level int
 	err = tx.QueryRowContext(ctx, `
-		SELECT c.name,COALESCE(c.race_id,''),c.world_id,wi.id::text,c.level
-		FROM world_sessions ws
-		JOIN server_registry sr ON sr.id=ws.server_id
-		JOIN world_instances wi ON wi.id=ws.instance_id AND wi.server_id=sr.id
-		JOIN characters c ON c.id=ws.character_id
-		WHERE ws.id=$1::uuid AND ws.character_id=$2::uuid
+		SELECT c.name,c.race_id,c.world_id,wi.instance_id::text,c.level
+		FROM chat_world_sessions ws
+		JOIN chat_server_nodes sr ON sr.node_key=ws.node_key
+		JOIN chat_world_instances wi ON wi.instance_id=ws.instance_id AND wi.node_key=sr.node_key
+		JOIN chat_characters c ON c.character_id=ws.character_id
+		WHERE ws.session_id=$1::uuid AND ws.character_id=$2::uuid
 		  AND sr.node_key=$3 AND sr.status='ready'
 		  AND sr.last_heartbeat_at > now()-interval '30 seconds'
 		  AND wi.status='ready'
@@ -443,13 +444,12 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 		err = tx.QueryRowContext(ctx, `
 			SELECT count(DISTINCT ws.character_id)
 			FROM jsonb_array_elements_text($2::jsonb) AS requested(character_id)
-			JOIN world_sessions ws ON ws.character_id=requested.character_id::uuid
-			JOIN characters c ON c.id=ws.character_id
-			WHERE ws.instance_id=$1::uuid AND ws.server_id=(
-				SELECT id FROM server_registry WHERE node_key=$3
-			) AND (ws.session_state='active' OR
-			      (ws.session_state IN ('saving','closed') AND
-			       COALESCE(ws.disconnected_at,ws.updated_at) > now()-interval '30 days'))
+			JOIN chat_world_sessions ws ON ws.character_id=requested.character_id::uuid
+			JOIN chat_characters c ON c.character_id=ws.character_id
+			WHERE ws.instance_id=$1::uuid AND ws.node_key=$3
+			  AND (ws.session_state='active' OR
+			       (ws.session_state IN ('saving','closed') AND
+			        COALESCE(ws.disconnected_at,ws.updated_at) > now()-interval '30 days'))
 			  AND c.status='alive'`,
 			instanceID, string(recipientsJSON), nodeKey).Scan(&validRecipients)
 		if err != nil {
@@ -487,10 +487,10 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 	}
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO chat_messages(channel_type,world_id,world_instance_id,nearby_recipient_character_ids,
-			sender_character_id,client_message_id,content)
-		VALUES($1,$2,$3::uuid,$4::jsonb,$5::uuid,$6::uuid,$7)
+			sender_character_id,client_message_id,sender_name,sender_race,sender_level,content)
+		VALUES($1,$2,$3::uuid,$4::jsonb,$5::uuid,$6::uuid,$7,$8,$9,$10)
 		ON CONFLICT(sender_character_id,client_message_id) DO NOTHING`,
-		req.Channel, worldValue, instanceValue, string(recipientsJSON), characterID, req.ClientMessageID, req.Content)
+		req.Channel, worldValue, instanceValue, string(recipientsJSON), characterID, req.ClientMessageID, name, raceID, level, req.Content)
 	if err != nil {
 		return Message{}, fmt.Errorf("persist world server chat message: %w", err)
 	}
@@ -678,11 +678,11 @@ func (s *Service) CurrentChatScope(ctx context.Context, accountID string) (ChatS
 	}
 	var scope ChatScope
 	err := s.db.QueryRowContext(ctx, `
-		SELECT c.id::text,c.world_id,COALESCE(ws.instance_id::text,'')
-		FROM souls soul
-		JOIN characters c ON c.id=soul.current_character_id
-		LEFT JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
-		WHERE soul.account_id=$1 AND c.status='alive'`, accountID).
+		SELECT c.character_id::text,c.world_id,COALESCE(ws.instance_id::text,'')
+		FROM chat_accounts account
+		JOIN chat_characters c ON c.character_id=account.current_character_id
+		LEFT JOIN chat_world_sessions ws ON ws.character_id=c.character_id AND ws.session_state='active'
+		WHERE account.account_id=$1::uuid AND c.status='alive'`, accountID).
 		Scan(&scope.CharacterID,&scope.WorldID,&scope.WorldInstanceID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ChatScope{}, ErrNoCharacter
@@ -700,9 +700,9 @@ func (s *Service) CurrentWorldID(ctx context.Context, accountID string) (string,
 	var worldID string
 	err := s.db.QueryRowContext(ctx, `
 		SELECT c.world_id
-		FROM souls soul
-		JOIN characters c ON c.id = soul.current_character_id
-		WHERE soul.account_id = $1 AND c.status = 'alive'`, accountID).Scan(&worldID)
+		FROM chat_accounts account
+		JOIN chat_characters c ON c.character_id = account.current_character_id
+		WHERE account.account_id = $1::uuid AND c.status = 'alive'`, accountID).Scan(&worldID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", ErrNoCharacter
 	}
