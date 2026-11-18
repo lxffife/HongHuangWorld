@@ -232,7 +232,7 @@ func decodeChatEvent(data []byte) (chatEventEnvelope, error) {
 			return chatEventEnvelope{}, errInvalidChatEvent
 		}
 	case "nearby":
-		if message.WorldID == "" || message.WorldInstanceID == "" || len(message.RecipientCharacterIDs) == 0 || len(message.RecipientCharacterIDs) > 128 {
+		if message.WorldID == "" || message.WorldInstanceID == "" || len(message.RecipientCharacterIDs) == 0 || len(message.RecipientCharacterIDs) > 512 {
 			return chatEventEnvelope{}, errInvalidChatEvent
 		}
 	default:
