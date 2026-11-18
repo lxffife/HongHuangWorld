@@ -1963,6 +1963,7 @@ bool EnetServer::start() {
     }
     impl_->heartbeat_stop_requested = false;
     impl_->start_heartbeat_worker(heartbeat_ok);
+    impl_->start_chat_worker();
     impl_->start_persistence_worker();
     std::string loot_error;
     if (!load_loot_table(impl_->config, impl_->loot_table, loot_error)) {
@@ -2182,6 +2183,7 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
             break;
         }
     }
+    impl_->drain_chat_results();
     impl_->disconnect_revoked_sessions();
     impl_->online_players.store(impl_->players.size(), std::memory_order_relaxed);
     impl_->tick_world();
@@ -2197,6 +2199,8 @@ void EnetServer::stop() {
         impl_->heartbeat_cv.notify_all();
         if (impl_->heartbeat_thread.joinable()) impl_->heartbeat_thread.join();
 
+        impl_->stop_chat_worker();
+        impl_->drain_chat_results();
         impl_->stop_outbox_worker();
         impl_->stop_reward_worker();
         impl_->stop_drop_worker();
