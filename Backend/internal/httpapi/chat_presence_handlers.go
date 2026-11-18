@@ -24,3 +24,19 @@ func (h *chatHandlers) presence(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+
+func (h *chatHandlers) friendPresence(w http.ResponseWriter, r *http.Request) {
+	account, ok := h.authenticate(w, r)
+	if !ok {
+		return
+	}
+	items, err := h.service.ListFriendPresence(r.Context(), account.ID)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items": items,
+		"presence_scope": "chat",
+	})
+}
