@@ -13,6 +13,7 @@ public:
  ~DurableOutbox();
  DurableOutbox(const DurableOutbox&) = delete; DurableOutbox& operator=(const DurableOutbox&) = delete;
  bool enqueue(const OutboxEvent& event, std::string& error);
+ std::optional<OutboxEvent> find(const std::string& event_id, std::string& error) const;
  std::optional<OutboxEvent> claim_due(std::int64_t now_ms, std::string& error);
  std::optional<OutboxEvent> claim_due_type(std::int64_t now_ms, const std::string& event_type, std::string& error);
  std::optional<OutboxEvent> claim_due_excluding(std::int64_t now_ms, const std::string& event_type, std::string& error);
