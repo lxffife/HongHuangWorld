@@ -199,3 +199,31 @@ func (h *soulHandlers) essence(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, profile)
 }
+
+
+func (h *soulHandlers) applyAbsorption(w http.ResponseWriter, r *http.Request) {
+ providedKey:=r.Header.Get("X-World-Server-Key")
+ if h.apiKey=="" || len(providedKey)!=len(h.apiKey) ||
+  subtle.ConstantTimeCompare([]byte(providedKey),[]byte(h.apiKey))!=1 {
+  http.Error(w,"unauthorized",http.StatusUnauthorized); return
+ }
+ nodeKey:=strings.TrimSpace(r.Header.Get("X-World-Server-Node"))
+ var event soul.Absorption
+ if err:=decodeJSON(w,r,&event);err!=nil {
+  http.Error(w,"invalid request body",http.StatusBadRequest);return
+ }
+ result,err:=h.soulService.ApplyServerAbsorption(r.Context(),nodeKey,event)
+ switch {
+ case err==nil:
+  writeJSON(w,http.StatusOK,result)
+ case errors.Is(err,soul.ErrInvalidAbsorption):
+  http.Error(w,"invalid soul absorption event",http.StatusBadRequest)
+ case errors.Is(err,soul.ErrAbsorptionSession):
+  http.Error(w,"soul absorption session is not valid for this node",http.StatusConflict)
+ case errors.Is(err,soul.ErrAbsorptionCapacity):
+  http.Error(w,"soul absorption capacity is full",http.StatusConflict)
+ default:
+  h.logger.Error("apply soul absorption failed","error",err)
+  http.Error(w,"internal server error",http.StatusInternalServerError)
+ }
+}
