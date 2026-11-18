@@ -590,6 +590,11 @@ func (s *Service) CurrentEssence(ctx context.Context, accountID string) (Essence
 	result.PendingRareChoices=make([]PendingRareChoice,0)
 	for pendingRows.Next(){var choice PendingRareChoice;if err:=pendingRows.Scan(&choice.RecordID,&choice.KindID,&choice.KindName,&choice.CreatedAt);err!=nil{return EssenceProfile{},fmt.Errorf("scan pending rare soul choice: %w",err)};result.PendingRareChoices=append(result.PendingRareChoices,choice)}
 	if err:=pendingRows.Err();err!=nil{return EssenceProfile{},fmt.Errorf("iterate pending rare soul choices: %w",err)}
+	rareRows,rareErr:=s.db.QueryContext(ctx, `SELECT selected_attribute,COUNT(*) FROM soul_absorption_records WHERE soul_id=(SELECT id FROM souls WHERE account_id=$1) AND absorption_kind_id='faceless_essence' AND selected_at IS NOT NULL GROUP BY selected_attribute`,accountID)
+	if rareErr!=nil{return EssenceProfile{},fmt.Errorf("load allocated rare soul affinities: %w",rareErr)}
+	defer rareRows.Close()
+	for rareRows.Next(){var attribute string;var count int64;if err:=rareRows.Scan(&attribute,&count);err!=nil{return EssenceProfile{},fmt.Errorf("scan allocated rare soul affinity: %w",err)};key:="selected_"+attribute;if _,ok:=result.AffinityCounts[key];ok{result.AffinityCounts[key]=count}}
+	if err:=rareRows.Err();err!=nil{return EssenceProfile{},fmt.Errorf("iterate allocated rare soul affinities: %w",err)}
 	return result,nil
 }
 
