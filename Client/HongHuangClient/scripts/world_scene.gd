@@ -2244,7 +2244,7 @@ func _exploration_event_state_text(event: Dictionary, distance: float) -> String
 		"available":
 			return "触发奇遇" if in_range else "待触发 · 距离 %dm" % roundi(distance)
 		_:
-			return "未解锁 · 先发现地点"
+			return "未解锁 · 需满足前置因果并发现地点"
 
 
 func _render_exploration_events(events: Variant) -> void:
