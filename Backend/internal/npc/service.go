@@ -683,6 +683,8 @@ func (s *Service) TriggerExplorationEvent(ctx context.Context, accountID,eventID
 		case "beast_awaken": meritDelta,karmaDelta=2,2
 		case "lantern_shadow_follow": meritDelta,karmaDelta=3,-1
 		case "lantern_shadow_release": meritDelta,karmaDelta=1,-1
+		case "battlefield_seal": meritDelta,karmaDelta=3,-2
+		case "battlefield_summon": meritDelta,karmaDelta=1,3
 		default: return ExplorationEventResult{},ErrExplorationEventUnavailable
 		}
 	} else if choiceID!="" {
