@@ -14,6 +14,7 @@ import (
 type chatServerHandlers struct {
 	service *chat.Service
 	apiKey string
+	events *chatEventBus
 	logger *slog.Logger
 }
 
@@ -122,6 +123,9 @@ func (h *chatServerHandlers) publish(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 		}
 		return
+	}
+	if h.events != nil {
+		h.events.publish(item)
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"message": item})
 }
