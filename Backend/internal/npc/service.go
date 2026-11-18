@@ -464,7 +464,7 @@ type ExplorationEventChoice struct {
 	Text string `json:"text"`
 	Description string `json:"description"`
 	Result string `json:"result"`
-	EffectKey string `json:"-"`
+	EffectKey string `json:"effect_key"`
 }
 
 type ExplorationEvent struct {
