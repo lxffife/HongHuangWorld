@@ -345,3 +345,24 @@ func (s *Service) PruneExpiredMessages(ctx context.Context) (int64, error) {
 	}
 	return deleted, nil
 }
+
+// CurrentWorldID resolves the active character's world for chat-only routing.
+// It intentionally reads identity state but never mutates game state.
+func (s *Service) CurrentWorldID(ctx context.Context, accountID string) (string, error) {
+	if strings.TrimSpace(accountID) == "" {
+		return "", ErrInvalidInput
+	}
+	var worldID string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT c.world_id
+		FROM souls soul
+		JOIN characters c ON c.id = soul.current_character_id
+		WHERE soul.account_id = $1 AND c.status = 'alive'`, accountID).Scan(&worldID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNoCharacter
+	}
+	if err != nil {
+		return "", fmt.Errorf("resolve chat world: %w", err)
+	}
+	return worldID, nil
+}
