@@ -782,11 +782,9 @@ func _apply_world_player_form() -> void:
 		local_player.set_soul_form(false)
 	if is_instance_valid(soul_choice_button):
 		var pending: Array = soul_essence_profile.get("pending_rare_choices", [])
-		soul_choice_button.visible = is_underworld and hud_visible and pending.size() > 0
+		soul_choice_button.visible = hud_visible and pending.size() > 0
 
 func _request_soul_essence() -> void:
-	if str(HHSession.world_snapshot.get("world_id", "")) != "underworld_fengdu":
-		return
 	if soul_essence_http == null or HHSession.access_token.is_empty() or soul_essence_request_busy:
 		return
 	soul_essence_request_busy = true
@@ -813,7 +811,7 @@ func _on_soul_essence_request_completed(result: int, response_code: int, _header
 	_update_compact_hud()
 	var pending: Array = soul_essence_profile.get("pending_rare_choices", [])
 	if is_instance_valid(soul_choice_button):
-		soul_choice_button.visible = pending.size() > 0 and hud_visible and str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu"
+		soul_choice_button.visible = pending.size() > 0 and hud_visible
 	if pending.size() > 0 and pending_rare_choice_record_id.is_empty():
 		pending_rare_choice_record_id = str(pending[0].get("record_id", ""))
 		_show_notification("获得无相灵魄！可在左上方选择一项来世属性", 6.0)
@@ -1003,7 +1001,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if is_instance_valid(details_toggle_button):
 			details_toggle_button.visible = hud_visible
 		if is_instance_valid(soul_choice_button):
-			soul_choice_button.visible = hud_visible and str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu" and soul_essence_profile.get("pending_rare_choices", []).size() > 0
+			soul_choice_button.visible = hud_visible and soul_essence_profile.get("pending_rare_choices", []).size() > 0
 		if is_instance_valid(vitals_panel):
 			vitals_panel.visible = hud_visible
 		if is_instance_valid(input_debug_panel):
