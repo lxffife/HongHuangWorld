@@ -12,7 +12,7 @@ import (
 )
 
 type inventoryHandlers struct {
-	authService *auth.Service
+	authService auth.Provider
 	service *inventory.Service
 	apiKey string
 	logger *slog.Logger
