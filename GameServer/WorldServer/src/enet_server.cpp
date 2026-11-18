@@ -1085,6 +1085,7 @@ struct EnetServer::Impl {
                 }
 
                 long status = 0;
+                std::string message_id;
                 std::string delivery_error;
                 bool delivered = false;
                 try {
