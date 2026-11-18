@@ -1085,6 +1085,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		$HUD/Panel.visible = hud_visible and details_visible
 		if is_instance_valid(compact_hud_panel):
 			compact_hud_panel.visible = hud_visible
+		if is_instance_valid(chat_panel):
+			chat_panel.visible = hud_visible
 		if is_instance_valid(details_toggle_button):
 			details_toggle_button.visible = hud_visible
 		if is_instance_valid(soul_choice_button):
@@ -1196,6 +1198,7 @@ func _set_chat_expanded(expanded: bool) -> void:
 	chat_expanded = expanded
 	if not is_instance_valid(chat_panel):
 		return
+	chat_panel.offset_top = -354.0 if expanded else -166.0
 	chat_panel.custom_minimum_size.y = 236.0 if expanded else 48.0
 	for child in chat_panel.get_child(0).get_children():
 		if child is Control and child != chat_panel.get_child(0).get_child(0):
