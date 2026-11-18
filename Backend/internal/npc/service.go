@@ -459,6 +459,14 @@ var (
 	ErrExplorationEventResolved = errors.New("exploration event was already resolved by this soul")
 )
 
+type ExplorationEventChoice struct {
+	ID string `json:"id"`
+	Text string `json:"text"`
+	Description string `json:"description"`
+	Result string `json:"result"`
+	EffectKey string `json:"-"`
+}
+
 type ExplorationEvent struct {
 	ID string `json:"id"`
 	PointID string `json:"point_id"`
@@ -473,6 +481,7 @@ type ExplorationEvent struct {
 	DangerLevel int `json:"danger_level"`
 	MeritReward int64 `json:"merit_reward"`
 	KarmaDelta int64 `json:"karma_delta"`
+	Choices []ExplorationEventChoice `json:"choices"`
 	Status string `json:"status"`
 	Discovered bool `json:"discovered"`
 	Unlocked bool `json:"unlocked"`
@@ -481,8 +490,11 @@ type ExplorationEvent struct {
 
 type ExplorationEventResult struct {
 	EventID string `json:"event_id"`
+	ChoiceID string `json:"choice_id"`
+	ChoiceText string `json:"choice_text"`
 	Title string `json:"title"`
 	Description string `json:"description"`
+	Outcome string `json:"outcome"`
 	Merit int64 `json:"merit"`
 	Karma int64 `json:"karma"`
 	MeritDelta int64 `json:"merit_delta"`
@@ -508,7 +520,7 @@ func (s *Service) ListAvailableExplorationEvents(ctx context.Context, accountID 
 	rows,err:=s.db.QueryContext(ctx,
 		`SELECT e.id,e.point_id,p.name,e.title,e.description,e.event_type,
 		        p.position_x,p.position_y,p.position_z,p.interaction_radius,p.danger_level,
-		        e.merit_reward,e.karma_delta,
+		        e.merit_reward,e.karma_delta,e.choices,
 		        (d.point_id IS NOT NULL),
 		        (d.point_id IS NOT NULL
 		          AND (e.required_race_id IS NULL OR e.required_race_id=c.race_id)
@@ -536,10 +548,14 @@ func (s *Service) ListAvailableExplorationEvents(ctx context.Context, accountID 
 	items:=make([]ExplorationEvent,0)
 	for rows.Next() {
 		var item ExplorationEvent
+		var choicesJSON []byte
 		if err:=rows.Scan(&item.ID,&item.PointID,&item.PointName,&item.Title,&item.Description,&item.EventType,
 			&item.PositionX,&item.PositionY,&item.PositionZ,&item.InteractionRadius,&item.DangerLevel,
-			&item.MeritReward,&item.KarmaDelta,&item.Discovered,&item.Unlocked,&item.Completed,&item.Status);err!=nil {
+			&item.MeritReward,&item.KarmaDelta,&choicesJSON,&item.Discovered,&item.Unlocked,&item.Completed,&item.Status);err!=nil {
 			return nil,fmt.Errorf("scan exploration event: %w",err)
+		}
+		if len(choicesJSON)>0 {
+			if err:=json.Unmarshal(choicesJSON,&item.Choices);err!=nil { return nil,fmt.Errorf("decode exploration event choices: %w",err) }
 		}
 		items=append(items,item)
 	}
@@ -547,18 +563,19 @@ func (s *Service) ListAvailableExplorationEvents(ctx context.Context, accountID 
 	return items,nil
 }
 
-func (s *Service) TriggerExplorationEvent(ctx context.Context, accountID,eventID string) (ExplorationEventResult,error) {
-	if eventID=="" || len(eventID)>96 { return ExplorationEventResult{},ErrExplorationEventUnavailable }
+func (s *Service) TriggerExplorationEvent(ctx context.Context, accountID,eventID,choiceID string) (ExplorationEventResult,error) {
+	if eventID=="" || len(eventID)>96 || len(choiceID)>64 { return ExplorationEventResult{},ErrExplorationEventUnavailable }
 	tx,err:=s.db.BeginTx(ctx,nil)
 	if err!=nil { return ExplorationEventResult{},fmt.Errorf("begin exploration event: %w",err) }
 	defer tx.Rollback()
 	var soulID,worldID string
 	var event ExplorationEvent
 	var meritDelta,karmaDelta int64
+	var choicesJSON []byte
 	err=tx.QueryRowContext(ctx,
 		`SELECT soul.id::text,wi.world_id,e.id,e.point_id,p.name,e.title,e.description,e.event_type,
 		        p.position_x,p.position_y,p.position_z,p.interaction_radius,p.danger_level,
-		        e.merit_reward,e.karma_delta
+		        e.merit_reward,e.karma_delta,e.choices
 		 FROM souls soul
 		 JOIN characters c ON c.id=soul.current_character_id AND c.status='alive'
 		 JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
@@ -573,7 +590,7 @@ func (s *Service) TriggerExplorationEvent(ctx context.Context, accountID,eventID
 		 ORDER BY ws.connected_at DESC NULLS LAST LIMIT 1
 		 FOR UPDATE OF soul,c,ws`,accountID,eventID).Scan(
 		&soulID,&worldID,&event.ID,&event.PointID,&event.PointName,&event.Title,&event.Description,&event.EventType,
-		&event.PositionX,&event.PositionY,&event.PositionZ,&event.InteractionRadius,&event.DangerLevel,&meritDelta,&karmaDelta)
+		&event.PositionX,&event.PositionY,&event.PositionZ,&event.InteractionRadius,&event.DangerLevel,&meritDelta,&karmaDelta,&choicesJSON)
 	if errors.Is(err,sql.ErrNoRows) {
 		var active bool
 		checkErr:=tx.QueryRowContext(ctx,
@@ -596,6 +613,26 @@ func (s *Service) TriggerExplorationEvent(ctx context.Context, accountID,eventID
 		return ExplorationEventResult{},ErrTooFar
 	}
 	if err!=nil { return ExplorationEventResult{},fmt.Errorf("validate exploration event: %w",err) }
+	var selected *ExplorationEventChoice
+	if len(choicesJSON)>0 {
+		if err:=json.Unmarshal(choicesJSON,&event.Choices);err!=nil { return ExplorationEventResult{},fmt.Errorf("decode exploration event choices: %w",err) }
+		if choiceID=="" { return ExplorationEventResult{},ErrExplorationEventUnavailable }
+		for i:=range event.Choices { if event.Choices[i].ID==choiceID { selected=&event.Choices[i]; break } }
+		if selected==nil { return ExplorationEventResult{},ErrExplorationEventUnavailable }
+		switch selected.EffectKey {
+		case "lantern_keep": meritDelta,karmaDelta=2,-1
+		case "lantern_take": meritDelta,karmaDelta=1,1
+		case "river_accept": meritDelta,karmaDelta=2,-1
+		case "river_release": meritDelta,karmaDelta=1,1
+		case "bridge_honor": meritDelta,karmaDelta=2,-2
+		case "bridge_break": meritDelta,karmaDelta=1,2
+		case "tablet_record": meritDelta,karmaDelta=3,-1
+		case "tablet_conceal": meritDelta,karmaDelta=0,2
+		default: return ExplorationEventResult{},ErrExplorationEventUnavailable
+		}
+	} else if choiceID!="" {
+		return ExplorationEventResult{},ErrExplorationEventUnavailable
+	}
 	var fateEventID string
 	err=tx.QueryRowContext(ctx,
 		`INSERT INTO soul_exploration_event_claims(soul_id,event_id)
@@ -610,6 +647,7 @@ func (s *Service) TriggerExplorationEvent(ctx context.Context, accountID,eventID
 		}
 	}
 	result:=ExplorationEventResult{EventID:event.ID,Title:event.Title,Description:event.Description,MeritDelta:meritDelta,KarmaDelta:karmaDelta}
+	if selected!=nil { result.ChoiceID=selected.ID; result.ChoiceText=selected.Text; result.Outcome=selected.Result; result.Description=selected.Result }
 	err=tx.QueryRowContext(ctx,
 		`UPDATE souls SET merit=merit+$1,karma=karma+$2,updated_at=now() WHERE id=$3 RETURNING merit,karma`,
 		meritDelta,karmaDelta,soulID).Scan(&result.Merit,&result.Karma)
