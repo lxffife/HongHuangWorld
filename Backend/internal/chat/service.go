@@ -321,7 +321,7 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 		  AND sr.node_key=$3 AND sr.status='ready'
 		  AND sr.last_heartbeat_at > now()-interval '30 seconds'
 		  AND ws.session_state='active' AND c.status='alive'
-		FOR UPDATE OF ws`, sessionID, characterID, nodeKey).
+		FOR UPDATE OF ws, c`, sessionID, characterID, nodeKey).
 		Scan(&name,&raceID,&worldID,&level)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Message{}, ErrNoCharacter
