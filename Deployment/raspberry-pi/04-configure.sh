@@ -18,7 +18,7 @@ if [[ -f "$HH_ENV_FILE" ]]; then
   CHAT_DATABASE_URL="postgres://$CHAT_DB_USER:$CHAT_DB_PASSWORD@127.0.0.1:5432/$CHAT_DB_NAME?sslmode=disable"
   tmp_env="$(mktemp)"
   awk -F= '$1 != "CHAT_DATABASE_URL" && $1 != "CHAT_TARGET_DATABASE_URL" && $1 != "CHAT_PROJECTION_DATABASE_URL" && $1 != "CHAT_USE_PROJECTION_DATABASE" { print }' "$HH_ENV_FILE" > "$tmp_env"
-  printf 'CHAT_DATABASE_URL=%s\\n' "$CHAT_DATABASE_URL" >> "$tmp_env"
+  printf 'CHAT_DATABASE_URL=%s\n' "$CHAT_DATABASE_URL" >> "$tmp_env"
   sudo install -m 600 -o "$USER" -g "$USER" "$tmp_env" "$HH_ENV_FILE"
   rm -f "$tmp_env"
   log "已将现有环境配置切换为独立 Chat 数据库，其他密码和配置保持不变：$HH_ENV_FILE"
