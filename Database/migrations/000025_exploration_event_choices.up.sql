@@ -5,6 +5,9 @@ BEGIN;
 ALTER TABLE world_exploration_events
     ADD COLUMN choices JSONB NOT NULL DEFAULT '[]'::jsonb;
 
+ALTER TABLE soul_exploration_event_claims
+    ADD COLUMN choice_id VARCHAR(64);
+
 UPDATE world_exploration_events SET choices = '[
   {"id":"keep_soul_flame","text":"留下魂灯，照亮后来者","description":"你愿意让这盏灯继续为迷途新魂指路。","result":"魂灯火光稳定下来，灯芯深处留下你的善念。","effect_key":"lantern_keep"},
   {"id":"take_soul_flame","text":"收取灯火，追寻自己的来路","description":"你将灯火收于掌心，试图从中寻找自己的前尘。","result":"灯火映出一缕旧影，你得到线索，也沾染了些许执念。","effect_key":"lantern_take"}
