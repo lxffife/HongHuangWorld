@@ -791,6 +791,10 @@ struct EnetServer::Impl {
     std::deque<ChatJobResult> completed_chat_jobs;
     bool chat_stop_requested{false};
     std::thread chat_thread;
+    std::mutex chat_outbox_mutex;
+    std::condition_variable chat_outbox_cv;
+    bool chat_outbox_stop_requested{false};
+    std::thread chat_outbox_thread;
 
     explicit Impl(ServerConfig value) : config(std::move(value)) {
         const auto add_monster = [this](std::string runtime_id, std::string definition_id,
@@ -879,7 +883,10 @@ struct EnetServer::Impl {
         const auto now = wall_clock_ms();
         const bool stored = durable_outbox->enqueue(
             honghuang::persistence::OutboxEvent{event_id, type, payload.dump(), 0, now, now, {}}, error);
-        if (stored) outbox_cv.notify_one();
+        if (stored) {
+            outbox_cv.notify_one();
+            chat_outbox_cv.notify_one();
+        }
         return stored;
     }
 
@@ -892,7 +899,7 @@ struct EnetServer::Impl {
                     if (outbox_stop_requested) return;
                 }
                 std::string storage_error;
-                auto event = durable_outbox->claim_due(wall_clock_ms(), storage_error);
+                auto event = durable_outbox->claim_due_excluding(wall_clock_ms(), "nearby_chat", storage_error);
                 if (!event) {
                     if (!storage_error.empty()) std::cerr << "Outbox claim failed: " << storage_error << '\n';
                     std::unique_lock lock(outbox_mutex);
@@ -1039,6 +1046,83 @@ struct EnetServer::Impl {
                     std::cerr << "Outbox retry scheduling failed: " << retry_error << '\n';
             }
         });
+    }
+
+    void start_chat_outbox_worker() {
+        chat_outbox_stop_requested = false;
+        chat_outbox_thread = std::thread([this] {
+            while (true) {
+                {
+                    std::lock_guard lock(chat_outbox_mutex);
+                    if (chat_outbox_stop_requested) return;
+                }
+                std::string storage_error;
+                auto event = durable_outbox->claim_due_type(wall_clock_ms(), "nearby_chat", storage_error);
+                if (!event) {
+                    if (!storage_error.empty()) std::cerr << "Chat outbox claim failed: " << storage_error << '\\n';
+                    std::unique_lock lock(chat_outbox_mutex);
+                    if (chat_outbox_stop_requested) return;
+                    chat_outbox_cv.wait_for(lock, std::chrono::milliseconds(500));
+                    continue;
+                }
+
+                long status = 0;
+                std::string delivery_error;
+                bool delivered = false;
+                try {
+                    const Json payload = Json::parse(event->payload);
+                    ChatJob chat;
+                    chat.session_id = payload.at("session_id").get<std::string>();
+                    chat.character_id = payload.at("character_id").get<std::string>();
+                    chat.client_message_id = payload.at("client_message_id").get<std::string>();
+                    chat.content = payload.at("content").get<std::string>();
+                    chat.recipient_character_ids = payload.at("recipient_character_ids").get<std::vector<std::string>>();
+                    delivered = deliver_chat_message(config, chat, status, delivery_error);
+                } catch (const std::exception& exception) {
+                    status = 400;
+                    delivery_error = std::string("invalid nearby chat outbox payload: ") + exception.what();
+                }
+
+                if (delivered) {
+                    std::string mark_error;
+                    if (!durable_outbox->mark_delivered(event->event_id, mark_error)) {
+                        std::cerr << "Nearby chat delivered marker failed; idempotent replay expected: "
+                                  << mark_error << '\\n';
+                    }
+                    continue;
+                }
+                if (status >= 300 && status < 500) {
+                    std::string dead_error;
+                    if (!durable_outbox->move_to_dead_letter(
+                            event->event_id, event->attempts + 1, delivery_error, dead_error)) {
+                        std::cerr << "Nearby chat dead-letter update failed: " << dead_error << '\\n';
+                    } else {
+                        std::cerr << "Nearby chat outbox event dead-lettered (HTTP " << status
+                                  << "): " << event->event_id << " " << delivery_error << '\\n';
+                    }
+                    continue;
+                }
+                const auto attempts = event->attempts == std::numeric_limits<std::uint32_t>::max()
+                    ? event->attempts : event->attempts + 1;
+                const auto exponent = std::min<std::uint32_t>(attempts, 8U);
+                const auto delay_ms = std::min<std::int64_t>(1000LL * (1LL << exponent), 300000LL);
+                std::string retry_error;
+                if (!durable_outbox->schedule_retry(
+                        event->event_id, attempts, wall_clock_ms() + delay_ms,
+                        delivery_error, retry_error)) {
+                    std::cerr << "Nearby chat retry scheduling failed: " << retry_error << '\\n';
+                }
+            }
+        });
+    }
+
+    void stop_chat_outbox_worker() {
+        {
+            std::lock_guard lock(chat_outbox_mutex);
+            chat_outbox_stop_requested = true;
+        }
+        chat_outbox_cv.notify_all();
+        if (chat_outbox_thread.joinable()) chat_outbox_thread.join();
     }
 
     void stop_outbox_worker() {
@@ -1983,6 +2067,7 @@ bool EnetServer::start() {
     }
     impl_->start_drop_worker();
     impl_->start_outbox_worker();
+    impl_->start_chat_outbox_worker();
     impl_->last_persistence = Clock::now();
     std::cout << "WorldServer ENet listening on UDP " << impl_->config.port << '\n';
     return true;
@@ -2205,6 +2290,7 @@ void EnetServer::stop() {
 
         impl_->stop_chat_worker();
         impl_->drain_chat_results();
+        impl_->stop_chat_outbox_worker();
         impl_->stop_outbox_worker();
         impl_->stop_reward_worker();
         impl_->stop_drop_worker();
