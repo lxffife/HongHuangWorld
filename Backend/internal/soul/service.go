@@ -572,9 +572,9 @@ func (s *Service) CurrentEssence(ctx context.Context, accountID string) (Essence
 		result.AbsorptionKinds=append(result.AbsorptionKinds,item)
 		switch item.KindID {
 		case "ironbone_beast_soul", "beast_spirit":
-			result.AffinityCounts["beast"] = item.AbsorbedCount
+			result.AffinityCounts["beast"] += item.AbsorbedCount
 		case "blazing_war_soul", "battle_spirit":
-			result.AffinityCounts["battle"] = item.AbsorbedCount
+			result.AffinityCounts["battle"] += item.AbsorbedCount
 		case "gale_wraith":
 			result.AffinityCounts["gale"] = item.AbsorbedCount
 		case "spirit_scholar_wisp":
