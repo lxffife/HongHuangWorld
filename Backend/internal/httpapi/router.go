@@ -50,6 +50,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		souls := &soulHandlers{authService: authService, soulService: soul.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
 		mux.HandleFunc("POST /api/v1/souls", souls.create)
 		mux.HandleFunc("GET /api/v1/souls/current", souls.current)
+		mux.HandleFunc("GET /api/v1/souls/current/essence", souls.essence)
 		mux.HandleFunc("GET /api/v1/souls/current/progression", souls.progression)
 		mux.HandleFunc("GET /api/v1/souls/current/fate", souls.fate)
 		mux.HandleFunc("POST /api/v1/souls/current/breakthrough", souls.breakthrough)
@@ -110,7 +111,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		unavailable := func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "service unavailable", http.StatusServiceUnavailable) }
 		for _, route := range []string{
 			"POST /api/v1/auth/register", "POST /api/v1/auth/login", "GET /api/v1/account/me",
-			"POST /api/v1/souls", "GET /api/v1/souls/current", "GET /api/v1/souls/current/progression", "POST /api/v1/souls/current/breakthrough", "GET /api/v1/souls/current/trials", "GET /api/v1/souls/current/reincarnation-eligibility", "POST /api/v1/servers/souls/rewards", "GET /api/v1/worlds", "GET /api/v1/worlds/current/npcs", "POST /api/v1/worlds/current/npcs/interact", "POST /api/v1/worlds/current/npcs/choose", "POST /api/v1/worlds/current/npcs/discover",
+			"POST /api/v1/souls", "GET /api/v1/souls/current", "GET /api/v1/souls/current/essence", "GET /api/v1/souls/current/progression", "POST /api/v1/souls/current/breakthrough", "GET /api/v1/souls/current/trials", "GET /api/v1/souls/current/reincarnation-eligibility", "POST /api/v1/servers/souls/rewards", "GET /api/v1/worlds", "GET /api/v1/worlds/current/npcs", "POST /api/v1/worlds/current/npcs/interact", "POST /api/v1/worlds/current/npcs/choose", "POST /api/v1/worlds/current/npcs/discover",
 			"GET /api/v1/worlds/current/exploration-progress", "GET /api/v1/worlds/current/exploration-points", "POST /api/v1/worlds/current/exploration-points/discover", "GET /api/v1/worlds/current/exploration-events", "POST /api/v1/worlds/current/exploration-events/trigger",
 			"GET /api/v1/cultivation/systems", "GET /api/v1/cultivation/race-growth",
 			"GET /api/v1/cultivation/bloodlines", "GET /api/v1/cultivation/techniques",
