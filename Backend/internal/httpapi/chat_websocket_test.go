@@ -5,6 +5,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"testing"
+	"time"
+
+	"github.com/liflife/HongHuangWorld/Backend/internal/chat"
 )
 
 func maskedClientFrame(opcode byte, payload []byte) []byte {
@@ -49,5 +52,25 @@ func TestReadChatSocketFrameRejectsOversizedPayload(t *testing.T) {
 	reader := bufio.NewReader(bytes.NewReader(frame))
 	if _, _, err := readChatSocketFrame(reader); err == nil {
 		t.Fatal("expected oversized client frame to be rejected")
+	}
+}
+
+func TestChatSocketHubRoutesWorldAndCrossWorldMessages(t *testing.T) {
+	hub := newChatSocketHub()
+	worldA := &chatSocketClient{worldID: "world-a", send: make(chan []byte, 4), done: make(chan struct{})}
+	worldA2 := &chatSocketClient{worldID: "world-a", send: make(chan []byte, 4), done: make(chan struct{})}
+	worldB := &chatSocketClient{worldID: "world-b", send: make(chan []byte, 4), done: make(chan struct{})}
+	hub.add(worldA)
+	hub.add(worldA2)
+	hub.add(worldB)
+
+	hub.broadcast(chat.Message{ID: "1", Channel: "world", WorldID: "world-a", Content: "world", CreatedAt: time.Now()})
+	if len(worldA.send) != 1 || len(worldA2.send) != 1 || len(worldB.send) != 0 {
+		t.Fatalf("world broadcast recipients = (%d,%d,%d), want (1,1,0)", len(worldA.send), len(worldA2.send), len(worldB.send))
+	}
+
+	hub.broadcast(chat.Message{ID: "2", Channel: "cross_world", Content: "cross", CreatedAt: time.Now()})
+	if len(worldA.send) != 2 || len(worldA2.send) != 2 || len(worldB.send) != 1 {
+		t.Fatalf("cross-world broadcast recipients = (%d,%d,%d), want (2,2,1)", len(worldA.send), len(worldA2.send), len(worldB.send))
 	}
 }
