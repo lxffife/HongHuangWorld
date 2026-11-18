@@ -34,3 +34,10 @@ CMakeCache.txt
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Admin web frontend
+AdminWeb/node_modules/
+AdminWeb/dist/
+AdminWeb/.vite/
+*.tsbuildinfo
+npm-debug.log*
