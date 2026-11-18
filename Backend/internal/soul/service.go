@@ -493,6 +493,8 @@ type EssenceProfile struct {
 	AffinityCounts map[string]int64 `json:"affinity_counts"`
 	Mutations []SoulMutation `json:"mutations"`
 	MutationCount int64 `json:"mutation_count"`
+	FusionNames []string `json:"fusion_names"`
+	FusionCount int64 `json:"fusion_count"`
 }
 
 type InheritanceAttributes struct {
@@ -639,6 +641,13 @@ func (s *Service) CurrentEssence(ctx context.Context, accountID string) (Essence
 	}
 	if err:=mutationRows.Err();err!=nil{return EssenceProfile{},fmt.Errorf("iterate soul mutations: %w",err)}
 	if err:=s.db.QueryRowContext(ctx,`SELECT COUNT(*) FROM soul_mutation_records WHERE soul_id=(SELECT id FROM souls WHERE account_id=$1)`,accountID).Scan(&result.MutationCount);err!=nil{return EssenceProfile{},fmt.Errorf("count soul mutations: %w",err)}
+	fusionRows,fusionErr:=s.db.QueryContext(ctx,`SELECT fusion_name FROM soul_fusion_records WHERE soul_id=(SELECT id FROM souls WHERE account_id=$1) ORDER BY created_at DESC LIMIT 8`,accountID)
+	if fusionErr!=nil{return EssenceProfile{},fmt.Errorf("load soul fusion history: %w",fusionErr)}
+	defer fusionRows.Close()
+	result.FusionNames=make([]string,0)
+	for fusionRows.Next(){var name string;if err:=fusionRows.Scan(&name);err!=nil{return EssenceProfile{},fmt.Errorf("scan soul fusion history: %w",err)};result.FusionNames=append(result.FusionNames,name)}
+	if err:=fusionRows.Err();err!=nil{return EssenceProfile{},fmt.Errorf("iterate soul fusion history: %w",err)}
+	if err:=s.db.QueryRowContext(ctx,`SELECT COUNT(*) FROM soul_fusion_records WHERE soul_id=(SELECT id FROM souls WHERE account_id=$1)`,accountID).Scan(&result.FusionCount);err!=nil{return EssenceProfile{},fmt.Errorf("count soul fusions: %w",err)}
 	return result,nil
 }
 
