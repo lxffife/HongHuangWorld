@@ -21,7 +21,7 @@ var (
 	ErrIdempotencyConflict = errors.New("chat client message id was reused with different content")
 )
 
-type Service struct { db *sql.DB; projectionMode bool }
+type Service struct { db *sql.DB }
 
 type Message struct {
 	ID string `json:"id"`
@@ -45,9 +45,8 @@ type SendRequest struct {
 	RecipientCharacterIDs []string `json:"recipient_character_ids,omitempty"`
 }
 
-func NewService(db *sql.DB) *Service { return &Service{db: db, projectionMode: true} }
+func NewService(db *sql.DB) *Service { return &Service{db: db} }
 
-// NewProjectionService is retained as a source-compatible alias; Chat always uses its own projections.
 func NewProjectionService(db *sql.DB) *Service { return NewService(db) }
 
 func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (Message, error) {
@@ -75,15 +74,7 @@ func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (
 	// remain correct when the same account submits concurrent requests.
 	var characterID, characterName, raceID, worldID string
 	var level int
-	characterQuery := `SELECT c.id::text,c.name,COALESCE(c.race_id,''),c.world_id,c.level
-		FROM souls soul JOIN characters c ON c.id=soul.current_character_id
-		WHERE soul.account_id=$1 AND c.status='alive'
-		FOR UPDATE OF c`
-	if s.projectionMode { characterQuery = `SELECT c.character_id::text,c.name,COALESCE(c.race_id,''),c.world_id,c.level
-		FROM chat_accounts account
-		JOIN chat_characters c ON c.character_id=account.current_character_id
-		WHERE account.account_id=$1::uuid AND c.status='alive'
-		FOR UPDATE OF account,c` }
+	characterQuery := `SELECT c.character_id::text,c.name,COALESCE(c.race_id,''),c.world_id,c.level FROM chat_accounts account JOIN chat_characters c ON c.character_id=account.current_character_id WHERE account.account_id=$1::uuid AND c.status='alive' FOR UPDATE OF account,c`
 	err = tx.QueryRowContext(ctx, characterQuery, accountID).Scan(&characterID, &characterName, &raceID, &worldID, &level)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Message{}, ErrNoCharacter
@@ -92,7 +83,7 @@ func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (
 		return Message{}, fmt.Errorf("resolve and lock chat character: %w", err)
 	}
 
-	existing, existingErr := getChatMessageByClientID(ctx, tx, characterID, req.ClientMessageID, s.projectionMode)
+	existing, existingErr := getChatMessageByClientID(ctx, tx, characterID, req.ClientMessageID)
 	if existingErr == nil {
 		if existing.Channel != req.Channel || existing.Content != req.Content {
 			return Message{}, ErrIdempotencyConflict
@@ -124,21 +115,11 @@ func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (
 	if req.Channel == "world" {
 		worldValue = worldID
 	}
-	var insertErr error
-	if s.projectionMode {
-		_, insertErr = tx.ExecContext(ctx, `INSERT INTO chat_messages(channel_type,world_id,sender_character_id,client_message_id,sender_name,sender_race,sender_level,content)
-			VALUES($1,$2,$3::uuid,$4::uuid,$5,$6,$7,$8)`,
-			req.Channel, worldValue, characterID, req.ClientMessageID, characterName, raceID, level, req.Content)
-	} else {
-		_, insertErr = tx.ExecContext(ctx, `INSERT INTO chat_messages(channel_type,world_id,sender_character_id,client_message_id,content)
-			VALUES($1,$2,$3::uuid,$4::uuid,$5)`,
-			req.Channel, worldValue, characterID, req.ClientMessageID, req.Content)
-	}
-	err = insertErr
+	_, err = tx.ExecContext(ctx, `INSERT INTO chat_messages(channel_type,world_id,sender_character_id,client_message_id,sender_name,sender_race,sender_level,content) VALUES($1,$2,$3::uuid,$4::uuid,$5,$6,$7,$8)`, req.Channel, worldValue, characterID, req.ClientMessageID, characterName, raceID, level, req.Content)
 	if err != nil {
 		return Message{}, fmt.Errorf("store chat message: %w", err)
 	}
-	item, err := getChatMessageByClientID(ctx, tx, characterID, req.ClientMessageID, s.projectionMode)
+	item, err := getChatMessageByClientID(ctx, tx, characterID, req.ClientMessageID)
 	if err != nil {
 		return Message{}, err
 	}
@@ -165,19 +146,7 @@ func (s *Service) List(ctx context.Context, accountID, channel, before string, l
 		limit = 50
 	}
 	var characterID, worldID, instanceID string
-	resolveQuery := `
-		SELECT c.id::text,c.world_id,COALESCE(ws.instance_id::text,'')
-		FROM souls soul JOIN characters c ON c.id=soul.current_character_id
-		LEFT JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
-		WHERE soul.account_id=$1 AND c.status='alive'`
-	if s.projectionMode {
-		resolveQuery = `
-			SELECT c.character_id::text,c.world_id,COALESCE(ws.instance_id::text,'')
-			FROM chat_accounts account
-			JOIN chat_characters c ON c.character_id=account.current_character_id
-			LEFT JOIN chat_world_sessions ws ON ws.character_id=c.character_id AND ws.session_state='active'
-			WHERE account.account_id=$1::uuid AND c.status='alive'`
-	}
+	resolveQuery := `SELECT c.character_id::text,c.world_id,COALESCE(ws.instance_id::text,'') FROM chat_accounts account JOIN chat_characters c ON c.character_id=account.current_character_id LEFT JOIN chat_world_sessions ws ON ws.character_id=c.character_id AND ws.session_state='active' WHERE account.account_id=$1::uuid AND c.status='alive'`
 	err := s.db.QueryRowContext(ctx, resolveQuery, accountID).Scan(&characterID, &worldID, &instanceID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNoCharacter
@@ -189,16 +158,7 @@ func (s *Service) List(ctx context.Context, accountID, channel, before string, l
 		return []Message{}, nil
 	}
 
-	query := `SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),
-		m.sender_character_id::text,c.name,COALESCE(c.race_id,''),c.level,m.content,m.created_at
-		FROM chat_messages m JOIN characters c ON c.id=m.sender_character_id
-		WHERE m.created_at > now()-interval '30 days' AND `
-	if s.projectionMode {
-		query = `SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),
-			m.sender_character_id::text,m.sender_name,m.sender_race,m.sender_level,m.content,m.created_at
-			FROM chat_messages m
-			WHERE m.created_at > now()-interval '30 days' AND `
-	}
+	query := `SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),m.sender_character_id::text,m.sender_name,m.sender_race,m.sender_level,m.content,m.created_at FROM chat_messages m WHERE m.created_at > now()-interval '30 days' AND `
 	args := []any{}
 	switch channel {
 	case "world":
@@ -246,20 +206,15 @@ type chatRowQueryer interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
-func getChatMessageByClientID(ctx context.Context, queryer chatRowQueryer, characterID, clientID string, projection bool) (Message, error) {
+func getChatMessageByClientID(ctx context.Context, queryer chatRowQueryer, characterID, clientID string) (Message, error) {
 	var m Message
-	query := `SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),m.sender_character_id::text,c.name,COALESCE(c.race_id,''),c.level,m.content,m.created_at FROM chat_messages m JOIN characters c ON c.id=m.sender_character_id WHERE m.sender_character_id=$1::uuid AND m.client_message_id=$2::uuid`
-	if projection { query = `SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),m.sender_character_id::text,m.sender_name,m.sender_race,m.sender_level,m.content,m.created_at FROM chat_messages m WHERE m.sender_character_id=$1::uuid AND m.client_message_id=$2::uuid` }
-	err := queryer.QueryRowContext(ctx, query, characterID, clientID).
-		Scan(&m.ID,&m.ClientMessageID,&m.Channel,&m.WorldID,&m.SenderCharacterID,&m.SenderName,&m.SenderRace,&m.SenderLevel,&m.Content,&m.CreatedAt)
-	if err != nil {
-		return Message{}, fmt.Errorf("load stored chat message: %w", err)
-	}
+	err := queryer.QueryRowContext(ctx, `SELECT id::text,client_message_id::text,channel_type,COALESCE(world_id,''),sender_character_id::text,sender_name,sender_race,sender_level,content,created_at FROM chat_messages WHERE sender_character_id=$1::uuid AND client_message_id=$2::uuid`, characterID, clientID).Scan(&m.ID,&m.ClientMessageID,&m.Channel,&m.WorldID,&m.SenderCharacterID,&m.SenderName,&m.SenderRace,&m.SenderLevel,&m.Content,&m.CreatedAt)
+	if err != nil { return Message{}, fmt.Errorf("load stored chat message: %w", err) }
 	return m, nil
 }
 
 func (s *Service) getByClientID(ctx context.Context, characterID, clientID string) (Message, error) {
-	return getChatMessageByClientID(ctx, s.db, characterID, clientID, s.projectionMode)
+	return getChatMessageByClientID(ctx, s.db, characterID, clientID)
 }
 
 func insertChatEventOutbox(ctx context.Context, tx *sql.Tx, message Message) error {
@@ -309,37 +264,7 @@ func (s *Service) ListForServer(ctx context.Context, nodeKey string, after time.
 
 	// A node may host multiple instances, but only messages for worlds it currently
 	// serves are visible. cross_world deliberately has no world filter.
-	serverQuery := `
-		SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),
-		       m.sender_character_id::text,c.name,COALESCE(c.race_id,''),c.level,m.content,m.created_at
-		FROM chat_messages m
-		JOIN characters c ON c.id=m.sender_character_id
-		WHERE m.channel_type IN ('world','cross_world')
-		  AND (m.channel_type='cross_world' OR m.world_id IN (
-			SELECT DISTINCT wi.world_id
-			FROM world_instances wi
-			JOIN server_registry sr ON sr.id=wi.server_id
-			WHERE sr.node_key=$1 AND sr.status='ready' AND wi.status='ready'
-		  ))
-		  AND (m.created_at > $2 OR (m.created_at = $2 AND m.id > $3::uuid))
-		ORDER BY m.created_at ASC,m.id ASC
-		LIMIT $4`
-	if s.projectionMode {
-		serverQuery = `
-			SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),
-			       m.sender_character_id::text,m.sender_name,m.sender_race,m.sender_level,m.content,m.created_at
-			FROM chat_messages m
-			WHERE m.channel_type IN ('world','cross_world')
-			  AND (m.channel_type='cross_world' OR m.world_id IN (
-				SELECT DISTINCT wi.world_id
-				FROM chat_world_instances wi
-				JOIN chat_server_nodes sr ON sr.node_key=wi.node_key
-				WHERE sr.node_key=$1 AND sr.status='ready' AND wi.status='ready'
-			  ))
-			  AND (m.created_at > $2 OR (m.created_at = $2 AND m.id > $3::uuid))
-			ORDER BY m.created_at ASC,m.id ASC
-			LIMIT $4`
-	}
+	serverQuery := `SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),m.sender_character_id::text,m.sender_name,m.sender_race,m.sender_level,m.content,m.created_at FROM chat_messages m WHERE m.channel_type IN ('world','cross_world') AND (m.channel_type='cross_world' OR m.world_id IN (SELECT DISTINCT wi.world_id FROM chat_world_instances wi JOIN chat_server_nodes sr ON sr.node_key=wi.node_key WHERE sr.node_key=$1 AND sr.status='ready' AND wi.status='ready')) AND (m.created_at > $2 OR (m.created_at = $2 AND m.id > $3::uuid)) ORDER BY m.created_at ASC,m.id ASC LIMIT $4`
 	rows, err := s.db.QueryContext(ctx, serverQuery, nodeKey, after, afterID, limit)
 	if err != nil {
 		return ServerBatch{}, fmt.Errorf("query server chat messages: %w", err)
@@ -423,38 +348,7 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 
 	var name, raceID, worldID, instanceID string
 	var level int
-	sessionQuery := `
-		SELECT c.name,COALESCE(c.race_id,''),c.world_id,wi.id::text,c.level
-		FROM world_sessions ws
-		JOIN server_registry sr ON sr.id=ws.server_id
-		JOIN world_instances wi ON wi.id=ws.instance_id AND wi.server_id=sr.id
-		JOIN characters c ON c.id=ws.character_id
-		WHERE ws.id=$1::uuid AND ws.character_id=$2::uuid
-		  AND sr.node_key=$3 AND sr.status='ready'
-		  AND sr.last_heartbeat_at > now()-interval '30 seconds'
-		  AND wi.status='ready'
-		  AND (ws.session_state='active' OR
-		       (ws.session_state IN ('saving','closed') AND
-		        COALESCE(ws.disconnected_at,ws.updated_at) > now()-interval '30 days'))
-		  AND c.status='alive'
-		FOR UPDATE OF ws, c`
-	if s.projectionMode {
-		sessionQuery = `
-			SELECT c.name,c.race_id,c.world_id,wi.instance_id::text,c.level
-			FROM chat_world_sessions ws
-			JOIN chat_server_nodes sr ON sr.node_key=ws.node_key
-			JOIN chat_world_instances wi ON wi.instance_id=ws.instance_id AND wi.node_key=sr.node_key
-			JOIN chat_characters c ON c.character_id=ws.character_id
-			WHERE ws.session_id=$1::uuid AND ws.character_id=$2::uuid
-			  AND sr.node_key=$3 AND sr.status='ready'
-			  AND sr.last_heartbeat_at > now()-interval '30 seconds'
-			  AND wi.status='ready'
-			  AND (ws.session_state='active' OR
-			       (ws.session_state IN ('saving','closed') AND
-			        COALESCE(ws.disconnected_at,ws.updated_at) > now()-interval '30 days'))
-			  AND c.status='alive'
-			FOR UPDATE OF ws, c`
-	}
+	sessionQuery := `SELECT c.name,c.race_id,c.world_id,wi.instance_id::text,c.level FROM chat_world_sessions ws JOIN chat_server_nodes sr ON sr.node_key=ws.node_key JOIN chat_world_instances wi ON wi.instance_id=ws.instance_id AND wi.node_key=sr.node_key JOIN chat_characters c ON c.character_id=ws.character_id WHERE ws.session_id=$1::uuid AND ws.character_id=$2::uuid AND sr.node_key=$3 AND sr.status='ready' AND sr.last_heartbeat_at > now()-interval '30 seconds' AND wi.status='ready' AND (ws.session_state='active' OR (ws.session_state IN ('saving','closed') AND COALESCE(ws.disconnected_at,ws.updated_at) > now()-interval '30 days')) AND c.status='alive' FOR UPDATE OF ws,c`
 	err = tx.QueryRowContext(ctx, sessionQuery, sessionID, characterID, nodeKey).
 		Scan(&name, &raceID, &worldID, &instanceID, &level)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -505,28 +399,7 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 
 	if req.Channel == "nearby" {
 		var validRecipients int
-		recipientQuery := `
-			SELECT count(DISTINCT ws.character_id)
-			FROM jsonb_array_elements_text($2::jsonb) AS requested(character_id)
-			JOIN world_sessions ws ON ws.character_id=requested.character_id::uuid
-			JOIN characters c ON c.id=ws.character_id
-			WHERE ws.instance_id=$1::uuid AND ws.server_id=(SELECT id FROM server_registry WHERE node_key=$3)
-			  AND (ws.session_state='active' OR
-			       (ws.session_state IN ('saving','closed') AND
-			        COALESCE(ws.disconnected_at,ws.updated_at) > now()-interval '30 days'))
-			  AND c.status='alive'`
-		if s.projectionMode {
-			recipientQuery = `
-				SELECT count(DISTINCT ws.character_id)
-				FROM jsonb_array_elements_text($2::jsonb) AS requested(character_id)
-				JOIN chat_world_sessions ws ON ws.character_id=requested.character_id::uuid
-				JOIN chat_characters c ON c.character_id=ws.character_id
-				WHERE ws.instance_id=$1::uuid AND ws.node_key=$3
-				  AND (ws.session_state='active' OR
-				       (ws.session_state IN ('saving','closed') AND
-				        COALESCE(ws.disconnected_at,ws.updated_at) > now()-interval '30 days'))
-				  AND c.status='alive'`
-		}
+		recipientQuery := `SELECT count(DISTINCT ws.character_id) FROM jsonb_array_elements_text($2::jsonb) AS requested(character_id) JOIN chat_world_sessions ws ON ws.character_id=requested.character_id::uuid JOIN chat_characters c ON c.character_id=ws.character_id WHERE ws.instance_id=$1::uuid AND ws.node_key=$3 AND (ws.session_state='active' OR (ws.session_state IN ('saving','closed') AND COALESCE(ws.disconnected_at,ws.updated_at) > now()-interval '30 days')) AND c.status='alive'`
 		err = tx.QueryRowContext(ctx, recipientQuery, instanceID, string(recipientsJSON), nodeKey).Scan(&validRecipients)
 		if err != nil {
 			return Message{}, fmt.Errorf("validate nearby chat AOI recipients: %w", err)
@@ -561,21 +434,7 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 	if req.Channel == "nearby" {
 		instanceValue = instanceID
 	}
-	insertSQL := `
-		INSERT INTO chat_messages(channel_type,world_id,world_instance_id,nearby_recipient_character_ids,
-			sender_character_id,client_message_id,content)
-		VALUES($1,$2,$3::uuid,$4::jsonb,$5::uuid,$6::uuid,$7)
-		ON CONFLICT(sender_character_id,client_message_id) DO NOTHING`
-	insertArgs := []any{req.Channel, worldValue, instanceValue, string(recipientsJSON), characterID, req.ClientMessageID, req.Content}
-	if s.projectionMode {
-		insertSQL = `
-			INSERT INTO chat_messages(channel_type,world_id,world_instance_id,nearby_recipient_character_ids,
-				sender_character_id,client_message_id,sender_name,sender_race,sender_level,content)
-			VALUES($1,$2,$3::uuid,$4::jsonb,$5::uuid,$6::uuid,$7,$8,$9,$10)
-			ON CONFLICT(sender_character_id,client_message_id) DO NOTHING`
-		insertArgs = []any{req.Channel, worldValue, instanceValue, string(recipientsJSON), characterID, req.ClientMessageID, name, raceID, level, req.Content}
-	}
-	_, err = tx.ExecContext(ctx, insertSQL, insertArgs...)
+	_, err = tx.ExecContext(ctx, `INSERT INTO chat_messages(channel_type,world_id,world_instance_id,nearby_recipient_character_ids,sender_character_id,client_message_id,sender_name,sender_race,sender_level,content) VALUES($1,$2,$3::uuid,$4::jsonb,$5::uuid,$6::uuid,$7,$8,$9,$10) ON CONFLICT(sender_character_id,client_message_id) DO NOTHING`, req.Channel, worldValue, instanceValue, string(recipientsJSON), characterID, req.ClientMessageID, name, raceID, level, req.Content)
 	if err != nil {
 		return Message{}, fmt.Errorf("persist world server chat message: %w", err)
 	}
@@ -762,19 +621,7 @@ func (s *Service) CurrentChatScope(ctx context.Context, accountID string) (ChatS
 		return ChatScope{}, ErrInvalidInput
 	}
 	var scope ChatScope
-	scopeQuery := `
-		SELECT c.id::text,c.world_id,COALESCE(ws.instance_id::text,'')
-		FROM souls soul JOIN characters c ON c.id=soul.current_character_id
-		LEFT JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
-		WHERE soul.account_id=$1 AND c.status='alive'`
-	if s.projectionMode {
-		scopeQuery = `
-			SELECT c.character_id::text,c.world_id,COALESCE(ws.instance_id::text,'')
-			FROM chat_accounts account
-			JOIN chat_characters c ON c.character_id=account.current_character_id
-			LEFT JOIN chat_world_sessions ws ON ws.character_id=c.character_id AND ws.session_state='active'
-			WHERE account.account_id=$1::uuid AND c.status='alive'`
-	}
+	scopeQuery := `SELECT c.character_id::text,c.world_id,COALESCE(ws.instance_id::text,'') FROM chat_accounts account JOIN chat_characters c ON c.character_id=account.current_character_id LEFT JOIN chat_world_sessions ws ON ws.character_id=c.character_id AND ws.session_state='active' WHERE account.account_id=$1::uuid AND c.status='alive'`
 	err := s.db.QueryRowContext(ctx, scopeQuery, accountID).Scan(&scope.CharacterID,&scope.WorldID,&scope.WorldInstanceID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ChatScope{}, ErrNoCharacter
@@ -790,16 +637,7 @@ func (s *Service) CurrentWorldID(ctx context.Context, accountID string) (string,
 		return "", ErrInvalidInput
 	}
 	var worldID string
-	worldQuery := `
-		SELECT c.world_id FROM souls soul
-		JOIN characters c ON c.id=soul.current_character_id
-		WHERE soul.account_id=$1 AND c.status='alive'`
-	if s.projectionMode {
-		worldQuery = `
-			SELECT c.world_id FROM chat_accounts account
-			JOIN chat_characters c ON c.character_id=account.current_character_id
-			WHERE account.account_id=$1::uuid AND c.status='alive'`
-	}
+	worldQuery := `SELECT c.world_id FROM chat_accounts account JOIN chat_characters c ON c.character_id=account.current_character_id WHERE account.account_id=$1::uuid AND c.status='alive'`
 	err := s.db.QueryRowContext(ctx, worldQuery, accountID).Scan(&worldID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", ErrNoCharacter
