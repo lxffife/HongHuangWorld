@@ -38,6 +38,7 @@ var reincarnation_race_select: OptionButton
 var reincarnation_route_select: OptionButton
 var reincarnation_route_label: Label
 var reincarnation_route_description: Label
+var reincarnation_inheritance_label: Label
 var reincarnation_routes: Array = []
 var reincarnation_status_label: Label
 var reincarnation_check_button: Button
@@ -243,6 +244,11 @@ func _build_reincarnation_ui() -> void:
 	reincarnation_route_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	reincarnation_route_description.add_theme_color_override("font_color", Color("#aab6cc"))
 	content_box.add_child(reincarnation_route_description)
+	reincarnation_inheritance_label = Label.new()
+	reincarnation_inheritance_label.text = "选择种族后，将显示灵魂吞噬资质对下一世出生属性的影响。"
+	reincarnation_inheritance_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	reincarnation_inheritance_label.add_theme_color_override("font_color", Color("#d7c59a"))
+	content_box.add_child(reincarnation_inheritance_label)
 	reincarnation_check_button = Button.new()
 	reincarnation_check_button.text = "查询投胎资格"
 	reincarnation_check_button.pressed.connect(_check_reincarnation_eligibility)
@@ -257,7 +263,7 @@ func _build_reincarnation_ui() -> void:
 	reincarnation_confirm.dialog_text = "此操作不可撤销：当前肉身将归档为前世，并为同一灵魂创建新的肉身。灵魂经验、功德、业力会保留。是否继续？"
 	reincarnation_confirm.confirmed.connect(_submit_reincarnation)
 	add_child(reincarnation_confirm)
-	for control in [title, reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_route_label, reincarnation_route_select, reincarnation_route_description, reincarnation_check_button, reincarnation_submit_button]:
+	for control in [title, reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_route_label, reincarnation_route_select, reincarnation_route_description, reincarnation_inheritance_label, reincarnation_check_button, reincarnation_submit_button]:
 		control.hide()
 	life_history_title = Label.new()
 	life_history_title.text = "灵魂历世档案"
@@ -460,8 +466,43 @@ func _on_reincarnation_race_selected(_index: int) -> void:
 	if reincarnation_route_select.item_count > 0:
 		reincarnation_route_select.select(0)
 	_update_reincarnation_route_description(reincarnation_route_select.selected)
+	if access_token.is_empty():
+		reincarnation_inheritance_label.text = "登录后可读取灵魂来世资质。"
+	else:
+		var preview_race_id := str(reincarnation_race_select.get_item_metadata(reincarnation_race_select.selected))
+		reincarnation_inheritance_label.text = "正在计算 " + preview_race_id + " 种族的来世继承……"
+		_enqueue(HTTPClient.METHOD_GET, "/api/v1/characters/current/reincarnation-preview?race_id=" + preview_race_id, {}, true, "reincarnation_preview")
 	if reincarnation_eligible:
 		reincarnation_submit_button.disabled = reincarnation_route_select.item_count == 0
+
+func _render_reincarnation_inheritance(inheritance: Dictionary) -> void:
+	var growth_name := str(inheritance.get("source_growth_name", "初生魂团"))
+	var growth_stage := int(inheritance.get("source_growth_stage", 1))
+	var absorbed_count := int(inheritance.get("source_absorbed_count", 0))
+	var dominant := str(inheritance.get("dominant_attribute", ""))
+	var attribute_names := {
+		"strength": "力量", "constitution": "体质", "agility": "敏捷",
+		"spirit": "灵力", "vitality": "气血"
+	}
+	var applied_lines := PackedStringArray()
+	for key in ["strength", "constitution", "agility", "spirit", "vitality"]:
+		var bonus := int(inheritance.get("applied_" + key, 0))
+		applied_lines.append(str(attribute_names[key]) + " +" + str(bonus))
+	var summary := "【灵魂继承预览】吞噬 " + str(absorbed_count) + " 次 · " + growth_name + "（阶段 " + str(growth_stage) + "）"
+	if not dominant.is_empty():
+		summary += "\n主导魂质：" + str(attribute_names.get(dominant, dominant))
+	summary += "\n出生五维：" + " / ".join(applied_lines)
+	summary += "\n初始属性：力 " + str(inheritance.get("initial_strength", 5))
+	summary += " · 体 " + str(inheritance.get("initial_constitution", 5))
+	summary += " · 敏 " + str(inheritance.get("initial_agility", 5))
+	summary += " · 灵 " + str(inheritance.get("initial_spirit", 5))
+	summary += " · 血 " + str(inheritance.get("initial_vitality", 5))
+	summary += "\n衍生：攻击 " + str(inheritance.get("initial_attack", 10))
+	summary += " · 防御 " + str(inheritance.get("initial_defense", 5))
+	summary += " · 生命 " + str(inheritance.get("initial_max_health", 100))
+	summary += " · 灵力 " + str(inheritance.get("initial_max_mana", 50))
+	summary += " · 移速 " + str(inheritance.get("initial_movement_speed", 5.0))
+	reincarnation_inheritance_label.text = summary
 
 func _update_reincarnation_route_description(_index: int) -> void:
 	if reincarnation_route_description == null:
@@ -653,6 +694,8 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 			reincarnation_route_select.clear()
 			reincarnation_status_label.text = "出生路线读取失败（HTTP " + str(response_code) + "）：" + body_text
 			reincarnation_submit_button.disabled = true
+		elif context == "reincarnation_preview":
+			reincarnation_inheritance_label.text = "来世资质预览失败（HTTP " + str(response_code) + "）：" + body_text
 		elif context == "reincarnation_eligibility":
 			reincarnation_check_button.disabled = false
 			reincarnation_eligible = false
@@ -718,6 +761,10 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 		"reincarnation_routes":
 			reincarnation_routes = data.get("routes", [])
 			_render_reincarnation_routes()
+		"reincarnation_preview":
+			var inheritance: Variant = data.get("inheritance", {})
+			if inheritance is Dictionary:
+				_render_reincarnation_inheritance(inheritance)
 		"reincarnation_eligibility":
 			reincarnation_check_button.disabled = false
 			reincarnation_eligible = bool(data.get("eligible", false))
@@ -769,7 +816,7 @@ func _on_login_pressed() -> void:
 	}, false, "login")
 
 func _show_reincarnation_controls() -> void:
-	for control in [reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_route_label, reincarnation_route_select, reincarnation_route_description, reincarnation_check_button, reincarnation_submit_button, life_history_title, life_history_status, life_history_box, life_history_refresh_button, soul_memory_title, soul_memory_status, soul_memory_box, soul_memory_refresh_button, soul_fate_title, soul_fate_status, soul_fate_box, soul_fate_refresh_button]:
+	for control in [reincarnation_status_label, reincarnation_name_input, reincarnation_race_select, reincarnation_route_label, reincarnation_route_select, reincarnation_route_description, reincarnation_inheritance_label, reincarnation_check_button, reincarnation_submit_button, life_history_title, life_history_status, life_history_box, life_history_refresh_button, soul_memory_title, soul_memory_status, soul_memory_box, soul_memory_refresh_button, soul_fate_title, soul_fate_status, soul_fate_box, soul_fate_refresh_button]:
 		control.show()
 	reincarnation_name_input.text = ""
 	reincarnation_eligible = false
