@@ -111,7 +111,7 @@
 - 独立服务拆分第一步已提交：新增 Backend/cmd/chat 独立 Go 进程（默认 :8788）、httpapi.NewChatRouter（只注册聊天与健康检查路由）、CHAT_DATABASE_URL/CHAT_HTTP_ADDR 配置，以及 Windows/Linux 启动脚本。Game API 暂时保留原聊天路由作为迁移兼容入口。详见 Docs/Architecture/SERVICE-ISOLATION.md。
 - P0-B2 本次新增：WorldServer 节点认证的中心消息拉取和发布 API。发布接口校验活动会话确属该节点，服务端注入消息身份并做 3 秒世界/5 秒跨界限流与幂等；拉取接口按节点服务世界筛选 world 频道，cross_world 对所有 ready 节点可见，支持 1–100 条分页与 `(created_at,id)` 游标。仍未实现 WorldServer 调用发布/定时拉取、ENet 广播、消费游标持久化与断线补发确认。
 - 附近频道当前为 WorldServer 内存实时消息，不写入 PostgreSQL，因此暂不提供附近频道历史；世界/跨界 HTTP 历史接口与 ENet 实时消息目前尚未接通。
-- 仍未实现：WorldServer 发布/拉取接口接入和 ENet 消息扇出、消费游标可靠保存/确认、好友/私聊 API、离线投递、聊天过期清理调度器、队伍/宗门频道。
+- 仍未实现：WorldServer 发布/拉取接口接入和 ENet 消息扇出、消费游标可靠保存/确认、好友/私聊 API、离线投递、队伍/宗门频道。
 - 独立 ChatServer 已增加 30 天消息保留清理调度：启动后执行一次，之后每小时执行；清理不再发生在玩家发送/查询请求路径，避免请求触发全表删除。清理失败仅记录日志并等待下一轮重试。
 - 当前仍未实现独立聊天 WebSocket 客户端连接、WorldServer 到 ChatServer 的异步消息接入、NATS 在线/世界事件订阅、聊天数据物理数据库拆分和故障注入验收。
 - 本阶段尚未运行 Go 测试、C++ 编译/CTest、Godot 解析/运行、数据库迁移或 GitHub Actions。不要把静态代码提交视为运行验收通过。
