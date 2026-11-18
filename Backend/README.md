@@ -160,4 +160,4 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 
 `soul_essence_attributes` 以 `soul_id` 为主键，保存魂力、灵性、魂韧、神识、吞噬容量和累计吸收能量/次数；这些数据属于灵魂，不属于某一世肉身。`soul_absorption_kinds` 当前预置普通游魂、兽魂、战魂三类；`soul_absorption_records` 是带 `(soul_id,event_id)` 唯一约束的不可变审计流水。
 
-当前阶段只开放读取 `GET /api/v1/souls/current/essence`。类别目录中的基础能量和特质键是服务端设计数据，不代表客户端可自行发放奖励。真正吞噬接口将在 WorldServer 的战斗目标、距离、存活状态、一次性事件 ID 和容量校验接入后开放，避免客户端伪造吞噬或重复刷取。
+当前开放读取 `GET /api/v1/souls/current/essence`，并接入第一条可信吞噬结算链。冥界 WorldServer 只在权威战斗结算确认 `wandering_wraith` 被击败后，才将 `soul_absorption` 事件写入本地 SQLite Durable Outbox；事件携带服务端生成的 UUID、当前世界会话/角色和怪物运行时 ID/服务端定义类别。Outbox 负责断线重试与重启恢复。中心服 `POST /api/v1/servers/souls/absorptions` 仅接受 `X-World-Server-Key` + `X-World-Server-Node`，再次验证节点、角色、会话、存活肉身和 `underworld_fengdu` 世界归属；`wandering_wraith` 由服务端映射为 `ordinary_wraith`，基础能量和特质键从 `soul_absorption_kinds` 读取。中心服事务锁定灵魂本体，按剩余吞噬容量截断本次能量，写入唯一 `(soul_id,event_id)` 流水并增加 `absorbed_energy`、`absorbed_count` 和魂力。客户端不提供能量、类别奖励、特质键或灵魂 ID；同一事件重试不会重复入账。当前仅接入普通游魂，兽魂/战魂仍待对应怪物定义与服务端映射。容量已满时返回 409，WorldServer 将该事件移入死信，不会自动丢弃已有魂力或突破容量。客户端击杀冥界游祟后延迟刷新魂体档案与 HUD。
