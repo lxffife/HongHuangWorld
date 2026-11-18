@@ -87,7 +87,7 @@
 
 ### P0-B：实时传输与附近/世界/跨界频道
 - P0-B1（已提交，待运行验证）：为 ENet 协议分配聊天消息类型；Godot 网络层支持发送/接收；WorldServer 实现当前实例附近频道 AOI 转发、服务端身份注入、200 字校验与 1 秒限流。
-- P0-B2（进行中）：已增加受 `X-World-Server-Key` 与 `X-World-Server-Node` 保护的 `GET /api/v1/servers/chat/messages` 中心拉取接口。后端根据节点当前 ready 的 world_instances 返回该节点所服务世界的 world 消息，以及全服统一的 cross_world 消息；按 `(created_at,id)` 稳定游标分页，避免相同时间戳消息漏取。WorldServer 尚未接入轮询/广播，因此这只是中心持久化分发接口，不代表跨实例实时链路已完成。
+- P0-B2（进行中）：已增加受 `X-World-Server-Key` 与 `X-World-Server-Node` 保护的 `GET /api/v1/servers/chat/messages` 中心拉取接口，以及 `POST /api/v1/servers/chat/messages` 发布接口。发布时必须验证 world_sessions + server_registry + character 三者关系、节点心跳、会话 active 状态；发送者名称/境界/世界由数据库注入，客户端不能伪造。客户端消息 ID 重试返回原消息，限流在幂等检查之后执行。拉取按节点当前 ready 的 world_instances 返回其 world 消息，以及全服统一 cross_world 消息；按 `(created_at,id)` 稳定游标分页。WorldServer 尚未接入发布/轮询/广播，因此跨实例实时链路仍未完成。
 - 验收：B1 需两客户端同实例附近可见，超出 AOI 不可见，伪造 sender 字段无效，限流和长度校验生效；B2 需不同实例同世界可见世界频道、不同世界可见同一跨界频道。
 
 ### P0-C：Godot 聊天 HUD
@@ -107,7 +107,7 @@
 
 - 已有：迁移 000038 的基础表；Go chat service 支持 world/cross_world 文本写入和历史查询。
 - 本次新增：ENet ChatSendCommand/ChatEvent 协议；WorldServer 当前实例附近频道 AOI 转发、服务端身份注入、200 字校验和 1 秒限流；Godot 网络层发送/接收接口；协议帧测试覆盖聊天消息类型；Godot 初版附近聊天 HUD（可折叠、输入发送、错误提示）。
-- P0-B2 本次新增：WorldServer 节点认证的中心消息拉取 API；消息按节点服务世界筛选 world 频道，cross_world 对所有 ready 节点可见；支持 1–100 条分页与 `(created_at,id)` 游标。仍未实现 WorldServer 定时拉取、客户端实时推送、消费游标持久化与断线补发确认。
+- P0-B2 本次新增：WorldServer 节点认证的中心消息拉取和发布 API。发布接口校验活动会话确属该节点，服务端注入消息身份并做 3 秒世界/5 秒跨界限流与幂等；拉取接口按节点服务世界筛选 world 频道，cross_world 对所有 ready 节点可见，支持 1–100 条分页与 `(created_at,id)` 游标。仍未实现 WorldServer 调用发布/定时拉取、ENet 广播、消费游标持久化与断线补发确认。
 - 附近频道当前为 WorldServer 内存实时消息，不写入 PostgreSQL，因此暂不提供附近频道历史；世界/跨界 HTTP 历史接口与 ENet 实时消息目前尚未接通。
-- 仍未实现：WorldServer 拉取接口接入和 ENet 消息扇出、消费游标可靠保存/确认、好友/私聊 API、离线投递、清理调度器、队伍/宗门频道。
+- 仍未实现：WorldServer 发布/拉取接口接入和 ENet 消息扇出、消费游标可靠保存/确认、好友/私聊 API、离线投递、聊天过期清理调度器、队伍/宗门频道。
 - 本阶段尚未运行 Go 测试、C++ 编译/CTest、Godot 解析/运行、数据库迁移或 GitHub Actions。不要把静态代码提交视为运行验收通过。
