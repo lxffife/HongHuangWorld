@@ -983,7 +983,7 @@ struct EnetServer::Impl {
         };
         std::string error;
         if (!enqueue_durable_event(event_id, "soul_absorption", payload, error))
-            std::cerr << "Could not persist soul absorption: " << error << '\\n';
+            std::cerr << "Could not persist soul absorption: " << error << '\n';
     }
 
     void stop_reward_worker() {
