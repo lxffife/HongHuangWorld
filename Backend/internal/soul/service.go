@@ -73,6 +73,9 @@ func (s *Service) Create(ctx context.Context, accountID, name, origin string) (S
 	if _, err := tx.ExecContext(ctx, `INSERT INTO soul_progression (soul_id) VALUES ($1)`, result.ID); err != nil {
 		return Soul{}, fmt.Errorf("initialize soul progression: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO soul_essence_attributes (soul_id) VALUES ($1)`, result.ID); err != nil {
+		return Soul{}, fmt.Errorf("initialize soul essence: %w", err)
+	}
 	if err := tx.Commit(); err != nil { return Soul{}, fmt.Errorf("commit soul creation: %w", err) }
 	if createdAt.Valid {
 		result.CreatedAt = createdAt.Time.UTC().Format("2006-01-02T15:04:05Z07:00")
@@ -454,4 +457,89 @@ func (s *Service) ReincarnationEligibility(ctx context.Context, accountID string
  if !result.TrialCompleted { result.Reasons=append(result.Reasons,"fengdu_trial_required") }
  result.Eligible=len(result.Reasons)==0
  return result,nil
+}
+
+
+// EssenceProfile describes the persistent soul body. Physical character attributes
+// are deliberately excluded: they are generated separately at reincarnation.
+type EssenceProfile struct {
+	SoulPower int64 `json:"soul_power"`
+	SoulWisdom int64 `json:"soul_wisdom"`
+	SoulResilience int64 `json:"soul_resilience"`
+	SoulPerception int64 `json:"soul_perception"`
+	AbsorptionCapacity int64 `json:"absorption_capacity"`
+	AbsorbedEnergy int64 `json:"absorbed_energy"`
+	AbsorbedCount int64 `json:"absorbed_count"`
+	RealmID string `json:"realm_id"`
+	RealmName string `json:"realm_name"`
+	RealmOrder int `json:"realm_order"`
+	FormStage int `json:"form_stage"`
+	FormName string `json:"form_name"`
+	VisualScale float64 `json:"visual_scale"`
+	AbsorptionKinds []AbsorptionKindProgress `json:"absorption_kinds"`
+}
+
+type AbsorptionKindProgress struct {
+	KindID string `json:"kind_id"`
+	Name string `json:"name"`
+	Description string `json:"description"`
+	BaseEnergy int64 `json:"base_energy"`
+	TraitKey string `json:"trait_key"`
+	AbsorbedCount int64 `json:"absorbed_count"`
+}
+
+// CurrentEssence returns soul-owned essence and authored absorption categories.
+// It is read-only; rewards must later be applied by trusted combat/server events.
+func (s *Service) CurrentEssence(ctx context.Context, accountID string) (EssenceProfile, error) {
+	var result EssenceProfile
+	err := s.db.QueryRowContext(ctx,
+		`SELECT a.soul_power,a.soul_wisdom,a.soul_resilience,a.soul_perception,
+			       a.absorption_capacity,a.absorbed_energy,a.absorbed_count,
+			       realm.id,realm.name,realm.realm_order
+		 FROM souls soul
+		 JOIN soul_essence_attributes a ON a.soul_id=soul.id
+		 JOIN soul_progression progression ON progression.soul_id=soul.id
+		 JOIN soul_realm_definitions realm ON realm.id=progression.realm_id
+		 WHERE soul.account_id=$1`, accountID).Scan(
+		&result.SoulPower,&result.SoulWisdom,&result.SoulResilience,&result.SoulPerception,
+		&result.AbsorptionCapacity,&result.AbsorbedEnergy,&result.AbsorbedCount,
+		&result.RealmID,&result.RealmName,&result.RealmOrder)
+	if errors.Is(err,sql.ErrNoRows) { return EssenceProfile{},ErrNotFound }
+	if err!=nil { return EssenceProfile{},fmt.Errorf("load soul essence: %w",err) }
+
+	switch {
+	case result.RealmOrder <= 1:
+		result.FormStage,result.FormName,result.VisualScale=1,"初生魂光",0.35
+	case result.RealmOrder == 2:
+		result.FormStage,result.FormName,result.VisualScale=2,"凝魂",0.55
+	case result.RealmOrder == 3:
+		result.FormStage,result.FormName,result.VisualScale=3,"聚魄",0.8
+	case result.RealmOrder <= 5:
+		result.FormStage,result.FormName,result.VisualScale=4,"灵体",1.1
+	default:
+		result.FormStage,result.FormName,result.VisualScale=5,"魂魄圆满",1.4
+	}
+
+	rows,err:=s.db.QueryContext(ctx,
+		`SELECT kinds.id,kinds.name,kinds.description,kinds.base_energy,kinds.trait_key,
+			       COUNT(records.id)
+		 FROM soul_absorption_kinds kinds
+		 LEFT JOIN soul_absorption_records records
+		   ON records.absorption_kind_id=kinds.id
+		  AND records.soul_id=(SELECT id FROM souls WHERE account_id=$1)
+		 WHERE kinds.enabled=TRUE
+		 GROUP BY kinds.id,kinds.name,kinds.description,kinds.base_energy,kinds.trait_key
+		 ORDER BY kinds.id`,accountID)
+	if err!=nil { return EssenceProfile{},fmt.Errorf("load soul absorption kinds: %w",err) }
+	defer rows.Close()
+	result.AbsorptionKinds=make([]AbsorptionKindProgress,0)
+	for rows.Next() {
+		var item AbsorptionKindProgress
+		if err:=rows.Scan(&item.KindID,&item.Name,&item.Description,&item.BaseEnergy,&item.TraitKey,&item.AbsorbedCount);err!=nil {
+			return EssenceProfile{},fmt.Errorf("scan soul absorption kind: %w",err)
+		}
+		result.AbsorptionKinds=append(result.AbsorptionKinds,item)
+	}
+	if err:=rows.Err();err!=nil { return EssenceProfile{},fmt.Errorf("iterate soul absorption kinds: %w",err) }
+	return result,nil
 }
