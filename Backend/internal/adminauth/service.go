@@ -141,8 +141,18 @@ func (s *Service) ListPermissions(ctx context.Context) ([]map[string]string,erro
 }
 
 func (s *Service) ListUsers(ctx context.Context) ([]User,error) {
- rows,err:=s.db.QueryContext(ctx,`SELECT id::text,username,email,is_super_admin FROM admin_users ORDER BY created_at DESC`);if err!=nil{return nil,err};defer rows.Close()
- out:=[]User{};for rows.Next(){var u User;var e sql.NullString;if err:=rows.Scan(&u.ID,&u.Username,&e,&u.IsSuperAdmin);err!=nil{return nil,err};if e.Valid{u.Email=&e.String};out=append(out,u)};return out,rows.Err()
+ rows,err:=s.db.QueryContext(ctx,`SELECT id::text,username,email,is_super_admin FROM admin_users ORDER BY created_at DESC`)
+ if err!=nil{return nil,err}
+ out:=[]User{}
+ for rows.Next(){var u User;var e sql.NullString;if err:=rows.Scan(&u.ID,&u.Username,&e,&u.IsSuperAdmin);err!=nil{rows.Close();return nil,err};if e.Valid{u.Email=&e.String};u.Permissions=[]string{};out=append(out,u)}
+ if err:=rows.Err();err!=nil{rows.Close();return nil,err};rows.Close()
+ grants,err:=s.db.QueryContext(ctx,`SELECT user_id::text,permission_key FROM admin_user_permissions ORDER BY permission_key`)
+ if err!=nil{return nil,err};defer grants.Close()
+ byUser:=map[string][]string{}
+ for grants.Next(){var id,key string;if err:=grants.Scan(&id,&key);err!=nil{return nil,err};byUser[id]=append(byUser[id],key)}
+ if err:=grants.Err();err!=nil{return nil,err}
+ for i:=range out{out[i].Permissions=byUser[out[i].ID]}
+ return out,nil
 }
 
 func (s *Service) audit(ctx context.Context,actor *string,action,kind,id,result,details,remote,agent string) error {
