@@ -61,7 +61,7 @@ DurableOutbox::DurableOutbox(const std::string& path, std::size_t capacity, bool
         "created_at_ms INTEGER NOT NULL,updated_at_ms INTEGER NOT NULL,last_error TEXT NOT NULL DEFAULT '');"
         "CREATE INDEX IF NOT EXISTS idx_world_event_outbox_due "
         "ON world_event_outbox(status,next_retry_at_ms,created_at_ms);"
-        "UPDATE world_event_outbox SET status='pending' WHERE status='inflight';";
+        "";
     char* message = nullptr;
     if (sqlite3_exec(db_, schema, nullptr, nullptr, &message) != SQLITE_OK) {
         const std::string error = message ? message : sqlite3_errmsg(db_);
