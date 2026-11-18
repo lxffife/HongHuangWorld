@@ -78,6 +78,8 @@ int main() {
         };
         assert(box.enqueue(chat, error));
         assert(box.enqueue(chat, error));
+        auto found_chat = box.find("nearby-chat:client-1", error);
+        assert(found_chat && found_chat->payload == chat.payload);
         assert(!box.enqueue({
             "nearby-chat:client-1", "nearby_chat",
             R"({"session_id":"s1","client_message_id":"client-1"})",
