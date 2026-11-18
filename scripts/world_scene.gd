@@ -65,6 +65,8 @@ var remote_targets: Dictionary = {}
 var remote_yaws: Dictionary = {}
 var monsters: Dictionary = {}
 var monster_targets: Dictionary = {}
+var floating_combat_labels: Dictionary = {}
+var floating_combat_lifetimes: Dictionary = {}
 var drops: Dictionary = {}
 var drop_targets: Dictionary = {}
 var inventory_http: HTTPRequest
@@ -1569,6 +1571,7 @@ func _on_combat_event(event: Dictionary) -> void:
 		return
 	if str(event.get("source", "")) == "monster":
 		var incoming_damage := int(event.get("damage", 0))
+		_spawn_combat_number(incoming_damage, true, false)
 		var current_health := int(event.get("health", 0))
 		var max_health := int(event.get("max_health", 0))
 		_update_vitals(current_health, max_health)
@@ -1583,6 +1586,7 @@ func _on_combat_event(event: Dictionary) -> void:
 		return
 	var monster_name := str(event.get("target_name", "目标"))
 	var damage := int(event.get("damage", 0))
+	_spawn_combat_number(damage, false, bool(event.get("critical", false)))
 	if bool(event.get("defeated", false)):
 		var experience := int(event.get("experience_reward", 0))
 		var cultivation := int(event.get("cultivation_reward", 0))
@@ -1593,6 +1597,61 @@ func _on_combat_event(event: Dictionary) -> void:
 		_refresh_reward_status_later()
 	else:
 		_show_notification("命中 " + monster_name + " · 造成 " + str(damage) + " 点伤害")
+
+
+func _spawn_combat_number(amount: int, incoming: bool, critical: bool) -> void:
+	if amount <= 0:
+		return
+	var origin := Vector3.ZERO
+	if incoming and is_instance_valid(local_player):
+		origin = local_player.global_position + Vector3(0.0, 1.8, 0.0)
+	elif is_instance_valid(local_player):
+		var nearest_id := ""
+		var nearest_distance := INF
+		for monster_id in monster_targets.keys():
+			var target: Vector3 = monster_targets[monster_id]
+			var distance := local_player.global_position.distance_to(target)
+			if distance < nearest_distance:
+				nearest_distance = distance
+				nearest_id = str(monster_id)
+		if not nearest_id.is_empty() and monsters.has(nearest_id):
+			var target_node := monsters[nearest_id] as Node3D
+			origin = target_node.global_position + Vector3(0.0, 2.0, 0.0)
+		else:
+			origin = local_player.global_position + Vector3(0.0, 1.8, 0.0)
+	var label := Label3D.new()
+	label.name = "CombatDamageNumber"
+	label.text = ("-" if incoming else "") + str(amount)
+	label.font_size = 42 if critical else 32
+	label.outline_size = 8
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.modulate = Color("#ff6262") if incoming else (Color("#ffe08a") if critical else Color("#fff1d0"))
+	label.position = origin
+	label.pixel_size = 0.01
+	add_child(label)
+	var label_id := str(label.get_instance_id())
+	floating_combat_labels[label_id] = label
+	floating_combat_lifetimes[label_id] = 1.0 if critical else 0.82
+
+func _update_floating_combat_labels(delta: float) -> void:
+	for label_id in floating_combat_labels.keys():
+		var label := floating_combat_labels[label_id] as Label3D
+		if not is_instance_valid(label):
+			floating_combat_labels.erase(label_id)
+			floating_combat_lifetimes.erase(label_id)
+			continue
+		var lifetime := float(floating_combat_lifetimes.get(label_id, 0.0)) - delta
+		floating_combat_lifetimes[label_id] = lifetime
+		label.position.y += delta * (1.15 if lifetime > 0.35 else 0.55)
+		var fade := clampf(lifetime / 0.35, 0.0, 1.0)
+		var tint := label.modulate
+		tint.a = fade
+		label.modulate = tint
+		if lifetime <= 0.0:
+			label.queue_free()
+			floating_combat_labels.erase(label_id)
+			floating_combat_lifetimes.erase(label_id)
 
 func _refresh_reward_status_later() -> void:
 	await get_tree().create_timer(2.0).timeout
@@ -1717,6 +1776,7 @@ func _process(delta: float) -> void:
 		var drop: Node3D = drops[drop_id]
 		var target: Vector3 = drop_targets.get(drop_id, drop.position)
 		drop.position = drop.position.lerp(target, minf(delta * 12.0, 1.0))
+	_update_floating_combat_labels(delta)
 	_update_nearest_npc_prompt()
 	_update_exploration_proximity()
 	_animate_exploration_markers(delta)
