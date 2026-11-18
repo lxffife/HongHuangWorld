@@ -12,7 +12,7 @@ import (
 )
 
 type worldEntryHandlers struct {
-	authService  *auth.Service
+	authService  auth.Provider
 	entryService *worldentry.Service
 	apiKey       string
 	logger       *slog.Logger
