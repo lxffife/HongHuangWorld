@@ -43,6 +43,15 @@ func connect_chat(api_base: String, token: String) -> Error:
 		socket_url = "ws://" + base.trim_prefix("http://") + SOCKET_PATH
 	else:
 		return ERR_INVALID_PARAMETER
+	if reconnect_timer != null:
+		reconnect_timer.stop()
+	if heartbeat_timer != null:
+		heartbeat_timer.stop()
+	if socket != null and socket.get_ready_state() != WebSocketPeer.STATE_CLOSED:
+		socket.close(1000, "refresh chat world binding")
+	socket = WebSocketPeer.new()
+	connecting = false
+	was_open = false
 	access_token = token
 	manually_closed = false
 	_connect_socket()
