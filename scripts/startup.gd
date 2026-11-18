@@ -807,7 +807,7 @@ func _format_lobby_equipment_summary() -> String:
 	if lobby_equipment.is_empty():
 		return "装备外观：当前未穿戴装备"
 	var slot_names := {"weapon": "武器", "head": "头饰", "chest": "护甲", "legs": "护腿", "boots": "靴子", "accessory": "饰品"}
-	var names: Array[String] = []
+	var names := PackedStringArray()
 	for item_variant in lobby_equipment:
 		if item_variant is Dictionary:
 			var item: Dictionary = item_variant
