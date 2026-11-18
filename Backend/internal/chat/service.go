@@ -45,10 +45,10 @@ type SendRequest struct {
 	RecipientCharacterIDs []string `json:"recipient_character_ids,omitempty"`
 }
 
-func NewService(db *sql.DB) *Service { return &Service{db: db} }
+func NewService(db *sql.DB) *Service { return &Service{db: db, projectionMode: true} }
 
-// NewProjectionService uses only Chat-owned projection tables and message snapshots.
-func NewProjectionService(db *sql.DB) *Service { return &Service{db: db, projectionMode: true} }
+// NewProjectionService is retained as a source-compatible alias; Chat always uses its own projections.
+func NewProjectionService(db *sql.DB) *Service { return NewService(db) }
 
 func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (Message, error) {
 	req.Channel = strings.TrimSpace(req.Channel)
