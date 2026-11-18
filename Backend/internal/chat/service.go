@@ -69,8 +69,6 @@ func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (
 	if err:=s.db.QueryRowContext(ctx,`SELECT count(*) FROM chat_messages WHERE sender_character_id=$1::uuid AND created_at>now()-$2::interval AND channel_type=$3`,characterID,window.String(),req.Channel).Scan(&recent);err!=nil{return Message{},fmt.Errorf("check chat rate limit: %w",err)}
 	if recent>0 { return Message{},ErrRateLimited }
 
-	_,err=s.db.ExecContext(ctx,`DELETE FROM chat_messages WHERE created_at<now()-interval '30 days'`)
-	if err!=nil{return Message{},fmt.Errorf("prune expired chat history: %w",err)}
 	var worldValue any
 	if req.Channel=="world" { worldValue=worldScope }
 	_,err=s.db.ExecContext(ctx,`INSERT INTO chat_messages(channel_type,world_id,sender_character_id,client_message_id,content)
@@ -88,8 +86,6 @@ func (s *Service) List(ctx context.Context, accountID, channel, before string, l
 	err:=s.db.QueryRowContext(ctx,`SELECT c.id::text,c.world_id FROM souls soul JOIN characters c ON c.id=soul.current_character_id WHERE soul.account_id=$1 AND c.status='alive'`,accountID).Scan(&characterID,&worldID)
 	if errors.Is(err,sql.ErrNoRows){return nil,ErrNoCharacter}
 	if err!=nil{return nil,fmt.Errorf("resolve chat history character: %w",err)}
-	_,err=s.db.ExecContext(ctx,`DELETE FROM chat_messages WHERE created_at<now()-interval '30 days'`)
-	if err!=nil{return nil,fmt.Errorf("prune expired chat history: %w",err)}
 	var rows *sql.Rows
 	if channel=="world" {
 		if before!="" {
@@ -312,3 +308,17 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 	return item,nil
 }
 
+
+// PruneExpiredMessages removes chat history beyond the configured 30-day retention.
+// It is called by the standalone ChatServer scheduler, never from a player request.
+func (s *Service) PruneExpiredMessages(ctx context.Context) (int64, error) {
+	result, err := s.db.ExecContext(ctx, `DELETE FROM chat_messages WHERE created_at < now() - interval '30 days'`)
+	if err != nil {
+		return 0, fmt.Errorf("prune expired chat history: %w", err)
+	}
+	deleted, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("read expired chat deletion count: %w", err)
+	}
+	return deleted, nil
+}
