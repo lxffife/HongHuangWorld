@@ -896,7 +896,7 @@ func _render_lobby_equipment_manager() -> void:
 		slot_title.add_theme_color_override("font_color", Color("#9eafc5"))
 		card_content.add_child(slot_title)
 		var item_name := Label.new()
-		item_name.text = str(equipped.get("name", "尚未装备")) if not equipped.is_empty() else "尚未装备"
+		item_name.text = str(equipped.get("name", "尚未装备")) + "  ·  " + _equipment_quality_name(int(equipped.get("quality", 0))) if not equipped.is_empty() else "尚未装备"
 		item_name.add_theme_font_size_override("font_size", 14)
 		item_name.add_theme_color_override("font_color", _equipment_quality_color(int(equipped.get("quality", 0))) if not equipped.is_empty() else Color("#748196"))
 		item_name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1059,6 +1059,14 @@ func _format_equipment_stat_summary(raw_stats: Variant) -> String:
 	if parts.is_empty():
 		return "暂无属性加成"
 	return "  ·  ".join(parts)
+
+func _equipment_quality_name(quality: int) -> String:
+	match quality:
+		1: return "普通"
+		2: return "优秀"
+		3: return "精良"
+		4: return "稀有"
+		_: return "传说"
 
 func _equipment_quality_color(quality: int) -> Color:
 	match quality:
