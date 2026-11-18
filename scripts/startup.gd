@@ -44,6 +44,9 @@ var lobby_race_label: Label
 var lobby_realm_label: Label
 var lobby_world_label: Label
 var lobby_status_label: Label
+var lobby_level_label: Label
+var lobby_progress_label: Label
+var lobby_stats_grid: GridContainer
 var lobby_details_host: VBoxContainer
 var lobby_body_container: HBoxContainer
 var lobby_enter_button: Button
@@ -499,6 +502,20 @@ func _build_lobby_ui() -> void:
 	lobby_world_label = Label.new()
 	lobby_world_label.text = "出生世界：待载入"
 	info.add_child(lobby_world_label)
+	lobby_level_label = Label.new()
+	lobby_level_label.text = "等级：—"
+	lobby_level_label.add_theme_color_override("font_color", Color("#e4d2ad"))
+	info.add_child(lobby_level_label)
+	lobby_progress_label = Label.new()
+	lobby_progress_label.text = "经验：—  ·  修为：—"
+	lobby_progress_label.add_theme_font_size_override("font_size", 12)
+	lobby_progress_label.add_theme_color_override("font_color", Color("#9eafc5"))
+	info.add_child(lobby_progress_label)
+	lobby_stats_grid = GridContainer.new()
+	lobby_stats_grid.columns = 3
+	lobby_stats_grid.add_theme_constant_override("h_separation", 8)
+	lobby_stats_grid.add_theme_constant_override("v_separation", 6)
+	info.add_child(lobby_stats_grid)
 	var preview_hint := Label.new()
 	preview_hint.text = "角色预览 · 按住鼠标左键拖动旋转"
 	preview_hint.add_theme_color_override("font_color", Color("#8fa4bd"))
@@ -1056,6 +1073,11 @@ func _show_character_lobby() -> void:
 			world_name = str(world.get("name", world_id))
 			break
 	lobby_world_label.text = "当前世界：" + world_name
+	var level := int(current_character.get("level", 1))
+	lobby_level_label.text = "角色等级  Lv." + str(level)
+	var progression_data: Dictionary = current_character.get("progression", {})
+	lobby_progress_label.text = "经验：" + _lobby_number_text(progression_data.get("experience", 0)) + "  ·  修为：" + _lobby_number_text(progression_data.get("cultivation", 0)) + "  ·  " + str(progression_data.get("power_tier_name", "未定阶"))
+	_render_lobby_character_stats(current_character.get("attributes", {}))
 	lobby_status_label.text = "角色资料已载入。准备好后，进入此世洪荒。"
 	lobby_equipment = []
 	lobby_inventory = []
@@ -1065,6 +1087,56 @@ func _show_character_lobby() -> void:
 	lobby_root.show()
 	_enqueue(HTTPClient.METHOD_GET, "/api/v1/characters/current/equipment", {}, true, "lobby_equipment")
 	_enqueue(HTTPClient.METHOD_GET, "/api/v1/characters/current/inventory", {}, true, "lobby_inventory")
+
+func _lobby_number_text(value: Variant) -> String:
+	if value is float:
+		return str(int(value))
+	if value is int:
+		return str(value)
+	return str(value)
+
+func _render_lobby_character_stats(raw_attributes: Variant) -> void:
+	if not is_instance_valid(lobby_stats_grid):
+		return
+	for child in lobby_stats_grid.get_children():
+		child.queue_free()
+	var attributes: Dictionary = raw_attributes if raw_attributes is Dictionary else {}
+	var cards := [
+		{"key": "health", "label": "生命", "suffix": ""},
+		{"key": "mana", "label": "灵力", "suffix": ""},
+		{"key": "attack", "label": "攻击", "suffix": ""},
+		{"key": "defense", "label": "防御", "suffix": ""},
+		{"key": "strength", "label": "力量", "suffix": ""},
+		{"key": "constitution", "label": "体质", "suffix": ""},
+		{"key": "agility", "label": "敏捷", "suffix": ""},
+		{"key": "spirit", "label": "灵识", "suffix": ""},
+		{"key": "vitality", "label": "气血", "suffix": ""}
+	]
+	for card in cards:
+		var key := str(card["key"])
+		var value_text := "—"
+		if attributes.has(key):
+			value_text = _lobby_number_text(attributes[key])
+		if key == "health" and attributes.has("max_health"):
+			value_text += " / " + _lobby_number_text(attributes["max_health"])
+		elif key == "mana" and attributes.has("max_mana"):
+			value_text += " / " + _lobby_number_text(attributes["max_mana"])
+		var tile := PanelContainer.new()
+		tile.custom_minimum_size = Vector2(92, 48)
+		lobby_stats_grid.add_child(tile)
+		var content := VBoxContainer.new()
+		content.add_theme_constant_override("separation", 1)
+		tile.add_child(content)
+		var name_label := Label.new()
+		name_label.text = str(card["label"])
+		name_label.add_theme_font_size_override("font_size", 11)
+		name_label.add_theme_color_override("font_color", Color("#9eafc5"))
+		content.add_child(name_label)
+		var value_label := Label.new()
+		value_label.text = value_text
+		value_label.add_theme_font_size_override("font_size", 16)
+		value_label.add_theme_color_override("font_color", Color("#e7d4ae"))
+		content.add_child(value_label)
 
 func _request_soul_fate() -> void:
 	if access_token.is_empty():
@@ -1527,7 +1599,14 @@ func _on_http_completed(result: int, response_code: int, _headers: PackedStringA
 			action_button.text = "进入世界"
 			_enqueue(HTTPClient.METHOD_GET, "/api/v1/characters/current/status", {}, true, "character_status")
 		"character_status":
+			var status_character: Dictionary = data.get("character", {})
 			var progression: Dictionary = data.get("progression", {})
+			current_character["attributes"] = data.get("attributes", {})
+			current_character["progression"] = progression
+			if not status_character.is_empty():
+				current_character["level"] = int(status_character.get("level", current_character.get("level", 1)))
+				current_character["world_id"] = str(status_character.get("world_id", current_character.get("world_id", "")))
+				current_character["race_id"] = str(status_character.get("race_id", current_character.get("race_id", "")))
 			var tier_text := str(progression.get("power_tier_name", "未知层级"))
 			var realm_text := str(progression.get("system_name", "")) + " · " + str(progression.get("realm_name", "")) + str(progression.get("realm_stage_name", ""))
 			character_title_label.text = "当前角色"
