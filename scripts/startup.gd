@@ -877,20 +877,45 @@ func _render_lobby_equipment_manager() -> void:
 		if value is Dictionary:
 			var item: Dictionary = value
 			equipped_by_slot[str(item.get("slot", ""))] = item
+	var slots_grid := GridContainer.new()
+	slots_grid.columns = 2
+	slots_grid.add_theme_constant_override("h_separation", 8)
+	slots_grid.add_theme_constant_override("v_separation", 8)
+	lobby_equipment_list.add_child(slots_grid)
 	for slot in ["weapon", "head", "chest", "legs", "boots", "accessory"]:
-		var row := HBoxContainer.new()
-		lobby_equipment_list.add_child(row)
-		var current_label := Label.new()
 		var equipped: Dictionary = equipped_by_slot.get(slot, {})
-		current_label.text = str(slot_names[slot]) + "：" + (str(equipped.get("name", "未装备")) if not equipped.is_empty() else "未装备")
-		current_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(current_label)
+		var slot_card := PanelContainer.new()
+		slot_card.custom_minimum_size = Vector2(220, 82)
+		slots_grid.add_child(slot_card)
+		var card_content := VBoxContainer.new()
+		card_content.add_theme_constant_override("separation", 3)
+		slot_card.add_child(card_content)
+		var slot_title := Label.new()
+		slot_title.text = str(slot_names[slot])
+		slot_title.add_theme_font_size_override("font_size", 11)
+		slot_title.add_theme_color_override("font_color", Color("#9eafc5"))
+		card_content.add_child(slot_title)
+		var item_name := Label.new()
+		item_name.text = str(equipped.get("name", "尚未装备")) if not equipped.is_empty() else "尚未装备"
+		item_name.add_theme_font_size_override("font_size", 14)
+		item_name.add_theme_color_override("font_color", _equipment_quality_color(int(equipped.get("quality", 0))) if not equipped.is_empty() else Color("#748196"))
+		item_name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		card_content.add_child(item_name)
+		var detail_row := HBoxContainer.new()
+		card_content.add_child(detail_row)
+		var detail_label := Label.new()
+		detail_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		detail_label.add_theme_font_size_override("font_size", 10)
+		detail_label.add_theme_color_override("font_color", Color("#9ed6b1"))
+		detail_label.text = _format_equipment_stat_summary(equipped.get("base_stats", {})) if not equipped.is_empty() else "等待装备"
+		detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		detail_row.add_child(detail_label)
 		if not equipped.is_empty():
 			var remove_button := Button.new()
 			remove_button.text = "卸下"
 			remove_button.disabled = lobby_equipment_busy
 			remove_button.pressed.connect(_request_lobby_unequip.bind(slot))
-			row.add_child(remove_button)
+			detail_row.add_child(remove_button)
 	var divider := HSeparator.new()
 	lobby_equipment_list.add_child(divider)
 	var inventory_heading := Label.new()
@@ -1012,6 +1037,28 @@ func _request_lobby_unequip(slot: String) -> void:
 	lobby_equipment_status_label.text = "正在卸下装备……"
 	_render_lobby_equipment_manager()
 	_enqueue(HTTPClient.METHOD_POST, "/api/v1/characters/current/equipment/unequip", {"slot": slot}, true, "lobby_unequip_action")
+
+func _format_equipment_stat_summary(raw_stats: Variant) -> String:
+	if not (raw_stats is Dictionary) or raw_stats.is_empty():
+		return "暂无属性加成"
+	var labels := {
+		"attack": "攻击", "defense": "防御", "strength": "力量",
+		"constitution": "体质", "agility": "敏捷", "spirit": "灵识",
+		"vitality": "气血", "max_health": "生命上限", "max_mana": "灵力上限"
+	}
+	var parts := PackedStringArray()
+	var keys: Array = raw_stats.keys()
+	keys.sort()
+	for key_variant in keys:
+		var key := str(key_variant)
+		var value := int(raw_stats[key_variant])
+		if value == 0:
+			continue
+		var prefix := "+" if value > 0 else ""
+		parts.append(str(labels.get(key, key)) + " " + prefix + str(value))
+	if parts.is_empty():
+		return "暂无属性加成"
+	return "  ·  ".join(parts)
 
 func _equipment_quality_color(quality: int) -> Color:
 	match quality:
