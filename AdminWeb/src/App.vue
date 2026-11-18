@@ -75,7 +75,10 @@ async function restoreSession() {
   }
 }
 
-function logout(showMessage = true) {
+async function logout(showMessage = true) {
+  if (token.value) {
+    try { await api('/api/v1/admin/auth/logout', { method: 'POST' }) } catch { /* Expired sessions are cleared locally. */ }
+  }
   setToken(null)
   token.value = ''
   currentUser.value = null
