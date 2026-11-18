@@ -12,11 +12,13 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 - `POST /api/v1/souls`：为当前账号创建唯一灵魂档案。
 - `GET /api/v1/souls/current`：读取当前账号的灵魂档案。
 - `GET /api/v1/souls/current/progression`：读取跨世保留的灵魂经验与灵魂境界。
-- `GET /api/v1/souls/current/essence`：读取跨轮回保留的灵魂核心属性、当前魂体阶段/视觉体型系数，以及普通游魂、兽魂、战魂类别与该灵魂的吞噬次数；该接口只读，吞噬奖励尚未开放客户端写入，后续必须由可信世界战斗事件结算。
+- `GET /api/v1/souls/current/essence`：读取跨轮回灵魂本体、当前魂体阶段、各类魂质统计、力量/体质/敏捷/灵力/气血五项来世资质，以及待分配的无相灵魄。
 - `POST /api/v1/souls/current/breakthrough`：达到下一灵魂境界经验门槛后主动突破；灵魂经验奖励不会自动提升境界。
 - `GET /api/v1/souls/current/trials`：读取当前灵魂可见的冥界试炼目标、进度和奖励状态。
 - `GET /api/v1/souls/current/reincarnation-eligibility`：查询当前灵魂是否满足首次投胎门槛（聚灵境、完成酆都首个试炼），并返回未满足条件。
 - `POST /api/v1/servers/souls/rewards`：可信世界节点提交灵魂经验奖励；校验节点密钥、节点标识、角色世界会话和事件幂等性。单次奖励限制为 1–100000 灵魂经验。
+- `POST /api/v1/servers/souls/absorptions`：可信世界节点提交吞噬事件；中心服校验节点密钥、节点标识、角色会话、存活肉身与冥界世界归属，按服务端怪物类别目录结算魂力、容量和对应来世资质，以 `(soul_id,event_id)` 幂等。
+- `POST /api/v1/souls/current/essence/allocate`：玩家为一枚待分配无相灵魄选择 `strength`、`constitution`、`agility`、`spirit` 或 `vitality`；服务端确认记录属于当前灵魂且未分配，在同一事务中只增加一项来世资质，不能重复使用。
 - `GET /api/v1/worlds`：读取已启用的世界目录。
 - `GET /api/v1/worlds/current/npcs`：按当前角色活跃世界会话读取该世界启用的 NPC 目录和交互配置。
 - `POST /api/v1/worlds/current/npcs/interact`：与当前世界 NPC 交互；中心服根据当前活跃会话和已保存角色坐标校验世界归属及交互半径，不接受客户端自报坐标。
@@ -158,6 +160,6 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 
 ## 灵魂本体与吞噬基础（000027）
 
-`soul_essence_attributes` 以 `soul_id` 为主键，保存魂力、灵性、魂韧、神识、吞噬容量和累计吸收能量/次数；这些数据属于灵魂，不属于某一世肉身。`soul_absorption_kinds` 当前预置普通游魂、兽魂、战魂三类；`soul_absorption_records` 是带 `(soul_id,event_id)` 唯一约束的不可变审计流水。
+`soul_essence_attributes` 以 `soul_id` 为主键，保存魂力、灵性、魂韧、神识、吞噬容量和累计吸收能量/次数；`soul_inheritance_attributes` 保存力量、体质、敏捷、灵力、气血五项来世资质，均属于灵魂而非某一世肉身。魂质目录包含普通游魂、炽战残魂、铁骨兽魂、疾风游魂、灵识游魂、生机古魂和无相灵魄。属性魂每次吸收增加对应来世资质 1 点；无相灵魄先进入待分配状态，由玩家自行选择五项属性之一。吞噬记录带 `(soul_id,event_id)` 唯一约束，并保存无相灵魄的选择与分配时间。
 
-当前开放读取 `GET /api/v1/souls/current/essence`，并接入第一条可信吞噬结算链。冥界 WorldServer 只在权威战斗结算确认 `wandering_wraith` 被击败后，才将 `soul_absorption` 事件写入本地 SQLite Durable Outbox；事件携带服务端生成的 UUID、当前世界会话/角色和怪物运行时 ID/服务端定义类别。Outbox 负责断线重试与重启恢复。中心服 `POST /api/v1/servers/souls/absorptions` 仅接受 `X-World-Server-Key` + `X-World-Server-Node`，再次验证节点、角色、会话、存活肉身和 `underworld_fengdu` 世界归属；`wandering_wraith` 由服务端映射为 `ordinary_wraith`，基础能量和特质键从 `soul_absorption_kinds` 读取。中心服事务锁定灵魂本体，按剩余吞噬容量截断本次能量，写入唯一 `(soul_id,event_id)` 流水并增加 `absorbed_energy`、`absorbed_count` 和魂力。客户端不提供能量、类别奖励、特质键或灵魂 ID；同一事件重试不会重复入账。当前仅接入普通游魂，兽魂/战魂仍待对应怪物定义与服务端映射。容量已满时返回 409，WorldServer 将该事件移入死信，不会自动丢弃已有魂力或突破容量。客户端击杀冥界游祟后延迟刷新魂体档案与 HUD。
+当前开放读取 `GET /api/v1/souls/current/essence`，并接入第一条可信吞噬结算链。冥界 WorldServer 只在权威战斗结算确认 `wandering_wraith` 被击败后，才将 `soul_absorption` 事件写入本地 SQLite Durable Outbox；事件携带服务端生成的 UUID、当前世界会话/角色和怪物运行时 ID/服务端定义类别。Outbox 负责断线重试与重启恢复。中心服 `POST /api/v1/servers/souls/absorptions` 仅接受 `X-World-Server-Key` + `X-World-Server-Node`，再次验证节点、角色、会话、存活肉身和 `underworld_fengdu` 世界归属；`wandering_wraith` 由服务端映射为 `ordinary_wraith`，基础能量和特质键从 `soul_absorption_kinds` 读取。中心服事务锁定灵魂本体，按剩余吞噬容量截断本次能量，写入唯一 `(soul_id,event_id)` 流水并增加 `absorbed_energy`、`absorbed_count` 和魂力。客户端不提供能量、类别奖励、特质键或灵魂 ID；同一事件重试不会重复入账。酆都 WorldServer 已加入各属性魂类怪物，并由中心服白名单映射到类别目录。普通游魂只增加基础魂力；属性魂增加对应来世资质；无相灵魄增加固定魂力并留下待分配选择。容量已满时返回 409，WorldServer 将该事件移入死信，不会自动丢弃已有魂力或突破容量。客户端击杀冥界游祟后延迟刷新魂体档案与 HUD。
