@@ -74,3 +74,30 @@ func TestChatSocketHubRoutesWorldAndCrossWorldMessages(t *testing.T) {
 		t.Fatalf("cross-world broadcast recipients = (%d,%d,%d), want (2,2,1)", len(worldA.send), len(worldA2.send), len(worldB.send))
 	}
 }
+
+func TestNewChatPresenceConnectionIDIsUUID(t *testing.T) {
+	id, err := newChatPresenceConnectionID()
+	if err != nil {
+		t.Fatalf("generate presence connection id: %v", err)
+	}
+	if len(id) != 36 {
+		t.Fatalf("connection id length = %d, want 36 (%q)", len(id), id)
+	}
+	for index, value := range id {
+		if index == 8 || index == 13 || index == 18 || index == 23 {
+			if value != '-' {
+				t.Fatalf("connection id separator at %d = %q", index, value)
+			}
+			continue
+		}
+		if !((value >= '0' && value <= '9') || (value >= 'a' && value <= 'f')) {
+			t.Fatalf("connection id contains non-hex character %q", value)
+		}
+	}
+	if id[14] != '4' {
+		t.Fatalf("UUID version nibble = %q, want 4", id[14])
+	}
+	if id[19] != '8' && id[19] != '9' && id[19] != 'a' && id[19] != 'b' {
+		t.Fatalf("UUID variant nibble = %q, want RFC 4122 variant", id[19])
+	}
+}
