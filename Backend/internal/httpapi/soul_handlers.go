@@ -227,3 +227,23 @@ func (h *soulHandlers) applyAbsorption(w http.ResponseWriter, r *http.Request) {
   http.Error(w,"internal server error",http.StatusInternalServerError)
  }
 }
+
+
+func (h *soulHandlers) allocateRareEssence(w http.ResponseWriter, r *http.Request) {
+ account,ok:=h.currentAccount(w,r);if !ok{return}
+ var request struct {
+  RecordID string `json:"record_id"`
+  Attribute string `json:"attribute"`
+ }
+ if err:=decodeJSON(w,r,&request);err!=nil{http.Error(w,"invalid request body",http.StatusBadRequest);return}
+ attrs,err:=h.soulService.AllocateRareEssence(r.Context(),account.ID,request.RecordID,request.Attribute)
+ switch {
+ case err==nil: writeJSON(w,http.StatusOK,attrs)
+ case errors.Is(err,soul.ErrInvalidAbsorption): http.Error(w,"invalid rare essence choice",http.StatusBadRequest)
+ case errors.Is(err,soul.ErrAbsorptionChoiceUsed): http.Error(w,"rare essence was already allocated or is unavailable",http.StatusConflict)
+ case errors.Is(err,soul.ErrNotFound): http.Error(w,"soul not found",http.StatusNotFound)
+ default:
+  h.logger.Error("allocate rare soul essence failed","error",err)
+  http.Error(w,"internal server error",http.StatusInternalServerError)
+ }
+}
