@@ -27,7 +27,7 @@ func main(){
  bootstrapCancel()
  if err!=nil{logger.Error("admin bootstrap failed","error",err);os.Exit(1)}
  if created{logger.Info("initial super administrator created","username",os.Getenv("ADMIN_BOOTSTRAP_USERNAME"))}
- addr:=os.Getenv("ADMIN_HTTP_ADDR");if addr==""{addr=":8790"}
+ addr:=os.Getenv("ADMIN_HTTP_ADDR");if addr==""{addr="127.0.0.1:8790"}
  server:=&http.Server{Addr:addr,Handler:httpapi.NewAdminRouter(logger,db),ReadHeaderTimeout:5*time.Second}
  runCtx,stop:=signal.NotifyContext(context.Background(),os.Interrupt,syscall.SIGTERM);defer stop()
  go func(){logger.Info("admin API starting","addr",addr);if err:=server.ListenAndServe();err!=nil&&!errors.Is(err,http.ErrServerClosed){logger.Error("admin API stopped unexpectedly","error",err);stop()}}()
