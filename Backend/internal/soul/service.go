@@ -562,6 +562,8 @@ const (
 )
 
 // Soul attribute milestones use cumulative counts 3, 9, 21, 45, ... 3069.
+func validSoulProgressUnits(units int) bool { return units == 1 || units == 2 || units == 4 || units == 8 }
+
 func soulAttributeMilestones(absorbedCount int64) int {
 	points := 0
 	threshold := soulAbsorptionAttributeFirstThreshold
@@ -581,11 +583,11 @@ func soulAttributeNextThreshold(awardedPoints int) int64 {
 	return threshold
 }
 
-// advanceSoulAbsorptionAttribute counts one matching soul essence and awards
+// advanceSoulAbsorptionAttribute adds trusted quality-weighted progress and awards
 // only newly reached milestones. The total inheritance attribute is capped.
 func advanceSoulAbsorptionAttribute(ctx context.Context, tx *sql.Tx, soulID, attribute string, progressUnits int) (SoulAttributeProgress, int64, error) {
 	allowed := map[string]bool{"strength":true,"constitution":true,"agility":true,"spirit":true,"vitality":true}
-	if !allowed[attribute] || progressUnits < 1 || progressUnits > 8 { return SoulAttributeProgress{}, 0, ErrInvalidAbsorption }
+	if !allowed[attribute] || !validSoulProgressUnits(progressUnits) { return SoulAttributeProgress{}, 0, ErrInvalidAbsorption }
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO soul_absorption_attribute_progress (soul_id,attribute)
 		VALUES ($1,$2) ON CONFLICT (soul_id,attribute) DO NOTHING`, soulID, attribute); err != nil {
