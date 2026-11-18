@@ -10,6 +10,7 @@ signal player_joined(player: Dictionary)
 signal player_left(character_id: String)
 signal combat_event(event: Dictionary)
 signal pickup_event(event: Dictionary)
+signal chat_event(event: Dictionary)
 
 const BUILD := "0.1.0"
 const EXTENSION_PATH := "res://bin/honghuang_native_net.gdextension"
@@ -104,6 +105,25 @@ func send_pickup(drop_id: String) -> Error:
 		return ERR_INVALID_DATA
 	return transport.send_frame(frame)
 
+func send_chat(channel: String, content: String) -> Error:
+	if not world_ready or transport == null:
+		return ERR_UNCONFIGURED
+	var normalized := content.strip_edges()
+	if normalized.is_empty() or normalized.length() > 200:
+		return ERR_INVALID_PARAMETER
+	if channel not in ["nearby", "world", "cross_world"]:
+		return ERR_INVALID_PARAMETER
+	var message_id := Crypto.generate_random_bytes(16).hex_encode()
+	var payload := JSON.stringify({
+		"client_message_id": message_id,
+		"channel": channel,
+		"content": normalized
+	}).to_utf8_buffer()
+	var frame := HHProtocolCodec.encode_frame(HHProtocolCodec.MessageType.CHAT_SEND_COMMAND, payload)
+	if frame.is_empty():
+		return ERR_INVALID_DATA
+	return transport.send_frame(frame)
+
 func _on_frame_received(bytes: PackedByteArray) -> void:
 	var decoded := HHProtocolCodec.decode_frame(bytes)
 	if not decoded.get("ok", false):
@@ -156,6 +176,12 @@ func _on_frame_received(bytes: PackedByteArray) -> void:
 				combat_event.emit(combat)
 			else:
 				rejected.emit("收到无效的 CombatEvent。")
+		HHProtocolCodec.MessageType.CHAT_EVENT:
+			var chat: Variant = JSON.parse_string(payload.get_string_from_utf8())
+			if chat is Dictionary:
+				chat_event.emit(chat)
+			else:
+				rejected.emit("收到无效的 ChatEvent。")
 		HHProtocolCodec.MessageType.PICKUP_EVENT:
 			var pickup: Variant = JSON.parse_string(payload.get_string_from_utf8())
 			if pickup is Dictionary:
