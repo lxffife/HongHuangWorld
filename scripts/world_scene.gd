@@ -842,13 +842,32 @@ func _on_soul_essence_request_completed(result: int, response_code: int, _header
 		return
 	var had_previous_essence_profile := soul_essence_profile.has("mutation_count")
 	var previous_mutation_count := int(soul_essence_profile.get("mutation_count", 0))
+	var previous_attribute_points: Dictionary = {}
+	for previous_variant in soul_essence_profile.get("attribute_progress", []):
+		if previous_variant is Dictionary:
+			var previous_item: Dictionary = previous_variant
+			previous_attribute_points[str(previous_item.get("attribute", ""))] = int(previous_item.get("awarded_points", 0))
 	soul_essence_profile = parsed
+	var growth_notifications: Array[String] = []
 	var current_mutation_count := int(soul_essence_profile.get("mutation_count", 0))
 	if had_previous_essence_profile and current_mutation_count > previous_mutation_count:
 		var mutations: Array = soul_essence_profile.get("mutations", [])
 		if mutations.size() > 0:
 			var latest: Dictionary = mutations[0]
-			_show_notification("魂质异变 · " + str(latest.get("name", "未知异变")) + "，来世" + str({"strength":"力量","constitution":"体质","agility":"敏捷","spirit":"灵力","vitality":"气血"}.get(str(latest.get("attribute", "")), "资质")) + " +" + str(latest.get("attribute_bonus", 1)), 5.0)
+			growth_notifications.append(str(latest.get("name", "未知异变")) + " · " + str({"strength":"力量","constitution":"体质","agility":"敏捷","spirit":"灵力","vitality":"气血"}.get(str(latest.get("attribute", "")), "资质")) + " +" + str(latest.get("attribute_bonus", 1)))
+	if had_previous_essence_profile:
+		for current_variant in soul_essence_profile.get("attribute_progress", []):
+			if not current_variant is Dictionary:
+				continue
+			var current_item: Dictionary = current_variant
+			var attribute := str(current_item.get("attribute", ""))
+			var old_points := int(previous_attribute_points.get(attribute, 0))
+			var new_points := int(current_item.get("awarded_points", 0))
+			if new_points > old_points:
+				var attribute_name := str({"strength":"力量","constitution":"体质","agility":"敏捷","spirit":"灵力","vitality":"气血"}.get(attribute, attribute))
+				growth_notifications.append(attribute_name + "资质突破 +" + str(new_points - old_points))
+	if growth_notifications.size() > 0:
+		_show_notification("魂质成长 · " + "；".join(growth_notifications), 5.0)
 	_apply_world_player_form()
 	_update_compact_hud()
 	var pending: Array = soul_essence_profile.get("pending_rare_choices", [])
