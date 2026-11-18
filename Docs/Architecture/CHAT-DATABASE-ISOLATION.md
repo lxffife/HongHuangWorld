@@ -63,6 +63,25 @@ Chat's own message outbox publishes `honghuang.chat.events.v1` through JetStream
 8. Verify player send/history, WorldServer nearby/world/cross-world fanout, reconnect/replay, 30-day retention, and behavior while Game API is stopped.
 9. Only after acceptance remove the old Game DB chat tables and credentials from ChatServer.
 
+
+## Implemented Game transactional outbox (migration 000043)
+
+The Game database now has a transactional `game_event_outbox`. PostgreSQL triggers append events in the same transaction as these source changes:
+
+- Character create/update: `game.character.created.v1`, `game.character.updated.v1`
+- Soul current-character change: `game.account.current_character_changed.v1`
+- World instance changes: `game.world_instance.upserted.v1`
+- Server registry heartbeat/status changes: `game.server_node.heartbeat.v1`
+- World session lifecycle changes: `game.world_session.opened.v1`, `game.world_session.updated.v1`, `game.world_session.closed.v1`
+
+Each event has a UUID, a globally increasing event/aggregate sequence, event type, aggregate ID, UTC occurrence time, and typed data. Trigger insertion is atomic with the source row transaction; a rollback removes both the domain change and its outbox event.
+
+The API process runs `internal/gameevents.RunOutboxPublisher` independently. It claims rows using `FOR UPDATE SKIP LOCKED`, leases them, publishes to JetStream subject `honghuang.game.events.v1`, and marks them published only after JetStream acknowledges. Retries use the same event UUID as the NATS message ID. NATS connection or stream setup failure does not prevent the API from starting; pending events remain in PostgreSQL.
+
+The current publisher is a single background worker per API process. If multiple API replicas are deployed, outbox leases prevent duplicate simultaneous claims, and consumers must still be idempotent because a crash after JetStream acknowledgement but before marking the row published causes a safe redelivery. The publisher orders each claimed batch by event sequence; consumers must use `aggregate_version` to ignore stale events.
+
+JetStream currently retains the event stream for 30 days. Chat projection bootstrap/backfill remains required for a consumer that is offline beyond that window. No Chat cutover is implied by this migration.
+
 ## Current implementation status
 
 - Chat runs as a separate process and reads `CHAT_DATABASE_URL`.
