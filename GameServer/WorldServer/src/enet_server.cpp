@@ -4,6 +4,7 @@
 #include "simulation/monster.hpp"
 #include "simulation/combat.hpp"
 #include "persistence/durable_outbox.hpp"
+#include "network/chat_delivery_policy.hpp"
 
 #include <enet/enet.h>
 #include <curl/curl.h>
@@ -1107,7 +1108,7 @@ struct EnetServer::Impl {
                     }
                     continue;
                 }
-                if (status >= 400 && status < 500 && status != 408 && status != 425 && status != 429) {
+                if (honghuang::network::chat_delivery_is_permanent_http_error(status)) {
                     std::string dead_error;
                     if (!durable_outbox->move_to_dead_letter(
                             event->event_id, event->attempts + 1, delivery_error, dead_error)) {
