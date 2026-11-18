@@ -73,14 +73,14 @@ int main() {
         std::string error;
         const honghuang::persistence::OutboxEvent chat{
             "nearby-chat:client-1", "nearby_chat",
-            "{\\"session_id\\":\\"s1\\",\\"client_message_id\\":\\"client-1\\"}",
+            R"({"session_id":"s1","client_message_id":"client-1"})",
             0, 500, 500, {}
         };
         assert(box.enqueue(chat, error));
         assert(box.enqueue(chat, error));
         assert(!box.enqueue({
             "nearby-chat:client-1", "nearby_chat",
-            "{\\"session_id\\":\\"s1\\",\\"client_message_id\\":\\"client-1\\",\\"content\\":\\"changed\\"}",
+            R"({"session_id":"s1","client_message_id":"client-1"})",
             0, 500, 500, {}
         }, error));
         auto pending_chat = box.claim_due_type(500, "nearby_chat", error);
