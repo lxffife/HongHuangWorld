@@ -8,7 +8,20 @@ fi
 set -Eeuo pipefail
 source "$(dirname "$0")/lib/common.sh"
 if [[ -f "$HH_ENV_FILE" ]]; then
-  log "环境文件已存在，保留现有密码与配置：$HH_ENV_FILE"
+  # Upgrade an existing pre-split environment file without rotating any secrets.
+  set -a
+  source "$HH_ENV_FILE"
+  set +a
+  : "${CHAT_DB_NAME:=honghuang_chat}"
+  : "${CHAT_DB_USER:=chat_user}"
+  : "${CHAT_DB_PASSWORD:?现有环境文件缺少 CHAT_DB_PASSWORD，请先设置独立 Chat 数据库密码}"
+  CHAT_DATABASE_URL="postgres://$CHAT_DB_USER:$CHAT_DB_PASSWORD@127.0.0.1:5432/$CHAT_DB_NAME?sslmode=disable"
+  tmp_env="$(mktemp)"
+  awk -F= '$1 != "CHAT_DATABASE_URL" && $1 != "CHAT_TARGET_DATABASE_URL" && $1 != "CHAT_PROJECTION_DATABASE_URL" && $1 != "CHAT_USE_PROJECTION_DATABASE" { print }' "$HH_ENV_FILE" > "$tmp_env"
+  printf 'CHAT_DATABASE_URL=%s\\n' "$CHAT_DATABASE_URL" >> "$tmp_env"
+  sudo install -m 600 -o "$USER" -g "$USER" "$tmp_env" "$HH_ENV_FILE"
+  rm -f "$tmp_env"
+  log "已将现有环境配置切换为独立 Chat 数据库，其他密码和配置保持不变：$HH_ENV_FILE"
   exit 0
 fi
 DBPASS="$(openssl rand -hex 24)"
