@@ -99,7 +99,7 @@
 ### P0-D5：附近聊天发件箱运维
 - WorldServer 增加本机 `world_outbox_admin` 管理程序，不开放公网管理 API。支持 `stats` 查看队列状态/最老 pending 与 dead-letter 年龄，`dead-letters` 查询附近聊天死信，`retry <event_id>` 将指定 nearby_chat 死信重新排队。
 - 管理程序以非恢复模式打开 SQLite，不会把正在投递的 inflight 事件重置为 pending；人工重试只允许修改 event_type=nearby_chat 的 dead-letter，不能触碰经验、掉落等游戏事件。
-- Chat Outbox worker 每 60 秒输出独立指标：pending、inflight、dead_letter、最老 pending 年龄和最老死信年龄；永久 HTTP 4xx 仍进入死信并记录原因。
+- Chat Outbox worker 每 60 秒输出独立指标：pending、inflight、dead_letter、最老 pending 年龄和最老死信年龄；存在死信或最老 pending 超过 60 秒时输出 WARN；永久 HTTP 4xx 仍进入死信并记录原因。
 - 本机使用示例：
   ```sh
   ./world_outbox_admin stats
@@ -129,4 +129,4 @@
 - 聊天用户接口和 WorldServer 内部发布接口均强化幂等：相同 client_message_id + 相同频道/正文返回原消息；相同 ID 被用于不同频道或正文时返回 409，避免客户端错误重试覆盖/混淆消息。
 - 当前仍未实现 NATS 故障期间在线客户端历史增量同步、WorldServer 本地 SQLite 与 ChatServer/JetStream 的自动故障注入验收、聊天数据物理数据库拆分。
 - 本轮新增附近频道 SQLite 持久发件箱接入：复用 WorldServer 现有 WAL/FULL DurableOutbox，新增独立 nearby_chat claim worker；游戏事件 worker 排除聊天事件，聊天队列设置容量配额；客户端在持久化确认前使用相同 client_message_id 退避重发；服务端从已有 outbox 读取原始 AOI 快照以保证重试幂等；允许同节点最近 30 天处于 saving/closed 的会话完成延迟投递；新增重启恢复、类型隔离和容量配额测试。
-- P0-D5 新增本机 outbox 管理程序，可查询队列指标/死信并人工重试 nearby_chat 死信；管理进程不会重置运行中 inflight 事件，且无法重试游戏事件。Chat Outbox worker 每 60 秒输出独立健康指标。新增管理 API 与 SQLite 管理逻辑测试；尚未运行 C++ 编译/CTest。尚未运行 Go 测试、C++ 编译/CTest、Godot 解析/运行、数据库迁移或 GitHub Actions。不要把静态代码提交视为运行验收通过。
+- P0-D5 新增本机 outbox 管理程序，可查询队列指标/死信并人工重试 nearby_chat 死信；管理进程不会重置运行中 inflight 事件，且无法重试游戏事件。Chat Outbox worker 每 60 秒输出独立健康指标。新增本机 CLI 与 SQLite 管理逻辑测试；尚未运行 C++ 编译/CTest。尚未运行 Go 测试、C++ 编译/CTest、Godot 解析/运行、数据库迁移或 GitHub Actions。不要把静态代码提交视为运行验收通过。
