@@ -109,6 +109,23 @@ func (h *characterHandlers) createFirstLife(w http.ResponseWriter, r *http.Reque
 }
 
 
+func (h *characterHandlers) reincarnationPreview(w http.ResponseWriter, r *http.Request) {
+	account, ok := h.currentAccount(w, r)
+	if !ok { return }
+	preview, err := h.characterService.ReincarnationPreview(r.Context(), account.ID, r.URL.Query().Get("race_id"))
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusOK, map[string]any{"inheritance": preview})
+	case errors.Is(err, character.ErrInvalidRace):
+		http.Error(w, "unsupported race", http.StatusBadRequest)
+	case errors.Is(err, character.ErrSoulRequired):
+		http.Error(w, "soul profile not found", http.StatusConflict)
+	default:
+		h.logger.Error("preview reincarnation inheritance failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
+}
+
 func (h *characterHandlers) reincarnationRoutes(w http.ResponseWriter, r *http.Request) {
 	account, ok := h.currentAccount(w, r)
 	if !ok {
