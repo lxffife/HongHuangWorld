@@ -126,5 +126,19 @@ int main() {
         assert(first_box.pending_count(error) == 2);
     }
     remove_database(concurrent_path);
+
+    const std::string quota_path = "world_outbox_quota_test.sqlite";
+    remove_database(quota_path);
+    {
+        honghuang::persistence::DurableOutbox box(quota_path, 4);
+        std::string error;
+        assert(box.enqueue({"chat-1", "nearby_chat", "payload", 0, 0, 1, {}}, error));
+        assert(box.enqueue({"chat-2", "nearby_chat", "payload", 0, 0, 2, {}}, error));
+        assert(!box.enqueue({"chat-3", "nearby_chat", "payload", 0, 0, 3, {}}, error));
+        assert(box.enqueue({"game-1", "character_reward", "payload", 0, 0, 4, {}}, error));
+        assert(box.enqueue({"game-2", "ground_drop_create", "payload", 0, 0, 5, {}}, error));
+        assert(!box.enqueue({"game-3", "character_reward", "payload", 0, 0, 6, {}}, error));
+    }
+    remove_database(quota_path);
     return 0;
 }
