@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/liflife/HongHuangWorld/Backend/internal/database"
+	"github.com/liflife/HongHuangWorld/Backend/internal/gameevents"
 	"github.com/liflife/HongHuangWorld/Backend/internal/httpapi"
 	"github.com/liflife/HongHuangWorld/Backend/internal/worldentry"
 )
@@ -41,6 +42,7 @@ func main() {
 	defer stop()
 
 	go runSessionRecovery(ctx, worldentry.NewService(db), logger)
+	go gameevents.RunOutboxPublisher(ctx, db, logger)
 
 	go func() {
 		logger.Info("backend starting", "addr", addr)
