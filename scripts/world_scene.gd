@@ -35,7 +35,6 @@ var chat_log: VBoxContainer
 var chat_input: LineEdit
 var chat_status: Label
 var chat_expanded := false
-var chat_lines: Array[String] = []
 var chat_lines_by_channel: Dictionary = {"nearby": [], "world": [], "cross_world": []}
 var selected_chat_channel := "nearby"
 
@@ -1301,10 +1300,10 @@ func _append_chat_line(line: String, channel: String = "") -> void:
 func _render_chat_lines() -> void:
 	if not is_instance_valid(chat_log):
 		return
-	chat_lines = chat_lines_by_channel.get(selected_chat_channel, [])
+	var visible_lines: Array = chat_lines_by_channel.get(selected_chat_channel, [])
 	for child in chat_log.get_children():
 		child.queue_free()
-	for value in chat_lines:
+	for value in visible_lines:
 		var label := Label.new()
 		label.text = value
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
