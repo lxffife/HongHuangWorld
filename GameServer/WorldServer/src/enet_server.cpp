@@ -991,7 +991,8 @@ struct EnetServer::Impl {
         if (config.world_id != "underworld_fengdu") return;
         const auto& kind = monster.definition.id;
         if (kind != "wandering_wraith" && kind != "blazing_war_soul" &&
-            kind != "ironbone_beast_soul" && kind != "gale_wraith" &&
+            kind != "blazing_war_soul_elite" && kind != "blazing_war_soul_ancient" &&
+            kind != "blazing_war_soul_mythic" && kind != "ironbone_beast_soul" && kind != "gale_wraith" &&
             kind != "spirit_scholar_wisp" && kind != "life_ancient_soul" &&
             kind != "faceless_essence") return;
         const auto event_id = make_event_uuid();
