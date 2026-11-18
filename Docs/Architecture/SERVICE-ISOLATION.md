@@ -56,5 +56,5 @@
 - 30 天消息保留由 ChatServer 后台调度器负责：启动时执行一次，之后每小时执行；发送和历史查询请求不再触发过期消息删除，清理失败记录日志并在下一周期重试。
 - Game API 暂时保留原聊天路由，作为客户端/WorldServer 切换期间的兼容入口。
 - Godot 已建立独立 WebSocket 聊天连接：Bearer Token 握手、20 秒心跳、Pong 超时检测和断线自动重连；世界/跨界频道使用独立连接，附近频道由 ENet 上行、WebSocket 下行。每次连接/重连成功后自动拉取附近/世界/跨界最近 50 条历史，按消息 ID 去重并按时间+ID排序；过期连接的历史响应会被丢弃。ChatServer 已通过 JetStream 跨进程广播世界/跨界消息；配置优先使用 `CHAT_NATS_URL`，未设置时回退到 `NATS_URL`。每个聊天节点必须连接同一启用 JetStream 的 NATS 集群，并配置稳定且唯一的 `CHAT_NODE_ID`；本地单机开发可使用 `nats://localhost:4222`。每节点 durable consumer 会在重启后从上次确认位置继续消费；附近消息按实例与 AOI 接收者快照过滤，WebSocket 心跳会刷新当前角色的世界实例绑定。
-- PostgreSQL 事务 Outbox 与 JetStream 持久流/每节点 durable consumer 已提交；WorldServer 附近频道 SQLite 持久发件箱和独立投递 worker 已提交；NATS 故障期间在线客户端历史增量同步、在线状态订阅、聊天数据库物理拆分、完整历史分页/离线投递和故障注入测试尚未实现。
+- PostgreSQL 事务 Outbox 与 JetStream 持久流/每节点 durable consumer 已提交；WorldServer 附近频道 SQLite 持久发件箱和独立投递 worker 已提交；本机 `world_outbox_admin` 仅通过 SQLite 文件权限提供队列统计、附近聊天死信查询和手动重试，不开放网络管理端点；管理进程不会重置运行中 inflight 事件，且不能重试游戏事件；Chat Outbox 每 60 秒记录独立健康指标；NATS 故障期间在线客户端历史增量同步、在线状态订阅、聊天数据库物理拆分、完整历史分页/离线投递和故障注入测试尚未实现。
 - 本轮增加 JetStream 持久流、每节点独立 durable pull consumer、消费确认/重投递、后台异步发布和消息 ID 去重；没有运行 Go 测试、构建、迁移、Godot 解析/运行或 GitHub Actions；所有新增代码仍待本地验证。
