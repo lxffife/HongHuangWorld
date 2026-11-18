@@ -90,7 +90,7 @@ func _process(_delta: float) -> void:
 		var send_error: Error = transport.send_frame(frame)
 		pending["last_sent_msec"] = now
 		if send_error == OK:
-			pending["attempts"] = attempts + 1
+			pending["attempts"] = mini(attempts + 1, 5)
 		pending_chat_frames[message_id] = pending
 
 func send_input(move_x: float, move_z: float, sequence: int, jump: bool = false) -> Error:
