@@ -260,7 +260,7 @@ func (h *chatHandlers) socket(w http.ResponseWriter, r *http.Request) {
 				client.sendError(chatSocketErrorText(err))
 				continue
 			}
-			h.hub.broadcast(message)
+			if h.events != nil { h.events.publish(message) } else if h.hub != nil { h.hub.broadcast(message) }
 		default:
 			client.sendError("unsupported websocket frame")
 		}
