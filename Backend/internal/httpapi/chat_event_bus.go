@@ -284,12 +284,9 @@ func (b *chatEventBus) publish(message chat.Message) {
 }
 
 func chatEventPublisherID() string {
-	node := strings.TrimSpace(os.Getenv("CHAT_NODE_ID"))
+	node := chatEventDurableName()
 	if node == "" {
-		node, _ = os.Hostname()
-	}
-	if node == "" {
-		node = "chat"
+		node = "CHAT"
 	}
 	return fmt.Sprintf("%s-%d", node, os.Getpid())
 }
