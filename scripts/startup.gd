@@ -388,6 +388,10 @@ func _show_login_screen() -> void:
 		details_container.hide()
 
 
+func _process(delta: float) -> void:
+	if is_instance_valid(lobby_root) and lobby_root.visible and is_instance_valid(lobby_preview_root) and not lobby_preview_dragging:
+		lobby_preview_root.rotation.y += delta * 0.12
+
 func _build_lobby_ui() -> void:
 	lobby_root = Control.new()
 	lobby_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -488,6 +492,11 @@ func _build_lobby_ui() -> void:
 	lobby_world_label = Label.new()
 	lobby_world_label.text = "出生世界：待载入"
 	info.add_child(lobby_world_label)
+	var preview_hint := Label.new()
+	preview_hint.text = "角色预览 · 按住鼠标左键拖动旋转"
+	preview_hint.add_theme_color_override("font_color", Color("#8fa4bd"))
+	preview_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	info.add_child(preview_hint)
 	lobby_status_label = Label.new()
 	lobby_status_label.text = "角色资料已准备就绪。"
 	lobby_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
