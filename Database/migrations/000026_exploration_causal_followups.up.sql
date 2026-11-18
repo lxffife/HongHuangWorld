@@ -9,13 +9,20 @@ ALTER TABLE world_exploration_events
     ADD CONSTRAINT chk_world_exploration_event_prerequisite_pair
         CHECK ((required_event_id IS NULL) = (required_choice_id IS NULL));
 
+ALTER TABLE world_exploration_points
+    ADD COLUMN required_event_id VARCHAR(96)
+        REFERENCES world_exploration_events(id) ON DELETE CASCADE,
+    ADD COLUMN required_choice_id VARCHAR(64),
+    ADD CONSTRAINT chk_world_exploration_point_prerequisite_pair
+        CHECK ((required_event_id IS NULL) = (required_choice_id IS NULL));
+
 INSERT INTO world_exploration_points
     (id,world_id,region_id,name,description,position_x,position_y,position_z,
-     interaction_radius,danger_level,merit_reward,karma_delta)
+     interaction_radius,danger_level,merit_reward,karma_delta,required_event_id,required_choice_id)
 VALUES
     ('fengdu_lantern_shadow_trace','underworld_fengdu','fengdu_gate_outskirts','魂灯旧影',
      '引魂灯火被收取后，灯座深处浮现一道旧日影痕。靠近细察，可追寻灯火曾照见的前尘。',
-     13,0,-14,4,2,1,0)
+     13,0,-14,4,2,1,0,'fengdu_lantern_memory','take_soul_flame')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO world_exploration_events
