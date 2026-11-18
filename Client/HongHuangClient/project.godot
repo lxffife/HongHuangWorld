@@ -9,6 +9,7 @@ run/main_scene="res://scenes/Startup.tscn"
 
 [autoload]
 HHSession="*res://scripts/session.gd"
+HHChatNetwork="*res://scripts/chat_network.gd"
 
 [rendering]
 renderer/rendering_method="forward_plus"
