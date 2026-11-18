@@ -104,6 +104,6 @@ Projection mode requires `CHAT_PROJECTION_DATABASE_URL` to be different from `CH
 
 - Chat runs as a separate process and reads `CHAT_DATABASE_URL`.
 - Chat authentication can call the independent Identity service.
-- Chat still contains direct SQL reads of Game tables, and the existing Game DB chat tables still have foreign keys to Game entities.
+- The legacy compatibility mode still reads the original Game-backed chat tables. The new projection mode contains separate SQL paths that use only Chat-owned tables; it must be selected explicitly after backfill.
 - The schema in `Database/chat-migrations` is the target standalone schema; the Game event publisher and Chat projection consumer are implemented. Chat has explicit legacy and projection modes. The projection mode reads only Chat-owned projections; the legacy mode remains the default until historical message backfill and cutover validation are complete.
-- Do not point production `CHAT_DATABASE_URL` at this schema yet. The current ChatServer SQL still expects the legacy Game DB layout.
+- Keep `CHAT_USE_PROJECTION_DATABASE=false` until backfill and acceptance. When enabled, the HTTP API uses `CHAT_PROJECTION_DATABASE_URL`; `CHAT_DATABASE_URL` remains the legacy connection for rollback and the migration window.
