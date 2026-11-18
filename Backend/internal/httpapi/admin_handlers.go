@@ -11,6 +11,14 @@ import (
  "github.com/liflife/HongHuangWorld/Backend/internal/adminauth"
 )
 
+func (h *adminHandlers) dashboard(w http.ResponseWriter,r *http.Request) {
+ if _,ok:=h.require(w,r,"dashboard.read");!ok{return}
+ ctx,cancel:=context.WithTimeout(r.Context(),3*time.Second);defer cancel()
+ out,err:=h.service.Dashboard(ctx)
+ if err!=nil { h.logger.Error("admin dashboard query failed","error",err);http.Error(w,"internal server error",http.StatusInternalServerError);return }
+ writeJSON(w,http.StatusOK,out)
+}
+
 type adminHandlers struct { service *adminauth.Service; logger *slog.Logger }
 type adminLoginRequest struct { Username string `json:"username"`; Password string `json:"password"` }
 type adminPasswordRequest struct { CurrentPassword string `json:"current_password"`; NewPassword string `json:"new_password"` }
