@@ -794,7 +794,8 @@ func _apply_world_player_form() -> void:
 			int(soul_essence_profile.get("form_stage", 1)),
 			float(soul_essence_profile.get("visual_scale", 0.35)),
 			affinities,
-			int(soul_essence_profile.get("growth_stage", 1)))
+			int(soul_essence_profile.get("growth_stage", 1)),
+			soul_essence_profile.get("fusion_names", []))
 	else:
 		local_player.set_soul_form(false)
 	if is_instance_valid(soul_choice_button):
