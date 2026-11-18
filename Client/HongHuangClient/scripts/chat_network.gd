@@ -1,6 +1,4 @@
 extends Node
-class_name HHChatNetwork
-
 signal connected
 signal disconnected
 signal connection_error(message: String)
