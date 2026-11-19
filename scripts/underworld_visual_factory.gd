@@ -18,6 +18,12 @@ static func create_monster(monster_name: String, monster_level: int) -> Node3D:
 			_build_wraith(root, Color("#75d79a"), Color("#b4ffd0"))
 		"wind_soul":
 			_build_wraith(root, Color("#67cfc5"), Color("#b6fff0"))
+		"fire_soul":
+			_build_wraith(root, Color("#a94f37"), Color("#ffd08a"))
+			_build_fire_soul_details(root)
+		"frost_soul":
+			_build_wraith(root, Color("#5688b7"), Color("#d7f4ff"))
+			_build_frost_soul_details(root)
 		_:
 			_build_wraith(root, Color("#668fc7"), Color("#c1e1ff"))
 	var level_scale := clampf(1.0 + float(maxi(monster_level - 1, 0)) * 0.018, 1.0, 1.32)
@@ -36,6 +42,10 @@ static func _resolve_archetype(monster_name: String) -> String:
 		return "life_soul"
 	if monster_name.contains("疾风") or monster_name.contains("风灵"):
 		return "wind_soul"
+	if monster_name.contains("烈焰") or monster_name.contains("火灵") or monster_name.contains("炎魂") or monster_name.contains("炽魂"):
+		return "fire_soul"
+	if monster_name.contains("寒冰") or monster_name.contains("冰魄") or monster_name.contains("霜魂"):
+		return "frost_soul"
 	return "wraith"
 
 
@@ -246,6 +256,31 @@ static func _build_wraith(root: Node3D, aura_color: Color, core_color: Color) ->
 	_part(root, "SoulOrbit", orbit, Vector3(0.0, 0.72, 0.0), core_color, Vector3(0.72, 0.0, 0.0), 1.1)
 	for side in [-1.0, 1.0]:
 		_part(root, "Wisp" + str(side), _sphere(0.095), Vector3(side * 0.47, 0.60, 0.08), core_color, Vector3.ZERO, 1.8)
+
+
+static func _build_fire_soul_details(root: Node3D) -> void:
+	var flame := Color("#ff8750")
+	var gold := Color("#ffd08a")
+	for side in [-1.0, 1.0]:
+		_part(root, "FlameHorn" + str(side), _capsule(0.075, 0.52), Vector3(side * 0.24, 1.30, 0.02), flame, Vector3(0.0, 0.0, side * -0.48), 2.0)
+		_part(root, "FlameOrb" + str(side), _sphere(0.085), Vector3(side * 0.42, 0.66, 0.04), gold, Vector3.ZERO, 2.6)
+	_part(root, "FlameTail" + str(side), _capsule(0.065, 0.42), Vector3(side * 0.25, 0.22, 0.30), flame, Vector3(side * 0.35, 0.0, side * 0.38), 1.8)
+	_part(root, "FlameCrest", _sphere(0.12), Vector3(0.0, 1.56, 0.02), gold, Vector3.ZERO, 3.0)
+
+
+static func _build_frost_soul_details(root: Node3D) -> void:
+	var ice := Color("#a9e8ff")
+	var deep_ice := Color("#5eacd6")
+	for side in [-1.0, 1.0]:
+		_part(root, "IceHorn" + str(side), _box(Vector3(0.13, 0.62, 0.13)), Vector3(side * 0.30, 1.27, 0.04), ice, Vector3(0.0, 0.0, side * -0.42), 0.9, 0.12)
+		_part(root, "IceShard" + str(side), _box(Vector3(0.16, 0.42, 0.12)), Vector3(side * 0.42, 0.70, 0.18), deep_ice, Vector3(0.18, 0.0, side * 0.28), 0.8, 0.18)
+	_part(root, "IceCrown", _box(Vector3(0.48, 0.10, 0.16)), Vector3(0.0, 1.48, 0.02), ice, Vector3.ZERO, 1.2, 0.12)
+	var frost_ring := TorusMesh.new()
+	frost_ring.inner_radius = 0.62
+	frost_ring.outer_radius = 0.68
+	frost_ring.rings = 24
+	frost_ring.ring_segments = 6
+	_part(root, "FrostOrbit", frost_ring, Vector3(0.0, 0.78, 0.0), ice, Vector3(0.9, 0.0, 0.0), 1.1, 0.1)
 
 
 static func create_npc(npc_type: String, npc_name: String) -> Node3D:
