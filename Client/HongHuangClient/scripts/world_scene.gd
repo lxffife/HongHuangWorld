@@ -2828,6 +2828,8 @@ func _on_equipment_request_completed(result: int, response_code: int, _headers: 
 	if not (parsed is Dictionary):
 		return
 	var items: Array = parsed.get("items", [])
+	if is_instance_valid(local_player) and local_player.has_method("set_equipment_visuals"):
+		local_player.call("set_equipment_visuals", items)
 	var slots := ["weapon", "head", "chest", "legs", "boots", "accessory"]
 	var labels := {"weapon":"武器", "head":"头部", "chest":"胸甲", "legs":"腿部", "boots":"鞋子", "accessory":"饰品"}
 	var equipped: Dictionary = {}
