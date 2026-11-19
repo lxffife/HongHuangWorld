@@ -1051,6 +1051,9 @@ func _create_monster(monster_name: String, monster_level: int) -> Node3D:
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.modulate = Color("#ff9b55") if is_war_god else (Color("#b9d9ff") if is_wraith else Color("#ffd0a8"))
 	monster.add_child(label)
+	monster.set_meta("base_visual_scale", monster.scale)
+	monster.set_meta("death_reaction_time", 0.0)
+	monster.set_meta("hit_reaction_time", 0.0)
 	add_child(monster)
 	return monster
 
@@ -1952,12 +1955,14 @@ func _animate_monster_visuals(delta: float) -> void:
 				body.position.x = hit_weight * 0.10
 			else:
 				body.position.x = move_toward(body.position.x, 0.0, delta * 0.8)
+		var base_scale: Vector3 = monster.get_meta("base_visual_scale", Vector3.ONE)
 		if death_time > 0.0:
 			var death_weight := 1.0 - death_time / 0.52
 			monster.rotation.z = death_weight * 0.42
-			monster.scale = Vector3.ONE * maxf(0.08, 1.0 - death_weight * 0.72)
-		elif animation_state != "death":
+			monster.scale = base_scale * maxf(0.08, 1.0 - death_weight * 0.72)
+		else:
 			monster.rotation.z = move_toward(monster.rotation.z, 0.0, delta * 2.0)
+			monster.scale = monster.scale.lerp(base_scale, minf(delta * 8.0, 1.0))
 
 
 func _animate_wolf_monster(monster: Node3D, stride: float, moving: bool, phase: float) -> void:
