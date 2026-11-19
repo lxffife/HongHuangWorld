@@ -420,6 +420,8 @@ static func create_player_humanoid() -> Node3D:
 	_add_equipment_socket(root, "EquipmentWeaponSocket", Vector3(0.43, 1.12, -0.20))
 	_add_equipment_socket(root, "EquipmentHeadSocket", Vector3(0.0, 2.08, 0.0))
 	_add_equipment_socket(root, "EquipmentChestSocket", Vector3(0.0, 1.20, -0.24))
+	_add_equipment_socket(root, "EquipmentLegsSocket", Vector3(0.0, 0.58, -0.22))
+	_add_equipment_socket(root, "EquipmentBootsSocket", Vector3(0.0, 0.18, -0.06))
 	_add_equipment_socket(root, "EquipmentBackSocket", Vector3(0.0, 1.28, 0.24))
 	_add_equipment_socket(root, "EquipmentAccessorySocket", Vector3(0.20, 0.82, -0.30))
 	_add_equipment_socket(root, "EquipmentOffhandSocket", Vector3(-0.43, 1.12, -0.20))
