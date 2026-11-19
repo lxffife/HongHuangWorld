@@ -5,10 +5,14 @@ class_name VisualModelLibrary
 # fall back to the procedural model, so a clean checkout remains playable.
 const MODEL_PATHS := {
 	"player_humanoid": "res://assets/models/player_humanoid.glb",
-	"wasteland_wolf": "res://assets/models/wasteland_wolf.glb",
+	"wolf": "res://assets/models/wasteland_wolf.glb",
 	"iron_beast": "res://assets/models/iron_beast.glb",
+	"warrior": "res://assets/models/warrior_soul.glb",
+	"life_soul": "res://assets/models/life_soul.glb",
+	"wind_soul": "res://assets/models/wind_soul.glb",
 	"fire_soul": "res://assets/models/fire_soul.glb",
-	"frost_soul": "res://assets/models/frost_soul.glb"
+	"frost_soul": "res://assets/models/frost_soul.glb",
+	"wraith": "res://assets/models/wraith.glb"
 }
 
 static func instantiate_model(model_key: String, fallback_factory: Callable) -> Node3D:
