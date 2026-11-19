@@ -165,7 +165,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			# 首次点击游戏画面只负责锁定鼠标，不误触发攻击。
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 			return
-		var world := get_parent()
 		if world != null and world.has_method("_request_nearest_monster_attack"):
 			world.call("_request_nearest_monster_attack")
 	elif event.is_action_pressed("jump"):
