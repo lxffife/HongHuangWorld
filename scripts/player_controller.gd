@@ -359,10 +359,10 @@ func _apply_soul_affinity_visuals(affinities: Dictionary) -> void:
 		{"count": constitution, "color": Color(0.86, 0.72, 0.38)},
 		{"count": agility, "color": Color(0.24, 0.88, 0.86)}
 	]
-	for trait in traits:
-		if int(trait["count"]) > highest:
-			highest = int(trait["count"])
-			primary = trait["color"]
+	for trait_data in traits:
+		if int(trait_data["count"]) > highest:
+			highest = int(trait_data["count"])
+			primary = trait_data["color"]
 	var core_material := _make_trait_material(primary, 0.72)
 	core_material.emission_energy_multiplier = 2.4
 	visual.material_override = core_material
