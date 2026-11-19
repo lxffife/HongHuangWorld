@@ -571,6 +571,10 @@ func (h *gamePlayerAdminHandlers) rollbackConfigRevision(w http.ResponseWriter, 
 	if !h.authorize(w, r) { return }
 	revisionID, err := strconv.ParseInt(strings.TrimSpace(r.PathValue("revisionID")), 10, 64)
 	if err != nil || revisionID < 1 { http.Error(w, "invalid revision id", http.StatusBadRequest); return }
+	var request struct { Reason string `json:"reason"` }
+	if err := decodeJSON(w, r, &request); err != nil { http.Error(w, "invalid request body", http.StatusBadRequest); return }
+	request.Reason = strings.TrimSpace(request.Reason)
+	if len([]rune(request.Reason)) < 2 || len([]rune(request.Reason)) > 300 { http.Error(w, "rollback reason must contain 2 to 300 characters", http.StatusBadRequest); return }
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 	tx, err := h.db.BeginTx(ctx, nil)
@@ -612,7 +616,7 @@ func (h *gamePlayerAdminHandlers) rollbackConfigRevision(w http.ResponseWriter, 
 	var restored json.RawMessage
 	restored,err=readConfigSnapshot(ctx,tx,table,where,args...)
 	if errors.Is(err,sql.ErrNoRows){restored=nil}else if err!=nil{http.Error(w,"internal server error",500);return}
-	if err=recordConfigRevision(ctx,tx,resourceType,resourceID,"rollback",current,restored);err!=nil{h.logger.Error("record rollback revision failed","revision_id",revisionID,"error",err);http.Error(w,"rollback was applied but revision recording failed",500);return}
+	if err=recordConfigRevisionWithReason(ctx,tx,resourceType,resourceID,"rollback",current,restored,request.Reason);err!=nil{h.logger.Error("record rollback revision failed","revision_id",revisionID,"error",err);http.Error(w,"rollback was applied but revision recording failed",500);return}
 	if err=tx.Commit();err!=nil{http.Error(w,"internal server error",500);return}
 	writeJSON(w,http.StatusOK,map[string]any{"status":"rolled_back","source_revision_id":revisionID,"resource_type":resourceType,"resource_id":resourceID,"note":"Rollback is recorded as a new revision; existing history is preserved"})
 }
