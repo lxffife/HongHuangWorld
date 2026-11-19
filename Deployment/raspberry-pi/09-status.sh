@@ -11,6 +11,8 @@ set -Eeuo pipefail
 source "$(dirname "$0")/lib/common.sh"
 echo "=== Identity ==="; systemctl --no-pager --full status honghuang-identity || true
 echo "=== Identity readiness ==="; curl -i --max-time 5 http://127.0.0.1:8789/ready || true
+echo "=== Chat ==="; systemctl --no-pager --full status honghuang-chat || true
+echo "=== Chat readiness ==="; curl -i --max-time 5 http://127.0.0.1:8788/ready || true
 echo "=== API ==="; systemctl --no-pager --full status honghuang-api || true
 echo "=== Qingyun WorldServer ==="; systemctl --no-pager --full status honghuang-world-server || true
 echo "=== Fengdu Underworld WorldServer ==="; systemctl --no-pager --full status honghuang-underworld-server || true
