@@ -126,8 +126,10 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 	} else {
 		unavailable := func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "service unavailable", http.StatusServiceUnavailable) }
 		mux.HandleFunc("GET /api/v1/internal/admin/monsters/definitions", unavailable)
+		mux.HandleFunc("POST /api/v1/internal/admin/monsters/definitions", unavailable)
 		mux.HandleFunc("PATCH /api/v1/internal/admin/monsters/definitions/{monsterID}", unavailable)
 		mux.HandleFunc("GET /api/v1/internal/admin/monsters/spawn-points", unavailable)
+		mux.HandleFunc("POST /api/v1/internal/admin/monsters/spawn-points", unavailable)
 		mux.HandleFunc("PATCH /api/v1/internal/admin/monsters/spawn-points/{spawnID}", unavailable)
 		mux.HandleFunc("GET /api/v1/internal/admin/loot/items", unavailable))
 		mux.HandleFunc("PATCH /api/v1/internal/admin/loot/items/{itemID}", unavailable)
