@@ -28,8 +28,8 @@ int main() {
     assert(std::string(wolf_profile.style) == "wolf_lunge");
 
     // Pack members receive separate approach points but remain within melee reach.
-    MonsterState pack_left{.x = -8.0F, .z = -8.0F, .health = wolf.max_health};
-    MonsterState pack_right{.x = 8.0F, .z = 8.0F, .health = wolf.max_health};
+    MonsterState pack_left{.x = -6.0F, .z = -6.0F, .health = wolf.max_health};
+    MonsterState pack_right{.x = 6.0F, .z = 6.0F, .health = wolf.max_health};
     const MonsterTarget pack_slot_left{.id = "pack-player", .x = 0.0F, .z = 0.0F,
         .alive = true, .approach_x = -0.65F, .approach_z = 0.0F, .has_approach_position = true};
     const MonsterTarget pack_slot_right{.id = "pack-player", .x = 0.0F, .z = 0.0F,
