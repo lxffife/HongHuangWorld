@@ -1922,6 +1922,9 @@ func _request_nearest_monster_attack() -> void:
 	var error: Error = network.send_attack(nearest_id)
 	if error != OK:
 		hud_label.text = "攻击指令发送失败：" + str(error)
+	elif local_player.has_method("play_attack_animation"):
+		# 本地挥剑只反馈输入；命中、伤害与攻击结果仍由 WorldServer 决定。
+		local_player.call("play_attack_animation")
 
 func _on_monster_action_event(event: Dictionary) -> void:
 	var attacker_id := str(event.get("source_entity_id", ""))
@@ -2388,6 +2391,33 @@ func _animate_monster_attack(monster: Node3D, archetype: String, phase: String, 
 			var orbit := monster.get_node_or_null("SoulOrbit") as Node3D
 			if is_instance_valid(orbit):
 				orbit.scale = Vector3.ONE * (1.0 + anticipation * 0.08 + strike * 0.22)
+		"fire_soul":
+			var fire_core := monster.get_node_or_null("SoulCore") as Node3D
+			if is_instance_valid(fire_core):
+				fire_core.scale = Vector3.ONE * (1.0 + anticipation * 0.24 + strike * 0.62 + recovery * 0.10)
+			var crest := monster.get_node_or_null("FlameCrest") as Node3D
+			if is_instance_valid(crest):
+				crest.scale = Vector3.ONE * (1.0 + anticipation * 0.35 + strike * 0.9)
+			for side in [-1.0, 1.0]:
+				var orb := monster.get_node_or_null("FlameOrb" + str(side)) as Node3D
+				if is_instance_valid(orb):
+					orb.position.x = side * (0.42 + anticipation * 0.12 + strike * 0.22)
+					orb.scale = Vector3.ONE * (1.0 + anticipation * 0.45 + strike * 0.85)
+		"frost_soul":
+			var frost_core := monster.get_node_or_null("SoulCore") as Node3D
+			if is_instance_valid(frost_core):
+				frost_core.scale = Vector3.ONE * (1.0 + anticipation * 0.16 + strike * 0.42 + recovery * 0.06)
+			var crown := monster.get_node_or_null("IceCrown") as Node3D
+			if is_instance_valid(crown):
+				crown.scale = Vector3.ONE * (1.0 + anticipation * 0.22 + strike * 0.58)
+			var frost_ring := monster.get_node_or_null("FrostOrbit") as Node3D
+			if is_instance_valid(frost_ring):
+				frost_ring.scale = Vector3.ONE * (1.0 + anticipation * 0.10 + strike * 0.42)
+			for side in [-1.0, 1.0]:
+				var shard := monster.get_node_or_null("IceShard" + str(side)) as Node3D
+				if is_instance_valid(shard):
+					shard.rotation.x = anticipation * 0.28 + strike * 0.75
+					shard.scale = Vector3.ONE * (1.0 + anticipation * 0.20 + strike * 0.55)
 
 
 func _apply_monster_death_fade(monster: Node3D, weight: float) -> void:
