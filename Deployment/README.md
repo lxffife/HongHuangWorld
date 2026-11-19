@@ -50,7 +50,7 @@ WorldServer 启动后会立即调用中心服 `POST /api/v1/servers/heartbeat`�
 2. 安装 vcpkg，并设置用户环境变量 `VCPKG_ROOT` 指向 vcpkg 根目录。WorldServer 的 `vcpkg.json` 会声明 ENet、libcurl 和 nlohmann-json 依赖。
 3. 复制 `Deployment/.env.example` 为 `Deployment/.env`，修改 PostgreSQL/Redis 密码；确保 `DATABASE_URL` 中的 PostgreSQL 密码与 `POSTGRES_PASSWORD` 一致，并将 `WORLD_SERVER_API_KEY` 改为足够长的随机密钥。
 4. 启动基础设施：`.\Deployment\start-infra.bat`。
-5. 首次初始化数据库时执行 `.\Deployment\migrate-database.ps1`；脚本会创建迁移账本并按顺序执行尚未应用的迁移（当前迁移版本为 000045，包含游戏基础、轮回成长、聊天、后台管理、节点管控及怪物模板/刷新点配置）；已记录的版本会自动跳过。若数据库已有 `accounts` 表但没有迁移账本，脚本会停止，避免猜测现有数据库版本。
+5. 首次初始化数据库时执行 `.\Deployment\migrate-database.ps1`；脚本会创建迁移账本并按顺序执行尚未应用的迁移（当前迁移版本为 000046，包含游戏基础、轮回成长、聊天、后台管理、节点管控、怪物模板/刷新点及配置版本历史）；已记录的版本会自动跳过。若数据库已有 `accounts` 表但没有迁移账本，脚本会停止，避免猜测现有数据库版本。
 6. 在独立 PowerShell 窗口启动中心服：`.\Deployment\start-backend.ps1`。确认 `http://127.0.0.1:8787/ready` 返回 HTTP 200。
 7. 配置后台首次初始化账号：在 Deployment/.env 中设置 ADMIN_BOOTSTRAP_USERNAME、ADMIN_BOOTSTRAP_EMAIL 和唯一的 ADMIN_BOOTSTRAP_PASSWORD（至少 12 位，不要使用示例密码）。首次启动管理 API 时会创建超级管理员；后续重启检测到已有超级管理员后不会重置密码。启动命令：Windows `./Deployment/start-admin-server.ps1`；Linux/macOS `bash Deployment/start-admin-server.sh`。后台 API 默认仅监听本机 127.0.0.1:8790；需要远程访问时应通过 HTTPS 反向代理或 VPN，不要直接暴露管理端口，检查 `http://127.0.0.1:8790/ready`。
 8. 在另一个独立 PowerShell 窗口启动聊天服：`.\Deployment\start-chat-server.ps1`。确认 `http://127.0.0.1:8788/ready` 返回 HTTP 200。聊天服必须配置 `CHAT_DATABASE_URL`；开发阶段可与 `DATABASE_URL` 指向同一个数据库，但进程、监听端口和连接池彼此独立。Linux/macOS 在仓库根目录运行 `bash Deployment/start-chat-server.sh`。
@@ -158,3 +158,11 @@ Windows（在仓库根目录，单独 PowerShell 窗口运行）：
 
 
 WorldServer 怪物配置由 Game API 按已认证节点身份返回，不接受客户端指定 world_id。节点必须处于 ready 且管理员状态为 normal；被维护/禁用的节点不会拉取新的怪物配置。怪物刷新配置每 30 秒热更新一次，正在战斗的同一刷新点会尽量保留当前血量、位置和死亡计时；新增/删除/禁用刷新点在下一次配置应用时生效。 重试间隔修改会作用于该刷新点下一次死亡后的重生周期；首次刷新延迟修改会立即重新安排已处于休眠/死亡状态的刷新点，存活中的怪物不会被强制传送或重置。
+
+
+### 游戏配置版本历史（Game 数据库）
+
+- Game 数据库迁移 `000046` 新增 `game_config_revisions`，配置快照与配置变更在同一 Game 数据库事务内提交，不依赖 Admin 数据库可用性。
+- `GET /api/v1/admin/config-revisions?resource_type=monster_definition&resource_id={monster_id}&limit=50`：需要 `monsters.read`，查询配置历史；省略 resource_type/resource_id 可查看最近的多类配置变更，limit 为 1-100，默认 50。
+- 当前已记录：怪物模板修改、世界怪物刷新点修改、物品目录修改、怪物掉落条目新增/更新/删除。每条记录保留修改前后 JSON 快照和递增版本号。
+- Admin 的审计日志仍保存在 Admin 数据库；配置快照保存在 Game 数据库，两个服务不跨库写入。
