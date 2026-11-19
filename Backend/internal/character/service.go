@@ -1159,6 +1159,48 @@ func (s *Service) CurrentStatus(ctx context.Context, accountID string) (Status, 
 	if race.Valid {
 		result.Character.RaceID = &race.String
 	}
+	var sourceAbsorbedCount, sourceGrowthStage sql.NullInt64
+	var sourceGrowthName, dominantAttribute sql.NullString
+	var sourceStrength, sourceConstitution, sourceAgility, sourceSpirit, sourceVitality sql.NullInt64
+	var appliedStrength, appliedConstitution, appliedAgility, appliedSpirit, appliedVitality sql.NullInt64
+	birthErr := s.db.QueryRowContext(ctx,
+		`SELECT source_absorbed_count, source_growth_stage, source_growth_name,
+		        source_strength, source_constitution, source_agility, source_spirit, source_vitality,
+		        applied_strength, applied_constitution, applied_agility, applied_spirit, applied_vitality,
+		        dominant_attribute
+		 FROM character_birth_inheritance WHERE character_id = $1`,
+		result.Character.ID,
+	).Scan(&sourceAbsorbedCount, &sourceGrowthStage, &sourceGrowthName,
+		&sourceStrength, &sourceConstitution, &sourceAgility, &sourceSpirit, &sourceVitality,
+		&appliedStrength, &appliedConstitution, &appliedAgility, &appliedSpirit, &appliedVitality, &dominantAttribute)
+	if birthErr != nil && !errors.Is(birthErr, sql.ErrNoRows) {
+		return Status{}, fmt.Errorf("load current character birth inheritance: %w", birthErr)
+	}
+	if sourceAbsorbedCount.Valid {
+		birth := &BirthInheritance{
+			SourceAbsorbedCount: sourceAbsorbedCount.Int64,
+			SourceGrowthStage: int(sourceGrowthStage.Int64),
+			SourceGrowthName: sourceGrowthName.String,
+			SourceStrength: sourceStrength.Int64,
+			SourceConstitution: sourceConstitution.Int64,
+			SourceAgility: sourceAgility.Int64,
+			SourceSpirit: sourceSpirit.Int64,
+			SourceVitality: sourceVitality.Int64,
+			AppliedStrength: int(appliedStrength.Int64),
+			AppliedConstitution: int(appliedConstitution.Int64),
+			AppliedAgility: int(appliedAgility.Int64),
+			AppliedSpirit: int(appliedSpirit.Int64),
+			AppliedVitality: int(appliedVitality.Int64),
+			DominantAttribute: dominantAttribute.String,
+		}
+		birth.InitialStrength, birth.InitialConstitution = 5+birth.AppliedStrength, 5+birth.AppliedConstitution
+		birth.InitialAgility, birth.InitialSpirit, birth.InitialVitality = 5+birth.AppliedAgility, 5+birth.AppliedSpirit, 5+birth.AppliedVitality
+		birth.InitialHealth, birth.InitialMaxHealth = 100+birth.AppliedConstitution*10+birth.AppliedVitality*5, 100+birth.AppliedConstitution*10+birth.AppliedVitality*5
+		birth.InitialMana, birth.InitialMaxMana = 50+birth.AppliedSpirit*10, 50+birth.AppliedSpirit*10
+		birth.InitialAttack, birth.InitialDefense = 10+birth.AppliedStrength*2, 5+birth.AppliedConstitution+birth.AppliedVitality
+		birth.InitialMovementSpeed = 5.0+float64(birth.AppliedAgility)*0.05
+		result.Character.BirthInheritance = birth
+	}
 	if stageName.Valid {
 		result.Progression.RealmStageName = stageName.String
 	}
