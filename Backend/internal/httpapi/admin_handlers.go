@@ -87,7 +87,7 @@ func (h *adminHandlers) listAuditLogs(w http.ResponseWriter, r *http.Request) {
  offset:=0
  if raw:=q.Get("offset");raw!="" { n,err:=strconv.Atoi(raw);if err!=nil||n<0||n>1000000{http.Error(w,"invalid offset",http.StatusBadRequest);return};offset=n }
  result:=q.Get("result");if result!=""&&result!="success"&&result!="failure"&&result!="denied"{http.Error(w,"invalid result filter",http.StatusBadRequest);return}
- filter:=adminauth.AuditFilter{ActorID:strings.TrimSpace(q.Get("actor_id")),Action:strings.TrimSpace(q.Get("action")),Result:result,Limit:limit,Offset:offset}
+ filter:=adminauth.AuditFilter{ActorID:strings.TrimSpace(q.Get("actor_id")),ResourceType:strings.TrimSpace(q.Get("resource_type")),ResourceID:strings.TrimSpace(q.Get("resource_id")),Action:strings.TrimSpace(q.Get("action")),Result:result,Limit:limit,Offset:offset}
  if raw:=q.Get("from");raw!="" { t,err:=time.Parse(time.RFC3339,raw);if err!=nil{http.Error(w,"from must be RFC3339",http.StatusBadRequest);return};filter.From=&t }
  if raw:=q.Get("to");raw!="" { t,err:=time.Parse(time.RFC3339,raw);if err!=nil{http.Error(w,"to must be RFC3339",http.StatusBadRequest);return};filter.To=&t }
  if filter.From!=nil&&filter.To!=nil&&!filter.From.Before(*filter.To){http.Error(w,"from must be earlier than to",http.StatusBadRequest);return}
