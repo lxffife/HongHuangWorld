@@ -117,7 +117,10 @@ static func create_sect_hall() -> StaticBody3D:
 		_box(root, "HallEaveTip_" + str(side), Vector3(2.2, 0.24, 3.0), Vector3(side * 9.6, 7.48, -0.2), roof, Vector3(0.0, 0.0, side * -0.16))
 	_box(root, "HallSign", Vector3(5.2, 1.35, 0.25), Vector3(0.0, 6.15, -5.08), Color("#2e453b"))
 	_label(root, "HallInscription", "青 云 大 殿", Vector3(0.0, 5.98, -5.24), Color("#e4d0a1"), 42)
-	_pillar_collision(root, "HallBodyCollision", Vector3(0.0, 4.2, -0.2), Vector3(17.0, 6.0, 9.0))
+	# Keep the central doorway open; collide only with the side and rear walls.
+	_pillar_collision(root, "HallLeftWallCollision", Vector3(-7.55, 4.2, -0.2), Vector3(1.0, 6.0, 9.0))
+	_pillar_collision(root, "HallRightWallCollision", Vector3(7.55, 4.2, -0.2), Vector3(1.0, 6.0, 9.0))
+	_pillar_collision(root, "HallRearWallCollision", Vector3(0.0, 4.2, 4.1), Vector3(16.0, 6.0, 0.8))
 	return root
 
 static func create_pine(tree_height: float = 7.0, tree_color: Color = Color("#294b3d")) -> Node3D:
