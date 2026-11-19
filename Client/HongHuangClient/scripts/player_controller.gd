@@ -647,7 +647,12 @@ func _get_or_create_equipment_socket(slot: String, socket_name: String) -> Node3
 	if not is_instance_valid(socket):
 		socket = Node3D.new()
 		socket.name = socket_name
-		socket.position = _equipment_socket_position(slot)
+		if socket_parent != player_humanoid and slot == "weapon":
+			socket.position = Vector3(0.03, -0.58, -0.06)
+		elif socket_parent != player_humanoid and slot == "offhand":
+			socket.position = Vector3(-0.03, -0.58, -0.06)
+		else:
+			socket.position = _equipment_socket_position(slot)
 		socket_parent.add_child(socket)
 	return socket
 
