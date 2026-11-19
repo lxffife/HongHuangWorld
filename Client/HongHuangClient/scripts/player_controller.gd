@@ -31,6 +31,7 @@ var soul_trait_life_ring: MeshInstance3D
 var soul_growth_rings: Array[MeshInstance3D] = []
 var soul_growth_shell: MeshInstance3D
 var soul_fusion_ring: MeshInstance3D
+var birth_resonance_root: Node3D
 var soul_growth_stage := 1
 var soul_form_enabled := false
 var soul_form_time := 0.0
@@ -293,6 +294,65 @@ func set_soul_form(enabled: bool, stage: int = 1, visual_scale: float = 0.35, af
 	_apply_soul_affinity_visuals(affinities)
 	_apply_soul_growth_visuals(growth_stage)
 	_apply_soul_fusion_visuals(fusion_names)
+
+
+func set_birth_inheritance_visuals(birth: Dictionary) -> void:
+	if not is_instance_valid(player_humanoid):
+		return
+	if birth.is_empty():
+		if is_instance_valid(birth_resonance_root):
+			birth_resonance_root.visible = false
+		return
+	if not is_instance_valid(birth_resonance_root):
+		birth_resonance_root = Node3D.new()
+		birth_resonance_root.name = "BirthResonanceVisuals"
+		player_humanoid.add_child(birth_resonance_root)
+		for index in range(3):
+			var ring := MeshInstance3D.new()
+			ring.name = "BirthResonanceRing" + str(index + 1)
+			var torus := TorusMesh.new()
+			torus.inner_radius = 0.46 + float(index) * 0.12
+			torus.outer_radius = torus.inner_radius + 0.025
+			torus.rings = 32
+			torus.ring_segments = 6
+			ring.mesh = torus
+			ring.position.y = 0.48 + float(index) * 0.42
+			ring.rotation.x = [0.0, 0.72, -0.72][index]
+			birth_resonance_root.add_child(ring)
+		var aura := MeshInstance3D.new()
+		aura.name = "BirthResonanceAura"
+		var aura_mesh := SphereMesh.new()
+		aura_mesh.radius = 0.48
+		aura_mesh.height = 1.45
+		aura_mesh.radial_segments = 20
+		aura_mesh.rings = 12
+		aura.mesh = aura_mesh
+		aura.position.y = 0.92
+		birth_resonance_root.add_child(aura)
+	var dominant := str(birth.get("dominant_attribute", ""))
+	var resonance_color := Color(0.68, 0.72, 0.82)
+	match dominant:
+		"strength":
+			resonance_color = Color(1.0, 0.34, 0.18)
+		"constitution":
+			resonance_color = Color(0.92, 0.72, 0.34)
+		"agility":
+			resonance_color = Color(0.22, 0.86, 0.82)
+		"spirit":
+			resonance_color = Color(0.68, 0.44, 1.0)
+		"vitality":
+			resonance_color = Color(0.28, 0.88, 0.48)
+	var growth_stage := clampi(int(birth.get("source_growth_stage", 1)), 1, 5)
+	var applied_total := int(birth.get("applied_strength", 0)) + int(birth.get("applied_constitution", 0)) + int(birth.get("applied_agility", 0)) + int(birth.get("applied_spirit", 0)) + int(birth.get("applied_vitality", 0))
+	birth_resonance_root.visible = true
+	for index in range(3):
+		var ring := birth_resonance_root.get_node("BirthResonanceRing" + str(index + 1)) as MeshInstance3D
+		ring.visible = growth_stage >= index + 2
+		ring.material_override = _make_trait_material(resonance_color, 0.30 + minf(float(applied_total) * 0.025, 0.22))
+		 ring.scale = Vector3.ONE * (1.0 + float(growth_stage - 1) * 0.045)
+	var aura := birth_resonance_root.get_node("BirthResonanceAura") as MeshInstance3D
+	aura.visible = growth_stage >= 4 or applied_total >= 6
+	aura.material_override = _make_trait_material(resonance_color, 0.055 + minf(float(applied_total) * 0.008, 0.06))
 
 
 func _apply_soul_growth_visuals(growth_stage: int) -> void:
