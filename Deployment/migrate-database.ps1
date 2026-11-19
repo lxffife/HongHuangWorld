@@ -64,7 +64,8 @@ try {
         '000043_game_domain_event_outbox.up.sql',
         '000044_server_node_admin_control.up.sql',
         '000045_monster_definitions_and_spawn_points.up.sql',
-        '000046_game_config_revisions.up.sql'
+        '000046_game_config_revisions.up.sql',
+        '000047_game_config_revision_reason.up.sql'
     )
 
     $existing = docker compose --env-file .env exec -T postgres psql -U $env:POSTGRES_USER -d $env:POSTGRES_DB -At -c "SELECT to_regclass('public.accounts') IS NOT NULL;"
