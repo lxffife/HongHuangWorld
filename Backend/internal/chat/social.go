@@ -237,6 +237,9 @@ func (s *Service) RespondFriendRequest(ctx context.Context, accountID, requestID
 			INSERT INTO chat_friendships(requester_character_id,addressee_character_id)
 			VALUES($1::uuid,$2::uuid),($2::uuid,$1::uuid)
 			ON CONFLICT DO NOTHING`,currentID,requesterID);err!=nil{return fmt.Errorf("create accepted friendship: %w",err)}
+		if _,err:=tx.ExecContext(ctx,`
+			UPDATE chat_friend_requests SET status='cancelled',responded_at=now()
+			WHERE requester_character_id=$1::uuid AND addressee_character_id=$2::uuid AND status='pending'`,currentID,requesterID);err!=nil{return fmt.Errorf("cancel reverse pending friend request: %w",err)}
 	}
 	if err:=tx.Commit();err!=nil{return fmt.Errorf("commit friend request response: %w",err)}
 	return nil
@@ -302,7 +305,7 @@ func (s *Service) ListConversation(ctx context.Context, accountID, peerCharacter
 	return items,nil
 }
 
-func (s *Service) GetAllowStrangerFriendRequests(ctx context.Context, accountID string) (bool, error) {
+func (s *Service) GetAllowFriendRequests(ctx context.Context, accountID string) (bool, error) {
 	characterID, err := s.currentCharacterID(ctx, accountID)
 	if err != nil { return false, err }
 	var allowed bool
@@ -312,7 +315,7 @@ func (s *Service) GetAllowStrangerFriendRequests(ctx context.Context, accountID 
 	return allowed,nil
 }
 
-func (s *Service) SetAllowStrangerFriendRequests(ctx context.Context, accountID string, allowed bool) error {
+func (s *Service) SetAllowFriendRequests(ctx context.Context, accountID string, allowed bool) error {
 	characterID, err := s.currentCharacterID(ctx, accountID)
 	if err != nil { return err }
 	_, err = s.db.ExecContext(ctx, `
