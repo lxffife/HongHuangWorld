@@ -11,6 +11,7 @@ import (
  "time"
 
  "github.com/liflife/HongHuangWorld/Backend/internal/adminauth"
+ "github.com/liflife/HongHuangWorld/Backend/internal/identityadmin"
 )
 
 func (h *adminHandlers) dashboard(w http.ResponseWriter,r *http.Request) {
@@ -21,7 +22,7 @@ func (h *adminHandlers) dashboard(w http.ResponseWriter,r *http.Request) {
  writeJSON(w,http.StatusOK,out)
 }
 
-type adminHandlers struct { service *adminauth.Service; logger *slog.Logger }
+type adminHandlers struct { service *adminauth.Service; identity *identityadmin.Client; logger *slog.Logger }
 type adminLoginRequest struct { Username string `json:"username"`; Password string `json:"password"` }
 type adminPasswordRequest struct { CurrentPassword string `json:"current_password"`; NewPassword string `json:"new_password"` }
 type adminCreateUserRequest struct { Username string `json:"username"`; Email string `json:"email"`; Password string `json:"password"` }
@@ -106,4 +107,36 @@ func (h *adminHandlers) setUserStatus(w http.ResponseWriter,r *http.Request) {
   h.logger.Error("set admin user status failed","error",err);http.Error(w,"internal server error",http.StatusInternalServerError);return
  }
  writeJSON(w,http.StatusOK,map[string]string{"status":"updated"})
+}
+
+func (h *adminHandlers) listPlayers(w http.ResponseWriter,r *http.Request) {
+ if _,ok:=h.require(w,r,"players.read");!ok{return}
+ limit:=50
+ if raw:=r.URL.Query().Get("limit");raw!="" { n,err:=strconv.Atoi(raw);if err!=nil||n<1||n>100{http.Error(w,"limit must be between 1 and 100",400);return};limit=n }
+ ctx,cancel:=context.WithTimeout(r.Context(),6*time.Second);defer cancel()
+ page,err:=h.identity.ListAccounts(ctx,strings.TrimSpace(r.URL.Query().Get("q")),limit)
+ if err!=nil{h.logger.Error("admin player search failed","error",err);http.Error(w,"identity service unavailable",http.StatusServiceUnavailable);return}
+ writeJSON(w,http.StatusOK,page)
+}
+
+func (h *adminHandlers) setPlayerStatus(w http.ResponseWriter,r *http.Request) {
+ actor,ok:=h.require(w,r,"players.ban");if !ok{return}
+ var req struct { Status string `json:"status"`; Reason string `json:"reason"` }
+ if err:=decodeJSON(w,r,&req);err!=nil{http.Error(w,"invalid request body",400);return}
+ if req.Status!="active"&&req.Status!="locked"{http.Error(w,"status must be active or locked",400);return}
+ req.Reason=strings.TrimSpace(req.Reason)
+ if req.Status=="locked"&&(len([]rune(req.Reason))<2||len([]rune(req.Reason))>300){http.Error(w,"ban reason must contain 2 to 300 characters",400);return}
+ if req.Status=="active"&&len([]rune(req.Reason))>300{http.Error(w,"reason is too long",400);return}
+ ctx,cancel:=context.WithTimeout(r.Context(),6*time.Second);defer cancel()
+ id:=r.PathValue("id")
+ if err:=h.identity.SetAccountStatus(ctx,id,req.Status);err!=nil{
+  if strings.Contains(err.Error(),"not found"){http.Error(w,"player not found",404);return}
+  h.logger.Error("admin player status update failed","error",err);http.Error(w,"identity service unavailable",503);return
+ }
+ action:="player.unban";if req.Status=="locked"{action="player.ban"}
+ if err:=h.service.RecordAudit(ctx,actor,action,"player",id,"success",map[string]any{"status":req.Status,"reason":req.Reason});err!=nil{
+  h.logger.Error("record player moderation audit failed","error",err)
+  http.Error(w,"player status changed but audit recording failed",http.StatusInternalServerError);return
+ }
+ writeJSON(w,http.StatusOK,map[string]string{"status":req.Status})
 }
