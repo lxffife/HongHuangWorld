@@ -121,6 +121,53 @@ func (h *adminHandlers) listPlayers(w http.ResponseWriter,r *http.Request) {
  writeJSON(w,http.StatusOK,page)
 }
 
+func (h *adminHandlers) listGameConfig(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.require(w, r, "game_config.read"); !ok { return }
+	resource := r.PathValue("resource")
+	worldID := strings.TrimSpace(r.URL.Query().Get("world_id"))
+	if len(worldID) > 64 { http.Error(w, "invalid world id", http.StatusBadRequest); return }
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	result, err := h.game.GameConfig(ctx, resource, worldID)
+	if err != nil {
+		if strings.Contains(err.Error(), "unsupported game config resource") { http.Error(w, "unsupported game config resource", http.StatusBadRequest); return }
+		h.logger.Error("admin game config lookup failed", "resource", resource, "error", err)
+		http.Error(w, "game service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(result)
+}
+
+func (h *adminHandlers) setGameConfigEnabled(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.require(w, r, "game_config.manage")
+	if !ok { return }
+	resource := r.PathValue("resource")
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" || len(id) > 96 { http.Error(w, "invalid config id", http.StatusBadRequest); return }
+	var request struct { Enabled *bool `json:"enabled"` }
+	if err := decodeJSON(w, r, &request); err != nil || request.Enabled == nil { http.Error(w, "enabled must be a boolean", http.StatusBadRequest); return }
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	result, err := h.game.SetGameConfigEnabled(ctx, resource, id, *request.Enabled)
+	if err != nil {
+		if strings.Contains(err.Error(), "game config not found") { http.Error(w, "game config not found", http.StatusNotFound); return }
+		if strings.Contains(err.Error(), "unsupported game config resource") || strings.Contains(err.Error(), "invalid game config request") { http.Error(w, "invalid game config request", http.StatusBadRequest); return }
+		h.logger.Error("admin game config state update failed", "resource", resource, "id", id, "error", err)
+		http.Error(w, "game service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if err := h.service.RecordAudit(ctx, actor, "game_config.state", resource, id, "success", map[string]any{"enabled": *request.Enabled}); err != nil {
+		h.logger.Error("record game config audit failed", "error", err)
+		http.Error(w, "game config changed but audit recording failed", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(result)
+}
+
 func (h *adminHandlers) listWorlds(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.require(w, r, "worlds.read"); !ok { return }
 	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
