@@ -18,6 +18,7 @@ load_env
 : "${IDENTITY_API_BASE:?请先在 $HH_ENV_FILE 配置 IDENTITY_API_BASE}"
 : "${IDENTITY_SERVICE_TOKEN:?请先在 $HH_ENV_FILE 配置 IDENTITY_SERVICE_TOKEN}"
 [[ -x "$HH_PROJECT_DIR/bin/world_server" ]] || die "WorldServer 二进制不存在，请先运行 07-build.sh"
+[[ -x "$HH_PROJECT_DIR/build/world-server/world_server" ]] || die "WorldServer 构建产物不存在，请先运行 07-build.sh"
 sudo tee /etc/systemd/system/honghuang-identity.service >/dev/null <<EOF
 [Unit]
 Description=HongHuangWorld Identity Service
@@ -86,8 +87,27 @@ NoNewPrivileges=true
 [Install]
 WantedBy=multi-user.target
 EOF
+sudo tee /etc/systemd/system/honghuang-underworld-server.service >/dev/null <<EOF
+[Unit]
+Description=HongHuangWorld Fengdu Underworld WorldServer
+After=network-online.target docker.service honghuang-api.service
+Requires=honghuang-api.service
+Wants=network-online.target
+[Service]
+Type=simple
+User=$USER
+WorkingDirectory=$HH_PROJECT_DIR
+EnvironmentFile=$HH_ENV_FILE
+Environment=HH_ENV_FILE=$HH_ENV_FILE
+ExecStart=/usr/bin/bash $HH_PROJECT_DIR/Deployment/start-underworld-server.sh
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+[Install]
+WantedBy=multi-user.target
+EOF
 sudo systemctl daemon-reload
-sudo systemctl enable honghuang-identity honghuang-api honghuang-admin honghuang-world-server
+sudo systemctl enable honghuang-identity honghuang-api honghuang-admin honghuang-world-server honghuang-underworld-server
 sudo systemctl restart honghuang-identity
 for n in $(seq 1 30); do
   curl -fsS http://127.0.0.1:8789/ready >/dev/null && break
@@ -107,8 +127,10 @@ for n in $(seq 1 30); do
   sleep 2
 done
 sudo systemctl restart honghuang-world-server
-log "Identity、API、Admin 与 WorldServer 服务安装并启动完成"
+sudo systemctl restart honghuang-underworld-server
+log "Identity、API、Admin、青云人界 WorldServer 与冥界 WorldServer 服务安装并启动完成"
 systemctl is-active honghuang-identity
 systemctl is-active honghuang-api
 systemctl is-active honghuang-admin
 systemctl is-active honghuang-world-server
+systemctl is-active honghuang-underworld-server
