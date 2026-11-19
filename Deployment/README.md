@@ -85,6 +85,14 @@ Windows（在仓库根目录，单独 PowerShell 窗口运行）：
 
 
 
+### 游戏运营配置管理
+
+- `GET /api/v1/admin/game-config/npcs?world_id={world_id}`：需要 `game_config.read`，查询世界 NPC 定义、交互类型、位置、交互半径、对白 JSON 和启用状态。
+- `GET /api/v1/admin/game-config/exploration-points?world_id={world_id}`：查询探索点区域、位置、危险等级、功德/业力奖励和启用状态。
+- `GET /api/v1/admin/game-config/exploration-events?world_id={world_id}`：查询探索奇遇、关联探索点、资格限制和奖励配置。
+- `PATCH /api/v1/admin/game-config/{resource}/{id}/state`：需要 `game_config.manage`，请求体为 `{"enabled":true|false}`；resource 仅允许 `npcs`、`exploration-points`、`exploration-events`。
+- 配置数据只由 Game 服务读写；Admin 通过独立的 Game 内部 API 调用，所有状态变更写入 Admin 审计日志。当前阶段先提供查询和启停，奖励数值、对白及坐标编辑后续增加带校验的版本化发布流程。
+
 ### 世界与世界实例管理
 
 - `GET /api/v1/admin/worlds`：需要 `worlds.read`，返回世界类型、等级、启用状态、实例数量、可用实例数量和在线会话数。
