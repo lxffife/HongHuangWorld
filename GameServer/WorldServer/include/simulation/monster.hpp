@@ -36,6 +36,7 @@ struct MonsterState {
     float health{100.0F};
     MonsterMode mode{MonsterMode::Idle};
     std::string target_id;
+    float yaw{};
 };
 
 inline bool valid_monster_definition(const MonsterDefinition& definition) {
@@ -117,6 +118,10 @@ inline bool tick_monster(const MonsterDefinition& definition, MonsterState& stat
     const float dx = destination_x - state.x;
     const float dz = destination_z - state.z;
     const double distance = std::hypot(static_cast<double>(dx), static_cast<double>(dz));
+    if (distance > 0.001) {
+        // Godot characters face local -Z; keep the server snapshot as the facing authority.
+        state.yaw = std::atan2(-dx, -dz);
+    }
     if (state.mode == MonsterMode::Chasing &&
         distance <= static_cast<double>(definition.attack_range)) {
         return true;
