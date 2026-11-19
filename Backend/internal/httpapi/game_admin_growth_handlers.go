@@ -74,23 +74,23 @@ func (h *gamePlayerAdminHandlers) growth(w http.ResponseWriter, r *http.Request)
 		ORDER BY created_at DESC,id DESC LIMIT 50`,soulID)
 	if err != nil { adminGrowthQueryError(h.logger,w,"fusion records",err); return }
 	reincarnations, err := queryAdminRows(ctx,h.db,`
-		SELECT event.id::text,event.life_index,event.previous_character_id::text,
+		SELECT reincarnation.id::text,reincarnation.life_index,reincarnation.previous_character_id::text,
 		       previous_character.name AS previous_character_name,
-		       event.new_character_id::text,new_character.name AS new_character_name,
-		       event.previous_world_id,previous_world.name AS previous_world_name,
-		       event.new_world_id,new_world.name AS new_world_name,
-		       event.previous_race_id,previous_race.name AS previous_race_name,
-		       event.new_race_id,new_race.name AS new_race_name,
-		       event.merit_spent,event.reincarnated_at
-		FROM reincarnation_events event
+		       reincarnation.new_character_id::text,new_character.name AS new_character_name,
+		       reincarnation.previous_world_id,previous_world.name AS previous_world_name,
+		       reincarnation.new_world_id,new_world.name AS new_world_name,
+		       reincarnation.previous_race_id,previous_race.name AS previous_race_name,
+		       reincarnation.new_race_id,new_race.name AS new_race_name,
+		       reincarnation.merit_spent,reincarnation.reincarnated_at
+		FROM reincarnation_events reincarnation
 		JOIN characters previous_character ON previous_character.id=event.previous_character_id
 		JOIN characters new_character ON new_character.id=event.new_character_id
 		JOIN world_definitions previous_world ON previous_world.id=event.previous_world_id
 		JOIN world_definitions new_world ON new_world.id=event.new_world_id
 		JOIN race_definitions previous_race ON previous_race.id=event.previous_race_id
 		JOIN race_definitions new_race ON new_race.id=event.new_race_id
-		WHERE event.soul_id=$1::uuid
-		ORDER BY event.life_index DESC LIMIT 100`,soulID)
+		WHERE reincarnation.soul_id=$1::uuid
+		ORDER BY reincarnation.life_index DESC LIMIT 100`,soulID)
 	if err != nil { adminGrowthQueryError(h.logger,w,"reincarnation history",err); return }
 	births, err := queryAdminRows(ctx,h.db,`
 		SELECT snapshot.character_id::text,born_character.name AS character_name,
