@@ -162,7 +162,7 @@ WorldServer 怪物配置由 Game API 按已认证节点身份返回，不接受�
 
 ### 游戏配置版本历史（Game 数据库）
 
-- Game 数据库迁移 `000046` 新增 `game_config_revisions`，配置快照与配置变更在同一 Game 数据库事务内提交，不依赖 Admin 数据库可用性。
+- Game 数据库迁移 `000046` 新增 `game_config_revisions`，`000047` 增加回滚原因字段；配置快照与配置变更在同一 Game 数据库事务内提交，不依赖 Admin 数据库可用性。
 - `GET /api/v1/admin/config-revisions?resource_type=monster_definition&resource_id={monster_id}&limit=50`：需要 `monsters.read`，查询配置历史；省略 resource_type/resource_id 可查看最近的多类配置变更，limit 为 1-100，默认 50。
 - 当前已记录：怪物模板和世界刷新点新增/修改、物品目录修改、怪物掉落条目新增/更新/删除。每条记录保留修改前后 JSON 快照和递增版本号。
 - Admin 的审计日志仍保存在 Admin 数据库；配置快照保存在 Game 数据库，两个服务不跨库写入。
