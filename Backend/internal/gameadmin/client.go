@@ -12,7 +12,11 @@ import (
 	"time"
 )
 
-var ErrUnavailable = errors.New("game administration service unavailable")
+var (
+	ErrUnavailable = errors.New("game administration service unavailable")
+	ErrInvalidLootRequest = errors.New("invalid loot administration request")
+	ErrLootNotFound = errors.New("loot item or entry not found")
+)
 
 type Client struct {
 	baseURL string
@@ -183,4 +187,30 @@ func (c *Client) DisconnectPlayer(ctx context.Context, accountID string) (Discon
 	var result DisconnectResult
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil { return DisconnectResult{}, err }
 	return result, nil
+}
+
+func (c *Client) LootItems(ctx context.Context) (json.RawMessage,error) {
+	return c.getAdminJSON(ctx,"/api/v1/internal/admin/loot/items")
+}
+func (c *Client) LootTables(ctx context.Context) (json.RawMessage,error) {
+	return c.getAdminJSON(ctx,"/api/v1/internal/admin/loot/tables")
+}
+func (c *Client) UpdateLootItem(ctx context.Context,id string,body any) (json.RawMessage,error) {
+	return c.doLootJSON(ctx,http.MethodPatch,"/api/v1/internal/admin/loot/items/"+url.PathEscape(id),body)
+}
+func (c *Client) UpsertLootEntry(ctx context.Context,monsterID,itemID string,body any) (json.RawMessage,error) {
+	return c.doLootJSON(ctx,http.MethodPut,"/api/v1/internal/admin/loot/tables/"+url.PathEscape(monsterID)+"/"+url.PathEscape(itemID),body)
+}
+func (c *Client) DeleteLootEntry(ctx context.Context,monsterID,itemID string) (json.RawMessage,error) {
+	return c.doLootJSON(ctx,http.MethodDelete,"/api/v1/internal/admin/loot/tables/"+url.PathEscape(monsterID)+"/"+url.PathEscape(itemID),nil)
+}
+func (c *Client) doLootJSON(ctx context.Context,method,path string,body any) (json.RawMessage,error) {
+	if !c.ready(){return nil,ErrUnavailable}
+	var reader io.Reader
+	if body!=nil { data,err:=json.Marshal(body);if err!=nil{return nil,err};reader=bytes.NewReader(data) }
+	req,err:=http.NewRequestWithContext(ctx,method,c.baseURL+path,reader);if err!=nil{return nil,err}
+	req.Header.Set("X-Game-Admin-Key",c.apiKey);if body!=nil{req.Header.Set("Content-Type","application/json")}
+	resp,err:=c.httpClient.Do(req);if err!=nil{return nil,fmt.Errorf("%w: %v",ErrUnavailable,err)};defer resp.Body.Close()
+	switch resp.StatusCode {case http.StatusBadRequest: data,_:=io.ReadAll(io.LimitReader(resp.Body,2048));return nil,fmt.Errorf("%w: %s",ErrInvalidLootRequest,strings.TrimSpace(string(data)));case http.StatusNotFound:return nil,ErrLootNotFound;case http.StatusOK:default:return nil,fmt.Errorf("%w: game returned %d",ErrUnavailable,resp.StatusCode)}
+	var result json.RawMessage;if err:=json.NewDecoder(resp.Body).Decode(&result);err!=nil{return nil,err};return result,nil
 }
