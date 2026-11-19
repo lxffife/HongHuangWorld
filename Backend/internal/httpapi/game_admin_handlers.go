@@ -184,7 +184,7 @@ func (h *gamePlayerAdminHandlers) online(w http.ResponseWriter, r *http.Request)
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	rows, err := h.db.QueryContext(ctx, `
-		SELECT soul.account_id::text, c.id::text, c.name, c.level, c.world_id,
+		SELECT COUNT(*) OVER(), soul.account_id::text, c.id::text, c.name, c.level, c.world_id,
 		       wd.name, ws.id::text, ws.connected_at, sr.node_key, sr.host,
 		       sr.udp_port, sr.region, CASE WHEN sr.last_heartbeat_at < now() - interval '30 seconds' THEN 'offline' ELSE sr.status END, sr.last_heartbeat_at, sr.capacity, sr.current_players
 		FROM world_sessions ws
@@ -203,9 +203,10 @@ func (h *gamePlayerAdminHandlers) online(w http.ResponseWriter, r *http.Request)
 	}
 	defer rows.Close()
 	items := make([]adminOnlinePlayer, 0)
+	var total int64
 	for rows.Next() {
 		var item adminOnlinePlayer
-		if err := rows.Scan(&item.AccountID, &item.CharacterID, &item.CharacterName, &item.Level, &item.WorldID, &item.WorldName, &item.SessionID, &item.ConnectedAt, &item.NodeKey, &item.Host, &item.UDPPort, &item.Region, &item.NodeStatus, &item.HeartbeatAt, &item.Capacity, &item.CurrentPlayers); err != nil {
+		if err := rows.Scan(&total, &item.AccountID, &item.CharacterID, &item.CharacterName, &item.Level, &item.WorldID, &item.WorldName, &item.SessionID, &item.ConnectedAt, &item.NodeKey, &item.Host, &item.UDPPort, &item.Region, &item.NodeStatus, &item.HeartbeatAt, &item.Capacity, &item.CurrentPlayers); err != nil {
 			h.logger.Error("scan game admin online player failed", "error", err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
@@ -217,7 +218,7 @@ func (h *gamePlayerAdminHandlers) online(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": len(items), "limit": 500})
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": total, "returned": len(items), "limit": 500})
 }
 func (h *gamePlayerAdminHandlers) disconnect(w http.ResponseWriter, r *http.Request) {
 	if !h.authorize(w, r) { return }
