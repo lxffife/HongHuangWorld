@@ -135,11 +135,29 @@ func (h *adminHandlers) setPlayerStatus(w http.ResponseWriter,r *http.Request) {
   h.logger.Error("admin player status update failed","error",err);http.Error(w,"identity service unavailable",503);return
  }
  action:="player.unban";if req.Status=="locked"{action="player.ban"}
- if err:=h.service.RecordAudit(ctx,actor,action,"player",id,"success",map[string]any{"status":req.Status,"reason":req.Reason});err!=nil{
+ details:=map[string]any{"status":req.Status,"reason":req.Reason}
+ response:=map[string]any{"status":req.Status}
+ if req.Status=="locked" {
+  disconnect,disconnectErr:=h.game.DisconnectPlayer(ctx,id)
+  if disconnectErr!=nil {
+   h.logger.Error("player was locked but world disconnect request failed","error",disconnectErr)
+   details["disconnect_requested"]=false
+   details["disconnect_error"]="game service unavailable"
+   response["disconnect_requested"]=false
+   response["warning"]="账号已封禁，但游戏会话断开请求未能送达，请稍后重试强制下线"
+  } else {
+   details["disconnect_requested"]=true
+   details["requested_sessions"]=disconnect.RequestedSessions
+   response["disconnect_requested"]=true
+   response["requested_sessions"]=disconnect.RequestedSessions
+  }
+ }
+ if err:=h.service.RecordAudit(ctx,actor,action,"player",id,"success",details);err!=nil{
   h.logger.Error("record player moderation audit failed","error",err)
   http.Error(w,"player status changed but audit recording failed",http.StatusInternalServerError);return
  }
- writeJSON(w,http.StatusOK,map[string]string{"status":req.Status})
+ if req.Status=="locked" { writeJSON(w,http.StatusAccepted,response);return }
+ writeJSON(w,http.StatusOK,response)
 }
 
 func (h *adminHandlers) playerDetail(w http.ResponseWriter, r *http.Request) {
