@@ -556,7 +556,8 @@ func _build_terrain() -> void:
 			_add_world_cylinder("QingyunPineTrunk_" + str(i), 0.28, 2.8, Vector3(x, 1.4, z), Color("#514638"))
 			var crown := MeshInstance3D.new()
 			crown.name = "QingyunPineCrown_" + str(i)
-			var cone := ConeMesh.new()
+			var cone := CylinderMesh.new()
+			cone.top_radius = 0.0
 			cone.bottom_radius = 2.0
 			cone.height = 5.2
 			crown.mesh = cone
@@ -1035,13 +1036,13 @@ func _upsert_monster(entity: Dictionary) -> void:
 		float(entity.get("y", 0.0)),
 		float(entity.get("z", 0.0))
 	)
-	var monster := monsters[monster_id] as Node3D
-	monster.set_meta("target_yaw", float(entity.get("yaw", monster.rotation.y)))
-	monster.set_meta("server_mode", int(entity.get("mode", 0)))
+	var monster_node := monsters[monster_id] as Node3D
+	monster_node.set_meta("target_yaw", float(entity.get("yaw", monster_node.rotation.y)))
+	monster_node.set_meta("server_mode", int(entity.get("mode", 0)))
 	monster_entities[monster_id] = entity.duplicate(true)
 	if monster_id == selected_monster_id:
 		_update_target_info()
-	var nameplate := monster.get_node_or_null("Nameplate") as Label3D
+	var nameplate := monster_node.get_node_or_null("Nameplate") as Label3D
 	if nameplate != null:
 		var base_text := str(entity.get("name", "野兽")) + " · Lv." + str(int(entity.get("level", 1)))
 		if entity.has("health") and entity.has("max_health"):
@@ -1052,10 +1053,10 @@ func _upsert_monster(entity: Dictionary) -> void:
 		nameplate.text = base_text
 
 func _create_monster(monster_name: String, monster_level: int) -> Node3D:
-	var monster: Node3D = UnderworldVisualFactory.create_monster(monster_name, monster_level)
+	var visual_root: Node3D = UnderworldVisualFactory.create_monster(monster_name, monster_level)
 	var is_wraith := monster_name.contains("游祟") or monster_name.contains("幽魂") or monster_name.contains("灵识")
 	var is_war_god := monster_name.contains("战神") or monster_name.contains("战魂")
-	if str(monster.get_meta("visual_archetype", "")) == "iron_beast":
+	if str(visual_root.get_meta("visual_archetype", "")) == "iron_beast":
 		var telegraph := MeshInstance3D.new()
 		telegraph.name = "SlamTelegraph"
 		var torus := TorusMesh.new()
@@ -1074,19 +1075,19 @@ func _create_monster(monster_name: String, monster_level: int) -> Node3D:
 		telegraph.material_override = telegraph_material
 		telegraph.position.y = 0.075
 		telegraph.visible = false
-		monster.add_child(telegraph)
+		visual_root.add_child(telegraph)
 	var label := Label3D.new()
 	label.name = "Nameplate"
 	label.text = monster_name + " · Lv." + str(monster_level)
 	label.position.y = 2.05 if is_war_god else (1.85 if is_wraith else 1.75)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.modulate = Color("#ff9b55") if is_war_god else (Color("#b9d9ff") if is_wraith else Color("#ffd0a8"))
-	monster.add_child(label)
-	monster.set_meta("base_visual_scale", monster.scale)
-	monster.set_meta("death_reaction_time", 0.0)
-	monster.set_meta("hit_reaction_time", 0.0)
-	add_child(monster)
-	return monster
+	visual_root.add_child(label)
+	visual_root.set_meta("base_visual_scale", visual_root.scale)
+	visual_root.set_meta("death_reaction_time", 0.0)
+	visual_root.set_meta("hit_reaction_time", 0.0)
+	add_child(visual_root)
+	return visual_root
 
 func _upsert_drop(entity: Dictionary) -> void:
 	var drop_id := str(entity.get("entity_id", ""))
