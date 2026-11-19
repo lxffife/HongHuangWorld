@@ -33,7 +33,7 @@ func (h *gameMonsterAdminHandlers) createDefinition(w http.ResponseWriter,r *htt
 	enabled:=true;if req.Enabled!=nil{enabled=*req.Enabled}
 	ctx,cancel:=context.WithTimeout(r.Context(),8*time.Second);defer cancel()
 	_,err:=h.db.ExecContext(ctx,`INSERT INTO monster_definitions(id,name,level,max_health,attack,defense,move_speed,aggro_radius,leash_radius,enabled) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,req.ID,req.Name,req.Level,req.MaxHealth,req.Attack,req.Defense,req.MoveSpeed,req.AggroRadius,req.LeashRadius,enabled)
-	if err!=nil{if strings.Contains(strings.ToLower(err.Error()),"duplicate key"){http.Error(w,"monster definition already exists",409);return};h.logger.Error("create monster definition failed","monster_id",req.ID,"error",err);http.Error(w,"invalid monster definition or database error",400);return}
+	if err!=nil{if strings.Contains(strings.ToLower(err.Error()),"duplicate key"){http.Error(w,"monster definition already exists",409);return};h.logger.Error("create monster definition failed","monster_id",req.ID,"error",err);http.Error(w,"internal server error",500);return}
 	writeJSON(w,201,map[string]any{"monster_id":req.ID,"created":true})
 }
 
