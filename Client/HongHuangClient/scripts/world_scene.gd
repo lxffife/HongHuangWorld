@@ -1808,6 +1808,8 @@ func _on_combat_event(event: Dictionary) -> void:
 		return
 	if str(event.get("source", "")) == "monster":
 		var incoming_damage := int(event.get("damage", 0))
+		if is_instance_valid(local_player) and local_player.has_method("play_hit_reaction"):
+			local_player.call("play_hit_reaction", incoming_damage, str(event.get("attack_style", "")))
 		_spawn_combat_number(incoming_damage, true, false)
 		var current_health := int(event.get("health", 0))
 		var max_health := int(event.get("max_health", 0))
