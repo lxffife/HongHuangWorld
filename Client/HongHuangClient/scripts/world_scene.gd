@@ -477,12 +477,7 @@ func _build_terrain() -> void:
 
 	if is_underworld:
 		# Fengdu gate and the soul lantern avenue.
-		var stone := Color("#494354")
-		_add_world_box("FengduGateLeft", Vector3(1.5, 8.0, 1.5), Vector3(-5.0, 4.0, -18.0), stone)
-		_add_world_box("FengduGateRight", Vector3(1.5, 8.0, 1.5), Vector3(5.0, 4.0, -18.0), stone)
-		_add_world_box("FengduGateLintel", Vector3(12.0, 1.6, 2.0), Vector3(0.0, 8.2, -18.0), Color("#62566d"))
-		_add_world_box("FengduGateTablet", Vector3(4.0, 2.0, 0.7), Vector3(0.0, 6.5, -16.8), Color("#30283d"))
-		_add_world_landmark_label("FengduGateName", "酆都鬼门关", Vector3(0.0, 10.0, -17.5), Color("#c4b6dc"))
+		add_child(UnderworldVisualFactory.create_fengdu_gate())
 		for side in [-1.0, 1.0]:
 			var lantern_position := Vector3(side * 7.0, 2.1, -14.0)
 			_add_world_box("SoulLanternStone_" + str(side), Vector3(0.8, 2.2, 0.8), lantern_position, Color("#393344"))
