@@ -1797,7 +1797,7 @@ func _spawn_soul_bolt_visual(attacker: Node3D) -> void:
 	bolt.material_override = material
 	add_child(bolt)
 	bolt.global_position = attacker.global_position + Vector3(0.0, 1.05, 0.0)
-	var destination := local_player.global_position + Vector3(0.0, 1.0, 0.0)
+	var destination: Vector3 = local_player.global_position + Vector3(0.0, 1.0, 0.0)
 	var tween := create_tween()
 	tween.tween_property(bolt, "global_position", destination, 0.24)
 	tween.tween_callback(Callable(bolt, "queue_free"))
@@ -1869,7 +1869,7 @@ func _spawn_combat_number(amount: int, incoming: bool, critical: bool) -> void:
 		var nearest_distance := INF
 		for monster_id in monster_targets.keys():
 			var target: Vector3 = monster_targets[monster_id]
-			var distance := local_player.global_position.distance_to(target)
+			var distance: float = local_player.global_position.distance_to(target)
 			if distance < nearest_distance:
 				nearest_distance = distance
 				nearest_id = str(monster_id)
@@ -3248,7 +3248,7 @@ func _render_exploration_points(points: Variant) -> void:
 		var point_button := Button.new()
 		var danger := int(point.get("danger_level", 1))
 		var target := Vector3(float(point.get("position_x", 0.0)), float(point.get("position_y", 0.0)), float(point.get("position_z", 0.0)))
-		var distance := local_player.global_position.distance_to(target) if is_instance_valid(local_player) else INF
+		var distance: float = local_player.global_position.distance_to(target) if is_instance_valid(local_player) else INF
 		var radius := float(point.get("interaction_radius", 4.0))
 		var state_text := "已发现" if discovered else ("调查" if distance <= radius else "未抵达 · " + str(roundi(distance)) + "m")
 		point_button.text = str(point.get("region_name", "未知区域")) + " · " + state_text + " · " + str(point.get("name", "未知地点")) + "  | 危险 " + str(danger) + "/10"
@@ -3316,7 +3316,7 @@ func _render_exploration_progress(data: Dictionary) -> void:
 
 func _exploration_event_state_text(event: Dictionary, distance: float) -> String:
 	var status := str(event.get("status", "locked"))
-	var in_range := distance <= float(event.get("interaction_radius", 4.0))
+	var in_range: bool = distance <= float(event.get("interaction_radius", 4.0))
 	match status:
 		"completed":
 			return "已完成"
@@ -3352,8 +3352,8 @@ func _render_exploration_events(events: Variant) -> void:
 		if event_id.is_empty():
 			continue
 		var target := Vector3(float(event.get("position_x", 0.0)), float(event.get("position_y", 0.0)), float(event.get("position_z", 0.0)))
-		var distance := local_player.global_position.distance_to(target) if is_instance_valid(local_player) else INF
-		var in_range := distance <= float(event.get("interaction_radius", 4.0))
+		var distance: float = local_player.global_position.distance_to(target) if is_instance_valid(local_player) else INF
+		var in_range: bool = distance <= float(event.get("interaction_radius", 4.0))
 		var status := str(event.get("status", "locked"))
 		var state_text := _exploration_event_state_text(event, distance)
 		var event_button := Button.new()
@@ -3374,7 +3374,7 @@ func _open_exploration_event(event_id: String) -> void:
 	if str(event.get("status", "locked")) != "available":
 		return
 	var target := Vector3(float(event.get("position_x", 0.0)), float(event.get("position_y", 0.0)), float(event.get("position_z", 0.0)))
-	var distance := local_player.global_position.distance_to(target) if is_instance_valid(local_player) else INF
+	var distance: float = local_player.global_position.distance_to(target) if is_instance_valid(local_player) else INF
 	if distance > float(event.get("interaction_radius", 4.0)):
 		npc_status_label.text = "尚未抵达奇遇地点，距离约 %dm。" % roundi(distance)
 		return
@@ -3627,8 +3627,8 @@ func _update_exploration_proximity() -> void:
 			float(point.get("position_y", 0.0)),
 			float(point.get("position_z", 0.0))
 		)
-		var distance := local_player.global_position.distance_to(target)
-		var in_range := distance <= float(point.get("interaction_radius", 4.0))
+		var distance: float = local_player.global_position.distance_to(target)
+		var in_range: bool = distance <= float(point.get("interaction_radius", 4.0))
 		point_button.disabled = not in_range or npc_request_busy
 		var danger := int(point.get("danger_level", 1))
 		point_button.text = str(point.get("region_name", "未知区域")) + " · " + ("调查" if in_range else "未抵达 · " + str(roundi(distance)) + "m") + " · " + str(point.get("name", "未知地点")) + "  | 危险 " + str(danger) + "/10"
@@ -3638,8 +3638,8 @@ func _update_exploration_proximity() -> void:
 		if not is_instance_valid(event_button):
 			continue
 		var event_target := Vector3(float(event.get("position_x", 0.0)), float(event.get("position_y", 0.0)), float(event.get("position_z", 0.0)))
-		var event_distance := local_player.global_position.distance_to(event_target)
-		var event_in_range := event_distance <= float(event.get("interaction_radius", 4.0))
+		var event_distance: float = local_player.global_position.distance_to(event_target)
+		var event_in_range: bool = event_distance <= float(event.get("interaction_radius", 4.0))
 		var event_status := str(event.get("status", "locked"))
 		event_button.disabled = event_status != "available" or not event_in_range or npc_request_busy
 		event_button.text = str(event.get("point_name", "探索地点")) + " · " + str(event.get("title", "未知奇遇")) + " · " + _exploration_event_state_text(event, event_distance)
