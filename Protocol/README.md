@@ -59,6 +59,16 @@
 - 已实现：客户端左键攻击最近的可见怪物；服务端校验目标、存活状态、3.5 米攻击距离与 650ms 攻击间隔，使用统一伤害计算结算；怪物死亡后隐藏并在 12 秒后于出生点满血重生。当前玩家基础攻击值为临时配置值 20。
 - 已实现：怪物击败后按等级计算经验与修为，WorldServer 通过带节点身份的服务端接口异步提交中心服持久化；每次击杀使用 UUID 事件 ID，并绑定产生击杀的世界会话；中心服按节点+事件 ID 防止重复发放，且允许该会话关闭后 10 分钟内完成异步补交。中心服已建立物品目录、怪物掉落配置、地面掉落记录、角色背包和幂等拾取结算 API。WorldServer 启动时从中心服读取掉落表；怪物被击败后服务端按配置概率抽取物品，异步持久化地面掉落，只有归属角色在 AOI 内可见。PickupCommand 由服务端校验归属、会话、3 米距离和拾取频率，异步调用中心服事务结算，并通过 PickupEvent 返回结果。Godot 客户端显示掉落球体，按 E 请求拾取，并提供背包窗口读取持久化物品。地面掉落持久化在中心服数据库，WorldServer 启动时按节点恢复未过期掉落，允许同一角色在同一节点重新进入后拾取此前会话产生的掉落；等级成长阈值与升级奖励、NPC、任务事件也尚未实现。完成握手和玩家移动不代表这些玩法已可用。
 
+## CombatEvent 权威字段
+
+CombatEvent 使用 JSON payload，事件方向与字段由服务端确定：
+
+- 玩家攻击怪物（返回给发起攻击的玩家）：`accepted`、`attacker_character_id`、`target_entity_id`、`target_name`、`damage`、`remaining_health`、`max_health`、`defeated`，以及击败奖励字段。
+- 怪物攻击玩家（返回给受击玩家）：`accepted`、`source`（固定为 `monster`）、`source_entity_id`（怪物运行时实体 ID）、`damage`、`health`、`max_health`、`defeated`。
+- 被拒绝的攻击：`accepted=false` 与 `reason`；不应触发命中、攻击或伤害表现。
+- 客户端必须使用 `source_entity_id` 关联怪物攻击者，使用 `target_entity_id` 关联玩家攻击的怪物目标。不得使用近似字段名替代，也不得自行推断攻击来源。
+- 以上字段均为表现层关联依据；伤害、生命、击败和奖励仍以 WorldServer 的权威结算为准。
+
 ## 世界入口票据流程
 
 1. 客户端使用账号 Bearer Token 调用 `POST /api/v1/worlds/enter`。
