@@ -142,7 +142,7 @@ func _on_request_completed(result: int, response_code: int, _headers: PackedStri
 		"search":
 			_render_search(parsed.get("items", []))
 		"preference":
-			allow_requests_toggle.set_pressed_no_signal(bool(parsed.get("allow_stranger_requests", true)))
+			allow_requests_toggle.set_pressed_no_signal(bool(parsed.get("allow_friend_requests", true)))
 		"create_request":
 			status_label.text = "好友申请已发送。"
 			_refresh()
@@ -229,7 +229,7 @@ func _render_search(items: Array) -> void:
 		_add_empty(results_list, "没有找到符合条件的角色。")
 
 func _on_allow_requests_toggled(allowed: bool) -> void:
-	_api_request(HTTPClient.METHOD_PUT, "/api/v1/chat/preferences/friends", JSON.stringify({"allow_stranger_requests": allowed}), "save_preference")
+	_api_request(HTTPClient.METHOD_PUT, "/api/v1/chat/preferences/friends", JSON.stringify({"allow_friend_requests": allowed}), "save_preference")
 
 func _clear(container: VBoxContainer) -> void:
 	for child in container.get_children():
