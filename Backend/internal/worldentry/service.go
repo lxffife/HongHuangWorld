@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -37,7 +38,8 @@ type PlayerSnapshot struct {
 	PositionX   float64 `json:"position_x"`
 	PositionY   float64 `json:"position_y"`
 	PositionZ   float64 `json:"position_z"`
-	RotationY   float64 `json:"rotation_y"`
+	RotationY   float64        `json:"rotation_y"`
+	BirthInheritance map[string]any `json:"birth_inheritance,omitempty"`
 }
 
 type SessionSnapshot struct {
@@ -125,9 +127,28 @@ func (s *Service) Redeem(ctx context.Context, nodeKey, ticket string) (PlayerSna
 
 	var ticketID, characterID, instanceID, serverID string
 	var snapshot PlayerSnapshot
+	var birthInheritanceJSON []byte
 	err = tx.QueryRowContext(ctx,
 		`SELECT t.id::text, c.id::text, t.instance_id::text, t.server_id::text,
-		        c.world_id, c.name, c.position_x, c.position_y, c.position_z, c.rotation_y
+		        c.world_id, c.name, c.position_x, c.position_y, c.position_z, c.rotation_y,
+		        COALESCE((
+		          SELECT jsonb_build_object(
+		            'source_absorbed_count', bi.source_absorbed_count,
+		            'source_growth_stage', bi.source_growth_stage,
+		            'source_growth_name', bi.source_growth_name,
+		            'source_strength', bi.source_strength,
+		            'source_constitution', bi.source_constitution,
+		            'source_agility', bi.source_agility,
+		            'source_spirit', bi.source_spirit,
+		            'source_vitality', bi.source_vitality,
+		            'applied_strength', bi.applied_strength,
+		            'applied_constitution', bi.applied_constitution,
+		            'applied_agility', bi.applied_agility,
+		            'applied_spirit', bi.applied_spirit,
+		            'applied_vitality', bi.applied_vitality,
+		            'dominant_attribute', bi.dominant_attribute
+		          ) FROM character_birth_inheritance bi WHERE bi.character_id = c.id
+		        ), '{}'::jsonb)
 		 FROM world_entry_tickets t
 		 JOIN server_registry sr ON sr.id = t.server_id
 		 JOIN world_instances wi ON wi.id = t.instance_id AND wi.status = 'ready'
@@ -138,7 +159,7 @@ func (s *Service) Redeem(ctx context.Context, nodeKey, ticket string) (PlayerSna
 		   AND c.status = 'alive'
 		 FOR UPDATE OF t`, tokenHash[:], nodeKey,
 	).Scan(&ticketID, &characterID, &instanceID, &serverID, &snapshot.WorldID, &snapshot.Name,
-		&snapshot.PositionX, &snapshot.PositionY, &snapshot.PositionZ, &snapshot.RotationY)
+		&snapshot.PositionX, &snapshot.PositionY, &snapshot.PositionZ, &snapshot.RotationY, &birthInheritanceJSON)
 	if errors.Is(err, sql.ErrNoRows) {
 		return PlayerSnapshot{}, ErrInvalidTicket
 	}
@@ -147,6 +168,11 @@ func (s *Service) Redeem(ctx context.Context, nodeKey, ticket string) (PlayerSna
 	}
 	snapshot.CharacterID = characterID
 	snapshot.InstanceID = instanceID
+	if len(birthInheritanceJSON) > 0 {
+		if err := json.Unmarshal(birthInheritanceJSON, &snapshot.BirthInheritance); err != nil {
+			return PlayerSnapshot{}, fmt.Errorf("decode character birth inheritance: %w", err)
+		}
+	}
 
 	if _, err := tx.ExecContext(ctx, `UPDATE world_entry_tickets SET consumed_at = now() WHERE id = $1`, ticketID); err != nil {
 		return PlayerSnapshot{}, fmt.Errorf("consume world entry ticket: %w", err)
