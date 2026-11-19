@@ -169,16 +169,38 @@ static func _build_iron_beast(root: Node3D) -> void:
 	var ember := Color("#d47b45")
 	_part(root, "IronCore", _capsule(0.48, 1.65), Vector3(0.0, 0.66, 0.05), iron, Vector3(PI * 0.5, 0.0, 0.0), 0.0, 0.52)
 	_part(root, "ChestPlate", _box(Vector3(0.82, 0.16, 0.58)), Vector3(0.0, 0.83, -0.30), edge, Vector3(0.0, 0.0, 0.08), 0.15, 0.68)
-	_part(root, "Skull", _sphere(0.31), Vector3(0.0, 0.90, -0.68), iron, Vector3.ZERO, 0.0, 0.42)
-	_part(root, "Jaw", _box(Vector3(0.42, 0.12, 0.34)), Vector3(0.0, 0.70, -0.88), edge)
+	var skull_pivot := Node3D.new()
+	skull_pivot.name = "SkullPivot"
+	skull_pivot.position = Vector3(0.0, 0.90, -0.68)
+	root.add_child(skull_pivot)
+	_part(skull_pivot, "Skull", _sphere(0.31), Vector3.ZERO, iron, Vector3.ZERO, 0.0, 0.42)
+	_part(skull_pivot, "Jaw", _box(Vector3(0.42, 0.12, 0.34)), Vector3(0.0, -0.20, -0.20), edge)
 	for side in [-1.0, 1.0]:
-		_part(root, "Horn" + str(side), _capsule(0.075, 0.55), Vector3(side * 0.23, 1.20, -0.58), edge, Vector3(0.0, 0.0, side * -0.55), 0.0, 0.35)
-		_part(root, "Eye" + str(side), _sphere(0.055), Vector3(side * 0.20, 0.96, -0.91), ember, Vector3.ZERO, 2.0)
-		for z in [-0.38, 0.42]:
-			_part(root, "Leg" + str(side) + str(z), _capsule(0.13, 0.72), Vector3(side * 0.30, 0.32, z), iron, Vector3.ZERO, 0.0, 0.3)
-	for index in range(3):
-		var plate := _box(Vector3(0.22, 0.52, 0.72))
-		_part(root, "BackRib" + str(index), plate, Vector3(-0.30 + float(index) * 0.30, 1.02, 0.12), edge, Vector3(0.0, 0.0, -0.16), 0.0, 0.48)
+		_part(skull_pivot, "Horn" + str(side), _capsule(0.075, 0.55), Vector3(side * 0.23, 0.30, 0.10), edge, Vector3(0.0, 0.0, side * -0.55), 0.0, 0.35)
+		_part(skull_pivot, "Eye" + str(side), _sphere(0.055), Vector3(side * 0.20, 0.06, -0.23), ember, Vector3.ZERO, 2.0)
+	for side in [-1.0, 1.0]:
+		for leg_index in range(2):
+			var front := leg_index == 0
+			var leg_pivot := Node3D.new()
+			leg_pivot.name = ("FrontLeg" if front else "HindLeg") + ("Left" if side < 0.0 else "Right")
+			leg_pivot.position = Vector3(side * 0.30, 0.57, -0.38 if front else 0.42)
+			root.add_child(leg_pivot)
+			_part(leg_pivot, "IronLeg", _capsule(0.13, 0.72), Vector3(0.0, -0.27, 0.0), iron, Vector3.ZERO, 0.0, 0.3)
+			_part(leg_pivot, "KneeGuard", _box(Vector3(0.30, 0.22, 0.26)), Vector3(0.0, -0.14, -0.06), edge, Vector3.ZERO, 0.0, 0.48)
+			_part(leg_pivot, "IronPaw", _box(Vector3(0.30, 0.14, 0.34)), Vector3(0.0, -0.58, -0.08), edge, Vector3.ZERO, 0.0, 0.42)
+	var spine_armor := Node3D.new()
+	spine_armor.name = "SpineArmor"
+	spine_armor.position = Vector3(0.0, 0.98, 0.10)
+	root.add_child(spine_armor)
+	for index in range(4):
+		var plate := _box(Vector3(0.24, 0.52, 0.62))
+		_part(spine_armor, "BackRib" + str(index), plate, Vector3(-0.36 + float(index) * 0.24, 0.04, 0.0), edge, Vector3(0.0, 0.0, -0.16), 0.0, 0.48)
+	var tail_pivot := Node3D.new()
+	tail_pivot.name = "TailPivot"
+	tail_pivot.position = Vector3(0.0, 0.70, 0.76)
+	root.add_child(tail_pivot)
+	_part(tail_pivot, "TailArmor", _capsule(0.12, 0.62), Vector3(0.0, 0.08, 0.18), iron, Vector3(-0.62, 0.0, 0.0), 0.0, 0.42)
+	_part(tail_pivot, "TailSpur", _box(Vector3(0.20, 0.18, 0.26)), Vector3(0.0, 0.25, 0.38), edge, Vector3.ZERO, 0.0, 0.5)
 
 
 static func _build_warrior(root: Node3D, monster_name: String) -> void:
