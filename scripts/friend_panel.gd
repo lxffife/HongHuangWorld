@@ -217,8 +217,10 @@ func _render_search(items: Array) -> void:
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(label)
 		var add_button := Button.new()
-		add_button.text = "已是好友" if bool(item.get("is_friend", false)) else "添加"
-		add_button.disabled = bool(item.get("is_friend", false))
+		var is_friend := bool(item.get("is_friend", false))
+		var is_pending := bool(item.get("request_pending", false))
+		add_button.text = "已是好友" if is_friend else ("已申请" if is_pending else "添加")
+		add_button.disabled = is_friend or is_pending
 		add_button.pressed.connect(func():
 			_api_request(HTTPClient.METHOD_POST, "/api/v1/chat/friends/requests", JSON.stringify({"character_id": str(item.get("character_id", "")), "message": "希望与你成为好友"}), "create_request")
 		)
