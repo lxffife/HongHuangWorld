@@ -26,7 +26,7 @@ func (h *gamePlayerAdminHandlers) growth(w http.ResponseWriter, r *http.Request)
 			"essence": nil, "inheritance_attributes": nil,
 			"absorption_progress": []map[string]any{}, "absorption_records": []map[string]any{},
 			"mutation_records": []map[string]any{}, "fusion_records": []map[string]any{},
-			"birth_inheritance": []map[string]any{},
+			"birth_inheritance": []map[string]any{}, "reincarnations": []map[string]any{},
 		})
 		return
 	}
