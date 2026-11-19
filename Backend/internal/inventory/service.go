@@ -606,3 +606,36 @@ func parseConsumableEffect(raw []byte) (int,int,map[string]int,error) {
 	for key:=range effect { if key!="heal_health" && key!="restore_mana" { return 0,0,nil,ErrInvalidRequest } }
 	return heal,restore,effect,nil
 }
+
+type MonsterSpawnConfig struct {
+	RuntimeID string `json:"runtime_id"`
+	MonsterID string `json:"monster_id"`
+	Name string `json:"name"`
+	Level int `json:"level"`
+	MaxHealth float64 `json:"max_health"`
+	Attack float64 `json:"attack"`
+	Defense float64 `json:"defense"`
+	MoveSpeed float64 `json:"move_speed"`
+	AggroRadius float64 `json:"aggro_radius"`
+	LeashRadius float64 `json:"leash_radius"`
+	SpawnX float64 `json:"spawn_x"`
+	SpawnZ float64 `json:"spawn_z"`
+	RareSpawn bool `json:"rare_spawn"`
+	SpawnChancePercent int `json:"spawn_chance_percent"`
+	RetrySpawnSeconds int `json:"retry_spawn_seconds"`
+	FirstSpawnDelaySeconds int `json:"first_spawn_delay_seconds"`
+}
+
+func (s *Service) ListMonsterSpawnConfig(ctx context.Context, worldID string) ([]MonsterSpawnConfig,error) {
+	rows,err:=s.db.QueryContext(ctx,`SELECT sp.id,md.id,md.name,md.level,md.max_health,md.attack,md.defense,md.move_speed,md.aggro_radius,md.leash_radius,sp.spawn_x,sp.spawn_z,sp.rare_spawn,sp.spawn_chance_percent,sp.retry_spawn_seconds,sp.first_spawn_delay_seconds
+		FROM world_monster_spawn_points sp
+		JOIN monster_definitions md ON md.id=sp.monster_id
+		WHERE sp.world_id=$1 AND sp.enabled=TRUE AND md.enabled=TRUE
+		ORDER BY md.level,sp.id`,worldID)
+	if err!=nil{return nil,fmt.Errorf("list world monster spawn config: %w",err)}
+	defer rows.Close()
+	items:=make([]MonsterSpawnConfig,0)
+	for rows.Next(){var v MonsterSpawnConfig;if err:=rows.Scan(&v.RuntimeID,&v.MonsterID,&v.Name,&v.Level,&v.MaxHealth,&v.Attack,&v.Defense,&v.MoveSpeed,&v.AggroRadius,&v.LeashRadius,&v.SpawnX,&v.SpawnZ,&v.RareSpawn,&v.SpawnChancePercent,&v.RetrySpawnSeconds,&v.FirstSpawnDelaySeconds);err!=nil{return nil,fmt.Errorf("scan world monster spawn config: %w",err)};items=append(items,v)}
+	if err:=rows.Err();err!=nil{return nil,fmt.Errorf("iterate world monster spawn config: %w",err)}
+	return items,nil
+}
