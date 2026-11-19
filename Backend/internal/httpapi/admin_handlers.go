@@ -2,6 +2,7 @@ package httpapi
 
 import (
  "context"
+	"encoding/json"
  "errors"
  "log/slog"
  "net"
@@ -120,6 +121,48 @@ func (h *adminHandlers) listPlayers(w http.ResponseWriter,r *http.Request) {
  writeJSON(w,http.StatusOK,page)
 }
 
+func (h *adminHandlers) listServerNodes(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.require(w, r, "servers.read"); !ok { return }
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+	result, err := h.game.ServerNodes(ctx)
+	if err != nil {
+		h.logger.Error("admin server node lookup failed", "error", err)
+		http.Error(w, "game service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(result)
+}
+
+func (h *adminHandlers) setServerNodeState(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.require(w, r, "servers.manage")
+	if !ok { return }
+	nodeKey := strings.TrimSpace(r.PathValue("nodeKey"))
+	if nodeKey == "" || len(nodeKey) > 96 { http.Error(w, "invalid node key", http.StatusBadRequest); return }
+	var request struct { AdminState string `json:"admin_state"` }
+	if err := decodeJSON(w, r, &request); err != nil { http.Error(w, "invalid request body", http.StatusBadRequest); return }
+	if request.AdminState != "normal" && request.AdminState != "draining" && request.AdminState != "disabled" { http.Error(w, "admin_state must be normal, draining or disabled", http.StatusBadRequest); return }
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+	result, err := h.game.SetServerNodeState(ctx, nodeKey, request.AdminState)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") { http.Error(w, "world server node not found", http.StatusNotFound); return }
+		if strings.Contains(err.Error(), "invalid world server node state") { http.Error(w, "invalid node state", http.StatusBadRequest); return }
+		h.logger.Error("admin server node state update failed", "error", err)
+		http.Error(w, "game service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if err := h.service.RecordAudit(ctx, actor, "server.node.state", "server_node", nodeKey, "success", map[string]any{"admin_state": request.AdminState, "game_response": json.RawMessage(result)}); err != nil {
+		h.logger.Error("record server node state audit failed", "error", err)
+		http.Error(w, "node state changed but audit recording failed", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(result)
+}
 func (h *adminHandlers) listOnlinePlayers(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.require(w, r, "players.read"); !ok { return }
 	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
