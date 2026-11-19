@@ -91,7 +91,7 @@ func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (
 
 	existing, existingErr := getChatMessageByClientID(ctx, tx, characterID, req.ClientMessageID)
 	if existingErr == nil {
-		if existing.Channel != req.Channel || existing.Content != req.Content {
+		if existing.Channel != req.Channel || existing.Content != req.Content || existing.RecipientCharacterID != req.RecipientCharacterID {
 			return Message{}, ErrIdempotencyConflict
 		}
 		if err := tx.Commit(); err != nil {
