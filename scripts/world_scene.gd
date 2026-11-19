@@ -2565,15 +2565,17 @@ func _apply_monster_death_fade(monster: Node3D, weight: float) -> void:
 			elif mesh_instance.mesh != null:
 				# Imported GLBs often use per-surface materials instead of material_override.
 				for surface_index in range(mesh_instance.mesh.get_surface_count()):
-					var surface_material := mesh_instance.get_surface_override_material(surface_index) as StandardMaterial3D
 					var meta_key := "death_fade_surface_" + str(surface_index)
-					if surface_material == null:
-						surface_material = mesh_instance.get_active_material(surface_index) as StandardMaterial3D
-						if surface_material == null:
+					if not bool(mesh_instance.get_meta(meta_key, false)):
+						var source_material := mesh_instance.get_surface_override_material(surface_index) as StandardMaterial3D
+						if source_material == null:
+							source_material = mesh_instance.get_active_material(surface_index) as StandardMaterial3D
+						if source_material == null:
 							continue
-						surface_material = surface_material.duplicate(true) as StandardMaterial3D
-						mesh_instance.set_surface_override_material(surface_index, surface_material)
-					mesh_instance.set_meta(meta_key, true)
+						var unique_material := source_material.duplicate(true) as StandardMaterial3D
+						mesh_instance.set_surface_override_material(surface_index, unique_material)
+						mesh_instance.set_meta(meta_key, true)
+					var surface_material := mesh_instance.get_surface_override_material(surface_index) as StandardMaterial3D
 					_apply_death_fade_to_material(surface_material, weight)
 		elif child is Node3D:
 			_apply_monster_death_fade(child as Node3D, weight)
