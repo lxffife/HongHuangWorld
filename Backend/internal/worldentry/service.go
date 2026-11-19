@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"time"
+	"strings"
 )
 
 var (
@@ -395,4 +396,31 @@ func (s *Service) RespawnCurrent(ctx context.Context, accountID string) error {
 	); err != nil { return fmt.Errorf("complete character respawn record: %w", err) }
 	if err := tx.Commit(); err != nil { return fmt.Errorf("commit character respawn: %w", err) }
 	return nil
+}
+
+
+// RequestDisconnect marks all active world sessions for an account as saving.
+// WorldServer's next authoritative snapshot receives HTTP 409, which causes it
+// to disconnect the ENet peer and persist the final snapshot through SaveAndClose.
+func (s *Service) RequestDisconnect(ctx context.Context, accountID string) (int64, error) {
+	if strings.TrimSpace(accountID) == "" {
+		return 0, ErrInvalidSessionSnapshot
+	}
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE world_sessions ws
+		SET session_state = 'saving', updated_at = now()
+		FROM characters c
+		JOIN souls soul ON soul.id = c.soul_id
+		WHERE ws.character_id = c.id
+		  AND soul.account_id = $1::uuid
+		  AND ws.session_state = 'active'
+	`, accountID)
+	if err != nil {
+		return 0, fmt.Errorf("request player world disconnect: %w", err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("read requested player disconnect count: %w", err)
+	}
+	return count, nil
 }
