@@ -4,6 +4,7 @@ signal disconnected
 signal connection_error(message: String)
 signal message_received(message: Dictionary)
 signal history_received(channel: String, messages: Array)
+signal conversation_history_received(character_id: String, messages: Array)
 signal send_failed(reason: String)
 
 const SOCKET_PATH := "/api/v1/chat/socket"
@@ -144,10 +145,12 @@ func _on_history_request_completed(result: int, response_code: int, _headers: Pa
 		return
 	history_received.emit(channel, parsed.get("items", []))
 
-func send_message(channel: String, content: String, client_message_id: String) -> Error:
+func send_message(channel: String, content: String, client_message_id: String, recipient_character_id: String = "") -> Error:
 	if socket.get_ready_state() != WebSocketPeer.STATE_OPEN:
 		return ERR_UNAVAILABLE
-	if channel not in ["world", "cross_world"] or content.strip_edges().is_empty() or content.length() > 200 or client_message_id.is_empty():
+	if channel not in ["world", "cross_world", "whisper"] or content.strip_edges().is_empty() or content.length() > 200 or client_message_id.is_empty():
+		return ERR_INVALID_PARAMETER
+	if channel == "whisper" and recipient_character_id.is_empty():
 		return ERR_INVALID_PARAMETER
 	var payload := {
 		"type": "send",
@@ -155,7 +158,51 @@ func send_message(channel: String, content: String, client_message_id: String) -
 		"channel": channel,
 		"content": content.strip_edges()
 	}
+	if channel == "whisper":
+		payload["recipient_character_id"] = recipient_character_id
 	return socket.send_text(JSON.stringify(payload))
+
+func fetch_conversation_history(character_id: String, limit: int = 50) -> void:
+	if not is_uuid(character_id) or access_token.is_empty() or http_base_url.is_empty():
+		return
+	var request := HTTPRequest.new()
+	request.timeout = 10.0
+	request.set_meta("chat_character_id", character_id)
+	request.set_meta("generation", connection_generation)
+	request.request_completed.connect(_on_conversation_history_completed.bind(request))
+	add_child(request)
+	var headers := PackedStringArray(["Authorization: Bearer " + access_token])
+	var url := http_base_url + "/api/v1/chat/conversations/" + character_id.uri_encode() + "/messages?limit=" + str(clampi(limit, 1, 100))
+	var error := request.request(url, headers, HTTPClient.METHOD_GET)
+	if error != OK:
+		request.queue_free()
+		connection_error.emit("好友私聊历史请求失败：" + str(error))
+
+func _on_conversation_history_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray, request: HTTPRequest) -> void:
+	var character_id := str(request.get_meta("chat_character_id", ""))
+	var generation := int(request.get_meta("generation", -1))
+	request.queue_free()
+	if generation != connection_generation:
+		return
+	if result != HTTPRequest.RESULT_SUCCESS or response_code != 200:
+		connection_error.emit("好友私聊记录暂时无法获取（HTTP " + str(response_code) + "）")
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if not (parsed is Dictionary) or not (parsed.get("items", []) is Array):
+		connection_error.emit("好友私聊历史响应格式错误。")
+		return
+	conversation_history_received.emit(character_id, parsed.get("items", []))
+
+func is_uuid(value: String) -> bool:
+	if value.length() != 36:
+		return false
+	for index in range(value.length()):
+		var char_code := value.unicode_at(index)
+		if index in [8, 13, 18, 23]:
+			if char_code != 45: return false
+		elif not ((char_code >= 48 and char_code <= 57) or (char_code >= 97 and char_code <= 102) or (char_code >= 65 and char_code <= 70)):
+			return false
+	return true
 
 func _send_heartbeat() -> void:
 	if socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
