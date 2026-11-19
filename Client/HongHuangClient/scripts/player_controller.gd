@@ -317,7 +317,7 @@ func set_birth_inheritance_visuals(birth: Dictionary) -> void:
 			torus.ring_segments = 6
 			ring.mesh = torus
 			ring.position.y = 0.48 + float(index) * 0.42
-			ring.rotation.x = [0.0, 0.72, -0.72][index]
+			ring.rotation.x = [PI * 0.5, 0.72, -0.72][index]
 			birth_resonance_root.add_child(ring)
 		var aura := MeshInstance3D.new()
 		aura.name = "BirthResonanceAura"
@@ -560,6 +560,12 @@ func _process(delta: float) -> void:
 		if is_instance_valid(right_leg):
 			right_leg.rotation.x = swing * 0.82 + attack_weight * 0.035
 		player_humanoid.position.y = -0.9 + (absf(stride) * 0.045 if moving else sin(humanoid_animation_time * 1.8) * 0.012)
+		if is_instance_valid(birth_resonance_root) and birth_resonance_root.visible:
+			birth_resonance_root.rotation.y += delta * 0.16
+			var birth_aura := birth_resonance_root.get_node_or_null("BirthResonanceAura") as MeshInstance3D
+			if is_instance_valid(birth_aura) and birth_aura.visible:
+				var birth_pulse := 1.0 + sin(humanoid_animation_time * 1.35) * 0.018
+				birth_aura.scale = Vector3.ONE * birth_pulse
 	if not soul_form_enabled or not is_instance_valid(visual):
 		return
 	soul_form_time += delta
