@@ -2208,18 +2208,21 @@ struct EnetServer::Impl {
                           << monster.runtime_id << '\n';
                 continue;
             }
-            const auto windup_duration = monster.rare_spawn
-                ? std::chrono::milliseconds(900) : std::chrono::milliseconds(520);
-            const auto recovery_duration = monster.rare_spawn
-                ? std::chrono::milliseconds(780) : std::chrono::milliseconds(420);
-            const auto attack_cooldown = monster.rare_spawn
-                ? std::chrono::milliseconds(2600) : std::chrono::milliseconds(1500);
+            const auto attack_profile = honghuang::simulation::monster_attack_profile(monster.definition);
+            const auto rare_scale = monster.rare_spawn ? 1.25 : 1.0;
+            const auto windup_duration = std::chrono::milliseconds(
+                static_cast<int>(std::lround(attack_profile.windup_ms * rare_scale)));
+            const auto recovery_duration = std::chrono::milliseconds(
+                static_cast<int>(std::lround(attack_profile.recovery_ms * rare_scale)));
+            const auto attack_cooldown = std::chrono::milliseconds(
+                static_cast<int>(std::lround(attack_profile.cooldown_ms * rare_scale)));
             const auto broadcast_attack_phase = [&](const std::string& phase) {
                 const Json action{
                     {"source_entity_id", monster.runtime_id},
                     {"source", "monster"},
                     {"action", "attack"},
                     {"phase", phase},
+                    {"attack_style", attack_profile.style},
                     {"target_character_id", monster.attack_target_character_id},
                     {"windup_ms", windup_duration.count()},
                     {"recovery_ms", recovery_duration.count()}
