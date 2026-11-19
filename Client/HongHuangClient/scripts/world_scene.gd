@@ -1941,18 +1941,17 @@ func _animate_monster_visuals(delta: float) -> void:
 			if is_instance_valid(tail):
 				tail.rotation.y = sin(monster_animation_time * 2.4 + phase) * (0.24 if moving else 0.14)
 				tail.rotation.z = sin(monster_animation_time * 1.8 + phase) * 0.08
+		var body := monster.get_node_or_null("Torso") as Node3D
+		if not is_instance_valid(body):
+			body = monster.get_node_or_null("IronCore") as Node3D
 		var hit_time := float(monster.get_meta("hit_reaction_time", 0.0))
 		if hit_time > 0.0:
 			hit_time = maxf(hit_time - delta, 0.0)
 			monster.set_meta("hit_reaction_time", hit_time)
-			var body := monster.get_node_or_null("Torso") as Node3D
-			if not is_instance_valid(body):
-				body = monster.get_node_or_null("IronCore") as Node3D
 			if is_instance_valid(body):
 				var hit_weight := sin((0.24 - hit_time) / 0.24 * PI)
 				body.position.x = hit_weight * 0.10
 		else:
-			var body := monster.get_node_or_null("Torso") as Node3D
 			if is_instance_valid(body):
 				body.position.x = move_toward(body.position.x, 0.0, delta * 0.8)
 
