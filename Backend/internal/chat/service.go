@@ -30,6 +30,8 @@ type Message struct {
 	WorldID string `json:"world_id,omitempty"`
 	WorldInstanceID string `json:"world_instance_id,omitempty"`
 	RecipientCharacterIDs []string `json:"recipient_character_ids,omitempty"`
+	RecipientCharacterID string `json:"recipient_character_id,omitempty"`
+	ConversationID string `json:"conversation_id,omitempty"`
 	SenderCharacterID string `json:"sender_character_id"`
 	SenderName string `json:"sender_name"`
 	SenderRace string `json:"sender_race,omitempty"`
@@ -43,6 +45,7 @@ type SendRequest struct {
 	Channel string `json:"channel"`
 	Content string `json:"content"`
 	RecipientCharacterIDs []string `json:"recipient_character_ids,omitempty"`
+	RecipientCharacterID string `json:"recipient_character_id,omitempty"`
 }
 
 func NewService(db *sql.DB) *Service { return &Service{db: db} }
@@ -58,8 +61,13 @@ func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (
 			return Message{}, ErrInvalidInput
 		}
 	}
-	if req.Channel != "world" && req.Channel != "cross_world" {
+	if req.Channel != "world" && req.Channel != "cross_world" && req.Channel != "whisper" {
 		return Message{}, ErrUnsupportedChannel
+	}
+	if req.Channel == "whisper" {
+		if !isUUID(req.RecipientCharacterID) { return Message{}, ErrInvalidInput }
+	} else if req.RecipientCharacterID != "" {
+		return Message{}, ErrInvalidInput
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -96,9 +104,8 @@ func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (
 	}
 
 	window := 3 * time.Second
-	if req.Channel == "cross_world" {
-		window = 5 * time.Second
-	}
+	if req.Channel == "cross_world" { window = 5 * time.Second }
+	if req.Channel == "whisper" { window = time.Second }
 	var recent int
 	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM chat_messages
 		WHERE sender_character_id=$1::uuid AND created_at>now()-$2::interval AND channel_type=$3`,
@@ -110,10 +117,35 @@ func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (
 	}
 
 	var worldValue any
-	if req.Channel == "world" {
-		worldValue = worldID
+	if req.Channel == "world" { worldValue = worldID }
+	var recipientValue any
+	var conversationValue any
+	if req.Channel == "whisper" {
+		var recipientName string
+		if err := tx.QueryRowContext(ctx, `SELECT name FROM chat_characters WHERE character_id=$1::uuid AND status='alive'`, req.RecipientCharacterID).Scan(&recipientName); err != nil {
+			if errors.Is(err, sql.ErrNoRows) { return Message{}, ErrInvalidInput }
+			return Message{}, fmt.Errorf("resolve whisper recipient: %w", err)
+		}
+		var friends bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM chat_friendships WHERE requester_character_id=$1::uuid AND addressee_character_id=$2::uuid)`, characterID, req.RecipientCharacterID).Scan(&friends); err != nil {
+			return Message{}, fmt.Errorf("check whisper friendship: %w", err)
+		}
+		if !friends { return Message{}, ErrFriendRequired }
+		var blocked bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM chat_blocks WHERE (blocker_character_id=$1::uuid AND blocked_character_id=$2::uuid) OR (blocker_character_id=$2::uuid AND blocked_character_id=$1::uuid))`, characterID, req.RecipientCharacterID).Scan(&blocked); err != nil {
+			return Message{}, fmt.Errorf("check whisper block: %w", err)
+		}
+		if blocked { return Message{}, ErrBlocked }
+		if err := tx.QueryRowContext(ctx, `
+			INSERT INTO chat_conversations(participant_low,participant_high)
+			VALUES(LEAST($1::uuid,$2::uuid),GREATEST($1::uuid,$2::uuid))
+			ON CONFLICT(participant_low,participant_high) DO UPDATE SET updated_at=now()
+			RETURNING id::text`, characterID, req.RecipientCharacterID).Scan(&conversationValue); err != nil {
+			return Message{}, fmt.Errorf("resolve direct conversation: %w", err)
+		}
+		recipientValue = req.RecipientCharacterID
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO chat_messages(channel_type,world_id,sender_character_id,client_message_id,sender_name,sender_race,sender_level,content) VALUES($1,$2,$3::uuid,$4::uuid,$5,$6,$7,$8)`, req.Channel, worldValue, characterID, req.ClientMessageID, characterName, raceID, level, req.Content)
+	_, err = tx.ExecContext(ctx, `INSERT INTO chat_messages(channel_type,world_id,sender_character_id,recipient_character_id,conversation_id,client_message_id,sender_name,sender_race,sender_level,content) VALUES($1,$2,$3::uuid,$4::uuid,$5::uuid,$6::uuid,$7,$8,$9,$10)`, req.Channel, worldValue, characterID, recipientValue, conversationValue, req.ClientMessageID, characterName, raceID, level, req.Content)
 	if err != nil {
 		return Message{}, fmt.Errorf("store chat message: %w", err)
 	}
@@ -206,7 +238,7 @@ type chatRowQueryer interface {
 
 func getChatMessageByClientID(ctx context.Context, queryer chatRowQueryer, characterID, clientID string) (Message, error) {
 	var m Message
-	err := queryer.QueryRowContext(ctx, `SELECT id::text,client_message_id::text,channel_type,COALESCE(world_id,''),sender_character_id::text,sender_name,sender_race,sender_level,content,created_at FROM chat_messages WHERE sender_character_id=$1::uuid AND client_message_id=$2::uuid`, characterID, clientID).Scan(&m.ID,&m.ClientMessageID,&m.Channel,&m.WorldID,&m.SenderCharacterID,&m.SenderName,&m.SenderRace,&m.SenderLevel,&m.Content,&m.CreatedAt)
+	err := queryer.QueryRowContext(ctx, `SELECT id::text,client_message_id::text,channel_type,COALESCE(world_id,''),COALESCE(recipient_character_id::text,''),COALESCE(conversation_id::text,''),sender_character_id::text,sender_name,sender_race,sender_level,content,created_at FROM chat_messages WHERE sender_character_id=$1::uuid AND client_message_id=$2::uuid`, characterID, clientID).Scan(&m.ID,&m.ClientMessageID,&m.Channel,&m.WorldID,&m.RecipientCharacterID,&m.ConversationID,&m.SenderCharacterID,&m.SenderName,&m.SenderRace,&m.SenderLevel,&m.Content,&m.CreatedAt)
 	if err != nil { return Message{}, fmt.Errorf("load stored chat message: %w", err) }
 	return m, nil
 }
