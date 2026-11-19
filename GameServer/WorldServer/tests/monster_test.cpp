@@ -55,6 +55,13 @@ int main() {
     assert(soul_state.yaw < -1.5F);
     assert(std::hypot(soul_state.x - close_player.x, soul_state.z - close_player.z) > 3.0F);
 
+    // Kiting must not push a soul beyond its spawn leash.
+    soul_state.x = 19.9F;
+    soul_state.z = 0.0F;
+    const MonsterTarget flank_player{.id = "player-ranged", .x = 18.0F, .z = 0.0F, .alive = true};
+    assert(tick_monster(soul, soul_state, &flank_player, 0.05F));
+    assert(soul_state.x <= soul.leash_radius - 0.049F);
+
     MonsterState state{.x = 0.0F, .z = 0.0F, .health = 80.0F};
     const MonsterTarget player{.id = "player-1", .x = 8.0F, .z = 0.0F, .alive = true};
     assert(tick_monster(wolf, state, &player, 0.05F));
