@@ -267,7 +267,7 @@ func (s *Service) ListConversation(ctx context.Context, accountID, peerCharacter
 	if err != nil { return nil, err }
 	if currentID == peerCharacterID { return nil, ErrInvalidInput }
 	var friends, blocked bool
-	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM chat_friendships WHERE requester_character_id=$1::uuid AND addressee_character_id=$2::uuid)`, currentID, peerCharacterID).Scan(&friends); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM chat_friendships WHERE (requester_character_id=$1::uuid AND addressee_character_id=$2::uuid) OR (requester_character_id=$2::uuid AND addressee_character_id=$1::uuid))`, currentID, peerCharacterID).Scan(&friends); err != nil {
 		return nil, fmt.Errorf("check direct conversation friendship: %w", err)
 	}
 	if !friends { return nil, ErrFriendRequired }
