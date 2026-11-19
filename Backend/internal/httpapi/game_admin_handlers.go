@@ -189,7 +189,7 @@ func (h *gamePlayerAdminHandlers) online(w http.ResponseWriter, r *http.Request)
 	rows, err := h.db.QueryContext(ctx, `
 		SELECT COUNT(*) OVER(), soul.account_id::text, c.id::text, c.name, c.level, c.world_id,
 		       wd.name, ws.id::text, ws.connected_at, sr.node_key, sr.host,
-		       sr.udp_port, sr.region, CASE WHEN sr.last_heartbeat_at < now() - interval '30 seconds' THEN 'offline' ELSE sr.status END, sr.last_heartbeat_at, sr.capacity, sr.current_players
+		       sr.udp_port, sr.region, CASE WHEN sr.admin_state = 'disabled' THEN 'offline' WHEN sr.admin_state = 'draining' THEN 'draining' WHEN sr.last_heartbeat_at IS NULL OR sr.last_heartbeat_at < now() - interval '30 seconds' THEN 'offline' ELSE sr.status END, sr.last_heartbeat_at, sr.capacity, sr.current_players
 		FROM world_sessions ws
 		JOIN characters c ON c.id = ws.character_id
 		JOIN souls soul ON soul.id = c.soul_id
