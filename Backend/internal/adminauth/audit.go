@@ -11,6 +11,8 @@ import (
 
 type AuditFilter struct {
 	ActorID string
+	ResourceType string
+	ResourceID string
 	Action string
 	Result string
 	From *time.Time
@@ -50,6 +52,8 @@ func (s *Service) ListAuditLogs(ctx context.Context, f AuditFilter) (AuditPage, 
 		where = append(where, fmt.Sprintf(expr, len(args)))
 	}
 	if f.ActorID != "" { add("l.actor_user_id = $%d", f.ActorID) }
+	if f.ResourceType != "" { add("l.resource_type = $%d", f.ResourceType) }
+	if f.ResourceID != "" { add("l.resource_id = $%d", f.ResourceID) }
 	if f.Action != "" { add("l.action = $%d", f.Action) }
 	if f.Result != "" { add("l.result = $%d", f.Result) }
 	if f.From != nil { add("l.created_at >= $%d", *f.From) }
