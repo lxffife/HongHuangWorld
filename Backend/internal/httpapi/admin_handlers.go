@@ -121,6 +121,62 @@ func (h *adminHandlers) listPlayers(w http.ResponseWriter,r *http.Request) {
  writeJSON(w,http.StatusOK,page)
 }
 
+func (h *adminHandlers) listWorlds(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.require(w, r, "worlds.read"); !ok { return }
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+	result, err := h.game.Worlds(ctx)
+	if err != nil { h.logger.Error("admin worlds lookup failed", "error", err); http.Error(w, "game service unavailable", http.StatusServiceUnavailable); return }
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(result)
+}
+
+func (h *adminHandlers) listWorldInstances(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.require(w, r, "worlds.read"); !ok { return }
+	worldID := strings.TrimSpace(r.PathValue("worldID"))
+	if worldID == "" || len(worldID) > 64 { http.Error(w, "invalid world id", http.StatusBadRequest); return }
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+	result, err := h.game.WorldInstances(ctx, worldID)
+	if err != nil {
+		if strings.Contains(err.Error(), "world not found") { http.Error(w, "world not found", http.StatusNotFound); return }
+		h.logger.Error("admin world instances lookup failed", "error", err)
+		http.Error(w, "game service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(result)
+}
+
+func (h *adminHandlers) setWorldEnabled(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.require(w, r, "worlds.manage")
+	if !ok { return }
+	worldID := strings.TrimSpace(r.PathValue("worldID"))
+	if worldID == "" || len(worldID) > 64 { http.Error(w, "invalid world id", http.StatusBadRequest); return }
+	var request struct { Enabled *bool `json:"enabled"` }
+	if err := decodeJSON(w, r, &request); err != nil || request.Enabled == nil { http.Error(w, "enabled must be a boolean", http.StatusBadRequest); return }
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	result, err := h.game.SetWorldEnabled(ctx, worldID, *request.Enabled)
+	if err != nil {
+		if strings.Contains(err.Error(), "world not found") { http.Error(w, "world not found", http.StatusNotFound); return }
+		if strings.Contains(err.Error(), "invalid world state") { http.Error(w, "invalid world state", http.StatusBadRequest); return }
+		h.logger.Error("admin world state update failed", "error", err)
+		http.Error(w, "game service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if err := h.service.RecordAudit(ctx, actor, "world.state", "world", worldID, "success", map[string]any{"enabled": *request.Enabled, "game_response": json.RawMessage(result)}); err != nil {
+		h.logger.Error("record world state audit failed", "error", err)
+		http.Error(w, "world state changed but audit recording failed", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(result)
+}
+
 func (h *adminHandlers) listServerNodes(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.require(w, r, "servers.read"); !ok { return }
 	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
