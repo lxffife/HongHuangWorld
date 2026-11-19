@@ -101,3 +101,22 @@ func (h *chatHandlers) conversationMessages(w http.ResponseWriter, r *http.Reque
 	if err != nil { h.writeError(w, err); return }
 	writeJSON(w, http.StatusOK, map[string]any{"items": items, "retention_days": 30})
 }
+
+func (h *chatHandlers) friendRequestPreference(w http.ResponseWriter, r *http.Request) {
+	account, ok := h.authenticate(w, r)
+	if !ok { return }
+	if r.Method == http.MethodGet {
+		allowed, err := h.service.GetAllowStrangerFriendRequests(r.Context(), account.ID)
+		if err != nil { h.writeError(w, err); return }
+		writeJSON(w, http.StatusOK, map[string]any{"allow_stranger_requests": allowed})
+		return
+	}
+	var req struct { Allow bool `json:"allow_stranger_requests"` }
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest); return
+	}
+	if err := h.service.SetAllowStrangerFriendRequests(r.Context(), account.ID, req.Allow); err != nil {
+		h.writeError(w, err); return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"allow_stranger_requests": req.Allow})
+}
