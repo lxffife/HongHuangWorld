@@ -1319,8 +1319,18 @@ struct EnetServer::Impl {
         if (revoked.empty()) return;
         for (auto it = players.begin(); it != players.end();) {
             if (revoked.contains(it->second.session_id)) {
-                std::cout << "Closing stale world session for character: "
+                std::cout << "Closing revoked world session for character: "
                           << it->second.character_id << '\n';
+                // The backend marks the session as 'saving' before the periodic
+                // snapshot receives HTTP 409. Persist the latest state and close
+                // the session before removing the peer.
+                broadcast_player_event(honghuang::protocol::MessageType::PlayerLeft,
+                                       it->second, it->first);
+                std::string close_error;
+                if (!save_and_close_session(config, it->second, close_error)) {
+                    std::cerr << "Could not persist revoked player session: "
+                              << close_error << '\n';
+                }
                 enet_peer_disconnect_later(it->first, 7);
                 it = players.erase(it);
             } else {
