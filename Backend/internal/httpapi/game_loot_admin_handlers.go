@@ -37,9 +37,13 @@ func (h *gameLootAdminHandlers) updateItem(w http.ResponseWriter,r *http.Request
 	ctx,cancel:=context.WithTimeout(r.Context(),8*time.Second);defer cancel();tx,err:=h.db.BeginTx(ctx,nil);if err!=nil{http.Error(w,"internal server error",500);return};defer tx.Rollback()
 	var lockedID string;err=tx.QueryRowContext(ctx,`SELECT id FROM item_definitions WHERE id=$1 FOR UPDATE`,id).Scan(&lockedID)
 	if errors.Is(err,sql.ErrNoRows){http.Error(w,"item not found",404);return};if err!=nil{http.Error(w,"internal server error",500);return}
+	oldSnapshot,err:=readConfigSnapshot(ctx,tx,"item_definitions","id=$1",id);if err!=nil{http.Error(w,"internal server error",500);return}
 	if req.MaxStack!=nil{var used int;err=tx.QueryRowContext(ctx,`SELECT GREATEST(COALESCE((SELECT MAX(quantity) FROM character_inventory WHERE item_id=$1),0),COALESCE((SELECT MAX(max_quantity) FROM monster_loot_entries WHERE item_id=$1),0),COALESCE((SELECT MAX(quantity) FROM ground_drops WHERE item_id=$1 AND status='available'),0))`,id).Scan(&used);if err!=nil{http.Error(w,"internal server error",500);return};if *req.MaxStack<used{http.Error(w,"max_stack cannot be lower than existing inventory, loot or ground-drop quantities",400);return}}
 	_,err=tx.ExecContext(ctx,`UPDATE item_definitions SET name=COALESCE($2,name),description=COALESCE($3,description),icon_key=COALESCE($4,icon_key),max_stack=COALESCE($5,max_stack),enabled=COALESCE($6,enabled),updated_at=now() WHERE id=$1`,id,req.Name,req.Description,req.IconKey,req.MaxStack,req.Enabled)
-	if err!=nil{h.logger.Error("game admin item update failed","item_id",id,"error",err);http.Error(w,"internal server error",500);return};if err=tx.Commit();err!=nil{http.Error(w,"internal server error",500);return};writeJSON(w,200,map[string]any{"item_id":id,"updated":true})
+	if err!=nil{h.logger.Error("game admin item update failed","item_id",id,"error",err);http.Error(w,"internal server error",500);return}
+	newSnapshot,err:=readConfigSnapshot(ctx,tx,"item_definitions","id=$1",id);if err!=nil{http.Error(w,"internal server error",500);return}
+	if err=recordConfigRevision(ctx,tx,"item_definition",id,"update",oldSnapshot,newSnapshot);err!=nil{h.logger.Error("record item revision failed","item_id",id,"error",err);http.Error(w,"internal server error",500);return}
+	if err=tx.Commit();err!=nil{http.Error(w,"internal server error",500);return};writeJSON(w,200,map[string]any{"item_id":id,"updated":true})
 }
 func (h *gameLootAdminHandlers) listLoot(w http.ResponseWriter,r *http.Request){
 	if !h.authorize(w,r){return};ctx,cancel:=context.WithTimeout(r.Context(),8*time.Second);defer cancel()
