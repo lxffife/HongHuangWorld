@@ -28,6 +28,7 @@ struct MonsterAttackProfile {
     int recovery_ms{420};
     int cooldown_ms{1500};
     float range{};
+    float splash_radius{};
     const char* style{"melee"};
 };
 
@@ -46,6 +47,8 @@ inline MonsterAttackProfile monster_attack_profile(const MonsterDefinition& defi
         profile.windup_ms = 1000;
         profile.recovery_ms = 900;
         profile.cooldown_ms = 2500;
+        profile.splash_radius = std::min(std::max(definition.attack_range * 2.0F, 3.6F),
+                                         definition.leash_radius - 0.1F);
         profile.style = "heavy_slam";
     } else if (key.find("warrior") != std::string::npos || key.find("战魂") != std::string::npos) {
         profile.windup_ms = 620;
