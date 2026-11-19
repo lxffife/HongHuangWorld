@@ -1,0 +1,11 @@
+asset_id,category,name,source,model_or_tool,format,license_or_rights,project_path,status,notes
+uw_monster_wolf,monster,荒原狼,procedural_original_gdscript,Godot procedural mesh,Godot runtime mesh,original project code,Client/HongHuangClient/scripts/underworld_visual_factory.gd,blockout,Replace with rigged GLB after visual approval
+uw_monster_iron_beast,monster,铁骨兽魂,procedural_original_gdscript,Godot procedural mesh,Godot runtime mesh,original project code,Client/HongHuangClient/scripts/underworld_visual_factory.gd,blockout,Distinct plated quadruped silhouette
+uw_monster_warrior,monster,炽战残魂与战魂,procedural_original_gdscript,Godot procedural mesh,Godot runtime mesh,original project code,Client/HongHuangClient/scripts/underworld_visual_factory.gd,blockout,Humanoid armor silhouette; final rigged model pending
+uw_monster_wraith,monster,游祟与灵识游魂,procedural_original_gdscript,Godot procedural mesh,Godot runtime mesh,original project code,Client/HongHuangClient/scripts/underworld_visual_factory.gd,blockout,Emissive floating soul archetype
+uw_monster_life_soul,monster,生机古魂,procedural_original_gdscript,Godot procedural mesh,Godot runtime mesh,original project code,Client/HongHuangClient/scripts/underworld_visual_factory.gd,blockout,Green life-affinity variant
+uw_monster_wind_soul,monster,疾风游魂,procedural_original_gdscript,Godot procedural mesh,Godot runtime mesh,original project code,Client/HongHuangClient/scripts/underworld_visual_factory.gd,blockout,Cyan wind-affinity variant
+player_humanoid_v1,player,转世人形角色,AI_3D_generation_pending,Meshy 6 Text to 3D,GLB,awaiting generation and rights review,Client/HongHuangClient/assets/models/player/,pending,Estimate 25 credits with rigging; not generated
+underworld_wolf_v1,monster,正式荒原狼,AI_3D_generation_pending,Meshy 6 Text to 3D,GLB,awaiting generation and rights review,Client/HongHuangClient/assets/models/monsters/,pending,Estimate 25 credits without rigging; not generated
+fengdu_gate_v1,building,酆都鬼门关,modular_model_pending,Blender_or_3D_generation,GLB,awaiting creation and rights review,Client/HongHuangClient/assets/models/buildings/,pending,Modular stone gate and roof kit
+mengpo_npc_v1,npc,孟婆,AI_3D_generation_pending,Meshy_or_image_to_3d,GLB,awaiting generation and rights review,Client/HongHuangClient/assets/models/npcs/,pending,Humanoid rig and idle/talk animation
