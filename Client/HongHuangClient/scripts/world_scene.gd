@@ -1056,6 +1056,26 @@ func _create_monster(monster_name: String, monster_level: int) -> Node3D:
 	var monster: Node3D = UnderworldVisualFactory.create_monster(monster_name, monster_level)
 	var is_wraith := monster_name.contains("游祟") or monster_name.contains("幽魂") or monster_name.contains("灵识")
 	var is_war_god := monster_name.contains("战神") or monster_name.contains("战魂")
+	if str(monster.get_meta("visual_archetype", "")) == "iron_beast":
+		var telegraph := MeshInstance3D.new()
+		telegraph.name = "SlamTelegraph"
+		var torus := TorusMesh.new()
+		torus.inner_radius = 0.94
+		torus.outer_radius = 1.0
+		torus.rings = 40
+		torus.ring_segments = 8
+		telegraph.mesh = torus
+		var telegraph_material := StandardMaterial3D.new()
+		telegraph_material.albedo_color = Color("#ff6547", 0.34)
+		telegraph_material.emission_enabled = true
+		telegraph_material.emission = Color("#ff3f2d")
+		telegraph_material.emission_energy_multiplier = 1.2
+		telegraph_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		telegraph_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		telegraph.material_override = telegraph_material
+		telegraph.position.y = 0.075
+		telegraph.visible = false
+		monster.add_child(telegraph)
 	var label := Label3D.new()
 	label.name = "Nameplate"
 	label.text = monster_name + " · Lv." + str(monster_level)
@@ -1698,8 +1718,12 @@ func _on_monster_action_event(event: Dictionary) -> void:
 	var phase := str(event.get("phase", ""))
 	var attack_style := str(event.get("attack_style", "melee"))
 	attacker.set_meta("attack_style", attack_style)
+	if attack_style == "heavy_slam":
+		attacker.set_meta("attack_radius", maxf(float(event.get("attack_radius", 3.6)), 0.5))
 	if phase == "windup":
 		attacker.set_meta("attack_phase", "windup")
+		if attack_style == "heavy_slam":
+			_set_iron_slam_telegraph(attacker, true)
 		var windup := maxf(float(event.get("windup_ms", 520)) / 1000.0, 0.1)
 		attacker.set_meta("attack_phase_duration", windup)
 		attacker.set_meta("attack_phase_time", windup)
@@ -1708,8 +1732,51 @@ func _on_monster_action_event(event: Dictionary) -> void:
 		attacker.set_meta("attack_phase", "impact")
 		attacker.set_meta("attack_phase_duration", 0.2)
 		attacker.set_meta("attack_phase_time", 0.2)
+		if attack_style == "heavy_slam":
+			_set_iron_slam_telegraph(attacker, false)
+			_spawn_iron_slam_impact_visual(attacker, float(attacker.get_meta("attack_radius", 3.6)))
 		if attack_style == "soul_bolt" and str(event.get("target_character_id", "")) == str(HHSession.world_snapshot.get("character_id", "")):
 			_spawn_soul_bolt_visual(attacker)
+
+func _set_iron_slam_telegraph(monster: Node3D, enabled: bool) -> void:
+	var telegraph := monster.get_node_or_null("SlamTelegraph") as MeshInstance3D
+	if not is_instance_valid(telegraph):
+		return
+	telegraph.visible = enabled
+	if enabled:
+		var radius := maxf(float(monster.get_meta("attack_radius", 3.6)), 0.5)
+		telegraph.scale = Vector3.ONE * radius
+		var material := telegraph.material_override as StandardMaterial3D
+		if material != null:
+			material.albedo_color.a = 0.34
+			material.emission_energy_multiplier = 1.2
+
+func _spawn_iron_slam_impact_visual(monster: Node3D, radius: float) -> void:
+	var ring := MeshInstance3D.new()
+	ring.name = "IronSlamImpactRing"
+	var torus := TorusMesh.new()
+	torus.inner_radius = maxf(radius - 0.16, 0.2)
+	torus.outer_radius = maxf(radius - 0.04, 0.24)
+	torus.rings = 36
+	torus.ring_segments = 8
+	ring.mesh = torus
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#ff7048", 0.82)
+	material.emission_enabled = true
+	material.emission = Color("#ff4f32")
+	material.emission_energy_multiplier = 2.4
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring.material_override = material
+	add_child(ring)
+	ring.global_position = monster.global_position + Vector3(0.0, 0.10, 0.0)
+	ring.scale = Vector3.ONE * 0.72
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(ring, "scale", Vector3.ONE, 0.34)
+	tween.tween_property(material, "albedo_color:a", 0.0, 0.34)
+	tween.tween_property(material, "emission_energy_multiplier", 0.0, 0.34)
+	tween.chain().tween_callback(Callable(ring, "queue_free"))
 
 func _spawn_soul_bolt_visual(attacker: Node3D) -> void:
 	if not is_instance_valid(local_player):
@@ -2001,6 +2068,8 @@ func _animate_monster_visuals(delta: float) -> void:
 		var attack_phase_duration := maxf(float(monster.get_meta("attack_phase_duration", 0.2)), 0.1)
 		monster.set_meta("attack_phase_time", attack_phase_time)
 		if attack_phase_time <= 0.0:
+			if attack_phase == "windup" and str(monster.get_meta("attack_style", "")) == "heavy_slam":
+				_set_iron_slam_telegraph(monster, false)
 			if attack_phase == "impact":
 				attack_phase = "recovery"
 				attack_phase_time = maxf(float(monster.get_meta("attack_recovery_duration", 0.42)), 0.1)
@@ -2080,6 +2149,12 @@ func _animate_monster_attack(monster: Node3D, archetype: String, phase: String, 
 			var skull := monster.get_node_or_null("SkullPivot") as Node3D
 			if is_instance_valid(skull):
 				skull.rotation.x = -anticipation * 0.16 - strike * 0.48
+			var telegraph := monster.get_node_or_null("SlamTelegraph") as MeshInstance3D
+			if is_instance_valid(telegraph) and phase == "windup":
+				var telegraph_material := telegraph.material_override as StandardMaterial3D
+				if telegraph_material != null:
+					telegraph_material.albedo_color.a = lerpf(0.30, 0.62, progress)
+					telegraph_material.emission_energy_multiplier = lerpf(1.0, 2.2, progress)
 		"warrior":
 			var arm := monster.get_node_or_null("ArmPivotRight") as Node3D
 			if is_instance_valid(arm):
