@@ -2,7 +2,6 @@ package adminauth
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 )
@@ -27,4 +26,3 @@ func (s *Service) SetUserStatus(ctx context.Context, actor User, targetID, statu
 	return tx.Commit()
 }
 
-var _ = sql.ErrNoRows
