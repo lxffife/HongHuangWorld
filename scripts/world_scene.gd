@@ -39,7 +39,7 @@ var chat_lines_by_channel: Dictionary = {"nearby": [], "world": [], "cross_world
 var chat_seen_ids: Dictionary = {}
 var selected_chat_channel := "nearby"
 
-var local_player: HHPlayerController
+var local_player: Variant
 var hud_visible := true
 var death_panel: PanelContainer
 var death_message_label: Label
@@ -56,6 +56,7 @@ var notification_timer: Timer
 var vitals_known := false
 var input_debug_panel: PanelContainer
 var input_debug_label: Label
+var input_debug_visible := false
 var input_debug_accumulator := 0.0
 var region_update_accumulator := 0.0
 var current_region_name := ""
@@ -580,7 +581,17 @@ func _build_terrain() -> void:
 			add_child(rock)
 
 func _build_player() -> void:
-	local_player = HHPlayerController.new()
+	# Avoid a global class-cache dependency for the player controller. This also
+	# makes a missing/invalid controller report at the point where it is created.
+	var controller_script := load("res://scripts/player_controller.gd") as Script
+	if controller_script == null:
+		push_error("无法加载玩家控制器：res://scripts/player_controller.gd")
+		return
+	var controller_instance: Variant = controller_script.new()
+	if not (controller_instance is CharacterBody3D):
+		push_error("玩家控制器脚本必须继承 CharacterBody3D。")
+		return
+	local_player = controller_instance
 	local_player.name = "LocalPlayer"
 	local_player.position = Vector3(0.0, 0.15, 0.0)
 	add_child(local_player)
@@ -904,7 +915,7 @@ func _update_hud() -> void:
 	var world_id := str(snapshot.get("world_id", ""))
 	var world_name := _world_display_name(world_id)
 	var character_name := str(snapshot.get("name", "初入洪荒"))
-	hud_label.text = "当前世界 · " + world_name + " · 所在区域 " + (current_region_name if not current_region_name.is_empty() else "区域载入中") + "\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\nF NPC交互 · E 拾取 · I 背包 · C 聊天 · 鼠标左键攻击附近怪物 · 首次点击画面锁定鼠标"
+	hud_label.text = "当前世界 · " + world_name + " · 所在区域 " + (current_region_name if not current_region_name.is_empty() else "区域载入中") + "\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\nF NPC交互 · E 拾取 · I 背包 · C 聊天 · 鼠标左键攻击附近怪物 · 首次点击画面锁定鼠标 · F2 网络诊断"
 	_update_compact_hud()
 
 func _exit_tree() -> void:
@@ -1099,6 +1110,12 @@ func _create_drop(item_name: String, quality: int, quantity: int) -> Node3D:
 	return root
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F2:
+		input_debug_visible = not input_debug_visible
+		if is_instance_valid(input_debug_panel):
+			input_debug_panel.visible = hud_visible and input_debug_visible
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F1:
 		hud_visible = not hud_visible
 		$HUD/Panel.visible = hud_visible and details_visible
@@ -1115,7 +1132,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if is_instance_valid(target_info_panel):
 			target_info_panel.visible = hud_visible and not selected_monster_id.is_empty()
 		if is_instance_valid(input_debug_panel):
-			input_debug_panel.visible = hud_visible
+			input_debug_panel.visible = hud_visible and input_debug_visible
 		if is_instance_valid(notification_panel) and not hud_visible:
 			notification_panel.visible = false
 		get_viewport().set_input_as_handled()
@@ -1850,6 +1867,7 @@ func _build_input_debug_hud() -> void:
 	input_debug_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	input_debug_panel.position = Vector2(-238.0, -154.0)
 	input_debug_panel.custom_minimum_size = Vector2(220.0, 126.0)
+	input_debug_panel.visible = false
 	hud.add_child(input_debug_panel)
 	var layout := VBoxContainer.new()
 	layout.add_theme_constant_override("separation", 4)
