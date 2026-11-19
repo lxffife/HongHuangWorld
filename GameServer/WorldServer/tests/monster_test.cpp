@@ -40,6 +40,20 @@ int main() {
     const auto soul_profile = monster_attack_profile(soul);
     assert(soul_profile.range >= 6.0F);
     assert(std::string(soul_profile.style) == "soul_bolt");
+    soul.attack_range = soul_profile.range;
+
+    // Ranged souls approach from outside attack range, then retreat when rushed.
+    MonsterState soul_state{.x = 0.0F, .z = 0.0F, .health = soul.max_health};
+    const MonsterTarget distant_player{.id = "player-ranged", .x = 10.0F, .z = 0.0F, .alive = true};
+    assert(tick_monster(soul, soul_state, &distant_player, 0.05F));
+    assert(soul_state.mode == MonsterMode::Chasing);
+    assert(soul_state.x > 0.0F);
+    soul_state.x = 0.0F;
+    const MonsterTarget close_player{.id = "player-ranged", .x = 3.0F, .z = 0.0F, .alive = true};
+    assert(tick_monster(soul, soul_state, &close_player, 0.05F));
+    assert(soul_state.x < 0.0F);
+    assert(soul_state.yaw < -1.5F);
+    assert(std::hypot(soul_state.x - close_player.x, soul_state.z - close_player.z) > 3.0F);
 
     MonsterState state{.x = 0.0F, .z = 0.0F, .health = 80.0F};
     const MonsterTarget player{.id = "player-1", .x = 8.0F, .z = 0.0F, .alive = true};
