@@ -91,5 +91,8 @@ Windows（在仓库根目录，单独 PowerShell 窗口运行）：
 - Game：`GAME_API_BASE=http://127.0.0.1:8787` + `GAME_ADMIN_INTERNAL_API_KEY`，负责灵魂、历世角色、当前角色和活动世界会话。
 - `GAME_ADMIN_INTERNAL_API_KEY` 必须使用独立随机密钥，不得复用 `WORLD_SERVER_API_KEY` 或 Identity 内部密钥。Game API 启动时会检查该配置。
 - 管理后台玩家详情：`GET /api/v1/admin/players/{account_id}`，需要 `players.read` 权限。该接口会分别请求 Identity 与 Game 服务。
+- 管理后台强制下线：`POST /api/v1/admin/players/{account_id}/disconnect`，需要 `players.ban` 权限。Game 将活动会话标记为 `saving`；WorldServer 下一次周期快照收到 HTTP 409 后断开 ENet 玩家连接、广播离开事件，并提交最终位置/生命值后关闭会话。
+- 封禁账号（`PATCH /api/v1/admin/players/{account_id}/status`，status=`locked`）会同时请求 Game 强制下线；若 Game 服务暂时不可用，账号仍会被锁定，接口响应会明确提示断开请求未送达，可稍后重试。
+- 强制下线是异步请求，接口返回 HTTP 202 和 `requested_sessions` 数量；实际断开在 WorldServer 下一次周期快照时完成（通常约 1 秒内，受节点负载影响）。
 
 修改 `Deployment/.env.example` 后，请同步更新本机 `Deployment/.env` 中的配置，再分别重启 Game API 与 Admin API。
