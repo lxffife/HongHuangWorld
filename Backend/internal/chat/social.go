@@ -238,7 +238,7 @@ func (s *Service) RespondFriendRequest(ctx context.Context, accountID, requestID
 	if accept{
 		if _,err:=tx.ExecContext(ctx,`
 			INSERT INTO chat_friendships(requester_character_id,addressee_character_id)
-			VALUES($1::uuid,$2::uuid),($2::uuid,$1::uuid)
+			VALUES(LEAST($1::uuid,$2::uuid),GREATEST($1::uuid,$2::uuid))
 			ON CONFLICT DO NOTHING`,currentID,requesterID);err!=nil{return fmt.Errorf("create accepted friendship: %w",err)}
 		if _,err:=tx.ExecContext(ctx,`
 			UPDATE chat_friend_requests SET status='cancelled',responded_at=now()
