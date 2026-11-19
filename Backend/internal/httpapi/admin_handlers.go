@@ -163,3 +163,39 @@ func (h *adminHandlers) playerDetail(w http.ResponseWriter, r *http.Request) {
  }
  writeJSON(w,http.StatusOK,map[string]any{"account":account,"game":gameDetail,"audit_logs":auditPage.Items})
 }
+
+func (h *adminHandlers) disconnectPlayer(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.require(w, r, "players.ban")
+	if !ok { return }
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" || len(id) > 64 {
+		http.Error(w, "invalid player id", http.StatusBadRequest)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+	if _, err := h.identity.GetAccount(ctx, id); err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			http.Error(w, "player not found", http.StatusNotFound)
+			return
+		}
+		h.logger.Error("admin disconnect player identity lookup failed", "error", err)
+		http.Error(w, "identity service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	result, err := h.game.DisconnectPlayer(ctx, id)
+	if err != nil {
+		h.logger.Error("admin disconnect player request failed", "error", err)
+		http.Error(w, "game service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if err := h.service.RecordAudit(ctx, actor, "player.disconnect", "player", id, "success", map[string]any{
+		"requested_sessions": result.RequestedSessions,
+		"status": result.Status,
+	}); err != nil {
+		h.logger.Error("record player disconnect audit failed", "error", err)
+		http.Error(w, "disconnect was requested but audit recording failed", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, result)
+}
