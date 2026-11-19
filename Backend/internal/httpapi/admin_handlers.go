@@ -6,6 +6,7 @@ import (
  "log/slog"
  "net"
  "net/http"
+ "strconv"
  "strings"
  "time"
 
@@ -74,3 +75,21 @@ func (h *adminHandlers) setPermissions(w http.ResponseWriter,r *http.Request){
  writeJSON(w,200,map[string]string{"status":"updated"})
 }
 func remoteIP(r *http.Request) string { host,_,err:=net.SplitHostPort(r.RemoteAddr);if err==nil{return host};return "" }
+
+func (h *adminHandlers) listAuditLogs(w http.ResponseWriter, r *http.Request) {
+ if _,ok:=h.require(w,r,"audit.read");!ok{return}
+ q:=r.URL.Query()
+ limit:=50
+ if raw:=q.Get("limit");raw!="" { n,err:=strconv.Atoi(raw);if err!=nil||n<1||n>100{http.Error(w,"limit must be between 1 and 100",http.StatusBadRequest);return};limit=n }
+ offset:=0
+ if raw:=q.Get("offset");raw!="" { n,err:=strconv.Atoi(raw);if err!=nil||n<0||n>1000000{http.Error(w,"invalid offset",http.StatusBadRequest);return};offset=n }
+ result:=q.Get("result");if result!=""&&result!="success"&&result!="failure"&&result!="denied"{http.Error(w,"invalid result filter",http.StatusBadRequest);return}
+ filter:=adminauth.AuditFilter{ActorID:strings.TrimSpace(q.Get("actor_id")),Action:strings.TrimSpace(q.Get("action")),Result:result,Limit:limit,Offset:offset}
+ if raw:=q.Get("from");raw!="" { t,err:=time.Parse(time.RFC3339,raw);if err!=nil{http.Error(w,"from must be RFC3339",http.StatusBadRequest);return};filter.From=&t }
+ if raw:=q.Get("to");raw!="" { t,err:=time.Parse(time.RFC3339,raw);if err!=nil{http.Error(w,"to must be RFC3339",http.StatusBadRequest);return};filter.To=&t }
+ if filter.From!=nil&&filter.To!=nil&&!filter.From.Before(*filter.To){http.Error(w,"from must be earlier than to",http.StatusBadRequest);return}
+ ctx,cancel:=context.WithTimeout(r.Context(),5*time.Second);defer cancel()
+ page,err:=h.service.ListAuditLogs(ctx,filter)
+ if err!=nil{h.logger.Error("list admin audit logs failed","error",err);http.Error(w,"internal server error",http.StatusInternalServerError);return}
+ writeJSON(w,http.StatusOK,page)
+}
