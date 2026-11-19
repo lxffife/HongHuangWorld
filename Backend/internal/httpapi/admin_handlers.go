@@ -12,6 +12,7 @@ import (
 
  "github.com/liflife/HongHuangWorld/Backend/internal/adminauth"
  "github.com/liflife/HongHuangWorld/Backend/internal/identityadmin"
+ "github.com/liflife/HongHuangWorld/Backend/internal/gameadmin"
 )
 
 func (h *adminHandlers) dashboard(w http.ResponseWriter,r *http.Request) {
@@ -22,7 +23,7 @@ func (h *adminHandlers) dashboard(w http.ResponseWriter,r *http.Request) {
  writeJSON(w,http.StatusOK,out)
 }
 
-type adminHandlers struct { service *adminauth.Service; identity *identityadmin.Client; logger *slog.Logger }
+type adminHandlers struct { service *adminauth.Service; identity *identityadmin.Client; game *gameadmin.Client; logger *slog.Logger }
 type adminLoginRequest struct { Username string `json:"username"`; Password string `json:"password"` }
 type adminPasswordRequest struct { CurrentPassword string `json:"current_password"`; NewPassword string `json:"new_password"` }
 type adminCreateUserRequest struct { Username string `json:"username"`; Email string `json:"email"`; Password string `json:"password"` }
@@ -139,4 +140,23 @@ func (h *adminHandlers) setPlayerStatus(w http.ResponseWriter,r *http.Request) {
   http.Error(w,"player status changed but audit recording failed",http.StatusInternalServerError);return
  }
  writeJSON(w,http.StatusOK,map[string]string{"status":req.Status})
+}
+
+func (h *adminHandlers) playerDetail(w http.ResponseWriter, r *http.Request) {
+ if _,ok:=h.require(w,r,"players.read");!ok{return}
+ id:=strings.TrimSpace(r.PathValue("id"))
+ if id=="" || len(id)>64 { http.Error(w,"invalid player id",http.StatusBadRequest);return }
+ ctx,cancel:=context.WithTimeout(r.Context(),8*time.Second);defer cancel()
+ page,err:=h.identity.ListAccounts(ctx,id,100)
+ if err!=nil { h.logger.Error("admin player detail identity lookup failed","error",err);http.Error(w,"identity service unavailable",http.StatusServiceUnavailable);return }
+ var account any
+ for _,item:=range page.Items { if item.ID==id { account=item;break } }
+ if account==nil { http.Error(w,"player not found",http.StatusNotFound);return }
+ gameDetail,err:=h.game.PlayerDetail(ctx,id)
+ if err!=nil {
+  if strings.Contains(err.Error(),"not found") { http.Error(w,"game player not found",http.StatusNotFound);return }
+  h.logger.Error("admin player detail game lookup failed","error",err)
+  http.Error(w,"game service unavailable",http.StatusServiceUnavailable);return
+ }
+ writeJSON(w,http.StatusOK,map[string]any{"account":account,"game":gameDetail})
 }
