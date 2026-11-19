@@ -25,6 +25,7 @@ type CharacterSearchResult struct {
 	WorldID string `json:"world_id"`
 	Level int `json:"level"`
 	IsFriend bool `json:"is_friend"`
+	RequestPending bool `json:"request_pending"`
 }
 
 type Friend struct {
@@ -76,7 +77,10 @@ func (s *Service) SearchCharacters(ctx context.Context, accountID, query string,
 		SELECT c.character_id::text,c.name,c.world_id,c.level,
 			EXISTS(SELECT 1 FROM chat_friendships f
 				WHERE (f.requester_character_id=$1::uuid AND f.addressee_character_id=c.character_id)
-				   OR (f.addressee_character_id=$1::uuid AND f.requester_character_id=c.character_id))
+				   OR (f.addressee_character_id=$1::uuid AND f.requester_character_id=c.character_id)),
+			EXISTS(SELECT 1 FROM chat_friend_requests r
+				WHERE r.status='pending' AND ((r.requester_character_id=$1::uuid AND r.addressee_character_id=c.character_id)
+				   OR (r.addressee_character_id=$1::uuid AND r.requester_character_id=c.character_id)))
 		FROM chat_characters c
 		WHERE c.status='alive' AND c.character_id<>$1::uuid
 			AND c.name ILIKE '%' || $2 || '%'
@@ -92,7 +96,7 @@ func (s *Service) SearchCharacters(ctx context.Context, accountID, query string,
 	items := make([]CharacterSearchResult, 0)
 	for rows.Next() {
 		var item CharacterSearchResult
-		if err := rows.Scan(&item.CharacterID,&item.Name,&item.WorldID,&item.Level,&item.IsFriend); err != nil {
+		if err := rows.Scan(&item.CharacterID,&item.Name,&item.WorldID,&item.Level,&item.IsFriend,&item.RequestPending); err != nil {
 			return nil, fmt.Errorf("scan character search result: %w", err)
 		}
 		items = append(items, item)
