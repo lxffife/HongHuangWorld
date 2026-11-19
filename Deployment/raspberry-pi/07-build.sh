@@ -27,7 +27,7 @@ fi
 if [ "$ADMIN_NEEDS_BUILD" -eq 1 ]; then
   need_cmd npm
   cd "$ADMIN_WEB_DIR"
-  if [ ! -d node_modules ] || { [ -f package-lock.json ] && [ -f node_modules/.package-lock.json ] && [ package-lock.json -nt node_modules/.package-lock.json ]; }; then
+  if [ ! -d node_modules ] || { [ -f package-lock.json ] && { [ ! -f node_modules/.package-lock.json ] || [ package-lock.json -nt node_modules/.package-lock.json ]; }; }; then
     if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
   fi
   npm run build
