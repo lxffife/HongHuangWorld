@@ -45,6 +45,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 	})
 
 	if db != nil {
+		registerGamePlayerAdminRoutes(mux, db, logger)
 		authService := configuredAuthProvider()
 		handlers := &authHandlers{service: authService, logger: logger}
 		chatAPI := &chatHandlers{authService: authService, service: chat.NewService(db), logger: logger}
@@ -123,6 +124,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/servers/sessions/close", entry.closeSession)
 	} else {
 		unavailable := func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "service unavailable", http.StatusServiceUnavailable) }
+		mux.HandleFunc("GET /api/v1/internal/admin/players/{accountID}", unavailable)
 		for _, route := range []string{
 			"POST /api/v1/auth/register", "POST /api/v1/auth/login", "GET /api/v1/account/me",
 			"POST /api/v1/chat/messages", "GET /api/v1/chat/messages", "GET /api/v1/servers/chat/messages", "POST /api/v1/servers/chat/messages",
