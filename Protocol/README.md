@@ -29,6 +29,9 @@
 | 15 | CombatEvent | S→C | 命中、伤害、击败或拒绝原因 |
 | 16 | PickupCommand | C→S | 请求拾取指定地面掉落实体 |
 | 17 | PickupEvent | S→C | 返回拾取结算状态与物品数量 |
+| 18 | ChatSendCommand | C→S | 发送聊天消息 |
+| 19 | ChatEvent | S→C | 聊天消息投递结果与回执 |
+| 20 | MonsterActionEvent | S→C | AOI 范围内怪物攻击动作表现，不携带伤害结算 |
 
 ## ClientHello v1 payload
 
