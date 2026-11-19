@@ -83,12 +83,12 @@ func (h *gamePlayerAdminHandlers) growth(w http.ResponseWriter, r *http.Request)
 		       reincarnation.new_race_id,new_race.name AS new_race_name,
 		       reincarnation.merit_spent,reincarnation.reincarnated_at
 		FROM reincarnation_events reincarnation
-		JOIN characters previous_character ON previous_character.id=event.previous_character_id
-		JOIN characters new_character ON new_character.id=event.new_character_id
-		JOIN world_definitions previous_world ON previous_world.id=event.previous_world_id
-		JOIN world_definitions new_world ON new_world.id=event.new_world_id
-		JOIN race_definitions previous_race ON previous_race.id=event.previous_race_id
-		JOIN race_definitions new_race ON new_race.id=event.new_race_id
+		JOIN characters previous_character ON previous_character.id=reincarnation.previous_character_id
+		JOIN characters new_character ON new_character.id=reincarnation.new_character_id
+		JOIN world_definitions previous_world ON previous_world.id=reincarnation.previous_world_id
+		JOIN world_definitions new_world ON new_world.id=reincarnation.new_world_id
+		JOIN race_definitions previous_race ON previous_race.id=reincarnation.previous_race_id
+		JOIN race_definitions new_race ON new_race.id=reincarnation.new_race_id
 		WHERE reincarnation.soul_id=$1::uuid
 		ORDER BY reincarnation.life_index DESC LIMIT 100`,soulID)
 	if err != nil { adminGrowthQueryError(h.logger,w,"reincarnation history",err); return }
