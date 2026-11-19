@@ -36,6 +36,8 @@ var chat_panel: PanelContainer
 var chat_log: VBoxContainer
 var chat_input: LineEdit
 var chat_status: Label
+var chat_scroll: ScrollContainer
+var chat_toggle_button: Button
 var chat_expanded := false
 var chat_lines_by_channel: Dictionary = {"nearby": [], "world": [], "cross_world": []}
 var chat_seen_ids: Dictionary = {}
@@ -198,6 +200,8 @@ func _ready() -> void:
 	_build_inventory_ui()
 	_build_npc_ui()
 	_build_death_ui()
+	get_viewport().size_changed.connect(_layout_hud)
+	_layout_hud()
 	_request_world_npcs()
 	_show_notification("已进入「" + _world_display_name(str(HHSession.world_snapshot.get("world_id", ""))) + "」", 5.0)
 
@@ -1232,10 +1236,10 @@ func _build_chat_hud() -> void:
 	title.text = "万界传音 · 附近"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	heading.add_child(title)
-	var toggle := Button.new()
-	toggle.text = "展开"
-	toggle.pressed.connect(func(): _set_chat_expanded(not chat_expanded))
-	heading.add_child(toggle)
+	chat_toggle_button = Button.new()
+	chat_toggle_button.text = "展开"
+	chat_toggle_button.pressed.connect(func(): _set_chat_expanded(not chat_expanded))
+	heading.add_child(chat_toggle_button)
 	var channels := HBoxContainer.new()
 	layout.add_child(channels)
 	for channel_data in [["nearby", "附近"], ["world", "世界"], ["cross_world", "跨界"]]:
@@ -1243,13 +1247,14 @@ func _build_chat_hud() -> void:
 		channel_button.text = channel_data[1]
 		channel_button.pressed.connect(_select_chat_channel.bind(str(channel_data[0])))
 		channels.add_child(channel_button)
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(360.0, 132.0)
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	layout.add_child(scroll)
+	chat_scroll = ScrollContainer.new()
+	chat_scroll.custom_minimum_size = Vector2(360.0, 132.0)
+	chat_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	chat_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	layout.add_child(chat_scroll)
 	chat_log = VBoxContainer.new()
 	chat_log.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(chat_log)
+	chat_scroll.add_child(chat_log)
 	var input_row := HBoxContainer.new()
 	layout.add_child(input_row)
 	chat_input = LineEdit.new()
@@ -1272,16 +1277,63 @@ func _set_chat_expanded(expanded: bool) -> void:
 	chat_expanded = expanded
 	if not is_instance_valid(chat_panel):
 		return
-	chat_panel.offset_top = -270.0 if expanded else -66.0
-	chat_panel.offset_bottom = -18.0
-	chat_panel.custom_minimum_size.y = 252.0 if expanded else 48.0
 	for child in chat_panel.get_child(0).get_children():
 		if child is Control and child != chat_panel.get_child(0).get_child(0):
 			child.visible = expanded
-	var heading := chat_panel.get_child(0).get_child(0) as HBoxContainer
-	if heading != null and heading.get_child_count() > 1:
-		var toggle := heading.get_child(1) as Button
-		toggle.text = "收起" if expanded else "展开"
+	if is_instance_valid(chat_toggle_button):
+		chat_toggle_button.text = "收起" if expanded else "展开"
+	_layout_hud()
+
+func _layout_hud() -> void:
+	var viewport_size := get_viewport_rect().size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		return
+
+	# Keep the character card and its controls in a single, non-overlapping
+	# top-left stack. The original fixed Y=118 placed the button over the card.
+	if is_instance_valid(compact_hud_panel):
+		var is_underworld := str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu"
+		var card_width := minf(420.0 if is_underworld else 340.0, maxf(260.0, viewport_size.x - 36.0))
+		var card_height := compact_hud_panel.custom_minimum_size.y
+		compact_hud_panel.position = Vector2(18.0, 18.0)
+		compact_hud_panel.custom_minimum_size = Vector2(card_width, card_height)
+		compact_hud_panel.size = Vector2(card_width, card_height)
+		if is_instance_valid(compact_hud_label):
+			compact_hud_label.custom_minimum_size = Vector2(card_width - 24.0, card_height - 20.0)
+		var controls_y := 18.0 + card_height + 8.0
+		if is_instance_valid(details_toggle_button):
+			details_toggle_button.position = Vector2(18.0, controls_y)
+		if is_instance_valid(soul_choice_button):
+			soul_choice_button.position = Vector2(140.0, controls_y)
+
+	# The chat drawer owns the lower-right corner. Its width and height adapt
+	# to small windows, and the interaction prompt is placed above it.
+	var chat_height := 48.0
+	if chat_expanded:
+		chat_height = minf(330.0, maxf(210.0, viewport_size.y - 48.0))
+	if is_instance_valid(chat_panel):
+		var chat_width := minf(390.0, maxf(260.0, viewport_size.x - 36.0))
+		chat_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+		chat_panel.offset_left = -chat_width - 18.0
+		chat_panel.offset_right = -18.0
+		chat_panel.offset_top = -chat_height - 18.0
+		chat_panel.offset_bottom = -18.0
+		chat_panel.custom_minimum_size = Vector2(chat_width, chat_height)
+		if is_instance_valid(chat_scroll):
+			chat_scroll.custom_minimum_size = Vector2(chat_width - 30.0, maxf(96.0, chat_height - 176.0))
+	if is_instance_valid(npc_interact_button):
+		npc_interact_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+		npc_interact_button.offset_left = -minf(280.0, viewport_size.x - 36.0)
+		npc_interact_button.offset_right = -18.0
+		npc_interact_button.offset_top = -chat_height - 72.0
+		npc_interact_button.offset_bottom = -chat_height - 26.0
+	if is_instance_valid(exploration_open_button):
+		# Keep exploration separate from the health bar at bottom-left.
+		exploration_open_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+		exploration_open_button.offset_left = 18.0
+		exploration_open_button.offset_top = -158.0
+		exploration_open_button.offset_right = 180.0
+		exploration_open_button.offset_bottom = -112.0
 
 func _on_chat_input_submitted(value: String) -> void:
 	var normalized := value.strip_edges()
