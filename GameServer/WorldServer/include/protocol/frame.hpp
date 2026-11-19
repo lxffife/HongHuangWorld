@@ -29,6 +29,7 @@ enum class MessageType : std::uint16_t {
     PickupEvent = 17,
     ChatSendCommand = 18,
     ChatEvent = 19,
+    MonsterActionEvent = 20,
 };
 
 struct Frame {
