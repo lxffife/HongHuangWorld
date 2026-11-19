@@ -1523,7 +1523,7 @@ func _chat_timestamp_sort_value(timestamp: String) -> int:
 	var normalized := timestamp.substr(0, 19).replace("T", " ")
 	var seconds := int(Time.get_unix_time_from_datetime_string(normalized))
 	var fractional_microseconds := 0
-	if timestamp.length() > 20 and timestamp[19] == ".":
+	if timestamp.length() > 20 and timestamp.substr(19, 1) == ".":
 		var fraction_text := timestamp.substr(20).split("Z")[0].split("+")[0].split("-")[0]
 		fraction_text = fraction_text.substr(0, mini(6, fraction_text.length())).lpad(6, "0")
 		if fraction_text.is_valid_int():
