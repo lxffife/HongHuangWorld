@@ -71,6 +71,9 @@ struct MonsterTarget {
     float x{};
     float z{};
     bool alive{true};
+    float approach_x{};
+    float approach_z{};
+    bool has_approach_position{false};
 };
 
 struct MonsterState {
@@ -158,20 +161,35 @@ inline bool tick_monster(const MonsterDefinition& definition, MonsterState& stat
     float dx = destination_x - state.x;
     float dz = destination_z - state.z;
 
+    double movement_attack_range = static_cast<double>(definition.attack_range);
     if (state.mode == MonsterMode::Chasing && target != nullptr) {
-        dx = target->x - state.x;
-        dz = target->z - state.z;
-        distance = std::hypot(static_cast<double>(dx), static_cast<double>(dz));
         const auto profile = monster_attack_profile(definition);
+        const bool wolf_pack_position = std::string(profile.style) == "wolf_lunge" &&
+            target->has_approach_position;
+        const float movement_target_x = wolf_pack_position ? target->approach_x : target->x;
+        const float movement_target_z = wolf_pack_position ? target->approach_z : target->z;
+        dx = movement_target_x - state.x;
+        dz = movement_target_z - state.z;
+        distance = std::hypot(static_cast<double>(dx), static_cast<double>(dz));
+        if (wolf_pack_position) {
+            const double slot_radius = std::hypot(
+                static_cast<double>(target->approach_x - target->x),
+                static_cast<double>(target->approach_z - target->z));
+            movement_attack_range = std::max(0.1, movement_attack_range - slot_radius);
+        }
         if (std::string(profile.style) == "soul_bolt") {
             // Ranged souls kite at roughly 72% of their attack range. They still
             // remain inside attack range, so a windup can complete if the player
             // does not keep closing the gap.
             const double preferred_distance = static_cast<double>(definition.attack_range) * 0.72;
-            retreating = distance < preferred_distance && distance > 0.001;
+            const double target_distance = std::hypot(
+                static_cast<double>(target->x - state.x),
+                static_cast<double>(target->z - state.z));
+            retreating = target_distance < preferred_distance && target_distance > 0.001;
             if (retreating) {
-                dx = -dx;
-                dz = -dz;
+                dx = state.x - target->x;
+                dz = state.z - target->z;
+                distance = target_distance;
             }
         }
     } else {
@@ -203,7 +221,7 @@ inline bool tick_monster(const MonsterDefinition& definition, MonsterState& stat
     double desired_travel = state.mode == MonsterMode::Chasing
         ? (retreating
             ? static_cast<double>(definition.attack_range) * 0.72 - distance
-            : distance - static_cast<double>(definition.attack_range))
+            : distance - movement_attack_range)
         : distance;
     if (retreating) {
         const double from_spawn = std::hypot(
