@@ -124,6 +124,9 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/servers/sessions/close", entry.closeSession)
 	} else {
 		unavailable := func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "service unavailable", http.StatusServiceUnavailable) }
+		mux.HandleFunc("GET /api/v1/internal/admin/worlds", unavailable)
+		mux.HandleFunc("GET /api/v1/internal/admin/worlds/{worldID}/instances", unavailable)
+		mux.HandleFunc("PATCH /api/v1/internal/admin/worlds/{worldID}/state", unavailable)
 		mux.HandleFunc("GET /api/v1/internal/admin/servers/nodes", unavailable)
 		mux.HandleFunc("PATCH /api/v1/internal/admin/servers/nodes/{nodeKey}/state", unavailable)
 		mux.HandleFunc("GET /api/v1/internal/admin/players/online", unavailable)
