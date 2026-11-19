@@ -82,14 +82,14 @@ func restoreConfigSnapshot(ctx context.Context, tx *sql.Tx, resourceType, resour
         var v struct{Name string `json:"name"`;Level int `json:"level"`;MaxHealth float64 `json:"max_health"`;Attack float64 `json:"attack"`;Defense float64 `json:"defense"`;MoveSpeed float64 `json:"move_speed"`;AggroRadius float64 `json:"aggro_radius"`;LeashRadius float64 `json:"leash_radius"`;Enabled bool `json:"enabled"`}
         if err:=json.Unmarshal(snapshot,&v);err!=nil{return err}
         if v.LeashRadius<v.AggroRadius{return fmt.Errorf("invalid monster snapshot")}
-        _,err:=tx.ExecContext(ctx,`UPDATE monster_definitions SET name=$2,level=$3,max_health=$4,attack=$5,defense=$6,move_speed=$7,aggro_radius=$8,leash_radius=$9,enabled=$10,updated_at=now() WHERE id=$1`,resourceID,v.Name,v.Level,v.MaxHealth,v.Attack,v.Defense,v.MoveSpeed,v.AggroRadius,v.LeashRadius,v.Enabled)
-        return err
+        result,err:=tx.ExecContext(ctx,`UPDATE monster_definitions SET name=$2,level=$3,max_health=$4,attack=$5,defense=$6,move_speed=$7,aggro_radius=$8,leash_radius=$9,enabled=$10,updated_at=now() WHERE id=$1`,resourceID,v.Name,v.Level,v.MaxHealth,v.Attack,v.Defense,v.MoveSpeed,v.AggroRadius,v.LeashRadius,v.Enabled)
+        if err!=nil{return err};affected,_:=result.RowsAffected();if affected==0{return errRevisionRollbackConflict};return nil
     case "monster_spawn_point":
         if len(snapshot)==0 { _,err:=tx.ExecContext(ctx,`DELETE FROM world_monster_spawn_points WHERE id=$1`,resourceID);return err }
         var v struct{SpawnX float64 `json:"spawn_x"`;SpawnZ float64 `json:"spawn_z"`;RareSpawn bool `json:"rare_spawn"`;SpawnChancePercent int `json:"spawn_chance_percent"`;RetrySpawnSeconds int `json:"retry_spawn_seconds"`;FirstSpawnDelaySeconds int `json:"first_spawn_delay_seconds"`;Enabled bool `json:"enabled"`}
         if err:=json.Unmarshal(snapshot,&v);err!=nil{return err}
-        _,err:=tx.ExecContext(ctx,`UPDATE world_monster_spawn_points SET spawn_x=$2,spawn_z=$3,rare_spawn=$4,spawn_chance_percent=$5,retry_spawn_seconds=$6,first_spawn_delay_seconds=$7,enabled=$8,updated_at=now() WHERE id=$1`,resourceID,v.SpawnX,v.SpawnZ,v.RareSpawn,v.SpawnChancePercent,v.RetrySpawnSeconds,v.FirstSpawnDelaySeconds,v.Enabled)
-        return err
+        result,err:=tx.ExecContext(ctx,`UPDATE world_monster_spawn_points SET spawn_x=$2,spawn_z=$3,rare_spawn=$4,spawn_chance_percent=$5,retry_spawn_seconds=$6,first_spawn_delay_seconds=$7,enabled=$8,updated_at=now() WHERE id=$1`,resourceID,v.SpawnX,v.SpawnZ,v.RareSpawn,v.SpawnChancePercent,v.RetrySpawnSeconds,v.FirstSpawnDelaySeconds,v.Enabled)
+        if err!=nil{return err};affected,_:=result.RowsAffected();if affected==0{return errRevisionRollbackConflict};return nil
     case "item_definition":
         if len(snapshot)==0 { _,err:=tx.ExecContext(ctx,`DELETE FROM item_definitions WHERE id=$1`,resourceID);return err }
         var v struct{Name string `json:"name"`;Description string `json:"description"`;IconKey string `json:"icon_key"`;MaxStack int `json:"max_stack"`;Enabled bool `json:"enabled"`}
@@ -97,8 +97,8 @@ func restoreConfigSnapshot(ctx context.Context, tx *sql.Tx, resourceType, resour
         var used int
         if err:=tx.QueryRowContext(ctx,`SELECT GREATEST(COALESCE((SELECT MAX(quantity) FROM character_inventory WHERE item_id=$1),0),COALESCE((SELECT MAX(max_quantity) FROM monster_loot_entries WHERE item_id=$1),0),COALESCE((SELECT MAX(quantity) FROM ground_drops WHERE item_id=$1 AND status='available'),0))`,resourceID).Scan(&used);err!=nil{return err}
         if v.MaxStack<used{return errRevisionRollbackConflict}
-        _,err:=tx.ExecContext(ctx,`UPDATE item_definitions SET name=$2,description=$3,icon_key=$4,max_stack=$5,enabled=$6,updated_at=now() WHERE id=$1`,resourceID,v.Name,v.Description,v.IconKey,v.MaxStack,v.Enabled)
-        return err
+        result,err:=tx.ExecContext(ctx,`UPDATE item_definitions SET name=$2,description=$3,icon_key=$4,max_stack=$5,enabled=$6,updated_at=now() WHERE id=$1`,resourceID,v.Name,v.Description,v.IconKey,v.MaxStack,v.Enabled)
+        if err!=nil{return err};affected,_:=result.RowsAffected();if affected==0{return errRevisionRollbackConflict};return nil
     case "monster_loot_entry":
         parts:=strings.SplitN(resourceID,":",2);if len(parts)!=2{return fmt.Errorf("invalid loot revision identity")}
         if len(snapshot)==0 { _,err:=tx.ExecContext(ctx,`DELETE FROM monster_loot_entries WHERE monster_id=$1 AND item_id=$2`,parts[0],parts[1]);return err }
