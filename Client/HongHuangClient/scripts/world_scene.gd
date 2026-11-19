@@ -1,6 +1,7 @@
 extends Node3D
 
 const UnderworldVisualFactory = preload("res://scripts/underworld_visual_factory.gd")
+const VisualModelLibrary = preload("res://scripts/visual_model_library.gd")
 const QingyunVisualFactory = preload("res://scripts/qingyun_visual_factory.gd")
 const FriendPanelScript = preload("res://scripts/friend_panel.gd")
 
@@ -1059,7 +1060,28 @@ func _create_monster(monster_name: String, monster_level: int) -> Node3D:
 	var archetype := str(visual_root.get_meta("visual_archetype", ""))
 	var is_wraith := archetype in ["life_soul", "wind_soul", "fire_soul", "frost_soul", "wraith"]
 	var is_war_god := monster_name.contains("战神") or monster_name.contains("战魂")
-	if str(visual_root.get_meta("visual_archetype", "")) == "iron_beast":
+	if archetype in ["fire_soul", "frost_soul"]:
+		var elemental_telegraph := MeshInstance3D.new()
+		elemental_telegraph.name = "ElementalTelegraph"
+		var elemental_ring := TorusMesh.new()
+		elemental_ring.inner_radius = 0.54
+		elemental_ring.outer_radius = 0.62
+		elemental_ring.rings = 36
+		elemental_ring.ring_segments = 8
+		elemental_telegraph.mesh = elemental_ring
+		var elemental_material := StandardMaterial3D.new()
+		var elemental_color := Color("#ff9b42") if archetype == "fire_soul" else Color("#72dfff")
+		elemental_material.albedo_color = Color(elemental_color.r, elemental_color.g, elemental_color.b, 0.28)
+		elemental_material.emission_enabled = true
+		elemental_material.emission = elemental_color
+		elemental_material.emission_energy_multiplier = 1.1
+		elemental_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		elemental_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		elemental_telegraph.material_override = elemental_material
+		elemental_telegraph.position.y = 0.07
+		elemental_telegraph.visible = false
+		visual_root.add_child(elemental_telegraph)
+	if archetype == "iron_beast":
 		var telegraph := MeshInstance3D.new()
 		telegraph.name = "SlamTelegraph"
 		var torus := TorusMesh.new()
@@ -1942,6 +1964,8 @@ func _on_monster_action_event(event: Dictionary) -> void:
 		attacker.set_meta("attack_phase", "windup")
 		if attack_style == "heavy_slam":
 			_set_iron_slam_telegraph(attacker, true)
+		if attack_style == "soul_bolt":
+			_set_elemental_telegraph(attacker, true)
 		var windup := maxf(float(event.get("windup_ms", 520)) / 1000.0, 0.1)
 		attacker.set_meta("attack_phase_duration", windup)
 		attacker.set_meta("attack_phase_time", windup)
@@ -1953,8 +1977,28 @@ func _on_monster_action_event(event: Dictionary) -> void:
 		if attack_style == "heavy_slam":
 			_set_iron_slam_telegraph(attacker, false)
 			_spawn_iron_slam_impact_visual(attacker, float(attacker.get_meta("attack_radius", 3.6)))
-		if attack_style == "soul_bolt" and str(event.get("target_character_id", "")) == str(HHSession.world_snapshot.get("character_id", "")):
-			_spawn_soul_bolt_visual(attacker)
+		if attack_style == "soul_bolt":
+			_set_elemental_telegraph(attacker, false)
+			if str(event.get("target_character_id", "")) == str(HHSession.world_snapshot.get("character_id", "")):
+				_spawn_soul_bolt_visual(attacker)
+
+func _set_elemental_telegraph(monster: Node3D, enabled: bool) -> void:
+	var telegraph := monster.get_node_or_null("ElementalTelegraph") as MeshInstance3D
+	if not is_instance_valid(telegraph):
+		return
+	telegraph.visible = enabled
+	if enabled:
+		telegraph.scale = Vector3.ONE * 0.88
+		var tween := create_tween()
+		tween.set_loops()
+		tween.tween_property(telegraph, "scale", Vector3.ONE * 1.16, 0.32)
+		tween.tween_property(telegraph, "scale", Vector3.ONE * 0.88, 0.32)
+		telegraph.set_meta("pulse_tween", tween)
+	else:
+		var active_tween: Variant = telegraph.get_meta("pulse_tween", null)
+		if active_tween is Tween and active_tween.is_running():
+			(active_tween as Tween).kill()
+		telegraph.scale = Vector3.ONE
 
 func _set_iron_slam_telegraph(monster: Node3D, enabled: bool) -> void:
 	var telegraph := monster.get_node_or_null("SlamTelegraph") as MeshInstance3D
@@ -2046,6 +2090,7 @@ func _on_combat_event(event: Dictionary) -> void:
 	if monsters.has(hit_target_id):
 		var hit_monster := monsters[hit_target_id] as Node3D
 		hit_monster.set_meta("hit_reaction_time", 0.24)
+		_spawn_monster_hit_visual(hit_monster, bool(event.get("critical", false)))
 		if bool(event.get("defeated", false)):
 			hit_monster.set_meta("death_reaction_time", 1.15)
 			hit_monster.set_meta("defeated_visual", true)
@@ -2075,6 +2120,43 @@ func _on_combat_event(event: Dictionary) -> void:
 	else:
 		_show_notification("命中 " + monster_name + " · 造成 " + str(damage) + " 点伤害")
 
+
+func _spawn_monster_hit_visual(monster: Node3D, critical: bool) -> void:
+	if not is_instance_valid(monster):
+		return
+	var archetype := str(monster.get_meta("visual_archetype", ""))
+	var tint := Color("#ffdf9a")
+	if archetype == "frost_soul":
+		tint = Color("#9ceaff")
+	elif archetype == "fire_soul":
+		tint = Color("#ff9b55")
+	elif archetype == "life_soul":
+		tint = Color("#a7ffc0")
+	elif archetype == "wind_soul":
+		tint = Color("#9affed")
+	var flash := MeshInstance3D.new()
+	flash.name = "MonsterHitFlash"
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.20 if critical else 0.14
+	mesh.height = mesh.radius * 2.0
+	mesh.radial_segments = 16
+	mesh.rings = 8
+	flash.mesh = mesh
+	var material := StandardMaterial3D.new()
+	material.albedo_color = tint
+	material.emission_enabled = true
+	material.emission = tint
+	material.emission_energy_multiplier = 2.8 if critical else 1.8
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	flash.material_override = material
+	add_child(flash)
+	flash.global_position = monster.global_position + Vector3(0.0, 1.0, 0.0)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(flash, "scale", Vector3.ONE * (2.3 if critical else 1.65), 0.22)
+	tween.tween_property(material, "albedo_color:a", 0.0, 0.22)
+	tween.tween_property(material, "emission_energy_multiplier", 0.0, 0.22)
+	tween.chain().tween_callback(Callable(flash, "queue_free"))
 
 func _spawn_combat_number(amount: int, incoming: bool, critical: bool) -> void:
 	if amount <= 0:
@@ -2156,6 +2238,7 @@ func _create_remote_player(character_name: String) -> Node3D:
 		var orb := SphereMesh.new()
 		orb.radius = 0.34
 		orb.height = 0.68
+		body.name = "RemoteBody"
 		body.mesh = orb
 		var spirit_material := StandardMaterial3D.new()
 		spirit_material.albedo_color = Color(0.36, 0.72, 1.0, 0.72)
@@ -2167,6 +2250,7 @@ func _create_remote_player(character_name: String) -> Node3D:
 		body.material_override = spirit_material
 		body.position.y = 0.42
 		var halo := MeshInstance3D.new()
+		halo.name = "RemoteHalo"
 		var torus := TorusMesh.new()
 		torus.inner_radius = 0.42
 		torus.outer_radius = 0.47
@@ -2182,6 +2266,7 @@ func _create_remote_player(character_name: String) -> Node3D:
 		halo.position.y = 0.42
 		remote.add_child(halo)
 	else:
+		body.name = "RemoteBody"
 		var capsule := CapsuleMesh.new()
 		capsule.radius = 0.4
 		capsule.height = 1.75
@@ -2191,6 +2276,8 @@ func _create_remote_player(character_name: String) -> Node3D:
 		body.material_override = material
 		body.position.y = 0.88
 	remote.add_child(body)
+	remote.set_meta("is_underworld", is_underworld)
+	remote.set_meta("remote_animation_time", 0.0)
 	var label := Label3D.new()
 	label.text = character_name
 	label.position.y = 1.15 if is_underworld else 2.0
@@ -2243,9 +2330,20 @@ func _process(delta: float) -> void:
 	for character_id in remote_players:
 		var remote: Node3D = remote_players[character_id]
 		var target: Vector3 = remote_targets.get(character_id, remote.position)
+		var remote_moving := remote.position.distance_to(target) > 0.035
 		remote.position = remote.position.lerp(target, minf(delta * 14.0, 1.0))
 		var target_yaw := float(remote_yaws.get(character_id, remote.rotation.y))
 		remote.rotation.y = lerp_angle(remote.rotation.y, target_yaw, minf(delta * 12.0, 1.0))
+		var remote_time := float(remote.get_meta("remote_animation_time", 0.0)) + delta
+		remote.set_meta("remote_animation_time", remote_time)
+		var remote_body := remote.get_node_or_null("RemoteBody") as MeshInstance3D
+		if is_instance_valid(remote_body):
+			var base_y := 0.42 if bool(remote.get_meta("is_underworld", false)) else 0.88
+			var bob := sin(remote_time * (9.0 if remote_moving else 1.8)) * (0.035 if remote_moving else 0.012)
+			remote_body.position.y = base_y + bob
+		var remote_halo := remote.get_node_or_null("RemoteHalo") as MeshInstance3D
+		if is_instance_valid(remote_halo):
+			remote_halo.rotation.y += delta * (1.05 if remote_moving else 0.34)
 	for monster_id in monsters:
 		var monster: Node3D = monsters[monster_id]
 		var target: Vector3 = monster_targets.get(monster_id, monster.position)
