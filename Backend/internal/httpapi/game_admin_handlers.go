@@ -174,6 +174,7 @@ type adminOnlinePlayer struct {
 	UDPPort int `json:"udp_port"`
 	Region string `json:"region"`
 	NodeStatus string `json:"node_status"`
+	HeartbeatAt time.Time `json:"heartbeat_at"`
 	Capacity int `json:"capacity"`
 	CurrentPlayers int `json:"current_players"`
 }
@@ -185,7 +186,7 @@ func (h *gamePlayerAdminHandlers) online(w http.ResponseWriter, r *http.Request)
 	rows, err := h.db.QueryContext(ctx, `
 		SELECT soul.account_id::text, c.id::text, c.name, c.level, c.world_id,
 		       wd.name, ws.id::text, ws.connected_at, sr.node_key, sr.host,
-		       sr.udp_port, sr.region, sr.status, sr.capacity, sr.current_players
+		       sr.udp_port, sr.region, CASE WHEN sr.last_heartbeat_at < now() - interval '30 seconds' THEN 'offline' ELSE sr.status END, sr.last_heartbeat_at, sr.capacity, sr.current_players
 		FROM world_sessions ws
 		JOIN characters c ON c.id = ws.character_id
 		JOIN souls soul ON soul.id = c.soul_id
@@ -204,7 +205,7 @@ func (h *gamePlayerAdminHandlers) online(w http.ResponseWriter, r *http.Request)
 	items := make([]adminOnlinePlayer, 0)
 	for rows.Next() {
 		var item adminOnlinePlayer
-		if err := rows.Scan(&item.AccountID, &item.CharacterID, &item.CharacterName, &item.Level, &item.WorldID, &item.WorldName, &item.SessionID, &item.ConnectedAt, &item.NodeKey, &item.Host, &item.UDPPort, &item.Region, &item.NodeStatus, &item.Capacity, &item.CurrentPlayers); err != nil {
+		if err := rows.Scan(&item.AccountID, &item.CharacterID, &item.CharacterName, &item.Level, &item.WorldID, &item.WorldName, &item.SessionID, &item.ConnectedAt, &item.NodeKey, &item.Host, &item.UDPPort, &item.Region, &item.NodeStatus, &item.HeartbeatAt, &item.Capacity, &item.CurrentPlayers); err != nil {
 			h.logger.Error("scan game admin online player failed", "error", err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
