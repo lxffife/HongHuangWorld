@@ -23,6 +23,23 @@ int main() {
         .spawn_z = 0.0F
     };
     assert(valid_monster_definition(wolf));
+    const auto wolf_profile = monster_attack_profile(wolf);
+    assert(wolf_profile.windup_ms == 320 && wolf_profile.cooldown_ms == 900);
+    assert(std::string(wolf_profile.style) == "wolf_lunge");
+
+    auto iron_beast = wolf;
+    iron_beast.id = "iron_beast";
+    iron_beast.name = "铁骨兽";
+    const auto iron_profile = monster_attack_profile(iron_beast);
+    assert(iron_profile.windup_ms > wolf_profile.windup_ms);
+    assert(std::string(iron_profile.style) == "heavy_slam");
+
+    auto soul = wolf;
+    soul.id = "wind_soul";
+    soul.name = "风系游魂";
+    const auto soul_profile = monster_attack_profile(soul);
+    assert(soul_profile.range >= 6.0F);
+    assert(std::string(soul_profile.style) == "soul_bolt");
 
     MonsterState state{.x = 0.0F, .z = 0.0F, .health = 80.0F};
     const MonsterTarget player{.id = "player-1", .x = 8.0F, .z = 0.0F, .alive = true};
