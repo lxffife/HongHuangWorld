@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+type adminServiceProbeTarget struct {
+	name string
+	base string
+}
+
 type serviceHealthItem struct {
 	Name      string    `json:"name"`
 	Status    string    `json:"status"`
@@ -22,11 +27,7 @@ func (h *adminHandlers) serviceHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type serviceProbeTarget struct {
-		name string
-		base string
-	}
-	targets := []serviceProbeTarget{
+	targets := []adminServiceProbeTarget{
 		{name: "identity", base: serviceBaseURL("IDENTITY_API_BASE", "http://127.0.0.1:8789")},
 		{name: "game", base: serviceBaseURL("GAME_API_BASE", "http://127.0.0.1:8787")},
 		{name: "chat", base: serviceBaseURL("CHAT_API_BASE", "http://127.0.0.1:8788")},
@@ -46,7 +47,7 @@ func (h *adminHandlers) serviceHealth(w http.ResponseWriter, r *http.Request) {
 	var wg sync.WaitGroup
 	for i, probeTarget := range targets {
 		wg.Add(1)
-		go func(index int, dependency serviceProbeTarget) {
+		go func(index int, dependency adminServiceProbeTarget) {
 			defer wg.Done()
 			results[index+1] = probeAdminDependency(r.Context(), dependency.name, dependency.base)
 		}(i, probeTarget)
