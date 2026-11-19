@@ -1415,7 +1415,7 @@ func _on_lobby_preview_input(event: InputEvent) -> void:
 		lobby_preview_dragging = event.pressed
 		lobby_preview_last_mouse = event.position
 	elif event is InputEventMouseMotion and lobby_preview_dragging and is_instance_valid(lobby_preview_root):
-		var delta := event.position - lobby_preview_last_mouse
+		var delta: Vector2 = event.position - lobby_preview_last_mouse
 		lobby_preview_root.rotation.y += delta.x * 0.012
 		lobby_preview_last_mouse = event.position
 
