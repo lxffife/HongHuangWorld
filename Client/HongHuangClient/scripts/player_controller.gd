@@ -427,14 +427,21 @@ func _process(delta: float) -> void:
 	if not soul_form_enabled and is_instance_valid(player_humanoid):
 		humanoid_animation_time += delta
 		var moving := current_move_input.length() > 0.08
-		var stride := sin(humanoid_animation_time * (9.0 if moving else 2.0))
-		var left_arm := player_humanoid.get_node_or_null("Arm-1.0") as Node3D
-		var right_arm := player_humanoid.get_node_or_null("Arm1.0") as Node3D
+		var stride := sin(humanoid_animation_time * (9.0 if moving else 1.8))
+		var swing := stride * 0.42 if moving else 0.0
+		var left_arm := player_humanoid.get_node_or_null("ArmPivotLeft") as Node3D
+		var right_arm := player_humanoid.get_node_or_null("ArmPivotRight") as Node3D
+		var left_leg := player_humanoid.get_node_or_null("LegPivotLeft") as Node3D
+		var right_leg := player_humanoid.get_node_or_null("LegPivotRight") as Node3D
 		if is_instance_valid(left_arm):
-			left_arm.rotation.x = stride * 0.34 if moving else sin(humanoid_animation_time * 1.2) * 0.025
+			left_arm.rotation.x = swing if moving else sin(humanoid_animation_time * 1.1) * 0.018
 		if is_instance_valid(right_arm):
-			right_arm.rotation.x = -stride * 0.34 if moving else sin(humanoid_animation_time * 1.2 + 0.6) * 0.025
-		player_humanoid.position.y = -0.9 + (absf(stride) * 0.035 if moving else sin(humanoid_animation_time * 1.8) * 0.012)
+			right_arm.rotation.x = -swing if moving else sin(humanoid_animation_time * 1.1 + 0.5) * 0.018
+		if is_instance_valid(left_leg):
+			left_leg.rotation.x = -swing * 0.82
+		if is_instance_valid(right_leg):
+			right_leg.rotation.x = swing * 0.82
+		player_humanoid.position.y = -0.9 + (absf(stride) * 0.045 if moving else sin(humanoid_animation_time * 1.8) * 0.012)
 	if not soul_form_enabled or not is_instance_valid(visual):
 		return
 	soul_form_time += delta
