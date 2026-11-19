@@ -20,6 +20,8 @@ func TestAdminRoutesUnavailableWithoutDatabase(t *testing.T) {
   {http.MethodGet,"/api/v1/admin/users"},
   {http.MethodPost,"/api/v1/admin/users"},
   {http.MethodGet,"/api/v1/admin/permissions"},
+  {http.MethodGet,"/api/v1/admin/game-config/npcs"},
+  {http.MethodPatch,"/api/v1/admin/game-config/npcs/fengdu_soul_guide/state"},
   {http.MethodGet,"/api/v1/admin/worlds"},
   {http.MethodGet,"/api/v1/admin/worlds/underworld_fengdu/instances"},
   {http.MethodPatch,"/api/v1/admin/worlds/underworld_fengdu/state"},
@@ -42,4 +44,6 @@ func TestAdminPermissionChecks(t *testing.T) {
  if hasPermission(user,"servers.manage"){t.Fatal("node management must require its own permission")}
  if !hasPermission(adminauth.User{IsSuperAdmin:true},"worlds.manage"){t.Fatal("super administrator should have world management permission")}
  if hasPermission(user,"worlds.manage"){t.Fatal("world management must require its own permission")}
+ if !hasPermission(adminauth.User{IsSuperAdmin:true},"game_config.manage"){t.Fatal("super administrator should have game config permission")}
+ if hasPermission(user,"game_config.manage"){t.Fatal("game config management must require its own permission")}
 }
