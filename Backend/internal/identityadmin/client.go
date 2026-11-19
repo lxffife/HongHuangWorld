@@ -52,3 +52,19 @@ func (c *Client) SetAccountStatus(ctx context.Context,id,status string) error {
 	if resp.StatusCode<200||resp.StatusCode>=300{return fmt.Errorf("%w: identity returned %d",ErrUnavailable,resp.StatusCode)}
 	return nil
 }
+
+func (c *Client) GetAccount(ctx context.Context, id string) (Account, error) {
+ if !c.ready() { return Account{}, ErrUnavailable }
+ endpoint:=c.baseURL+"/api/v1/internal/admin/accounts/"+url.PathEscape(id)
+ req,err:=http.NewRequestWithContext(ctx,http.MethodGet,endpoint,nil)
+ if err!=nil { return Account{},err }
+ req.Header.Set("X-Identity-Service-Key",c.apiKey)
+ resp,err:=c.httpClient.Do(req)
+ if err!=nil { return Account{},fmt.Errorf("%w: %v",ErrUnavailable,err) }
+ defer resp.Body.Close()
+ if resp.StatusCode==http.StatusNotFound { return Account{},fmt.Errorf("identity account not found") }
+ if resp.StatusCode!=http.StatusOK { return Account{},fmt.Errorf("%w: identity returned %d",ErrUnavailable,resp.StatusCode) }
+ var account Account
+ if err:=json.NewDecoder(resp.Body).Decode(&account);err!=nil { return Account{},err }
+ return account,nil
+}
