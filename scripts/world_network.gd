@@ -214,7 +214,8 @@ func _on_frame_received(bytes: PackedByteArray) -> void:
 			var target_id := str(monster_action.get("target_character_id", "")) if monster_action is Dictionary else ""
 			var source := str(monster_action.get("source", "")) if monster_action is Dictionary else ""
 			var action := str(monster_action.get("action", "")) if monster_action is Dictionary else ""
-			if monster_action is Dictionary and not source_id.is_empty() and source_id.length() <= 96 and not target_id.is_empty() and target_id.length() <= 96 and source == "monster" and action == "attack":
+			var phase := str(monster_action.get("phase", "")) if monster_action is Dictionary else ""
+			if monster_action is Dictionary and not source_id.is_empty() and source_id.length() <= 96 and not target_id.is_empty() and target_id.length() <= 96 and source == "monster" and action == "attack" and phase in ["windup", "impact"]:
 				monster_action_event.emit(monster_action)
 			else:
 				rejected.emit("收到无效的 MonsterActionEvent。")
