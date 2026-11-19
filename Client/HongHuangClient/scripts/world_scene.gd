@@ -42,6 +42,7 @@ var chat_unread_badge: Label
 var chat_unread_count := 0
 var chat_expanded := false
 var chat_restore_mouse_captured := false
+var chat_order_sequence := 0
 var chat_lines_by_channel: Dictionary = {"nearby": [], "world": [], "cross_world": []}
 var chat_seen_ids: Dictionary = {}
 var selected_chat_channel := "nearby"
@@ -1409,6 +1410,8 @@ func _select_chat_channel(channel: String) -> void:
 	var names := {"nearby": "附近", "world": "世界", "cross_world": "跨界"}
 	chat_input.placeholder_text = "输入" + str(names[channel]) + "消息（最多 200 字）"
 	_render_chat_lines()
+	if chat_expanded:
+		call_deferred("_scroll_chat_to_bottom")
 	if channel == "nearby":
 		chat_status.text = "附近频道 · 仅当前实例 AOI 范围内可见"
 	elif HHChatNetwork.socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
@@ -1496,13 +1499,14 @@ func _append_chat_line(line: String, channel: String = "", message_id: String = 
 	var timestamp := created_at
 	if timestamp.is_empty():
 		timestamp = Time.get_datetime_string_from_system(true)
-	var entry := {"text": line, "id": message_id, "created_at": timestamp, "sort_time": _chat_timestamp_sort_value(timestamp)}
+	chat_order_sequence += 1
+	var entry := {"text": line, "id": message_id, "created_at": timestamp, "sort_time": _chat_timestamp_sort_value(timestamp), "sequence": chat_order_sequence}
 	lines.append(entry)
 	lines.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		var a_time := int(a.get("sort_time", 0))
 		var b_time := int(b.get("sort_time", 0))
 		if a_time == b_time:
-			return str(a.get("id", "")) < str(b.get("id", ""))
+			return int(a.get("sequence", 0)) < int(b.get("sequence", 0))
 		return a_time < b_time
 	)
 	while lines.size() > 40:
@@ -1515,9 +1519,16 @@ func _append_chat_line(line: String, channel: String = "", message_id: String = 
 
 func _chat_timestamp_sort_value(timestamp: String) -> int:
 	if timestamp.is_empty() or timestamp.length() < 19:
-		return int(Time.get_unix_time_from_system())
+		return int(Time.get_unix_time_from_system()) * 1000000
 	var normalized := timestamp.substr(0, 19).replace("T", " ")
-	return int(Time.get_unix_time_from_datetime_string(normalized))
+	var seconds := int(Time.get_unix_time_from_datetime_string(normalized))
+	var fractional_microseconds := 0
+	if timestamp.length() > 20 and timestamp[19] == ".":
+		var fraction_text := timestamp.substr(20).split("Z")[0].split("+")[0].split("-")[0]
+		fraction_text = fraction_text.substr(0, mini(6, fraction_text.length())).lpad(6, "0")
+		if fraction_text.is_valid_int():
+			fractional_microseconds = int(fraction_text)
+	return seconds * 1000000 + fractional_microseconds
 
 func _scroll_chat_to_bottom() -> void:
 	if not is_instance_valid(chat_scroll):
