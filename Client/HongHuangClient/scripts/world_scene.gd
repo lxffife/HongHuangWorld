@@ -1745,7 +1745,8 @@ func _set_iron_slam_telegraph(monster: Node3D, enabled: bool) -> void:
 	telegraph.visible = enabled
 	if enabled:
 		var radius := maxf(float(monster.get_meta("attack_radius", 3.6)), 0.5)
-		telegraph.scale = Vector3.ONE * radius
+		var parent_scale := maxf(absf(monster.scale.x), 0.01)
+		telegraph.scale = Vector3.ONE * (radius / parent_scale)
 		var material := telegraph.material_override as StandardMaterial3D
 		if material != null:
 			material.albedo_color.a = 0.34
