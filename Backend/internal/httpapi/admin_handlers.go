@@ -120,6 +120,20 @@ func (h *adminHandlers) listPlayers(w http.ResponseWriter,r *http.Request) {
  writeJSON(w,http.StatusOK,page)
 }
 
+func (h *adminHandlers) listOnlinePlayers(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.require(w, r, "players.read"); !ok { return }
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+	result, err := h.game.OnlinePlayers(ctx)
+	if err != nil {
+		h.logger.Error("admin online player lookup failed", "error", err)
+		http.Error(w, "game service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(result)
+}
 func (h *adminHandlers) setPlayerStatus(w http.ResponseWriter,r *http.Request) {
  actor,ok:=h.require(w,r,"players.ban");if !ok{return}
  var req struct { Status string `json:"status"`; Reason string `json:"reason"` }
