@@ -124,13 +124,15 @@ func (h *gamePlayerAdminHandlers) growth(w http.ResponseWriter, r *http.Request)
 	if err != nil { adminGrowthQueryError(h.logger,w,"birth inheritance",err); return }
 
 	writeJSON(w,http.StatusOK,map[string]any{
-		"current_body": firstAdminRow(currentBody),\n\t\t"essence": firstAdminRow(essence),
+		"current_body": firstAdminRow(currentBody),
+		"essence": firstAdminRow(essence),
 		"inheritance_attributes": firstAdminRow(inheritance),
 		"absorption_progress": progress,
 		"absorption_records": absorptions,
 		"mutation_records": mutations,
 		"fusion_records": fusions,
-		"birth_inheritance": births,\n\t\t"reincarnations": reincarnations,
+		"birth_inheritance": births,
+		"reincarnations": reincarnations,
 		"limits": map[string]int{"absorption_records":100,"mutation_records":50,"fusion_records":50,"birth_inheritance":100},
 	})
 }
