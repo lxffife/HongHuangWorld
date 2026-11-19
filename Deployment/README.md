@@ -85,7 +85,7 @@ Windows（在仓库根目录，单独 PowerShell 窗口运行）：
 
 
 
-### WorldServer 节点管理\n\n- `GET /api/v1/admin/servers/nodes`：需要 `servers.read` 权限，返回节点地址、UDP 端口、区域、世界实例、容量、心跳、在线会话数、连接中/保存中的会话数和有效状态。\n- `PATCH /api/v1/admin/servers/nodes/{node_key}/state`：需要 `servers.manage` 权限，JSON 请求体为 `{"admin_state":"normal|draining|disabled"}`。\n- `normal`：恢复正常接入；若心跳已过期，节点和实例仍显示离线，待下一次有效心跳恢复。\n- `draining`：停止给该节点签发/兑换新世界入口票据，但不强制断开现有玩家，适用于计划维护。\n- `disabled`：节点停止接入新玩家，并将现有 active 会话标记为 `saving`，由 WorldServer 快照链路优雅下线。\n- WorldServer 后续心跳不会覆盖管理员设置的 `draining` / `disabled` 状态；解除维护必须由有权限的管理员显式设置为 `normal`。\n### 管理后台在线玩家监控
+### 世界与世界实例管理\n\n- `GET /api/v1/admin/worlds`：需要 `worlds.read`，返回世界类型、等级、启用状态、实例数量、可用实例数量和在线会话数。\n- `GET /api/v1/admin/worlds/{world_id}/instances`：需要 `worlds.read`，查看该世界的实例、节点地址、心跳、有效状态和会话数量。\n- `PATCH /api/v1/admin/worlds/{world_id}/state`：需要 `worlds.manage`，请求体为 `{"enabled":true|false}`。\n- 停用世界会在同一 Game 数据库事务中关闭世界入口、将实例置为 draining、把活动会话标记为 saving，并作废未兑换的入口票据；WorldServer 通过既有快照/HTTP 409 链路优雅断开。\n- 重新启用只恢复世界定义，不会伪造实例在线状态；实例必须等待 WorldServer 下一次有效心跳才会恢复 ready。\n\n### WorldServer 节点管理\n\n- `GET /api/v1/admin/servers/nodes`：需要 `servers.read` 权限，返回节点地址、UDP 端口、区域、世界实例、容量、心跳、在线会话数、连接中/保存中的会话数和有效状态。\n- `PATCH /api/v1/admin/servers/nodes/{node_key}/state`：需要 `servers.manage` 权限，JSON 请求体为 `{"admin_state":"normal|draining|disabled"}`。\n- `normal`：恢复正常接入；若心跳已过期，节点和实例仍显示离线，待下一次有效心跳恢复。\n- `draining`：停止给该节点签发/兑换新世界入口票据，但不强制断开现有玩家，适用于计划维护。\n- `disabled`：节点停止接入新玩家，并将现有 active 会话标记为 `saving`，由 WorldServer 快照链路优雅下线。\n- WorldServer 后续心跳不会覆盖管理员设置的 `draining` / `disabled` 状态；解除维护必须由有权限的管理员显式设置为 `normal`。\n### 管理后台在线玩家监控
 
 - `GET /api/v1/admin/players/online`：需要管理员 `players.read` 权限。
 - Admin 服务通过 `GAME_API_BASE` 和 `GAME_ADMIN_INTERNAL_API_KEY` 调用 Game 内部接口，不跨库读取游戏数据。
