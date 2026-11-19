@@ -2,11 +2,24 @@ extends RefCounted
 ## Procedural, replaceable visual blockouts for the Underworld bestiary.
 ## Keep gameplay/network state in world_scene.gd; this file only builds presentation.
 
+const VisualModelLibrary = preload("res://scripts/visual_model_library.gd")
+
 static func create_monster(monster_name: String, monster_level: int) -> Node3D:
+	var archetype := _resolve_archetype(monster_name)
+	var root := VisualModelLibrary.instantiate_model(
+		archetype,
+		func() -> Node3D: return _create_procedural_monster(archetype, monster_name)
+	)
+	root.name = "MonsterVisual"
+	root.set_meta("visual_archetype", archetype)
+	var level_scale := clampf(1.0 + float(maxi(monster_level - 1, 0)) * 0.018, 1.0, 1.32)
+	root.scale *= Vector3.ONE * level_scale
+	return root
+
+
+static func _create_procedural_monster(archetype: String, monster_name: String) -> Node3D:
 	var root := Node3D.new()
 	root.name = "MonsterVisual"
-	var archetype := _resolve_archetype(monster_name)
-	root.set_meta("visual_archetype", archetype)
 	match archetype:
 		"wolf":
 			_build_wolf(root, Color("#98705a"), Color("#d9b08b"))
@@ -26,8 +39,6 @@ static func create_monster(monster_name: String, monster_level: int) -> Node3D:
 			_build_frost_soul_details(root)
 		_:
 			_build_wraith(root, Color("#668fc7"), Color("#c1e1ff"))
-	var level_scale := clampf(1.0 + float(maxi(monster_level - 1, 0)) * 0.018, 1.0, 1.32)
-	root.scale = Vector3.ONE * level_scale
 	return root
 
 
