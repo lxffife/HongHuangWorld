@@ -1,6 +1,7 @@
 extends Node3D
 
 const UnderworldVisualFactory = preload("res://scripts/underworld_visual_factory.gd")
+const QingyunVisualFactory = preload("res://scripts/qingyun_visual_factory.gd")
 const FriendPanelScript = preload("res://scripts/friend_panel.gd")
 
 @onready var hud_label: Label = $HUD/Panel/Margin/Content/Status
@@ -553,12 +554,9 @@ func _build_terrain() -> void:
 		_add_world_box("ReincarnationHallRoofTop", Vector3(12.0, 0.7, 8.0), Vector3(-22.0, 9.0, -55.0), Color("#65536d"))
 		_add_world_landmark_label("ReincarnationHallName", "轮回殿", Vector3(-22.0, 11.0, -54.0), Color("#c4b6dc"))
 	else:
-		# Qingyun mountain gate, a stone path, and layered pine silhouettes.
-		_add_world_box("QingyunGateLeft", Vector3(1.1, 6.5, 1.1), Vector3(-5.0, 3.25, -22.0), Color("#777d70"))
-		_add_world_box("QingyunGateRight", Vector3(1.1, 6.5, 1.1), Vector3(5.0, 3.25, -22.0), Color("#777d70"))
-		_add_world_box("QingyunGateBeam", Vector3(12.0, 1.0, 1.5), Vector3(0.0, 6.7, -22.0), Color("#a18a61"))
-		_add_world_box("QingyunGatePlaque", Vector3(3.8, 1.2, 0.35), Vector3(0.0, 6.0, -20.9), Color("#354c43"))
-		_add_world_landmark_label("QingyunGateName", "青云山门", Vector3(0.0, 8.3, -21.5), Color("#f0d7a8"))
+		# Qingyun mountain gate, sect hall, stone path and layered pine silhouettes.
+		add_child(QingyunVisualFactory.create_mountain_gate())
+		add_child(QingyunVisualFactory.create_sect_hall())
 		for i in range(12):
 			var z := -4.0 - float(i) * 3.0
 			var width := 5.5 if i < 7 else 7.0
@@ -568,20 +566,9 @@ func _build_terrain() -> void:
 			var row := float(i / 2)
 			var x := side * (9.0 + float(i % 3) * 2.0)
 			var z := -8.0 - row * 7.0
-			_add_world_cylinder("QingyunPineTrunk_" + str(i), 0.28, 2.8, Vector3(x, 1.4, z), Color("#514638"))
-			var crown := MeshInstance3D.new()
-			crown.name = "QingyunPineCrown_" + str(i)
-			var cone := CylinderMesh.new()
-			cone.top_radius = 0.0
-			cone.bottom_radius = 2.0
-			cone.height = 5.2
-			crown.mesh = cone
-			crown.position = Vector3(x, 4.4, z)
-			var pine_material := StandardMaterial3D.new()
-			pine_material.albedo_color = Color("#294b3d")
-			pine_material.roughness = 1.0
-			crown.material_override = pine_material
-			add_child(crown)
+			var pine := QingyunVisualFactory.create_pine(6.5 + float(i % 3) * 0.6)
+			pine.position = Vector3(x, 0.0, z)
+			add_child(pine)
 		# Natural rocks frame the path without obscuring the spawn area.
 		for i in range(12):
 			var rock := MeshInstance3D.new()
