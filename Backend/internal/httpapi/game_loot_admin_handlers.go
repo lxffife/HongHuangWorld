@@ -66,14 +66,28 @@ func (h *gameLootAdminHandlers) upsertLoot(w http.ResponseWriter,r *http.Request
 	var currentChance sql.NullInt64
 	currentErr:=tx.QueryRowContext(ctx,`SELECT drop_chance_bp FROM monster_loot_entries WHERE monster_id=$1 AND item_id=$2`,monsterID,itemID).Scan(&currentChance)
 	if currentErr!=nil&&!errors.Is(currentErr,sql.ErrNoRows){http.Error(w,"internal server error",500);return}
+	var oldSnapshot json.RawMessage
+	oldSnapshot, currentErr = readConfigSnapshot(ctx,tx,"monster_loot_entries","monster_id=$1 AND item_id=$2",monsterID,itemID)
+	if currentErr!=nil&&!errors.Is(currentErr,sql.ErrNoRows){http.Error(w,"internal server error",500);return}
 	if otherTotal+*req.DropChanceBP>10000&&(!currentChance.Valid||int64(*req.DropChanceBP)>=currentChance.Int64){http.Error(w,"total drop chance for a monster cannot exceed 10000 basis points (100%); reduce existing entries first",400);return}
 	_,err=tx.ExecContext(ctx,`INSERT INTO monster_loot_entries(monster_id,item_id,drop_chance_bp,min_quantity,max_quantity) VALUES($1,$2,$3,$4,$5) ON CONFLICT(monster_id,item_id) DO UPDATE SET drop_chance_bp=EXCLUDED.drop_chance_bp,min_quantity=EXCLUDED.min_quantity,max_quantity=EXCLUDED.max_quantity`,monsterID,itemID,*req.DropChanceBP,*req.MinQuantity,*req.MaxQuantity)
-	if err!=nil{h.logger.Error("game admin loot upsert failed","monster_id",monsterID,"item_id",itemID,"error",err);http.Error(w,"internal server error",500);return};if err=tx.Commit();err!=nil{http.Error(w,"internal server error",500);return}
+	if err!=nil{h.logger.Error("game admin loot upsert failed","monster_id",monsterID,"item_id",itemID,"error",err);http.Error(w,"internal server error",500);return}
+	newSnapshot,err:=readConfigSnapshot(ctx,tx,"monster_loot_entries","monster_id=$1 AND item_id=$2",monsterID,itemID);if err!=nil{http.Error(w,"internal server error",500);return}
+	changeKind:="update";if len(oldSnapshot)==0{changeKind="create"}
+	if err=recordConfigRevision(ctx,tx,"monster_loot_entry",monsterID+":"+itemID,changeKind,oldSnapshot,newSnapshot);err!=nil{h.logger.Error("record loot revision failed","monster_id",monsterID,"item_id",itemID,"error",err);http.Error(w,"internal server error",500);return}
+	if err=tx.Commit();err!=nil{http.Error(w,"internal server error",500);return}
 	writeJSON(w,200,map[string]any{"monster_id":monsterID,"item_id":itemID,"drop_chance_bp":*req.DropChanceBP,"min_quantity":*req.MinQuantity,"max_quantity":*req.MaxQuantity})
 }
 func (h *gameLootAdminHandlers) deleteLoot(w http.ResponseWriter,r *http.Request){
 	if !h.authorize(w,r){return};monsterID,itemID:=strings.TrimSpace(r.PathValue("monsterID")),strings.TrimSpace(r.PathValue("itemID"));if monsterID==""||len(monsterID)>64||itemID==""||len(itemID)>64{http.Error(w,"invalid monster or item id",400);return}
-	ctx,cancel:=context.WithTimeout(r.Context(),6*time.Second);defer cancel();result,err:=h.db.ExecContext(ctx,`DELETE FROM monster_loot_entries WHERE monster_id=$1 AND item_id=$2`,monsterID,itemID);if err!=nil{http.Error(w,"internal server error",500);return};n,_:=result.RowsAffected();if n==0{http.Error(w,"loot entry not found",404);return};writeJSON(w,200,map[string]any{"deleted":true,"monster_id":monsterID,"item_id":itemID})
+	ctx,cancel:=context.WithTimeout(r.Context(),6*time.Second);defer cancel()
+	tx,err:=h.db.BeginTx(ctx,nil);if err!=nil{http.Error(w,"internal server error",500);return};defer tx.Rollback()
+	oldSnapshot,err:=readConfigSnapshot(ctx,tx,"monster_loot_entries","monster_id=$1 AND item_id=$2",monsterID,itemID)
+	if errors.Is(err,sql.ErrNoRows){http.Error(w,"loot entry not found",404);return};if err!=nil{http.Error(w,"internal server error",500);return}
+	result,err:=tx.ExecContext(ctx,`DELETE FROM monster_loot_entries WHERE monster_id=$1 AND item_id=$2`,monsterID,itemID);if err!=nil{http.Error(w,"internal server error",500);return};n,_:=result.RowsAffected();if n==0{http.Error(w,"loot entry not found",404);return}
+	if err=recordConfigRevision(ctx,tx,"monster_loot_entry",monsterID+":"+itemID,"delete",oldSnapshot,nil);err!=nil{h.logger.Error("record loot deletion revision failed","monster_id",monsterID,"item_id",itemID,"error",err);http.Error(w,"internal server error",500);return}
+	if err=tx.Commit();err!=nil{http.Error(w,"internal server error",500);return}
+	writeJSON(w,200,map[string]any{"deleted":true,"monster_id":monsterID,"item_id":itemID})
 }
 func registerGameLootAdminRoutes(mux *http.ServeMux,db *sql.DB,logger *slog.Logger){
 	h:=&gameLootAdminHandlers{db:db,apiKey:strings.TrimSpace(os.Getenv("GAME_ADMIN_INTERNAL_API_KEY")),logger:logger}
