@@ -27,7 +27,11 @@ func (h *gameMonsterAdminHandlers) createDefinition(w http.ResponseWriter,r *htt
 	var req struct{ID string `json:"id"`;Name string `json:"name"`;Level int `json:"level"`;MaxHealth float64 `json:"max_health"`;Attack float64 `json:"attack"`;Defense float64 `json:"defense"`;MoveSpeed float64 `json:"move_speed"`;AggroRadius float64 `json:"aggro_radius"`;LeashRadius float64 `json:"leash_radius"`;Enabled *bool `json:"enabled"`}
 	if err:=decodeJSON(w,r,&req);err!=nil{http.Error(w,"invalid request body",400);return}
 	req.ID=strings.TrimSpace(req.ID);req.Name=strings.TrimSpace(req.Name)
-	if !validMonsterAdminKey(req.ID,64)||req.Name==""||len(req.Name)>96||req.Level<1||req.Level>10000||req.MaxHealth<=0||req.MaxHealth>1e9||req.Attack<0||req.Attack>1e9||req.Defense<0||req.Defense>1e9||req.MoveSpeed<=0||req.MoveSpeed>10000||req.AggroRadius<=0||req.AggroRadius>100000||req.LeashRadius<req.AggroRadius||req.LeashRadius>100000{
+	validRange:=func(v,min,max float64)bool{return v==v&&v>=min&&v<=max}
+	if !validMonsterAdminKey(req.ID,64)||req.Name==""||len(req.Name)>96||req.Level<1||req.Level>10000||
+		!validRange(req.MaxHealth,0.000001,1e9)||!validRange(req.Attack,0,1e9)||!validRange(req.Defense,0,1e9)||
+		!validRange(req.MoveSpeed,0.000001,10000)||!validRange(req.AggroRadius,0.000001,100000)||
+		!validRange(req.LeashRadius,req.AggroRadius,100000){
 		http.Error(w,"invalid monster definition fields",400);return
 	}
 	enabled:=true;if req.Enabled!=nil{enabled=*req.Enabled}
