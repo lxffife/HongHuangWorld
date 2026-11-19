@@ -756,6 +756,11 @@ struct EnetServer::Impl {
     std::unordered_map<ENetPeer*, PlayerState> players;
     std::vector<MonsterRuntime> monsters;
     std::vector<LootEntry> loot_table;
+    std::mutex loot_table_mutex;
+    std::mutex loot_refresh_mutex;
+    std::condition_variable loot_refresh_cv;
+    bool loot_refresh_stop_requested{false};
+    std::thread loot_refresh_thread;
     std::vector<GroundDropRuntime> ground_drops;
     std::unique_ptr<honghuang::persistence::DurableOutbox> durable_outbox;
     std::mutex outbox_mutex;
@@ -1389,6 +1394,43 @@ struct EnetServer::Impl {
     }
 
 
+    void start_loot_refresh_worker() {
+        loot_refresh_stop_requested = false;
+        loot_refresh_thread = std::thread([this] {
+            while (true) {
+                {
+                    std::unique_lock lock(loot_refresh_mutex);
+                    if (loot_refresh_cv.wait_for(lock, std::chrono::seconds(30),
+                            [this] { return loot_refresh_stop_requested; })) {
+                        return;
+                    }
+                }
+                std::vector<LootEntry> refreshed;
+                std::string error;
+                if (!load_loot_table(config, refreshed, error)) {
+                    std::cerr << "Monster loot table refresh failed; keeping previous configuration: "
+                              << error << '\n';
+                    continue;
+                }
+                const auto count = refreshed.size();
+                {
+                    std::lock_guard lock(loot_table_mutex);
+                    loot_table = std::move(refreshed);
+                }
+                std::cout << "Monster loot table refreshed; entries=" << count << '\n';
+            }
+        });
+    }
+
+    void stop_loot_refresh_worker() {
+        {
+            std::lock_guard lock(loot_refresh_mutex);
+            loot_refresh_stop_requested = true;
+        }
+        loot_refresh_cv.notify_all();
+        if (loot_refresh_thread.joinable()) loot_refresh_thread.join();
+    }
+
     void start_drop_worker() {
         drop_stop_requested = false;
         drop_thread = std::thread([this] {
@@ -1735,7 +1777,12 @@ struct EnetServer::Impl {
     void enqueue_monster_drops(const MonsterRuntime& monster, const PlayerState& player) {
         static thread_local std::mt19937 generator(std::random_device{}());
         std::uniform_int_distribution<int> chance(1, 10000);
-        for (const auto& entry : loot_table) {
+        std::vector<LootEntry> current_loot;
+        {
+            std::lock_guard lock(loot_table_mutex);
+            current_loot = loot_table;
+        }
+        for (const auto& entry : current_loot) {
             if (entry.monster_id != monster.definition.id || chance(generator) > entry.drop_chance_bp) continue;
             std::uniform_int_distribution<int> quantity(entry.min_quantity, entry.max_quantity);
             GroundDropRuntime drop{
@@ -2109,10 +2156,11 @@ bool EnetServer::start() {
     impl_->start_persistence_worker();
     std::string loot_error;
     if (!load_loot_table(impl_->config, impl_->loot_table, loot_error)) {
-        std::cerr << "Monster loot table unavailable; drops disabled until restart: " << loot_error << '\n';
+        std::cerr << "Monster loot table unavailable; periodic refresh will retry: " << loot_error << '\n';
     } else {
         std::cout << "Loaded " << impl_->loot_table.size() << " monster loot entries\n";
     }
+    impl_->start_loot_refresh_worker();
     std::string persisted_drop_error;
     if (!load_persisted_ground_drops(impl_->config, impl_->ground_drops, persisted_drop_error)) {
         std::cerr << "Persisted ground drops could not be restored: " << persisted_drop_error << '\n';
@@ -2341,6 +2389,7 @@ void EnetServer::stop() {
         }
         impl_->heartbeat_cv.notify_all();
         if (impl_->heartbeat_thread.joinable()) impl_->heartbeat_thread.join();
+        impl_->stop_loot_refresh_worker();
 
         impl_->stop_chat_worker();
         impl_->drain_chat_results();
