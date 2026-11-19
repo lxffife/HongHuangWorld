@@ -9,6 +9,7 @@
 | 组件 | 运行方式 | 端口 | 用途 |
 |---|---|---:|---|
 | Go API | systemd | TCP 8787 | 注册、登录、灵魂、角色、世界入口 |
+| Admin 管理后台 API | systemd | TCP 8790 | 管理后台登录与管理接口（仅局域网） |
 | C++ 青云人界 WorldServer | systemd | UDP 7777 | ENet 实时游戏连接 |
 | C++ 冥界酆都 WorldServer | systemd | UDP 7778 | 与青云人界并行的冥界游戏连接 |
 | PostgreSQL 17 | Docker Compose | TCP 5432 | 游戏业务数据 |
@@ -210,13 +211,15 @@
 ## 8. 网络与 Windows 客户端
 
 局域网客户端至少需要访问：
-- TCP 8787：HTTP API。
+- TCP 8787：游戏 HTTP API。
+- TCP 8790：Admin 管理后台（浏览器访问 `http://树莓派局域网IP:8790`）。
 - UDP 7777：青云人界 ENet 游戏连接。
 - UDP 7778：冥界酆都 ENet 游戏连接（部署并启用冥界服务后）。
 
 如果树莓派启用了 UFW：
 
     sudo ufw allow 8787/tcp
+    sudo ufw allow 8790/tcp
     sudo ufw allow 7777/udp
     sudo ufw allow 7778/udp
     sudo ufw status
@@ -231,7 +234,7 @@ Windows Godot 客户端 API Base URL 填写：
 
 不要填写 127.0.0.1（它指向 Windows 自己），也不要填写 0.0.0.0。WorldServer 返回给客户端的地址同样由 WORLD_SERVER_ADVERTISE_HOST 决定。
 
-PostgreSQL 5432、Redis 6379、NATS 4222/8222 在 Compose 中绑定到 127.0.0.1，不接受局域网远程连接。不要配置路由器公网端口转发。当前方案没有配置 TLS、反向代理和生产级密钥管理。
+PostgreSQL 5432、Redis 6379、NATS 4222/8222 在 Compose 中绑定到 127.0.0.1，不接受局域网远程连接。Admin 默认监听 `0.0.0.0:8790` 以便局域网访问；请只在可信局域网放行该端口，使用强管理员密码，不要配置路由器公网端口转发。当前方案没有配置 TLS、反向代理和生产级密钥管理。
 
 ## 9. 部署检查
 
