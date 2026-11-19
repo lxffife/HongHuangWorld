@@ -1693,8 +1693,19 @@ func _on_monster_action_event(event: Dictionary) -> void:
 	if attacker_id.is_empty() or not monsters.has(attacker_id):
 		return
 	var attacker := monsters[attacker_id] as Node3D
-	if is_instance_valid(attacker):
-		attacker.set_meta("attack_reaction_time", 0.78)
+	if not is_instance_valid(attacker):
+		return
+	var phase := str(event.get("phase", ""))
+	if phase == "windup":
+		attacker.set_meta("attack_phase", "windup")
+		var windup := maxf(float(event.get("windup_ms", 520)) / 1000.0, 0.1)
+		attacker.set_meta("attack_phase_duration", windup)
+		attacker.set_meta("attack_phase_time", windup)
+		attacker.set_meta("attack_recovery_duration", maxf(float(event.get("recovery_ms", 420)) / 1000.0, 0.1))
+	elif phase == "impact":
+		attacker.set_meta("attack_phase", "impact")
+		attacker.set_meta("attack_phase_duration", 0.2)
+		attacker.set_meta("attack_phase_time", 0.2)
 
 func _on_combat_event(event: Dictionary) -> void:
 	if not bool(event.get("accepted", true)):
@@ -1958,12 +1969,24 @@ func _animate_monster_visuals(delta: float) -> void:
 		var phase := monster_animation_time * (8.5 if moving else 1.7) + float(abs(hash(str(monster_id))) % 100) * 0.031
 		var stride := sin(phase)
 		var hit_time := maxf(float(monster.get_meta("hit_reaction_time", 0.0)) - delta, 0.0)
-		var attack_time := maxf(float(monster.get_meta("attack_reaction_time", 0.0)) - delta, 0.0)
+		var attack_phase := str(monster.get_meta("attack_phase", ""))
+		var attack_phase_time := maxf(float(monster.get_meta("attack_phase_time", 0.0)) - delta, 0.0)
+		var attack_phase_duration := maxf(float(monster.get_meta("attack_phase_duration", 0.2)), 0.1)
+		monster.set_meta("attack_phase_time", attack_phase_time)
+		if attack_phase_time <= 0.0:
+			if attack_phase == "impact":
+				attack_phase = "recovery"
+				attack_phase_time = maxf(float(monster.get_meta("attack_recovery_duration", 0.42)), 0.1)
+				attack_phase_duration = attack_phase_time
+				monster.set_meta("attack_phase_time", attack_phase_time)
+				monster.set_meta("attack_phase_duration", attack_phase_duration)
+			elif attack_phase != "":
+				attack_phase = ""
+			monster.set_meta("attack_phase", attack_phase)
 		var death_time := maxf(float(monster.get_meta("death_reaction_time", 0.0)) - delta, 0.0)
 		monster.set_meta("hit_reaction_time", hit_time)
-		monster.set_meta("attack_reaction_time", attack_time)
 		monster.set_meta("death_reaction_time", death_time)
-		var animation_state := "death" if death_time > 0.0 else ("hit" if hit_time > 0.0 else ("attack" if attack_time > 0.0 else ("move" if moving else "idle")))
+		var animation_state := "death" if death_time > 0.0 else ("hit" if hit_time > 0.0 else ("attack" if attack_phase != "" else ("move" if moving else "idle")))
 		monster.set_meta("animation_state", animation_state)
 		match archetype:
 			"wolf":
@@ -1974,8 +1997,9 @@ func _animate_monster_visuals(delta: float) -> void:
 				_animate_warrior_monster(monster, stride, moving, phase, animation_state)
 			"life_soul", "wind_soul", "wraith":
 				_animate_soul_monster(monster, delta, phase, moving, archetype)
-		if attack_time > 0.0 and death_time <= 0.0:
-			_animate_monster_attack(monster, archetype, 1.0 - attack_time / 0.78)
+		if attack_phase != "" and death_time <= 0.0:
+			var attack_progress := 1.0 - attack_phase_time / attack_phase_duration
+			_animate_monster_attack(monster, archetype, attack_phase, clampf(attack_progress, 0.0, 1.0))
 		var body := monster.get_node_or_null("Torso") as Node3D
 		if not is_instance_valid(body):
 			body = monster.get_node_or_null("IronCore") as Node3D
@@ -2003,45 +2027,47 @@ func _animate_monster_visuals(delta: float) -> void:
 				_apply_monster_death_fade(monster, 0.92)
 
 
-func _animate_monster_attack(monster: Node3D, archetype: String, progress: float) -> void:
-	# A short server-confirmed attack cue; it never applies damage or changes combat state.
-	var strike := sin(clampf(progress, 0.0, 1.0) * PI)
+func _animate_monster_attack(monster: Node3D, archetype: String, phase: String, progress: float) -> void:
+	# Server-confirmed phases drive presentation only; damage is resolved by WorldServer.
+	var anticipation := sin(clampf(progress, 0.0, 1.0) * PI * 0.5) if phase == "windup" else 0.0
+	var strike := sin(clampf(progress, 0.0, 1.0) * PI) if phase == "impact" else 0.0
+	var recovery := 1.0 - clampf(progress, 0.0, 1.0) if phase == "recovery" else 0.0
 	match archetype:
 		"wolf":
 			var torso := monster.get_node_or_null("Torso") as Node3D
 			if is_instance_valid(torso):
-				torso.position.z = 0.05 - strike * 0.18
+				torso.position.z = -anticipation * 0.06 - strike * 0.18 + recovery * 0.04
 			var jaw := monster.get_node_or_null("JawPivot") as Node3D
 			if is_instance_valid(jaw):
-				jaw.rotation.x = -strike * 0.42
+				jaw.rotation.x = -anticipation * 0.18 - strike * 0.42
 			var front_left := monster.get_node_or_null("FrontLegLeft") as Node3D
 			var front_right := monster.get_node_or_null("FrontLegRight") as Node3D
 			if is_instance_valid(front_left):
-				front_left.rotation.x -= strike * 0.24
+				front_left.rotation.x = -anticipation * 0.12 - strike * 0.24
 			if is_instance_valid(front_right):
-				front_right.rotation.x -= strike * 0.24
+				front_right.rotation.x = -anticipation * 0.12 - strike * 0.24
 		"iron_beast":
 			var core := monster.get_node_or_null("IronCore") as Node3D
 			if is_instance_valid(core):
-				core.position.z = 0.05 - strike * 0.16
+				core.position.z = -anticipation * 0.05 - strike * 0.16 + recovery * 0.03
 			var skull := monster.get_node_or_null("SkullPivot") as Node3D
 			if is_instance_valid(skull):
-				skull.rotation.x = -strike * 0.48
+				skull.rotation.x = -anticipation * 0.16 - strike * 0.48
 		"warrior":
 			var arm := monster.get_node_or_null("ArmPivotRight") as Node3D
 			if is_instance_valid(arm):
-				arm.rotation.x = -strike * 1.05
-				arm.rotation.z = -0.18 - strike * 0.34
+				arm.rotation.x = anticipation * 0.42 - strike * 1.05 + recovery * 0.12
+				arm.rotation.z = -0.18 - anticipation * 0.16 - strike * 0.34
 		"life_soul", "wind_soul", "wraith":
 			var core := monster.get_node_or_null("SoulCore") as Node3D
 			if is_instance_valid(core):
-				core.scale = Vector3.ONE * (1.0 + strike * 0.48)
+				core.scale = Vector3.ONE * (1.0 + anticipation * 0.18 + strike * 0.48 + recovery * 0.08)
 			var spark := monster.get_node_or_null("SoulSpark") as Node3D
 			if is_instance_valid(spark):
-				spark.scale = Vector3.ONE * (1.0 + strike * 1.8)
+				spark.scale = Vector3.ONE * (1.0 + anticipation * 0.65 + strike * 1.8)
 			var orbit := monster.get_node_or_null("SoulOrbit") as Node3D
 			if is_instance_valid(orbit):
-				orbit.scale = Vector3.ONE * (1.0 + strike * 0.22)
+				orbit.scale = Vector3.ONE * (1.0 + anticipation * 0.08 + strike * 0.22)
 
 
 func _apply_monster_death_fade(monster: Node3D, weight: float) -> void:
