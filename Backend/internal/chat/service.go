@@ -362,7 +362,7 @@ func (s *Service) SendFromServer(ctx context.Context, nodeKey, sessionID, charac
 	var existingRecipients []byte
 	err = tx.QueryRowContext(ctx, `
 		SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),
-		       m.sender_character_id::text,$2,$3,$4,m.content,m.created_at,
+		       m.sender_character_id::text,$2::text,$3::text,$4::int,m.content,m.created_at,
 		       COALESCE(m.world_instance_id::text,''),m.nearby_recipient_character_ids
 		FROM chat_messages m
 		WHERE m.sender_character_id=$1::uuid AND m.client_message_id=$5::uuid`,
