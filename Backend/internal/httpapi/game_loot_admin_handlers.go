@@ -82,8 +82,11 @@ func (h *gameLootAdminHandlers) deleteLoot(w http.ResponseWriter,r *http.Request
 	if !h.authorize(w,r){return};monsterID,itemID:=strings.TrimSpace(r.PathValue("monsterID")),strings.TrimSpace(r.PathValue("itemID"));if monsterID==""||len(monsterID)>64||itemID==""||len(itemID)>64{http.Error(w,"invalid monster or item id",400);return}
 	ctx,cancel:=context.WithTimeout(r.Context(),6*time.Second);defer cancel()
 	tx,err:=h.db.BeginTx(ctx,nil);if err!=nil{http.Error(w,"internal server error",500);return};defer tx.Rollback()
+	if _,err=tx.ExecContext(ctx,`SELECT pg_advisory_xact_lock(hashtext($1))`,monsterID);err!=nil{http.Error(w,"internal server error",500);return}
+	var locked int
+	if err=tx.QueryRowContext(ctx,`SELECT 1 FROM monster_loot_entries WHERE monster_id=$1 AND item_id=$2 FOR UPDATE`,monsterID,itemID).Scan(&locked);errors.Is(err,sql.ErrNoRows){http.Error(w,"loot entry not found",404);return}else if err!=nil{http.Error(w,"internal server error",500);return}
 	oldSnapshot,err:=readConfigSnapshot(ctx,tx,"monster_loot_entries","monster_id=$1 AND item_id=$2",monsterID,itemID)
-	if errors.Is(err,sql.ErrNoRows){http.Error(w,"loot entry not found",404);return};if err!=nil{http.Error(w,"internal server error",500);return}
+	if err!=nil{http.Error(w,"internal server error",500);return}
 	result,err:=tx.ExecContext(ctx,`DELETE FROM monster_loot_entries WHERE monster_id=$1 AND item_id=$2`,monsterID,itemID);if err!=nil{http.Error(w,"internal server error",500);return};n,_:=result.RowsAffected();if n==0{http.Error(w,"loot entry not found",404);return}
 	if err=recordConfigRevision(ctx,tx,"monster_loot_entry",monsterID+":"+itemID,"delete",oldSnapshot,nil);err!=nil{h.logger.Error("record loot deletion revision failed","monster_id",monsterID,"item_id",itemID,"error",err);http.Error(w,"internal server error",500);return}
 	if err=tx.Commit();err!=nil{http.Error(w,"internal server error",500);return}
