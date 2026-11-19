@@ -240,8 +240,12 @@ static func create_npc(npc_type: String, npc_name: String) -> Node3D:
 	_part(root, "HairCap", _sphere(0.265, 0.30), Vector3(0.0, 2.015, 0.015), hair)
 	# Broad sleeves and hands make the NPC readable from the third-person camera.
 	for side in [-1.0, 1.0]:
-		_part(root, "Sleeve" + str(side), _capsule(0.145, 0.72), Vector3(side * 0.40, 1.20, -0.01), robe, Vector3(0.0, 0.0, side * -0.42))
-		_part(root, "Hand" + str(side), _sphere(0.09), Vector3(side * 0.57, 0.91, -0.02), skin)
+		var arm_pivot := Node3D.new()
+		arm_pivot.name = "ArmPivotLeft" if side < 0.0 else "ArmPivotRight"
+		arm_pivot.position = Vector3(side * 0.40, 1.48, -0.01)
+		root.add_child(arm_pivot)
+		_part(arm_pivot, "Sleeve", _capsule(0.145, 0.72), Vector3(0.0, -0.28, 0.0), robe, Vector3(0.0, 0.0, side * -0.42))
+		_part(arm_pivot, "Hand", _sphere(0.09), Vector3(side * 0.17, -0.59, -0.01), skin)
 	if npc_type == "soup_keeper" or npc_name == "孟婆":
 		# Jade hair ornament and a steaming bowl identify the reincarnation guide.
 		_part(root, "HairBun", _sphere(0.14), Vector3(0.20, 2.12, 0.02), hair)
