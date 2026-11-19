@@ -535,3 +535,111 @@ func _process(delta: float) -> void:
 		soul_fusion_ring.rotation.y += delta * 0.32
 		var seal_pulse := 1.0 + sin(soul_form_time * 1.8) * 0.025
 		soul_fusion_ring.scale = Vector3.ONE * soul_form_scale * 1.28 * seal_pulse
+
+
+# Equipment visuals are presentation-only. Server inventory/equipment remains authoritative.
+func set_equipment_visuals(items: Array) -> void:
+	if not is_instance_valid(player_humanoid):
+		return
+	var sockets := {
+		"weapon": "EquipmentWeaponSocket",
+		"head": "EquipmentHeadSocket",
+		"chest": "EquipmentChestSocket",
+		"accessory": "EquipmentAccessorySocket",
+		"back": "EquipmentBackSocket",
+		"offhand": "EquipmentOffhandSocket"
+	}
+	for socket_name in sockets.values():
+		var socket := player_humanoid.get_node_or_null(str(socket_name)) as Node3D
+		if not is_instance_valid(socket):
+			continue
+		for child in socket.get_children():
+			child.queue_free()
+	for item in items:
+		if not (item is Dictionary):
+			continue
+		var slot := str(item.get("slot", item.get("equipment_slot", "")))
+		if not sockets.has(slot):
+			continue
+		var socket := player_humanoid.get_node_or_null(str(sockets[slot])) as Node3D
+		if not is_instance_valid(socket):
+			continue
+		var visual_root := Node3D.new()
+		visual_root.name = "EquipmentVisual"
+		visual_root.set_meta("item_id", str(item.get("item_id", "")))
+		socket.add_child(visual_root)
+		_build_equipment_slot_visual(visual_root, slot, int(item.get("quality", 1)))
+
+
+func _build_equipment_slot_visual(root: Node3D, slot: String, quality: int) -> void:
+	var accent := Color("#c5a66d")
+	if quality >= 5:
+		accent = Color("#e9a7ff")
+	elif quality == 4:
+		accent = Color("#8fc8ff")
+	elif quality == 3:
+		accent = Color("#8ee0b0")
+	var material := StandardMaterial3D.new()
+	material.albedo_color = accent
+	material.metallic = 0.42
+	material.roughness = 0.34
+	match slot:
+		"weapon", "offhand":
+			var blade := MeshInstance3D.new()
+			blade.name = "EquipmentBlade"
+			var blade_mesh := BoxMesh.new()
+			blade_mesh.size = Vector3(0.075, 0.78, 0.035)
+			blade.mesh = blade_mesh
+			blade.material_override = material
+			blade.position = Vector3(0.0, 0.0, -0.06)
+			blade.rotation.z = -0.12 if slot == "weapon" else 0.12
+			root.add_child(blade)
+			var grip := MeshInstance3D.new()
+			grip.name = "EquipmentGrip"
+			var grip_mesh := BoxMesh.new()
+			grip_mesh.size = Vector3(0.11, 0.20, 0.09)
+			grip.mesh = grip_mesh
+			grip.position.y = -0.48
+			grip.material_override = _equipment_dark_material()
+			root.add_child(grip)
+		"head":
+			var helmet := MeshInstance3D.new()
+			helmet.name = "EquipmentHelmet"
+			var helmet_mesh := SphereMesh.new()
+			helmet_mesh.radius = 0.27
+			helmet_mesh.height = 0.30
+			helmet.mesh = helmet_mesh
+			helmet.material_override = material
+			root.add_child(helmet)
+		"chest":
+			var armor := MeshInstance3D.new()
+			armor.name = "EquipmentChestArmor"
+			var armor_mesh := BoxMesh.new()
+			armor_mesh.size = Vector3(0.58, 0.64, 0.16)
+			armor.mesh = armor_mesh
+			armor.material_override = material
+			root.add_child(armor)
+		"accessory":
+			var ornament := MeshInstance3D.new()
+			ornament.name = "EquipmentOrnament"
+			var ring := TorusMesh.new()
+			ring.inner_radius = 0.07
+			ring.outer_radius = 0.11
+			ornament.mesh = ring
+			ornament.material_override = material
+			root.add_child(ornament)
+		"back":
+			var mantle := MeshInstance3D.new()
+			mantle.name = "EquipmentBackMantle"
+			var mantle_mesh := BoxMesh.new()
+			mantle_mesh.size = Vector3(0.58, 0.76, 0.10)
+			mantle.mesh = mantle_mesh
+			mantle.material_override = material
+			root.add_child(mantle)
+
+
+func _equipment_dark_material() -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#493b32")
+	material.roughness = 0.72
+	return material
