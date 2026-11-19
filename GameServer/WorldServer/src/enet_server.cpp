@@ -2068,7 +2068,8 @@ struct EnetServer::Impl {
                     {"health", monster.state.health},
                     {"max_health", monster.definition.max_health},
                     {"mode", static_cast<int>(monster.state.mode)},
-                    {"x", monster.state.x}, {"y", 0.0F}, {"z", monster.state.z}
+                    {"x", monster.state.x}, {"y", 0.0F}, {"z", monster.state.z},
+                    {"yaw", monster.state.yaw}
                 });
             }
             for (const auto& drop : ground_drops) {
