@@ -38,6 +38,8 @@ var chat_input: LineEdit
 var chat_status: Label
 var chat_scroll: ScrollContainer
 var chat_toggle_button: Button
+var chat_unread_badge: Label
+var chat_unread_count := 0
 var chat_expanded := false
 var chat_lines_by_channel: Dictionary = {"nearby": [], "world": [], "cross_world": []}
 var chat_seen_ids: Dictionary = {}
@@ -1245,6 +1247,12 @@ func _build_chat_hud() -> void:
 	chat_toggle_button.text = "展开"
 	chat_toggle_button.pressed.connect(func(): _set_chat_expanded(not chat_expanded))
 	heading.add_child(chat_toggle_button)
+	chat_unread_badge = Label.new()
+	chat_unread_badge.text = "●"
+	chat_unread_badge.add_theme_color_override("font_color", Color("#ff4d5e"))
+	chat_unread_badge.add_theme_font_size_override("font_size", 17)
+	chat_unread_badge.visible = false
+	heading.add_child(chat_unread_badge)
 	var channels := HBoxContainer.new()
 	layout.add_child(channels)
 	for channel_data in [["nearby", "附近"], ["world", "世界"], ["cross_world", "跨界"]]:
@@ -1267,6 +1275,7 @@ func _build_chat_hud() -> void:
 	chat_input.max_length = 200
 	chat_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	chat_input.text_submitted.connect(_on_chat_input_submitted)
+	chat_input.gui_input.connect(_on_chat_input_gui_input)
 	input_row.add_child(chat_input)
 	var send_button := Button.new()
 	send_button.text = "发送"
@@ -1280,6 +1289,11 @@ func _build_chat_hud() -> void:
 
 func _set_chat_expanded(expanded: bool) -> void:
 	chat_expanded = expanded
+	if expanded:
+		chat_unread_count = 0
+		_update_chat_unread_badge()
+	elif is_instance_valid(chat_input):
+		chat_input.release_focus()
 	if not is_instance_valid(chat_panel):
 		return
 	for child in chat_panel.get_child(0).get_children():
@@ -1340,6 +1354,12 @@ func _layout_hud() -> void:
 		exploration_open_button.offset_right = 180.0
 		exploration_open_button.offset_bottom = -112.0
 
+func _on_chat_input_gui_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
+		_set_chat_expanded(false)
+		get_viewport().set_input_as_handled()
+		chat_input.accept_event()
+
 func _on_chat_input_submitted(value: String) -> void:
 	var normalized := value.strip_edges()
 	if normalized.is_empty():
@@ -1359,7 +1379,9 @@ func _on_chat_input_submitted(value: String) -> void:
 		chat_status.text = "发送失败：" + str(error)
 		return
 	chat_input.clear()
-	chat_input.release_focus()
+	# Keep focus after sending so Enter can send consecutive messages;
+	# Escape is the explicit way to leave chat input mode.
+	chat_input.grab_focus()
 
 
 func _select_chat_channel(channel: String) -> void:
@@ -1408,10 +1430,29 @@ func _on_chat_socket_message(message: Dictionary) -> void:
 		return
 	var sender := str(message.get("sender_name", "未知玩家"))
 	var content := str(message.get("content", ""))
+	var message_id := str(message.get("id", ""))
+	var is_duplicate := not message_id.is_empty() and chat_seen_ids.has(message_id)
 	if not content.is_empty():
-		_append_chat_line("[" + sender + "] " + content, channel, str(message.get("id", "")))
+		_append_chat_line("[" + sender + "] " + content, channel, message_id)
+		if not is_duplicate and not _is_local_chat_message(message) and not chat_expanded:
+			chat_unread_count = mini(chat_unread_count + 1, 99)
+			_update_chat_unread_badge()
 		if is_instance_valid(chat_status) and channel == selected_chat_channel:
 			chat_status.text = "聊天消息已送达"
+
+func _is_local_chat_message(message: Dictionary) -> bool:
+	var local_character_id := str(HHSession.world_snapshot.get("character_id", HHSession.world_snapshot.get("current_character_id", "")))
+	var sender_character_id := str(message.get("sender_character_id", ""))
+	if not local_character_id.is_empty() and not sender_character_id.is_empty():
+		return local_character_id == sender_character_id
+	var local_name := str(HHSession.world_snapshot.get("character_name", HHSession.world_snapshot.get("name", "")))
+	return not local_name.is_empty() and str(message.get("sender_name", "")) == local_name
+
+func _update_chat_unread_badge() -> void:
+	if not is_instance_valid(chat_unread_badge):
+		return
+	chat_unread_badge.visible = chat_unread_count > 0 and not chat_expanded
+	chat_unread_badge.text = "● " + str(chat_unread_count) if chat_unread_count > 0 else ""
 
 func _on_chat_event(event: Dictionary) -> void:
 	if not bool(event.get("accepted", false)):
