@@ -215,8 +215,13 @@ static func _build_warrior(root: Node3D, monster_name: String) -> void:
 	_part(root, "Helmet", _box(Vector3(0.54, 0.17, 0.42)), Vector3(0.0, 2.02, 0.0), gold, Vector3.ZERO, 0.2, 0.52)
 	for side in [-1.0, 1.0]:
 		_part(root, "Shoulder" + str(side), _box(Vector3(0.40, 0.28, 0.46)), Vector3(side * 0.42, 1.49, 0.0), gold, Vector3(0.0, 0.0, side * -0.12), 0.0, 0.52)
-		_part(root, "Arm" + str(side), _capsule(0.11, 0.78), Vector3(side * 0.46, 1.02, 0.0), armor, Vector3(0.0, 0.0, side * -0.12))
-	_part(root, "Blade", _box(Vector3(0.10, 1.10, 0.13)), Vector3(0.70, 0.86, -0.08), gold, Vector3(0.0, 0.0, -0.12), 0.4, 0.72)
+		var arm_pivot := Node3D.new()
+		arm_pivot.name = "ArmPivotLeft" if side < 0.0 else "ArmPivotRight"
+		arm_pivot.position = Vector3(side * 0.46, 1.40, 0.0)
+		root.add_child(arm_pivot)
+		_part(arm_pivot, "Arm", _capsule(0.11, 0.78), Vector3(0.0, -0.38, 0.0), armor, Vector3(0.0, 0.0, side * -0.12))
+		if side > 0.0:
+			_part(arm_pivot, "Blade", _box(Vector3(0.10, 1.10, 0.13)), Vector3(0.24, -0.48, -0.08), gold, Vector3(0.0, 0.0, -0.12), 0.4, 0.72)
 	if monster_name.contains("炽战"):
 		_part(root, "FlameCrest", _capsule(0.08, 0.70), Vector3(0.0, 2.38, 0.02), flame, Vector3(0.0, 0.0, 0.0), 2.2)
 
@@ -225,6 +230,9 @@ static func _build_wraith(root: Node3D, aura_color: Color, core_color: Color) ->
 	_part(root, "WraithMantle", _sphere(0.47, 1.28), Vector3(0.0, 0.86, 0.0), aura_color, Vector3.ZERO, 1.0, 0.0, 0.48)
 	_part(root, "SoulCore", _sphere(0.20), Vector3(0.0, 0.94, -0.20), core_color, Vector3.ZERO, 2.2)
 	_part(root, "LowerWisp", _capsule(0.18, 0.72), Vector3(0.0, 0.32, 0.12), aura_color, Vector3(0.22, 0.0, 0.0), 0.8, 0.0, 0.42)
+	_part(root, "SoulSpark", _sphere(0.065), Vector3(0.0, 1.42, -0.06), core_color, Vector3.ZERO, 2.8)
+	_part(root, "SoulShardLeft", _sphere(0.055), Vector3(-0.28, 0.88, 0.12), aura_color, Vector3.ZERO, 1.7)
+	_part(root, "SoulShardRight", _sphere(0.055), Vector3(0.28, 0.88, 0.12), aura_color, Vector3.ZERO, 1.7)
 	var orbit := TorusMesh.new()
 	orbit.inner_radius = 0.55
 	orbit.outer_radius = 0.60
