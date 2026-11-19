@@ -1,5 +1,7 @@
 extends Node3D
 
+const UnderworldVisualFactory = preload("res://scripts/underworld_visual_factory.gd")
+
 @onready var hud_label: Label = $HUD/Panel/Margin/Content/Status
 @onready var progression_label: Label = $HUD/Panel/Margin/Content/Progression
 @onready var breakthrough_button: Button = $HUD/Panel/Margin/Content/Breakthrough
@@ -1042,66 +1044,18 @@ func _upsert_monster(entity: Dictionary) -> void:
 		nameplate.text = base_text
 
 func _create_monster(monster_name: String, monster_level: int) -> Node3D:
-	var monster := Node3D.new()
-	var is_wraith := monster_name.contains("游祟") or monster_name.contains("幽魂")
-	var is_war_god := monster_name.contains("上古战神")
-	var body := MeshInstance3D.new()
-	var body_mesh: Mesh
-	if is_wraith:
-		var ghost_mesh := SphereMesh.new()
-		ghost_mesh.radius = 0.48
-		ghost_mesh.height = 1.25
-		body_mesh = ghost_mesh
-	else:
-		var wolf_mesh := CapsuleMesh.new()
-		wolf_mesh.radius = 0.52
-		wolf_mesh.height = 1.25
-		body_mesh = wolf_mesh
-	body.mesh = body_mesh
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color("#d58b45") if is_war_god else (Color("#7897c7") if is_wraith else Color("#8b5140"))
-	material.roughness = 0.48 if is_war_god else (0.72 if is_wraith else 0.9)
-	if is_war_god:
-		material.metallic = 0.42
-		material.emission_enabled = true
-		material.emission = Color("#ff6b2e")
-		material.emission_energy_multiplier = 2.4
-	elif is_wraith:
-		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		material.albedo_color.a = 0.78
-		material.emission_enabled = true
-		material.emission = Color("#557fc5")
-		material.emission_energy_multiplier = 1.3
-	body.material_override = material
-	body.position.y = 0.72 if is_wraith else 0.62
-	monster.add_child(body)
-
-	if is_wraith:
-		var wisp_mesh := SphereMesh.new()
-		wisp_mesh.radius = 0.2
-		wisp_mesh.height = 0.42
-		var wisp_material := StandardMaterial3D.new()
-		wisp_material.albedo_color = Color("#b2d8ff")
-		wisp_material.emission_enabled = true
-		wisp_material.emission = Color("#79aaff")
-		wisp_material.emission_energy_multiplier = 2.0
-		var wisp := MeshInstance3D.new()
-		wisp.name = "SoulCore"
-		wisp.mesh = wisp_mesh
-		wisp.position = Vector3(0.0, 1.2, -0.18)
-		wisp.material_override = wisp_material
-		monster.add_child(wisp)
-
+	var monster: Node3D = UnderworldVisualFactory.create_monster(monster_name, monster_level)
+	var is_wraith := monster_name.contains("游祟") or monster_name.contains("幽魂") or monster_name.contains("灵识")
+	var is_war_god := monster_name.contains("战神") or monster_name.contains("战魂")
 	var label := Label3D.new()
 	label.name = "Nameplate"
 	label.text = monster_name + " · Lv." + str(monster_level)
-	label.position.y = 1.65
+	label.position.y = 2.05 if is_war_god else (1.85 if is_wraith else 1.75)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.modulate = Color("#ff9b55") if is_war_god else (Color("#b9d9ff") if is_wraith else Color("#ffd0a8"))
 	monster.add_child(label)
 	add_child(monster)
 	return monster
-
 
 func _upsert_drop(entity: Dictionary) -> void:
 	var drop_id := str(entity.get("entity_id", ""))
