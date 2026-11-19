@@ -249,3 +249,7 @@ func (c *Client) ConfigRevisions(ctx context.Context, resourceType, resourceID s
 	if encoded := query.Encode(); encoded != "" { path += "?" + encoded }
 	return c.getAdminJSON(ctx, path)
 }
+
+func (c *Client) RollbackConfigRevision(ctx context.Context, revisionID int64) (json.RawMessage, error) {
+	return c.doLootJSON(ctx, http.MethodPost, "/api/v1/internal/admin/config-revisions/"+strconv.FormatInt(revisionID,10)+"/rollback", map[string]any{})
+}
