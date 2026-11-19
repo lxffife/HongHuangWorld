@@ -1288,6 +1288,14 @@ func _build_chat_hud() -> void:
 	layout.add_child(chat_status)
 	_set_chat_expanded(false)
 
+func is_gameplay_input_blocked() -> bool:
+	# Keep movement disabled for the entire time the chat drawer is open,
+	# including Chinese IME candidate/composition states.
+	if chat_expanded:
+		return true
+	var focused_control := get_viewport().gui_get_focus_owner()
+	return focused_control is LineEdit or focused_control is TextEdit
+
 func _set_chat_expanded(expanded: bool) -> void:
 	chat_expanded = expanded
 	if expanded:
