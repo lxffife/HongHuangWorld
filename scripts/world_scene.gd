@@ -2556,16 +2556,37 @@ func _apply_monster_death_fade(monster: Node3D, weight: float) -> void:
 	for child in monster.get_children():
 		if child is MeshInstance3D:
 			var mesh_instance := child as MeshInstance3D
-			var material := mesh_instance.material_override as StandardMaterial3D
-			if material == null:
-				continue
-			material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-			var tint := material.albedo_color
-			tint.a = 1.0 - weight
-			material.albedo_color = tint
-			material.emission_energy_multiplier = maxf(0.0, 1.0 - weight)
+			if mesh_instance.material_override is StandardMaterial3D:
+				if not bool(mesh_instance.get_meta("death_fade_override_duplicated", false)):
+					mesh_instance.material_override = (mesh_instance.material_override as StandardMaterial3D).duplicate(true)
+					mesh_instance.set_meta("death_fade_override_duplicated", true)
+				var override_material := mesh_instance.material_override as StandardMaterial3D
+				_apply_death_fade_to_material(override_material, weight)
+			elif mesh_instance.mesh != null:
+				# Imported GLBs often use per-surface materials instead of material_override.
+				for surface_index in range(mesh_instance.mesh.get_surface_count()):
+					var surface_material := mesh_instance.get_surface_override_material(surface_index) as StandardMaterial3D
+					var meta_key := "death_fade_surface_" + str(surface_index)
+					if surface_material == null:
+						surface_material = mesh_instance.get_active_material(surface_index) as StandardMaterial3D
+						if surface_material == null:
+							continue
+						surface_material = surface_material.duplicate(true) as StandardMaterial3D
+						mesh_instance.set_surface_override_material(surface_index, surface_material)
+					mesh_instance.set_meta(meta_key, true)
+					_apply_death_fade_to_material(surface_material, weight)
 		elif child is Node3D:
 			_apply_monster_death_fade(child as Node3D, weight)
+
+
+func _apply_death_fade_to_material(material: StandardMaterial3D, weight: float) -> void:
+	if material == null:
+		return
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	var tint := material.albedo_color
+	tint.a = 1.0 - weight
+	material.albedo_color = tint
+	material.emission_energy_multiplier = maxf(0.0, 1.0 - weight)
 
 
 func _animate_wolf_monster(monster: Node3D, stride: float, moving: bool, phase: float) -> void:
