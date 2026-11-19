@@ -26,6 +26,11 @@ func TestDecodeChatEventValidatesEnvelopeAndChannelScope(t *testing.T) {
 		t.Fatalf("decode valid nearby event: %v", err)
 	}
 
+	validWhisper := []byte(`{"version":1,"message":{"id":"message-4","channel":"whisper","conversation_id":"conversation-1","recipient_character_id":"character-2","sender_character_id":"character-1","content":"private hello"}}`)
+	if _, err := decodeChatEvent(validWhisper); err != nil {
+		t.Fatalf("decode valid whisper event: %v", err)
+	}
+
 	for name, payload := range map[string][]byte{
 		"unsupported version": []byte(`{"version":2,"message":{"id":"1","channel":"cross_world","sender_character_id":"c","content":"x"}}`),
 		"missing world scope": []byte(`{"version":1,"message":{"id":"1","channel":"world","sender_character_id":"c","content":"x"}}`),
@@ -34,6 +39,7 @@ func TestDecodeChatEventValidatesEnvelopeAndChannelScope(t *testing.T) {
 		"missing sender": []byte(`{"version":1,"message":{"id":"1","channel":"cross_world","content":"x"}}`),
 		"nearby missing instance": []byte(`{"version":1,"message":{"id":"1","channel":"nearby","world_id":"world-a","recipient_character_ids":["c"],"sender_character_id":"c","content":"x"}}`),
 		"nearby missing recipients": []byte(`{"version":1,"message":{"id":"1","channel":"nearby","world_id":"world-a","world_instance_id":"instance-a","sender_character_id":"c","content":"x"}}`),
+		"whisper missing recipient": []byte(`{"version":1,"message":{"id":"1","channel":"whisper","conversation_id":"conversation-1","sender_character_id":"c","content":"x"}}`),
 		"empty content": []byte(`{"version":1,"message":{"id":"1","channel":"cross_world","sender_character_id":"c","content":" "}}`),
 		"invalid json": []byte(`{"version":`),
 	} {
@@ -107,5 +113,27 @@ func TestChatHubRestrictsNearbyToAOIRecipientsAndInstance(t *testing.T) {
 	}
 	if got := len(otherInstance.send); got != 0 {
 		t.Fatalf("other-instance client received %d messages, want 0", got)
+	}
+}
+
+
+func TestChatHubRestrictsWhisperToConversationParticipants(t *testing.T) {
+	hub := newChatSocketHub()
+	sender := &chatSocketClient{characterID: "character-1", send: make(chan []byte, 1), done: make(chan struct{})}
+	recipient := &chatSocketClient{characterID: "character-2", send: make(chan []byte, 1), done: make(chan struct{})}
+	outsider := &chatSocketClient{characterID: "character-3", send: make(chan []byte, 1), done: make(chan struct{})}
+	hub.add(sender)
+	hub.add(recipient)
+	hub.add(outsider)
+	hub.broadcast(chat.Message{
+		ID: "private-message", Channel: "whisper", ConversationID: "conversation-1",
+		SenderCharacterID: "character-1", RecipientCharacterID: "character-2",
+		Content: "only these two", CreatedAt: time.Now().UTC(),
+	})
+	if len(sender.send) != 1 || len(recipient.send) != 1 {
+		t.Fatalf("conversation participants did not both receive the message: sender=%d recipient=%d", len(sender.send), len(recipient.send))
+	}
+	if len(outsider.send) != 0 {
+		t.Fatalf("unrelated client received a private message")
 	}
 }
