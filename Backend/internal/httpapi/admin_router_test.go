@@ -51,4 +51,8 @@ func TestAdminPermissionChecks(t *testing.T) {
  if hasPermission(user,"worlds.manage"){t.Fatal("world management must require its own permission")}
  if !hasPermission(adminauth.User{IsSuperAdmin:true},"game_config.manage"){t.Fatal("super administrator should have game config permission")}
  if hasPermission(user,"game_config.manage"){t.Fatal("game config management must require its own permission")}
+ if !hasPermission(adminauth.User{IsSuperAdmin:true},"monsters.read"){t.Fatal("super administrator should have monster read permission")}
+ if !hasPermission(adminauth.User{IsSuperAdmin:true},"monsters.manage"){t.Fatal("super administrator should have monster management permission")}
+ if hasPermission(user,"monsters.read"){t.Fatal("monster read must require its own permission")}
+ if hasPermission(user,"monsters.manage"){t.Fatal("monster management must require its own permission")}
 }
