@@ -1171,6 +1171,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		_set_chat_expanded(false)
 		get_viewport().set_input_as_handled()
 		return
+	# Do not trigger gameplay shortcuts while the player is typing in chat
+	# (or another text editor). Letters such as I/C/F/E belong to the text field.
+	var focused_control := get_viewport().gui_get_focus_owner()
+	if focused_control is LineEdit or focused_control is TextEdit:
+		return
 	if event.keycode == KEY_TAB:
 		_cycle_monster_target()
 		get_viewport().set_input_as_handled()
