@@ -87,10 +87,14 @@ func (h *gameMonsterAdminHandlers) updateDefinition(w http.ResponseWriter,r *htt
 	var currentAggro,currentLeash float64
 	err=tx.QueryRowContext(ctx,`SELECT aggro_radius,leash_radius FROM monster_definitions WHERE id=$1 FOR UPDATE`,id).Scan(&currentAggro,&currentLeash)
 	if errors.Is(err,sql.ErrNoRows){http.Error(w,"monster definition not found",404);return};if err!=nil{http.Error(w,"internal server error",500);return}
+	oldSnapshot,err:=readConfigSnapshot(ctx,tx,"monster_definitions","id=$1",id);if err!=nil{http.Error(w,"internal server error",500);return}
 	if req.AggroRadius!=nil{currentAggro=*req.AggroRadius};if req.LeashRadius!=nil{currentLeash=*req.LeashRadius}
 	if currentLeash<currentAggro{http.Error(w,"leash_radius cannot be smaller than aggro_radius",400);return}
 	_,err=tx.ExecContext(ctx,`UPDATE monster_definitions SET name=COALESCE($2,name),level=COALESCE($3,level),max_health=COALESCE($4,max_health),attack=COALESCE($5,attack),defense=COALESCE($6,defense),move_speed=COALESCE($7,move_speed),aggro_radius=COALESCE($8,aggro_radius),leash_radius=COALESCE($9,leash_radius),enabled=COALESCE($10,enabled),updated_at=now() WHERE id=$1`,id,req.Name,req.Level,req.MaxHealth,req.Attack,req.Defense,req.MoveSpeed,req.AggroRadius,req.LeashRadius,req.Enabled)
-	if err!=nil{http.Error(w,"internal server error",500);return};if err=tx.Commit();err!=nil{http.Error(w,"internal server error",500);return};writeJSON(w,200,map[string]any{"monster_id":id,"updated":true})
+	if err!=nil{http.Error(w,"internal server error",500);return}
+	newSnapshot,err:=readConfigSnapshot(ctx,tx,"monster_definitions","id=$1",id);if err!=nil{http.Error(w,"internal server error",500);return}
+	if err=recordConfigRevision(ctx,tx,"monster_definition",id,"update",oldSnapshot,newSnapshot);err!=nil{h.logger.Error("record monster definition revision failed","monster_id",id,"error",err);http.Error(w,"internal server error",500);return}
+	if err=tx.Commit();err!=nil{http.Error(w,"internal server error",500);return};writeJSON(w,200,map[string]any{"monster_id":id,"updated":true})
 }
 
 func (h *gameMonsterAdminHandlers) listSpawnPoints(w http.ResponseWriter,r *http.Request) {
@@ -113,9 +117,16 @@ func (h *gameMonsterAdminHandlers) updateSpawnPoint(w http.ResponseWriter,r *htt
 	for _,v:=range []*int{req.RetrySpawnSeconds,req.FirstSpawnDelaySeconds}{if v!=nil&&(*v<0||*v>604800){http.Error(w,"spawn delays must be between 0 and 604800 seconds",400);return}}
 	if req.RetrySpawnSeconds!=nil&&*req.RetrySpawnSeconds<1{http.Error(w,"retry_spawn_seconds must be at least 1",400);return}
 	ctx,cancel:=context.WithTimeout(r.Context(),8*time.Second);defer cancel()
+	tx,err:=h.db.BeginTx(ctx,nil);if err!=nil{http.Error(w,"internal server error",500);return};defer tx.Rollback()
+	var lockedID string
+	if err=tx.QueryRowContext(ctx,`SELECT id FROM world_monster_spawn_points WHERE id=$1 FOR UPDATE`,id).Scan(&lockedID);errors.Is(err,sql.ErrNoRows){http.Error(w,"spawn point not found",404);return}else if err!=nil{http.Error(w,"internal server error",500);return}
+	oldSnapshot,err:=readConfigSnapshot(ctx,tx,"world_monster_spawn_points","id=$1",id);if err!=nil{http.Error(w,"internal server error",500);return}
 	var updatedID string
-	err:=h.db.QueryRowContext(ctx,`UPDATE world_monster_spawn_points SET spawn_x=COALESCE($2,spawn_x),spawn_z=COALESCE($3,spawn_z),rare_spawn=COALESCE($4,rare_spawn),spawn_chance_percent=COALESCE($5,spawn_chance_percent),retry_spawn_seconds=COALESCE($6,retry_spawn_seconds),first_spawn_delay_seconds=COALESCE($7,first_spawn_delay_seconds),enabled=COALESCE($8,enabled),updated_at=now() WHERE id=$1 RETURNING id`,id,req.SpawnX,req.SpawnZ,req.RareSpawn,req.SpawnChancePercent,req.RetrySpawnSeconds,req.FirstSpawnDelaySeconds,req.Enabled).Scan(&updatedID)
-	if errors.Is(err,sql.ErrNoRows){http.Error(w,"spawn point not found",404);return};if err!=nil{h.logger.Error("monster spawn point update failed","spawn_id",id,"error",err);http.Error(w,"internal server error",500);return}
+	err=tx.QueryRowContext(ctx,`UPDATE world_monster_spawn_points SET spawn_x=COALESCE($2,spawn_x),spawn_z=COALESCE($3,spawn_z),rare_spawn=COALESCE($4,rare_spawn),spawn_chance_percent=COALESCE($5,spawn_chance_percent),retry_spawn_seconds=COALESCE($6,retry_spawn_seconds),first_spawn_delay_seconds=COALESCE($7,first_spawn_delay_seconds),enabled=COALESCE($8,enabled),updated_at=now() WHERE id=$1 RETURNING id`,id,req.SpawnX,req.SpawnZ,req.RareSpawn,req.SpawnChancePercent,req.RetrySpawnSeconds,req.FirstSpawnDelaySeconds,req.Enabled).Scan(&updatedID)
+	if err!=nil{h.logger.Error("monster spawn point update failed","spawn_id",id,"error",err);http.Error(w,"internal server error",500);return}
+	newSnapshot,err:=readConfigSnapshot(ctx,tx,"world_monster_spawn_points","id=$1",id);if err!=nil{http.Error(w,"internal server error",500);return}
+	if err=recordConfigRevision(ctx,tx,"monster_spawn_point",id,"update",oldSnapshot,newSnapshot);err!=nil{h.logger.Error("record monster spawn revision failed","spawn_id",id,"error",err);http.Error(w,"internal server error",500);return}
+	if err=tx.Commit();err!=nil{http.Error(w,"internal server error",500);return}
 	writeJSON(w,200,map[string]any{"spawn_point_id":updatedID,"updated":true})
 }
 
