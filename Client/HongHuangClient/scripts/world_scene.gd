@@ -826,11 +826,41 @@ func _update_compact_hud(progression: Dictionary = {}) -> void:
 	]
 	if world_id == "underworld_fengdu":
 		lines.append("魂力 " + str(soul_essence_profile.get("soul_power", 0)) + "  ·  吞噬 " + str(soul_essence_profile.get("absorbed_count", 0)) + "  ·  " + str(soul_essence_profile.get("growth_name", "初生魂团")))
+		var progress_by_attribute: Dictionary = {}
+		for progress_variant in soul_essence_profile.get("attribute_progress", []):
+			if progress_variant is Dictionary:
+				var progress_item: Dictionary = progress_variant
+				progress_by_attribute[str(progress_item.get("attribute", ""))] = progress_item
+		var attribute_labels := {
+			"strength": "力",
+			"constitution": "体",
+			"agility": "敏",
+			"spirit": "灵",
+			"vitality": "气"
+		}
+		var progress_parts: Array[String] = []
+		for attribute in ["strength", "constitution", "agility", "spirit", "vitality"]:
+			if not progress_by_attribute.has(attribute):
+				continue
+			var progress_item: Dictionary = progress_by_attribute[attribute]
+			var next_threshold := int(progress_item.get("next_threshold", 0))
+			var absorbed := int(progress_item.get("absorbed_count", 0))
+			var applied := int(progress_item.get("applied_points", 0))
+			var max_points := int(progress_item.get("max_points", 10))
+			var milestone_text := "满" if next_threshold <= 0 or applied >= max_points else str(absorbed) + "/" + str(next_threshold)
+			progress_parts.append(str(attribute_labels.get(attribute, attribute)) + "+" + str(applied) + " " + milestone_text)
+		if not progress_parts.is_empty():
+			lines.append("来世资质 · " + "  ".join(PackedStringArray(progress_parts)))
+		compact_hud_panel.custom_minimum_size = Vector2(420.0, 116.0)
+		compact_hud_label.custom_minimum_size = Vector2(396.0, 96.0)
 		var pending_choices: Array = soul_essence_profile.get("pending_rare_choices", [])
 		if is_instance_valid(soul_choice_button):
 			soul_choice_button.visible = not pending_choices.is_empty()
 			if not pending_choices.is_empty():
 				soul_choice_button.text = "分配无相灵魄 · " + str(pending_choices.size())
+	else:
+		compact_hud_panel.custom_minimum_size = Vector2(340.0, 92.0)
+		compact_hud_label.custom_minimum_size = Vector2(316.0, 72.0)
 	compact_hud_label.text = "\n".join(PackedStringArray(lines))
 
 func _apply_world_player_form() -> void:
