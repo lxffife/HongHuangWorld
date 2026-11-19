@@ -93,7 +93,7 @@ func (h *gamePlayerAdminHandlers) growth(w http.ResponseWriter, r *http.Request)
 		ORDER BY event.life_index DESC LIMIT 100`,soulID)
 	if err != nil { adminGrowthQueryError(h.logger,w,"reincarnation history",err); return }
 	births, err := queryAdminRows(ctx,h.db,`
-		SELECT snapshot.character_id::text,character.name AS character_name,
+		SELECT snapshot.character_id::text,born_character.name AS character_name,
 		       snapshot.life_index,snapshot.source_absorbed_count,
 		       snapshot.source_growth_stage,snapshot.source_growth_name,
 		       snapshot.source_strength,snapshot.source_constitution,
@@ -102,7 +102,7 @@ func (h *gamePlayerAdminHandlers) growth(w http.ResponseWriter, r *http.Request)
 		       snapshot.applied_agility,snapshot.applied_spirit,snapshot.applied_vitality,
 		       snapshot.dominant_attribute,snapshot.created_at
 		FROM character_birth_inheritance snapshot
-		JOIN characters character ON character.id=snapshot.character_id
+		JOIN characters born_character ON born_character.id=snapshot.character_id
 		WHERE snapshot.soul_id=$1::uuid
 		ORDER BY snapshot.life_index DESC LIMIT 100`,soulID)
 	if err != nil { adminGrowthQueryError(h.logger,w,"birth inheritance",err); return }
