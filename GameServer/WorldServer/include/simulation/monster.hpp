@@ -153,19 +153,44 @@ inline bool tick_monster(const MonsterDefinition& definition, MonsterState& stat
 
     float destination_x = definition.spawn_x;
     float destination_z = definition.spawn_z;
+    bool retreating = false;
+    double distance = 0.0;
+    float dx = destination_x - state.x;
+    float dz = destination_z - state.z;
+
     if (state.mode == MonsterMode::Chasing && target != nullptr) {
-        destination_x = target->x;
-        destination_z = target->z;
+        dx = target->x - state.x;
+        dz = target->z - state.z;
+        distance = std::hypot(static_cast<double>(dx), static_cast<double>(dz));
+        const auto profile = monster_attack_profile(definition);
+        if (std::string(profile.style) == "soul_bolt") {
+            // Ranged souls kite at roughly 72% of their attack range. They still
+            // remain inside attack range, so a windup can complete if the player
+            // does not keep closing the gap.
+            const double preferred_distance = static_cast<double>(definition.attack_range) * 0.72;
+            retreating = distance < preferred_distance && distance > 0.001;
+            if (retreating) {
+                dx = -dx;
+                dz = -dz;
+            }
+        }
+    } else {
+        distance = std::hypot(static_cast<double>(dx), static_cast<double>(dz));
     }
 
-    const float dx = destination_x - state.x;
-    const float dz = destination_z - state.z;
-    const double distance = std::hypot(static_cast<double>(dx), static_cast<double>(dz));
-    if (distance > 0.001) {
+    if (state.mode == MonsterMode::Chasing && target != nullptr) {
+        const float face_dx = target->x - state.x;
+        const float face_dz = target->z - state.z;
+        if (std::hypot(static_cast<double>(face_dx), static_cast<double>(face_dz)) > 0.001) {
+            // Even while kiting, ranged souls keep facing their target.
+            state.yaw = std::atan2(-face_dx, -face_dz);
+        }
+    } else if (distance > 0.001) {
         // Godot characters face local -Z; keep the server snapshot as the facing authority.
         state.yaw = std::atan2(-dx, -dz);
     }
-    if (state.mode == MonsterMode::Chasing &&
+
+    if (state.mode == MonsterMode::Chasing && !retreating &&
         distance <= static_cast<double>(definition.attack_range)) {
         return true;
     }
@@ -175,9 +200,19 @@ inline bool tick_monster(const MonsterDefinition& definition, MonsterState& stat
     }
 
     const float step = definition.move_speed * std::min(delta_seconds, 0.1F);
-    const double desired_travel = state.mode == MonsterMode::Chasing
-        ? distance - static_cast<double>(definition.attack_range)
+    double desired_travel = state.mode == MonsterMode::Chasing
+        ? (retreating
+            ? static_cast<double>(definition.attack_range) * 0.72 - distance
+            : distance - static_cast<double>(definition.attack_range))
         : distance;
+    if (retreating) {
+        const double from_spawn = std::hypot(
+            static_cast<double>(state.x - definition.spawn_x),
+            static_cast<double>(state.z - definition.spawn_z));
+        const double leash_remaining = std::max(
+            0.0, static_cast<double>(definition.leash_radius) - from_spawn - 0.05);
+        desired_travel = std::min(desired_travel, leash_remaining);
+    }
     const float travel = static_cast<float>(std::min(static_cast<double>(step), desired_travel));
     state.x += dx / static_cast<float>(distance) * travel;
     state.z += dz / static_cast<float>(distance) * travel;
