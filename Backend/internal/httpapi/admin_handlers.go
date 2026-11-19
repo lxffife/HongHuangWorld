@@ -153,11 +153,13 @@ func (h *adminHandlers) playerDetail(w http.ResponseWriter, r *http.Request) {
   h.logger.Error("admin player detail identity lookup failed","error",err)
   http.Error(w,"identity service unavailable",http.StatusServiceUnavailable);return
  }
+ auditPage,err:=h.service.ListAuditLogs(ctx,adminauth.AuditFilter{ResourceType:"player",ResourceID:id,Limit:20})
+ if err!=nil { h.logger.Error("admin player audit lookup failed","error",err);http.Error(w,"audit service unavailable",http.StatusServiceUnavailable);return }
  gameDetail,err:=h.game.PlayerDetail(ctx,id)
  if err!=nil {
   if strings.Contains(err.Error(),"not found") { http.Error(w,"game player not found",http.StatusNotFound);return }
   h.logger.Error("admin player detail game lookup failed","error",err)
   http.Error(w,"game service unavailable",http.StatusServiceUnavailable);return
  }
- writeJSON(w,http.StatusOK,map[string]any{"account":account,"game":gameDetail})
+ writeJSON(w,http.StatusOK,map[string]any{"account":account,"game":gameDetail,"audit_logs":auditPage.Items})
 }
