@@ -6,6 +6,7 @@ import (
  "log/slog"
  "os"
  "net/http"
+ "strings"
  "time"
 
  "github.com/liflife/HongHuangWorld/Backend/internal/adminauth"
@@ -28,7 +29,12 @@ func NewAdminRouter(logger *slog.Logger,db *sql.DB) http.Handler {
  if db==nil { unavailable:=func(w http.ResponseWriter,_ *http.Request){http.Error(w,"service unavailable",http.StatusServiceUnavailable)}
   for _,route:=range []string{"POST /api/v1/admin/auth/login","GET /api/v1/admin/auth/me","GET /api/v1/admin/audit-logs","GET /api/v1/admin/dashboard","GET /api/v1/admin/services/health","POST /api/v1/admin/auth/logout","POST /api/v1/admin/auth/password","GET /api/v1/admin/users","POST /api/v1/admin/users","GET /api/v1/admin/permissions","PUT /api/v1/admin/users/{id}/permissions","PATCH /api/v1/admin/users/{id}/status","GET /api/v1/admin/players","GET /api/v1/admin/players/online","GET /api/v1/admin/config-revisions","POST /api/v1/admin/config-revisions/{revisionID}/rollback","GET /api/v1/admin/monsters/definitions","POST /api/v1/admin/monsters/definitions","PATCH /api/v1/admin/monsters/definitions/{monsterID}","GET /api/v1/admin/monsters/spawn-points","POST /api/v1/admin/monsters/spawn-points","PATCH /api/v1/admin/monsters/spawn-points/{spawnID}","GET /api/v1/admin/loot/items","PATCH /api/v1/admin/loot/items/{itemID}","GET /api/v1/admin/loot/tables","PUT /api/v1/admin/loot/tables/{monsterID}/{itemID}","DELETE /api/v1/admin/loot/tables/{monsterID}/{itemID}","GET /api/v1/admin/game-config/{resource}","PATCH /api/v1/admin/game-config/{resource}/{id}/state","GET /api/v1/admin/worlds","GET /api/v1/admin/worlds/{worldID}/instances","PATCH /api/v1/admin/worlds/{worldID}/state","GET /api/v1/admin/servers/nodes","PATCH /api/v1/admin/servers/nodes/{nodeKey}/state","GET /api/v1/admin/players/{id}","PATCH /api/v1/admin/players/{id}/status","POST /api/v1/admin/players/{id}/disconnect"}{mux.HandleFunc(route,unavailable)}
  } else {
-  h:=&adminHandlers{db:db,service:adminauth.NewService(db),identity:identityadmin.New(os.Getenv("IDENTITY_API_BASE"),os.Getenv("IDENTITY_INTERNAL_API_KEY")),game:gameadmin.New(os.Getenv("GAME_API_BASE"),os.Getenv("GAME_ADMIN_INTERNAL_API_KEY")),logger:logger}
+  gameAPIBase := strings.TrimSpace(os.Getenv("GAME_API_BASE"))
+  if gameAPIBase == "" {
+   gameAPIBase = "http://127.0.0.1:8787"
+   logger.Warn("GAME_API_BASE is not configured; using local Game API default", "game_api_base", gameAPIBase)
+  }
+  h:=&adminHandlers{db:db,service:adminauth.NewService(db),identity:identityadmin.New(os.Getenv("IDENTITY_API_BASE"),os.Getenv("IDENTITY_INTERNAL_API_KEY")),game:gameadmin.New(gameAPIBase,os.Getenv("GAME_ADMIN_INTERNAL_API_KEY")),logger:logger}
   mux.HandleFunc("POST /api/v1/admin/auth/login",h.login)
   mux.HandleFunc("GET /api/v1/admin/auth/me",h.me)
   mux.HandleFunc("GET /api/v1/admin/dashboard",h.dashboard)
