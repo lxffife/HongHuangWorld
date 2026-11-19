@@ -46,6 +46,20 @@ func (c *Client) PlayerDetail(ctx context.Context, accountID string) (json.RawMe
 	return result, nil
 }
 
+func (c *Client) OnlinePlayers(ctx context.Context) (json.RawMessage, error) {
+	if !c.ready() { return nil, ErrUnavailable }
+	endpoint := c.baseURL + "/api/v1/internal/admin/players/online"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil { return nil, err }
+	req.Header.Set("X-Game-Admin-Key", c.apiKey)
+	resp, err := c.httpClient.Do(req)
+	if err != nil { return nil, fmt.Errorf("%w: %v", ErrUnavailable, err) }
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK { return nil, fmt.Errorf("%w: game returned %d", ErrUnavailable, resp.StatusCode) }
+	var result json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil { return nil, err }
+	return result, nil
+}
 type DisconnectResult struct {
 	Status string `json:"status"`
 	RequestedSessions int64 `json:"requested_sessions"`
