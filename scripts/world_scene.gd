@@ -41,6 +41,7 @@ var chat_toggle_button: Button
 var chat_unread_badge: Label
 var chat_unread_count := 0
 var chat_expanded := false
+var chat_restore_mouse_captured := false
 var chat_lines_by_channel: Dictionary = {"nearby": [], "world": [], "cross_world": []}
 var chat_seen_ids: Dictionary = {}
 var selected_chat_channel := "nearby"
@@ -1297,12 +1298,20 @@ func is_gameplay_input_blocked() -> bool:
 	return focused_control is LineEdit or focused_control is TextEdit
 
 func _set_chat_expanded(expanded: bool) -> void:
+	if expanded and not chat_expanded:
+		# Release captured mouse before the player can interact with chat controls.
+		chat_restore_mouse_captured = Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	chat_expanded = expanded
 	if expanded:
 		chat_unread_count = 0
 		_update_chat_unread_badge()
+		call_deferred("_scroll_chat_to_bottom")
 	elif is_instance_valid(chat_input):
 		chat_input.release_focus()
+		if chat_restore_mouse_captured:
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		chat_restore_mouse_captured = false
 	if not is_instance_valid(chat_panel):
 		return
 	for child in chat_panel.get_child(0).get_children():
@@ -1487,18 +1496,38 @@ func _append_chat_line(line: String, channel: String = "", message_id: String = 
 	var timestamp := created_at
 	if timestamp.is_empty():
 		timestamp = Time.get_datetime_string_from_system(true)
-	var entry := {"text": line, "id": message_id, "created_at": timestamp, "sort_key": timestamp + message_id}
-	var insert_at := lines.size()
-	for index in range(lines.size()):
-		if str(lines[index].get("sort_key", "")) > str(entry["sort_key"]):
-			insert_at = index
-			break
-	lines.insert(insert_at, entry)
+	var entry := {"text": line, "id": message_id, "created_at": timestamp, "sort_time": _chat_timestamp_sort_value(timestamp)}
+	lines.append(entry)
+	lines.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var a_time := int(a.get("sort_time", 0))
+		var b_time := int(b.get("sort_time", 0))
+		if a_time == b_time:
+			return str(a.get("id", "")) < str(b.get("id", ""))
+		return a_time < b_time
+	)
 	while lines.size() > 40:
 		lines.pop_front()
 	chat_lines_by_channel[target_channel] = lines
 	if target_channel == selected_chat_channel:
 		_render_chat_lines()
+		if chat_expanded:
+			call_deferred("_scroll_chat_to_bottom")
+
+func _chat_timestamp_sort_value(timestamp: String) -> int:
+	if timestamp.is_empty() or timestamp.length() < 19:
+		return int(Time.get_unix_time_from_system())
+	var normalized := timestamp.substr(0, 19).replace("T", " ")
+	return int(Time.get_unix_time_from_datetime_string(normalized))
+
+func _scroll_chat_to_bottom() -> void:
+	if not is_instance_valid(chat_scroll):
+		return
+	await get_tree().process_frame
+	if not is_instance_valid(chat_scroll):
+		return
+	var scroll_bar := chat_scroll.get_v_scroll_bar()
+	if is_instance_valid(scroll_bar):
+		chat_scroll.scroll_vertical = int(scroll_bar.max_value)
 
 func _render_chat_lines() -> void:
 	if not is_instance_valid(chat_log):
@@ -1507,11 +1536,15 @@ func _render_chat_lines() -> void:
 	for child in chat_log.get_children():
 		child.queue_free()
 	for entry in visible_lines:
-		var label := Label.new()
-		label.text = str(entry.get("text", ""))
-		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		chat_log.add_child(label)
+		var message_text := RichTextLabel.new()
+		message_text.text = str(entry.get("text", ""))
+		message_text.fit_content = true
+		message_text.scroll_active = false
+		message_text.selection_enabled = true
+		message_text.context_menu_enabled = true
+		message_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		message_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		chat_log.add_child(message_text)
 
 func _on_pickup_event(event: Dictionary) -> void:
 	if bool(event.get("pending", false)):
