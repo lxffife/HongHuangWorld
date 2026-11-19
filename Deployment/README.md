@@ -129,3 +129,15 @@ Windows（在仓库根目录，单独 PowerShell 窗口运行）：
 - 强制下线是异步请求，接口返回 HTTP 202 和 `requested_sessions` 数量；实际断开在 WorldServer 下一次周期快照时完成（通常约 1 秒内，受节点负载影响）。
 
 修改 `Deployment/.env.example` 后，请同步更新本机 `Deployment/.env` 中的配置，再分别重启 Game API 与 Admin API。
+
+
+### 怪物掉落与物品目录管理
+
+- `GET /api/v1/admin/loot/items`：需要 `monsters.read`，查看物品目录（含装备属性、使用效果、堆叠上限和启用状态）。
+- `PATCH /api/v1/admin/loot/items/{item_id}`：需要 `monsters.manage`，可修改物品名称、描述、图标、最大堆叠数和启用状态；物品 ID、类别和品质保持稳定。
+- `GET /api/v1/admin/loot/tables`：查看怪物掉落条目、单项概率、数量区间及该怪物的概率总和。
+- `PUT /api/v1/admin/loot/tables/{monster_id}/{item_id}`：新增或更新掉落条目，请求体为 `{"drop_chance_bp":6500,"min_quantity":1,"max_quantity":2}`。概率使用万分比（10000=100%）。
+- `DELETE /api/v1/admin/loot/tables/{monster_id}/{item_id}`：删除对应掉落条目。
+- 概率总和在同一怪物维度加事务锁校验，不能超过 10000；数量必须为正数且最大数量不得超过物品堆叠上限。
+- 降低物品堆叠上限时，会检查现有背包、掉落配置和地面掉落数量，不能造成已有数据超过上限。
+- Game 服务是物品与掉落配置的唯一数据所有者；Admin 只通过 `GAME_ADMIN_INTERNAL_API_KEY` 调用 Game 内部接口，不跨库访问。所有修改写入 Admin 审计日志。
