@@ -32,7 +32,17 @@ func (h *adminHandlers) serviceHealth(w http.ResponseWriter, r *http.Request) {
 		{name: "chat", base: serviceBaseURL("CHAT_API_BASE", "http://127.0.0.1:8788")},
 	}
 	results := make([]serviceHealthItem, 4)
-	results[0] = serviceHealthItem{Name: "admin", Status: "healthy", CheckedAt: time.Now().UTC()}
+	results[0] = serviceHealthItem{Name: "admin", Status: "unhealthy", CheckedAt: time.Now().UTC()}
+	adminCtx, adminCancel := context.WithTimeout(r.Context(), 2*time.Second)
+	adminStarted := time.Now()
+	if h.db != nil && h.db.PingContext(adminCtx) == nil {
+		results[0].Status = "healthy"
+	} else {
+		results[0].Error = "Admin database unavailable"
+	}
+	results[0].LatencyMS = time.Since(adminStarted).Milliseconds()
+	results[0].CheckedAt = time.Now().UTC()
+	adminCancel()
 	var wg sync.WaitGroup
 	for i, target := range targets {
 		wg.Add(1)
