@@ -2247,6 +2247,8 @@ func _on_reconnected_welcomed(snapshot: Dictionary) -> void:
 		reconnect_network.player_left.connect(_on_player_left)
 	if not reconnect_network.combat_event.is_connected(_on_combat_event):
 		reconnect_network.combat_event.connect(_on_combat_event)
+	if not reconnect_network.monster_action_event.is_connected(_on_monster_action_event):
+		reconnect_network.monster_action_event.connect(_on_monster_action_event)
 	if not reconnect_network.pickup_event.is_connected(_on_pickup_event):
 		reconnect_network.pickup_event.connect(_on_pickup_event)
 	if not reconnect_network.chat_event.is_connected(_on_chat_event):
