@@ -417,14 +417,16 @@ static func create_player_humanoid() -> Node3D:
 	_part(root, "SwordPommel", _sphere(0.065), Vector3(-0.43, 1.70, 0.25), trim, Vector3.ZERO, 0.12, 0.25)
 
 	# Stable sockets let equipment visuals be replaced independently of the body mesh.
-	_add_equipment_socket(root, "EquipmentWeaponSocket", Vector3(0.43, 1.12, -0.20))
+	var right_arm := root.get_node("ArmPivotRight") as Node3D
+	var left_arm := root.get_node("ArmPivotLeft") as Node3D
+	_add_equipment_socket(right_arm, "EquipmentWeaponSocket", Vector3(0.03, -0.58, -0.06))
 	_add_equipment_socket(root, "EquipmentHeadSocket", Vector3(0.0, 2.08, 0.0))
 	_add_equipment_socket(root, "EquipmentChestSocket", Vector3(0.0, 1.20, -0.24))
 	_add_equipment_socket(root, "EquipmentLegsSocket", Vector3(0.0, 0.58, -0.22))
 	_add_equipment_socket(root, "EquipmentBootsSocket", Vector3(0.0, 0.18, -0.06))
 	_add_equipment_socket(root, "EquipmentBackSocket", Vector3(0.0, 1.28, 0.24))
 	_add_equipment_socket(root, "EquipmentAccessorySocket", Vector3(0.20, 0.82, -0.30))
-	_add_equipment_socket(root, "EquipmentOffhandSocket", Vector3(-0.43, 1.12, -0.20))
+	_add_equipment_socket(left_arm, "EquipmentOffhandSocket", Vector3(-0.03, -0.58, -0.06))
 	# Keep the visible humanoid close to the 1.8 m collision capsule.
 	root.scale = Vector3.ONE * 0.88
 	return root
