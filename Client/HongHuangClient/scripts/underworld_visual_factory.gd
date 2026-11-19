@@ -306,4 +306,6 @@ static func create_player_humanoid() -> Node3D:
 		_part(arm_pivot, "Hand", _sphere(0.085), Vector3(side * 0.03, -0.58, -0.01), skin)
 	_part(root, "BackScabbard", _box(Vector3(0.12, 0.92, 0.18)), Vector3(-0.28, 1.05, 0.19), leather, Vector3(0.0, 0.0, -0.22))
 	_part(root, "ScabbardGuard", _box(Vector3(0.42, 0.07, 0.10)), Vector3(-0.28, 1.43, 0.19), trim, Vector3(0.0, 0.0, -0.22))
+	# Keep the visible humanoid close to the 1.8 m collision capsule.
+	root.scale = Vector3.ONE * 0.88
 	return root
