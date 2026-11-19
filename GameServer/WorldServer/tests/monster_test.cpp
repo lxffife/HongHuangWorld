@@ -27,6 +27,22 @@ int main() {
     assert(wolf_profile.windup_ms == 320 && wolf_profile.cooldown_ms == 900);
     assert(std::string(wolf_profile.style) == "wolf_lunge");
 
+    // Pack members receive separate approach points but remain within melee reach.
+    MonsterState pack_left{.x = -8.0F, .z = -8.0F, .health = wolf.max_health};
+    MonsterState pack_right{.x = 8.0F, .z = 8.0F, .health = wolf.max_health};
+    const MonsterTarget pack_slot_left{.id = "pack-player", .x = 0.0F, .z = 0.0F,
+        .alive = true, .approach_x = -0.65F, .approach_z = 0.0F, .has_approach_position = true};
+    const MonsterTarget pack_slot_right{.id = "pack-player", .x = 0.0F, .z = 0.0F,
+        .alive = true, .approach_x = 0.65F, .approach_z = 0.0F, .has_approach_position = true};
+    for (int step = 0; step < 200; ++step) {
+        assert(tick_monster(wolf, pack_left, &pack_slot_left, 0.05F));
+        assert(tick_monster(wolf, pack_right, &pack_slot_right, 0.05F));
+    }
+    assert(pack_left.x < 0.0F && pack_right.x > 0.0F);
+    assert(std::hypot(pack_left.x - pack_slot_left.x, pack_left.z - pack_slot_left.z) <= wolf.attack_range - 0.64F);
+    assert(std::hypot(pack_right.x - pack_slot_right.x, pack_right.z - pack_slot_right.z) <= wolf.attack_range - 0.64F);
+    assert(std::hypot(pack_left.x - pack_right.x, pack_left.z - pack_right.z) > 1.0F);
+
     auto iron_beast = wolf;
     iron_beast.id = "iron_beast";
     iron_beast.name = "铁骨兽";
