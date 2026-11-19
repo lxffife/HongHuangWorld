@@ -2203,6 +2203,21 @@ struct EnetServer::Impl {
                     nearest_target = &target_storage;
                 }
             }
+            if (nearest_target != nullptr &&
+                honghuang::simulation::monster_attack_profile(monster.definition).style == std::string("wolf_lunge")) {
+                // Give each wolf a deterministic point on a small ring around its victim.
+                // This spreads the pack without changing target selection or combat authority.
+                std::uint32_t slot_hash = 2166136261U;
+                for (const unsigned char ch : monster.runtime_id) {
+                    slot_hash ^= ch;
+                    slot_hash *= 16777619U;
+                }
+                const double angle = (static_cast<double>(slot_hash % 8U) / 8.0) * 6.283185307179586;
+                const float slot_radius = std::min(0.65F, monster.definition.attack_range * 0.35F);
+                target_storage.approach_x = target_storage.x + static_cast<float>(std::cos(angle) * slot_radius);
+                target_storage.approach_z = target_storage.z + static_cast<float>(std::sin(angle) * slot_radius);
+                target_storage.has_approach_position = true;
+            }
             if (!honghuang::simulation::tick_monster(
                     monster.definition, monster.state, nearest_target, delta)) {
                 std::cerr << "Skipping invalid monster simulation state: "
