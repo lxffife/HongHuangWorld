@@ -215,3 +215,18 @@ func (c *Client) doLootJSON(ctx context.Context,method,path string,body any) (js
 	switch resp.StatusCode {case http.StatusBadRequest: data,_:=io.ReadAll(io.LimitReader(resp.Body,2048));return nil,fmt.Errorf("%w: %s",ErrInvalidLootRequest,strings.TrimSpace(string(data)));case http.StatusNotFound:return nil,ErrLootNotFound;case http.StatusOK:default:return nil,fmt.Errorf("%w: game returned %d",ErrUnavailable,resp.StatusCode)}
 	var result json.RawMessage;if err:=json.NewDecoder(resp.Body).Decode(&result);err!=nil{return nil,err};return result,nil
 }
+
+func (c *Client) MonsterDefinitions(ctx context.Context) (json.RawMessage,error) {
+	return c.getAdminJSON(ctx,"/api/v1/internal/admin/monsters/definitions")
+}
+func (c *Client) MonsterSpawnPoints(ctx context.Context,worldID string) (json.RawMessage,error) {
+	path:="/api/v1/internal/admin/monsters/spawn-points"
+	if worldID!="" { path+="?world_id="+url.QueryEscape(worldID) }
+	return c.getAdminJSON(ctx,path)
+}
+func (c *Client) UpdateMonsterDefinition(ctx context.Context,id string,body any) (json.RawMessage,error) {
+	return c.doLootJSON(ctx,http.MethodPatch,"/api/v1/internal/admin/monsters/definitions/"+url.PathEscape(id),body)
+}
+func (c *Client) UpdateMonsterSpawnPoint(ctx context.Context,id string,body any) (json.RawMessage,error) {
+	return c.doLootJSON(ctx,http.MethodPatch,"/api/v1/internal/admin/monsters/spawn-points/"+url.PathEscape(id),body)
+}
