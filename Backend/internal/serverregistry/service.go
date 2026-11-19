@@ -54,6 +54,7 @@ type Node struct {
 	AdminState string `json:"admin_state"`
 	LastHeartbeatAt *time.Time `json:"last_heartbeat_at"`
 	ActiveSessions int `json:"active_sessions"`
+	PendingSessions int `json:"pending_sessions"`
 	WorldInstances int `json:"world_instances"`
 	WorldNames string `json:"world_names"`
 	CreatedAt time.Time `json:"created_at"`
@@ -68,7 +69,8 @@ func (s *Service) ListNodes(ctx context.Context) ([]Node, error) {
 		            WHEN sr.last_heartbeat_at IS NULL OR sr.last_heartbeat_at < now() - interval '30 seconds' THEN 'offline'
 		            ELSE sr.status END,
 		       sr.admin_state, sr.last_heartbeat_at,
-		       (SELECT COUNT(*) FROM world_sessions ws WHERE ws.server_id = sr.id AND ws.session_state IN ('connecting','active','saving'))::int,
+		       (SELECT COUNT(*) FROM world_sessions ws WHERE ws.server_id = sr.id AND ws.session_state = 'active')::int,
+		       (SELECT COUNT(*) FROM world_sessions ws WHERE ws.server_id = sr.id AND ws.session_state IN ('connecting','saving'))::int,
 		       (SELECT COUNT(*) FROM world_instances wi WHERE wi.server_id = sr.id)::int,
 		       COALESCE((SELECT string_agg(DISTINCT wd.name, ', ' ORDER BY wd.name) FROM world_instances wi JOIN world_definitions wd ON wd.id = wi.world_id WHERE wi.server_id = sr.id), ''),
 		       sr.created_at, sr.updated_at
@@ -80,7 +82,7 @@ func (s *Service) ListNodes(ctx context.Context) ([]Node, error) {
 	for rows.Next() {
 		var node Node
 		var heartbeat sql.NullTime
-		if err := rows.Scan(&node.ID, &node.NodeKey, &node.Host, &node.UDPPort, &node.Region, &node.Capacity, &node.ReportedPlayers, &node.Status, &node.AdminState, &heartbeat, &node.ActiveSessions, &node.WorldInstances, &node.WorldNames, &node.CreatedAt, &node.UpdatedAt); err != nil { return nil, fmt.Errorf("scan world server node: %w", err) }
+		if err := rows.Scan(&node.ID, &node.NodeKey, &node.Host, &node.UDPPort, &node.Region, &node.Capacity, &node.ReportedPlayers, &node.Status, &node.AdminState, &heartbeat, &node.ActiveSessions, &node.PendingSessions, &node.WorldInstances, &node.WorldNames, &node.CreatedAt, &node.UpdatedAt); err != nil { return nil, fmt.Errorf("scan world server node: %w", err) }
 		if heartbeat.Valid { value := heartbeat.Time; node.LastHeartbeatAt = &value }
 		nodes = append(nodes, node)
 	}
