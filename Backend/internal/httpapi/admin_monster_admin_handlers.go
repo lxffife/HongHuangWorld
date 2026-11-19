@@ -10,11 +10,32 @@ import (
 	"github.com/liflife/HongHuangWorld/Backend/internal/gameadmin"
 )
 
+type adminMonsterDefinitionCreate struct {
+	ID string `json:"id"`; Name string `json:"name"`; Level int `json:"level"`; MaxHealth float64 `json:"max_health"`; Attack float64 `json:"attack"`; Defense float64 `json:"defense"`; MoveSpeed float64 `json:"move_speed"`; AggroRadius float64 `json:"aggro_radius"`; LeashRadius float64 `json:"leash_radius"`; Enabled *bool `json:"enabled"`
+}
+type adminMonsterSpawnCreate struct {
+	ID string `json:"id"`; WorldID string `json:"world_id"`; MonsterID string `json:"monster_id"`; SpawnX float64 `json:"spawn_x"`; SpawnZ float64 `json:"spawn_z"`; RareSpawn bool `json:"rare_spawn"`; SpawnChancePercent int `json:"spawn_chance_percent"`; RetrySpawnSeconds int `json:"retry_spawn_seconds"`; FirstSpawnDelaySeconds int `json:"first_spawn_delay_seconds"`; Enabled *bool `json:"enabled"`
+}
 type adminMonsterDefinitionUpdate struct {
 	Name *string `json:"name"`; Level *int `json:"level"`; MaxHealth *float64 `json:"max_health"`; Attack *float64 `json:"attack"`; Defense *float64 `json:"defense"`; MoveSpeed *float64 `json:"move_speed"`; AggroRadius *float64 `json:"aggro_radius"`; LeashRadius *float64 `json:"leash_radius"`; Enabled *bool `json:"enabled"`
 }
 type adminMonsterSpawnUpdate struct {
 	SpawnX *float64 `json:"spawn_x"`; SpawnZ *float64 `json:"spawn_z"`; RareSpawn *bool `json:"rare_spawn"`; SpawnChancePercent *int `json:"spawn_chance_percent"`; RetrySpawnSeconds *int `json:"retry_spawn_seconds"`; FirstSpawnDelaySeconds *int `json:"first_spawn_delay_seconds"`; Enabled *bool `json:"enabled"`
+}
+
+func (h *adminHandlers) createMonsterDefinition(w http.ResponseWriter,r *http.Request){
+	actor,ok:=h.require(w,r,"monsters.manage");if !ok{return}
+	var req adminMonsterDefinitionCreate;if err:=decodeJSON(w,r,&req);err!=nil{http.Error(w,"invalid request body",400);return}
+	ctx,cancel:=context.WithTimeout(r.Context(),10*time.Second);defer cancel();result,err:=h.game.CreateMonsterDefinition(ctx,req)
+	if err!=nil{if errors.Is(err,gameadmin.ErrInvalidLootRequest){http.Error(w,err.Error(),400);return};h.logger.Error("admin monster definition create failed","monster_id",req.ID,"error",err);http.Error(w,"game service unavailable",503);return}
+	if err:=h.service.RecordAudit(ctx,actor,"monster.definition.create","monster_definition",req.ID,"success",map[string]any{"name":req.Name,"level":req.Level});err!=nil{http.Error(w,"monster created but audit recording failed",500);return};writeJSONRaw(w,result)
+}
+func (h *adminHandlers) createMonsterSpawnPoint(w http.ResponseWriter,r *http.Request){
+	actor,ok:=h.require(w,r,"monsters.manage");if !ok{return}
+	var req adminMonsterSpawnCreate;if err:=decodeJSON(w,r,&req);err!=nil{http.Error(w,"invalid request body",400);return}
+	ctx,cancel:=context.WithTimeout(r.Context(),10*time.Second);defer cancel();result,err:=h.game.CreateMonsterSpawnPoint(ctx,req)
+	if err!=nil{if errors.Is(err,gameadmin.ErrInvalidLootRequest){http.Error(w,err.Error(),400);return};h.logger.Error("admin monster spawn point create failed","spawn_id",req.ID,"error",err);http.Error(w,"game service unavailable",503);return}
+	if err:=h.service.RecordAudit(ctx,actor,"monster.spawn_point.create","monster_spawn_point",req.ID,"success",map[string]any{"world_id":req.WorldID,"monster_id":req.MonsterID,"rare_spawn":req.RareSpawn});err!=nil{http.Error(w,"spawn point created but audit recording failed",500);return};writeJSONRaw(w,result)
 }
 
 func (h *adminHandlers) listMonsterDefinitions(w http.ResponseWriter,r *http.Request) {
