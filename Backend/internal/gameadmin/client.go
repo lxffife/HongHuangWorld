@@ -60,6 +60,34 @@ func (c *Client) OnlinePlayers(ctx context.Context) (json.RawMessage, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil { return nil, err }
 	return result, nil
 }
+func (c *Client) GameConfig(ctx context.Context, resource, worldID string) (json.RawMessage, error) {
+	if resource != "npcs" && resource != "exploration-points" && resource != "exploration-events" { return nil, fmt.Errorf("unsupported game config resource") }
+	path := "/api/v1/internal/admin/game-config/" + url.PathEscape(resource)
+	if worldID != "" { path += "?world_id=" + url.QueryEscape(worldID) }
+	return c.getAdminJSON(ctx, path)
+}
+
+func (c *Client) SetGameConfigEnabled(ctx context.Context, resource, id string, enabled bool) (json.RawMessage, error) {
+	if resource != "npcs" && resource != "exploration-points" && resource != "exploration-events" { return nil, fmt.Errorf("unsupported game config resource") }
+	if !c.ready() { return nil, ErrUnavailable }
+	body, err := json.Marshal(map[string]bool{"enabled": enabled})
+	if err != nil { return nil, err }
+	endpoint := c.baseURL + "/api/v1/internal/admin/game-config/" + url.PathEscape(resource) + "/" + url.PathEscape(id) + "/state"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, endpoint, bytes.NewReader(body))
+	if err != nil { return nil, err }
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Game-Admin-Key", c.apiKey)
+	resp, err := c.httpClient.Do(req)
+	if err != nil { return nil, fmt.Errorf("%w: %v", ErrUnavailable, err) }
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound { return nil, fmt.Errorf("game config not found") }
+	if resp.StatusCode == http.StatusBadRequest { return nil, fmt.Errorf("invalid game config request") }
+	if resp.StatusCode != http.StatusOK { return nil, fmt.Errorf("%w: game returned %d", ErrUnavailable, resp.StatusCode) }
+	var result json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil { return nil, err }
+	return result, nil
+}
+
 func (c *Client) Worlds(ctx context.Context) (json.RawMessage, error) {
 	return c.getAdminJSON(ctx, "/api/v1/internal/admin/worlds")
 }
