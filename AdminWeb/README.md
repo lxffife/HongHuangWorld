@@ -4,7 +4,7 @@
 
 ## 本地开发
 
-1. 确保 PostgreSQL 已启动，并按 `Deployment/migrate-database.ps1` 或对应 Linux 迁移流程执行 Game、Identity、Admin 数据库迁移；Game 数据库当前迁移至 `000046`。
+1. 确保 PostgreSQL 已启动，并按 `Deployment/migrate-database.ps1` 或对应 Linux 迁移流程执行 Game、Identity、Admin 数据库迁移；Game 数据库当前迁移至 `000047`。
 2. 配置 `Deployment/.env` 中各服务独立数据库连接、内部服务密钥及后台超级管理员初始化信息。
 3. 启动 Identity、Game API 和 Admin API。Admin API 默认监听 `127.0.0.1:8790`。
 4. 在本目录执行 `npm install`，然后执行 `npm run dev`。
@@ -17,7 +17,7 @@
 - **世界管理**：世界定义、实例列表、启用/停用世界。
 - **服务器监控**：节点心跳、在线负载、恢复/排空/禁用节点。
 - **怪物与掉落**：怪物模板、世界刷新点、物品目录、掉落概率配置。
-- **配置版本历史**：历史快照查看、历史版本回滚。
+- **配置版本历史**：历史快照查看、字段级差异预览、填写回滚原因后恢复历史版本。
 - **操作审计**：查询管理员关键操作记录。
 - **后台用户与权限**：后台用户创建、权限分配、本人密码修改。
 
