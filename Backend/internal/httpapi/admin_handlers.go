@@ -147,11 +147,12 @@ func (h *adminHandlers) playerDetail(w http.ResponseWriter, r *http.Request) {
  id:=strings.TrimSpace(r.PathValue("id"))
  if id=="" || len(id)>64 { http.Error(w,"invalid player id",http.StatusBadRequest);return }
  ctx,cancel:=context.WithTimeout(r.Context(),8*time.Second);defer cancel()
- page,err:=h.identity.ListAccounts(ctx,id,100)
- if err!=nil { h.logger.Error("admin player detail identity lookup failed","error",err);http.Error(w,"identity service unavailable",http.StatusServiceUnavailable);return }
- var account any
- for _,item:=range page.Items { if item.ID==id { account=item;break } }
- if account==nil { http.Error(w,"player not found",http.StatusNotFound);return }
+ account,err:=h.identity.GetAccount(ctx,id)
+ if err!=nil {
+  if strings.Contains(err.Error(),"not found") { http.Error(w,"player not found",http.StatusNotFound);return }
+  h.logger.Error("admin player detail identity lookup failed","error",err)
+  http.Error(w,"identity service unavailable",http.StatusServiceUnavailable);return
+ }
  gameDetail,err:=h.game.PlayerDetail(ctx,id)
  if err!=nil {
   if strings.Contains(err.Error(),"not found") { http.Error(w,"game player not found",http.StatusNotFound);return }
