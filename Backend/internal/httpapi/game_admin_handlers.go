@@ -160,6 +160,64 @@ func (h *gamePlayerAdminHandlers) detail(w http.ResponseWriter, r *http.Request)
 }
 
 
+type adminOnlinePlayer struct {
+	AccountID string `json:"account_id"`
+	CharacterID string `json:"character_id"`
+	CharacterName string `json:"character_name"`
+	Level int `json:"level"`
+	WorldID string `json:"world_id"`
+	WorldName string `json:"world_name"`
+	SessionID string `json:"session_id"`
+	ConnectedAt time.Time `json:"connected_at"`
+	NodeKey string `json:"node_key"`
+	Host string `json:"host"`
+	UDPPort int `json:"udp_port"`
+	Region string `json:"region"`
+	NodeStatus string `json:"node_status"`
+	Capacity int `json:"capacity"`
+	CurrentPlayers int `json:"current_players"`
+}
+
+func (h *gamePlayerAdminHandlers) online(w http.ResponseWriter, r *http.Request) {
+	if !h.authorize(w, r) { return }
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	rows, err := h.db.QueryContext(ctx, `
+		SELECT soul.account_id::text, c.id::text, c.name, c.level, c.world_id,
+		       wd.name, ws.id::text, ws.connected_at, sr.node_key, sr.host,
+		       sr.udp_port, sr.region, sr.status, sr.capacity, sr.current_players
+		FROM world_sessions ws
+		JOIN characters c ON c.id = ws.character_id
+		JOIN souls soul ON soul.id = c.soul_id
+		JOIN world_definitions wd ON wd.id = c.world_id
+		JOIN server_registry sr ON sr.id = ws.server_id
+		WHERE ws.session_state = 'active'
+		ORDER BY ws.connected_at DESC
+		LIMIT 500
+	`)
+	if err != nil {
+		h.logger.Error("game admin online players query failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	items := make([]adminOnlinePlayer, 0)
+	for rows.Next() {
+		var item adminOnlinePlayer
+		if err := rows.Scan(&item.AccountID, &item.CharacterID, &item.CharacterName, &item.Level, &item.WorldID, &item.WorldName, &item.SessionID, &item.ConnectedAt, &item.NodeKey, &item.Host, &item.UDPPort, &item.Region, &item.NodeStatus, &item.Capacity, &item.CurrentPlayers); err != nil {
+			h.logger.Error("scan game admin online player failed", "error", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		h.logger.Error("iterate game admin online players failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": len(items), "limit": 500})
+}
 func (h *gamePlayerAdminHandlers) disconnect(w http.ResponseWriter, r *http.Request) {
 	if !h.authorize(w, r) { return }
 	accountID := strings.TrimSpace(r.PathValue("accountID"))
@@ -183,6 +241,7 @@ func (h *gamePlayerAdminHandlers) disconnect(w http.ResponseWriter, r *http.Requ
 
 func registerGamePlayerAdminRoutes(mux *http.ServeMux, db *sql.DB, logger *slog.Logger) {
 	h := &gamePlayerAdminHandlers{db: db, apiKey: strings.TrimSpace(os.Getenv("GAME_ADMIN_INTERNAL_API_KEY")), logger: logger, entryService: worldentry.NewService(db)}
+	mux.HandleFunc("GET /api/v1/internal/admin/players/online", h.online)
 	mux.HandleFunc("GET /api/v1/internal/admin/players/{accountID}", h.detail)
 	mux.HandleFunc("POST /api/v1/internal/admin/players/{accountID}/disconnect", h.disconnect)
 }
