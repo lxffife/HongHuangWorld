@@ -8,12 +8,15 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/liflife/HongHuangWorld/Backend/internal/worldentry"
 )
 
 type gamePlayerAdminHandlers struct {
 	db *sql.DB
 	apiKey string
 	logger *slog.Logger
+	entryService *worldentry.Service
 }
 
 type adminPlayerSoul struct {
@@ -155,7 +158,30 @@ func (h *gamePlayerAdminHandlers) detail(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+
+func (h *gamePlayerAdminHandlers) disconnect(w http.ResponseWriter, r *http.Request) {
+	if !h.authorize(w, r) { return }
+	accountID := strings.TrimSpace(r.PathValue("accountID"))
+	if accountID == "" || len(accountID) > 64 {
+		http.Error(w, "invalid account id", http.StatusBadRequest)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	count, err := h.entryService.RequestDisconnect(ctx, accountID)
+	if err != nil {
+		h.logger.Error("game admin player disconnect request failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{
+		"status": "disconnect_requested",
+		"requested_sessions": count,
+	})
+}
+
 func registerGamePlayerAdminRoutes(mux *http.ServeMux, db *sql.DB, logger *slog.Logger) {
-	h := &gamePlayerAdminHandlers{db: db, apiKey: strings.TrimSpace(os.Getenv("GAME_ADMIN_INTERNAL_API_KEY")), logger: logger}
+	h := &gamePlayerAdminHandlers{db: db, apiKey: strings.TrimSpace(os.Getenv("GAME_ADMIN_INTERNAL_API_KEY")), logger: logger, entryService: worldentry.NewService(db)}
 	mux.HandleFunc("GET /api/v1/internal/admin/players/{accountID}", h.detail)
+	mux.HandleFunc("POST /api/v1/internal/admin/players/{accountID}/disconnect", h.disconnect)
 }
