@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"log/slog"
 	"net/http"
+ "strings"
 	"os"
 	"time"
 
@@ -39,6 +40,9 @@ func NewIdentityRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/login", handlers.login)
 	mux.HandleFunc("GET /api/v1/account/me", handlers.me)
 	internalKey := os.Getenv("IDENTITY_INTERNAL_API_KEY")
+	adminHandlers := &identityAdminHandlers{service: auth.NewService(db), internalKey: internalKey, logger: logger}
+	mux.HandleFunc("GET /api/v1/internal/admin/accounts", adminHandlers.listAccounts)
+	mux.HandleFunc("PATCH /api/v1/internal/admin/accounts/{id}/status", adminHandlers.setAccountStatus)
 	mux.HandleFunc("POST /api/v1/internal/auth/introspect", func(w http.ResponseWriter, r *http.Request) {
 		providedKey := r.Header.Get("X-Identity-Service-Key")
 		if internalKey == "" || len(providedKey) != len(internalKey) || subtle.ConstantTimeCompare([]byte(providedKey), []byte(internalKey)) != 1 {
