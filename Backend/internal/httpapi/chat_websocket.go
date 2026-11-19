@@ -356,6 +356,8 @@ func chatSocketErrorText(err error) string {
 	case errors.Is(err, chat.ErrIdempotencyConflict): return "client_message_id already used with different content"
 	case errors.Is(err, chat.ErrRateLimited): return "chat rate limit exceeded"
 	case errors.Is(err, chat.ErrUnsupportedChannel): return "chat channel is not available yet"
+	case errors.Is(err, chat.ErrFriendRequired): return "add this player as a friend before private messaging"
+	case errors.Is(err, chat.ErrBlocked): return "private messaging is blocked"
 	default: return "chat service temporarily unavailable"
 	}
 }
