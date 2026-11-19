@@ -64,6 +64,12 @@ func NewChatRouterWithServiceAndShutdown(logger *slog.Logger, db *sql.DB, chatSe
 			"GET /api/v1/chat/presence/friends",
 			"GET /api/v1/chat/presence/summary",
 			"GET /api/v1/chat/presence/friends/summary",
+			"GET /api/v1/chat/friends",
+			"GET /api/v1/chat/friends/search",
+			"GET /api/v1/chat/friends/requests",
+			"POST /api/v1/chat/friends/requests",
+			"POST /api/v1/chat/friends/requests/{requestID}/{decision}",
+			"DELETE /api/v1/chat/friends/{characterID}",
 			"GET /api/v1/servers/chat/messages",
 			"POST /api/v1/servers/chat/messages",
 		} {
@@ -91,6 +97,12 @@ func NewChatRouterWithServiceAndShutdown(logger *slog.Logger, db *sql.DB, chatSe
 	mux.HandleFunc("GET /api/v1/chat/presence/friends", chatAPI.friendPresence)
 	mux.HandleFunc("GET /api/v1/chat/presence/summary", chatAPI.presenceSummary)
 	mux.HandleFunc("GET /api/v1/chat/presence/friends/summary", chatAPI.friendPresenceSummary)
+	mux.HandleFunc("GET /api/v1/chat/friends", chatAPI.listFriends)
+	mux.HandleFunc("GET /api/v1/chat/friends/search", chatAPI.searchFriends)
+	mux.HandleFunc("GET /api/v1/chat/friends/requests", chatAPI.incomingFriendRequests)
+	mux.HandleFunc("POST /api/v1/chat/friends/requests", chatAPI.createFriendRequest)
+	mux.HandleFunc("POST /api/v1/chat/friends/requests/{requestID}/{decision}", chatAPI.respondFriendRequest)
+	mux.HandleFunc("DELETE /api/v1/chat/friends/{characterID}", chatAPI.removeFriend)
 	mux.HandleFunc("GET /api/v1/chat/socket", chatAPI.socket)
 	mux.HandleFunc("GET /api/v1/servers/chat/messages", serverAPI.poll)
 	mux.HandleFunc("POST /api/v1/servers/chat/messages", serverAPI.publish)
