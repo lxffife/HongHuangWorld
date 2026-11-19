@@ -2207,6 +2207,21 @@ struct EnetServer::Impl {
                 continue;
             }
             player.health = damage.remaining_health;
+            // Broadcast a visual-only action cue to nearby observers. Damage and health
+            // remain private to the actual victim's authoritative CombatEvent.
+            const Json monster_action{
+                {"source_entity_id", monster.runtime_id},
+                {"source", "monster"},
+                {"action", "attack"},
+                {"target_character_id", player.character_id}
+            };
+            for (const auto& [observer_peer, observer] : players) {
+                if (!honghuang::simulation::within_interest_radius(
+                        monster.state.x, monster.state.z, observer.x, observer.z, kInterestRadius)) {
+                    continue;
+                }
+                send_json(observer_peer, honghuang::protocol::MessageType::MonsterActionEvent, monster_action);
+            }
             send_json(victim->first, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", true}, {"source", "monster"},
                            {"source_entity_id", monster.runtime_id},
