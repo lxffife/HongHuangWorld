@@ -1696,6 +1696,8 @@ func _on_monster_action_event(event: Dictionary) -> void:
 	if not is_instance_valid(attacker):
 		return
 	var phase := str(event.get("phase", ""))
+	var attack_style := str(event.get("attack_style", "melee"))
+	attacker.set_meta("attack_style", attack_style)
 	if phase == "windup":
 		attacker.set_meta("attack_phase", "windup")
 		var windup := maxf(float(event.get("windup_ms", 520)) / 1000.0, 0.1)
