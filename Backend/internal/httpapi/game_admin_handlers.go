@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"crypto/subtle"
 	"database/sql"
 	"errors"
@@ -424,6 +425,90 @@ func (h *gamePlayerAdminHandlers) setWorldEnabled(w http.ResponseWriter, r *http
 	writeJSON(w, http.StatusOK, map[string]any{"world_id": worldID, "enabled": *request.Enabled, "previous_enabled": current, "draining_instances": drainingInstances, "requested_disconnects": requestedSessions, "invalidated_tickets": invalidatedTickets, "note": "启用世界后，实例需等待 WorldServer 下一次有效心跳恢复为 ready"})
 }
 
+func (h *gamePlayerAdminHandlers) listGameConfig(w http.ResponseWriter, r *http.Request) {
+	if !h.authorize(w, r) { return }
+	resource := r.PathValue("resource")
+	worldID := strings.TrimSpace(r.URL.Query().Get("world_id"))
+	if len(worldID) > 64 { http.Error(w, "invalid world id", http.StatusBadRequest); return }
+	var query string
+	switch resource {
+	case "npcs":
+		query = `SELECT n.id, n.world_id, w.name AS world_name, n.name, n.title, n.npc_type, n.interaction_type,
+		 n.position_x, n.position_y, n.position_z, n.rotation_y, n.interaction_radius, n.dialogue, n.enabled, n.created_at, n.updated_at
+		 FROM world_npc_definitions n JOIN world_definitions w ON w.id=n.world_id
+		 WHERE ($1='' OR n.world_id=$1) ORDER BY n.world_id,n.id LIMIT 1000`
+	case "exploration-points":
+		query = `SELECT p.id, p.world_id, w.name AS world_name, p.region_id, p.name, p.description,
+		 p.position_x, p.position_y, p.position_z, p.interaction_radius, p.danger_level,
+		 p.merit_reward, p.karma_delta, p.required_race_id, p.enabled, p.created_at, p.updated_at
+		 FROM world_exploration_points p JOIN world_definitions w ON w.id=p.world_id
+		 WHERE ($1='' OR p.world_id=$1) ORDER BY p.world_id,p.region_id,p.id LIMIT 1000`
+	case "exploration-events":
+		query = `SELECT e.id, p.world_id, w.name AS world_name, e.point_id, p.name AS point_name,
+		 e.title, e.description, e.event_type, e.required_race_id, e.required_fate_trait_id,
+		 e.merit_reward, e.karma_delta, e.enabled, e.created_at, e.updated_at
+		 FROM world_exploration_events e JOIN world_exploration_points p ON p.id=e.point_id
+		 JOIN world_definitions w ON w.id=p.world_id
+		 WHERE ($1='' OR p.world_id=$1) ORDER BY p.world_id,e.point_id,e.id LIMIT 1000`
+	default:
+		http.Error(w, "unsupported game config resource", http.StatusBadRequest)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+	rows, err := h.db.QueryContext(ctx, query, worldID)
+	if err != nil {
+		h.logger.Error("game admin config query failed", "resource", resource, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	columns, err := rows.Columns()
+	if err != nil { http.Error(w, "internal server error", http.StatusInternalServerError); return }
+	items := make([]map[string]any, 0)
+	for rows.Next() {
+		values := make([]any, len(columns))
+		dest := make([]any, len(columns))
+		for i := range values { dest[i] = &values[i] }
+		if err := rows.Scan(dest...); err != nil { http.Error(w, "internal server error", http.StatusInternalServerError); return }
+		item := make(map[string]any, len(columns))
+		for i, column := range columns {
+			switch value := values[i].(type) {
+			case []byte:
+				if column == "dialogue" { item[column] = json.RawMessage(value) } else { item[column] = string(value) }
+			default: item[column] = value
+			}
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil { h.logger.Error("iterate game admin config failed", "error", err); http.Error(w, "internal server error", http.StatusInternalServerError); return }
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": len(items), "limit": 1000})
+}
+
+func (h *gamePlayerAdminHandlers) setGameConfigEnabled(w http.ResponseWriter, r *http.Request) {
+	if !h.authorize(w, r) { return }
+	resource := r.PathValue("resource")
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" || len(id) > 96 { http.Error(w, "invalid config id", http.StatusBadRequest); return }
+	var table string
+	switch resource {
+	case "npcs": table = "world_npc_definitions"
+	case "exploration-points": table = "world_exploration_points"
+	case "exploration-events": table = "world_exploration_events"
+	default: http.Error(w, "unsupported game config resource", http.StatusBadRequest); return
+	}
+	var request struct { Enabled *bool `json:"enabled"` }
+	if err := decodeJSON(w, r, &request); err != nil || request.Enabled == nil { http.Error(w, "enabled must be a boolean", http.StatusBadRequest); return }
+	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Second)
+	defer cancel()
+	var updatedID string
+	var enabled bool
+	err := h.db.QueryRowContext(ctx, "UPDATE "+table+" SET enabled=$2, updated_at=now() WHERE id=$1 RETURNING id, enabled", id, *request.Enabled).Scan(&updatedID, &enabled)
+	if errors.Is(err, sql.ErrNoRows) { http.Error(w, "game config not found", http.StatusNotFound); return }
+	if err != nil { h.logger.Error("game admin config state update failed", "resource", resource, "id", id, "error", err); http.Error(w, "internal server error", http.StatusInternalServerError); return }
+	writeJSON(w, http.StatusOK, map[string]any{"resource": resource, "id": updatedID, "enabled": enabled})
+}
+
 func (h *gamePlayerAdminHandlers) disconnect(w http.ResponseWriter, r *http.Request) {
 	if !h.authorize(w, r) { return }
 	accountID := strings.TrimSpace(r.PathValue("accountID"))
@@ -447,6 +532,8 @@ func (h *gamePlayerAdminHandlers) disconnect(w http.ResponseWriter, r *http.Requ
 
 func registerGamePlayerAdminRoutes(mux *http.ServeMux, db *sql.DB, logger *slog.Logger) {
 	h := &gamePlayerAdminHandlers{db: db, apiKey: strings.TrimSpace(os.Getenv("GAME_ADMIN_INTERNAL_API_KEY")), logger: logger, entryService: worldentry.NewService(db), serverService: serverregistry.NewService(db)}
+	mux.HandleFunc("GET /api/v1/internal/admin/game-config/{resource}", h.listGameConfig)
+	mux.HandleFunc("PATCH /api/v1/internal/admin/game-config/{resource}/{id}/state", h.setGameConfigEnabled)
 	mux.HandleFunc("GET /api/v1/internal/admin/worlds", h.listWorlds)
 	mux.HandleFunc("GET /api/v1/internal/admin/worlds/{worldID}/instances", h.listWorldInstances)
 	mux.HandleFunc("PATCH /api/v1/internal/admin/worlds/{worldID}/state", h.setWorldEnabled)
