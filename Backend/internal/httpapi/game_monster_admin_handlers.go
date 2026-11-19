@@ -48,7 +48,12 @@ func (h *gameMonsterAdminHandlers) createSpawnPoint(w http.ResponseWriter,r *htt
 	enabled:=true;if req.Enabled!=nil{enabled=*req.Enabled}
 	ctx,cancel:=context.WithTimeout(r.Context(),8*time.Second);defer cancel()
 	_,err:=h.db.ExecContext(ctx,`INSERT INTO world_monster_spawn_points(id,world_id,monster_id,spawn_x,spawn_z,rare_spawn,spawn_chance_percent,retry_spawn_seconds,first_spawn_delay_seconds,enabled) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,req.ID,req.WorldID,req.MonsterID,req.SpawnX,req.SpawnZ,req.RareSpawn,req.SpawnChancePercent,req.RetrySpawnSeconds,req.FirstSpawnDelaySeconds,enabled)
-	if err!=nil{h.logger.Error("create monster spawn point failed","spawn_id",req.ID,"error",err);http.Error(w,"world or monster not found, or spawn point already exists",400);return}
+	if err!=nil{
+		message:=strings.ToLower(err.Error())
+		if strings.Contains(message,"duplicate key"){http.Error(w,"spawn point already exists",409);return}
+		if strings.Contains(message,"foreign key"){http.Error(w,"world or monster definition not found",400);return}
+		h.logger.Error("create monster spawn point failed","spawn_id",req.ID,"error",err);http.Error(w,"internal server error",500);return
+	}
 	writeJSON(w,201,map[string]any{"spawn_point_id":req.ID,"created":true})
 }
 
