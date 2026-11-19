@@ -106,12 +106,16 @@ func (s *Service) ListFriends(ctx context.Context, accountID string) ([]Friend, 
 		return nil, err
 	}
 	rows, err := s.db.QueryContext(ctx, `
+		WITH friend_characters AS (
+			SELECT f.addressee_character_id AS character_id FROM chat_friendships f WHERE f.requester_character_id=$1::uuid
+			UNION
+			SELECT f.requester_character_id AS character_id FROM chat_friendships f WHERE f.addressee_character_id=$1::uuid
+		)
 		SELECT c.character_id::text,c.name,c.world_id,c.level,
 			EXISTS(SELECT 1 FROM chat_presence_sessions p WHERE p.character_id=c.character_id AND p.expires_at>now()),
 			EXISTS(SELECT 1 FROM chat_world_sessions ws WHERE ws.character_id=c.character_id AND ws.session_state='active')
-		FROM chat_friendships f
-		JOIN chat_characters c ON c.character_id=f.addressee_character_id AND c.status='alive'
-		WHERE f.requester_character_id=$1::uuid
+		FROM friend_characters f
+		JOIN chat_characters c ON c.character_id=f.character_id AND c.status='alive'
 		ORDER BY c.name,c.character_id`, characterID)
 	if err != nil {
 		return nil, fmt.Errorf("list chat friends: %w", err)
@@ -181,7 +185,7 @@ func (s *Service) SendFriendRequest(ctx context.Context, accountID, targetCharac
 	}
 	if blocked { return FriendRequest{}, ErrBlocked }
 	var friends bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM chat_friendships WHERE requester_character_id=$1::uuid AND addressee_character_id=$2::uuid)`, senderID,targetCharacterID).Scan(&friends); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM chat_friendships WHERE (requester_character_id=$1::uuid AND addressee_character_id=$2::uuid) OR (requester_character_id=$2::uuid AND addressee_character_id=$1::uuid))`, senderID,targetCharacterID).Scan(&friends); err != nil {
 		return FriendRequest{}, fmt.Errorf("check existing friendship: %w", err)
 	}
 	if friends { return FriendRequest{}, ErrAlreadyFriend }
@@ -228,7 +232,7 @@ func (s *Service) RespondFriendRequest(ctx context.Context, accountID, requestID
 		if _,err:=tx.ExecContext(ctx,`
 			INSERT INTO chat_friendships(requester_character_id,addressee_character_id)
 			VALUES($1::uuid,$2::uuid),($2::uuid,$1::uuid)
-			ON CONFLICT(requester_character_id,addressee_character_id) DO NOTHING`,currentID,requesterID);err!=nil{return fmt.Errorf("create accepted friendship: %w",err)}
+			ON CONFLICT DO NOTHING`,currentID,requesterID);err!=nil{return fmt.Errorf("create accepted friendship: %w",err)}
 	}
 	if err:=tx.Commit();err!=nil{return fmt.Errorf("commit friend request response: %w",err)}
 	return nil
