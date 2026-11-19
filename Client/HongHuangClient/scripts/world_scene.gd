@@ -1710,6 +1710,10 @@ func _on_combat_event(event: Dictionary) -> void:
 		hit_monster.set_meta("hit_reaction_time", 0.24)
 		if bool(event.get("defeated", false)):
 			hit_monster.set_meta("death_reaction_time", 1.15)
+			hit_monster.set_meta("defeated_visual", true)
+			var defeated_nameplate := hit_monster.get_node_or_null("Nameplate") as Label3D
+			if is_instance_valid(defeated_nameplate):
+				defeated_nameplate.visible = false
 	var damage := int(event.get("damage", 0))
 	if not selected_monster_id.is_empty() and monster_entities.has(selected_monster_id):
 		var selected_entity: Dictionary = monster_entities[selected_monster_id]
@@ -1967,7 +1971,6 @@ func _animate_monster_visuals(delta: float) -> void:
 		if death_time > 0.0:
 			var death_weight := 1.0 - death_time / 1.15
 			monster.rotation.z = death_weight * 0.42
-			monster.position.y += delta * death_weight * 0.34
 			monster.scale = base_scale * maxf(0.08, 1.0 - death_weight * 0.72)
 			_apply_monster_death_fade(monster, death_weight)
 		else:
@@ -1976,6 +1979,10 @@ func _animate_monster_visuals(delta: float) -> void:
 			if bool(monster.get_meta("pending_corpse_cleanup", false)):
 				monsters.erase(monster_id)
 				monster.queue_free()
+			elif bool(monster.get_meta("defeated_visual", false)):
+				monster.rotation.z = 0.42
+				monster.scale = base_scale * 0.28
+				_apply_monster_death_fade(monster, 0.92)
 
 
 func _apply_monster_death_fade(monster: Node3D, weight: float) -> void:
