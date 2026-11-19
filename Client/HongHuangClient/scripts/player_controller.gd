@@ -349,7 +349,7 @@ func set_birth_inheritance_visuals(birth: Dictionary) -> void:
 		var ring := birth_resonance_root.get_node("BirthResonanceRing" + str(index + 1)) as MeshInstance3D
 		ring.visible = growth_stage >= index + 2
 		ring.material_override = _make_trait_material(resonance_color, 0.30 + minf(float(applied_total) * 0.025, 0.22))
-		 ring.scale = Vector3.ONE * (1.0 + float(growth_stage - 1) * 0.045)
+		ring.scale = Vector3.ONE * (1.0 + float(growth_stage - 1) * 0.045)
 	var aura := birth_resonance_root.get_node("BirthResonanceAura") as MeshInstance3D
 	aura.visible = growth_stage >= 4 or applied_total >= 6
 	aura.material_override = _make_trait_material(resonance_color, 0.055 + minf(float(applied_total) * 0.008, 0.06))
