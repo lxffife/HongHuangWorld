@@ -1056,7 +1056,8 @@ func _upsert_monster(entity: Dictionary) -> void:
 
 func _create_monster(monster_name: String, monster_level: int) -> Node3D:
 	var visual_root: Node3D = UnderworldVisualFactory.create_monster(monster_name, monster_level)
-	var is_wraith := monster_name.contains("游祟") or monster_name.contains("幽魂") or monster_name.contains("灵识")
+	var archetype := str(visual_root.get_meta("visual_archetype", ""))
+	var is_wraith := archetype in ["life_soul", "wind_soul", "fire_soul", "frost_soul", "wraith"]
 	var is_war_god := monster_name.contains("战神") or monster_name.contains("战魂")
 	if str(visual_root.get_meta("visual_archetype", "")) == "iron_beast":
 		var telegraph := MeshInstance3D.new()
@@ -2308,7 +2309,7 @@ func _animate_monster_visuals(delta: float) -> void:
 				_animate_iron_beast(monster, stride, moving, phase)
 			"warrior":
 				_animate_warrior_monster(monster, stride, moving, phase, animation_state)
-			"life_soul", "wind_soul", "wraith":
+			"life_soul", "wind_soul", "fire_soul", "frost_soul", "wraith":
 				_animate_soul_monster(monster, delta, phase, moving, archetype)
 		if attack_phase != "" and death_time <= 0.0:
 			var attack_progress := 1.0 - attack_phase_time / attack_phase_duration
