@@ -72,6 +72,7 @@ func (s *Service) Issue(ctx context.Context, accountID string) (Entry, error) {
 		`SELECT c.id::text, c.world_id, wi.id::text, sr.id::text, sr.host, sr.udp_port
 		 FROM souls s
 		 JOIN characters c ON c.id = s.current_character_id
+		 JOIN world_definitions wd ON wd.id = c.world_id AND wd.enabled = TRUE
 		 JOIN world_instances wi ON wi.world_id = c.world_id AND wi.status = 'ready'
 		 JOIN server_registry sr ON sr.id = wi.server_id
 		 WHERE s.account_id = $1 AND c.status = 'alive' AND sr.status = 'ready' AND sr.admin_state = 'normal'
@@ -131,6 +132,7 @@ func (s *Service) Redeem(ctx context.Context, nodeKey, ticket string) (PlayerSna
 		 JOIN server_registry sr ON sr.id = t.server_id
 		 JOIN world_instances wi ON wi.id = t.instance_id AND wi.status = 'ready'
 		 JOIN characters c ON c.id = t.character_id
+		 JOIN world_definitions wd ON wd.id = c.world_id AND wd.enabled = TRUE
 		 WHERE t.token_hash = $1 AND t.expires_at > now() AND t.consumed_at IS NULL
 		   AND sr.node_key = $2 AND sr.status = 'ready' AND sr.admin_state = 'normal' AND sr.last_heartbeat_at > now() - INTERVAL '30 seconds'
 		   AND c.status = 'alive'
