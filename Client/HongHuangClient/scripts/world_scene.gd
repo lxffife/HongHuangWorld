@@ -1945,7 +1945,7 @@ func _animate_monster_visuals(delta: float) -> void:
 			"warrior":
 				_animate_warrior_monster(monster, stride, moving, phase, animation_state)
 			"life_soul", "wind_soul", "wraith":
-				_animate_soul_monster(monster, phase, moving, archetype)
+				_animate_soul_monster(monster, delta, phase, moving, archetype)
 		var body := monster.get_node_or_null("Torso") as Node3D
 		if not is_instance_valid(body):
 			body = monster.get_node_or_null("IronCore") as Node3D
@@ -2022,7 +2022,7 @@ func _animate_warrior_monster(monster: Node3D, stride: float, moving: bool, phas
 		blade.rotation.z = sin(phase * 0.5) * 0.035
 
 
-func _animate_soul_monster(monster: Node3D, phase: float, moving: bool, archetype: String) -> void:
+func _animate_soul_monster(monster: Node3D, delta: float, phase: float, moving: bool, archetype: String) -> void:
 	var drift_speed := 1.35 if archetype == "life_soul" else (2.1 if archetype == "wind_soul" else 1.0)
 	var amplitude := 0.12 if archetype == "life_soul" else (0.20 if archetype == "wind_soul" else 0.075)
 	var core := monster.get_node_or_null("SoulCore") as Node3D
@@ -2039,7 +2039,17 @@ func _animate_soul_monster(monster: Node3D, phase: float, moving: bool, archetyp
 		lower.rotation.z = sin(monster_animation_time * drift_speed * 0.8 + phase) * (0.18 if moving else 0.10)
 	var orbit := monster.get_node_or_null("SoulOrbit") as Node3D
 	if is_instance_valid(orbit):
-		orbit.rotation.y += get_process_delta_time() * (1.8 if archetype == "wind_soul" else 0.72)
+		orbit.rotation.y += delta * (1.8 if archetype == "wind_soul" else 0.72)
+	var spark := monster.get_node_or_null("SoulSpark") as Node3D
+	if is_instance_valid(spark):
+		spark.position.y = 1.42 + sin(monster_animation_time * drift_speed * 1.4 + phase) * amplitude * 1.8
+		spark.scale = Vector3.ONE * (0.85 + absf(sin(monster_animation_time * 1.8 + phase)) * 0.35)
+	for side in [-1.0, 1.0]:
+		var shard_name := "SoulShardLeft" if side < 0.0 else "SoulShardRight"
+		var shard := monster.get_node_or_null(shard_name) as Node3D
+		if is_instance_valid(shard):
+			shard.rotation.y = sin(monster_animation_time * drift_speed + phase + side) * 0.55
+			shard.position.y = 0.88 + sin(monster_animation_time * drift_speed * 0.7 + phase + side) * amplitude
 	for side in [-1.0, 1.0]:
 		var wisp := monster.get_node_or_null("Wisp" + str(side)) as Node3D
 		if is_instance_valid(wisp):
