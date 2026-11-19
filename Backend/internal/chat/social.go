@@ -248,3 +248,48 @@ func (s *Service) RemoveFriend(ctx context.Context, accountID, friendCharacterID
 	if count==0{return ErrFriendRequestNotFound}
 	return nil
 }
+
+func (s *Service) ListConversation(ctx context.Context, accountID, peerCharacterID, before string, limit int) ([]Message, error) {
+	if !isUUID(peerCharacterID) { return nil, ErrInvalidInput }
+	if limit < 1 || limit > 100 { limit = 50 }
+	currentID, err := s.currentCharacterID(ctx, accountID)
+	if err != nil { return nil, err }
+	if currentID == peerCharacterID { return nil, ErrInvalidInput }
+	var friends, blocked bool
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM chat_friendships WHERE requester_character_id=$1::uuid AND addressee_character_id=$2::uuid)`, currentID, peerCharacterID).Scan(&friends); err != nil {
+		return nil, fmt.Errorf("check direct conversation friendship: %w", err)
+	}
+	if !friends { return nil, ErrFriendRequired }
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM chat_blocks WHERE (blocker_character_id=$1::uuid AND blocked_character_id=$2::uuid) OR (blocker_character_id=$2::uuid AND blocked_character_id=$1::uuid))`, currentID, peerCharacterID).Scan(&blocked); err != nil {
+		return nil, fmt.Errorf("check direct conversation block: %w", err)
+	}
+	if blocked { return nil, ErrBlocked }
+	query := `SELECT m.id::text,m.client_message_id::text,m.channel_type,COALESCE(m.world_id,''),COALESCE(m.recipient_character_id::text,''),COALESCE(m.conversation_id::text,''),m.sender_character_id::text,m.sender_name,m.sender_race,m.sender_level,m.content,m.created_at
+		FROM chat_messages m
+		JOIN chat_conversations c ON c.id=m.conversation_id
+		WHERE m.channel_type='whisper'
+		  AND c.participant_low=LEAST($1::uuid,$2::uuid)
+		  AND c.participant_high=GREATEST($1::uuid,$2::uuid)
+		  AND m.created_at>now()-interval '30 days'`
+	args := []any{currentID, peerCharacterID}
+	if before != "" {
+		query += ` AND m.created_at < $3`
+		args = append(args, before)
+	}
+	query += fmt.Sprintf(` ORDER BY m.created_at DESC,m.id DESC LIMIT $%d`, len(args)+1)
+	args = append(args, limit)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil { return nil, fmt.Errorf("query direct conversation: %w", err) }
+	defer rows.Close()
+	items := make([]Message, 0)
+	for rows.Next() {
+		var m Message
+		if err := rows.Scan(&m.ID,&m.ClientMessageID,&m.Channel,&m.WorldID,&m.RecipientCharacterID,&m.ConversationID,&m.SenderCharacterID,&m.SenderName,&m.SenderRace,&m.SenderLevel,&m.Content,&m.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan direct conversation message: %w", err)
+		}
+		items = append(items,m)
+	}
+	if err := rows.Err(); err != nil { return nil, err }
+	for left,right:=0,len(items)-1;left<right;left,right=left+1,right-1 { items[left],items[right]=items[right],items[left] }
+	return items,nil
+}
