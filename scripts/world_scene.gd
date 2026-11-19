@@ -41,7 +41,7 @@ var chat_scroll: ScrollContainer
 var chat_toggle_button: Button
 var chat_title_label: Label
 var chat_unread_badge: Label
-var friend_panel: Control
+var friend_panel: Variant
 var selected_friend_character_id := ""
 var selected_friend_character_name := ""
 var chat_unread_count := 0
