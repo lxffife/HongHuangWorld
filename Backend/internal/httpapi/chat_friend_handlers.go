@@ -106,7 +106,7 @@ func (h *chatHandlers) friendRequestPreference(w http.ResponseWriter, r *http.Re
 	account, ok := h.authenticate(w, r)
 	if !ok { return }
 	if r.Method == http.MethodGet {
-		allowed, err := h.service.GetAllowStrangerFriendRequests(r.Context(), account.ID)
+		allowed, err := h.service.GetAllowFriendRequests(r.Context(), account.ID)
 		if err != nil { h.writeError(w, err); return }
 		writeJSON(w, http.StatusOK, map[string]any{"allow_friend_requests": allowed})
 		return
@@ -115,7 +115,7 @@ func (h *chatHandlers) friendRequestPreference(w http.ResponseWriter, r *http.Re
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest); return
 	}
-	if err := h.service.SetAllowStrangerFriendRequests(r.Context(), account.ID, req.Allow); err != nil {
+	if err := h.service.SetAllowFriendRequests(r.Context(), account.ID, req.Allow); err != nil {
 		h.writeError(w, err); return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"allow_friend_requests": req.Allow})
