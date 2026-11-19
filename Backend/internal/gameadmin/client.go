@@ -60,6 +60,39 @@ func (c *Client) OnlinePlayers(ctx context.Context) (json.RawMessage, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil { return nil, err }
 	return result, nil
 }
+func (c *Client) ServerNodes(ctx context.Context) (json.RawMessage, error) {
+	if !c.ready() { return nil, ErrUnavailable }
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/internal/admin/servers/nodes", nil)
+	if err != nil { return nil, err }
+	req.Header.Set("X-Game-Admin-Key", c.apiKey)
+	resp, err := c.httpClient.Do(req)
+	if err != nil { return nil, fmt.Errorf("%w: %v", ErrUnavailable, err) }
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK { return nil, fmt.Errorf("%w: game returned %d", ErrUnavailable, resp.StatusCode) }
+	var result json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil { return nil, err }
+	return result, nil
+}
+
+func (c *Client) SetServerNodeState(ctx context.Context, nodeKey, state string) (json.RawMessage, error) {
+	if !c.ready() { return nil, ErrUnavailable }
+	body, err := json.Marshal(map[string]string{"admin_state": state})
+	if err != nil { return nil, err }
+	endpoint := c.baseURL + "/api/v1/internal/admin/servers/nodes/" + url.PathEscape(nodeKey) + "/state"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, endpoint, bytes.NewReader(body))
+	if err != nil { return nil, err }
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Game-Admin-Key", c.apiKey)
+	resp, err := c.httpClient.Do(req)
+	if err != nil { return nil, fmt.Errorf("%w: %v", ErrUnavailable, err) }
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound { return nil, fmt.Errorf("world server node not found") }
+	if resp.StatusCode == http.StatusBadRequest { return nil, fmt.Errorf("invalid world server node state") }
+	if resp.StatusCode != http.StatusOK { return nil, fmt.Errorf("%w: game returned %d", ErrUnavailable, resp.StatusCode) }
+	var result json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil { return nil, err }
+	return result, nil
+}
 type DisconnectResult struct {
 	Status string `json:"status"`
 	RequestedSessions int64 `json:"requested_sessions"`
