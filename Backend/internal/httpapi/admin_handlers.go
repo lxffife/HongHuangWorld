@@ -26,6 +26,7 @@ type adminLoginRequest struct { Username string `json:"username"`; Password stri
 type adminPasswordRequest struct { CurrentPassword string `json:"current_password"`; NewPassword string `json:"new_password"` }
 type adminCreateUserRequest struct { Username string `json:"username"`; Email string `json:"email"`; Password string `json:"password"` }
 type adminSetPermissionsRequest struct { Permissions []string `json:"permissions"` }
+type adminSetUserStatusRequest struct { Status string `json:"status"` }
 type adminAuthResponse struct { User adminauth.User `json:"user"`; Token string `json:"access_token"`; TokenType string `json:"token_type"`; ExpiresAt time.Time `json:"expires_at"` }
 
 func (h *adminHandlers) login(w http.ResponseWriter,r *http.Request) {
@@ -92,4 +93,17 @@ func (h *adminHandlers) listAuditLogs(w http.ResponseWriter, r *http.Request) {
  page,err:=h.service.ListAuditLogs(ctx,filter)
  if err!=nil{h.logger.Error("list admin audit logs failed","error",err);http.Error(w,"internal server error",http.StatusInternalServerError);return}
  writeJSON(w,http.StatusOK,page)
+}
+
+func (h *adminHandlers) setUserStatus(w http.ResponseWriter,r *http.Request) {
+ actor,ok:=h.require(w,r,"admin_users.manage");if !ok{return}
+ var req adminSetUserStatusRequest
+ if err:=decodeJSON(w,r,&req);err!=nil{http.Error(w,"invalid request body",http.StatusBadRequest);return}
+ if req.Status!="active"&&req.Status!="disabled"{http.Error(w,"status must be active or disabled",http.StatusBadRequest);return}
+ if err:=h.service.SetUserStatus(r.Context(),actor,r.PathValue("id"),req.Status);err!=nil{
+  if errors.Is(err,adminauth.ErrInvalidInput){http.Error(w,"invalid target user",http.StatusBadRequest);return}
+  if errors.Is(err,adminauth.ErrForbidden){http.Error(w,"cannot change your own status",http.StatusForbidden);return}
+  h.logger.Error("set admin user status failed","error",err);http.Error(w,"internal server error",http.StatusInternalServerError);return
+ }
+ writeJSON(w,http.StatusOK,map[string]string{"status":"updated"})
 }
