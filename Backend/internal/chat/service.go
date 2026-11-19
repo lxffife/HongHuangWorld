@@ -127,7 +127,7 @@ func (s *Service) Send(ctx context.Context, accountID string, req SendRequest) (
 			return Message{}, fmt.Errorf("resolve whisper recipient: %w", err)
 		}
 		var friends bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM chat_friendships WHERE requester_character_id=$1::uuid AND addressee_character_id=$2::uuid)`, characterID, req.RecipientCharacterID).Scan(&friends); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM chat_friendships WHERE (requester_character_id=$1::uuid AND addressee_character_id=$2::uuid) OR (requester_character_id=$2::uuid AND addressee_character_id=$1::uuid))`, characterID, req.RecipientCharacterID).Scan(&friends); err != nil {
 			return Message{}, fmt.Errorf("check whisper friendship: %w", err)
 		}
 		if !friends { return Message{}, ErrFriendRequired }
