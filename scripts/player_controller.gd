@@ -1,5 +1,7 @@
 extends CharacterBody3D
 
+const UnderworldVisualFactory = preload("res://scripts/underworld_visual_factory.gd")
+
 @export var move_speed := 5.5
 @export var acceleration := 18.0
 @export var gravity := 18.0
@@ -9,6 +11,8 @@ extends CharacterBody3D
 var camera_pivot: Node3D
 var camera: Camera3D
 var visual: MeshInstance3D
+var player_humanoid: Node3D
+var humanoid_animation_time := 0.0
 var collision_shape: CollisionShape3D
 var base_visual_mesh: Mesh
 var base_visual_material: Material
@@ -56,6 +60,10 @@ func _build_player() -> void:
 	visual.material_override = material
 	base_visual_material = material
 	add_child(visual)
+	visual.mesh = null
+	player_humanoid = UnderworldVisualFactory.create_player_humanoid()
+	player_humanoid.position.y = -0.9
+	visual.add_child(player_humanoid)
 
 	collision_shape = CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
@@ -183,7 +191,9 @@ func set_soul_form(enabled: bool, stage: int = 1, visual_scale: float = 0.35, af
 	soul_form_enabled = enabled
 	soul_form_scale = clampf(visual_scale / 0.35, 0.85, 3.8)
 	if not enabled:
-		visual.mesh = base_visual_mesh
+		visual.mesh = null
+		if is_instance_valid(player_humanoid):
+			player_humanoid.visible = true
 		visual.material_override = base_visual_material
 		visual.position = Vector3(0.0, 0.9, 0.0)
 		visual.scale = Vector3.ONE
@@ -201,6 +211,8 @@ func set_soul_form(enabled: bool, stage: int = 1, visual_scale: float = 0.35, af
 				growth_ring.visible = false
 		return
 
+	if is_instance_valid(player_humanoid):
+		player_humanoid.visible = false
 	var orb := SphereMesh.new()
 	orb.radius = 0.34
 	orb.height = 0.68
@@ -412,6 +424,17 @@ func _apply_soul_affinity_visuals(affinities: Dictionary) -> void:
 
 
 func _process(delta: float) -> void:
+	if not soul_form_enabled and is_instance_valid(player_humanoid):
+		humanoid_animation_time += delta
+		var moving := current_move_input.length() > 0.08
+		var stride := sin(humanoid_animation_time * (9.0 if moving else 2.0))
+		var left_arm := player_humanoid.get_node_or_null("Arm-1.0") as Node3D
+		var right_arm := player_humanoid.get_node_or_null("Arm1.0") as Node3D
+		if is_instance_valid(left_arm):
+			left_arm.rotation.x = stride * 0.34 if moving else sin(humanoid_animation_time * 1.2) * 0.025
+		if is_instance_valid(right_arm):
+			right_arm.rotation.x = -stride * 0.34 if moving else sin(humanoid_animation_time * 1.2 + 0.6) * 0.025
+		player_humanoid.position.y = -0.9 + (absf(stride) * 0.035 if moving else sin(humanoid_animation_time * 1.8) * 0.012)
 	if not soul_form_enabled or not is_instance_valid(visual):
 		return
 	soul_form_time += delta
