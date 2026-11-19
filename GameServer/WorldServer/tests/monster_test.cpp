@@ -39,10 +39,12 @@ int main() {
         assert(tick_monster(wolf, pack_right, &pack_slot_right, 0.05F));
     }
     assert(pack_left.x < 0.0F && pack_right.x > 0.0F);
-    const float pack_slot_radius = std::min(0.65F, wolf.attack_range * 0.35F);
-    const float pack_stop_distance = wolf.attack_range - pack_slot_radius + 0.01F;
-    assert(std::hypot(pack_left.x - pack_slot_left.x, pack_left.z - pack_slot_left.z) <= pack_stop_distance);
-    assert(std::hypot(pack_right.x - pack_slot_right.x, pack_right.z - pack_slot_right.z) <= pack_stop_distance);
+    // Attack reach is measured from the player, not from the assigned approach point.
+    // The approach point is a formation offset, so its own distance is not the melee invariant.
+    assert(pack_left.mode == MonsterMode::Chasing);
+    assert(pack_right.mode == MonsterMode::Chasing);
+    assert(std::hypot(pack_left.x, pack_left.z) <= wolf.attack_range + 0.01F);
+    assert(std::hypot(pack_right.x, pack_right.z) <= wolf.attack_range + 0.01F);
     assert(std::hypot(pack_left.x - pack_right.x, pack_left.z - pack_right.z) > 1.0F);
 
     auto iron_beast = wolf;
