@@ -533,6 +533,7 @@ func (h *gamePlayerAdminHandlers) disconnect(w http.ResponseWriter, r *http.Requ
 func registerGamePlayerAdminRoutes(mux *http.ServeMux, db *sql.DB, logger *slog.Logger) {
 	h := &gamePlayerAdminHandlers{db: db, apiKey: strings.TrimSpace(os.Getenv("GAME_ADMIN_INTERNAL_API_KEY")), logger: logger, entryService: worldentry.NewService(db), serverService: serverregistry.NewService(db)}
 	registerGameLootAdminRoutes(mux, db, logger)
+	registerGameMonsterAdminRoutes(mux, db, logger)
 	mux.HandleFunc("GET /api/v1/internal/admin/game-config/{resource}", h.listGameConfig)
 	mux.HandleFunc("PATCH /api/v1/internal/admin/game-config/{resource}/{id}/state", h.setGameConfigEnabled)
 	mux.HandleFunc("GET /api/v1/internal/admin/worlds", h.listWorlds)
