@@ -1,6 +1,7 @@
 extends CharacterBody3D
 
 const UnderworldVisualFactory = preload("res://scripts/underworld_visual_factory.gd")
+const VisualModelLibrary = preload("res://scripts/visual_model_library.gd")
 
 @export var move_speed := 5.5
 @export var acceleration := 18.0
@@ -16,6 +17,7 @@ var camera: Camera3D
 var visual: MeshInstance3D
 var player_humanoid: Node3D
 var humanoid_animation_time := 0.0
+var attack_animation_time := 0.0
 var collision_shape: CollisionShape3D
 var base_visual_mesh: Mesh
 var base_visual_material: Material
@@ -64,7 +66,10 @@ func _build_player() -> void:
 	base_visual_material = material
 	add_child(visual)
 	visual.mesh = null
-	player_humanoid = UnderworldVisualFactory.create_player_humanoid()
+	player_humanoid = VisualModelLibrary.instantiate_model(
+		"player_humanoid",
+		func() -> Node3D: return UnderworldVisualFactory.create_player_humanoid()
+	)
 	player_humanoid.position.y = -0.9
 	visual.add_child(player_humanoid)
 
@@ -456,6 +461,11 @@ func play_hit_reaction(damage: int, attack_style: String = "") -> void:
 	var damage_strength := clampf(float(maxi(damage, 0)) / 240.0, 0.0, 0.045)
 	hit_reaction_strength = maxf(hit_reaction_strength, style_strength + damage_strength)
 
+func play_attack_animation() -> void:
+	if soul_form_enabled or not is_instance_valid(player_humanoid):
+		return
+	attack_animation_time = 0.34
+
 
 func _process(delta: float) -> void:
 	hit_reaction_time = maxf(hit_reaction_time - delta, 0.0)
@@ -472,18 +482,23 @@ func _process(delta: float) -> void:
 		var moving := current_move_input.length() > 0.08
 		var stride := sin(humanoid_animation_time * (9.0 if moving else 1.8))
 		var swing := stride * 0.42 if moving else 0.0
+		attack_animation_time = maxf(attack_animation_time - delta, 0.0)
+		var attack_weight := 0.0
+		if attack_animation_time > 0.0:
+			attack_weight = sin((1.0 - attack_animation_time / 0.34) * PI)
 		var left_arm := player_humanoid.get_node_or_null("ArmPivotLeft") as Node3D
 		var right_arm := player_humanoid.get_node_or_null("ArmPivotRight") as Node3D
 		var left_leg := player_humanoid.get_node_or_null("LegPivotLeft") as Node3D
 		var right_leg := player_humanoid.get_node_or_null("LegPivotRight") as Node3D
 		if is_instance_valid(left_arm):
-			left_arm.rotation.x = swing if moving else sin(humanoid_animation_time * 1.1) * 0.018
+			left_arm.rotation.x = (swing if moving else sin(humanoid_animation_time * 1.1) * 0.018) - attack_weight * 0.20
 		if is_instance_valid(right_arm):
-			right_arm.rotation.x = -swing if moving else sin(humanoid_animation_time * 1.1 + 0.5) * 0.018
+			right_arm.rotation.x = (-swing if moving else sin(humanoid_animation_time * 1.1 + 0.5) * 0.018) - attack_weight * 1.18
+			right_arm.rotation.z = -attack_weight * 0.28
 		if is_instance_valid(left_leg):
 			left_leg.rotation.x = -swing * 0.82
 		if is_instance_valid(right_leg):
-			right_leg.rotation.x = swing * 0.82
+			right_leg.rotation.x = swing * 0.82 + attack_weight * 0.035
 		player_humanoid.position.y = -0.9 + (absf(stride) * 0.045 if moving else sin(humanoid_animation_time * 1.8) * 0.012)
 	if not soul_form_enabled or not is_instance_valid(visual):
 		return
