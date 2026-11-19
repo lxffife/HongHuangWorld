@@ -543,6 +543,7 @@ func registerGamePlayerAdminRoutes(mux *http.ServeMux, db *sql.DB, logger *slog.
 	mux.HandleFunc("GET /api/v1/internal/admin/servers/nodes", h.listServerNodes)
 	mux.HandleFunc("PATCH /api/v1/internal/admin/servers/nodes/{nodeKey}/state", h.setServerNodeState)
 	mux.HandleFunc("GET /api/v1/internal/admin/config-revisions", h.listConfigRevisions)
+	mux.HandleFunc("POST /api/v1/internal/admin/config-revisions/{revisionID}/rollback", h.rollbackConfigRevision)
 	mux.HandleFunc("GET /api/v1/internal/admin/players/online", h.online)
 	mux.HandleFunc("GET /api/v1/internal/admin/players/{accountID}", h.detail)
 	mux.HandleFunc("POST /api/v1/internal/admin/players/{accountID}/disconnect", h.disconnect)
@@ -564,4 +565,46 @@ func (h *gamePlayerAdminHandlers) listConfigRevisions(w http.ResponseWriter, r *
 	items, err := listConfigRevisions(ctx, h.db, resourceType, resourceID, limit)
 	if err != nil { h.logger.Error("game admin config revision list failed", "error", err); http.Error(w, "internal server error", http.StatusInternalServerError); return }
 	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": len(items), "limit": limit})
+}
+
+func (h *gamePlayerAdminHandlers) rollbackConfigRevision(w http.ResponseWriter, r *http.Request) {
+	if !h.authorize(w, r) { return }
+	revisionID, err := strconv.ParseInt(strings.TrimSpace(r.PathValue("revisionID")), 10, 64)
+	if err != nil || revisionID < 1 { http.Error(w, "invalid revision id", http.StatusBadRequest); return }
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	tx, err := h.db.BeginTx(ctx, nil)
+	if err != nil { http.Error(w, "internal server error", http.StatusInternalServerError); return }
+	defer tx.Rollback()
+	var resourceType, resourceID string
+	var desired []byte
+	err = tx.QueryRowContext(ctx, `SELECT resource_type,resource_id,new_snapshot FROM game_config_revisions WHERE id=$1 FOR UPDATE`, revisionID).Scan(&resourceType,&resourceID,&desired)
+	if errors.Is(err, sql.ErrNoRows) { http.Error(w, "configuration revision not found", http.StatusNotFound); return }
+	if err != nil { h.logger.Error("load config revision for rollback failed", "revision_id", revisionID, "error", err); http.Error(w, "internal server error", http.StatusInternalServerError); return }
+	var table, where string
+	var args []any
+	switch resourceType {
+	case "monster_definition": table="monster_definitions";where="id=$1";args=[]any{resourceID}
+	case "monster_spawn_point": table="world_monster_spawn_points";where="id=$1";args=[]any{resourceID}
+	case "item_definition": table="item_definitions";where="id=$1";args=[]any{resourceID}
+	case "monster_loot_entry":
+		parts:=strings.SplitN(resourceID,":",2);if len(parts)!=2{http.Error(w,"invalid revision resource identity",http.StatusBadRequest);return}
+		table="monster_loot_entries";where="monster_id=$1 AND item_id=$2";args=[]any{parts[0],parts[1]}
+	default: http.Error(w,"unsupported revision resource type",http.StatusBadRequest);return
+	}
+	var current json.RawMessage
+	current,err=readConfigSnapshot(ctx,tx,table,where,args...)
+	if err!=nil&&!errors.Is(err,sql.ErrNoRows){h.logger.Error("read current config before rollback failed","error",err);http.Error(w,"internal server error",500);return}
+	if errors.Is(err,sql.ErrNoRows){current=nil}
+	if err=restoreConfigSnapshot(ctx,tx,resourceType,resourceID,json.RawMessage(desired));err!=nil{
+		if errors.Is(err,errRevisionRollbackConflict){http.Error(w,"rollback conflicts with current inventory or loot constraints",http.StatusConflict);return}
+		h.logger.Error("restore config revision failed","revision_id",revisionID,"resource_type",resourceType,"resource_id",resourceID,"error",err)
+		http.Error(w,"configuration revision could not be restored",http.StatusConflict);return
+	}
+	var restored json.RawMessage
+	restored,err=readConfigSnapshot(ctx,tx,table,where,args...)
+	if errors.Is(err,sql.ErrNoRows){restored=nil}else if err!=nil{http.Error(w,"internal server error",500);return}
+	if err=recordConfigRevision(ctx,tx,resourceType,resourceID,"rollback",current,restored);err!=nil{h.logger.Error("record rollback revision failed","revision_id",revisionID,"error",err);http.Error(w,"rollback was applied but revision recording failed",500);return}
+	if err=tx.Commit();err!=nil{http.Error(w,"internal server error",500);return}
+	writeJSON(w,http.StatusOK,map[string]any{"status":"rolled_back","source_revision_id":revisionID,"resource_type":resourceType,"resource_id":resourceID,"note":"Rollback is recorded as a new revision; existing history is preserved"})
 }
