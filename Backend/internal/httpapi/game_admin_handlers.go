@@ -541,7 +541,26 @@ func registerGamePlayerAdminRoutes(mux *http.ServeMux, db *sql.DB, logger *slog.
 	mux.HandleFunc("PATCH /api/v1/internal/admin/worlds/{worldID}/state", h.setWorldEnabled)
 	mux.HandleFunc("GET /api/v1/internal/admin/servers/nodes", h.listServerNodes)
 	mux.HandleFunc("PATCH /api/v1/internal/admin/servers/nodes/{nodeKey}/state", h.setServerNodeState)
+	mux.HandleFunc("GET /api/v1/internal/admin/config-revisions", h.listConfigRevisions)
 	mux.HandleFunc("GET /api/v1/internal/admin/players/online", h.online)
 	mux.HandleFunc("GET /api/v1/internal/admin/players/{accountID}", h.detail)
 	mux.HandleFunc("POST /api/v1/internal/admin/players/{accountID}/disconnect", h.disconnect)
+}
+
+func (h *gamePlayerAdminHandlers) listConfigRevisions(w http.ResponseWriter, r *http.Request) {
+	if !h.authorize(w, r) { return }
+	resourceType := strings.TrimSpace(r.URL.Query().Get("resource_type"))
+	resourceID := strings.TrimSpace(r.URL.Query().Get("resource_id"))
+	if len(resourceType) > 48 || len(resourceID) > 160 { http.Error(w, "invalid revision filter", http.StatusBadRequest); return }
+	limit := 50
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 || value > 100 { http.Error(w, "limit must be between 1 and 100", http.StatusBadRequest); return }
+		limit = value
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Second)
+	defer cancel()
+	items, err := listConfigRevisions(ctx, h.db, resourceType, resourceID, limit)
+	if err != nil { h.logger.Error("game admin config revision list failed", "error", err); http.Error(w, "internal server error", http.StatusInternalServerError); return }
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": len(items), "limit": limit})
 }
