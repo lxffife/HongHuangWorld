@@ -59,6 +59,13 @@ func (h *inventoryHandlers) lootTable(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
 }
 
+func (h *inventoryHandlers) monsterSpawnConfig(w http.ResponseWriter,r *http.Request) {
+	nodeKey,ok:=h.authorizeServer(w,r);if !ok{return}
+	entries,err:=h.service.ListMonsterSpawnConfigForNode(r.Context(),nodeKey)
+	if err!=nil{h.logger.Error("list world monster spawn config failed","node_key",nodeKey,"error",err);http.Error(w,"internal server error",http.StatusInternalServerError);return}
+	writeJSON(w,http.StatusOK,map[string]any{"entries":entries})
+}
+
 
 func (h *inventoryHandlers) listDrops(w http.ResponseWriter, r *http.Request) {
 	nodeKey, ok := h.authorizeServer(w, r); if !ok { return }
