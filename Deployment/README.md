@@ -174,3 +174,8 @@ WorldServer 怪物配置由 Game API 按已认证节点身份返回，不接受�
 ## 管理后台服务健康监控
 
 管理后台登录后可在“服务健康监控”查看 Identity、Game、Chat、Admin 四个服务。Admin API 的 `GET /api/v1/admin/services/health` 需要 `dashboard.read` 权限，并行请求各服务 `/ready`，显示状态、响应耗时和检查时间。Identity 默认 `127.0.0.1:8789`，Game 默认 `127.0.0.1:8787`，Chat 默认 `127.0.0.1:8788`；可通过 `IDENTITY_API_BASE`、`GAME_API_BASE`、`CHAT_API_BASE` 覆盖。Admin 自身使用当前管理数据库连接检查。该监控是只读诊断，不会重启服务或改变服务状态。
+
+
+## 玩家成长档案查询
+
+管理后台玩家详情会通过 Game 内部接口 `GET /api/v1/internal/admin/players/{accountID}/growth` 读取玩家魂体积累、五项永久来世资质、吞噬进度与最近100条吞噬记录、最近50条变异/融合记录、最近100次转世及出生资质快照。接口使用 `X-Game-Admin-Key`，只读 Game 自有数据库，不跨库访问 Identity；Admin 对外仍使用 `GET /api/v1/admin/players/{id}` 与 `players.read` 权限。该查询不会修改玩家成长数据。
