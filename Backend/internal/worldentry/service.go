@@ -74,7 +74,7 @@ func (s *Service) Issue(ctx context.Context, accountID string) (Entry, error) {
 		 JOIN characters c ON c.id = s.current_character_id
 		 JOIN world_instances wi ON wi.world_id = c.world_id AND wi.status = 'ready'
 		 JOIN server_registry sr ON sr.id = wi.server_id
-		 WHERE s.account_id = $1 AND c.status = 'alive' AND sr.status = 'ready'
+		 WHERE s.account_id = $1 AND c.status = 'alive' AND sr.status = 'ready' AND sr.admin_state = 'normal'
 		   AND GREATEST(sr.current_players, (SELECT COUNT(*) FROM world_sessions ws WHERE ws.server_id = sr.id AND ws.session_state IN ('connecting', 'active', 'saving')))
 		       + (SELECT COUNT(*) FROM world_entry_tickets pending WHERE pending.server_id = sr.id AND pending.expires_at > now() AND pending.consumed_at IS NULL) < sr.capacity
 		   AND sr.last_heartbeat_at > now() - INTERVAL '30 seconds'
@@ -132,7 +132,7 @@ func (s *Service) Redeem(ctx context.Context, nodeKey, ticket string) (PlayerSna
 		 JOIN world_instances wi ON wi.id = t.instance_id AND wi.status = 'ready'
 		 JOIN characters c ON c.id = t.character_id
 		 WHERE t.token_hash = $1 AND t.expires_at > now() AND t.consumed_at IS NULL
-		   AND sr.node_key = $2 AND sr.status = 'ready' AND sr.last_heartbeat_at > now() - INTERVAL '30 seconds'
+		   AND sr.node_key = $2 AND sr.status = 'ready' AND sr.admin_state = 'normal' AND sr.last_heartbeat_at > now() - INTERVAL '30 seconds'
 		   AND c.status = 'alive'
 		 FOR UPDATE OF t`, tokenHash[:], nodeKey,
 	).Scan(&ticketID, &characterID, &instanceID, &serverID, &snapshot.WorldID, &snapshot.Name,
