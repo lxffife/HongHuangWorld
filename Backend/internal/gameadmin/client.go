@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"strconv"
 	"time"
 )
 
@@ -237,4 +238,14 @@ func (c *Client) CreateMonsterDefinition(ctx context.Context,body any)(json.RawM
 }
 func (c *Client) CreateMonsterSpawnPoint(ctx context.Context,body any)(json.RawMessage,error){
 	return c.doLootJSON(ctx,http.MethodPost,"/api/v1/internal/admin/monsters/spawn-points",body)
+}
+
+func (c *Client) ConfigRevisions(ctx context.Context, resourceType, resourceID string, limit int) (json.RawMessage, error) {
+	query := url.Values{}
+	if resourceType != "" { query.Set("resource_type", resourceType) }
+	if resourceID != "" { query.Set("resource_id", resourceID) }
+	if limit > 0 { query.Set("limit", strconv.Itoa(limit)) }
+	path := "/api/v1/internal/admin/config-revisions"
+	if encoded := query.Encode(); encoded != "" { path += "?" + encoded }
+	return c.getAdminJSON(ctx, path)
 }
