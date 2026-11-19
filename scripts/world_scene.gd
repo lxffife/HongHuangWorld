@@ -1035,6 +1035,9 @@ func _upsert_monster(entity: Dictionary) -> void:
 		float(entity.get("y", 0.0)),
 		float(entity.get("z", 0.0))
 	)
+	var monster := monsters[monster_id] as Node3D
+	monster.set_meta("target_yaw", float(entity.get("yaw", monster.rotation.y)))
+	monster.set_meta("server_mode", int(entity.get("mode", 0)))
 	monster_entities[monster_id] = entity.duplicate(true)
 	if monster_id == selected_monster_id:
 		_update_target_info()
@@ -1921,6 +1924,8 @@ func _process(delta: float) -> void:
 		var monster: Node3D = monsters[monster_id]
 		var target: Vector3 = monster_targets.get(monster_id, monster.position)
 		monster.position = monster.position.lerp(target, minf(delta * 10.0, 1.0))
+		var target_yaw := float(monster.get_meta("target_yaw", monster.rotation.y))
+		monster.rotation.y = lerp_angle(monster.rotation.y, target_yaw, minf(delta * 9.0, 1.0))
 	_animate_monster_visuals(delta)
 	for drop_id in drops:
 		var drop: Node3D = drops[drop_id]
