@@ -55,7 +55,7 @@ func (h *gameLootAdminHandlers) upsertLoot(w http.ResponseWriter,r *http.Request
 	if err:=decodeJSON(w,r,&req);err!=nil||req.DropChanceBP==nil||req.MinQuantity==nil||req.MaxQuantity==nil{http.Error(w,"drop_chance_bp, min_quantity and max_quantity are required",400);return}
 	if *req.DropChanceBP<0||*req.DropChanceBP>10000||*req.MinQuantity<1||*req.MaxQuantity<*req.MinQuantity{http.Error(w,"invalid drop probability or quantity range",400);return}
 	ctx,cancel:=context.WithTimeout(r.Context(),8*time.Second);defer cancel();tx,err:=h.db.BeginTx(ctx,nil);if err!=nil{http.Error(w,"internal server error",500);return};defer tx.Rollback()
-	var lockResult any;if err=tx.QueryRowContext(ctx,`SELECT pg_advisory_xact_lock(hashtext($1))`,monsterID).Scan(&lockResult);err!=nil{http.Error(w,"internal server error",500);return}
+	if _,err=tx.ExecContext(ctx,`SELECT pg_advisory_xact_lock(hashtext($1))`,monsterID);err!=nil{http.Error(w,"internal server error",500);return}
 	var maxStack int;err=tx.QueryRowContext(ctx,`SELECT max_stack FROM item_definitions WHERE id=$1 AND enabled=TRUE FOR SHARE`,itemID).Scan(&maxStack)
 	if errors.Is(err,sql.ErrNoRows){http.Error(w,"enabled item not found",404);return};if err!=nil{http.Error(w,"internal server error",500);return};if *req.MaxQuantity>maxStack{http.Error(w,"max_quantity cannot exceed item max_stack",400);return}
 	var otherTotal int;err=tx.QueryRowContext(ctx,`SELECT COALESCE(SUM(drop_chance_bp),0)::int FROM monster_loot_entries WHERE monster_id=$1 AND item_id<>$2`,monsterID,itemID).Scan(&otherTotal);if err!=nil{http.Error(w,"internal server error",500);return}
