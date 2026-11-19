@@ -1285,7 +1285,7 @@ func _set_chat_expanded(expanded: bool) -> void:
 	_layout_hud()
 
 func _layout_hud() -> void:
-	var viewport_size := get_viewport_rect().size
+	var viewport_size := get_viewport().get_visible_rect().size
 	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
 		return
 
