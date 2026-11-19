@@ -30,6 +30,7 @@ int main() {
     assert(state.mode == MonsterMode::Chasing);
     assert(state.target_id == "player-1");
     assert(state.x > 0.0F && state.x < player.x);
+    assert(std::abs(state.yaw + 1.5707963F) < 0.001F);
 
     // Chase stops at attack range instead of walking into the player's position.
     state.x = 0.0F;
@@ -52,6 +53,7 @@ int main() {
     assert(state.mode == MonsterMode::Returning);
     assert(state.target_id.empty());
     assert(state.x < 25.0F);
+    assert(std::abs(state.yaw - 1.5707963F) < 0.001F);
 
     state.health = 0.0F;
     assert(tick_monster(wolf, state, nullptr, 0.05F));
