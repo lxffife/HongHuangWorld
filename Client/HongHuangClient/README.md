@@ -53,6 +53,8 @@ powershell -ExecutionPolicy Bypass -File .\Client\NativeNet\build_windows.ps1
 - 空格：跳跃
 - 鼠标：旋转第三人称视角
 - ESC：释放鼠标；点击窗口重新捕获
+- F1：隐藏/显示游戏状态栏
+- F2：单独显示/隐藏网络移动诊断面板（默认隐藏）
 
 当前角色是用于验证镜头、场景和输入的程序化占位模型，不代表最终角色美术。移动和跳跃由客户端发送意图，WorldServer 计算权威位置并广播实体快照。
 
