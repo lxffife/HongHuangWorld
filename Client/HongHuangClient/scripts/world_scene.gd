@@ -1273,6 +1273,7 @@ func _build_chat_hud() -> void:
 	chat_input = LineEdit.new()
 	chat_input.placeholder_text = "输入附近消息（最多 200 字）"
 	chat_input.max_length = 200
+	chat_input.keep_editing_on_text_submit = true
 	chat_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	chat_input.text_submitted.connect(_on_chat_input_submitted)
 	chat_input.gui_input.connect(_on_chat_input_gui_input)
