@@ -209,7 +209,7 @@ inline bool tick_monster(const MonsterDefinition& definition, MonsterState& stat
     }
 
     if (state.mode == MonsterMode::Chasing && !retreating &&
-        distance <= static_cast<double>(definition.attack_range)) {
+        distance <= movement_attack_range) {
         return true;
     }
     if (distance <= 0.001 || delta_seconds == 0.0F) {
