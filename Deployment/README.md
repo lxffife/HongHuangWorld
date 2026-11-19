@@ -50,7 +50,7 @@ WorldServer 启动后会立即调用中心服 `POST /api/v1/servers/heartbeat`�
 2. 安装 vcpkg，并设置用户环境变量 `VCPKG_ROOT` 指向 vcpkg 根目录。WorldServer 的 `vcpkg.json` 会声明 ENet、libcurl 和 nlohmann-json 依赖。
 3. 复制 `Deployment/.env.example` 为 `Deployment/.env`，修改 PostgreSQL/Redis 密码；确保 `DATABASE_URL` 中的 PostgreSQL 密码与 `POSTGRES_PASSWORD` 一致，并将 `WORLD_SERVER_API_KEY` 改为足够长的随机密钥。
 4. 启动基础设施：`.\Deployment\start-infra.bat`。
-5. 首次初始化数据库时执行 `.\Deployment\migrate-database.ps1`；脚本会创建迁移账本并按顺序执行尚未应用的迁移（当前迁移版本为 000046，包含游戏基础、轮回成长、聊天、后台管理、节点管控、怪物模板/刷新点及配置版本历史）；已记录的版本会自动跳过。若数据库已有 `accounts` 表但没有迁移账本，脚本会停止，避免猜测现有数据库版本。
+5. 首次初始化数据库时执行 `.\Deployment\migrate-database.ps1`；脚本会创建迁移账本并按顺序执行尚未应用的迁移（当前迁移版本为 000047，包含游戏基础、轮回成长、聊天、后台管理、节点管控、怪物模板/刷新点及配置版本历史）；已记录的版本会自动跳过。若数据库已有 `accounts` 表但没有迁移账本，脚本会停止，避免猜测现有数据库版本。
 6. 在独立 PowerShell 窗口启动中心服：`.\Deployment\start-backend.ps1`。确认 `http://127.0.0.1:8787/ready` 返回 HTTP 200。
 7. 配置后台首次初始化账号：在 Deployment/.env 中设置 ADMIN_BOOTSTRAP_USERNAME、ADMIN_BOOTSTRAP_EMAIL 和唯一的 ADMIN_BOOTSTRAP_PASSWORD（至少 12 位，不要使用示例密码）。首次启动管理 API 时会创建超级管理员；后续重启检测到已有超级管理员后不会重置密码。启动命令：Windows `./Deployment/start-admin-server.ps1`；Linux/macOS `bash Deployment/start-admin-server.sh`。后台 API 默认仅监听本机 127.0.0.1:8790；需要远程访问时应通过 HTTPS 反向代理或 VPN，不要直接暴露管理端口，检查 `http://127.0.0.1:8790/ready`。
 8. 在另一个独立 PowerShell 窗口启动聊天服：`.\Deployment\start-chat-server.ps1`。确认 `http://127.0.0.1:8788/ready` 返回 HTTP 200。聊天服必须配置 `CHAT_DATABASE_URL`；开发阶段可与 `DATABASE_URL` 指向同一个数据库，但进程、监听端口和连接池彼此独立。Linux/macOS 在仓库根目录运行 `bash Deployment/start-chat-server.sh`。
@@ -167,3 +167,5 @@ WorldServer 怪物配置由 Game API 按已认证节点身份返回，不接受�
 - 当前已记录：怪物模板和世界刷新点新增/修改、物品目录修改、怪物掉落条目新增/更新/删除。每条记录保留修改前后 JSON 快照和递增版本号。
 - Admin 的审计日志仍保存在 Admin 数据库；配置快照保存在 Game 数据库，两个服务不跨库写入。
 - `POST /api/v1/admin/config-revisions/{revision_id}/rollback`：需要 `monsters.manage`，将指定历史版本的 new_snapshot 恢复为当前配置；回滚动作本身会产生一个新的 rollback 版本，并写入 Admin 审计日志。恢复物品堆叠上限或掉落概率时会重新校验当前背包/地面掉落/概率总和约束，冲突时拒绝回滚。
+
+- Game 数据库迁移 `000047` 为配置版本历史增加 `reason` 字段。管理员回滚必须填写 2-300 字原因，写入 Game 版本记录，并同步写入 Admin 审计详情。前端历史详情页支持字段级差异预览。
