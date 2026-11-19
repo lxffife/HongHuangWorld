@@ -612,13 +612,7 @@ func set_equipment_visuals(items: Array) -> void:
 		"offhand": "EquipmentOffhandSocket"
 	}
 	for slot_key in sockets.keys():
-		var socket_name := str(sockets[slot_key])
-		var socket := player_humanoid.get_node_or_null(socket_name) as Node3D
-		if not is_instance_valid(socket):
-			socket = Node3D.new()
-			socket.name = socket_name
-			socket.position = _equipment_socket_position(str(slot_key))
-			player_humanoid.add_child(socket)
+		var socket := _get_or_create_equipment_socket(str(slot_key), str(sockets[slot_key]))
 		for child in socket.get_children():
 			if child.name == "EquipmentVisual":
 				child.queue_free()
@@ -628,14 +622,34 @@ func set_equipment_visuals(items: Array) -> void:
 		var slot := str(item.get("slot", item.get("equipment_slot", "")))
 		if not sockets.has(slot):
 			continue
-		var socket := player_humanoid.get_node_or_null(str(sockets[slot])) as Node3D
-		if not is_instance_valid(socket):
-			continue
+		var socket := _get_or_create_equipment_socket(slot, str(sockets[slot]))
 		var visual_root := Node3D.new()
 		visual_root.name = "EquipmentVisual"
 		visual_root.set_meta("item_id", str(item.get("item_id", "")))
 		socket.add_child(visual_root)
 		_build_equipment_slot_visual(visual_root, slot, int(item.get("quality", 1)))
+
+
+func _get_or_create_equipment_socket(slot: String, socket_name: String) -> Node3D:
+	var socket := player_humanoid.get_node_or_null(socket_name) as Node3D
+	if is_instance_valid(socket):
+		return socket
+	var socket_parent: Node3D = player_humanoid
+	if slot == "weapon":
+		var right_arm := player_humanoid.get_node_or_null("ArmPivotRight") as Node3D
+		if is_instance_valid(right_arm):
+			socket_parent = right_arm
+	elif slot == "offhand":
+		var left_arm := player_humanoid.get_node_or_null("ArmPivotLeft") as Node3D
+		if is_instance_valid(left_arm):
+			socket_parent = left_arm
+	socket = socket_parent.get_node_or_null(socket_name) as Node3D
+	if not is_instance_valid(socket):
+		socket = Node3D.new()
+		socket.name = socket_name
+		socket.position = _equipment_socket_position(slot)
+		socket_parent.add_child(socket)
+	return socket
 
 
 func _build_equipment_slot_visual(root: Node3D, slot: String, quality: int) -> void:
