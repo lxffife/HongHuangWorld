@@ -84,6 +84,14 @@ Windows（在仓库根目录，单独 PowerShell 窗口运行）：
 冥界节点使用 UDP 7778，青云节点继续使用 UDP 7777。请在 WorldServer 主机防火墙/云安全组放行 UDP 7778。启动日志应出现心跳成功（`WorldServer heartbeat accepted`）；中心服收到心跳后才会把酆都实例标记为 ready。Linux 构建产物路径为 `build/world-server/world_server`，Windows 构建产物路径为 `build\\world-server\\Release\\world_server.exe`。
 
 
+
+### 管理后台在线玩家监控
+
+- `GET /api/v1/admin/players/online`：需要管理员 `players.read` 权限。
+- Admin 服务通过 `GAME_API_BASE` 和 `GAME_ADMIN_INTERNAL_API_KEY` 调用 Game 内部接口，不跨库读取游戏数据。
+- Game 返回当前 `active` 世界会话、账号 ID、角色名称/等级、世界名称，以及 WorldServer 节点地址、区域、状态、容量、当前负载和最近心跳时间。
+- 节点最近心跳超过 30 秒时，接口将 `node_status` 标记为 `offline`，避免仅依赖节点上报的 `ready` 状态。
+- 在线列表最多返回 500 条；账号 ID 用于与 Identity 账号资料关联，Identity 用户名/邮箱仍由 Identity 服务单独管理。
 ## 管理后台玩家详情内部接口
 
 管理后台通过 Identity 和 Game 各自的内部 API 聚合玩家详情，不直接跨库查询：
