@@ -546,6 +546,7 @@ func registerGamePlayerAdminRoutes(mux *http.ServeMux, db *sql.DB, logger *slog.
 	mux.HandleFunc("POST /api/v1/internal/admin/config-revisions/{revisionID}/rollback", h.rollbackConfigRevision)
 	mux.HandleFunc("GET /api/v1/internal/admin/players/online", h.online)
 	mux.HandleFunc("GET /api/v1/internal/admin/players/{accountID}", h.detail)
+	mux.HandleFunc("GET /api/v1/internal/admin/players/{accountID}/growth", h.growth)
 	mux.HandleFunc("POST /api/v1/internal/admin/players/{accountID}/disconnect", h.disconnect)
 }
 
