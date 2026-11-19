@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="${ROOT_DIR}/Deployment/.env"
-if [[ ! -f "$ENV_FILE" ]]; then echo "Missing Deployment/.env" >&2; exit 1; fi
+ENV_FILE="${HH_ENV_FILE:-${ROOT_DIR}/Deployment/.env}"
+if [[ ! -f "$ENV_FILE" ]]; then echo "Missing environment file: $ENV_FILE" >&2; exit 1; fi
 
 # Load the shared backend URL and secret, then isolate this server's identity.
 set -a
@@ -10,9 +10,9 @@ set -a
 source "$ENV_FILE"
 set +a
 
-: "${BACKEND_URL:?Missing BACKEND_URL in Deployment/.env}"
-: "${WORLD_SERVER_API_KEY:?Missing WORLD_SERVER_API_KEY in Deployment/.env}"
-: "${WORLD_SERVER_ADVERTISE_HOST:?Missing WORLD_SERVER_ADVERTISE_HOST in Deployment/.env}"
+: "${BACKEND_URL:?Missing BACKEND_URL in $ENV_FILE}"
+: "${WORLD_SERVER_API_KEY:?Missing WORLD_SERVER_API_KEY in $ENV_FILE}"
+: "${WORLD_SERVER_ADVERTISE_HOST:?Missing WORLD_SERVER_ADVERTISE_HOST in $ENV_FILE}"
 
 export WORLD_SERVER_NODE_KEY="honghuang-underworld-node-01"
 export WORLD_ID="underworld_fengdu"
