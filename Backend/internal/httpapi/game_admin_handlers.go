@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"database/sql"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/liflife/HongHuangWorld/Backend/internal/worldentry"
+	"github.com/liflife/HongHuangWorld/Backend/internal/serverregistry"
 )
 
 type gamePlayerAdminHandlers struct {
@@ -18,6 +20,7 @@ type gamePlayerAdminHandlers struct {
 	apiKey string
 	logger *slog.Logger
 	entryService *worldentry.Service
+	serverService *serverregistry.Service
 }
 
 type adminPlayerSoul struct {
@@ -220,6 +223,35 @@ func (h *gamePlayerAdminHandlers) online(w http.ResponseWriter, r *http.Request)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": total, "returned": len(items), "limit": 500})
 }
+func (h *gamePlayerAdminHandlers) listServerNodes(w http.ResponseWriter, r *http.Request) {
+	if !h.authorize(w, r) { return }
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	nodes, err := h.serverService.ListNodes(ctx)
+	if err != nil {
+		h.logger.Error("game admin server node list failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": nodes, "total": len(nodes)})
+}
+
+func (h *gamePlayerAdminHandlers) setServerNodeState(w http.ResponseWriter, r *http.Request) {
+	if !h.authorize(w, r) { return }
+	var request struct { AdminState string `json:"admin_state"` }
+	if err := decodeJSON(w, r, &request); err != nil { http.Error(w, "invalid request body", http.StatusBadRequest); return }
+	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Second)
+	defer cancel()
+	requested, err := h.serverService.SetAdminState(ctx, r.PathValue("nodeKey"), request.AdminState)
+	if errors.Is(err, serverregistry.ErrInvalidNodeState) { http.Error(w, "admin_state must be normal, draining or disabled", http.StatusBadRequest); return }
+	if errors.Is(err, serverregistry.ErrNodeNotFound) { http.Error(w, "world server node not found", http.StatusNotFound); return }
+	if err != nil {
+		h.logger.Error("game admin server node state update failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"node_key": r.PathValue("nodeKey"), "admin_state": request.AdminState, "requested_disconnects": requested})
+}
 func (h *gamePlayerAdminHandlers) disconnect(w http.ResponseWriter, r *http.Request) {
 	if !h.authorize(w, r) { return }
 	accountID := strings.TrimSpace(r.PathValue("accountID"))
@@ -242,7 +274,9 @@ func (h *gamePlayerAdminHandlers) disconnect(w http.ResponseWriter, r *http.Requ
 }
 
 func registerGamePlayerAdminRoutes(mux *http.ServeMux, db *sql.DB, logger *slog.Logger) {
-	h := &gamePlayerAdminHandlers{db: db, apiKey: strings.TrimSpace(os.Getenv("GAME_ADMIN_INTERNAL_API_KEY")), logger: logger, entryService: worldentry.NewService(db)}
+	h := &gamePlayerAdminHandlers{db: db, apiKey: strings.TrimSpace(os.Getenv("GAME_ADMIN_INTERNAL_API_KEY")), logger: logger, entryService: worldentry.NewService(db), serverService: serverregistry.NewService(db)}
+	mux.HandleFunc("GET /api/v1/internal/admin/servers/nodes", h.listServerNodes)
+	mux.HandleFunc("PATCH /api/v1/internal/admin/servers/nodes/{nodeKey}/state", h.setServerNodeState)
 	mux.HandleFunc("GET /api/v1/internal/admin/players/online", h.online)
 	mux.HandleFunc("GET /api/v1/internal/admin/players/{accountID}", h.detail)
 	mux.HandleFunc("POST /api/v1/internal/admin/players/{accountID}/disconnect", h.disconnect)
