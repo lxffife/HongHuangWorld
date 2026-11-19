@@ -49,6 +49,8 @@ int main() {
     const auto iron_profile = monster_attack_profile(iron_beast);
     assert(iron_profile.windup_ms > wolf_profile.windup_ms);
     assert(std::string(iron_profile.style) == "heavy_slam");
+    assert(iron_profile.splash_radius >= 3.6F);
+    assert(iron_profile.splash_radius < iron_beast.leash_radius);
 
     auto soul = wolf;
     soul.id = "wind_soul";
