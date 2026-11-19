@@ -9,6 +9,9 @@ const UnderworldVisualFactory = preload("res://scripts/underworld_visual_factory
 @export var mouse_sensitivity := 0.0025
 
 var camera_pivot: Node3D
+var camera_pivot_base_position := Vector3(0.0, 1.45, 0.0)
+var hit_reaction_time := 0.0
+var hit_reaction_strength := 0.0
 var camera: Camera3D
 var visual: MeshInstance3D
 var player_humanoid: Node3D
@@ -76,7 +79,7 @@ func _build_player() -> void:
 
 	camera_pivot = Node3D.new()
 	camera_pivot.name = "CameraPivot"
-	camera_pivot.position.y = 1.45
+	camera_pivot.position = camera_pivot_base_position
 	add_child(camera_pivot)
 	var spring := SpringArm3D.new()
 	spring.spring_length = 4.2
@@ -423,7 +426,23 @@ func _apply_soul_affinity_visuals(affinities: Dictionary) -> void:
 	soul_trait_life_ring.scale = Vector3.ONE * soul_form_scale
 
 
+func play_hit_reaction(damage: int, attack_style: String = "") -> void:
+	hit_reaction_time = maxf(hit_reaction_time, 0.32)
+	var style_strength := 0.115 if attack_style == "heavy_slam" else 0.055
+	var damage_strength := clampf(float(maxi(damage, 0)) / 240.0, 0.0, 0.045)
+	hit_reaction_strength = maxf(hit_reaction_strength, style_strength + damage_strength)
+
+
 func _process(delta: float) -> void:
+	hit_reaction_time = maxf(hit_reaction_time - delta, 0.0)
+	if is_instance_valid(camera_pivot):
+		var shake_weight := hit_reaction_time / 0.32
+		var shake_time := 0.32 - hit_reaction_time
+		var shake := sin(shake_time * 58.0) * hit_reaction_strength * shake_weight
+		var vertical := absf(cos(shake_time * 34.0)) * hit_reaction_strength * 0.28 * shake_weight
+		camera_pivot.position = camera_pivot_base_position + Vector3(shake, vertical, 0.0)
+	if hit_reaction_time <= 0.0:
+		hit_reaction_strength = 0.0
 	if not soul_form_enabled and is_instance_valid(player_humanoid):
 		humanoid_animation_time += delta
 		var moving := current_move_input.length() > 0.08
