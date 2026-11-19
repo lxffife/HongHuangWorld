@@ -9,6 +9,7 @@ signal entities_updated(entities: Array)
 signal player_joined(player: Dictionary)
 signal player_left(character_id: String)
 signal combat_event(event: Dictionary)
+signal monster_action_event(event: Dictionary)
 signal pickup_event(event: Dictionary)
 signal chat_event(event: Dictionary)
 
@@ -207,6 +208,12 @@ func _on_frame_received(bytes: PackedByteArray) -> void:
 				combat_event.emit(combat)
 			else:
 				rejected.emit("收到无效的 CombatEvent。")
+		HHProtocolCodec.MessageType.MONSTER_ACTION_EVENT:
+			var monster_action: Variant = JSON.parse_string(payload.get_string_from_utf8())
+			if monster_action is Dictionary and str(monster_action.get("source_entity_id", "")).length() > 0 and str(monster_action.get("action", "")) == "attack":
+				monster_action_event.emit(monster_action)
+			else:
+				rejected.emit("收到无效的 MonsterActionEvent。")
 		HHProtocolCodec.MessageType.CHAT_EVENT:
 			var chat: Variant = JSON.parse_string(payload.get_string_from_utf8())
 			if chat is Dictionary:
