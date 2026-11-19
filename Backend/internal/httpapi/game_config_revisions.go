@@ -58,7 +58,7 @@ func listConfigRevisions(ctx context.Context, db *sql.DB, resourceType, resource
     items := make([]map[string]any, 0)
     for rows.Next() {
         var id int64
-        var kind, resource, resourceIDValue, change string
+        var kind, resourceIDValue, change string
         var revision int
         var oldValue, newValue []byte
         var created any
