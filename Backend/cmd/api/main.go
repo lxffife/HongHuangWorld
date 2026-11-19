@@ -18,6 +18,10 @@ import (
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	if os.Getenv("GAME_ADMIN_INTERNAL_API_KEY") == "" {
+		logger.Error("GAME_ADMIN_INTERNAL_API_KEY is required")
+		os.Exit(1)
+	}
 	startupCtx, startupCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	db, err := database.OpenPostgres(startupCtx, os.Getenv("DATABASE_URL"))
 	startupCancel()
