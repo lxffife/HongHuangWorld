@@ -17,6 +17,7 @@ var (
 	ErrUnavailable = errors.New("game administration service unavailable")
 	ErrInvalidLootRequest = errors.New("invalid loot administration request")
 	ErrLootNotFound = errors.New("loot item or entry not found")
+	ErrLootConflict = errors.New("loot resource already exists")
 )
 
 type Client struct {
@@ -212,7 +213,7 @@ func (c *Client) doLootJSON(ctx context.Context,method,path string,body any) (js
 	req,err:=http.NewRequestWithContext(ctx,method,c.baseURL+path,reader);if err!=nil{return nil,err}
 	req.Header.Set("X-Game-Admin-Key",c.apiKey);if body!=nil{req.Header.Set("Content-Type","application/json")}
 	resp,err:=c.httpClient.Do(req);if err!=nil{return nil,fmt.Errorf("%w: %v",ErrUnavailable,err)};defer resp.Body.Close()
-	switch resp.StatusCode {case http.StatusBadRequest: data,_:=io.ReadAll(io.LimitReader(resp.Body,2048));return nil,fmt.Errorf("%w: %s",ErrInvalidLootRequest,strings.TrimSpace(string(data)));case http.StatusNotFound:return nil,ErrLootNotFound;case http.StatusOK, http.StatusCreated:default:return nil,fmt.Errorf("%w: game returned %d",ErrUnavailable,resp.StatusCode)}
+	switch resp.StatusCode {case http.StatusBadRequest: data,_:=io.ReadAll(io.LimitReader(resp.Body,2048));return nil,fmt.Errorf("%w: %s",ErrInvalidLootRequest,strings.TrimSpace(string(data)));case http.StatusNotFound:return nil,ErrLootNotFound;case http.StatusConflict:return nil,ErrLootConflict;case http.StatusOK, http.StatusCreated:default:return nil,fmt.Errorf("%w: game returned %d",ErrUnavailable,resp.StatusCode)}
 	var result json.RawMessage;if err:=json.NewDecoder(resp.Body).Decode(&result);err!=nil{return nil,err};return result,nil
 }
 
