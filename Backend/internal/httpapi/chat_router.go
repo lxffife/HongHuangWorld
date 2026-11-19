@@ -64,6 +64,8 @@ func NewChatRouterWithServiceAndShutdown(logger *slog.Logger, db *sql.DB, chatSe
 			"GET /api/v1/chat/presence/friends",
 			"GET /api/v1/chat/presence/summary",
 			"GET /api/v1/chat/presence/friends/summary",
+			"GET /api/v1/chat/preferences/friends",
+			"PUT /api/v1/chat/preferences/friends",
 			"GET /api/v1/chat/friends",
 			"GET /api/v1/chat/friends/search",
 			"GET /api/v1/chat/friends/requests",
@@ -98,6 +100,8 @@ func NewChatRouterWithServiceAndShutdown(logger *slog.Logger, db *sql.DB, chatSe
 	mux.HandleFunc("GET /api/v1/chat/presence/friends", chatAPI.friendPresence)
 	mux.HandleFunc("GET /api/v1/chat/presence/summary", chatAPI.presenceSummary)
 	mux.HandleFunc("GET /api/v1/chat/presence/friends/summary", chatAPI.friendPresenceSummary)
+	mux.HandleFunc("GET /api/v1/chat/preferences/friends", chatAPI.friendRequestPreference)
+	mux.HandleFunc("PUT /api/v1/chat/preferences/friends", chatAPI.friendRequestPreference)
 	mux.HandleFunc("GET /api/v1/chat/friends", chatAPI.listFriends)
 	mux.HandleFunc("GET /api/v1/chat/friends/search", chatAPI.searchFriends)
 	mux.HandleFunc("GET /api/v1/chat/friends/requests", chatAPI.incomingFriendRequests)
