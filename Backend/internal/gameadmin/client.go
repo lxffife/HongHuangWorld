@@ -53,6 +53,10 @@ func (c *Client) PlayerDetail(ctx context.Context, accountID string) (json.RawMe
 	return result, nil
 }
 
+func (c *Client) PlayerGrowth(ctx context.Context, accountID string) (json.RawMessage, error) {
+	return c.getAdminJSON(ctx, "/api/v1/internal/admin/players/"+url.PathEscape(accountID)+"/growth")
+}
+
 func (c *Client) OnlinePlayers(ctx context.Context) (json.RawMessage, error) {
 	if !c.ready() { return nil, ErrUnavailable }
 	endpoint := c.baseURL + "/api/v1/internal/admin/players/online"
