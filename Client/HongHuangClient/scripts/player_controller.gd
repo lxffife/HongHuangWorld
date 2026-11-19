@@ -1,5 +1,4 @@
 extends CharacterBody3D
-class_name HHPlayerController
 
 @export var move_speed := 5.5
 @export var acceleration := 18.0
