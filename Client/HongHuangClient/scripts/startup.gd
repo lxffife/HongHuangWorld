@@ -91,6 +91,9 @@ var soul_fate_box: VBoxContainer
 var soul_fate_refresh_button: Button
 
 func _ready() -> void:
+	# The Startup scene is a full-window UI. Explicitly anchor its root to
+	# the viewport so dynamically-created children do not inherit a tiny rect.
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_ui()
 	_load_client_config()
 	_build_reincarnation_ui()
@@ -116,10 +119,14 @@ func _build_ui() -> void:
 	add_child(center)
 
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(900, 580)
+	panel.custom_minimum_size = Vector2(760, 500)
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	center.add_child(panel)
 
 	var main_layout := HBoxContainer.new()
+	main_layout.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	main_layout.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	main_layout.add_theme_constant_override("separation", 18)
 	panel.add_child(main_layout)
 
