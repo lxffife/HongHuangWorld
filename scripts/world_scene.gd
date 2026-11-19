@@ -153,6 +153,7 @@ func _ready() -> void:
 		HHSession.world_network.player_joined.connect(_on_player_joined)
 		HHSession.world_network.player_left.connect(_on_player_left)
 		HHSession.world_network.combat_event.connect(_on_combat_event)
+		HHSession.world_network.monster_action_event.connect(_on_monster_action_event)
 		HHSession.world_network.pickup_event.connect(_on_pickup_event)
 		HHSession.world_network.chat_event.connect(_on_chat_event)
 		HHSession.world_network.disconnected.connect(_on_world_disconnected)
@@ -1684,17 +1685,19 @@ func _request_nearest_monster_attack() -> void:
 	if error != OK:
 		hud_label.text = "攻击指令发送失败：" + str(error)
 
+func _on_monster_action_event(event: Dictionary) -> void:
+	var attacker_id := str(event.get("source_entity_id", ""))
+	if attacker_id.is_empty() or not monsters.has(attacker_id):
+		return
+	var attacker := monsters[attacker_id] as Node3D
+	if is_instance_valid(attacker):
+		attacker.set_meta("attack_reaction_time", 0.78)
+
 func _on_combat_event(event: Dictionary) -> void:
 	if not bool(event.get("accepted", true)):
 		hud_label.text = str(event.get("reason", "攻击未命中。"))
 		return
 	if str(event.get("source", "")) == "monster":
-		# Attack presentation is driven only by an explicit server attacker ID.
-		var attacker_id := str(event.get("source_entity_id", ""))
-		if not attacker_id.is_empty() and monsters.has(attacker_id):
-			var attacker := monsters[attacker_id] as Node3D
-			if is_instance_valid(attacker):
-				attacker.set_meta("attack_reaction_time", 0.78)
 		var incoming_damage := int(event.get("damage", 0))
 		_spawn_combat_number(incoming_damage, true, false)
 		var current_health := int(event.get("health", 0))
