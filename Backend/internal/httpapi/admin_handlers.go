@@ -340,7 +340,18 @@ func (h *adminHandlers) playerDetail(w http.ResponseWriter, r *http.Request) {
   h.logger.Error("admin player detail game lookup failed","error",err)
   http.Error(w,"game service unavailable",http.StatusServiceUnavailable);return
  }
- writeJSON(w,http.StatusOK,map[string]any{"account":account,"game":gameDetail,"audit_logs":auditPage.Items})
+ growthDetail,growthErr:=h.game.PlayerGrowth(ctx,id)
+ if growthErr!=nil {
+  h.logger.Error("admin player growth lookup failed","error",growthErr)
+  http.Error(w,"game growth data unavailable",http.StatusServiceUnavailable);return
+ }
+ var gamePayload map[string]json.RawMessage
+ if err:=json.Unmarshal(gameDetail,&gamePayload);err!=nil {
+  h.logger.Error("decode admin game player detail failed","error",err)
+  http.Error(w,"game service returned invalid player detail",http.StatusBadGateway);return
+ }
+ gamePayload["growth"]=growthDetail
+ writeJSON(w,http.StatusOK,map[string]any{"account":account,"game":gamePayload,"audit_logs":auditPage.Items})
 }
 
 func (h *adminHandlers) disconnectPlayer(w http.ResponseWriter, r *http.Request) {
