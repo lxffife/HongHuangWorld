@@ -7,4 +7,5 @@ DROP INDEX IF EXISTS idx_chat_friend_requests_outbox;
 DROP INDEX IF EXISTS idx_chat_friend_requests_inbox;
 DROP INDEX IF EXISTS uq_chat_friend_requests_pending;
 DROP TABLE IF EXISTS chat_friend_requests;
+ALTER TABLE chat_preferences DROP COLUMN IF EXISTS allow_friend_requests;
 COMMIT;
