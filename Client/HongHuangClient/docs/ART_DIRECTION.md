@@ -52,3 +52,26 @@
 - 当前原型仅用于玩法开发和视觉占位，不代表最终美术资产。
 - 下一批正式样板资产建议为：玩家人形、荒原狼、孟婆/轮回引导 NPC、酆都鬼门关。
 - 当前阶段不调用付费生成服务；正式 GLB 资产待具备可用额度或免费制作工具后再评估。每个资产都必须登记来源、生成模型、授权/许可、导入路径和验证状态。
+
+
+## 免费商用模型资源（临时资产池）
+
+优先选择发布者原始页面明确标注 CC0 的资源，不从不明网盘或转载站直接收录模型。以下资源已核对到发布者或官方许可页面；具体下载包仍需随包保存 LICENSE/README 与下载日期。
+
+| 资源 | 适合用途 | 授权与注意事项 |
+|---|---|---|
+| [Quaternius Ultimate Modular Men](https://quaternius.com/packs/ultimatemodularcharacters.html) | 玩家、路人、基础人形骨架与动画 | 该包页面标注 CC0，11 个角色、24 个动画；先检查风格和骨架，再决定导入。 |
+| [Quaternius Ultimate Monsters](https://quaternius.com/packs/ultimatemonsters.html) | 怪物、四足生物、战斗动画 | 页面标注 CC0，50 个动画怪物；需挑选轮廓合适的模型并检查四足骨骼。 |
+| [Quaternius Animated Men](https://quaternius.com/packs/animatedmen.html) | 人形角色动画样板 | 页面标注 CC0，4 个人形角色及动画。 |
+| [Kenney 3D Assets](https://kenney.nl/assets) | 墓园、道具、建筑模块、环境装饰 | Kenney 官方说明其资产页模型为 CC0，可商用；每个具体包仍保留许可证文件。 |
+| [Poly Haven Models](https://polyhaven.com/models) | 石材、岩石、树木、环境模型与 PBR | 官方明确全站模型/纹理/HDRI 为 CC0；高面数扫描模型需优化后再进游戏。 |
+| [KayKit](https://kaylousberg.itch.io/) | 模块化环境、角色与道具 | 部分包明确 CC0，不可把整个作者商店都视为同一授权；逐包检查。 |
+
+### 临时采用策略
+
+1. 玩家当前先使用本项目程序化人形原型，避免等待外部模型下载；后续优先试用 Quaternius Modular Men 中骨架结构最接近的角色。
+2. 怪物优先评估 Quaternius Ultimate Monsters；只导入实际需要的 GLB，不把整包无差别塞进客户端。
+3. 冥界建筑和墓园道具优先评估 Kenney Graveyard / Fantasy Town 模块；石材纹理和环境资产可从 Poly Haven 选择低面数版本。
+4. 每个导入资产记录原始下载地址、下载日期、包名/版本、许可证副本、作者、修改内容和项目路径。禁止把单独模型文件作为资产包再次出售或分发。
+5. 免费模型可能与东方玄幻的写实方向不完全一致，临时使用时统一比例、色板、材质粗糙度和轮廓；不合适的模型宁可继续用程序化原型。
+
