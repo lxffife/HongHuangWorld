@@ -49,6 +49,7 @@ func (h *chatHandlers) authenticate(w http.ResponseWriter,r *http.Request)(auth.
 }
 
 func (h *chatHandlers) writeError(w http.ResponseWriter,err error){
+	if h.writeSocialError(w, err) { return }
 	switch{
 	case errors.Is(err,chat.ErrInvalidInput):http.Error(w,"invalid chat request",http.StatusBadRequest)
 	case errors.Is(err,chat.ErrNoCharacter):http.Error(w,"no active character",http.StatusConflict)
