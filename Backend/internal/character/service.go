@@ -407,14 +407,26 @@ func (s *Service) CreateFirstLife(ctx context.Context, accountID, name, worldID,
 func (s *Service) Current(ctx context.Context, accountID string) (Character, error) {
 	var result Character
 	var race sql.NullString
+	var sourceAbsorbedCount, sourceGrowthStage sql.NullInt64
+	var sourceGrowthName, dominantAttribute sql.NullString
+	var sourceStrength, sourceConstitution, sourceAgility, sourceSpirit, sourceVitality sql.NullInt64
+	var appliedStrength, appliedConstitution, appliedAgility, appliedSpirit, appliedVitality sql.NullInt64
 	err := s.db.QueryRowContext(ctx,
 		`SELECT c.id::text, c.soul_id::text, c.life_index, c.world_id, c.name, c.race_id, c.level, c.status,
-		        COALESCE(trait.trait_id, ''), COALESCE(trait.trait_name, ''), COALESCE(trait.description, '')
+		        COALESCE(trait.trait_id, ''), COALESCE(trait.trait_name, ''), COALESCE(trait.description, ''),
+		        birth.source_absorbed_count, birth.source_growth_stage, birth.source_growth_name,
+		        birth.source_strength, birth.source_constitution, birth.source_agility, birth.source_spirit, birth.source_vitality,
+		        birth.applied_strength, birth.applied_constitution, birth.applied_agility, birth.applied_spirit, birth.applied_vitality,
+		        birth.dominant_attribute
 		 FROM souls s JOIN characters c ON c.id = s.current_character_id
 		 LEFT JOIN character_fate_traits trait ON trait.character_id = c.id
+		 LEFT JOIN character_birth_inheritance birth ON birth.character_id = c.id
 		 WHERE s.account_id = $1`, accountID,
 	).Scan(&result.ID, &result.SoulID, &result.LifeIndex, &result.WorldID, &result.Name, &race, &result.Level, &result.Status,
-		&result.FateTraitID, &result.FateTraitName, &result.FateTraitDescription)
+		&result.FateTraitID, &result.FateTraitName, &result.FateTraitDescription,
+		&sourceAbsorbedCount, &sourceGrowthStage, &sourceGrowthName,
+		&sourceStrength, &sourceConstitution, &sourceAgility, &sourceSpirit, &sourceVitality,
+		&appliedStrength, &appliedConstitution, &appliedAgility, &appliedSpirit, &appliedVitality, &dominantAttribute)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Character{}, sql.ErrNoRows
 	}
@@ -423,6 +435,31 @@ func (s *Service) Current(ctx context.Context, accountID string) (Character, err
 	}
 	if race.Valid {
 		result.RaceID = &race.String
+	}
+	if sourceAbsorbedCount.Valid {
+		birth := &BirthInheritance{
+			SourceAbsorbedCount: sourceAbsorbedCount.Int64,
+			SourceGrowthStage: int(sourceGrowthStage.Int64),
+			SourceGrowthName: sourceGrowthName.String,
+			SourceStrength: sourceStrength.Int64,
+			SourceConstitution: sourceConstitution.Int64,
+			SourceAgility: sourceAgility.Int64,
+			SourceSpirit: sourceSpirit.Int64,
+			SourceVitality: sourceVitality.Int64,
+			AppliedStrength: int(appliedStrength.Int64),
+			AppliedConstitution: int(appliedConstitution.Int64),
+			AppliedAgility: int(appliedAgility.Int64),
+			AppliedSpirit: int(appliedSpirit.Int64),
+			AppliedVitality: int(appliedVitality.Int64),
+			DominantAttribute: dominantAttribute.String,
+		}
+		birth.InitialStrength, birth.InitialConstitution = 5+birth.AppliedStrength, 5+birth.AppliedConstitution
+		birth.InitialAgility, birth.InitialSpirit, birth.InitialVitality = 5+birth.AppliedAgility, 5+birth.AppliedSpirit, 5+birth.AppliedVitality
+		birth.InitialHealth, birth.InitialMaxHealth = 100+birth.AppliedConstitution*10+birth.AppliedVitality*5, 100+birth.AppliedConstitution*10+birth.AppliedVitality*5
+		birth.InitialMana, birth.InitialMaxMana = 50+birth.AppliedSpirit*10, 50+birth.AppliedSpirit*10
+		birth.InitialAttack, birth.InitialDefense = 10+birth.AppliedStrength*2, 5+birth.AppliedConstitution+birth.AppliedVitality
+		birth.InitialMovementSpeed = 5.0+float64(birth.AppliedAgility)*0.05
+		result.BirthInheritance = birth
 	}
 	return result, nil
 }
