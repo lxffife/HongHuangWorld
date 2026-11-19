@@ -82,3 +82,14 @@ Windows（在仓库根目录，单独 PowerShell 窗口运行）：
 ```
 
 冥界节点使用 UDP 7778，青云节点继续使用 UDP 7777。请在 WorldServer 主机防火墙/云安全组放行 UDP 7778。启动日志应出现心跳成功（`WorldServer heartbeat accepted`）；中心服收到心跳后才会把酆都实例标记为 ready。Linux 构建产物路径为 `build/world-server/world_server`，Windows 构建产物路径为 `build\\world-server\\Release\\world_server.exe`。
+
+
+## 管理后台玩家详情内部接口
+
+管理后台通过 Identity 和 Game 各自的内部 API 聚合玩家详情，不直接跨库查询：
+- Identity：`IDENTITY_API_BASE` + `IDENTITY_INTERNAL_API_KEY`，负责账号资料与账号状态。
+- Game：`GAME_API_BASE=http://127.0.0.1:8787` + `GAME_ADMIN_INTERNAL_API_KEY`，负责灵魂、历世角色、当前角色和活动世界会话。
+- `GAME_ADMIN_INTERNAL_API_KEY` 必须使用独立随机密钥，不得复用 `WORLD_SERVER_API_KEY` 或 Identity 内部密钥。Game API 启动时会检查该配置。
+- 管理后台玩家详情：`GET /api/v1/admin/players/{account_id}`，需要 `players.read` 权限。该接口会分别请求 Identity 与 Game 服务。
+
+修改 `Deployment/.env.example` 后，请同步更新本机 `Deployment/.env` 中的配置，再分别重启 Game API 与 Admin API。
