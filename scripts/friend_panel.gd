@@ -180,14 +180,11 @@ func _render_friends(items: Array) -> void:
 		row.add_child(label)
 		var chat_button := Button.new()
 		chat_button.text = "私聊"
-		chat_button.pressed.connect(func():
-			open_private_chat.emit(str(item.get("character_id", "")), str(item.get("name", "好友")))
-			_close_panel()
-		)
+		chat_button.pressed.connect(_open_friend_from_row.bind(str(item.get("character_id", "")), str(item.get("name", "好友"))))
 		row.add_child(chat_button)
 		var remove_button := Button.new()
 		remove_button.text = "删除"
-		remove_button.pressed.connect(func(): _api_request(HTTPClient.METHOD_DELETE, "/api/v1/chat/friends/" + str(item.get("character_id", "")), "", "remove_friend"))
+		remove_button.pressed.connect(_remove_friend.bind(str(item.get("character_id", ""))))
 		row.add_child(remove_button)
 	if items.is_empty():
 		_add_empty(friends_list, "还没有好友，搜索角色名添加吧。")
@@ -208,11 +205,11 @@ func _render_requests(items: Array) -> void:
 		row.add_child(actions)
 		var accept := Button.new()
 		accept.text = "同意"
-		accept.pressed.connect(func(): _api_request(HTTPClient.METHOD_POST, "/api/v1/chat/friends/requests/" + str(item.get("id", "")) + "/accept", "{}", "accept_request"))
+		accept.pressed.connect(_respond_to_request.bind(str(item.get("id", "")), "accept"))
 		actions.add_child(accept)
 		var reject := Button.new()
 		reject.text = "拒绝"
-		reject.pressed.connect(func(): _api_request(HTTPClient.METHOD_POST, "/api/v1/chat/friends/requests/" + str(item.get("id", "")) + "/reject", "{}", "reject_request"))
+		reject.pressed.connect(_respond_to_request.bind(str(item.get("id", "")), "reject"))
 		actions.add_child(reject)
 	if items.is_empty():
 		_add_empty(requests_list, "暂无待处理申请。")
@@ -234,9 +231,7 @@ func _render_search(items: Array) -> void:
 		var is_pending := bool(item.get("request_pending", false))
 		add_button.text = "已是好友" if is_friend else ("已申请" if is_pending else "添加")
 		add_button.disabled = is_friend or is_pending
-		add_button.pressed.connect(func():
-			_api_request(HTTPClient.METHOD_POST, "/api/v1/chat/friends/requests", JSON.stringify({"character_id": str(item.get("character_id", "")), "message": "希望与你成为好友"}), "create_request")
-		)
+		add_button.pressed.connect(_send_friend_request.bind(str(item.get("character_id", ""))))
 		row.add_child(add_button)
 	if items.is_empty():
 		_add_empty(results_list, "没有找到符合条件的角色。")
@@ -253,3 +248,16 @@ func _add_empty(container: VBoxContainer, message: String) -> void:
 	label.text = message
 	label.modulate = Color(0.68, 0.73, 0.81)
 	container.add_child(label)
+
+func _open_friend_from_row(character_id: String, character_name: String) -> void:
+	open_private_chat.emit(character_id, character_name)
+	_close_panel()
+
+func _remove_friend(character_id: String) -> void:
+	_api_request(HTTPClient.METHOD_DELETE, "/api/v1/chat/friends/" + character_id, "", "remove_friend")
+
+func _respond_to_request(request_id: String, decision: String) -> void:
+	_api_request(HTTPClient.METHOD_POST, "/api/v1/chat/friends/requests/" + request_id + "/" + decision, "{}", decision + "_request")
+
+func _send_friend_request(character_id: String) -> void:
+	_api_request(HTTPClient.METHOD_POST, "/api/v1/chat/friends/requests", JSON.stringify({"character_id": character_id, "message": "希望与你成为好友"}), "create_request")
