@@ -43,10 +43,10 @@ func (h *gameLootAdminHandlers) updateItem(w http.ResponseWriter,r *http.Request
 }
 func (h *gameLootAdminHandlers) listLoot(w http.ResponseWriter,r *http.Request){
 	if !h.authorize(w,r){return};ctx,cancel:=context.WithTimeout(r.Context(),8*time.Second);defer cancel()
-	rows,err:=h.db.QueryContext(ctx,`SELECT ml.monster_id,i.id,i.name,i.category,i.quality,ml.drop_chance_bp,ml.min_quantity,ml.max_quantity,i.max_stack,SUM(ml.drop_chance_bp) OVER(PARTITION BY ml.monster_id)::int FROM monster_loot_entries ml JOIN item_definitions i ON i.id=ml.item_id ORDER BY ml.monster_id,i.quality DESC,i.id LIMIT 2000`)
+	rows,err:=h.db.QueryContext(ctx,`SELECT ml.monster_id,i.id,i.name,i.category,i.quality,ml.drop_chance_bp,ml.min_quantity,ml.max_quantity,i.max_stack,i.enabled,SUM(ml.drop_chance_bp) OVER(PARTITION BY ml.monster_id)::int FROM monster_loot_entries ml JOIN item_definitions i ON i.id=ml.item_id ORDER BY ml.monster_id,i.quality DESC,i.id LIMIT 2000`)
 	if err!=nil{h.logger.Error("game admin loot table query failed","error",err);http.Error(w,"internal server error",500);return};defer rows.Close()
-	type entry struct{MonsterID string `json:"monster_id"`;ItemID string `json:"item_id"`;ItemName string `json:"item_name"`;Category string `json:"category"`;Quality int `json:"quality"`;DropChanceBP int `json:"drop_chance_bp"`;MinQuantity int `json:"min_quantity"`;MaxQuantity int `json:"max_quantity"`;MaxStack int `json:"max_stack"`;TotalChanceBP int `json:"total_chance_bp"`}
-	items:=make([]entry,0);for rows.Next(){var v entry;if err:=rows.Scan(&v.MonsterID,&v.ItemID,&v.ItemName,&v.Category,&v.Quality,&v.DropChanceBP,&v.MinQuantity,&v.MaxQuantity,&v.MaxStack,&v.TotalChanceBP);err!=nil{http.Error(w,"internal server error",500);return};items=append(items,v)}
+	type entry struct{MonsterID string `json:"monster_id"`;ItemID string `json:"item_id"`;ItemName string `json:"item_name"`;Category string `json:"category"`;Quality int `json:"quality"`;DropChanceBP int `json:"drop_chance_bp"`;MinQuantity int `json:"min_quantity"`;MaxQuantity int `json:"max_quantity"`;MaxStack int `json:"max_stack"`;ItemEnabled bool `json:"item_enabled"`;TotalChanceBP int `json:"total_chance_bp"`}
+	items:=make([]entry,0);for rows.Next(){var v entry;if err:=rows.Scan(&v.MonsterID,&v.ItemID,&v.ItemName,&v.Category,&v.Quality,&v.DropChanceBP,&v.MinQuantity,&v.MaxQuantity,&v.MaxStack,&v.ItemEnabled,&v.TotalChanceBP);err!=nil{http.Error(w,"internal server error",500);return};items=append(items,v)}
 	if err:=rows.Err();err!=nil{http.Error(w,"internal server error",500);return};writeJSON(w,200,map[string]any{"entries":items,"total":len(items),"limit":2000})
 }
 func (h *gameLootAdminHandlers) upsertLoot(w http.ResponseWriter,r *http.Request){
