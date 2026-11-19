@@ -35,5 +35,5 @@ func TestAdminPermissionChecks(t *testing.T) {
  if !hasPermission(user,"players.read"){t.Fatal("explicit permission should be accepted")}
  if hasPermission(user,"players.ban"){t.Fatal("ungranted permission must be rejected")}
  if !hasPermission(adminauth.User{IsSuperAdmin:true},"servers.control"){t.Fatal("super administrator should have all permissions")}
- if !hasPermission(user,"servers.manage") && hasPermission(user,"servers.read") { /* node control is intentionally separate */ }
+ if hasPermission(user,"servers.manage"){t.Fatal("node management must require its own permission")}
 }
