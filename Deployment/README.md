@@ -169,3 +169,8 @@ WorldServer 怪物配置由 Game API 按已认证节点身份返回，不接受�
 - `POST /api/v1/admin/config-revisions/{revision_id}/rollback`：需要 `monsters.manage`，将指定历史版本的 new_snapshot 恢复为当前配置；回滚动作本身会产生一个新的 rollback 版本，并写入 Admin 审计日志。恢复物品堆叠上限或掉落概率时会重新校验当前背包/地面掉落/概率总和约束，冲突时拒绝回滚。
 
 - Game 数据库迁移 `000047` 为配置版本历史增加 `reason` 字段。管理员回滚必须填写 2-300 字原因，写入 Game 版本记录，并同步写入 Admin 审计详情。前端历史详情页支持字段级差异预览。
+
+
+## 管理后台服务健康监控
+
+管理后台登录后可在“服务健康监控”查看 Identity、Game、Chat、Admin 四个服务。Admin API 的 `GET /api/v1/admin/services/health` 需要 `dashboard.read` 权限，并行请求各服务 `/ready`，显示状态、响应耗时和检查时间。Identity 默认 `127.0.0.1:8789`，Game 默认 `127.0.0.1:8787`，Chat 默认 `127.0.0.1:8788`；可通过 `IDENTITY_API_BASE`、`GAME_API_BASE`、`CHAT_API_BASE` 覆盖。Admin 自身使用当前管理数据库连接检查。该监控是只读诊断，不会重启服务或改变服务状态。
