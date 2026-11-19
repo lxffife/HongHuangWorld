@@ -1690,7 +1690,7 @@ func _on_combat_event(event: Dictionary) -> void:
 		return
 	if str(event.get("source", "")) == "monster":
 		# Attack presentation is driven only by an explicit server attacker ID.
-		var attacker_id := str(event.get("source_id", ""))
+		var attacker_id := str(event.get("source_entity_id", ""))
 		if not attacker_id.is_empty() and monsters.has(attacker_id):
 			var attacker := monsters[attacker_id] as Node3D
 			if is_instance_valid(attacker):
@@ -1710,7 +1710,7 @@ func _on_combat_event(event: Dictionary) -> void:
 			_show_notification("受到怪物攻击 -" + str(incoming_damage) + " 生命")
 		return
 	var monster_name := str(event.get("target_name", "目标"))
-	var hit_target_id := str(event.get("target_id", ""))
+	var hit_target_id := str(event.get("target_entity_id", ""))
 	if monsters.has(hit_target_id):
 		var hit_monster := monsters[hit_target_id] as Node3D
 		hit_monster.set_meta("hit_reaction_time", 0.24)
