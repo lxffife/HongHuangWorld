@@ -102,6 +102,7 @@ func _close_panel() -> void:
 func _refresh_presence() -> void:
 	if visible:
 		_api_request(HTTPClient.METHOD_GET, "/api/v1/chat/friends", "", "friends")
+		_api_request(HTTPClient.METHOD_GET, "/api/v1/chat/friends/requests", "", "requests")
 
 func _refresh() -> void:
 	_api_request(HTTPClient.METHOD_GET, "/api/v1/chat/friends", "", "friends")
