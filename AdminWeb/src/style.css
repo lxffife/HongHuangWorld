@@ -131,3 +131,14 @@ button,input{font:inherit}
 .health-foot{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding-top:12px;border-top:1px solid #2b3a49;color:#8799ab;font-size:11px}
 .health-refresh-time{color:#8494a5;font-size:12px}
 @media(max-width:760px){.health-grid{grid-template-columns:1fr}.health-card{padding:16px}.health-latency{font-size:28px}}
+
+.player-profile-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 16px;margin-bottom:12px;border:1px solid #2b3a49;border-radius:10px;background:#152330}
+.player-profile-head>div{display:flex;flex-direction:column;gap:4px;min-width:0}
+.player-profile-head strong{font-size:16px;color:#e6edf5}
+.player-profile-head span{font-size:12px;color:#8295a8;overflow-wrap:anywhere}
+.growth-tabs .el-tab-pane{padding-top:8px}
+.growth-tabs h4{margin:18px 0 10px;color:#dbe5ee;font-size:13px;font-weight:650}
+.growth-tabs .el-descriptions{margin-bottom:16px}
+.growth-tabs .el-table{margin-bottom:14px}
+.growth-tabs .el-table .cell{white-space:normal;overflow-wrap:anywhere}
+@media(max-width:760px){.player-profile-head{align-items:flex-start;flex-direction:column}.growth-tabs .el-tabs__nav-wrap{overflow-x:auto}.growth-tabs .el-tabs__item{padding:0 12px}}
