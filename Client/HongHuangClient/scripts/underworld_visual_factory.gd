@@ -263,3 +263,40 @@ static func create_npc(npc_type: String, npc_name: String) -> Node3D:
 			_part(root, "SpearShaft", _capsule(0.035, 1.95), Vector3(0.82, 1.05, 0.10), Color("#8b7658"))
 			_part(root, "SpearHead", _capsule(0.07, 0.38), Vector3(0.82, 2.18, 0.10), trim, Vector3.ZERO, 0.2, 0.4)
 	return root
+
+
+static func create_player_humanoid() -> Node3D:
+	var root := Node3D.new()
+	root.name = "PlayerHumanoidPrototype"
+	var robe := Color("#34445e")
+	var robe_light := Color("#536783")
+	var leather := Color("#594538")
+	var trim := Color("#c4a36a")
+	var skin := Color("#d2ad91")
+	var hair := Color("#24232d")
+	# Grounded silhouette: boots, trousers, layered travel robe and shoulder mantle.
+	_part(root, "LeftBoot", _box(Vector3(0.22, 0.16, 0.38)), Vector3(-0.17, 0.08, -0.035), leather)
+	_part(root, "RightBoot", _box(Vector3(0.22, 0.16, 0.38)), Vector3(0.17, 0.08, -0.035), leather)
+	_part(root, "LeftTrouser", _capsule(0.13, 0.78), Vector3(-0.17, 0.49, 0.02), robe)
+	_part(root, "RightTrouser", _capsule(0.13, 0.78), Vector3(0.17, 0.49, 0.02), robe)
+	var coat := CylinderMesh.new()
+	coat.top_radius = 0.25
+	coat.bottom_radius = 0.43
+	coat.height = 0.92
+	coat.radial_segments = 12
+	_part(root, "TravelCoat", coat, Vector3(0.0, 1.08, 0.0), robe)
+	_part(root, "InnerChest", _box(Vector3(0.36, 0.56, 0.12)), Vector3(0.0, 1.17, -0.22), robe_light)
+	_part(root, "WaistBelt", _box(Vector3(0.70, 0.12, 0.48)), Vector3(0.0, 0.78, 0.0), leather)
+	_part(root, "BeltBuckle", _box(Vector3(0.13, 0.15, 0.06)), Vector3(0.0, 0.78, -0.255), trim, Vector3.ZERO, 0.12, 0.25)
+	_part(root, "Neck", _capsule(0.10, 0.22), Vector3(0.0, 1.60, 0.0), skin)
+	_part(root, "Head", _sphere(0.235), Vector3(0.0, 1.82, 0.0), skin)
+	_part(root, "Hair", _sphere(0.255, 0.30), Vector3(0.0, 2.00, 0.025), hair)
+	_part(root, "HairTail", _capsule(0.075, 0.44), Vector3(0.0, 1.68, 0.23), hair, Vector3(-0.18, 0.0, 0.0))
+	_part(root, "Headband", _box(Vector3(0.48, 0.055, 0.31)), Vector3(0.0, 1.91, -0.02), trim, Vector3.ZERO, 0.10, 0.25)
+	for side in [-1.0, 1.0]:
+		_part(root, "Shoulder" + str(side), _box(Vector3(0.38, 0.22, 0.40)), Vector3(side * 0.36, 1.43, 0.0), robe_light, Vector3(0.0, 0.0, side * -0.10))
+		_part(root, "Arm" + str(side), _capsule(0.105, 0.72), Vector3(side * 0.40, 1.05, 0.0), robe_light, Vector3(0.0, 0.0, side * -0.10))
+		_part(root, "Hand" + str(side), _sphere(0.085), Vector3(side * 0.43, 0.64, -0.01), skin)
+	_part(root, "BackScabbard", _box(Vector3(0.12, 0.92, 0.18)), Vector3(-0.28, 1.05, 0.19), leather, Vector3(0.0, 0.0, -0.22))
+	_part(root, "ScabbardGuard", _box(Vector3(0.42, 0.07, 0.10)), Vector3(-0.28, 1.43, 0.19), trim, Vector3(0.0, 0.0, -0.22))
+	return root
