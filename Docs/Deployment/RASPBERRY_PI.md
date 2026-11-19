@@ -9,7 +9,8 @@
 | 组件 | 运行方式 | 端口 | 用途 |
 |---|---|---:|---|
 | Go API | systemd | TCP 8787 | 注册、登录、灵魂、角色、世界入口 |
-| C++ WorldServer | systemd | UDP 7777 | ENet 实时游戏连接 |
+| C++ 青云人界 WorldServer | systemd | UDP 7777 | ENet 实时游戏连接 |
+| C++ 冥界酆都 WorldServer | systemd | UDP 7778 | 与青云人界并行的冥界游戏连接 |
 | PostgreSQL 17 | Docker Compose | TCP 5432 | 游戏业务数据 |
 | Redis 7 | Docker Compose | TCP 6379 | 后续缓存预留 |
 | NATS 2 | Docker Compose | TCP 4222 | 后续消息通信预留 |
@@ -17,7 +18,7 @@
 
 当前 Go API 直接使用 PostgreSQL。Redis 和 NATS 会随部署启动，但当前并非所有业务流程都已接入它们。
 
-客户端通过 HTTP 8787 访问树莓派，再使用 API 返回的游戏服地址和 UDP 7777 连接 WorldServer。WORLD_SERVER_BIND 是服务器监听地址，WORLD_SERVER_ADVERTISE_HOST 则必须填写 Windows 客户端能够访问的树莓派局域网 IP。
+客户端通过 HTTP 8787 访问树莓派，再使用 API 返回的游戏服地址和 UDP 端口连接对应 WorldServer。青云人界使用 UDP 7777，冥界酆都使用 UDP 7778。WORLD_SERVER_BIND 是服务器监听地址，WORLD_SERVER_ADVERTISE_HOST 则必须填写 Windows 客户端能够访问的树莓派局域网 IP。
 
 ## 2. 树莓派系统准备
 
@@ -66,7 +67,7 @@
 | `05-infra.sh` | 启动 PostgreSQL、Redis、NATS | 需要先完成配置 |
 | `06-migrate.sh` | 执行尚未应用的 SQL migration | 有迁移账本，重复运行会跳过已完成版本 |
 | `07-build.sh` | 编译 Go API、C++ WorldServer 并运行 CTest | 编译失败只需重跑此阶段 |
-| `08-install-services.sh` | 安装并重启 systemd 服务 | 需要先完成构建 |
+| `08-install-services.sh` | 安装并重启 systemd 服务（Identity、Admin、API、青云人界和冥界世界服） | 需要先完成构建 |
 | `09-status.sh` | 查看服务、API readiness 和容器状态 | 只检查，不修改业务数据 |
 | `lib/common.sh` | 公共路径、代理、日志、环境文件和 Compose 函数 | 由其他阶段自动加载 |
 
@@ -210,7 +211,8 @@
 
 局域网客户端至少需要访问：
 - TCP 8787：HTTP API。
-- UDP 7777：ENet 游戏连接。
+- UDP 7777：青云人界 ENet 游戏连接。
+- UDP 7778：冥界酆都 ENet 游戏连接（部署并启用冥界服务后）。
 
 如果树莓派启用了 UFW：
 
@@ -236,6 +238,7 @@ PostgreSQL 5432、Redis 6379、NATS 4222/8222 在 Compose 中绑定到 127.0.0.1
 
     sudo systemctl status honghuang-api
     sudo systemctl status honghuang-world-server
+    sudo systemctl status honghuang-underworld-server
 
 查看容器：
 
@@ -256,6 +259,7 @@ PostgreSQL 5432、Redis 6379、NATS 4222/8222 在 Compose 中绑定到 127.0.0.1
 查看 WorldServer 日志，确认节点启动并成功向中心服发送 heartbeat：
 
     sudo journalctl -u honghuang-world-server -n 100 --no-pager
+    sudo journalctl -u honghuang-underworld-server -n 100 --no-pager
 
 查看迁移记录：
 
@@ -283,12 +287,12 @@ PostgreSQL 5432、Redis 6379、NATS 4222/8222 在 Compose 中绑定到 127.0.0.1
 
 停止游戏服务：
 
-    sudo systemctl stop honghuang-world-server honghuang-api
+    sudo systemctl stop honghuang-underworld-server honghuang-world-server honghuang-api
 
 启动：
 
     sudo systemctl start honghuang-api
-    sudo systemctl start honghuang-world-server
+    sudo systemctl start honghuang-world-server honghuang-underworld-server
 
 再次运行部署脚本会询问是否拉取 feature/p0-foundation 最新代码，随后重新编译并重启服务。迁移账本会跳过已经成功执行的版本。更新前仍建议先备份数据库。
 
@@ -354,4 +358,4 @@ HTTP 和 ENet 使用不同协议。确认防火墙放行 UDP 7777，而不只是
 - Godot 客户端在 Windows PC 运行，树莓派不运行 Godot 编辑器。
 - Redis、NATS 已启动，但当前并非所有业务逻辑都使用它们。
 - 尚未配置公网 TLS、反向代理、自动证书、异地备份、监控告警和生产级密钥轮换。不要直接暴露到公网。
-- 首轮测试建议依次验证注册、登录、创建灵魂、创建角色、进入青云人界，再使用第二台客户端测试多人可见和移动同步。
+- 首轮测试建议依次验证注册、登录、创建灵魂、创建角色、进入青云人界，再测试复活/进入冥界酆都；两个世界分别使用 UDP 7777 和 UDP 7778。
