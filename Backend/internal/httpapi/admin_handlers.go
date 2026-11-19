@@ -377,3 +377,22 @@ func (h *adminHandlers) disconnectPlayer(w http.ResponseWriter, r *http.Request)
 	}
 	writeJSON(w, http.StatusAccepted, result)
 }
+
+func (h *adminHandlers) listConfigRevisions(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.require(w, r, "monsters.read"); !ok { return }
+	q := r.URL.Query()
+	resourceType := strings.TrimSpace(q.Get("resource_type"))
+	resourceID := strings.TrimSpace(q.Get("resource_id"))
+	limit := 50
+	if raw := q.Get("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > 100 { http.Error(w, "limit must be between 1 and 100", http.StatusBadRequest); return }
+		limit = n
+	}
+	if len(resourceType) > 48 || len(resourceID) > 160 { http.Error(w, "invalid revision filter", http.StatusBadRequest); return }
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+	result, err := h.game.ConfigRevisions(ctx, resourceType, resourceID, limit)
+	if err != nil { h.logger.Error("admin config revision list failed", "error", err); http.Error(w, "game service unavailable", http.StatusServiceUnavailable); return }
+	writeJSONRaw(w, result)
+}
