@@ -560,7 +560,8 @@ func set_equipment_visuals(items: Array) -> void:
 			socket.position = _equipment_socket_position(str(slot_key))
 			player_humanoid.add_child(socket)
 		for child in socket.get_children():
-			child.queue_free()
+			if child.name == "EquipmentVisual":
+				child.queue_free()
 	for item in items:
 		if not (item is Dictionary):
 			continue
