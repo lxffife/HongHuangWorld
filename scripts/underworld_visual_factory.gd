@@ -274,11 +274,14 @@ static func create_player_humanoid() -> Node3D:
 	var trim := Color("#c4a36a")
 	var skin := Color("#d2ad91")
 	var hair := Color("#24232d")
-	# Grounded silhouette: boots, trousers, layered travel robe and shoulder mantle.
-	_part(root, "LeftBoot", _box(Vector3(0.22, 0.16, 0.38)), Vector3(-0.17, 0.08, -0.035), leather)
-	_part(root, "RightBoot", _box(Vector3(0.22, 0.16, 0.38)), Vector3(0.17, 0.08, -0.035), leather)
-	_part(root, "LeftTrouser", _capsule(0.13, 0.78), Vector3(-0.17, 0.49, 0.02), robe)
-	_part(root, "RightTrouser", _capsule(0.13, 0.78), Vector3(0.17, 0.49, 0.02), robe)
+	# Legs and boots are children of hip pivots so locomotion rotates around joints.
+	for side in [-1.0, 1.0]:
+		var leg_pivot := Node3D.new()
+		leg_pivot.name = "LegPivotLeft" if side < 0.0 else "LegPivotRight"
+		leg_pivot.position = Vector3(side * 0.17, 0.82, 0.0)
+		root.add_child(leg_pivot)
+		_part(leg_pivot, "Trouser", _capsule(0.13, 0.78), Vector3(0.0, -0.19, 0.02), robe)
+		_part(leg_pivot, "Boot", _box(Vector3(0.22, 0.16, 0.38)), Vector3(0.0, -0.40, -0.10), leather)
 	var coat := CylinderMesh.new()
 	coat.top_radius = 0.25
 	coat.bottom_radius = 0.43
@@ -295,8 +298,12 @@ static func create_player_humanoid() -> Node3D:
 	_part(root, "Headband", _box(Vector3(0.48, 0.055, 0.31)), Vector3(0.0, 1.91, -0.02), trim, Vector3.ZERO, 0.10, 0.25)
 	for side in [-1.0, 1.0]:
 		_part(root, "Shoulder" + str(side), _box(Vector3(0.38, 0.22, 0.40)), Vector3(side * 0.36, 1.43, 0.0), robe_light, Vector3(0.0, 0.0, side * -0.10))
-		_part(root, "Arm" + str(side), _capsule(0.105, 0.72), Vector3(side * 0.40, 1.05, 0.0), robe_light, Vector3(0.0, 0.0, side * -0.10))
-		_part(root, "Hand" + str(side), _sphere(0.085), Vector3(side * 0.43, 0.64, -0.01), skin)
+		var arm_pivot := Node3D.new()
+		arm_pivot.name = "ArmPivotLeft" if side < 0.0 else "ArmPivotRight"
+		arm_pivot.position = Vector3(side * 0.40, 1.43, 0.0)
+		root.add_child(arm_pivot)
+		_part(arm_pivot, "Sleeve", _capsule(0.105, 0.72), Vector3(0.0, -0.23, 0.0), robe_light, Vector3(0.0, 0.0, side * -0.10))
+		_part(arm_pivot, "Hand", _sphere(0.085), Vector3(side * 0.03, -0.58, -0.01), skin)
 	_part(root, "BackScabbard", _box(Vector3(0.12, 0.92, 0.18)), Vector3(-0.28, 1.05, 0.19), leather, Vector3(0.0, 0.0, -0.22))
 	_part(root, "ScabbardGuard", _box(Vector3(0.42, 0.07, 0.10)), Vector3(-0.28, 1.43, 0.19), trim, Vector3(0.0, 0.0, -0.22))
 	return root
