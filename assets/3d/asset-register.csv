@@ -10,3 +10,5 @@ underworld_wolf_v1,monster,正式荒原狼,AI_3D_generation_pending,Meshy 6 Text
 fengdu_gate_blockout,building,酆都鬼门关程序化原型,procedural_original_gdscript,Godot procedural mesh,Godot runtime mesh,original project code,Client/HongHuangClient/scripts/underworld_visual_factory.gd,blockout,Modular columns beams roof plaque and blocking collision
 fengdu_gate_v1,building,酆都鬼门关正式模型,modular_model_pending,Blender_or_3D_generation,GLB,awaiting creation and rights review,Client/HongHuangClient/assets/models/buildings/,pending,Replace blockout with modular stone gate and roof kit
 mengpo_npc_v1,npc,孟婆,AI_3D_generation_pending,Meshy_or_image_to_3d,GLB,awaiting generation and rights review,Client/HongHuangClient/assets/models/npcs/,pending,Humanoid rig and idle/talk animation
+
+underworld_npc_set_v1,NPC组合,Godot程序化网格,Godot built-in meshes,原创程序化造型,内置资源,Client/HongHuangClient/scripts/underworld_visual_factory.gd,已接入待运行验证
