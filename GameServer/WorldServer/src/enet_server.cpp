@@ -611,6 +611,59 @@ bool load_loot_table(const ServerConfig& config, std::vector<LootEntry>& entries
     return true;
 }
 
+bool load_monster_spawn_config(const ServerConfig& config,std::vector<MonsterRuntime>& monsters,std::string& error) {
+    long status=0;
+    Json response;
+    if(!backend_inventory_request(config,"/api/v1/servers/monster-spawn-config",nullptr,status,response,error))return false;
+    if(!response.is_object()||!response.contains("entries")||!response["entries"].is_array()){
+        error="monster spawn config response is missing entries";return false;
+    }
+    std::vector<MonsterRuntime> loaded;
+    for(const auto& value:response["entries"]){
+        if(!value.is_object()){error="monster spawn config contains a non-object entry";return false;}
+        try{
+            honghuang::simulation::MonsterDefinition definition;
+            definition.id=value.at("monster_id").get<std::string>();
+            definition.name=value.at("name").get<std::string>();
+            definition.level=value.at("level").get<int>();
+            definition.max_health=value.at("max_health").get<float>();
+            definition.attack=value.at("attack").get<float>();
+            definition.defense=value.at("defense").get<float>();
+            definition.move_speed=value.at("move_speed").get<float>();
+            definition.aggro_radius=value.at("aggro_radius").get<float>();
+            definition.leash_radius=value.at("leash_radius").get<float>();
+            const float x=value.at("spawn_x").get<float>();
+            const float z=value.at("spawn_z").get<float>();
+            const auto runtime_id=value.at("runtime_id").get<std::string>();
+            const bool rare=value.at("rare_spawn").get<bool>();
+            const int chance=value.at("spawn_chance_percent").get<int>();
+            const int retry=value.at("retry_spawn_seconds").get<int>();
+            const int first_delay=value.at("first_spawn_delay_seconds").get<int>();
+            if(runtime_id.empty()||!honghuang::simulation::valid_monster_definition(definition)||
+               !std::isfinite(x)||!std::isfinite(z)||chance<1||chance>100||retry<1||
+               retry>604800||first_delay<0||first_delay>604800){
+                error="monster spawn config entry failed validation";return false;
+            }
+            definition.spawn_x=x;definition.spawn_z=z;
+            MonsterRuntime runtime;
+            runtime.definition=std::move(definition);
+            runtime.runtime_id=runtime_id;
+            runtime.rare_spawn=rare;
+            runtime.spawn_chance_percent=chance;
+            runtime.retry_spawn_seconds=retry;
+            runtime.state={x,z,runtime.definition.max_health};
+            if(rare){
+                runtime.state.mode=honghuang::simulation::MonsterMode::Dead;
+                runtime.respawn_at=Clock::now()+std::chrono::seconds(std::max(first_delay,1));
+            }
+            loaded.push_back(std::move(runtime));
+        }catch(const std::exception&){
+            error="monster spawn config contains an invalid entry";return false;
+        }
+    }
+    monsters=std::move(loaded);
+    return true;
+}
 
 bool load_persisted_ground_drops(const ServerConfig& config, std::vector<GroundDropRuntime>& drops,
                                  std::string& error) {
