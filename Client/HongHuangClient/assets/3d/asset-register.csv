@@ -1,6 +1,6 @@
 asset_id,category,name,source,model_or_tool,format,license_or_rights,project_path,status,notes
 uw_monster_wolf,monster,荒原狼,procedural_original_gdscript,Godot procedural mesh,Godot runtime mesh,original project code,Client/HongHuangClient/scripts/underworld_visual_factory.gd,blockout,Replace with rigged GLB after visual approval
-uw_monster_iron_beast,monster,铁骨兽魂,procedural_original_gdscript,Godot procedural mesh,Godot runtime mesh,original project code,Client/HongHuangClient/scripts/underworld_visual_factory.gd,blockout,Distinct plated quadruped silhouette
+uw_monster_iron_beast,monster,铁骨兽魂,procedural_original_gdscript,Godot procedural mesh,Godot runtime mesh,original project code,Client/HongHuangClient/scripts/underworld_visual_factory.gd,blockout,Articulated four-leg pivots; layered spine armor; skull and armored tail pivots; heavy idle and locomotion prototype
 uw_monster_warrior,monster,炽战残魂与战魂,procedural_original_gdscript,Godot procedural mesh,Godot runtime mesh,original project code,Client/HongHuangClient/scripts/underworld_visual_factory.gd,blockout,Humanoid armor silhouette; final rigged model pending
 uw_monster_wraith,monster,游祟与灵识游魂,procedural_original_gdscript,Godot procedural mesh,Godot runtime mesh,original project code,Client/HongHuangClient/scripts/underworld_visual_factory.gd,blockout,Emissive floating soul archetype
 uw_monster_life_soul,monster,生机古魂,procedural_original_gdscript,Godot procedural mesh,Godot runtime mesh,original project code,Client/HongHuangClient/scripts/underworld_visual_factory.gd,blockout,Green life-affinity variant
