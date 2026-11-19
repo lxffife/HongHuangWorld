@@ -10,6 +10,7 @@ import (
 
  "github.com/liflife/HongHuangWorld/Backend/internal/adminauth"
  "github.com/liflife/HongHuangWorld/Backend/internal/identityadmin"
+ "github.com/liflife/HongHuangWorld/Backend/internal/gameadmin"
 )
 
 func NewAdminRouter(logger *slog.Logger,db *sql.DB) http.Handler {
@@ -22,9 +23,9 @@ func NewAdminRouter(logger *slog.Logger,db *sql.DB) http.Handler {
   writeJSON(w,http.StatusOK,healthResponse{Status:"ready",Time:time.Now().UTC().Format(time.RFC3339)})
  })
  if db==nil { unavailable:=func(w http.ResponseWriter,_ *http.Request){http.Error(w,"service unavailable",http.StatusServiceUnavailable)}
-  for _,route:=range []string{"POST /api/v1/admin/auth/login","GET /api/v1/admin/auth/me","GET /api/v1/admin/audit-logs","GET /api/v1/admin/dashboard","POST /api/v1/admin/auth/logout","POST /api/v1/admin/auth/password","GET /api/v1/admin/users","POST /api/v1/admin/users","GET /api/v1/admin/permissions","PUT /api/v1/admin/users/{id}/permissions","PATCH /api/v1/admin/users/{id}/status","GET /api/v1/admin/players","PATCH /api/v1/admin/players/{id}/status"}{mux.HandleFunc(route,unavailable)}
+  for _,route:=range []string{"POST /api/v1/admin/auth/login","GET /api/v1/admin/auth/me","GET /api/v1/admin/audit-logs","GET /api/v1/admin/dashboard","POST /api/v1/admin/auth/logout","POST /api/v1/admin/auth/password","GET /api/v1/admin/users","POST /api/v1/admin/users","GET /api/v1/admin/permissions","PUT /api/v1/admin/users/{id}/permissions","PATCH /api/v1/admin/users/{id}/status","GET /api/v1/admin/players","GET /api/v1/admin/players/{id}","PATCH /api/v1/admin/players/{id}/status"}{mux.HandleFunc(route,unavailable)}
  } else {
-  h:=&adminHandlers{service:adminauth.NewService(db),identity:identityadmin.New(os.Getenv("IDENTITY_API_BASE"),os.Getenv("IDENTITY_INTERNAL_API_KEY")),logger:logger}
+  h:=&adminHandlers{service:adminauth.NewService(db),identity:identityadmin.New(os.Getenv("IDENTITY_API_BASE"),os.Getenv("IDENTITY_INTERNAL_API_KEY")),game:gameadmin.New(os.Getenv("GAME_API_BASE"),os.Getenv("GAME_ADMIN_INTERNAL_API_KEY")),logger:logger}
   mux.HandleFunc("POST /api/v1/admin/auth/login",h.login)
   mux.HandleFunc("GET /api/v1/admin/auth/me",h.me)
   mux.HandleFunc("GET /api/v1/admin/dashboard",h.dashboard)
@@ -37,6 +38,7 @@ func NewAdminRouter(logger *slog.Logger,db *sql.DB) http.Handler {
   mux.HandleFunc("PUT /api/v1/admin/users/{id}/permissions",h.setPermissions)
   mux.HandleFunc("PATCH /api/v1/admin/users/{id}/status",h.setUserStatus)
   mux.HandleFunc("GET /api/v1/admin/players",h.listPlayers)
+  mux.HandleFunc("GET /api/v1/admin/players/{id}",h.playerDetail)
   mux.HandleFunc("PATCH /api/v1/admin/players/{id}/status",h.setPlayerStatus)
  }
  return requestLogger(logger,mux)
