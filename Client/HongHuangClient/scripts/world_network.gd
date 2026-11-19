@@ -210,7 +210,11 @@ func _on_frame_received(bytes: PackedByteArray) -> void:
 				rejected.emit("收到无效的 CombatEvent。")
 		HHProtocolCodec.MessageType.MONSTER_ACTION_EVENT:
 			var monster_action: Variant = JSON.parse_string(payload.get_string_from_utf8())
-			if monster_action is Dictionary and str(monster_action.get("source_entity_id", "")).length() > 0 and str(monster_action.get("action", "")) == "attack":
+			var source_id := str(monster_action.get("source_entity_id", "")) if monster_action is Dictionary else ""
+			var target_id := str(monster_action.get("target_character_id", "")) if monster_action is Dictionary else ""
+			var source := str(monster_action.get("source", "")) if monster_action is Dictionary else ""
+			var action := str(monster_action.get("action", "")) if monster_action is Dictionary else ""
+			if monster_action is Dictionary and not source_id.is_empty() and source_id.length() <= 96 and not target_id.is_empty() and target_id.length() <= 96 and source == "monster" and action == "attack":
 				monster_action_event.emit(monster_action)
 			else:
 				rejected.emit("收到无效的 MonsterActionEvent。")
