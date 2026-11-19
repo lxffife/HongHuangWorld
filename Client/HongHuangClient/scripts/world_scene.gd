@@ -1041,7 +1041,6 @@ func _upsert_monster(entity: Dictionary) -> void:
 	monster_entities[monster_id] = entity.duplicate(true)
 	if monster_id == selected_monster_id:
 		_update_target_info()
-	var monster := monsters[monster_id] as Node3D
 	var nameplate := monster.get_node_or_null("Nameplate") as Label3D
 	if nameplate != null:
 		var base_text := str(entity.get("name", "野兽")) + " · Lv." + str(int(entity.get("level", 1)))
