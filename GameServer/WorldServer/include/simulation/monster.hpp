@@ -23,6 +23,47 @@ struct MonsterDefinition {
     float attack_range{1.8F};
 };
 
+struct MonsterAttackProfile {
+    int windup_ms{520};
+    int recovery_ms{420};
+    int cooldown_ms{1500};
+    float range{};
+    const char* style{"melee"};
+};
+
+// Keep archetype cadence server-authoritative. Names/IDs are the stable data
+// already supplied by the spawn catalogue; unknown monsters retain safe defaults.
+inline MonsterAttackProfile monster_attack_profile(const MonsterDefinition& definition) {
+    MonsterAttackProfile profile;
+    profile.range = definition.attack_range;
+    const auto& key = definition.id + " " + definition.name;
+    if (key.find("wolf") != std::string::npos || key.find("荒原狼") != std::string::npos) {
+        profile.windup_ms = 320;
+        profile.recovery_ms = 300;
+        profile.cooldown_ms = 900;
+        profile.style = "wolf_lunge";
+    } else if (key.find("iron_beast") != std::string::npos || key.find("铁骨兽") != std::string::npos) {
+        profile.windup_ms = 1000;
+        profile.recovery_ms = 900;
+        profile.cooldown_ms = 2500;
+        profile.style = "heavy_slam";
+    } else if (key.find("warrior") != std::string::npos || key.find("战魂") != std::string::npos) {
+        profile.windup_ms = 620;
+        profile.recovery_ms = 560;
+        profile.cooldown_ms = 1650;
+        profile.style = "blade_slash";
+    } else if (key.find("soul") != std::string::npos || key.find("游魂") != std::string::npos ||
+               key.find("wraith") != std::string::npos) {
+        profile.windup_ms = 760;
+        profile.recovery_ms = 680;
+        profile.cooldown_ms = 2100;
+        profile.range = std::min(std::max(definition.attack_range, 6.0F),
+                                 definition.leash_radius - 0.1F);
+        profile.style = "soul_bolt";
+    }
+    return profile;
+}
+
 struct MonsterTarget {
     std::string id;
     float x{};
