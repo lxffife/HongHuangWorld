@@ -144,6 +144,11 @@ static func _build_wolf(root: Node3D, hide_color: Color, bone_color: Color) -> v
 	_part(root, "Chest", _sphere(0.37), Vector3(0.0, 0.68, -0.42), hide_color)
 	_part(root, "Head", _sphere(0.29), Vector3(0.0, 0.83, -0.66), bone_color)
 	_part(root, "Muzzle", _capsule(0.13, 0.48), Vector3(0.0, 0.70, -0.91), bone_color, Vector3(PI * 0.5, 0.0, 0.0))
+	var jaw_pivot := Node3D.new()
+	jaw_pivot.name = "JawPivot"
+	jaw_pivot.position = Vector3(0.0, 0.70, -0.82)
+	root.add_child(jaw_pivot)
+	_part(jaw_pivot, "LowerJaw", _capsule(0.085, 0.34), Vector3(0.0, -0.08, -0.10), bone_color, Vector3(PI * 0.5, 0.0, 0.0))
 	for side in [-1.0, 1.0]:
 		_part(root, "Ear" + str(side), _capsule(0.075, 0.34), Vector3(side * 0.19, 1.10, -0.63), hide_color, Vector3(0.0, 0.0, side * -0.22))
 		_part(root, "Eye" + str(side), _sphere(0.055), Vector3(side * 0.205, 0.88, -0.88), Color("#ffc46d"), Vector3.ZERO, 1.8)
