@@ -51,7 +51,7 @@ func (s *Service) currentCharacterID(ctx context.Context, accountID string) (str
 		return "", ErrInvalidInput
 	}
 	var characterID string
-	err := s.db.QueryRowContext(ctx, `SELECT current_character_id::text FROM chat_accounts WHERE account_id=$1::uuid AND current_character_id IS NOT NULL`, accountID).Scan(&characterID)
+	err := s.db.QueryRowContext(ctx, `SELECT a.current_character_id::text FROM chat_accounts a JOIN chat_characters c ON c.character_id=a.current_character_id AND c.status='alive' WHERE a.account_id=$1::uuid AND a.current_character_id IS NOT NULL`, accountID).Scan(&characterID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", ErrNoCharacter
 	}
@@ -174,7 +174,7 @@ func (s *Service) SendFriendRequest(ctx context.Context, accountID, targetCharac
 	}
 	defer tx.Rollback()
 	var senderID string
-	if err := tx.QueryRowContext(ctx, `SELECT current_character_id::text FROM chat_accounts WHERE account_id=$1::uuid AND current_character_id IS NOT NULL FOR UPDATE`, accountID).Scan(&senderID); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT a.current_character_id::text FROM chat_accounts a JOIN chat_characters c ON c.character_id=a.current_character_id AND c.status='alive' WHERE a.account_id=$1::uuid AND a.current_character_id IS NOT NULL FOR UPDATE OF a,c`, accountID).Scan(&senderID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) { return FriendRequest{}, ErrNoCharacter }
 		return FriendRequest{}, fmt.Errorf("resolve friend requester: %w", err)
 	}
@@ -220,7 +220,10 @@ func (s *Service) RespondFriendRequest(ctx context.Context, accountID, requestID
 	var currentID, requesterID string
 	err=tx.QueryRowContext(ctx,`
 		SELECT a.current_character_id::text,r.requester_character_id::text
-		FROM chat_accounts a JOIN chat_friend_requests r ON r.addressee_character_id=a.current_character_id
+		FROM chat_accounts a
+		JOIN chat_characters recipient ON recipient.character_id=a.current_character_id AND recipient.status='alive'
+		JOIN chat_friend_requests r ON r.addressee_character_id=a.current_character_id
+		JOIN chat_characters requester ON requester.character_id=r.requester_character_id AND requester.status='alive'
 		WHERE a.account_id=$1::uuid AND a.current_character_id IS NOT NULL
 		  AND r.id=$2::uuid AND r.status='pending'
 		FOR UPDATE OF r`,accountID,requestID).Scan(&currentID,&requesterID)
