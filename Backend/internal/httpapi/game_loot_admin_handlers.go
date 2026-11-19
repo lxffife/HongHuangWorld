@@ -59,7 +59,10 @@ func (h *gameLootAdminHandlers) upsertLoot(w http.ResponseWriter,r *http.Request
 	var maxStack int;err=tx.QueryRowContext(ctx,`SELECT max_stack FROM item_definitions WHERE id=$1 AND enabled=TRUE FOR SHARE`,itemID).Scan(&maxStack)
 	if errors.Is(err,sql.ErrNoRows){http.Error(w,"enabled item not found",404);return};if err!=nil{http.Error(w,"internal server error",500);return};if *req.MaxQuantity>maxStack{http.Error(w,"max_quantity cannot exceed item max_stack",400);return}
 	var otherTotal int;err=tx.QueryRowContext(ctx,`SELECT COALESCE(SUM(drop_chance_bp),0)::int FROM monster_loot_entries WHERE monster_id=$1 AND item_id<>$2`,monsterID,itemID).Scan(&otherTotal);if err!=nil{http.Error(w,"internal server error",500);return}
-	if otherTotal+*req.DropChanceBP>10000{http.Error(w,"total drop chance for a monster cannot exceed 10000 basis points (100%)",400);return}
+	var currentChance sql.NullInt64
+	currentErr:=tx.QueryRowContext(ctx,`SELECT drop_chance_bp FROM monster_loot_entries WHERE monster_id=$1 AND item_id=$2`,monsterID,itemID).Scan(&currentChance)
+	if currentErr!=nil&&!errors.Is(currentErr,sql.ErrNoRows){http.Error(w,"internal server error",500);return}
+	if otherTotal+*req.DropChanceBP>10000&&(!currentChance.Valid||int64(*req.DropChanceBP)>=currentChance.Int64){http.Error(w,"total drop chance for a monster cannot exceed 10000 basis points (100%); reduce existing entries first",400);return}
 	_,err=tx.ExecContext(ctx,`INSERT INTO monster_loot_entries(monster_id,item_id,drop_chance_bp,min_quantity,max_quantity) VALUES($1,$2,$3,$4,$5) ON CONFLICT(monster_id,item_id) DO UPDATE SET drop_chance_bp=EXCLUDED.drop_chance_bp,min_quantity=EXCLUDED.min_quantity,max_quantity=EXCLUDED.max_quantity`,monsterID,itemID,*req.DropChanceBP,*req.MinQuantity,*req.MaxQuantity)
 	if err!=nil{h.logger.Error("game admin loot upsert failed","monster_id",monsterID,"item_id",itemID,"error",err);http.Error(w,"internal server error",500);return};if err=tx.Commit();err!=nil{http.Error(w,"internal server error",500);return}
 	writeJSON(w,200,map[string]any{"monster_id":monsterID,"item_id":itemID,"drop_chance_bp":*req.DropChanceBP,"min_quantity":*req.MinQuantity,"max_quantity":*req.MaxQuantity})
