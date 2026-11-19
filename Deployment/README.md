@@ -148,8 +148,10 @@ Windows（在仓库根目录，单独 PowerShell 窗口运行）：
 
 - 数据库迁移 `000045` 新增 `monster_definitions` 与 `world_monster_spawn_points`，并将当前 WorldServer 中已有的荒原狼、游祟、炽战残魂、稀有战魂、铁骨兽魂、疾风游魂、灵识游魂、忘川回音灵识、生机古魂和无相灵魄配置初始化入库。
 - `GET /api/v1/admin/monsters/definitions`：需要 `monsters.read`，查看怪物模板属性与启用状态。
+- `POST /api/v1/admin/monsters/definitions`：需要 `monsters.manage`，新增怪物模板；ID 使用小写字母、数字、下划线或连字符，必须提供完整战斗属性。
 - `PATCH /api/v1/admin/monsters/definitions/{monster_id}`：需要 `monsters.manage`，可调整名称、等级、生命、攻击、防御、移动速度、仇恨范围、追击范围和启用状态；追击范围不能小于仇恨范围。
 - `GET /api/v1/admin/monsters/spawn-points?world_id={world_id}`：查看各世界刷新点、坐标、稀有概率、首次延迟、失败重试间隔和启用状态。
+- `POST /api/v1/admin/monsters/spawn-points`：需要 `monsters.manage`，为指定世界和怪物模板新增刷新点。
 - `PATCH /api/v1/admin/monsters/spawn-points/{spawn_id}`：调整坐标、稀有刷新开关、1-100% 刷新概率、首次刷新延迟、重试间隔和启用状态。
 - 所有管理写操作要求 `monsters.manage` 并写入 Admin 审计日志。Game 数据库仍是怪物配置的唯一数据所有者。
 - WorldServer 启动时从 Game API 按节点所属世界加载启用的怪物模板与刷新点；后台修改后节点每 30 秒拉取新配置，并在主游戏循环安全应用，避免后台线程直接改动战斗中的怪物状态。刷新失败时保留上一次有效配置。
