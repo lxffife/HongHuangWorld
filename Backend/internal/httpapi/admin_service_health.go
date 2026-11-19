@@ -22,11 +22,11 @@ func (h *adminHandlers) serviceHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type target struct {
+	type serviceProbeTarget struct {
 		name string
 		base string
 	}
-	targets := []target{
+	targets := []serviceProbeTarget{
 		{name: "identity", base: serviceBaseURL("IDENTITY_API_BASE", "http://127.0.0.1:8789")},
 		{name: "game", base: serviceBaseURL("GAME_API_BASE", "http://127.0.0.1:8787")},
 		{name: "chat", base: serviceBaseURL("CHAT_API_BASE", "http://127.0.0.1:8788")},
@@ -44,12 +44,12 @@ func (h *adminHandlers) serviceHealth(w http.ResponseWriter, r *http.Request) {
 	results[0].CheckedAt = time.Now().UTC()
 	adminCancel()
 	var wg sync.WaitGroup
-	for i, target := range targets {
+	for i, probeTarget := range targets {
 		wg.Add(1)
-		go func(index int, target target) {
+		go func(index int, dependency serviceProbeTarget) {
 			defer wg.Done()
-			results[index+1] = probeAdminDependency(r.Context(), target.name, target.base)
-		}(i, target)
+			results[index+1] = probeAdminDependency(r.Context(), dependency.name, dependency.base)
+		}(i, probeTarget)
 	}
 	wg.Wait()
 
