@@ -1708,6 +1708,31 @@ func _on_monster_action_event(event: Dictionary) -> void:
 		attacker.set_meta("attack_phase", "impact")
 		attacker.set_meta("attack_phase_duration", 0.2)
 		attacker.set_meta("attack_phase_time", 0.2)
+		if attack_style == "soul_bolt" and str(event.get("target_character_id", "")) == str(HHSession.world_snapshot.get("character_id", "")):
+			_spawn_soul_bolt_visual(attacker)
+
+func _spawn_soul_bolt_visual(attacker: Node3D) -> void:
+	if not is_instance_valid(local_player):
+		return
+	var bolt := MeshInstance3D.new()
+	bolt.name = "SoulBoltImpactVisual"
+	var orb := SphereMesh.new()
+	orb.radius = 0.13
+	orb.height = 0.26
+	bolt.mesh = orb
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#9df5ff")
+	material.emission_enabled = true
+	material.emission = Color("#55dff5")
+	material.emission_energy_multiplier = 2.8
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bolt.material_override = material
+	add_child(bolt)
+	bolt.global_position = attacker.global_position + Vector3(0.0, 1.05, 0.0)
+	var destination := local_player.global_position + Vector3(0.0, 1.0, 0.0)
+	var tween := create_tween()
+	tween.tween_property(bolt, "global_position", destination, 0.24)
+	tween.tween_callback(Callable(bolt, "queue_free"))
 
 func _on_combat_event(event: Dictionary) -> void:
 	if not bool(event.get("accepted", true)):
