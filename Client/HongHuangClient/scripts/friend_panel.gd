@@ -8,12 +8,16 @@ var results_list: VBoxContainer
 var requests_list: VBoxContainer
 var friends_list: VBoxContainer
 var allow_requests_toggle: CheckButton
-var busy_contexts: Dictionary = {}
+var refresh_timer: Timer
 
 func _ready() -> void:
 	custom_minimum_size = Vector2(360.0, 460.0)
 	size = custom_minimum_size
 	_build_ui()
+	refresh_timer = Timer.new()
+	refresh_timer.wait_time = 30.0
+	refresh_timer.timeout.connect(_refresh_presence)
+	add_child(refresh_timer)
 	visible = false
 
 func _build_ui() -> void:
@@ -37,7 +41,7 @@ func _build_ui() -> void:
 	header.add_child(title)
 	var close_button := Button.new()
 	close_button.text = "关闭"
-	close_button.pressed.connect(func(): visible = false)
+	close_button.pressed.connect(_close_panel)
 	header.add_child(close_button)
 
 	allow_requests_toggle = CheckButton.new()
@@ -89,6 +93,15 @@ func _add_section(parent: VBoxContainer, text: String) -> void:
 func open_panel() -> void:
 	visible = true
 	_refresh()
+	refresh_timer.start()
+
+func _close_panel() -> void:
+	visible = false
+	refresh_timer.stop()
+
+func _refresh_presence() -> void:
+	if visible:
+		_api_request(HTTPClient.METHOD_GET, "/api/v1/chat/friends", "", "friends")
 
 func _refresh() -> void:
 	_api_request(HTTPClient.METHOD_GET, "/api/v1/chat/friends", "", "friends")
@@ -169,7 +182,7 @@ func _render_friends(items: Array) -> void:
 		chat_button.text = "私聊"
 		chat_button.pressed.connect(func():
 			open_private_chat.emit(str(item.get("character_id", "")), str(item.get("name", "好友")))
-			visible = false
+			_close_panel()
 		)
 		row.add_child(chat_button)
 		var remove_button := Button.new()
