@@ -28,7 +28,7 @@ func NewIdentityRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 	})
 	if db == nil {
 		unavailable := func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "service unavailable", http.StatusServiceUnavailable) }
-		for _, route := range []string{"POST /api/v1/auth/register", "POST /api/v1/auth/login", "GET /api/v1/account/me", "POST /api/v1/internal/auth/introspect", "GET /api/v1/internal/admin/accounts", "PATCH /api/v1/internal/admin/accounts/{id}/status"} {
+		for _, route := range []string{"POST /api/v1/auth/register", "POST /api/v1/auth/login", "GET /api/v1/account/me", "POST /api/v1/internal/auth/introspect", "GET /api/v1/internal/admin/accounts", "GET /api/v1/internal/admin/accounts/{id}", "PATCH /api/v1/internal/admin/accounts/{id}/status"} {
 			mux.HandleFunc(route, unavailable)
 		}
 		return requestLogger(logger, mux)
@@ -41,6 +41,7 @@ func NewIdentityRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 	internalKey := os.Getenv("IDENTITY_INTERNAL_API_KEY")
 	adminHandlers := &identityAdminHandlers{db: db, internalKey: internalKey, logger: logger}
 	mux.HandleFunc("GET /api/v1/internal/admin/accounts", adminHandlers.listAccounts)
+	mux.HandleFunc("GET /api/v1/internal/admin/accounts/{id}", adminHandlers.getAccount)
 	mux.HandleFunc("PATCH /api/v1/internal/admin/accounts/{id}/status", adminHandlers.setAccountStatus)
 	mux.HandleFunc("POST /api/v1/internal/auth/introspect", func(w http.ResponseWriter, r *http.Request) {
 		providedKey := r.Header.Get("X-Identity-Service-Key")
