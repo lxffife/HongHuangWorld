@@ -12,6 +12,7 @@ source "$(dirname "$0")/lib/common.sh"
 echo "=== Identity ==="; systemctl --no-pager --full status honghuang-identity || true
 echo "=== Identity readiness ==="; curl -i --max-time 5 http://127.0.0.1:8789/ready || true
 echo "=== API ==="; systemctl --no-pager --full status honghuang-api || true
-echo "=== WorldServer ==="; systemctl --no-pager --full status honghuang-world-server || true
+echo "=== Qingyun WorldServer ==="; systemctl --no-pager --full status honghuang-world-server || true
+echo "=== Fengdu Underworld WorldServer ==="; systemctl --no-pager --full status honghuang-underworld-server || true
 echo "=== API readiness ==="; curl -i --max-time 5 http://127.0.0.1:8787/ready || true
 if [[ -f "$HH_ENV_FILE" ]]; then load_env; echo "=== Containers ==="; compose ps; fi
