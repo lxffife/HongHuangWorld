@@ -1489,8 +1489,11 @@ func _on_chat_socket_connected() -> void:
 	HHChatNetwork.fetch_history("cross_world", 50)
 	if selected_chat_channel == "whisper" and not selected_friend_character_id.is_empty():
 		HHChatNetwork.fetch_conversation_history(selected_friend_character_id, 50)
-	if selected_chat_channel != "nearby" and is_instance_valid(chat_status):
-		chat_status.text = "聊天服务已连接 · " + ("世界频道" if selected_chat_channel == "world" else "跨界频道")
+	if is_instance_valid(chat_status):
+		if selected_chat_channel == "whisper":
+			chat_status.text = "好友私聊 · 独立聊天连接已建立"
+		elif selected_chat_channel != "nearby":
+			chat_status.text = "聊天服务已连接 · " + ("世界频道" if selected_chat_channel == "world" else "跨界频道")
 
 func _on_chat_history_received(channel: String, messages: Array) -> void:
 	if channel not in ["nearby", "world", "cross_world"]:
