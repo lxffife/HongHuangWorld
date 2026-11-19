@@ -45,6 +45,7 @@
 - `000039_chat_transactional_outbox` 创建聊天事件事务发件箱；每条公开聊天消息与待发布事件在同一 PostgreSQL 事务内提交，后台发布器通过 `FOR UPDATE SKIP LOCKED` 租约领取并在 JetStream PubAck 后标记完成。
 - `000040_chat_nearby_instance_scope` 为附近频道增加强制世界实例范围、AOI 接收者快照 JSONB 与实例历史索引；WorldServer 计算 AOI，ChatServer 校验接收者均属于同一活动实例。
 - `000041_admin_console_foundation` 建立独立后台用户、角色、权限、会话和操作审计表；种子化超级管理员/运营角色及细粒度权限目录，不创建默认管理员密码。
+- `000042_detach_soul_account_identity_fk` 移除 Game 灵魂账号 ID 对 Identity 账号表的数据库外键依赖，保持账号身份服务与游戏数据库独立。\n- `000043_game_domain_event_outbox` 建立 Game 领域事件事务发件箱及世界实例、节点心跳、世界会话事件投影触发器。\n- `000044_server_node_admin_control` 为 WorldServer 节点增加管理员运行状态（normal/draining/disabled），并增加 `servers.manage` 权限；draining 停止新玩家接入，disabled 触发在线会话优雅下线。
 
 ## 当前迁移顺序
 
@@ -92,6 +93,9 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000038_chat_found
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000039_chat_transactional_outbox.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000040_chat_nearby_instance_scope.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000041_admin_console_foundation.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000042_detach_soul_account_identity_fk.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000043_game_domain_event_outbox.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000044_server_node_admin_control.up.sql
 ```
 
 回滚时按相反顺序执行对应的 `.down.sql`。不要在已运行的生产库上重复执行非幂等迁移；后续接入迁移工具后，应由工具记录每个已应用版本，避免人工重复执行。
