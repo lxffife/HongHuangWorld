@@ -50,7 +50,7 @@ WorldServer 启动后会立即调用中心服 `POST /api/v1/servers/heartbeat`�
 2. 安装 vcpkg，并设置用户环境变量 `VCPKG_ROOT` 指向 vcpkg 根目录。WorldServer 的 `vcpkg.json` 会声明 ENet、libcurl 和 nlohmann-json 依赖。
 3. 复制 `Deployment/.env.example` 为 `Deployment/.env`，修改 PostgreSQL/Redis 密码；确保 `DATABASE_URL` 中的 PostgreSQL 密码与 `POSTGRES_PASSWORD` 一致，并将 `WORLD_SERVER_API_KEY` 改为足够长的随机密钥。
 4. 启动基础设施：`.\Deployment\start-infra.bat`。
-5. 首次初始化数据库时执行 `.\Deployment\migrate-database.ps1`；脚本会创建迁移账本并按顺序执行尚未应用的迁移（当前迁移版本为 000044，包含游戏基础、轮回成长、聊天、后台管理及世界服务器节点管控）；已记录的版本会自动跳过。若数据库已有 `accounts` 表但没有迁移账本，脚本会停止，避免猜测现有数据库版本。
+5. 首次初始化数据库时执行 `.\Deployment\migrate-database.ps1`；脚本会创建迁移账本并按顺序执行尚未应用的迁移（当前迁移版本为 000045，包含游戏基础、轮回成长、聊天、后台管理、节点管控及怪物模板/刷新点配置）；已记录的版本会自动跳过。若数据库已有 `accounts` 表但没有迁移账本，脚本会停止，避免猜测现有数据库版本。
 6. 在独立 PowerShell 窗口启动中心服：`.\Deployment\start-backend.ps1`。确认 `http://127.0.0.1:8787/ready` 返回 HTTP 200。
 7. 配置后台首次初始化账号：在 Deployment/.env 中设置 ADMIN_BOOTSTRAP_USERNAME、ADMIN_BOOTSTRAP_EMAIL 和唯一的 ADMIN_BOOTSTRAP_PASSWORD（至少 12 位，不要使用示例密码）。首次启动管理 API 时会创建超级管理员；后续重启检测到已有超级管理员后不会重置密码。启动命令：Windows `./Deployment/start-admin-server.ps1`；Linux/macOS `bash Deployment/start-admin-server.sh`。后台 API 默认仅监听本机 127.0.0.1:8790；需要远程访问时应通过 HTTPS 反向代理或 VPN，不要直接暴露管理端口，检查 `http://127.0.0.1:8790/ready`。
 8. 在另一个独立 PowerShell 窗口启动聊天服：`.\Deployment\start-chat-server.ps1`。确认 `http://127.0.0.1:8788/ready` 返回 HTTP 200。聊天服必须配置 `CHAT_DATABASE_URL`；开发阶段可与 `DATABASE_URL` 指向同一个数据库，但进程、监听端口和连接池彼此独立。Linux/macOS 在仓库根目录运行 `bash Deployment/start-chat-server.sh`。
@@ -152,4 +152,7 @@ Windows（在仓库根目录，单独 PowerShell 窗口运行）：
 - `GET /api/v1/admin/monsters/spawn-points?world_id={world_id}`：查看各世界刷新点、坐标、稀有概率、首次延迟、失败重试间隔和启用状态。
 - `PATCH /api/v1/admin/monsters/spawn-points/{spawn_id}`：调整坐标、稀有刷新开关、1-100% 刷新概率、首次刷新延迟、重试间隔和启用状态。
 - 所有管理写操作要求 `monsters.manage` 并写入 Admin 审计日志。Game 数据库仍是怪物配置的唯一数据所有者。
-- 注意：本阶段已完成数据库与管理 API。WorldServer 当前仍有一份 C++ 启动期怪物配置；数据库配置的运行时加载/热刷新正在接入，完成前后台修改不会自动改变已运行节点中的怪物。
+- WorldServer 启动时从 Game API 按节点所属世界加载启用的怪物模板与刷新点；后台修改后节点每 30 秒拉取新配置，并在主游戏循环安全应用，避免后台线程直接改动战斗中的怪物状态。刷新失败时保留上一次有效配置。
+
+
+WorldServer 怪物配置由 Game API 按已认证节点身份返回，不接受客户端指定 world_id。节点必须处于 ready 且管理员状态为 normal；被维护/禁用的节点不会拉取新的怪物配置。怪物刷新配置每 30 秒热更新一次，正在战斗的同一刷新点会尽量保留当前血量、位置和死亡计时；新增/删除/禁用刷新点在下一次配置应用时生效。
