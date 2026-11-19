@@ -50,7 +50,7 @@ WorldServer 启动后会立即调用中心服 `POST /api/v1/servers/heartbeat`�
 2. 安装 vcpkg，并设置用户环境变量 `VCPKG_ROOT` 指向 vcpkg 根目录。WorldServer 的 `vcpkg.json` 会声明 ENet、libcurl 和 nlohmann-json 依赖。
 3. 复制 `Deployment/.env.example` 为 `Deployment/.env`，修改 PostgreSQL/Redis 密码；确保 `DATABASE_URL` 中的 PostgreSQL 密码与 `POSTGRES_PASSWORD` 一致，并将 `WORLD_SERVER_API_KEY` 改为足够长的随机密钥。
 4. 启动基础设施：`.\Deployment\start-infra.bat`。
-5. 首次初始化数据库时执行 `.\Deployment\migrate-database.ps1`；脚本会创建迁移账本并按顺序执行尚未应用的迁移（当前迁移版本为 000041，包含游戏基础、轮回成长、聊天和后台管理基础表）；已记录的版本会自动跳过。若数据库已有 `accounts` 表但没有迁移账本，脚本会停止，避免猜测现有数据库版本。
+5. 首次初始化数据库时执行 `.\Deployment\migrate-database.ps1`；脚本会创建迁移账本并按顺序执行尚未应用的迁移（当前迁移版本为 000044，包含游戏基础、轮回成长、聊天、后台管理及世界服务器节点管控）；已记录的版本会自动跳过。若数据库已有 `accounts` 表但没有迁移账本，脚本会停止，避免猜测现有数据库版本。
 6. 在独立 PowerShell 窗口启动中心服：`.\Deployment\start-backend.ps1`。确认 `http://127.0.0.1:8787/ready` 返回 HTTP 200。
 7. 配置后台首次初始化账号：在 Deployment/.env 中设置 ADMIN_BOOTSTRAP_USERNAME、ADMIN_BOOTSTRAP_EMAIL 和唯一的 ADMIN_BOOTSTRAP_PASSWORD（至少 12 位，不要使用示例密码）。首次启动管理 API 时会创建超级管理员；后续重启检测到已有超级管理员后不会重置密码。启动命令：Windows `./Deployment/start-admin-server.ps1`；Linux/macOS `bash Deployment/start-admin-server.sh`。后台 API 默认仅监听本机 127.0.0.1:8790；需要远程访问时应通过 HTTPS 反向代理或 VPN，不要直接暴露管理端口，检查 `http://127.0.0.1:8790/ready`。
 8. 在另一个独立 PowerShell 窗口启动聊天服：`.\Deployment\start-chat-server.ps1`。确认 `http://127.0.0.1:8788/ready` 返回 HTTP 200。聊天服必须配置 `CHAT_DATABASE_URL`；开发阶段可与 `DATABASE_URL` 指向同一个数据库，但进程、监听端口和连接池彼此独立。Linux/macOS 在仓库根目录运行 `bash Deployment/start-chat-server.sh`。
@@ -85,7 +85,7 @@ Windows（在仓库根目录，单独 PowerShell 窗口运行）：
 
 
 
-### 管理后台在线玩家监控
+### WorldServer 节点管理\n\n- `GET /api/v1/admin/servers/nodes`：需要 `servers.read` 权限，返回节点地址、UDP 端口、区域、世界实例、容量、心跳、活动会话数和有效状态。\n- `PATCH /api/v1/admin/servers/nodes/{node_key}/state`：需要 `servers.manage` 权限，JSON 请求体为 `{"admin_state":"normal|draining|disabled"}`。\n- `normal`：恢复正常接入；若心跳已过期，节点和实例仍显示离线，待下一次有效心跳恢复。\n- `draining`：停止给该节点签发/兑换新世界入口票据，但不强制断开现有玩家，适用于计划维护。\n- `disabled`：节点停止接入新玩家，并将现有 active 会话标记为 `saving`，由 WorldServer 快照链路优雅下线。\n- WorldServer 后续心跳不会覆盖管理员设置的 `draining` / `disabled` 状态；解除维护必须由有权限的管理员显式设置为 `normal`。\n### 管理后台在线玩家监控
 
 - `GET /api/v1/admin/players/online`：需要管理员 `players.read` 权限。
 - Admin 服务通过 `GAME_API_BASE` 和 `GAME_ADMIN_INTERNAL_API_KEY` 调用 Game 内部接口，不跨库读取游戏数据。
