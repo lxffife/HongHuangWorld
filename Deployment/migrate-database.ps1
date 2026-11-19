@@ -56,7 +56,15 @@ try {
         '000035_ancient_battlefield_god_soul.up.sql',
         '000036_equipment_sets.up.sql',
         '000037_qingyun_starter_equipment_set.up.sql',
-        '000038_chat_foundation.up.sql'
+        '000038_chat_foundation.up.sql',
+        '000039_chat_transactional_outbox.up.sql',
+        '000040_chat_nearby_instance_scope.up.sql',
+        '000041_admin_console_foundation.up.sql',
+        '000042_detach_soul_account_identity_fk.up.sql',
+        '000043_game_domain_event_outbox.up.sql',
+        '000044_server_node_admin_control.up.sql',
+        '000045_monster_definitions_and_spawn_points.up.sql',
+        '000046_game_config_revisions.up.sql'
     )
 
     $existing = docker compose --env-file .env exec -T postgres psql -U $env:POSTGRES_USER -d $env:POSTGRES_DB -At -c "SELECT to_regclass('public.accounts') IS NOT NULL;"
