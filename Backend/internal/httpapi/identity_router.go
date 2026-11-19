@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"log/slog"
 	"net/http"
- "strings"
 	"os"
 	"time"
 
@@ -29,7 +28,7 @@ func NewIdentityRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 	})
 	if db == nil {
 		unavailable := func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "service unavailable", http.StatusServiceUnavailable) }
-		for _, route := range []string{"POST /api/v1/auth/register", "POST /api/v1/auth/login", "GET /api/v1/account/me", "POST /api/v1/internal/auth/introspect"} {
+		for _, route := range []string{"POST /api/v1/auth/register", "POST /api/v1/auth/login", "GET /api/v1/account/me", "POST /api/v1/internal/auth/introspect", "GET /api/v1/internal/admin/accounts", "PATCH /api/v1/internal/admin/accounts/{id}/status"} {
 			mux.HandleFunc(route, unavailable)
 		}
 		return requestLogger(logger, mux)
