@@ -293,3 +293,24 @@ func (s *Service) ListConversation(ctx context.Context, accountID, peerCharacter
 	for left,right:=0,len(items)-1;left<right;left,right=left+1,right-1 { items[left],items[right]=items[right],items[left] }
 	return items,nil
 }
+
+func (s *Service) GetAllowStrangerFriendRequests(ctx context.Context, accountID string) (bool, error) {
+	characterID, err := s.currentCharacterID(ctx, accountID)
+	if err != nil { return false, err }
+	var allowed bool
+	if err := s.db.QueryRowContext(ctx, `SELECT COALESCE((SELECT allow_stranger_requests FROM chat_preferences WHERE character_id=$1::uuid),true)`, characterID).Scan(&allowed); err != nil {
+		return false, fmt.Errorf("read friend request preference: %w", err)
+	}
+	return allowed,nil
+}
+
+func (s *Service) SetAllowStrangerFriendRequests(ctx context.Context, accountID string, allowed bool) error {
+	characterID, err := s.currentCharacterID(ctx, accountID)
+	if err != nil { return err }
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO chat_preferences(character_id,allow_stranger_requests,updated_at)
+		VALUES($1::uuid,$2,now())
+		ON CONFLICT(character_id) DO UPDATE SET allow_stranger_requests=EXCLUDED.allow_stranger_requests,updated_at=now()`, characterID, allowed)
+	if err != nil { return fmt.Errorf("update friend request preference: %w", err) }
+	return nil
+}
