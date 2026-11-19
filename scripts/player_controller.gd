@@ -112,6 +112,10 @@ func _add_key_action(action: String, keycode: int) -> void:
 
 
 func _is_text_input_focused() -> bool:
+	var world := get_parent()
+	if world != null and world.has_method("is_gameplay_input_blocked"):
+		if bool(world.call("is_gameplay_input_blocked")):
+			return true
 	var viewport := get_viewport()
 	if viewport == null:
 		return false
