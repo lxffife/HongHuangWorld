@@ -638,6 +638,7 @@ bool load_monster_spawn_config(const ServerConfig& config,std::vector<MonsterRun
             definition.aggro_radius=value.at("aggro_radius").get<float>();
             definition.leash_radius=value.at("leash_radius").get<float>();
             definition.attack_range=value.value("attack_range", 1.8F);
+            definition.attack_range=honghuang::simulation::monster_attack_profile(definition).range;
             const float x=value.at("spawn_x").get<float>();
             const float z=value.at("spawn_z").get<float>();
             const auto runtime_id=value.at("runtime_id").get<std::string>();
