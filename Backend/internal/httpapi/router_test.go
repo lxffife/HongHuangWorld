@@ -234,3 +234,13 @@ func TestChatEndpointsUnavailableWithoutDatabase(t *testing.T) {
 		}
 	}
 }
+
+func TestServerMonsterSpawnConfigUnavailableWithoutDatabase(t *testing.T) {
+	handler := NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/servers/monster-spawn-config", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, res.Code)
+	}
+}
