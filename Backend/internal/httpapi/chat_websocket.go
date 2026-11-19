@@ -73,6 +73,7 @@ func (h *chatSocketHub) broadcast(message chat.Message) {
 		"type": "message", "accepted": true,
 		"id": message.ID, "client_message_id": message.ClientMessageID,
 		"channel": message.Channel, "world_id": message.WorldID,
+		"recipient_character_id": message.RecipientCharacterID, "conversation_id": message.ConversationID,
 		"sender_character_id": message.SenderCharacterID,
 		"sender_name": message.SenderName, "sender_race": message.SenderRace,
 		"sender_level": message.SenderLevel, "content": message.Content,
@@ -97,6 +98,9 @@ func (h *chatSocketHub) broadcast(message chat.Message) {
 			if worldInstanceID == "" || worldInstanceID != message.WorldInstanceID || !hasRecipient(message.RecipientCharacterIDs, characterID) {
 				continue
 			}
+		}
+		if message.Channel == "whisper" && characterID != message.SenderCharacterID && characterID != message.RecipientCharacterID {
+			continue
 		}
 		select {
 		case client.send <- encoded:
@@ -203,6 +207,7 @@ type chatSocketRequest struct {
 	ClientMessageID string `json:"client_message_id"`
 	Channel string `json:"channel"`
 	Content string `json:"content"`
+	RecipientCharacterID string `json:"recipient_character_id,omitempty"`
 }
 
 func (h *chatHandlers) socket(w http.ResponseWriter, r *http.Request) {
@@ -321,6 +326,7 @@ func (h *chatHandlers) socket(w http.ResponseWriter, r *http.Request) {
 				ClientMessageID: request.ClientMessageID,
 				Channel: request.Channel,
 				Content: request.Content,
+				RecipientCharacterID: request.RecipientCharacterID,
 			})
 			if err != nil {
 				client.sendError(chatSocketErrorText(err))
