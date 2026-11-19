@@ -121,6 +121,8 @@ static func create_sect_hall() -> StaticBody3D:
 	_pillar_collision(root, "HallLeftWallCollision", Vector3(-7.55, 4.2, -0.2), Vector3(1.0, 6.0, 9.0))
 	_pillar_collision(root, "HallRightWallCollision", Vector3(7.55, 4.2, -0.2), Vector3(1.0, 6.0, 9.0))
 	_pillar_collision(root, "HallRearWallCollision", Vector3(0.0, 4.2, 4.1), Vector3(16.0, 6.0, 0.8))
+	_pillar_collision(root, "HallFrontLeftCollision", Vector3(-5.0, 4.2, -4.55), Vector3(7.0, 6.0, 0.7))
+	_pillar_collision(root, "HallFrontRightCollision", Vector3(5.0, 4.2, -4.55), Vector3(7.0, 6.0, 0.7))
 	return root
 
 static func create_pine(tree_height: float = 7.0, tree_color: Color = Color("#294b3d")) -> Node3D:
