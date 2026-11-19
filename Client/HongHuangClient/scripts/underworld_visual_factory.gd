@@ -88,6 +88,57 @@ static func _box(size: Vector3) -> BoxMesh:
 	return mesh
 
 
+
+static func create_fengdu_gate() -> Node3D:
+	var root := StaticBody3D.new()
+	root.name = "FengduGhostGate"
+	var stone := Color("#494354")
+	var stone_light := Color("#62566d")
+	var bronze := Color("#887451")
+	var roof := Color("#252638")
+	_part(root, "Foundation", _box(Vector3(14.0, 0.48, 4.6)), Vector3(0.0, 0.18, -18.0), Color("#34313f"))
+	for side in [-1.0, 1.0]:
+		var x := side * 5.0
+		var column := CylinderMesh.new()
+		column.top_radius = 0.52
+		column.bottom_radius = 0.72
+		column.height = 7.4
+		column.radial_segments = 12
+		_part(root, "GatePillar" + str(side), column, Vector3(x, 4.05, -18.0), stone, Vector3.ZERO, 0.0, 0.08)
+		_part(root, "PillarFoot" + str(side), _box(Vector3(1.65, 0.62, 1.65)), Vector3(x, 0.72, -18.0), stone_light)
+		_part(root, "PillarCapital" + str(side), _box(Vector3(1.75, 0.48, 1.75)), Vector3(x, 7.72, -18.0), stone_light)
+		_part(root, "PillarRune" + str(side), _box(Vector3(0.12, 3.2, 0.16)), Vector3(x, 4.2, -17.26), bronze, Vector3.ZERO, 0.22, 0.18)
+		var pillar_collision := CollisionShape3D.new()
+		var pillar_shape := BoxShape3D.new()
+		pillar_shape.size = Vector3(1.35, 7.6, 1.35)
+		pillar_collision.shape = pillar_shape
+		pillar_collision.position = Vector3(x, 4.0, -18.0)
+		root.add_child(pillar_collision)
+	_part(root, "GateLintel", _box(Vector3(12.0, 1.45, 1.85)), Vector3(0.0, 8.25, -18.0), stone_light)
+	_part(root, "UpperBeam", _box(Vector3(10.6, 0.38, 1.55)), Vector3(0.0, 9.15, -18.0), bronze, Vector3.ZERO, 0.0, 0.28)
+	_part(root, "LowerRoof", _box(Vector3(14.0, 0.42, 4.4)), Vector3(0.0, 9.52, -18.0), roof, Vector3.ZERO, 0.0, 0.16)
+	_part(root, "UpperRoof", _box(Vector3(10.4, 0.34, 3.2)), Vector3(0.0, 10.02, -18.0), roof, Vector3.ZERO, 0.0, 0.16)
+	_part(root, "RoofRidge", _box(Vector3(8.0, 0.26, 0.42)), Vector3(0.0, 10.32, -18.0), bronze, Vector3.ZERO, 0.0, 0.32)
+	for side in [-1.0, 1.0]:
+		_part(root, "Eave" + str(side), _box(Vector3(2.0, 0.20, 0.42)), Vector3(side * 6.6, 9.72, -18.0), bronze, Vector3(0.0, 0.0, side * -0.16), 0.0, 0.28)
+	_part(root, "GateTablet", _box(Vector3(4.2, 1.35, 0.32)), Vector3(0.0, 7.05, -16.98), Color("#30283d"), Vector3.ZERO, 0.0, 0.12)
+	var tablet_text := Label3D.new()
+	tablet_text.name = "GateName"
+	tablet_text.text = "酆 都 鬼 门 关"
+	tablet_text.position = Vector3(0.0, 7.03, -16.78)
+	tablet_text.font_size = 42
+	tablet_text.outline_size = 8
+	tablet_text.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	tablet_text.modulate = Color("#d7c7e8")
+	root.add_child(tablet_text)
+	var lintel_collision := CollisionShape3D.new()
+	var lintel_shape := BoxShape3D.new()
+	lintel_shape.size = Vector3(12.0, 1.45, 1.85)
+	lintel_collision.shape = lintel_shape
+	lintel_collision.position = Vector3(0.0, 8.25, -18.0)
+	root.add_child(lintel_collision)
+	return root
+
 static func _build_wolf(root: Node3D, hide_color: Color, bone_color: Color) -> void:
 	_part(root, "Torso", _capsule(0.36, 1.45), Vector3(0.0, 0.62, 0.05), hide_color, Vector3(PI * 0.5, 0.0, 0.0))
 	_part(root, "Chest", _sphere(0.37), Vector3(0.0, 0.68, -0.42), hide_color)
