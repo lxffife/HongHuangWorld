@@ -1941,6 +1941,27 @@ func _animate_monster_visuals(delta: float) -> void:
 			if is_instance_valid(tail):
 				tail.rotation.y = sin(monster_animation_time * 2.4 + phase) * (0.24 if moving else 0.14)
 				tail.rotation.z = sin(monster_animation_time * 1.8 + phase) * 0.08
+		elif archetype == "iron_beast":
+			var iron_core := monster.get_node_or_null("IronCore") as MeshInstance3D
+			if is_instance_valid(iron_core):
+				iron_core.position.y = 0.66 + (absf(stride) * 0.045 if moving else sin(phase) * 0.018)
+			for pivot_name in ["FrontLegLeft", "HindLegRight"]:
+				var leg := monster.get_node_or_null(pivot_name) as Node3D
+				if is_instance_valid(leg):
+					leg.rotation.x = stride * (0.28 if moving else 0.012)
+			for pivot_name in ["FrontLegRight", "HindLegLeft"]:
+				var leg := monster.get_node_or_null(pivot_name) as Node3D
+				if is_instance_valid(leg):
+					leg.rotation.x = -stride * (0.28 if moving else 0.012)
+			var skull := monster.get_node_or_null("SkullPivot") as Node3D
+			if is_instance_valid(skull):
+				skull.rotation.x = sin(phase * 0.5) * (0.055 if moving else 0.025)
+			var spine := monster.get_node_or_null("SpineArmor") as Node3D
+			if is_instance_valid(spine):
+				spine.rotation.z = sin(phase * 0.5) * (0.018 if moving else 0.008)
+			var tail := monster.get_node_or_null("TailPivot") as Node3D
+			if is_instance_valid(tail):
+				tail.rotation.y = sin(monster_animation_time * 1.45 + phase) * (0.12 if moving else 0.07)
 		var body := monster.get_node_or_null("Torso") as Node3D
 		if not is_instance_valid(body):
 			body = monster.get_node_or_null("IronCore") as Node3D
