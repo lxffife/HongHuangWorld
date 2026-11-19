@@ -55,7 +55,7 @@ func (s *Service) Bootstrap(ctx context.Context, username,email,password string)
  err=tx.QueryRowContext(ctx,`INSERT INTO admin_users(username,email,password_hash,is_super_admin) VALUES($1,NULLIF($2,''),$3,true) RETURNING id::text`,username,email,string(hash)).Scan(&id)
  if err!=nil { var pgErr *pgconn.PgError; if errors.As(err,&pgErr)&&pgErr.Code=="23505" { return false,ErrConflict }; return false,fmt.Errorf("create bootstrap administrator: %w",err) }
  if _,err=tx.ExecContext(ctx,`INSERT INTO admin_user_roles(user_id,role_id) SELECT $1,id FROM admin_roles WHERE role_key='super_admin' ON CONFLICT DO NOTHING`,id); err!=nil { return false,err }
- if _,err=tx.ExecContext(ctx,`INSERT INTO admin_audit_logs(actor_user_id,action,resource_type,resource_id,result,details) VALUES($1,'admin.bootstrap','admin_user',$1,'success','{}'::jsonb)`,id); err!=nil { return false,err }
+ if _,err=tx.ExecContext(ctx,`INSERT INTO admin_audit_logs(actor_user_id,action,resource_type,resource_id,result,details) VALUES($1,'admin.bootstrap','admin_user',$2,'success','{}'::jsonb)`,id,id); err!=nil { return false,err }
  if err=tx.Commit(); err!=nil { return false,err }; return true,nil
 }
 
@@ -72,7 +72,7 @@ func (s *Service) Login(ctx context.Context,username,password,remote,agent strin
  tx,err:=s.db.BeginTx(ctx,nil); if err!=nil { return User{},"",time.Time{},err }; defer tx.Rollback()
  if _,err=tx.ExecContext(ctx,`INSERT INTO admin_sessions(user_id,token_hash,expires_at) VALUES($1,$2,$3)`,user.ID,tokenHash[:],expires); err!=nil { return User{},"",time.Time{},err }
  if _,err=tx.ExecContext(ctx,`UPDATE admin_users SET last_login_at=now(),updated_at=now() WHERE id=$1`,user.ID); err!=nil { return User{},"",time.Time{},err }
- if _,err=tx.ExecContext(ctx,`INSERT INTO admin_audit_logs(actor_user_id,action,resource_type,resource_id,result,details,remote_addr,user_agent) VALUES($1,'admin.login','admin_user',$1,'success','{}'::jsonb,NULLIF($2,'')::inet,$3)`,user.ID,remote,agent); err!=nil { return User{},"",time.Time{},err }
+ if _,err=tx.ExecContext(ctx,`INSERT INTO admin_audit_logs(actor_user_id,action,resource_type,resource_id,result,details,remote_addr,user_agent) VALUES($1,'admin.login','admin_user',$2,'success','{}'::jsonb,NULLIF($3,'')::inet,$4)`,user.ID,user.ID,remote,agent); err!=nil { return User{},"",time.Time{},err }
  if err=tx.Commit(); err!=nil { return User{},"",time.Time{},err }
  user,err=s.loadPermissions(ctx,user); if err!=nil { return User{},"",time.Time{},err }
  return user,token,expires,nil
@@ -112,7 +112,7 @@ func (s *Service) ChangePassword(ctx context.Context,u User,current,next,remote,
  if _,err=tx.ExecContext(ctx,`UPDATE admin_users SET password_hash=$2,password_changed_at=now(),updated_at=now() WHERE id=$1`,u.ID,string(hash)); err!=nil { return "",time.Time{},err }
  if _,err=tx.ExecContext(ctx,`UPDATE admin_sessions SET revoked_at=now() WHERE user_id=$1 AND revoked_at IS NULL`,u.ID); err!=nil { return "",time.Time{},err }
  if _,err=tx.ExecContext(ctx,`INSERT INTO admin_sessions(user_id,token_hash,expires_at) VALUES($1,$2,$3)`,u.ID,tokenHash[:],expires); err!=nil { return "",time.Time{},err }
- if _,err=tx.ExecContext(ctx,`INSERT INTO admin_audit_logs(actor_user_id,action,resource_type,resource_id,result,details,remote_addr,user_agent) VALUES($1,'admin.password.change','admin_user',$1,'success','{}'::jsonb,NULLIF($2,'')::inet,$3)`,u.ID,remote,agent); err!=nil { return "",time.Time{},err }
+ if _,err=tx.ExecContext(ctx,`INSERT INTO admin_audit_logs(actor_user_id,action,resource_type,resource_id,result,details,remote_addr,user_agent) VALUES($1,'admin.password.change','admin_user',$2,'success','{}'::jsonb,NULLIF($3,'')::inet,$4)`,u.ID,u.ID,remote,agent); err!=nil { return "",time.Time{},err }
  if err=tx.Commit(); err!=nil { return "",time.Time{},err }; return token,expires,nil
 }
 
