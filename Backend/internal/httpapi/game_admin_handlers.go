@@ -592,10 +592,18 @@ func (h *gamePlayerAdminHandlers) rollbackConfigRevision(w http.ResponseWriter, 
 		table="monster_loot_entries";where="monster_id=$1 AND item_id=$2";args=[]any{parts[0],parts[1]}
 	default: http.Error(w,"unsupported revision resource type",http.StatusBadRequest);return
 	}
+	if resourceType == "monster_loot_entry" {
+		parts:=strings.SplitN(resourceID,":",2)
+		if len(parts)==2 { if _,err=tx.ExecContext(ctx,`SELECT pg_advisory_xact_lock(hashtext($1))`,parts[0]);err!=nil{http.Error(w,"internal server error",500);return} }
+	}
+	var locked int
+	lockErr:=tx.QueryRowContext(ctx,"SELECT 1 FROM "+table+" WHERE "+where+" FOR UPDATE",args...).Scan(&locked)
+	if lockErr!=nil&&!errors.Is(lockErr,sql.ErrNoRows){http.Error(w,"internal server error",500);return}
 	var current json.RawMessage
-	current,err=readConfigSnapshot(ctx,tx,table,where,args...)
-	if err!=nil&&!errors.Is(err,sql.ErrNoRows){h.logger.Error("read current config before rollback failed","error",err);http.Error(w,"internal server error",500);return}
-	if errors.Is(err,sql.ErrNoRows){current=nil}
+	if lockErr==nil {
+		current,err=readConfigSnapshot(ctx,tx,table,where,args...)
+		if err!=nil{h.logger.Error("read current config before rollback failed","error",err);http.Error(w,"internal server error",500);return}
+	}
 	if err=restoreConfigSnapshot(ctx,tx,resourceType,resourceID,json.RawMessage(desired));err!=nil{
 		if errors.Is(err,errRevisionRollbackConflict){http.Error(w,"rollback conflicts with current inventory or loot constraints",http.StatusConflict);return}
 		h.logger.Error("restore config revision failed","revision_id",revisionID,"resource_type",resourceType,"resource_id",resourceID,"error",err)
