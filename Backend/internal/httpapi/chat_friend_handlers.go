@@ -92,3 +92,12 @@ func (h *chatHandlers) writeSocialError(w http.ResponseWriter, err error) bool {
 	}
 	return true
 }
+
+func (h *chatHandlers) conversationMessages(w http.ResponseWriter, r *http.Request) {
+	account, ok := h.authenticate(w, r)
+	if !ok { return }
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	items, err := h.service.ListConversation(r.Context(), account.ID, strings.TrimSpace(r.PathValue("characterID")), strings.TrimSpace(r.URL.Query().Get("before")), limit)
+	if err != nil { h.writeError(w, err); return }
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "retention_days": 30})
+}
