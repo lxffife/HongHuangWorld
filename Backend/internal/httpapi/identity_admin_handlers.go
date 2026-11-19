@@ -66,3 +66,22 @@ func (h *identityAdminHandlers) setAccountStatus(w http.ResponseWriter,r *http.R
 	if err=tx.Commit();err!=nil{http.Error(w,"internal server error",500);return}
 	writeJSON(w,200,map[string]string{"status":req.Status})
 }
+
+func (h *identityAdminHandlers) getAccount(w http.ResponseWriter, r *http.Request) {
+ if !h.authorize(w,r) { return }
+ id:=strings.TrimSpace(r.PathValue("id"))
+ var item identityAccountAdminItem
+ var email sql.NullString
+ err:=h.db.QueryRowContext(r.Context(),`
+  SELECT id::text,username,email,status,created_at FROM accounts WHERE id=$1::uuid
+ `,id).Scan(&item.ID,&item.Username,&email,&item.Status,&item.CreatedAt)
+ if err!=nil {
+  var pgErr *pgconn.PgError
+  if errors.As(err,&pgErr)&&pgErr.Code=="22P02" { http.Error(w,"invalid account id",http.StatusBadRequest);return }
+  if errors.Is(err,sql.ErrNoRows) { http.Error(w,"account not found",http.StatusNotFound);return }
+  h.logger.Error("identity admin account detail failed","error",err)
+  http.Error(w,"internal server error",http.StatusInternalServerError);return
+ }
+ if email.Valid { item.Email=&email.String }
+ writeJSON(w,http.StatusOK,item)
+}
