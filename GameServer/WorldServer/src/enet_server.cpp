@@ -808,6 +808,12 @@ struct EnetServer::Impl {
     ENetHost* host{};
     std::unordered_map<ENetPeer*, PlayerState> players;
     std::vector<MonsterRuntime> monsters;
+    std::mutex monster_config_mutex;
+    std::condition_variable monster_config_cv;
+    bool monster_config_stop_requested{false};
+    bool pending_monster_config_ready{false};
+    std::vector<MonsterRuntime> pending_monster_config;
+    std::thread monster_config_thread;
     std::vector<LootEntry> loot_table;
     std::mutex loot_table_mutex;
     std::mutex loot_refresh_mutex;
@@ -1446,6 +1452,83 @@ struct EnetServer::Impl {
         });
     }
 
+
+    void start_monster_config_refresh_worker() {
+        monster_config_stop_requested=false;
+        monster_config_thread=std::thread([this]{
+            while(true){
+                {
+                    std::unique_lock lock(monster_config_mutex);
+                    if(monster_config_cv.wait_for(lock,std::chrono::seconds(30),[this]{return monster_config_stop_requested;}))return;
+                }
+                std::vector<MonsterRuntime> refreshed;
+                std::string error;
+                if(!load_monster_spawn_config(config,refreshed,error)){
+                    std::cerr<<"Monster spawn config refresh failed; keeping previous runtime: "<<error<<'\n';
+                    continue;
+                }
+                const auto count=refreshed.size();
+                {
+                    std::lock_guard lock(monster_config_mutex);
+                    pending_monster_config=std::move(refreshed);
+                    pending_monster_config_ready=true;
+                }
+                std::cout<<"Monster spawn config fetched; entries="<<count<<"; awaiting main-loop apply\n";
+            }
+        });
+    }
+
+    void stop_monster_config_refresh_worker() {
+        {
+            std::lock_guard lock(monster_config_mutex);
+            monster_config_stop_requested=true;
+        }
+        monster_config_cv.notify_all();
+        if(monster_config_thread.joinable())monster_config_thread.join();
+    }
+
+    void apply_pending_monster_config() {
+        std::vector<MonsterRuntime> refreshed;
+        {
+            std::lock_guard lock(monster_config_mutex);
+            if(!pending_monster_config_ready)return;
+            refreshed=std::move(pending_monster_config);
+            pending_monster_config.clear();
+            pending_monster_config_ready=false;
+        }
+        std::vector<MonsterRuntime> merged;
+        merged.reserve(refreshed.size());
+        for(auto& next:refreshed){
+            const auto found=std::find_if(monsters.begin(),monsters.end(),[&](const MonsterRuntime& current){return current.runtime_id==next.runtime_id;});
+            if(found==monsters.end()){
+                merged.push_back(std::move(next));
+                continue;
+            }
+            MonsterRuntime current=*found;
+            const bool rare_changed=current.rare_spawn!=next.rare_spawn;
+            current.definition=std::move(next.definition);
+            current.spawn_chance_percent=next.spawn_chance_percent;
+            current.retry_spawn_seconds=next.retry_spawn_seconds;
+            if(rare_changed){
+                current.rare_spawn=next.rare_spawn;
+                if(current.rare_spawn){
+                    current.state.health=0.0F;
+                    current.state.mode=honghuang::simulation::MonsterMode::Dead;
+                    current.state.target_id.clear();
+                    current.respawn_at=next.respawn_at;
+                }else{
+                    current.state={current.definition.spawn_x,current.definition.spawn_z,current.definition.max_health};
+                    current.respawn_at=Clock::time_point{};
+                }
+            }else{
+                current.rare_spawn=next.rare_spawn;
+                current.state.health=std::min(current.state.health,current.definition.max_health);
+            }
+            merged.push_back(std::move(current));
+        }
+        monsters=std::move(merged);
+        std::cout<<"Applied monster spawn configuration; active spawn points="<<monsters.size()<<'\n';
+    }
 
     void start_loot_refresh_worker() {
         loot_refresh_stop_requested = false;
@@ -2208,6 +2291,15 @@ bool EnetServer::start() {
     impl_->start_chat_worker();
     impl_->start_persistence_worker();
     std::string loot_error;
+    std::vector<MonsterRuntime> database_monsters;
+    std::string monster_config_error;
+    if(load_monster_spawn_config(impl_->config,database_monsters,monster_config_error)){
+        impl_->monsters=std::move(database_monsters);
+        std::cout<<"Loaded database monster spawn points="<<impl_->monsters.size()<<'\n';
+    }else{
+        std::cerr<<"Database monster config unavailable; retaining built-in startup fallback and retrying: "<<monster_config_error<<'\n';
+    }
+    impl_->start_monster_config_refresh_worker();
     if (!load_loot_table(impl_->config, impl_->loot_table, loot_error)) {
         std::cerr << "Monster loot table unavailable; periodic refresh will retry: " << loot_error << '\n';
     } else {
@@ -2230,6 +2322,7 @@ bool EnetServer::start() {
 
 void EnetServer::poll(std::uint32_t timeout_ms) {
     if (impl_->host == nullptr) return;
+    impl_->apply_pending_monster_config();
     ENetEvent event{};
     bool first_event = true;
     while (enet_host_service(impl_->host, &event, first_event ? timeout_ms : 0) > 0) {
@@ -2442,6 +2535,7 @@ void EnetServer::stop() {
         }
         impl_->heartbeat_cv.notify_all();
         if (impl_->heartbeat_thread.joinable()) impl_->heartbeat_thread.join();
+        impl_->stop_monster_config_refresh_worker();
         impl_->stop_loot_refresh_worker();
 
         impl_->stop_chat_worker();
