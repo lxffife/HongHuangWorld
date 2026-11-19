@@ -639,3 +639,20 @@ func (s *Service) ListMonsterSpawnConfig(ctx context.Context, worldID string) ([
 	if err:=rows.Err();err!=nil{return nil,fmt.Errorf("iterate world monster spawn config: %w",err)}
 	return items,nil
 }
+
+func (s *Service) ListMonsterSpawnConfigForNode(ctx context.Context,nodeKey string) ([]MonsterSpawnConfig,error) {
+	rows,err:=s.db.QueryContext(ctx,`SELECT sp.id,md.id,md.name,md.level,md.max_health,md.attack,md.defense,md.move_speed,md.aggro_radius,md.leash_radius,sp.spawn_x,sp.spawn_z,sp.rare_spawn,sp.spawn_chance_percent,sp.retry_spawn_seconds,sp.first_spawn_delay_seconds
+		FROM server_registry sr
+		JOIN world_instances wi ON wi.server_id=sr.id
+		JOIN world_monster_spawn_points sp ON sp.world_id=wi.world_id
+		JOIN monster_definitions md ON md.id=sp.monster_id
+		WHERE sr.node_key=$1 AND sr.status='ready' AND sr.admin_state='normal'
+		  AND wi.status='ready' AND sp.enabled=TRUE AND md.enabled=TRUE
+		ORDER BY md.level,sp.id`,nodeKey)
+	if err!=nil{return nil,fmt.Errorf("list node monster spawn config: %w",err)}
+	defer rows.Close()
+	items:=make([]MonsterSpawnConfig,0)
+	for rows.Next(){var v MonsterSpawnConfig;if err:=rows.Scan(&v.RuntimeID,&v.MonsterID,&v.Name,&v.Level,&v.MaxHealth,&v.Attack,&v.Defense,&v.MoveSpeed,&v.AggroRadius,&v.LeashRadius,&v.SpawnX,&v.SpawnZ,&v.RareSpawn,&v.SpawnChancePercent,&v.RetrySpawnSeconds,&v.FirstSpawnDelaySeconds);err!=nil{return nil,fmt.Errorf("scan node monster spawn config: %w",err)};items=append(items,v)}
+	if err:=rows.Err();err!=nil{return nil,fmt.Errorf("iterate node monster spawn config: %w",err)}
+	return items,nil
+}
