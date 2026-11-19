@@ -23,7 +23,7 @@ func (h *gamePlayerAdminHandlers) growth(w http.ResponseWriter, r *http.Request)
 	err := h.db.QueryRowContext(ctx, `SELECT id::text FROM souls WHERE account_id=$1::uuid`, accountID).Scan(&soulID)
 	if err == sql.ErrNoRows {
 		writeJSON(w, http.StatusOK, map[string]any{
-			"essence": nil, "inheritance_attributes": nil,
+			"current_body": nil, "essence": nil, "inheritance_attributes": nil,
 			"absorption_progress": []map[string]any{}, "absorption_records": []map[string]any{},
 			"mutation_records": []map[string]any{}, "fusion_records": []map[string]any{},
 			"birth_inheritance": []map[string]any{}, "reincarnations": []map[string]any{},
@@ -36,6 +36,22 @@ func (h *gamePlayerAdminHandlers) growth(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	currentBody, err := queryAdminRows(ctx,h.db,`
+		SELECT character.id::text,character.name,character.race_id,
+		       attributes.strength,attributes.constitution,attributes.agility,
+		       attributes.spirit,attributes.vitality,attributes.health,
+		       attributes.max_health,attributes.mana,attributes.max_mana,
+		       attributes.attack,attributes.defense,attributes.movement_speed,
+		       progression.experience,progression.cultivation,progression.realm_id,
+		       realm.name AS realm_name,progression.realm_stage,
+		       progression.unspent_attribute_points
+		FROM souls soul
+		JOIN characters character ON character.id=soul.current_character_id
+		LEFT JOIN character_attributes attributes ON attributes.character_id=character.id
+		LEFT JOIN character_progression progression ON progression.character_id=character.id
+		LEFT JOIN cultivation_realms realm ON realm.id=progression.realm_id
+		WHERE soul.id=$1::uuid`,soulID)
+	if err != nil { adminGrowthQueryError(h.logger,w,"current body attributes",err); return }
 	essence, err := queryAdminRows(ctx, h.db, `
 		SELECT soul_power,soul_wisdom,soul_resilience,soul_perception,
 		       absorption_capacity,absorbed_energy,absorbed_count,updated_at
@@ -108,7 +124,7 @@ func (h *gamePlayerAdminHandlers) growth(w http.ResponseWriter, r *http.Request)
 	if err != nil { adminGrowthQueryError(h.logger,w,"birth inheritance",err); return }
 
 	writeJSON(w,http.StatusOK,map[string]any{
-		"essence": firstAdminRow(essence),
+		"current_body": firstAdminRow(currentBody),\n\t\t"essence": firstAdminRow(essence),
 		"inheritance_attributes": firstAdminRow(inheritance),
 		"absorption_progress": progress,
 		"absorption_records": absorptions,
