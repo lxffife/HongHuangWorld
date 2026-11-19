@@ -632,6 +632,7 @@ bool load_monster_spawn_config(const ServerConfig& config,std::vector<MonsterRun
             definition.move_speed=value.at("move_speed").get<float>();
             definition.aggro_radius=value.at("aggro_radius").get<float>();
             definition.leash_radius=value.at("leash_radius").get<float>();
+            definition.attack_range=value.value("attack_range", 1.8F);
             const float x=value.at("spawn_x").get<float>();
             const float z=value.at("spawn_z").get<float>();
             const auto runtime_id=value.at("runtime_id").get<std::string>();
@@ -2157,8 +2158,30 @@ struct EnetServer::Impl {
             }
             honghuang::simulation::MonsterTarget target_storage;
             const honghuang::simulation::MonsterTarget* nearest_target = nullptr;
+            // Keep the current victim while they remain close enough; only acquire a
+            // different player after the current target leaves the retention radius.
+            if (monster.state.mode == honghuang::simulation::MonsterMode::Chasing &&
+                !monster.state.target_id.empty()) {
+                const auto current = std::find_if(players.begin(), players.end(), [&](const auto& entry) {
+                    return entry.second.character_id == monster.state.target_id &&
+                           entry.second.health > 0;
+                });
+                if (current != players.end()) {
+                    const double dx = static_cast<double>(current->second.x) - monster.state.x;
+                    const double dz = static_cast<double>(current->second.z) - monster.state.z;
+                    const double retain_radius = std::min(
+                        static_cast<double>(monster.definition.aggro_radius) * 1.25,
+                        static_cast<double>(monster.definition.leash_radius));
+                    if (dx * dx + dz * dz <= retain_radius * retain_radius) {
+                        target_storage = {current->second.character_id, current->second.x,
+                                          current->second.z, true};
+                        nearest_target = &target_storage;
+                    }
+                }
+            }
             double nearest_distance_squared = std::numeric_limits<double>::max();
             for (const auto& [peer, player] : players) {
+                if (nearest_target != nullptr) break;
                 (void)peer;
                 if (player.health <= 0) continue;
                 const double dx = static_cast<double>(player.x) - monster.state.x;
@@ -2185,10 +2208,10 @@ struct EnetServer::Impl {
             auto& player = victim->second;
             const double attack_dx = static_cast<double>(player.x) - monster.state.x;
             const double attack_dz = static_cast<double>(player.z) - monster.state.z;
-            constexpr double kMonsterAttackRange = 1.8;
+            const double attack_range = static_cast<double>(monster.definition.attack_range);
             constexpr auto kMonsterAttackCooldown = std::chrono::milliseconds(1500);
             if (attack_dx * attack_dx + attack_dz * attack_dz >
-                kMonsterAttackRange * kMonsterAttackRange) continue;
+                attack_range * attack_range) continue;
             if (monster.last_attack_at.time_since_epoch().count() != 0 &&
                 now - monster.last_attack_at < kMonsterAttackCooldown) continue;
             monster.last_attack_at = now;
