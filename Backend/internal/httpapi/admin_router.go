@@ -38,6 +38,7 @@ func NewAdminRouter(logger *slog.Logger,db *sql.DB) http.Handler {
   mux.HandleFunc("PUT /api/v1/admin/users/{id}/permissions",h.setPermissions)
   mux.HandleFunc("PATCH /api/v1/admin/users/{id}/status",h.setUserStatus)
   mux.HandleFunc("GET /api/v1/admin/players",h.listPlayers)
+  mux.HandleFunc("GET /api/v1/admin/config-revisions",h.listConfigRevisions)
   mux.HandleFunc("GET /api/v1/admin/monsters/definitions",h.listMonsterDefinitions)
   mux.HandleFunc("POST /api/v1/admin/monsters/definitions",h.createMonsterDefinition)
   mux.HandleFunc("PATCH /api/v1/admin/monsters/definitions/{monsterID}",h.updateMonsterDefinition)
