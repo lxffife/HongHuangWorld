@@ -142,3 +142,14 @@ Windows（在仓库根目录，单独 PowerShell 窗口运行）：
 - 降低物品堆叠上限时，会检查现有背包、掉落配置和地面掉落数量，不能造成已有数据超过上限。
 - Game 服务是物品与掉落配置的唯一数据所有者；Admin 只通过 `GAME_ADMIN_INTERNAL_API_KEY` 调用 Game 内部接口，不跨库访问。所有修改写入 Admin 审计日志。
 - WorldServer 启动时加载掉落表，并每 30 秒自动刷新；后台修改通常在 30 秒内对现有节点生效，无需重启 WorldServer。刷新失败会保留上一次有效配置并继续重试。
+
+
+### 怪物模板与世界刷新点管理
+
+- 数据库迁移 `000045` 新增 `monster_definitions` 与 `world_monster_spawn_points`，并将当前 WorldServer 中已有的荒原狼、游祟、炽战残魂、稀有战魂、铁骨兽魂、疾风游魂、灵识游魂、忘川回音灵识、生机古魂和无相灵魄配置初始化入库。
+- `GET /api/v1/admin/monsters/definitions`：需要 `monsters.read`，查看怪物模板属性与启用状态。
+- `PATCH /api/v1/admin/monsters/definitions/{monster_id}`：需要 `monsters.manage`，可调整名称、等级、生命、攻击、防御、移动速度、仇恨范围、追击范围和启用状态；追击范围不能小于仇恨范围。
+- `GET /api/v1/admin/monsters/spawn-points?world_id={world_id}`：查看各世界刷新点、坐标、稀有概率、首次延迟、失败重试间隔和启用状态。
+- `PATCH /api/v1/admin/monsters/spawn-points/{spawn_id}`：调整坐标、稀有刷新开关、1-100% 刷新概率、首次刷新延迟、重试间隔和启用状态。
+- 所有管理写操作要求 `monsters.manage` 并写入 Admin 审计日志。Game 数据库仍是怪物配置的唯一数据所有者。
+- 注意：本阶段已完成数据库与管理 API。WorldServer 当前仍有一份 C++ 启动期怪物配置；数据库配置的运行时加载/热刷新正在接入，完成前后台修改不会自动改变已运行节点中的怪物。
