@@ -549,10 +549,15 @@ func set_equipment_visuals(items: Array) -> void:
 		"back": "EquipmentBackSocket",
 		"offhand": "EquipmentOffhandSocket"
 	}
-	for socket_name in sockets.values():
-		var socket := player_humanoid.get_node_or_null(str(socket_name)) as Node3D
+	for slot_key in sockets.keys():
+		var socket_name := str(sockets[slot_key])
+		var socket := player_humanoid.get_node_or_null(socket_name) as Node3D
 		if not is_instance_valid(socket):
-			continue
+			socket = Node3D.new()
+			socket.name = socket_name
+			socket.position = _equipment_socket_position(str(slot_key))
+			player_humanoid.add_child(socket)
+		for child in socket.get_children():
 		for child in socket.get_children():
 			child.queue_free()
 	for item in items:
@@ -643,3 +648,14 @@ func _equipment_dark_material() -> StandardMaterial3D:
 	material.albedo_color = Color("#493b32")
 	material.roughness = 0.72
 	return material
+
+
+func _equipment_socket_position(slot: String) -> Vector3:
+	match slot:
+		"weapon": return Vector3(0.43, 1.12, -0.20)
+		"head": return Vector3(0.0, 2.08, 0.0)
+		"chest": return Vector3(0.0, 1.20, -0.24)
+		"back": return Vector3(0.0, 1.28, 0.24)
+		"accessory": return Vector3(0.20, 0.82, -0.30)
+		"offhand": return Vector3(-0.43, 1.12, -0.20)
+	return Vector3.ZERO
