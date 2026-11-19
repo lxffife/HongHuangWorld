@@ -179,3 +179,5 @@ WorldServer 怪物配置由 Game API 按已认证节点身份返回，不接受�
 ## 玩家成长档案查询
 
 管理后台玩家详情会通过 Game 内部接口 `GET /api/v1/internal/admin/players/{accountID}/growth` 读取玩家魂体积累、五项永久来世资质、吞噬进度与最近100条吞噬记录、最近50条变异/融合记录、最近100次转世及出生资质快照。接口使用 `X-Game-Admin-Key`，只读 Game 自有数据库，不跨库访问 Identity；Admin 对外仍使用 `GET /api/v1/admin/players/{id}` 与 `players.read` 权限。该查询不会修改玩家成长数据。
+
+玩家成长档案同时展示当前肉身的五维属性、生命/法力、攻防、境界修为与待分配属性点；这些当前肉身数据与灵魂永久继承资质分开呈现，避免混淆两种成长体系。
