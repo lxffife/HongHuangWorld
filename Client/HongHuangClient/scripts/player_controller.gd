@@ -149,6 +149,12 @@ func _get_move_input() -> Vector2:
 	return input_vector.normalized() if input_vector.length_squared() > 1.0 else input_vector
 
 func _unhandled_input(event: InputEvent) -> void:
+	# The chat drawer owns mouse and keyboard interaction while open.
+	# Do not rotate the camera or trigger attacks from chat mouse movement/clicks.
+	var world := get_parent()
+	if world != null and world.has_method("is_gameplay_input_blocked"):
+		if bool(world.call("is_gameplay_input_blocked")):
+			return
 	if event.is_action_pressed("release_mouse"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		return
