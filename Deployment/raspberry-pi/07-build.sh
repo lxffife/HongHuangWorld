@@ -10,7 +10,8 @@ fi
 set -Eeuo pipefail
 source "$(dirname "$0")/lib/common.sh"
 export PATH="/usr/local/go/bin:$HOME/go/bin:$PATH"
-need_cmd go; need_cmd cmake; need_cmd pkg-config
+need_cmd go; need_cmd cmake; need_cmd pkg-config; need_cmd npm
+(cd "$HH_PROJECT_DIR/AdminWeb" && npm install --no-audit --no-fund && npm run build)
 if ! pkg-config --exists sqlite3; then
   echo "[ERROR] 缺少 SQLite3 开发文件（头文件/库）。请先执行：" >&2
   echo "  sudo apt-get update && sudo apt-get install -y libsqlite3-dev" >&2
