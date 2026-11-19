@@ -2065,6 +2065,9 @@ func _animate_wolf_monster(monster: Node3D, stride: float, moving: bool, phase: 
 		var leg := monster.get_node_or_null(pivot_name) as Node3D
 		if is_instance_valid(leg):
 			leg.rotation.x = -stride * (0.42 if moving else 0.025)
+	var jaw := monster.get_node_or_null("JawPivot") as Node3D
+	if is_instance_valid(jaw):
+		jaw.rotation.x = move_toward(jaw.rotation.x, 0.0, 2.4 * get_process_delta_time())
 	var tail := monster.get_node_or_null("TailPivot") as Node3D
 	if is_instance_valid(tail):
 		tail.rotation.y = sin(monster_animation_time * 2.4 + phase) * (0.24 if moving else 0.14)
@@ -2130,6 +2133,7 @@ func _animate_soul_monster(monster: Node3D, delta: float, phase: float, moving: 
 	var orbit := monster.get_node_or_null("SoulOrbit") as Node3D
 	if is_instance_valid(orbit):
 		orbit.rotation.y += delta * (1.8 if archetype == "wind_soul" else 0.72)
+		orbit.scale = orbit.scale.lerp(Vector3.ONE, minf(delta * 6.0, 1.0))
 	var spark := monster.get_node_or_null("SoulSpark") as Node3D
 	if is_instance_valid(spark):
 		spark.position.y = 1.42 + sin(monster_animation_time * drift_speed * 1.4 + phase) * amplitude * 1.8
