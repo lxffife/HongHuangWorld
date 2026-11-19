@@ -131,7 +131,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("GET /api/v1/internal/admin/monsters/spawn-points", unavailable)
 		mux.HandleFunc("POST /api/v1/internal/admin/monsters/spawn-points", unavailable)
 		mux.HandleFunc("PATCH /api/v1/internal/admin/monsters/spawn-points/{spawnID}", unavailable)
-		mux.HandleFunc("GET /api/v1/internal/admin/loot/items", unavailable))
+		mux.HandleFunc("GET /api/v1/internal/admin/loot/items", unavailable)
 		mux.HandleFunc("PATCH /api/v1/internal/admin/loot/items/{itemID}", unavailable)
 		mux.HandleFunc("GET /api/v1/internal/admin/loot/tables", unavailable)
 		mux.HandleFunc("PUT /api/v1/internal/admin/loot/tables/{monsterID}/{itemID}", unavailable)
