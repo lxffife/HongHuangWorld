@@ -20,7 +20,7 @@ func NewAdminRouter(logger *slog.Logger,db *sql.DB) http.Handler {
   writeJSON(w,http.StatusOK,healthResponse{Status:"ready",Time:time.Now().UTC().Format(time.RFC3339)})
  })
  if db==nil { unavailable:=func(w http.ResponseWriter,_ *http.Request){http.Error(w,"service unavailable",http.StatusServiceUnavailable)}
-  for _,route:=range []string{"POST /api/v1/admin/auth/login","GET /api/v1/admin/auth/me","GET /api/v1/admin/audit-logs","GET /api/v1/admin/dashboard","POST /api/v1/admin/auth/logout","POST /api/v1/admin/auth/password","GET /api/v1/admin/users","POST /api/v1/admin/users","GET /api/v1/admin/permissions","PUT /api/v1/admin/users/{id}/permissions"}{mux.HandleFunc(route,unavailable)}
+  for _,route:=range []string{"POST /api/v1/admin/auth/login","GET /api/v1/admin/auth/me","GET /api/v1/admin/audit-logs","GET /api/v1/admin/dashboard","POST /api/v1/admin/auth/logout","POST /api/v1/admin/auth/password","GET /api/v1/admin/users","POST /api/v1/admin/users","GET /api/v1/admin/permissions","PUT /api/v1/admin/users/{id}/permissions","PATCH /api/v1/admin/users/{id}/status"}{mux.HandleFunc(route,unavailable)}
  } else {
   h:=&adminHandlers{service:adminauth.NewService(db),logger:logger}
   mux.HandleFunc("POST /api/v1/admin/auth/login",h.login)
@@ -33,6 +33,7 @@ func NewAdminRouter(logger *slog.Logger,db *sql.DB) http.Handler {
   mux.HandleFunc("POST /api/v1/admin/users",h.createUser)
   mux.HandleFunc("GET /api/v1/admin/permissions",h.listPermissions)
   mux.HandleFunc("PUT /api/v1/admin/users/{id}/permissions",h.setPermissions)
+  mux.HandleFunc("PATCH /api/v1/admin/users/{id}/status",h.setUserStatus)
  }
  return requestLogger(logger,mux)
 }
