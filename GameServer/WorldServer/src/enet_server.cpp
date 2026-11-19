@@ -2275,7 +2275,10 @@ struct EnetServer::Impl {
             auto& player = victim->second;
             const double attack_dx = static_cast<double>(player.x) - monster.state.x;
             const double attack_dz = static_cast<double>(player.z) - monster.state.z;
-            const double attack_range = static_cast<double>(monster.definition.attack_range);
+            const bool heavy_slam = std::string(attack_profile.style) == "heavy_slam";
+            const double attack_range = heavy_slam
+                ? static_cast<double>(attack_profile.splash_radius)
+                : static_cast<double>(monster.definition.attack_range);
             const bool in_attack_range = attack_dx * attack_dx + attack_dz * attack_dz <=
                 attack_range * attack_range;
 
@@ -2305,28 +2308,57 @@ struct EnetServer::Impl {
                 static_cast<std::int64_t>(monster.definition.attack),
                 static_cast<std::int64_t>(monster.definition.defense), 1, 1
             };
-            const honghuang::simulation::CombatantStats defender{
-                player.attack, player.defense, player.health, player.max_health
-            };
-            honghuang::simulation::DamageResult damage{};
-            if (!honghuang::simulation::calculate_damage(
-                    attacker, defender, honghuang::simulation::AttackProfile{}, damage)) {
-                std::cerr << "Monster attack rejected by combat validation: "
-                          << monster.runtime_id << '\n';
-                monster.attack_phase = MonsterAttackPhase::Recovery;
-                monster.attack_phase_started_at = now;
-                continue;
+            if (heavy_slam) {
+                // Resolve the circular area at impact time so players can evade during windup.
+                for (auto& [target_peer, target_player] : players) {
+                    if (target_player.health <= 0) continue;
+                    const double dx = static_cast<double>(target_player.x) - monster.state.x;
+                    const double dz = static_cast<double>(target_player.z) - monster.state.z;
+                    if (dx * dx + dz * dz > attack_range * attack_range) continue;
+                    const honghuang::simulation::CombatantStats defender{
+                        target_player.attack, target_player.defense,
+                        target_player.health, target_player.max_health
+                    };
+                    honghuang::simulation::DamageResult damage{};
+                    if (!honghuang::simulation::calculate_damage(
+                            attacker, defender, honghuang::simulation::AttackProfile{}, damage)) {
+                        std::cerr << "Heavy slam damage rejected by combat validation: "
+                                  << monster.runtime_id << '\n';
+                        continue;
+                    }
+                    target_player.health = damage.remaining_health;
+                    send_json(target_peer, honghuang::protocol::MessageType::CombatEvent,
+                              Json{{"accepted", true}, {"source", "monster"},
+                                   {"source_entity_id", monster.runtime_id},
+                                   {"attack_style", "heavy_slam"},
+                                   {"damage", damage.damage}, {"health", target_player.health},
+                                   {"max_health", target_player.max_health},
+                                   {"defeated", damage.defeated}});
+                }
+            } else {
+                const honghuang::simulation::CombatantStats defender{
+                    player.attack, player.defense, player.health, player.max_health
+                };
+                honghuang::simulation::DamageResult damage{};
+                if (!honghuang::simulation::calculate_damage(
+                        attacker, defender, honghuang::simulation::AttackProfile{}, damage)) {
+                    std::cerr << "Monster attack rejected by combat validation: "
+                              << monster.runtime_id << '\n';
+                    monster.attack_phase = MonsterAttackPhase::Recovery;
+                    monster.attack_phase_started_at = now;
+                    continue;
+                }
+                player.health = damage.remaining_health;
+                send_json(victim->first, honghuang::protocol::MessageType::CombatEvent,
+                          Json{{"accepted", true}, {"source", "monster"},
+                               {"source_entity_id", monster.runtime_id},
+                               {"damage", damage.damage}, {"health", player.health},
+                               {"max_health", player.max_health}, {"defeated", damage.defeated}});
             }
-            player.health = damage.remaining_health;
             monster.last_attack_at = now;
             monster.attack_phase = MonsterAttackPhase::Recovery;
             monster.attack_phase_started_at = now;
             broadcast_attack_phase("impact");
-            send_json(victim->first, honghuang::protocol::MessageType::CombatEvent,
-                      Json{{"accepted", true}, {"source", "monster"},
-                           {"source_entity_id", monster.runtime_id},
-                           {"damage", damage.damage}, {"health", player.health},
-                           {"max_health", player.max_health}, {"defeated", damage.defeated}});
         }
         last_snapshot = now;
         broadcast_snapshot();
