@@ -356,6 +356,19 @@ static func create_player_humanoid() -> Node3D:
 		_part(arm_pivot, "Hand", _sphere(0.085), Vector3(side * 0.03, -0.58, -0.01), skin)
 	_part(root, "BackScabbard", _box(Vector3(0.12, 0.92, 0.18)), Vector3(-0.28, 1.05, 0.19), leather, Vector3(0.0, 0.0, -0.22))
 	_part(root, "ScabbardGuard", _box(Vector3(0.42, 0.07, 0.10)), Vector3(-0.28, 1.43, 0.19), trim, Vector3(0.0, 0.0, -0.22))
+	# Layered robe panels and restrained jade fittings give the silhouette
+	# more readable depth without increasing the collision capsule.
+	_part(root, "OuterRobeFront", _box(Vector3(0.24, 0.72, 0.075)), Vector3(0.12, 0.83, -0.235), robe_light, Vector3(0.0, 0.0, -0.035))
+	_part(root, "OuterRobeLeft", _box(Vector3(0.20, 0.68, 0.07)), Vector3(-0.22, 0.82, -0.205), robe, Vector3(0.0, 0.0, 0.045))
+	_part(root, "HemTrim", _box(Vector3(0.72, 0.10, 0.44)), Vector3(0.0, 0.62, 0.0), trim, Vector3.ZERO, 0.08, 0.18)
+	_part(root, "JadeBuckle", _sphere(0.075), Vector3(0.0, 0.80, -0.29), Color("#75b9a1"), Vector3.ZERO, 0.35, 0.18)
+	_part(root, "CollarLeft", _box(Vector3(0.16, 0.34, 0.09)), Vector3(-0.10, 1.48, -0.20), trim, Vector3(0.0, 0.0, -0.32), 0.08, 0.18)
+	_part(root, "CollarRight", _box(Vector3(0.16, 0.34, 0.09)), Vector3(0.10, 1.48, -0.20), robe_light, Vector3(0.0, 0.0, 0.32))
+	_part(root, "HairTopKnot", _sphere(0.105), Vector3(0.0, 2.20, 0.02), hair)
+	_part(root, "JadeHairPin", _box(Vector3(0.42, 0.045, 0.06)), Vector3(0.0, 2.12, 0.02), Color("#78bca5"), Vector3(0.0, 0.0, 0.04), 0.16, 0.3)
+	_part(root, "ShoulderMantle", _box(Vector3(0.86, 0.12, 0.48)), Vector3(0.0, 1.54, 0.04), robe, Vector3.ZERO)
+	_part(root, "SwordHilt", _capsule(0.045, 0.30), Vector3(-0.39, 1.56, 0.22), leather, Vector3(0.0, 0.0, -0.22))
+	_part(root, "SwordPommel", _sphere(0.065), Vector3(-0.43, 1.70, 0.25), trim, Vector3.ZERO, 0.12, 0.25)
 	# Keep the visible humanoid close to the 1.8 m collision capsule.
 	root.scale = Vector3.ONE * 0.88
 	return root
