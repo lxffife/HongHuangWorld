@@ -147,9 +147,20 @@ static func _build_wolf(root: Node3D, hide_color: Color, bone_color: Color) -> v
 	for side in [-1.0, 1.0]:
 		_part(root, "Ear" + str(side), _capsule(0.075, 0.34), Vector3(side * 0.19, 1.10, -0.63), hide_color, Vector3(0.0, 0.0, side * -0.22))
 		_part(root, "Eye" + str(side), _sphere(0.055), Vector3(side * 0.205, 0.88, -0.88), Color("#ffc46d"), Vector3.ZERO, 1.8)
-		for z in [-0.36, 0.42]:
-			_part(root, "Leg" + str(side) + str(z), _capsule(0.105, 0.66), Vector3(side * 0.25, 0.30, z), hide_color)
-	_part(root, "Tail", _capsule(0.10, 0.72), Vector3(0.0, 0.78, 0.76), hide_color, Vector3(-0.65, 0.0, 0.0))
+		for leg_index in range(2):
+			var front := leg_index == 0
+			var leg_pivot := Node3D.new()
+			leg_pivot.name = ("FrontLeg" if front else "HindLeg") + ("Left" if side < 0.0 else "Right")
+			leg_pivot.position = Vector3(side * 0.25, 0.56, -0.36 if front else 0.42)
+			root.add_child(leg_pivot)
+			_part(leg_pivot, "LowerLeg", _capsule(0.105, 0.66), Vector3(0.0, -0.27, 0.0), hide_color)
+			_part(leg_pivot, "Paw", _sphere(0.12), Vector3(0.0, -0.56, -0.045), bone_color)
+	var tail_pivot := Node3D.new()
+	tail_pivot.name = "TailPivot"
+	tail_pivot.position = Vector3(0.0, 0.78, 0.72)
+	root.add_child(tail_pivot)
+	_part(tail_pivot, "TailBase", _capsule(0.10, 0.48), Vector3(0.0, 0.16, 0.14), hide_color, Vector3(-0.58, 0.0, 0.0))
+	_part(tail_pivot, "TailTip", _sphere(0.12), Vector3(0.0, 0.36, 0.28), bone_color)
 
 
 static func _build_iron_beast(root: Node3D) -> void:
