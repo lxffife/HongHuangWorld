@@ -36,8 +36,12 @@ func (h *gameMonsterAdminHandlers) createDefinition(w http.ResponseWriter,r *htt
 	}
 	enabled:=true;if req.Enabled!=nil{enabled=*req.Enabled}
 	ctx,cancel:=context.WithTimeout(r.Context(),8*time.Second);defer cancel()
-	_,err:=h.db.ExecContext(ctx,`INSERT INTO monster_definitions(id,name,level,max_health,attack,defense,move_speed,aggro_radius,leash_radius,enabled) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,req.ID,req.Name,req.Level,req.MaxHealth,req.Attack,req.Defense,req.MoveSpeed,req.AggroRadius,req.LeashRadius,enabled)
+	tx,err:=h.db.BeginTx(ctx,nil);if err!=nil{http.Error(w,"internal server error",500);return};defer tx.Rollback()
+	_,err=tx.ExecContext(ctx,`INSERT INTO monster_definitions(id,name,level,max_health,attack,defense,move_speed,aggro_radius,leash_radius,enabled) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,req.ID,req.Name,req.Level,req.MaxHealth,req.Attack,req.Defense,req.MoveSpeed,req.AggroRadius,req.LeashRadius,enabled)
 	if err!=nil{if strings.Contains(strings.ToLower(err.Error()),"duplicate key"){http.Error(w,"monster definition already exists",409);return};h.logger.Error("create monster definition failed","monster_id",req.ID,"error",err);http.Error(w,"internal server error",500);return}
+	newSnapshot,err:=readConfigSnapshot(ctx,tx,"monster_definitions","id=$1",req.ID);if err!=nil{http.Error(w,"internal server error",500);return}
+	if err=recordConfigRevision(ctx,tx,"monster_definition",req.ID,"create",nil,newSnapshot);err!=nil{h.logger.Error("record monster definition creation failed","monster_id",req.ID,"error",err);http.Error(w,"internal server error",500);return}
+	if err=tx.Commit();err!=nil{http.Error(w,"internal server error",500);return}
 	writeJSON(w,201,map[string]any{"monster_id":req.ID,"created":true})
 }
 
@@ -51,13 +55,17 @@ func (h *gameMonsterAdminHandlers) createSpawnPoint(w http.ResponseWriter,r *htt
 	}
 	enabled:=true;if req.Enabled!=nil{enabled=*req.Enabled}
 	ctx,cancel:=context.WithTimeout(r.Context(),8*time.Second);defer cancel()
-	_,err:=h.db.ExecContext(ctx,`INSERT INTO world_monster_spawn_points(id,world_id,monster_id,spawn_x,spawn_z,rare_spawn,spawn_chance_percent,retry_spawn_seconds,first_spawn_delay_seconds,enabled) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,req.ID,req.WorldID,req.MonsterID,req.SpawnX,req.SpawnZ,req.RareSpawn,req.SpawnChancePercent,req.RetrySpawnSeconds,req.FirstSpawnDelaySeconds,enabled)
+	tx,err:=h.db.BeginTx(ctx,nil);if err!=nil{http.Error(w,"internal server error",500);return};defer tx.Rollback()
+	_,err=tx.ExecContext(ctx,`INSERT INTO world_monster_spawn_points(id,world_id,monster_id,spawn_x,spawn_z,rare_spawn,spawn_chance_percent,retry_spawn_seconds,first_spawn_delay_seconds,enabled) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,req.ID,req.WorldID,req.MonsterID,req.SpawnX,req.SpawnZ,req.RareSpawn,req.SpawnChancePercent,req.RetrySpawnSeconds,req.FirstSpawnDelaySeconds,enabled)
 	if err!=nil{
 		message:=strings.ToLower(err.Error())
 		if strings.Contains(message,"duplicate key"){http.Error(w,"spawn point already exists",409);return}
 		if strings.Contains(message,"foreign key"){http.Error(w,"world or monster definition not found",400);return}
 		h.logger.Error("create monster spawn point failed","spawn_id",req.ID,"error",err);http.Error(w,"internal server error",500);return
 	}
+	newSnapshot,err:=readConfigSnapshot(ctx,tx,"world_monster_spawn_points","id=$1",req.ID);if err!=nil{http.Error(w,"internal server error",500);return}
+	if err=recordConfigRevision(ctx,tx,"monster_spawn_point",req.ID,"create",nil,newSnapshot);err!=nil{h.logger.Error("record spawn point creation failed","spawn_id",req.ID,"error",err);http.Error(w,"internal server error",500);return}
+	if err=tx.Commit();err!=nil{http.Error(w,"internal server error",500);return}
 	writeJSON(w,201,map[string]any{"spawn_point_id":req.ID,"created":true})
 }
 
