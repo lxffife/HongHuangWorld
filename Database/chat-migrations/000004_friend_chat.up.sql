@@ -1,6 +1,9 @@
 BEGIN;
 
 -- Friend requests are intentionally separate from stranger private-message requests.
+ALTER TABLE chat_preferences
+    ADD COLUMN allow_friend_requests BOOLEAN NOT NULL DEFAULT TRUE;
+
 CREATE TABLE chat_friend_requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     requester_character_id UUID NOT NULL,
