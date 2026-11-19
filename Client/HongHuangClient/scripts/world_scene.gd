@@ -99,6 +99,7 @@ var npc_http: HTTPRequest
 var npc_request_context := ""
 var npc_definitions: Array = []
 var npc_nodes: Dictionary = {}
+var npc_animation_time := 0.0
 var npc_panel: PanelContainer
 var npc_title_label: Label
 var npc_dialogue_label: Label
@@ -1894,6 +1895,7 @@ func _process(delta: float) -> void:
 		var target: Vector3 = drop_targets.get(drop_id, drop.position)
 		drop.position = drop.position.lerp(target, minf(delta * 12.0, 1.0))
 	_update_floating_combat_labels(delta)
+	_animate_npc_visuals(delta)
 	_update_nearest_npc_prompt()
 	_update_exploration_proximity()
 	_animate_exploration_markers(delta)
@@ -2655,25 +2657,6 @@ func _render_world_npcs() -> void:
 		marker.position = Vector3(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_y", 0.0)), float(npc_data.get("position_z", 0.0)))
 		marker.rotation.y = float(npc_data.get("rotation_y", 0.0))
 
-		var robe_color := Color("#b9a47c")
-		var accent_color := Color("#e7c77f")
-		match npc_type:
-			"soup_keeper":
-				robe_color = Color("#315d68")
-				accent_color = Color("#9bd8ce")
-			"judge":
-				robe_color = Color("#55416f")
-				accent_color = Color("#b99be8")
-			"trial_master":
-				robe_color = Color("#713e37")
-				accent_color = Color("#e5a16c")
-			"guard":
-				robe_color = Color("#465568")
-				accent_color = Color("#a9c5d9")
-			_:
-				robe_color = Color("#746044")
-				accent_color = Color("#e6c77d")
-
 		var npc_visual := UnderworldVisualFactory.create_npc(npc_type, npc_name)
 		marker.add_child(npc_visual)
 		var accent_color := Color("#9bd8ce")
@@ -2699,6 +2682,30 @@ func _render_world_npcs() -> void:
 		add_child(marker)
 		npc_nodes[npc_id] = marker
 	_update_nearest_npc_prompt()
+
+func _animate_npc_visuals(delta: float) -> void:
+	npc_animation_time += delta
+	for npc_id in npc_nodes:
+		var marker := npc_nodes[npc_id] as Node3D
+		if not is_instance_valid(marker) or marker.get_child_count() == 0:
+			continue
+		var visual := marker.get_child(0) as Node3D
+		if not is_instance_valid(visual):
+			continue
+		var phase := float(abs(hash(str(npc_id))) % 100) * 0.0628
+		var breath := sin(npc_animation_time * 1.7 + phase)
+		visual.position.y = breath * 0.018
+		var left_arm := visual.get_node_or_null("ArmPivotLeft") as Node3D
+		var right_arm := visual.get_node_or_null("ArmPivotRight") as Node3D
+		if is_instance_valid(left_arm):
+			left_arm.rotation.z = -0.035 + breath * 0.025
+		if is_instance_valid(right_arm):
+			right_arm.rotation.z = 0.035 - breath * 0.025
+		var mist := visual.get_node_or_null("BowlMist") as Node3D
+		if is_instance_valid(mist):
+			mist.position.y = 1.16 + sin(npc_animation_time * 2.4 + phase) * 0.045
+			var mist_scale := 1.0 + sin(npc_animation_time * 2.0 + phase) * 0.12
+			mist.scale = Vector3.ONE * mist_scale
 
 func _update_nearest_npc_prompt() -> void:
 	if npc_interact_button == null or not is_instance_valid(local_player):
