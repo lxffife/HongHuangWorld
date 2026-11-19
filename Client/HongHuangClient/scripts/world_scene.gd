@@ -2674,37 +2674,20 @@ func _render_world_npcs() -> void:
 				robe_color = Color("#746044")
 				accent_color = Color("#e6c77d")
 
-		var robe_mesh := CapsuleMesh.new()
-		robe_mesh.radius = 0.43 if npc_type == "soup_keeper" else 0.38
-		robe_mesh.height = 1.65
-		_make_npc_part(marker, "Robe", robe_mesh, Vector3(0.0, 0.83, 0.0), robe_color)
-		var head_mesh := SphereMesh.new()
-		head_mesh.radius = 0.25
-		head_mesh.height = 0.5
-		_make_npc_part(marker, "Head", head_mesh, Vector3(0.0, 1.82, 0.0), Color("#d5b69a"))
-		var hair_mesh := SphereMesh.new()
-		hair_mesh.radius = 0.27
-		hair_mesh.height = 0.3
-		_make_npc_part(marker, "Hair", hair_mesh, Vector3(0.0, 2.02, -0.015), Color("#25232c"))
-
-		if npc_type == "soup_keeper" or npc_name == "孟婆":
-			# A small jade bowl makes Meng Po recognizable even before the nameplate is read.
-			var bowl_mesh := CylinderMesh.new()
-			bowl_mesh.top_radius = 0.19
-			bowl_mesh.bottom_radius = 0.12
-			bowl_mesh.height = 0.12
-			_make_npc_part(marker, "ForgetfulnessBowl", bowl_mesh, Vector3(0.38, 1.05, -0.08), Color("#83c9bd"), true)
-			var hair_pin := BoxMesh.new()
-			hair_pin.size = Vector3(0.08, 0.42, 0.08)
-			_make_npc_part(marker, "JadeHairPin", hair_pin, Vector3(0.18, 2.12, 0.0), accent_color)
-		elif npc_type == "judge":
-			var crown_mesh := BoxMesh.new()
-			crown_mesh.size = Vector3(0.62, 0.18, 0.22)
-			_make_npc_part(marker, "JudgeCrown", crown_mesh, Vector3(0.0, 2.13, 0.0), accent_color, true)
-		elif npc_type == "trial_master" or npc_type == "guard":
-			var shoulder_mesh := BoxMesh.new()
-			shoulder_mesh.size = Vector3(1.0, 0.22, 0.48)
-			_make_npc_part(marker, "ShoulderArmor", shoulder_mesh, Vector3(0.0, 1.42, 0.0), accent_color)
+		var npc_visual := UnderworldVisualFactory.create_npc(npc_type, npc_name)
+		marker.add_child(npc_visual)
+		var accent_color := Color("#9bd8ce")
+		match npc_type:
+			"judge":
+				accent_color = Color("#b99be8")
+			"trial_master":
+				accent_color = Color("#e5a16c")
+			"guard":
+				accent_color = Color("#a9c5d9")
+			"soup_keeper":
+				accent_color = Color("#9bd8ce")
+			_:
+				accent_color = Color("#e6c77d")
 
 		var label := Label3D.new()
 		var title := str(npc_data.get("title", ""))
