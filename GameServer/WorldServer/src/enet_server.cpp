@@ -75,12 +75,17 @@ struct PlayerState {
     Clock::time_point last_chat_at{};
 };
 
+enum class MonsterAttackPhase { Ready, Windup, Recovery };
+
 struct MonsterRuntime {
     honghuang::simulation::MonsterDefinition definition;
     honghuang::simulation::MonsterState state;
     std::string runtime_id;
     Clock::time_point respawn_at{};
     Clock::time_point last_attack_at{};
+    Clock::time_point attack_phase_started_at{};
+    MonsterAttackPhase attack_phase{MonsterAttackPhase::Ready};
+    std::string attack_target_character_id;
     bool rare_spawn{false};
     int spawn_chance_percent{100};
     int retry_spawn_seconds{60};
@@ -2154,6 +2159,9 @@ struct EnetServer::Impl {
                     monster.state = {monster.definition.spawn_x, monster.definition.spawn_z,
                                      monster.definition.max_health};
                     monster.respawn_at = Clock::time_point{};
+                    monster.attack_phase = MonsterAttackPhase::Ready;
+                    monster.attack_target_character_id.clear();
+                    monster.last_attack_at = Clock::time_point{};
                 }
                 continue;
             }
@@ -2200,22 +2208,80 @@ struct EnetServer::Impl {
                           << monster.runtime_id << '\n';
                 continue;
             }
+            const auto windup_duration = monster.rare_spawn
+                ? std::chrono::milliseconds(900) : std::chrono::milliseconds(520);
+            const auto recovery_duration = monster.rare_spawn
+                ? std::chrono::milliseconds(780) : std::chrono::milliseconds(420);
+            const auto attack_cooldown = monster.rare_spawn
+                ? std::chrono::milliseconds(2600) : std::chrono::milliseconds(1500);
+            const auto broadcast_attack_phase = [&](const std::string& phase) {
+                const Json action{
+                    {"source_entity_id", monster.runtime_id},
+                    {"source", "monster"},
+                    {"action", "attack"},
+                    {"phase", phase},
+                    {"target_character_id", monster.attack_target_character_id},
+                    {"windup_ms", windup_duration.count()},
+                    {"recovery_ms", recovery_duration.count()}
+                };
+                for (const auto& [observer_peer, observer] : players) {
+                    if (!honghuang::simulation::within_interest_radius(
+                            monster.state.x, monster.state.z, observer.x, observer.z, kInterestRadius)) continue;
+                    send_json(observer_peer, honghuang::protocol::MessageType::MonsterActionEvent, action);
+                }
+            };
+
             if (monster.state.mode != honghuang::simulation::MonsterMode::Chasing ||
-                monster.state.target_id.empty()) continue;
+                monster.state.target_id.empty()) {
+                if (monster.attack_phase == MonsterAttackPhase::Windup) {
+                    monster.attack_phase = MonsterAttackPhase::Ready;
+                    monster.attack_target_character_id.clear();
+                } else if (monster.attack_phase == MonsterAttackPhase::Recovery &&
+                           now - monster.attack_phase_started_at >= recovery_duration) {
+                    monster.attack_phase = MonsterAttackPhase::Ready;
+                }
+                continue;
+            }
+
             auto victim = std::find_if(players.begin(), players.end(), [&](const auto& entry) {
                 return entry.second.character_id == monster.state.target_id;
             });
-            if (victim == players.end() || victim->second.health <= 0) continue;
+            if (victim == players.end() || victim->second.health <= 0) {
+                if (monster.attack_phase == MonsterAttackPhase::Windup) {
+                    monster.attack_phase = MonsterAttackPhase::Ready;
+                    monster.attack_target_character_id.clear();
+                }
+                continue;
+            }
             auto& player = victim->second;
             const double attack_dx = static_cast<double>(player.x) - monster.state.x;
             const double attack_dz = static_cast<double>(player.z) - monster.state.z;
             const double attack_range = static_cast<double>(monster.definition.attack_range);
-            constexpr auto kMonsterAttackCooldown = std::chrono::milliseconds(1500);
-            if (attack_dx * attack_dx + attack_dz * attack_dz >
-                attack_range * attack_range) continue;
-            if (monster.last_attack_at.time_since_epoch().count() != 0 &&
-                now - monster.last_attack_at < kMonsterAttackCooldown) continue;
-            monster.last_attack_at = now;
+            const bool in_attack_range = attack_dx * attack_dx + attack_dz * attack_dz <=
+                attack_range * attack_range;
+
+            if (monster.attack_phase == MonsterAttackPhase::Recovery) {
+                if (now - monster.attack_phase_started_at < recovery_duration) continue;
+                monster.attack_phase = MonsterAttackPhase::Ready;
+            }
+            if (monster.attack_phase == MonsterAttackPhase::Windup) {
+                if (!in_attack_range || monster.attack_target_character_id != player.character_id) {
+                    monster.attack_phase = MonsterAttackPhase::Ready;
+                    monster.attack_target_character_id.clear();
+                    continue;
+                }
+                if (now - monster.attack_phase_started_at < windup_duration) continue;
+            } else {
+                if (!in_attack_range) continue;
+                if (monster.last_attack_at.time_since_epoch().count() != 0 &&
+                    now - monster.last_attack_at < attack_cooldown) continue;
+                monster.attack_phase = MonsterAttackPhase::Windup;
+                monster.attack_phase_started_at = now;
+                monster.attack_target_character_id = player.character_id;
+                broadcast_attack_phase("windup");
+                continue;
+            }
+
             const honghuang::simulation::CombatantStats attacker{
                 static_cast<std::int64_t>(monster.definition.attack),
                 static_cast<std::int64_t>(monster.definition.defense), 1, 1
@@ -2228,24 +2294,15 @@ struct EnetServer::Impl {
                     attacker, defender, honghuang::simulation::AttackProfile{}, damage)) {
                 std::cerr << "Monster attack rejected by combat validation: "
                           << monster.runtime_id << '\n';
+                monster.attack_phase = MonsterAttackPhase::Recovery;
+                monster.attack_phase_started_at = now;
                 continue;
             }
             player.health = damage.remaining_health;
-            // Broadcast a visual-only action cue to nearby observers. Damage and health
-            // remain private to the actual victim's authoritative CombatEvent.
-            const Json monster_action{
-                {"source_entity_id", monster.runtime_id},
-                {"source", "monster"},
-                {"action", "attack"},
-                {"target_character_id", player.character_id}
-            };
-            for (const auto& [observer_peer, observer] : players) {
-                if (!honghuang::simulation::within_interest_radius(
-                        monster.state.x, monster.state.z, observer.x, observer.z, kInterestRadius)) {
-                    continue;
-                }
-                send_json(observer_peer, honghuang::protocol::MessageType::MonsterActionEvent, monster_action);
-            }
+            monster.last_attack_at = now;
+            monster.attack_phase = MonsterAttackPhase::Recovery;
+            monster.attack_phase_started_at = now;
+            broadcast_attack_phase("impact");
             send_json(victim->first, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", true}, {"source", "monster"},
                            {"source_entity_id", monster.runtime_id},
