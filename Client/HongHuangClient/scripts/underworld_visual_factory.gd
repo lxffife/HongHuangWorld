@@ -98,7 +98,7 @@ static func create_fengdu_gate() -> Node3D:
 	var roof := Color("#252638")
 	_part(root, "Foundation", _box(Vector3(14.0, 0.48, 4.6)), Vector3(0.0, 0.18, -18.0), Color("#34313f"))
 	for side in [-1.0, 1.0]:
-		var x := side * 5.0
+		var x: float = float(side) * 5.0
 		var column := CylinderMesh.new()
 		column.top_radius = 0.52
 		column.bottom_radius = 0.72
