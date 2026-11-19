@@ -2470,8 +2470,21 @@ func _animate_warrior_monster(monster: Node3D, stride: float, moving: bool, phas
 
 
 func _animate_soul_monster(monster: Node3D, delta: float, phase: float, moving: bool, archetype: String) -> void:
-	var drift_speed := 1.35 if archetype == "life_soul" else (2.1 if archetype == "wind_soul" else 1.0)
-	var amplitude := 0.12 if archetype == "life_soul" else (0.20 if archetype == "wind_soul" else 0.075)
+	var drift_speed := 1.0
+	var amplitude := 0.075
+	match archetype:
+		"life_soul":
+			drift_speed = 1.35
+			amplitude = 0.12
+		"wind_soul":
+			drift_speed = 2.1
+			amplitude = 0.20
+		"fire_soul":
+			drift_speed = 1.75
+			amplitude = 0.16
+		"frost_soul":
+			drift_speed = 0.72
+			amplitude = 0.055
 	var core := monster.get_node_or_null("SoulCore") as Node3D
 	if is_instance_valid(core):
 		core.position.y = 0.94 + sin(monster_animation_time * drift_speed + phase) * amplitude
@@ -2486,7 +2499,14 @@ func _animate_soul_monster(monster: Node3D, delta: float, phase: float, moving: 
 		lower.rotation.z = sin(monster_animation_time * drift_speed * 0.8 + phase) * (0.18 if moving else 0.10)
 	var orbit := monster.get_node_or_null("SoulOrbit") as Node3D
 	if is_instance_valid(orbit):
-		orbit.rotation.y += delta * (1.8 if archetype == "wind_soul" else 0.72)
+		var orbit_speed := 0.72
+		if archetype == "wind_soul":
+			orbit_speed = 1.8
+		elif archetype == "fire_soul":
+			orbit_speed = 1.25
+		elif archetype == "frost_soul":
+			orbit_speed = 0.38
+		orbit.rotation.y += delta * orbit_speed
 		orbit.scale = orbit.scale.lerp(Vector3.ONE, minf(delta * 6.0, 1.0))
 	var spark := monster.get_node_or_null("SoulSpark") as Node3D
 	if is_instance_valid(spark):
@@ -2503,6 +2523,17 @@ func _animate_soul_monster(monster: Node3D, delta: float, phase: float, moving: 
 		if is_instance_valid(wisp):
 			wisp.position.y = 0.60 + sin(monster_animation_time * drift_speed + phase + side) * amplitude * 1.4
 			wisp.position.x = side * (0.47 + sin(monster_animation_time * 0.9 + phase) * 0.045)
+		var flame := monster.get_node_or_null("FlameOrb" + str(side)) as Node3D
+		if is_instance_valid(flame):
+			flame.position.y = 0.66 + sin(monster_animation_time * 2.6 + phase + side) * 0.12
+			flame.scale = Vector3.ONE * (0.85 + absf(sin(monster_animation_time * 3.1 + phase)) * 0.32)
+		var ice_shard := monster.get_node_or_null("IceShard" + str(side)) as Node3D
+		if is_instance_valid(ice_shard):
+			ice_shard.rotation.y = sin(monster_animation_time * 0.8 + phase + side) * 0.12
+			ice_shard.position.y = 0.70 + sin(monster_animation_time * 0.9 + phase + side) * 0.035
+	var frost_orbit := monster.get_node_or_null("FrostOrbit") as Node3D
+	if is_instance_valid(frost_orbit):
+		frost_orbit.rotation.y -= delta * 0.28
 
 
 func _on_world_disconnected() -> void:
