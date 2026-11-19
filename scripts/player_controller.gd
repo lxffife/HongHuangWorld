@@ -111,8 +111,19 @@ func _add_key_action(action: String, keycode: int) -> void:
 	InputMap.action_add_event(action, logical_event)
 
 
+func _is_text_input_focused() -> bool:
+	var viewport := get_viewport()
+	if viewport == null:
+		return false
+	var focused_control := viewport.gui_get_focus_owner()
+	return focused_control is LineEdit or focused_control is TextEdit
+
 func _is_move_key_down(physical_key: int, logical_key: int) -> bool:
-	# 直接查询当前键盘状态，按键松开后立即归零，不依赖释放事件是否被 UI/焦点吞掉。
+	# Text inputs (including Chinese IME composition) own the keyboard.
+	# Never poll WASD while a LineEdit/TextEdit has focus: IME key events may
+	# be consumed by the control while global key-state polling still sees them.
+	if _is_text_input_focused():
+		return false
 	return Input.is_physical_key_pressed(physical_key) or Input.is_key_pressed(logical_key)
 
 func is_move_key_pressed(direction: String) -> bool:
@@ -158,6 +169,10 @@ func _physics_process(delta: float) -> void:
 	if is_dead:
 		velocity = Vector3.ZERO
 		return
+	if _is_text_input_focused():
+		# Clear queued jump as well; no gameplay movement should leak through
+		# while the player is composing or typing in chat/another text field.
+		jump_pending = false
 	var input_2d := _get_move_input()
 	current_move_input = input_2d
 	if camera_pivot == null or not is_instance_valid(camera_pivot):
