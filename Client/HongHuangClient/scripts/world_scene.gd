@@ -1,6 +1,7 @@
 extends Node3D
 
 const UnderworldVisualFactory = preload("res://scripts/underworld_visual_factory.gd")
+const FriendPanelScript = preload("res://scripts/friend_panel.gd")
 
 @onready var hud_label: Label = $HUD/Panel/Margin/Content/Status
 @onready var progression_label: Label = $HUD/Panel/Margin/Content/Progression
@@ -38,7 +39,11 @@ var chat_input: LineEdit
 var chat_status: Label
 var chat_scroll: ScrollContainer
 var chat_toggle_button: Button
+var chat_title_label: Label
 var chat_unread_badge: Label
+var friend_panel: Control
+var selected_friend_character_id := ""
+var selected_friend_character_name := ""
 var chat_unread_count := 0
 var chat_expanded := false
 var chat_restore_mouse_captured := false
@@ -146,6 +151,8 @@ func _ready() -> void:
 		HHChatNetwork.message_received.connect(_on_chat_socket_message)
 	if not HHChatNetwork.history_received.is_connected(_on_chat_history_received):
 		HHChatNetwork.history_received.connect(_on_chat_history_received)
+	if not HHChatNetwork.conversation_history_received.is_connected(_on_chat_conversation_history_received):
+		HHChatNetwork.conversation_history_received.connect(_on_chat_conversation_history_received)
 	if not HHChatNetwork.connected.is_connected(_on_chat_socket_connected):
 		HHChatNetwork.connected.connect(_on_chat_socket_connected)
 	if not HHChatNetwork.connection_error.is_connected(_on_chat_socket_error):
@@ -1241,10 +1248,17 @@ func _build_chat_hud() -> void:
 	chat_panel.add_child(layout)
 	var heading := HBoxContainer.new()
 	layout.add_child(heading)
-	var title := Label.new()
-	title.text = "万界传音 · 附近"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	heading.add_child(title)
+	chat_title_label = Label.new()
+	chat_title_label.text = "万界传音 · 附近"
+	chat_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_child(chat_title_label)
+	var friends_button := Button.new()
+	friends_button.text = "好友"
+	friends_button.pressed.connect(func():
+		if is_instance_valid(friend_panel):
+			friend_panel.open_panel()
+	)
+	heading.add_child(friends_button)
 	chat_toggle_button = Button.new()
 	chat_toggle_button.text = "展开"
 	chat_toggle_button.pressed.connect(func(): _set_chat_expanded(not chat_expanded))
@@ -1288,12 +1302,15 @@ func _build_chat_hud() -> void:
 	chat_status.text = "附近频道 · 仅同一实例、80 米范围内可见"
 	chat_status.modulate = Color(0.72, 0.78, 0.84)
 	layout.add_child(chat_status)
+	friend_panel = FriendPanelScript.new()
+	friend_panel.open_private_chat.connect(_open_friend_conversation)
+	hud.add_child(friend_panel)
 	_set_chat_expanded(false)
 
 func is_gameplay_input_blocked() -> bool:
 	# Keep movement disabled for the entire time the chat drawer is open,
 	# including Chinese IME candidate/composition states.
-	if chat_expanded:
+	if chat_expanded or (is_instance_valid(friend_panel) and friend_panel.visible):
 		return true
 	var focused_control := get_viewport().gui_get_focus_owner()
 	return focused_control is LineEdit or focused_control is TextEdit
@@ -1346,6 +1363,12 @@ func _layout_hud() -> void:
 
 	# The chat drawer owns the lower-right corner. Its width and height adapt
 	# to small windows, and the interaction prompt is placed above it.
+	if is_instance_valid(friend_panel):
+		friend_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		friend_panel.offset_left = -378.0
+		friend_panel.offset_top = 72.0
+		friend_panel.offset_right = -18.0
+		friend_panel.offset_bottom = 548.0
 	var chat_height := 48.0
 	if chat_expanded:
 		chat_height = minf(330.0, maxf(210.0, viewport_size.y - 48.0))
@@ -1393,7 +1416,10 @@ func _on_chat_input_submitted(value: String) -> void:
 	else:
 		var raw_id := Crypto.new().generate_random_bytes(16).hex_encode()
 		var message_id := "%s-%s-%s-%s-%s" % [raw_id.substr(0, 8), raw_id.substr(8, 4), raw_id.substr(12, 4), raw_id.substr(16, 4), raw_id.substr(20, 12)]
-		error = HHChatNetwork.send_message(selected_chat_channel, normalized, message_id)
+		if selected_chat_channel == "whisper":
+			error = HHChatNetwork.send_message("whisper", normalized, message_id, selected_friend_character_id)
+		else:
+			error = HHChatNetwork.send_message(selected_chat_channel, normalized, message_id)
 	if error != OK:
 		chat_status.text = "发送失败：" + str(error)
 		return
@@ -1403,11 +1429,49 @@ func _on_chat_input_submitted(value: String) -> void:
 	chat_input.grab_focus()
 
 
+func _active_chat_storage_key() -> String:
+	if selected_chat_channel == "whisper":
+		return "whisper:" + selected_friend_character_id
+	return selected_chat_channel
+
+func _open_friend_conversation(character_id: String, character_name: String) -> void:
+	if character_id.is_empty():
+		return
+	selected_chat_channel = "whisper"
+	selected_friend_character_id = character_id
+	selected_friend_character_name = character_name
+	chat_title_label.text = "好友私聊 · " + character_name
+	chat_input.placeholder_text = "发送给 " + character_name + "（最多 200 字）"
+	_set_chat_expanded(true)
+	_render_chat_lines()
+	if HHChatNetwork.socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
+		HHChatNetwork.fetch_conversation_history(character_id, 50)
+		chat_status.text = "好友私聊 · 独立聊天连接已建立"
+	else:
+		chat_status.text = "好友私聊 · 正在连接聊天服务"
+
+func _on_chat_conversation_history_received(character_id: String, messages: Array) -> void:
+	if character_id != selected_friend_character_id:
+		return
+	for message in messages:
+		if not message is Dictionary:
+			continue
+		var sender := str(message.get("sender_name", "未知玩家"))
+		var content := str(message.get("content", ""))
+		if not content.is_empty():
+			_append_chat_line("[" + sender + "] " + content, "whisper:" + character_id, str(message.get("id", "")), str(message.get("created_at", "")))
+	if selected_chat_channel == "whisper":
+		_render_chat_lines()
+		call_deferred("_scroll_chat_to_bottom")
+
 func _select_chat_channel(channel: String) -> void:
 	if channel not in ["nearby", "world", "cross_world"]:
 		return
 	selected_chat_channel = channel
+	selected_friend_character_id = ""
+	selected_friend_character_name = ""
 	var names := {"nearby": "附近", "world": "世界", "cross_world": "跨界"}
+	chat_title_label.text = "万界传音 · " + str(names[channel])
 	chat_input.placeholder_text = "输入" + str(names[channel]) + "消息（最多 200 字）"
 	_render_chat_lines()
 	if chat_expanded:
@@ -1423,6 +1487,8 @@ func _on_chat_socket_connected() -> void:
 	HHChatNetwork.fetch_history("nearby", 50)
 	HHChatNetwork.fetch_history("world", 50)
 	HHChatNetwork.fetch_history("cross_world", 50)
+	if selected_chat_channel == "whisper" and not selected_friend_character_id.is_empty():
+		HHChatNetwork.fetch_conversation_history(selected_friend_character_id, 50)
 	if selected_chat_channel != "nearby" and is_instance_valid(chat_status):
 		chat_status.text = "聊天服务已连接 · " + ("世界频道" if selected_chat_channel == "world" else "跨界频道")
 
@@ -1447,18 +1513,25 @@ func _on_chat_socket_message(message: Dictionary) -> void:
 			chat_status.text = str(message.get("reason", "聊天消息未送达。"))
 		return
 	var channel := str(message.get("channel", selected_chat_channel))
-	if channel not in ["nearby", "world", "cross_world"]:
+	if channel not in ["nearby", "world", "cross_world", "whisper"]:
 		return
 	var sender := str(message.get("sender_name", "未知玩家"))
 	var content := str(message.get("content", ""))
 	var message_id := str(message.get("id", ""))
 	var is_duplicate := not message_id.is_empty() and chat_seen_ids.has(message_id)
+	var target_channel := channel
+	if channel == "whisper":
+		var peer_id := str(message.get("sender_character_id", ""))
+		if _is_local_chat_message(message):
+			peer_id = str(message.get("recipient_character_id", ""))
+		target_channel = "whisper:" + peer_id
 	if not content.is_empty():
-		_append_chat_line("[" + sender + "] " + content, channel, message_id)
-		if not is_duplicate and not _is_local_chat_message(message) and not chat_expanded:
+		_append_chat_line("[" + sender + "] " + content, target_channel, message_id, str(message.get("created_at", "")))
+		var conversation_not_open := channel == "whisper" and (selected_chat_channel != "whisper" or target_channel != "whisper:" + selected_friend_character_id)
+		if not is_duplicate and not _is_local_chat_message(message) and (not chat_expanded or conversation_not_open):
 			chat_unread_count = mini(chat_unread_count + 1, 99)
 			_update_chat_unread_badge()
-		if is_instance_valid(chat_status) and channel == selected_chat_channel:
+		if is_instance_valid(chat_status) and target_channel == _active_chat_storage_key():
 			chat_status.text = "聊天消息已送达"
 
 func _is_local_chat_message(message: Dictionary) -> bool:
@@ -1486,7 +1559,7 @@ func _on_chat_event(event: Dictionary) -> void:
 		chat_status.text = "附近频道 · 消息已写入本地持久队列，正在投递"
 
 func _append_chat_line(line: String, channel: String = "", message_id: String = "", created_at: String = "") -> void:
-	var target_channel := channel if not channel.is_empty() else selected_chat_channel
+	var target_channel := channel if not channel.is_empty() else _active_chat_storage_key()
 	if not message_id.is_empty():
 		if chat_seen_ids.has(message_id):
 			return
@@ -1512,7 +1585,7 @@ func _append_chat_line(line: String, channel: String = "", message_id: String = 
 	while lines.size() > 40:
 		lines.pop_front()
 	chat_lines_by_channel[target_channel] = lines
-	if target_channel == selected_chat_channel:
+	if target_channel == _active_chat_storage_key():
 		_render_chat_lines()
 		if chat_expanded:
 			call_deferred("_scroll_chat_to_bottom")
@@ -1543,7 +1616,7 @@ func _scroll_chat_to_bottom() -> void:
 func _render_chat_lines() -> void:
 	if not is_instance_valid(chat_log):
 		return
-	var visible_lines: Array = chat_lines_by_channel.get(selected_chat_channel, [])
+	var visible_lines: Array = chat_lines_by_channel.get(_active_chat_storage_key(), [])
 	for child in chat_log.get_children():
 		child.queue_free()
 	for entry in visible_lines:
