@@ -2,6 +2,7 @@ package worldentry
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"math"
 	"testing"
@@ -94,5 +95,30 @@ func TestWorldSnapshotAllowsOmittedHealth(t *testing.T) {
 	var input SessionSnapshot
 	if input.Health != nil {
 		t.Fatal("omitted health must remain nil for backward-compatible position-only snapshots")
+	}
+}
+
+func TestPlayerSnapshotSerializesBirthInheritance(t *testing.T) {
+	snapshot := PlayerSnapshot{
+		CharacterID: "character-1",
+		BirthInheritance: map[string]any{
+			"dominant_attribute": "spirit",
+			"source_growth_stage": float64(3),
+		},
+	}
+	encoded, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatalf("marshal player snapshot: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("unmarshal player snapshot: %v", err)
+	}
+	birth, ok := decoded["birth_inheritance"].(map[string]any)
+	if !ok {
+		t.Fatal("birth_inheritance was not included as an object")
+	}
+	if birth["dominant_attribute"] != "spirit" {
+		t.Fatalf("dominant_attribute = %v, want spirit", birth["dominant_attribute"])
 	}
 }
