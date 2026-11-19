@@ -238,6 +238,10 @@ func decodeChatEvent(data []byte) (chatEventEnvelope, error) {
 		if message.WorldID == "" || message.WorldInstanceID == "" || len(message.RecipientCharacterIDs) == 0 || len(message.RecipientCharacterIDs) > 512 {
 			return chatEventEnvelope{}, errInvalidChatEvent
 		}
+	case "whisper":
+		if message.WorldID != "" || message.WorldInstanceID != "" || message.RecipientCharacterID == "" || message.ConversationID == "" || len(message.RecipientCharacterIDs) != 0 {
+			return chatEventEnvelope{}, errInvalidChatEvent
+		}
 	default:
 		return chatEventEnvelope{}, errInvalidChatEvent
 	}
