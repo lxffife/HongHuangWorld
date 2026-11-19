@@ -38,6 +38,13 @@ int main() {
         assert(chat_decoded.payload == chat_payload);
     }
 
+    const std::vector<std::uint8_t> action_payload{'{', '}'};
+    const auto action_frame = encode_frame(MessageType::MonsterActionEvent, action_payload);
+    Frame action_decoded{};
+    assert(decode_frame(action_frame, action_decoded, error));
+    assert(action_decoded.type == MessageType::MonsterActionEvent);
+    assert(action_decoded.payload == action_payload);
+
     const std::vector<std::uint8_t> lifecycle_payload{'{', '}'};
     for (const auto event_type : {MessageType::PlayerJoined, MessageType::PlayerLeft}) {
         const auto event_frame = encode_frame(event_type, lifecycle_payload);
