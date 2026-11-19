@@ -57,8 +57,10 @@ inline MonsterAttackProfile monster_attack_profile(const MonsterDefinition& defi
         profile.windup_ms = 760;
         profile.recovery_ms = 680;
         profile.cooldown_ms = 2100;
-        profile.range = std::min(std::max(definition.attack_range, 6.0F),
-                                 definition.leash_radius - 0.1F);
+        if (definition.leash_radius > 6.1F) {
+            profile.range = std::min(std::max(definition.attack_range, 6.0F),
+                                     definition.leash_radius - 0.1F);
+        }
         profile.style = "soul_bolt";
     }
     return profile;
