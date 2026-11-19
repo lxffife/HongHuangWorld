@@ -1988,6 +1988,9 @@ func _set_elemental_telegraph(monster: Node3D, enabled: bool) -> void:
 		return
 	telegraph.visible = enabled
 	if enabled:
+		var previous_tween: Variant = telegraph.get_meta("pulse_tween", null)
+		if previous_tween is Tween and (previous_tween as Tween).is_running():
+			(previous_tween as Tween).kill()
 		telegraph.scale = Vector3.ONE * 0.88
 		var tween := create_tween()
 		tween.set_loops()
@@ -2232,13 +2235,13 @@ func _on_player_left(character_id: String) -> void:
 
 func _create_remote_player(character_name: String) -> Node3D:
 	var remote := Node3D.new()
-	var body := MeshInstance3D.new()
 	var is_underworld := str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu"
 	if is_underworld:
+		var body := MeshInstance3D.new()
+		body.name = "RemoteBody"
 		var orb := SphereMesh.new()
 		orb.radius = 0.34
 		orb.height = 0.68
-		body.name = "RemoteBody"
 		body.mesh = orb
 		var spirit_material := StandardMaterial3D.new()
 		spirit_material.albedo_color = Color(0.36, 0.72, 1.0, 0.72)
@@ -2249,6 +2252,7 @@ func _create_remote_player(character_name: String) -> Node3D:
 		spirit_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		body.material_override = spirit_material
 		body.position.y = 0.42
+		remote.add_child(body)
 		var halo := MeshInstance3D.new()
 		halo.name = "RemoteHalo"
 		var torus := TorusMesh.new()
@@ -2266,21 +2270,17 @@ func _create_remote_player(character_name: String) -> Node3D:
 		halo.position.y = 0.42
 		remote.add_child(halo)
 	else:
-		body.name = "RemoteBody"
-		var capsule := CapsuleMesh.new()
-		capsule.radius = 0.4
-		capsule.height = 1.75
-		body.mesh = capsule
-		var material := StandardMaterial3D.new()
-		material.albedo_color = Color("#79a9c9")
-		body.material_override = material
-		body.position.y = 0.88
-	remote.add_child(body)
+		var humanoid := VisualModelLibrary.instantiate_model(
+			"player_humanoid",
+			func() -> Node3D: return UnderworldVisualFactory.create_player_humanoid()
+		)
+		humanoid.name = "RemoteHumanoid"
+		remote.add_child(humanoid)
 	remote.set_meta("is_underworld", is_underworld)
 	remote.set_meta("remote_animation_time", 0.0)
 	var label := Label3D.new()
 	label.text = character_name
-	label.position.y = 1.15 if is_underworld else 2.0
+	label.position.y = 1.15 if is_underworld else 2.25
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	remote.add_child(label)
 	add_child(remote)
@@ -2336,11 +2336,28 @@ func _process(delta: float) -> void:
 		remote.rotation.y = lerp_angle(remote.rotation.y, target_yaw, minf(delta * 12.0, 1.0))
 		var remote_time := float(remote.get_meta("remote_animation_time", 0.0)) + delta
 		remote.set_meta("remote_animation_time", remote_time)
-		var remote_body := remote.get_node_or_null("RemoteBody") as MeshInstance3D
-		if is_instance_valid(remote_body):
-			var base_y := 0.42 if bool(remote.get_meta("is_underworld", false)) else 0.88
-			var bob := sin(remote_time * (9.0 if remote_moving else 1.8)) * (0.035 if remote_moving else 0.012)
-			remote_body.position.y = base_y + bob
+		var bob := sin(remote_time * (9.0 if remote_moving else 1.8)) * (0.035 if remote_moving else 0.012)
+		if bool(remote.get_meta("is_underworld", false)):
+			var remote_body := remote.get_node_or_null("RemoteBody") as MeshInstance3D
+			if is_instance_valid(remote_body):
+				remote_body.position.y = 0.42 + bob
+		else:
+			var remote_humanoid := remote.get_node_or_null("RemoteHumanoid") as Node3D
+			if is_instance_valid(remote_humanoid):
+				remote_humanoid.position.y = bob
+				var remote_stride := sin(remote_time * (9.0 if remote_moving else 1.8)) * (0.38 if remote_moving else 0.012)
+				var remote_left_arm := remote_humanoid.get_node_or_null("ArmPivotLeft") as Node3D
+				var remote_right_arm := remote_humanoid.get_node_or_null("ArmPivotRight") as Node3D
+				var remote_left_leg := remote_humanoid.get_node_or_null("LegPivotLeft") as Node3D
+				var remote_right_leg := remote_humanoid.get_node_or_null("LegPivotRight") as Node3D
+				if is_instance_valid(remote_left_arm):
+					remote_left_arm.rotation.x = remote_stride
+				if is_instance_valid(remote_right_arm):
+					remote_right_arm.rotation.x = -remote_stride
+				if is_instance_valid(remote_left_leg):
+					remote_left_leg.rotation.x = -remote_stride * 0.82
+				if is_instance_valid(remote_right_leg):
+					remote_right_leg.rotation.x = remote_stride * 0.82
 		var remote_halo := remote.get_node_or_null("RemoteHalo") as MeshInstance3D
 		if is_instance_valid(remote_halo):
 			remote_halo.rotation.y += delta * (1.05 if remote_moving else 0.34)
@@ -2387,8 +2404,11 @@ func _animate_monster_visuals(delta: float) -> void:
 		var attack_phase_duration := maxf(float(monster.get_meta("attack_phase_duration", 0.2)), 0.1)
 		monster.set_meta("attack_phase_time", attack_phase_time)
 		if attack_phase_time <= 0.0:
-			if attack_phase == "windup" and str(monster.get_meta("attack_style", "")) == "heavy_slam":
-				_set_iron_slam_telegraph(monster, false)
+			if attack_phase == "windup":
+				if str(monster.get_meta("attack_style", "")) == "heavy_slam":
+					_set_iron_slam_telegraph(monster, false)
+				elif str(monster.get_meta("attack_style", "")) == "soul_bolt":
+					_set_elemental_telegraph(monster, false)
 			if attack_phase == "impact":
 				attack_phase = "recovery"
 				attack_phase_time = maxf(float(monster.get_meta("attack_recovery_duration", 0.42)), 0.1)
