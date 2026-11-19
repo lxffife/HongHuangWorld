@@ -1031,6 +1031,67 @@ func _upsert_remote_player(entity: Dictionary) -> void:
 		float(entity.get("z", 0.0))
 	)
 	remote_yaws[character_id] = float(entity.get("yaw", 0.0))
+	var birth_data: Variant = entity.get("birth_inheritance", {})
+	_apply_remote_birth_visuals(remote_players[character_id], birth_data if birth_data is Dictionary else {})
+
+func _apply_remote_birth_visuals(remote: Node3D, birth: Dictionary) -> void:
+	if not is_instance_valid(remote) or bool(remote.get_meta("is_underworld", false)):
+		return
+	var humanoid := remote.get_node_or_null("RemoteHumanoid") as Node3D
+	if humanoid == null:
+		return
+	var resonance := humanoid.get_node_or_null("BirthResonanceVisuals") as Node3D
+	if birth.is_empty():
+		if resonance != null:
+			resonance.visible = false
+		return
+	if resonance == null:
+		resonance = Node3D.new()
+		resonance.name = "BirthResonanceVisuals"
+		humanoid.add_child(resonance)
+		for index in range(3):
+			var ring := MeshInstance3D.new()
+			ring.name = "BirthResonanceRing" + str(index + 1)
+			var torus := TorusMesh.new()
+			torus.inner_radius = 0.46 + float(index) * 0.12
+			torus.outer_radius = torus.inner_radius + 0.025
+			torus.rings = 28
+			torus.ring_segments = 6
+			ring.mesh = torus
+			ring.position.y = 0.48 + float(index) * 0.42
+			ring.rotation.x = [PI * 0.5, 0.72, -0.72][index]
+			resonance.add_child(ring)
+		var aura := MeshInstance3D.new()
+		aura.name = "BirthResonanceAura"
+		var sphere := SphereMesh.new()
+		sphere.radius = 0.48
+		sphere.height = 1.45
+		sphere.radial_segments = 20
+		sphere.rings = 12
+		aura.mesh = sphere
+		resonance.add_child(aura)
+	var dominant := str(birth.get("dominant_attribute", "vitality"))
+	var colors := {
+		"strength": Color("#e76a43"),
+		"constitution": Color("#d5ad62"),
+		"agility": Color("#65c995"),
+		"spirit": Color("#9b82e8"),
+		"vitality": Color("#55c9a5")
+	}
+	var tint: Color = colors.get(dominant, colors["vitality"])
+	var stage := maxi(int(birth.get("source_growth_stage", 1)), 1)
+	for child in resonance.get_children():
+		if child is MeshInstance3D:
+			var material := StandardMaterial3D.new()
+			material.albedo_color = Color(tint.r, tint.g, tint.b, 0.24 if child.name == "BirthResonanceAura" else 0.62)
+			material.emission_enabled = true
+			material.emission = tint
+			material.emission_energy_multiplier = 0.8 + minf(float(stage - 1) * 0.12, 1.8)
+			material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			child.material_override = material
+			child.scale = Vector3.ONE * (1.0 + minf(float(stage - 1) * 0.035, 0.25))
+	resonance.visible = true
 
 func _upsert_monster(entity: Dictionary) -> void:
 	var monster_id := str(entity.get("entity_id", ""))
