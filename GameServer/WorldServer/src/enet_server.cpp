@@ -652,7 +652,7 @@ bool load_monster_spawn_config(const ServerConfig& config,std::vector<MonsterRun
             runtime.spawn_chance_percent=chance;
             runtime.retry_spawn_seconds=retry;
             runtime.state={x,z,runtime.definition.max_health};
-            if(rare){
+            if(rare||first_delay>0){
                 runtime.state.mode=honghuang::simulation::MonsterMode::Dead;
                 runtime.respawn_at=Clock::now()+std::chrono::seconds(std::max(first_delay,1));
             }
