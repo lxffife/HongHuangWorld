@@ -20,6 +20,7 @@ struct MonsterDefinition {
     float leash_radius{24.0F};
     float spawn_x{};
     float spawn_z{};
+    float attack_range{1.8F};
 };
 
 struct MonsterTarget {
@@ -49,7 +50,9 @@ inline bool valid_monster_definition(const MonsterDefinition& definition) {
         std::isfinite(definition.aggro_radius) && definition.aggro_radius > 0.0F &&
         std::isfinite(definition.leash_radius) &&
         definition.leash_radius >= definition.aggro_radius &&
-        std::isfinite(definition.spawn_x) && std::isfinite(definition.spawn_z);
+        std::isfinite(definition.spawn_x) && std::isfinite(definition.spawn_z) &&
+        std::isfinite(definition.attack_range) && definition.attack_range > 0.0F &&
+        definition.attack_range < definition.leash_radius;
 }
 
 // Server-authoritative, deterministic movement/aggro step. Combat is deliberately
@@ -84,11 +87,21 @@ inline bool tick_monster(const MonsterDefinition& definition, MonsterState& stat
         state.mode = MonsterMode::Returning;
         state.target_id.clear();
     } else if (target != nullptr && target->alive && !target->id.empty() &&
-               std::isfinite(target->x) && std::isfinite(target->z) &&
-               distance_squared(state.x, state.z, target->x, target->z) <=
-                   static_cast<double>(definition.aggro_radius) * definition.aggro_radius) {
-        state.mode = MonsterMode::Chasing;
-        state.target_id = target->id;
+               std::isfinite(target->x) && std::isfinite(target->z)) {
+        const bool retaining_target = state.mode == MonsterMode::Chasing &&
+            target->id == state.target_id;
+        const double aggro_radius = retaining_target
+            ? std::min(static_cast<double>(definition.aggro_radius) * 1.25,
+                       static_cast<double>(definition.leash_radius))
+            : static_cast<double>(definition.aggro_radius);
+        if (distance_squared(state.x, state.z, target->x, target->z) <=
+            aggro_radius * aggro_radius) {
+            state.mode = MonsterMode::Chasing;
+            state.target_id = target->id;
+        } else if (state.mode == MonsterMode::Chasing) {
+            state.mode = MonsterMode::Returning;
+            state.target_id.clear();
+        }
     } else if (state.mode == MonsterMode::Chasing) {
         state.mode = MonsterMode::Returning;
         state.target_id.clear();
@@ -104,13 +117,20 @@ inline bool tick_monster(const MonsterDefinition& definition, MonsterState& stat
     const float dx = destination_x - state.x;
     const float dz = destination_z - state.z;
     const double distance = std::hypot(static_cast<double>(dx), static_cast<double>(dz));
+    if (state.mode == MonsterMode::Chasing &&
+        distance <= static_cast<double>(definition.attack_range)) {
+        return true;
+    }
     if (distance <= 0.001 || delta_seconds == 0.0F) {
         if (state.mode == MonsterMode::Returning) state.mode = MonsterMode::Idle;
         return true;
     }
 
     const float step = definition.move_speed * std::min(delta_seconds, 0.1F);
-    const float travel = static_cast<float>(std::min(static_cast<double>(step), distance));
+    const double desired_travel = state.mode == MonsterMode::Chasing
+        ? distance - static_cast<double>(definition.attack_range)
+        : distance;
+    const float travel = static_cast<float>(std::min(static_cast<double>(step), desired_travel));
     state.x += dx / static_cast<float>(distance) * travel;
     state.z += dz / static_cast<float>(distance) * travel;
     if (state.mode == MonsterMode::Returning &&
