@@ -39,8 +39,10 @@ int main() {
         assert(tick_monster(wolf, pack_right, &pack_slot_right, 0.05F));
     }
     assert(pack_left.x < 0.0F && pack_right.x > 0.0F);
-    assert(std::hypot(pack_left.x - pack_slot_left.x, pack_left.z - pack_slot_left.z) <= wolf.attack_range - 0.64F);
-    assert(std::hypot(pack_right.x - pack_slot_right.x, pack_right.z - pack_slot_right.z) <= wolf.attack_range - 0.64F);
+    const float pack_slot_radius = std::min(0.65F, wolf.attack_range * 0.35F);
+    const float pack_stop_distance = wolf.attack_range - pack_slot_radius + 0.01F;
+    assert(std::hypot(pack_left.x - pack_slot_left.x, pack_left.z - pack_slot_left.z) <= pack_stop_distance);
+    assert(std::hypot(pack_right.x - pack_slot_right.x, pack_right.z - pack_slot_right.z) <= pack_stop_distance);
     assert(std::hypot(pack_left.x - pack_right.x, pack_left.z - pack_right.z) > 1.0F);
 
     auto iron_beast = wolf;
