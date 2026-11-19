@@ -194,7 +194,7 @@ func (s *Service) SendFriendRequest(ctx context.Context, accountID, targetCharac
 	}
 	if friends { return FriendRequest{}, ErrAlreadyFriend }
 	var allowed bool
-	err = tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT allow_stranger_requests FROM chat_preferences WHERE character_id=$1::uuid),true)`, targetCharacterID).Scan(&allowed)
+	err = tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT allow_friend_requests FROM chat_preferences WHERE character_id=$1::uuid),true)`, targetCharacterID).Scan(&allowed)
 	if err != nil { return FriendRequest{}, fmt.Errorf("check friend request preference: %w", err) }
 	if !allowed { return FriendRequest{}, ErrFriendRequestsDisabled }
 	var item FriendRequest
@@ -306,7 +306,7 @@ func (s *Service) GetAllowStrangerFriendRequests(ctx context.Context, accountID 
 	characterID, err := s.currentCharacterID(ctx, accountID)
 	if err != nil { return false, err }
 	var allowed bool
-	if err := s.db.QueryRowContext(ctx, `SELECT COALESCE((SELECT allow_stranger_requests FROM chat_preferences WHERE character_id=$1::uuid),true)`, characterID).Scan(&allowed); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT COALESCE((SELECT allow_friend_requests FROM chat_preferences WHERE character_id=$1::uuid),true)`, characterID).Scan(&allowed); err != nil {
 		return false, fmt.Errorf("read friend request preference: %w", err)
 	}
 	return allowed,nil
@@ -316,9 +316,9 @@ func (s *Service) SetAllowStrangerFriendRequests(ctx context.Context, accountID 
 	characterID, err := s.currentCharacterID(ctx, accountID)
 	if err != nil { return err }
 	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO chat_preferences(character_id,allow_stranger_requests,updated_at)
+		INSERT INTO chat_preferences(character_id,allow_friend_requests,updated_at)
 		VALUES($1::uuid,$2,now())
-		ON CONFLICT(character_id) DO UPDATE SET allow_stranger_requests=EXCLUDED.allow_stranger_requests,updated_at=now()`, characterID, allowed)
+		ON CONFLICT(character_id) DO UPDATE SET allow_friend_requests=EXCLUDED.allow_friend_requests,updated_at=now()`, characterID, allowed)
 	if err != nil { return fmt.Errorf("update friend request preference: %w", err) }
 	return nil
 }
