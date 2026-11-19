@@ -4,7 +4,7 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"errors"
-	"fmt"
+	"strconv"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -40,7 +40,7 @@ func (h *identityAdminHandlers) listAccounts(w http.ResponseWriter,r *http.Reque
 	q:=strings.TrimSpace(r.URL.Query().Get("q"))
 	if len(q)>64 { http.Error(w,"search query too long",http.StatusBadRequest);return }
 	limit:=50
-	if raw:=r.URL.Query().Get("limit");raw!="" { if _,err:=fmt.Sscanf(raw,"%d",&limit);err!=nil||limit<1||limit>100 {http.Error(w,"limit must be between 1 and 100",http.StatusBadRequest);return} }
+	if raw:=r.URL.Query().Get("limit");raw!="" { n,err:=strconv.Atoi(raw);if err!=nil||n<1||n>100 {http.Error(w,"limit must be between 1 and 100",http.StatusBadRequest);return} }
 	rows,err:=h.db.QueryContext(r.Context(),`SELECT id::text,username,email,status,created_at FROM accounts WHERE ($1='' OR username ILIKE '%'||$1||'%' OR COALESCE(email,'') ILIKE '%'||$1||'%') ORDER BY created_at DESC,id DESC LIMIT $2`,q,limit)
 	if err!=nil { h.logger.Error("identity admin account search failed","error",err);http.Error(w,"internal server error",500);return }
 	defer rows.Close()
