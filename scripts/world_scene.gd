@@ -1731,7 +1731,7 @@ func _on_combat_event(event: Dictionary) -> void:
 		_update_target_info()
 	_spawn_combat_number(damage, false, bool(event.get("critical", false)))
 	if bool(event.get("defeated", false)):
-		if str(event.get("target_id", "")) == selected_monster_id:
+		if str(event.get("target_entity_id", "")) == selected_monster_id:
 			_clear_monster_target()
 		var experience := int(event.get("experience_reward", 0))
 		var cultivation := int(event.get("cultivation_reward", 0))
