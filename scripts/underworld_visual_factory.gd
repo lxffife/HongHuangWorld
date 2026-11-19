@@ -200,3 +200,66 @@ static func _build_wraith(root: Node3D, aura_color: Color, core_color: Color) ->
 	_part(root, "SoulOrbit", orbit, Vector3(0.0, 0.72, 0.0), core_color, Vector3(0.72, 0.0, 0.0), 1.1)
 	for side in [-1.0, 1.0]:
 		_part(root, "Wisp" + str(side), _sphere(0.095), Vector3(side * 0.47, 0.60, 0.08), core_color, Vector3.ZERO, 1.8)
+
+
+static func create_npc(npc_type: String, npc_name: String) -> Node3D:
+	var root := Node3D.new()
+	root.name = "NPCModel_" + npc_type
+	var robe := Color("#315d68")
+	var trim := Color("#9bd8ce")
+	var skin := Color("#d5b69a")
+	var hair := Color("#25232c")
+	match npc_type:
+		"judge":
+			robe = Color("#55416f")
+			trim = Color("#b99be8")
+		"trial_master":
+			robe = Color("#713e37")
+			trim = Color("#e5a16c")
+		"guard":
+			robe = Color("#465568")
+			trim = Color("#a9c5d9")
+		"soup_keeper":
+			robe = Color("#315d68")
+			trim = Color("#9bd8ce")
+		_:
+			robe = Color("#746044")
+			trim = Color("#e6c77d")
+	# Layered robe silhouette, with a visible waist sash and front panel.
+	var robe_mesh := CylinderMesh.new()
+	robe_mesh.top_radius = 0.25
+	robe_mesh.bottom_radius = 0.48
+	robe_mesh.height = 1.48
+	robe_mesh.radial_segments = 16
+	_part(root, "LayeredRobe", robe_mesh, Vector3(0.0, 0.78, 0.0), robe)
+	_part(root, "InnerCollar", _box(Vector3(0.34, 0.34, 0.10)), Vector3(0.0, 1.39, -0.20), trim)
+	_part(root, "WaistSash", _box(Vector3(0.72, 0.12, 0.48)), Vector3(0.0, 1.03, 0.0), trim)
+	_part(root, "FrontRobePanel", _box(Vector3(0.22, 0.74, 0.08)), Vector3(0.0, 0.66, -0.245), robe.lightened(0.12))
+	_part(root, "Neck", _capsule(0.105, 0.25), Vector3(0.0, 1.54, 0.0), skin)
+	_part(root, "Head", _sphere(0.245), Vector3(0.0, 1.83, 0.0), skin)
+	_part(root, "HairCap", _sphere(0.265, 0.30), Vector3(0.0, 2.015, 0.015), hair)
+	# Broad sleeves and hands make the NPC readable from the third-person camera.
+	for side in [-1.0, 1.0]:
+		_part(root, "Sleeve" + str(side), _capsule(0.145, 0.72), Vector3(side * 0.40, 1.20, -0.01), robe, Vector3(0.0, 0.0, side * -0.42))
+		_part(root, "Hand" + str(side), _sphere(0.09), Vector3(side * 0.57, 0.91, -0.02), skin)
+	if npc_type == "soup_keeper" or npc_name == "孟婆":
+		# Jade hair ornament and a steaming bowl identify the reincarnation guide.
+		_part(root, "HairBun", _sphere(0.14), Vector3(0.20, 2.12, 0.02), hair)
+		_part(root, "JadeHairPin", _box(Vector3(0.08, 0.42, 0.08)), Vector3(0.19, 2.12, -0.03), trim, Vector3(0.0, 0.0, -0.25), 0.45)
+		var bowl := CylinderMesh.new()
+		bowl.top_radius = 0.19
+		bowl.bottom_radius = 0.12
+		bowl.height = 0.12
+		_part(root, "ForgetfulnessBowl", bowl, Vector3(0.43, 1.02, -0.10), Color("#83c9bd"), Vector3.ZERO, 0.65, 0.22)
+		_part(root, "BowlMist", _sphere(0.075), Vector3(0.43, 1.16, -0.10), Color("#b6fff0"), Vector3.ZERO, 1.5, 0.0, 0.42)
+	elif npc_type == "judge":
+		_part(root, "JudgeCrownBase", _box(Vector3(0.62, 0.16, 0.24)), Vector3(0.0, 2.14, 0.0), trim, Vector3.ZERO, 0.25, 0.3)
+		_part(root, "CrownFinial", _sphere(0.09), Vector3(0.0, 2.29, 0.0), Color("#e9d4ff"), Vector3.ZERO, 0.55)
+	elif npc_type == "trial_master" or npc_type == "guard":
+		_part(root, "ShoulderLeft", _box(Vector3(0.42, 0.25, 0.48)), Vector3(-0.43, 1.48, 0.0), trim, Vector3(0.0, 0.0, 0.10), 0.0, 0.35)
+		_part(root, "ShoulderRight", _box(Vector3(0.42, 0.25, 0.48)), Vector3(0.43, 1.48, 0.0), trim, Vector3(0.0, 0.0, -0.10), 0.0, 0.35)
+		_part(root, "ChestEmblem", _box(Vector3(0.20, 0.30, 0.08)), Vector3(0.0, 1.30, -0.25), trim, Vector3.ZERO, 0.25)
+		if npc_type == "guard":
+			_part(root, "SpearShaft", _capsule(0.035, 1.95), Vector3(0.82, 1.05, 0.10), Color("#8b7658"))
+			_part(root, "SpearHead", _capsule(0.07, 0.38), Vector3(0.82, 2.18, 0.10), trim, Vector3.ZERO, 0.2, 0.4)
+	return root
