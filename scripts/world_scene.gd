@@ -990,7 +990,15 @@ func _on_entities_updated(entities: Array) -> void:
 			remote_yaws.erase(character_id)
 	for monster_id in monsters.keys():
 		if not seen_monsters.has(monster_id):
-			monsters[monster_id].queue_free()
+			var missing_monster := monsters[monster_id] as Node3D
+			if float(missing_monster.get_meta("death_reaction_time", 0.0)) > 0.0:
+				missing_monster.set_meta("pending_corpse_cleanup", true)
+				monster_targets.erase(monster_id)
+				monster_entities.erase(monster_id)
+				if monster_id == selected_monster_id:
+					_clear_monster_target()
+				continue
+			missing_monster.queue_free()
 			monsters.erase(monster_id)
 			monster_targets.erase(monster_id)
 			monster_entities.erase(monster_id)
@@ -1701,7 +1709,7 @@ func _on_combat_event(event: Dictionary) -> void:
 		var hit_monster := monsters[hit_target_id] as Node3D
 		hit_monster.set_meta("hit_reaction_time", 0.24)
 		if bool(event.get("defeated", false)):
-			hit_monster.set_meta("death_reaction_time", 0.52)
+			hit_monster.set_meta("death_reaction_time", 1.15)
 	var damage := int(event.get("damage", 0))
 	if not selected_monster_id.is_empty() and monster_entities.has(selected_monster_id):
 		var selected_entity: Dictionary = monster_entities[selected_monster_id]
@@ -1957,12 +1965,33 @@ func _animate_monster_visuals(delta: float) -> void:
 				body.position.x = move_toward(body.position.x, 0.0, delta * 0.8)
 		var base_scale: Vector3 = monster.get_meta("base_visual_scale", Vector3.ONE)
 		if death_time > 0.0:
-			var death_weight := 1.0 - death_time / 0.52
+			var death_weight := 1.0 - death_time / 1.15
 			monster.rotation.z = death_weight * 0.42
+			monster.position.y += delta * death_weight * 0.34
 			monster.scale = base_scale * maxf(0.08, 1.0 - death_weight * 0.72)
+			_apply_monster_death_fade(monster, death_weight)
 		else:
 			monster.rotation.z = move_toward(monster.rotation.z, 0.0, delta * 2.0)
 			monster.scale = monster.scale.lerp(base_scale, minf(delta * 8.0, 1.0))
+			if bool(monster.get_meta("pending_corpse_cleanup", false)):
+				monsters.erase(monster_id)
+				monster.queue_free()
+
+
+func _apply_monster_death_fade(monster: Node3D, weight: float) -> void:
+	for child in monster.get_children():
+		if child is MeshInstance3D:
+			var mesh_instance := child as MeshInstance3D
+			var material := mesh_instance.material_override as StandardMaterial3D
+			if material == null:
+				continue
+			material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			var tint := material.albedo_color
+			tint.a = 1.0 - weight
+			material.albedo_color = tint
+			material.emission_energy_multiplier = maxf(0.0, 1.0 - weight)
+		elif child is Node3D:
+			_apply_monster_death_fade(child as Node3D, weight)
 
 
 func _animate_wolf_monster(monster: Node3D, stride: float, moving: bool, phase: float) -> void:
