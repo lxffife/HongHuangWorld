@@ -677,7 +677,7 @@ func _build_equipment_slot_visual(root: Node3D, slot: String, quality: int) -> v
 			blade_mesh.size = Vector3(0.075, 0.78, 0.035)
 			blade.mesh = blade_mesh
 			blade.material_override = material
-			blade.position = Vector3(0.0, 0.0, -0.06)
+			blade.position = Vector3(0.0, 0.42, -0.06)
 			blade.rotation.z = -0.12 if slot == "weapon" else 0.12
 			root.add_child(blade)
 			var grip := MeshInstance3D.new()
@@ -685,7 +685,7 @@ func _build_equipment_slot_visual(root: Node3D, slot: String, quality: int) -> v
 			var grip_mesh := BoxMesh.new()
 			grip_mesh.size = Vector3(0.11, 0.20, 0.09)
 			grip.mesh = grip_mesh
-			grip.position.y = -0.48
+			grip.position.y = -0.02
 			grip.material_override = _equipment_dark_material()
 			root.add_child(grip)
 		"head":
