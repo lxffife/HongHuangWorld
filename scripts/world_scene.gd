@@ -2445,10 +2445,18 @@ func _animate_monster_visuals(delta: float) -> void:
 			else:
 				body.position.x = move_toward(body.position.x, 0.0, delta * 0.8)
 		var base_scale: Vector3 = monster.get_meta("base_visual_scale", Vector3.ONE)
+		var is_soul_monster := archetype in ["life_soul", "wind_soul", "fire_soul", "frost_soul", "wraith"]
 		if death_time > 0.0:
 			var death_weight := 1.0 - death_time / 1.15
-			monster.rotation.z = death_weight * 0.42
-			monster.scale = base_scale * maxf(0.08, 1.0 - death_weight * 0.72)
+			if is_soul_monster:
+				# Soul creatures dissolve upward instead of falling like physical beasts.
+				monster.rotation.z = 0.0
+				monster.rotation.y += delta * (0.7 + death_weight * 1.8)
+				monster.position.y = lerpf(monster.position.y, target.y + death_weight * 0.9, minf(delta * 5.0, 1.0))
+				monster.scale = base_scale * maxf(0.035, 1.0 - death_weight * 0.965)
+			else:
+				monster.rotation.z = death_weight * 0.42
+				monster.scale = base_scale * maxf(0.08, 1.0 - death_weight * 0.72)
 			_apply_monster_death_fade(monster, death_weight)
 		else:
 			monster.rotation.z = move_toward(monster.rotation.z, 0.0, delta * 2.0)
@@ -2457,9 +2465,15 @@ func _animate_monster_visuals(delta: float) -> void:
 				monsters.erase(monster_id)
 				monster.queue_free()
 			elif bool(monster.get_meta("defeated_visual", false)):
-				monster.rotation.z = 0.42
-				monster.scale = base_scale * 0.28
-				_apply_monster_death_fade(monster, 0.92)
+				if is_soul_monster:
+					monster.position.y = target.y + 0.9
+					monster.rotation.z = 0.0
+					monster.scale = base_scale * 0.035
+					_apply_monster_death_fade(monster, 0.98)
+				else:
+					monster.rotation.z = 0.42
+					monster.scale = base_scale * 0.28
+					_apply_monster_death_fade(monster, 0.92)
 
 
 func _animate_monster_attack(monster: Node3D, archetype: String, phase: String, progress: float) -> void:
