@@ -24,8 +24,8 @@ CREATE INDEX idx_chat_friend_requests_inbox
 CREATE INDEX idx_chat_friend_requests_outbox
     ON chat_friend_requests(requester_character_id, status, created_at DESC);
 
--- Store each accepted friendship in both directions for efficient authorization.
--- Collapse any legacy reverse duplicates before enforcing an unordered unique pair.
+-- Store each accepted friendship once using a canonical unordered pair.
+-- Collapse any legacy reverse duplicates before enforcing pair uniqueness.
 DELETE FROM chat_friendships a
 USING chat_friendships b
 WHERE LEAST(a.requester_character_id, a.addressee_character_id) =
