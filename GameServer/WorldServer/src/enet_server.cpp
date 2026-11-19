@@ -46,7 +46,6 @@ constexpr auto kMinimumInputInterval = std::chrono::milliseconds(10);
 constexpr float kInterestRadius = 80.0F;
 constexpr auto kHeartbeatInterval = std::chrono::seconds(10);
 constexpr auto kAttackCooldown = std::chrono::milliseconds(650);
-constexpr auto kMonsterRespawnDelay = std::chrono::seconds(12);
 constexpr float kAttackRange = 3.5F;
 constexpr auto kHeartbeatRetryInterval = std::chrono::seconds(5);
 
@@ -1989,21 +1988,9 @@ struct EnetServer::Impl {
         if (damage.defeated) {
             target->state.mode = honghuang::simulation::MonsterMode::Dead;
             target->state.target_id.clear();
-            auto respawn_delay = kMonsterRespawnDelay;
-            if (target->definition.id == "blazing_war_soul_ancient") {
-                respawn_delay = std::chrono::seconds(600);
-            } else if (target->definition.id == "blazing_war_soul_elite") {
-                respawn_delay = std::chrono::seconds(180);
-            } else if (target->definition.id == "ancient_battlefield_god_soul") {
-                respawn_delay = std::chrono::seconds(900);
-            } else if (target->definition.id == "faceless_essence") {
-                respawn_delay = std::chrono::seconds(300);
-            } else if (target->definition.id == "life_ancient_soul") {
-                respawn_delay = std::chrono::seconds(120);
-            } else if (target->definition.id != "wandering_wraith") {
-                respawn_delay = std::chrono::seconds(45);
-            }
-            target->respawn_at = now + respawn_delay;
+            // Respawn timing is owned by the world's spawn-point configuration.
+            // This keeps live operations changes effective without hard-coded monster IDs.
+            target->respawn_at = now + std::chrono::seconds(target->retry_spawn_seconds);
             experience_reward = 20 + static_cast<std::int64_t>(target->definition.level) * 10;
             cultivation_reward = 10 + static_cast<std::int64_t>(target->definition.level) * 5;
             enqueue_character_reward(CharacterRewardEvent{
