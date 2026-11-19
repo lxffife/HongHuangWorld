@@ -120,3 +120,14 @@ button,input{font:inherit}
   .table-panel{overflow:hidden}
   .footer{font-size:8px}
 }
+
+.health-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:18px}
+.health-card{min-width:0;padding:20px;border:1px solid #2c3b4b;border-radius:12px;background:linear-gradient(145deg,#182634,#121c27);box-shadow:0 8px 24px #0002}
+.health-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.health-name{font-size:16px;font-weight:700;color:#e4eaf1}
+.health-subtitle{margin-top:5px;font-size:10px;letter-spacing:1.4px;color:#8092a5}
+.health-latency{margin:22px 0 14px;font-size:34px;font-weight:700;letter-spacing:-1px;color:#e4c58e;font-variant-numeric:tabular-nums}
+.health-latency small{font-size:13px;font-weight:500;color:#9aaabd;letter-spacing:0}
+.health-foot{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding-top:12px;border-top:1px solid #2b3a49;color:#8799ab;font-size:11px}
+.health-refresh-time{color:#8494a5;font-size:12px}
+@media(max-width:760px){.health-grid{grid-template-columns:1fr}.health-card{padding:16px}.health-latency{font-size:28px}}
