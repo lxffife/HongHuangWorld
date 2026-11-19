@@ -15,6 +15,9 @@ import (
 
 func NewAdminRouter(logger *slog.Logger,db *sql.DB) http.Handler {
  mux:=http.NewServeMux()
+ // Serve the compiled Vue admin console from the repository deployment directory.
+ // The Raspberry Pi build creates AdminWeb/dist before compiling the services.
+ mux.Handle("GET /", http.FileServer(http.Dir("AdminWeb/dist")))
  mux.HandleFunc("GET /health",func(w http.ResponseWriter,r *http.Request){writeJSON(w,http.StatusOK,healthResponse{Status:"ok",Time:time.Now().UTC().Format(time.RFC3339)})})
  mux.HandleFunc("GET /ready",func(w http.ResponseWriter,r *http.Request){
   if db==nil{http.Error(w,"database is not configured",http.StatusServiceUnavailable);return}
