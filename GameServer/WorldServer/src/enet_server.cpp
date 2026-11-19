@@ -84,6 +84,7 @@ struct MonsterRuntime {
     bool rare_spawn{false};
     int spawn_chance_percent{100};
     int retry_spawn_seconds{60};
+    int first_spawn_delay_seconds{0};
 };
 
 
@@ -650,6 +651,7 @@ bool load_monster_spawn_config(const ServerConfig& config,std::vector<MonsterRun
             runtime.rare_spawn=rare;
             runtime.spawn_chance_percent=chance;
             runtime.retry_spawn_seconds=retry;
+            runtime.first_spawn_delay_seconds=first_delay;
             runtime.state={x,z,runtime.definition.max_health};
             if(rare||first_delay>0){
                 runtime.state.mode=honghuang::simulation::MonsterMode::Dead;
@@ -1505,9 +1507,11 @@ struct EnetServer::Impl {
             }
             MonsterRuntime current=*found;
             const bool rare_changed=current.rare_spawn!=next.rare_spawn;
+            const bool first_delay_changed=current.first_spawn_delay_seconds!=next.first_spawn_delay_seconds;
             current.definition=std::move(next.definition);
             current.spawn_chance_percent=next.spawn_chance_percent;
             current.retry_spawn_seconds=next.retry_spawn_seconds;
+            current.first_spawn_delay_seconds=next.first_spawn_delay_seconds;
             if(rare_changed){
                 current.rare_spawn=next.rare_spawn;
                 if(current.rare_spawn){
@@ -1522,6 +1526,11 @@ struct EnetServer::Impl {
             }else{
                 current.rare_spawn=next.rare_spawn;
                 current.state.health=std::min(current.state.health,current.definition.max_health);
+                // A changed first-spawn delay takes effect immediately for a
+                // dormant spawn point. Living monsters keep their current life.
+                if(first_delay_changed&&current.state.mode==honghuang::simulation::MonsterMode::Dead){
+                    current.respawn_at=Clock::now()+std::chrono::seconds(current.first_spawn_delay_seconds);
+                }
             }
             merged.push_back(std::move(current));
         }
