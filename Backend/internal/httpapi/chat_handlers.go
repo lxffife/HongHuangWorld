@@ -56,6 +56,8 @@ func (h *chatHandlers) writeError(w http.ResponseWriter,err error){
 	case errors.Is(err,chat.ErrIdempotencyConflict):http.Error(w,"client_message_id already used with different content",http.StatusConflict)
 	case errors.Is(err,chat.ErrRateLimited):http.Error(w,"chat rate limit exceeded",http.StatusTooManyRequests)
 	case errors.Is(err,chat.ErrUnsupportedChannel):http.Error(w,"chat channel is not available yet",http.StatusNotImplemented)
+	case errors.Is(err,chat.ErrFriendRequired):http.Error(w,"accepted friendship required",http.StatusForbidden)
+	case errors.Is(err,chat.ErrBlocked):http.Error(w,"private messaging is blocked",http.StatusForbidden)
 	default:
 		h.logger.Error("chat request failed","error",err)
 		http.Error(w,"internal server error",http.StatusInternalServerError)
