@@ -33,8 +33,10 @@ func (h *gameMonsterAdminHandlers) updateDefinition(w http.ResponseWriter,r *htt
 	if req.Name==nil&&req.Level==nil&&req.MaxHealth==nil&&req.Attack==nil&&req.Defense==nil&&req.MoveSpeed==nil&&req.AggroRadius==nil&&req.LeashRadius==nil&&req.Enabled==nil{http.Error(w,"no monster fields supplied",400);return}
 	if req.Name!=nil{*req.Name=strings.TrimSpace(*req.Name);if *req.Name==""||len(*req.Name)>96{http.Error(w,"name must contain 1 to 96 characters",400);return}}
 	if req.Level!=nil&&(*req.Level<1||*req.Level>10000){http.Error(w,"level must be between 1 and 10000",400);return}
-	finite:=func(v *float64)bool{return v==nil||(*v>=0&&*v<1e9&&*v==*v)}
-	for _,v:=range []*float64{req.MaxHealth,req.Attack,req.Defense,req.MoveSpeed,req.AggroRadius,req.LeashRadius}{if !finite(v){http.Error(w,"monster stats must be finite and within supported bounds",400);return}}
+	validRange:=func(v *float64,min,max float64)bool{return v==nil||(*v>=min&&*v<=max&&*v==*v)}
+	if !validRange(req.MaxHealth,0.000001,1e9)||!validRange(req.Attack,0,1e9)||!validRange(req.Defense,0,1e9)||!validRange(req.MoveSpeed,0.000001,10000)||!validRange(req.AggroRadius,0.000001,100000)||!validRange(req.LeashRadius,0.000001,100000){
+		http.Error(w,"monster stats are outside supported numeric ranges",400);return
+	}
 	if req.MaxHealth!=nil&&*req.MaxHealth<=0||req.MoveSpeed!=nil&&*req.MoveSpeed<=0||req.AggroRadius!=nil&&*req.AggroRadius<=0||req.LeashRadius!=nil&&*req.LeashRadius<=0{http.Error(w,"health, speed and radii must be positive",400);return}
 	ctx,cancel:=context.WithTimeout(r.Context(),8*time.Second);defer cancel();tx,err:=h.db.BeginTx(ctx,nil);if err!=nil{http.Error(w,"internal server error",500);return};defer tx.Rollback()
 	var currentAggro,currentLeash float64
