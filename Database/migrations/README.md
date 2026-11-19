@@ -98,12 +98,8 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000043_game_domai
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000044_server_node_admin_control.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000045_monster_definitions_and_spawn_points.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000046_game_config_revisions.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000047_game_config_revision_reason.up.sql
 ```
 
 回滚时按相反顺序执行对应的 `.down.sql`。不要在已运行的生产库上重复执行非幂等迁移；后续接入迁移工具后，应由工具记录每个已应用版本，避免人工重复执行。
 
-当前 Game 数据库配置版本历史后续迁移：
-
-```bash
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000047_game_config_revision_reason.up.sql
-```
