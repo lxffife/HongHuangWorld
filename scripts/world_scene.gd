@@ -339,6 +339,10 @@ func _on_progression_request_completed(result: int, response_code: int, _headers
 		progression_label.text = "读取修炼状态失败：" + body.get_string_from_utf8()
 		breakthrough_button.disabled = true
 		return
+	var character_variant: Variant = data.get("character", {})
+	if is_instance_valid(local_player):
+		var birth_data: Dictionary = character_variant.get("birth_inheritance", {}) if character_variant is Dictionary else {}
+		local_player.set_birth_inheritance_visuals(birth_data)
 	var progression: Dictionary = data.get("progression", {})
 	var cultivation := int(progression.get("cultivation", 0))
 	var bloodlines: Array = data.get("bloodlines", [])
