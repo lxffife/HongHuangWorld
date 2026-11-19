@@ -69,6 +69,7 @@ var remote_yaws: Dictionary = {}
 var monsters: Dictionary = {}
 var monster_targets: Dictionary = {}
 var monster_entities: Dictionary = {}
+var monster_animation_time := 0.0
 var selected_monster_id := ""
 var target_info_panel: PanelContainer
 var target_info_label: Label
@@ -1692,6 +1693,9 @@ func _on_combat_event(event: Dictionary) -> void:
 			_show_notification("受到怪物攻击 -" + str(incoming_damage) + " 生命")
 		return
 	var monster_name := str(event.get("target_name", "目标"))
+	var hit_target_id := str(event.get("target_id", ""))
+	if monsters.has(hit_target_id):
+		(monsters[hit_target_id] as Node3D).set_meta("hit_reaction_time", 0.24)
 	var damage := int(event.get("damage", 0))
 	if not selected_monster_id.is_empty() and monster_entities.has(selected_monster_id):
 		var selected_entity: Dictionary = monster_entities[selected_monster_id]
@@ -1890,6 +1894,7 @@ func _process(delta: float) -> void:
 		var monster: Node3D = monsters[monster_id]
 		var target: Vector3 = monster_targets.get(monster_id, monster.position)
 		monster.position = monster.position.lerp(target, minf(delta * 10.0, 1.0))
+	_animate_monster_visuals(delta)
 	for drop_id in drops:
 		var drop: Node3D = drops[drop_id]
 		var target: Vector3 = drop_targets.get(drop_id, drop.position)
@@ -1907,6 +1912,49 @@ func _process(delta: float) -> void:
 	if input_debug_accumulator >= 0.05:
 		input_debug_accumulator = 0.0
 		_update_input_debug_hud()
+
+
+func _animate_monster_visuals(delta: float) -> void:
+	monster_animation_time += delta
+	for monster_id in monsters.keys():
+		var monster := monsters[monster_id] as Node3D
+		if not is_instance_valid(monster):
+			continue
+		var archetype := str(monster.get_meta("visual_archetype", ""))
+		var target: Vector3 = monster_targets.get(monster_id, monster.position)
+		var moving := monster.position.distance_to(target) > 0.055
+		var phase := monster_animation_time * (8.5 if moving else 1.7) + float(abs(hash(str(monster_id))) % 100) * 0.031
+		var stride := sin(phase)
+		if archetype == "wolf":
+			var torso := monster.get_node_or_null("Torso") as MeshInstance3D
+			if is_instance_valid(torso):
+				torso.position.y = 0.62 + (absf(stride) * 0.035 if moving else sin(phase) * 0.012)
+			for pivot_name in ["FrontLegLeft", "HindLegRight"]:
+				var leg := monster.get_node_or_null(pivot_name) as Node3D
+				if is_instance_valid(leg):
+					leg.rotation.x = stride * (0.42 if moving else 0.025)
+			for pivot_name in ["FrontLegRight", "HindLegLeft"]:
+				var leg := monster.get_node_or_null(pivot_name) as Node3D
+				if is_instance_valid(leg):
+					leg.rotation.x = -stride * (0.42 if moving else 0.025)
+			var tail := monster.get_node_or_null("TailPivot") as Node3D
+			if is_instance_valid(tail):
+				tail.rotation.y = sin(monster_animation_time * 2.4 + phase) * (0.24 if moving else 0.14)
+				tail.rotation.z = sin(monster_animation_time * 1.8 + phase) * 0.08
+		var hit_time := float(monster.get_meta("hit_reaction_time", 0.0))
+		if hit_time > 0.0:
+			hit_time = maxf(hit_time - delta, 0.0)
+			monster.set_meta("hit_reaction_time", hit_time)
+			var body := monster.get_node_or_null("Torso") as Node3D
+			if not is_instance_valid(body):
+				body = monster.get_node_or_null("IronCore") as Node3D
+			if is_instance_valid(body):
+				var hit_weight := sin((0.24 - hit_time) / 0.24 * PI)
+				body.position.x = hit_weight * 0.10
+		else:
+			var body := monster.get_node_or_null("Torso") as Node3D
+			if is_instance_valid(body):
+				body.position.x = move_toward(body.position.x, 0.0, delta * 0.8)
 
 
 func _on_world_disconnected() -> void:
