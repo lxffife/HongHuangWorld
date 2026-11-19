@@ -545,6 +545,8 @@ func set_equipment_visuals(items: Array) -> void:
 		"weapon": "EquipmentWeaponSocket",
 		"head": "EquipmentHeadSocket",
 		"chest": "EquipmentChestSocket",
+		"legs": "EquipmentLegsSocket",
+		"boots": "EquipmentBootsSocket",
 		"accessory": "EquipmentAccessorySocket",
 		"back": "EquipmentBackSocket",
 		"offhand": "EquipmentOffhandSocket"
@@ -623,6 +625,25 @@ func _build_equipment_slot_visual(root: Node3D, slot: String, quality: int) -> v
 			armor.mesh = armor_mesh
 			armor.material_override = material
 			root.add_child(armor)
+		"legs":
+			var leg_armor := MeshInstance3D.new()
+			leg_armor.name = "EquipmentLegArmor"
+			var leg_mesh := BoxMesh.new()
+			leg_mesh.size = Vector3(0.58, 0.30, 0.13)
+			leg_armor.mesh = leg_mesh
+			leg_armor.position.y = -0.12
+			leg_armor.material_override = material
+			root.add_child(leg_armor)
+		"boots":
+			for side in [-1.0, 1.0]:
+				var boot := MeshInstance3D.new()
+				boot.name = "EquipmentBoot" + str(side)
+				var boot_mesh := BoxMesh.new()
+				boot_mesh.size = Vector3(0.20, 0.16, 0.34)
+				boot.mesh = boot_mesh
+				boot.position = Vector3(side * 0.17, -0.10, -0.04)
+				boot.material_override = material
+				root.add_child(boot)
 		"accessory":
 			var ornament := MeshInstance3D.new()
 			ornament.name = "EquipmentOrnament"
@@ -654,6 +675,8 @@ func _equipment_socket_position(slot: String) -> Vector3:
 		"weapon": return Vector3(0.43, 1.12, -0.20)
 		"head": return Vector3(0.0, 2.08, 0.0)
 		"chest": return Vector3(0.0, 1.20, -0.24)
+		"legs": return Vector3(0.0, 0.58, -0.22)
+		"boots": return Vector3(0.0, 0.18, -0.06)
 		"back": return Vector3(0.0, 1.28, 0.24)
 		"accessory": return Vector3(0.20, 0.82, -0.30)
 		"offhand": return Vector3(-0.43, 1.12, -0.20)
