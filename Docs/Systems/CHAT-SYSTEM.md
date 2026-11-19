@@ -144,6 +144,7 @@
 ### 已接入 Chat 独立数据库
 - 迁移 `000004_friend_chat`：增加独立好友申请表 `chat_friend_requests`、好友私聊会话表 `chat_conversations`，并为消息增加 `conversation_id`。
 - 好友关系仍由 Chat 数据库维护；接受好友申请时双向写入 `chat_friendships`，查询时兼容旧的单向关系。
+- 好友申请隐私使用独立的 `chat_preferences.allow_friend_requests`；不复用 `allow_stranger_requests`，后者保留给陌生人私聊申请策略，避免两种申请混淆。
 - Chat API：角色名搜索、好友列表、收到的好友申请、发送申请、接受/拒绝申请、删除好友，以及允许/关闭陌生人好友申请设置。
 - 搜索只返回存活角色；屏蔽关系双方不会出现在搜索结果中；好友申请由服务端检查当前角色、目标角色、隐私设置、重复申请和屏蔽关系。
 - 好友私聊只允许已建立好友关系且双方未互相屏蔽的角色；会话由服务端按角色 ID 规范化创建，消息持久化在 Chat DB，30 天后清理。
