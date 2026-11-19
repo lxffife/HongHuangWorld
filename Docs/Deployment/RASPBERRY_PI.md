@@ -199,11 +199,11 @@
 如果树莓派 IP 变化，编辑 WORLD_SERVER_ADVERTISE_HOST：
 
     sudo nano /etc/honghuang-world.env
-    sudo systemctl restart honghuang-world-server
+    sudo systemctl restart honghuang-world-server honghuang-underworld-server
 
 修改 WORLD_SERVER_API_KEY 时，Go API 和 WorldServer 共用同一个环境文件，需重启两个服务：
 
-    sudo systemctl restart honghuang-api honghuang-world-server
+    sudo systemctl restart honghuang-api honghuang-world-server honghuang-underworld-server
 
 修改世界 ID、节点标识或端口后，也应重启相应服务。默认 WORLD_ID 为 qingyun_human。
 
@@ -218,6 +218,7 @@
 
     sudo ufw allow 8787/tcp
     sudo ufw allow 7777/udp
+    sudo ufw allow 7778/udp
     sudo ufw status
 
 Windows Godot 客户端 API Base URL 填写：
@@ -276,14 +277,18 @@ PostgreSQL 5432、Redis 6379、NATS 4222/8222 在 Compose 中绑定到 127.0.0.1
 
     sudo journalctl -u honghuang-api -f
 
-实时查看 WorldServer：
+实时查看青云人界 WorldServer：
 
     sudo journalctl -u honghuang-world-server -f
+
+实时查看冥界酆都 WorldServer：
+
+    sudo journalctl -u honghuang-underworld-server -f
 
 重启：
 
     sudo systemctl restart honghuang-api
-    sudo systemctl restart honghuang-world-server
+    sudo systemctl restart honghuang-world-server honghuang-underworld-server
 
 停止游戏服务：
 
@@ -293,6 +298,11 @@ PostgreSQL 5432、Redis 6379、NATS 4222/8222 在 Compose 中绑定到 127.0.0.1
 
     sudo systemctl start honghuang-api
     sudo systemctl start honghuang-world-server honghuang-underworld-server
+
+如只需维护冥界，不影响青云人界：
+
+    sudo systemctl stop honghuang-underworld-server
+    sudo systemctl start honghuang-underworld-server
 
 再次运行部署脚本会询问是否拉取 feature/p0-foundation 最新代码，随后重新编译并重启服务。迁移账本会跳过已经成功执行的版本。更新前仍建议先备份数据库。
 
