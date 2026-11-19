@@ -1,0 +1,10 @@
+BEGIN;
+DROP INDEX IF EXISTS idx_chat_messages_conversation_history;
+ALTER TABLE chat_messages DROP COLUMN IF EXISTS conversation_id;
+DROP TABLE IF EXISTS chat_conversations;
+DROP INDEX IF EXISTS uq_chat_friendships_unordered;
+DROP INDEX IF EXISTS idx_chat_friend_requests_outbox;
+DROP INDEX IF EXISTS idx_chat_friend_requests_inbox;
+DROP INDEX IF EXISTS uq_chat_friend_requests_pending;
+DROP TABLE IF EXISTS chat_friend_requests;
+COMMIT;
