@@ -402,9 +402,13 @@ func (h *adminHandlers) rollbackConfigRevision(w http.ResponseWriter, r *http.Re
 	if !ok { return }
 	revisionID, err := strconv.ParseInt(strings.TrimSpace(r.PathValue("revisionID")), 10, 64)
 	if err != nil || revisionID < 1 { http.Error(w, "invalid revision id", http.StatusBadRequest); return }
+	var request struct { Reason string `json:"reason"` }
+	if err := decodeJSON(w, r, &request); err != nil { http.Error(w, "invalid request body", http.StatusBadRequest); return }
+	request.Reason = strings.TrimSpace(request.Reason)
+	if len([]rune(request.Reason)) < 2 || len([]rune(request.Reason)) > 300 { http.Error(w, "rollback reason must contain 2 to 300 characters", http.StatusBadRequest); return }
 	ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
 	defer cancel()
-	result, err := h.game.RollbackConfigRevision(ctx, revisionID)
+	result, err := h.game.RollbackConfigRevision(ctx, revisionID, request.Reason)
 	if err != nil {
 		if errors.Is(err, gameadmin.ErrLootNotFound) { http.Error(w, "configuration revision not found", http.StatusNotFound); return }
 		if errors.Is(err, gameadmin.ErrLootConflict) { http.Error(w, "rollback conflicts with current configuration constraints", http.StatusConflict); return }
@@ -413,7 +417,7 @@ func (h *adminHandlers) rollbackConfigRevision(w http.ResponseWriter, r *http.Re
 		http.Error(w, "game service unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	if err := h.service.RecordAudit(ctx, actor, "game_config.revision.rollback", "game_config_revision", strconv.FormatInt(revisionID,10), "success", map[string]any{"source_revision_id": revisionID}); err != nil {
+	if err := h.service.RecordAudit(ctx, actor, "game_config.revision.rollback", "game_config_revision", strconv.FormatInt(revisionID,10), "success", map[string]any{"source_revision_id": revisionID, "reason": request.Reason}); err != nil {
 		h.logger.Error("record config rollback audit failed", "revision_id", revisionID, "error", err)
 		http.Error(w, "rollback applied but audit recording failed", http.StatusInternalServerError)
 		return
