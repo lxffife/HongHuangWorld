@@ -16,6 +16,42 @@ func (h *gameMonsterAdminHandlers) authorize(w http.ResponseWriter,r *http.Reque
 	return (&gamePlayerAdminHandlers{apiKey:h.apiKey}).authorize(w,r)
 }
 
+func validMonsterAdminKey(value string,max int)bool{
+	if value==""||len(value)>max{return false}
+	for _,r:=range value{if !(r>='a'&&r<='z'||r>='A'&&r<='Z'||r>='0'&&r<='9'||r=='_'||r=='-'){return false}}
+	return true
+}
+
+func (h *gameMonsterAdminHandlers) createDefinition(w http.ResponseWriter,r *http.Request){
+	if !h.authorize(w,r){return}
+	var req struct{ID string `json:"id"`;Name string `json:"name"`;Level int `json:"level"`;MaxHealth float64 `json:"max_health"`;Attack float64 `json:"attack"`;Defense float64 `json:"defense"`;MoveSpeed float64 `json:"move_speed"`;AggroRadius float64 `json:"aggro_radius"`;LeashRadius float64 `json:"leash_radius"`;Enabled *bool `json:"enabled"`}
+	if err:=decodeJSON(w,r,&req);err!=nil{http.Error(w,"invalid request body",400);return}
+	req.ID=strings.TrimSpace(req.ID);req.Name=strings.TrimSpace(req.Name)
+	if !validMonsterAdminKey(req.ID,64)||req.Name==""||len(req.Name)>96||req.Level<1||req.Level>10000||req.MaxHealth<=0||req.MaxHealth>1e9||req.Attack<0||req.Attack>1e9||req.Defense<0||req.Defense>1e9||req.MoveSpeed<=0||req.MoveSpeed>10000||req.AggroRadius<=0||req.AggroRadius>100000||req.LeashRadius<req.AggroRadius||req.LeashRadius>100000{
+		http.Error(w,"invalid monster definition fields",400);return
+	}
+	enabled:=true;if req.Enabled!=nil{enabled=*req.Enabled}
+	ctx,cancel:=context.WithTimeout(r.Context(),8*time.Second);defer cancel()
+	_,err:=h.db.ExecContext(ctx,`INSERT INTO monster_definitions(id,name,level,max_health,attack,defense,move_speed,aggro_radius,leash_radius,enabled) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,req.ID,req.Name,req.Level,req.MaxHealth,req.Attack,req.Defense,req.MoveSpeed,req.AggroRadius,req.LeashRadius,enabled)
+	if err!=nil{if strings.Contains(strings.ToLower(err.Error()),"duplicate key"){http.Error(w,"monster definition already exists",409);return};h.logger.Error("create monster definition failed","monster_id",req.ID,"error",err);http.Error(w,"invalid monster definition or database error",400);return}
+	writeJSON(w,201,map[string]any{"monster_id":req.ID,"created":true})
+}
+
+func (h *gameMonsterAdminHandlers) createSpawnPoint(w http.ResponseWriter,r *http.Request){
+	if !h.authorize(w,r){return}
+	var req struct{ID string `json:"id"`;WorldID string `json:"world_id"`;MonsterID string `json:"monster_id"`;SpawnX float64 `json:"spawn_x"`;SpawnZ float64 `json:"spawn_z"`;RareSpawn bool `json:"rare_spawn"`;SpawnChancePercent int `json:"spawn_chance_percent"`;RetrySpawnSeconds int `json:"retry_spawn_seconds"`;FirstSpawnDelaySeconds int `json:"first_spawn_delay_seconds"`;Enabled *bool `json:"enabled"`}
+	if err:=decodeJSON(w,r,&req);err!=nil{http.Error(w,"invalid request body",400);return}
+	req.ID=strings.TrimSpace(req.ID);req.WorldID=strings.TrimSpace(req.WorldID);req.MonsterID=strings.TrimSpace(req.MonsterID)
+	if !validMonsterAdminKey(req.ID,96)||!validMonsterAdminKey(req.WorldID,64)||!validMonsterAdminKey(req.MonsterID,64)||req.SpawnX!=req.SpawnX||req.SpawnZ!=req.SpawnZ||req.SpawnX< -1e7||req.SpawnX>1e7||req.SpawnZ< -1e7||req.SpawnZ>1e7||req.SpawnChancePercent<1||req.SpawnChancePercent>100||req.RetrySpawnSeconds<1||req.RetrySpawnSeconds>604800||req.FirstSpawnDelaySeconds<0||req.FirstSpawnDelaySeconds>604800{
+		http.Error(w,"invalid monster spawn point fields",400);return
+	}
+	enabled:=true;if req.Enabled!=nil{enabled=*req.Enabled}
+	ctx,cancel:=context.WithTimeout(r.Context(),8*time.Second);defer cancel()
+	_,err:=h.db.ExecContext(ctx,`INSERT INTO world_monster_spawn_points(id,world_id,monster_id,spawn_x,spawn_z,rare_spawn,spawn_chance_percent,retry_spawn_seconds,first_spawn_delay_seconds,enabled) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,req.ID,req.WorldID,req.MonsterID,req.SpawnX,req.SpawnZ,req.RareSpawn,req.SpawnChancePercent,req.RetrySpawnSeconds,req.FirstSpawnDelaySeconds,enabled)
+	if err!=nil{h.logger.Error("create monster spawn point failed","spawn_id",req.ID,"error",err);http.Error(w,"world or monster not found, or spawn point already exists",400);return}
+	writeJSON(w,201,map[string]any{"spawn_point_id":req.ID,"created":true})
+}
+
 func (h *gameMonsterAdminHandlers) listDefinitions(w http.ResponseWriter,r *http.Request) {
 	if !h.authorize(w,r){return}
 	ctx,cancel:=context.WithTimeout(r.Context(),8*time.Second);defer cancel()
@@ -77,7 +113,9 @@ func (h *gameMonsterAdminHandlers) updateSpawnPoint(w http.ResponseWriter,r *htt
 func registerGameMonsterAdminRoutes(mux *http.ServeMux,db *sql.DB,logger *slog.Logger){
 	h:=&gameMonsterAdminHandlers{db:db,apiKey:strings.TrimSpace(os.Getenv("GAME_ADMIN_INTERNAL_API_KEY")),logger:logger}
 	mux.HandleFunc("GET /api/v1/internal/admin/monsters/definitions",h.listDefinitions)
+	mux.HandleFunc("POST /api/v1/internal/admin/monsters/definitions",h.createDefinition)
 	mux.HandleFunc("PATCH /api/v1/internal/admin/monsters/definitions/{monsterID}",h.updateDefinition)
 	mux.HandleFunc("GET /api/v1/internal/admin/monsters/spawn-points",h.listSpawnPoints)
+	mux.HandleFunc("POST /api/v1/internal/admin/monsters/spawn-points",h.createSpawnPoint)
 	mux.HandleFunc("PATCH /api/v1/internal/admin/monsters/spawn-points/{spawnID}",h.updateSpawnPoint)
 }
