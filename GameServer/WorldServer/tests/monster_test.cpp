@@ -31,6 +31,20 @@ int main() {
     assert(state.target_id == "player-1");
     assert(state.x > 0.0F && state.x < player.x);
 
+    // Chase stops at attack range instead of walking into the player's position.
+    state.x = 0.0F;
+    state.z = 0.0F;
+    for (int step = 0; step < 200; ++step) {
+        assert(tick_monster(wolf, state, &player, 0.05F));
+    }
+    assert(state.mode == MonsterMode::Chasing);
+    assert(std::abs(state.x - (player.x - wolf.attack_range)) < 0.01F);
+
+    // The existing target gets a small hysteresis margin to avoid aggro flicker.
+    const MonsterTarget retained_player{.id = "player-1", .x = 10.5F, .z = 0.0F, .alive = true};
+    assert(tick_monster(wolf, state, &retained_player, 0.05F));
+    assert(state.mode == MonsterMode::Chasing);
+
     const MonsterTarget far_player{.id = "player-1", .x = 100.0F, .z = 0.0F, .alive = true};
     state.x = 25.0F;
     state.z = 0.0F;
@@ -46,6 +60,9 @@ int main() {
 
     auto invalid = wolf;
     invalid.leash_radius = 2.0F;
+    assert(!valid_monster_definition(invalid));
+    invalid = wolf;
+    invalid.attack_range = invalid.leash_radius;
     assert(!valid_monster_definition(invalid));
     assert(!tick_monster(wolf, state, nullptr, -0.1F));
     return 0;
