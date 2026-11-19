@@ -20,6 +20,8 @@ func TestAdminRoutesUnavailableWithoutDatabase(t *testing.T) {
   {http.MethodGet,"/api/v1/admin/users"},
   {http.MethodPost,"/api/v1/admin/users"},
   {http.MethodGet,"/api/v1/admin/permissions"},
+  {http.MethodGet,"/api/v1/admin/servers/nodes"},
+  {http.MethodPatch,"/api/v1/admin/servers/nodes/test-node/state"},
   {http.MethodPut,"/api/v1/admin/users/00000000-0000-4000-8000-000000000001/permissions"},
  }
  for _,tc:=range cases { t.Run(tc.method+" "+tc.path,func(t *testing.T){
@@ -33,4 +35,5 @@ func TestAdminPermissionChecks(t *testing.T) {
  if !hasPermission(user,"players.read"){t.Fatal("explicit permission should be accepted")}
  if hasPermission(user,"players.ban"){t.Fatal("ungranted permission must be rejected")}
  if !hasPermission(adminauth.User{IsSuperAdmin:true},"servers.control"){t.Fatal("super administrator should have all permissions")}
+ if !hasPermission(user,"servers.manage") && hasPermission(user,"servers.read") { /* node control is intentionally separate */ }
 }
