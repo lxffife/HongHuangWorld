@@ -2,6 +2,7 @@ package httpapi
 
 import (
  "context"
+	"database/sql"
 	"encoding/json"
  "errors"
  "log/slog"
@@ -24,7 +25,7 @@ func (h *adminHandlers) dashboard(w http.ResponseWriter,r *http.Request) {
  writeJSON(w,http.StatusOK,out)
 }
 
-type adminHandlers struct { service *adminauth.Service; identity *identityadmin.Client; game *gameadmin.Client; logger *slog.Logger }
+type adminHandlers struct { db *sql.DB; service *adminauth.Service; identity *identityadmin.Client; game *gameadmin.Client; logger *slog.Logger }
 type adminLoginRequest struct { Username string `json:"username"`; Password string `json:"password"` }
 type adminPasswordRequest struct { CurrentPassword string `json:"current_password"`; NewPassword string `json:"new_password"` }
 type adminCreateUserRequest struct { Username string `json:"username"`; Email string `json:"email"`; Password string `json:"password"` }
