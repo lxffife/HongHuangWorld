@@ -37,7 +37,7 @@ func (h *gamePlayerAdminHandlers) growth(w http.ResponseWriter, r *http.Request)
 	}
 
 	currentBody, err := queryAdminRows(ctx,h.db,`
-		SELECT character.id::text,character.name,character.race_id,
+		SELECT current_character.id::text,current_character.name,current_character.race_id,
 		       attributes.strength,attributes.constitution,attributes.agility,
 		       attributes.spirit,attributes.vitality,attributes.health,
 		       attributes.max_health,attributes.mana,attributes.max_mana,
@@ -46,9 +46,9 @@ func (h *gamePlayerAdminHandlers) growth(w http.ResponseWriter, r *http.Request)
 		       realm.name AS realm_name,progression.realm_stage,
 		       progression.unspent_attribute_points
 		FROM souls soul
-		JOIN characters character ON character.id=soul.current_character_id
-		LEFT JOIN character_attributes attributes ON attributes.character_id=character.id
-		LEFT JOIN character_progression progression ON progression.character_id=character.id
+		JOIN characters current_character ON current_character.id=soul.current_character_id
+		LEFT JOIN character_attributes attributes ON attributes.character_id=current_character.id
+		LEFT JOIN character_progression progression ON progression.character_id=current_character.id
 		LEFT JOIN cultivation_realms realm ON realm.id=progression.realm_id
 		WHERE soul.id=$1::uuid`,soulID)
 	if err != nil { adminGrowthQueryError(h.logger,w,"current body attributes",err); return }
