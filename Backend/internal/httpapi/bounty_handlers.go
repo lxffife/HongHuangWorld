@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+ "crypto/subtle"
  "errors"
  "log/slog"
  "net/http"
@@ -10,7 +11,7 @@ import (
  "github.com/liflife/HongHuangWorld/Backend/internal/task"
 )
 
-type bountyHandlers struct { authService auth.Provider; service *task.Service; logger *slog.Logger }
+type bountyHandlers struct { authService auth.Provider; service *task.Service; logger *slog.Logger; apiKey string }
 func (h *bountyHandlers) accountID(w http.ResponseWriter,r *http.Request)(string,bool){
  header:=r.Header.Get("Authorization");if !strings.HasPrefix(header,"Bearer "){http.Error(w,"unauthorized",http.StatusUnauthorized);return "",false}
  account,err:=h.authService.Authenticate(r.Context(),strings.TrimSpace(strings.TrimPrefix(header,"Bearer ")))
@@ -56,4 +57,34 @@ func (h *bountyHandlers) writeError(w http.ResponseWriter,err error){
  case errors.Is(err,task.ErrInsufficientTreasury),errors.Is(err,task.ErrAlreadyJoined),errors.Is(err,task.ErrTaskFull):http.Error(w,err.Error(),http.StatusConflict)
  default:h.logger.Error("bounty task request failed","error",err);http.Error(w,"internal server error",http.StatusInternalServerError)
  }
+}
+
+
+// cancel allows only the publishing faction's leader/officer to release the
+// remaining escrow. The event key must be reused when retrying the request.
+func (h *bountyHandlers) cancel(w http.ResponseWriter,r *http.Request) {
+ account,ok:=h.accountID(w,r); if !ok { return }
+ var body struct { EventKey string `json:"event_key"` }
+ if err:=decodeJSON(w,r,&body);err!=nil { http.Error(w,"invalid request body",http.StatusBadRequest);return }
+ result,err:=h.service.Cancel(r.Context(),account,r.PathValue("taskID"),body.EventKey)
+ if err!=nil { h.writeError(w,err);return }
+ writeJSON(w,http.StatusOK,result)
+}
+
+// expireDue is a trusted scheduler endpoint. It deliberately uses the same
+// World Server key as other server-to-server commands and is never exposed to players.
+func (h *bountyHandlers) expireDue(w http.ResponseWriter,r *http.Request) {
+ if h.apiKey=="" { http.Error(w,"world server API is not configured",http.StatusServiceUnavailable);return }
+ provided:=r.Header.Get("X-World-Server-Key")
+ if len(provided)!=len(h.apiKey) || subtle.ConstantTimeCompare([]byte(provided),[]byte(h.apiKey))!=1 {
+  http.Error(w,"unauthorized",http.StatusUnauthorized);return
+ }
+ var body struct { Limit int `json:"limit"` }
+ if r.Body!=nil && r.ContentLength!=0 {
+  if err:=decodeJSON(w,r,&body);err!=nil { http.Error(w,"invalid request body",http.StatusBadRequest);return }
+ }
+ if body.Limit==0 { body.Limit=50 }
+ count,err:=h.service.ExpireDue(r.Context(),body.Limit)
+ if err!=nil { h.writeError(w,err);return }
+ writeJSON(w,http.StatusOK,map[string]any{"refunded_tasks":count})
 }
