@@ -70,6 +70,7 @@ var vitals_panel: PanelContainer
 var health_label: Label
 var mana_label: Label
 var health_bar: ProgressBar
+var mana_bar: ProgressBar
 var spell_cooldown_labels: Dictionary = {}
 var spell_cooldown_remaining: Dictionary = {"fireball": 0.0, "ice_bolt": 0.0}
 var notification_panel: PanelContainer
@@ -712,13 +713,25 @@ func _build_combat_hud() -> void:
 	vitals_panel = PanelContainer.new()
 	vitals_panel.position = Vector2(18.0, -104.0)
 	vitals_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	vitals_panel.custom_minimum_size = Vector2(300.0, 104.0)
+	vitals_panel.custom_minimum_size = Vector2(320.0, 154.0)
+	var vitals_style := StyleBoxFlat.new()
+	vitals_style.bg_color = Color("#0c1724", 0.94)
+	vitals_style.border_color = Color("#3b5368")
+	vitals_style.set_border_width_all(1)
+	vitals_style.set_corner_radius_all(10)
+	vitals_style.content_margin_left = 12.0
+	vitals_style.content_margin_right = 12.0
+	vitals_style.content_margin_top = 9.0
+	vitals_style.content_margin_bottom = 9.0
+	vitals_panel.add_theme_stylebox_override("panel", vitals_style)
 	hud.add_child(vitals_panel)
 	var vitals_layout := VBoxContainer.new()
 	vitals_layout.add_theme_constant_override("separation", 6)
 	vitals_panel.add_child(vitals_layout)
 	health_label = Label.new()
-	health_label.text = "生命：等待服务端战斗状态"
+	health_label.text = "生命  ·  等待服务端战斗状态"
+	health_label.add_theme_color_override("font_color", Color("#f0c4b8"))
+	health_label.add_theme_font_size_override("font_size", 13)
 	vitals_layout.add_child(health_label)
 	mana_label = Label.new()
 	mana_label.text = "灵力  " + str(int(HHSession.world_snapshot.get("mana", 0))) + " / " + str(int(HHSession.world_snapshot.get("max_mana", 0)))
@@ -729,13 +742,45 @@ func _build_combat_hud() -> void:
 	health_bar.max_value = 1.0
 	health_bar.value = 0.0
 	health_bar.show_percentage = false
+	var health_track := StyleBoxFlat.new()
+	health_track.bg_color = Color("#2a303c")
+	health_track.set_corner_radius_all(5)
+	var health_fill := StyleBoxFlat.new()
+	health_fill.bg_color = Color("#c65d5d")
+	health_fill.set_corner_radius_all(5)
+	health_bar.add_theme_stylebox_override("background", health_track)
+	health_bar.add_theme_stylebox_override("fill", health_fill)
 	vitals_layout.add_child(health_bar)
+	mana_label = Label.new()
+	mana_label.text = "灵力  " + str(int(HHSession.world_snapshot.get("mana", 0))) + " / " + str(int(HHSession.world_snapshot.get("max_mana", 0)))
+	mana_label.add_theme_color_override("font_color", Color("#a9d4f2"))
+	mana_label.add_theme_font_size_override("font_size", 12)
+	vitals_layout.add_child(mana_label)
+	mana_bar = ProgressBar.new()
+	mana_bar.custom_minimum_size = Vector2(270.0, 10.0)
+	mana_bar.min_value = 0.0
+	mana_bar.max_value = maxf(1.0, float(HHSession.world_snapshot.get("max_mana", 0)))
+	mana_bar.value = clampf(float(HHSession.world_snapshot.get("mana", 0)), 0.0, mana_bar.max_value)
+	mana_bar.show_percentage = false
+	var mana_track := StyleBoxFlat.new()
+	mana_track.bg_color = Color("#202f40")
+	mana_track.set_corner_radius_all(5)
+	var mana_fill := StyleBoxFlat.new()
+	mana_fill.bg_color = Color("#4b91c7")
+	mana_fill.set_corner_radius_all(5)
+	mana_bar.add_theme_stylebox_override("background", mana_track)
+	mana_bar.add_theme_stylebox_override("fill", mana_fill)
+	vitals_layout.add_child(mana_bar)
 	var spell_hint := Label.new()
-	spell_hint.text = "Q 火球术  ·  R 冰锥术"
+	spell_hint.text = "快捷技能"
+	spell_hint.add_theme_color_override("font_color", Color("#d6bd8b"))
+	spell_hint.add_theme_font_size_override("font_size", 11)
 	vitals_layout.add_child(spell_hint)
 	for spell_id in ["fireball", "ice_bolt"]:
 		var cooldown_label := Label.new()
-		cooldown_label.text = "火球术：就绪" if spell_id == "fireball" else "冰锥术：就绪"
+		cooldown_label.text = "Q  火球术：就绪" if spell_id == "fireball" else "R  冰锥术：就绪"
+		cooldown_label.add_theme_color_override("font_color", Color("#c4d2df"))
+		cooldown_label.add_theme_font_size_override("font_size", 11)
 		spell_cooldown_labels[spell_id] = cooldown_label
 		vitals_layout.add_child(cooldown_label)
 	_update_spell_cooldown_hud()
@@ -1026,7 +1071,12 @@ func _on_entities_updated(entities: Array) -> void:
 			if entity.has("max_mana"):
 				HHSession.world_snapshot["max_mana"] = int(entity.get("max_mana", 0))
 			if is_instance_valid(mana_label):
-				mana_label.text = "灵力  " + str(int(HHSession.world_snapshot.get("mana", 0))) + " / " + str(int(HHSession.world_snapshot.get("max_mana", 0)))
+				var mana_now := int(HHSession.world_snapshot.get("mana", 0))
+				var mana_max := int(HHSession.world_snapshot.get("max_mana", 0))
+				mana_label.text = "灵力  " + str(mana_now) + " / " + str(mana_max)
+				if is_instance_valid(mana_bar):
+					mana_bar.max_value = maxf(1.0, float(mana_max))
+					mana_bar.value = clampf(float(mana_now), 0.0, mana_bar.max_value)
 			continue
 		seen[character_id] = true
 		_upsert_remote_player(entity)
@@ -1767,13 +1817,25 @@ func _layout_hud() -> void:
 		npc_interact_button.offset_right = -18.0
 		npc_interact_button.offset_top = -chat_height - 72.0
 		npc_interact_button.offset_bottom = -chat_height - 26.0
+	if is_instance_valid(vitals_panel):
+		var vitals_width := minf(340.0, maxf(250.0, viewport_size.x - 36.0))
+		vitals_panel.custom_minimum_size = Vector2(vitals_width, 154.0)
+		vitals_panel.size = Vector2(vitals_width, 154.0)
+		vitals_panel.offset_left = 18.0
+		vitals_panel.offset_top = -172.0
+		vitals_panel.offset_right = 18.0 + vitals_width
+		vitals_panel.offset_bottom = -18.0
+		if is_instance_valid(health_bar):
+			health_bar.custom_minimum_size.x = vitals_width - 44.0
+		if is_instance_valid(mana_bar):
+			mana_bar.custom_minimum_size.x = vitals_width - 44.0
 	if is_instance_valid(exploration_open_button):
-		# Keep exploration separate from the health bar at bottom-left.
+		# Keep exploration below the vitals card at bottom-left.
 		exploration_open_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 		exploration_open_button.offset_left = 18.0
-		exploration_open_button.offset_top = -158.0
+		exploration_open_button.offset_top = -218.0
 		exploration_open_button.offset_right = 180.0
-		exploration_open_button.offset_bottom = -112.0
+		exploration_open_button.offset_bottom = -172.0
 
 func _on_chat_input_gui_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
