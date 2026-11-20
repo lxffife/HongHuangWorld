@@ -631,6 +631,8 @@ type ItemUseResult struct {
 	Quantity int `json:"quantity"`
 	HealthRestored int `json:"health_restored"`
 	ManaRestored int `json:"mana_restored"`
+	HealthEffect int `json:"health_effect"`
+	ManaEffect int `json:"mana_effect"`
 	Health int `json:"health"`
 	MaxHealth int `json:"max_health"`
 	Mana int `json:"mana"`
@@ -694,6 +696,8 @@ func applyLiveConsumableEffect(request ItemUseRequest, live LiveConsumableResour
 	result.MaxMana = live.MaxMana
 	result.HealthRestored = result.Health - live.Health
 	result.ManaRestored = result.Mana - live.Mana
+	result.HealthEffect = heal * request.Quantity
+	result.ManaEffect = restore * request.Quantity
 	return result
 }
 
@@ -724,18 +728,20 @@ func (s *Service) useConsumableForCharacter(ctx context.Context,tx *sql.Tx,chara
 		// A retry may arrive after the original transaction committed but its HTTP
 		// response was lost. Return current authoritative resources so WorldServer
 		// can reconcile its in-memory snapshot without consuming the item twice.
- 		var health, maxHealth, mana, maxMana, healthRestored, manaRestored int
+ 		var health, maxHealth, mana, maxMana, healthRestored, manaRestored, healthEffect, manaEffect int
 		if live != nil {
 			var saved map[string]int
 			if err := json.Unmarshal(previousEffect, &saved); err != nil { return ItemUseResult{}, fmt.Errorf("decode duplicate consumable result: %w", err) }
 			health, maxHealth = saved["result_health"], saved["effective_max_health"]
 			mana, maxMana = saved["result_mana"], saved["effective_max_mana"]
 			healthRestored, manaRestored = saved["health_restored"], saved["mana_restored"]
+			healthEffect, manaEffect = saved["health_effect"], saved["mana_effect"]
 		} else if err:=tx.QueryRowContext(ctx,`SELECT health,max_health,mana,max_mana FROM character_attributes WHERE character_id=$1::uuid`,characterID).Scan(&health,&maxHealth,&mana,&maxMana); err!=nil {
 			return ItemUseResult{},fmt.Errorf("load resources for duplicate consumable request: %w",err)
 		}
 		result := consumableReplayResult(request,health,maxHealth,mana,maxMana)
 		result.HealthRestored, result.ManaRestored = healthRestored, manaRestored
+		result.HealthEffect, result.ManaEffect = healthEffect, manaEffect
 		return result,nil
 	}
 	if !errors.Is(err,sql.ErrNoRows) { return ItemUseResult{},fmt.Errorf("check consumable idempotency: %w",err) }
@@ -794,6 +800,7 @@ func (s *Service) useConsumableForCharacter(ctx context.Context,tx *sql.Tx,chara
 	effectResult["result_health"], effectResult["effective_max_health"] = result.Health, result.MaxHealth
 	effectResult["result_mana"], effectResult["effective_max_mana"] = result.Mana, result.MaxMana
 	effectResult["health_restored"], effectResult["mana_restored"] = result.HealthRestored, result.ManaRestored
+	effectResult["health_effect"], effectResult["mana_effect"] = result.HealthEffect, result.ManaEffect
 	effectJSON,_:=json.Marshal(effectResult)
 	if _,err:=tx.ExecContext(ctx,`INSERT INTO item_use_events(character_id,request_id,item_id,quantity,effect_applied)
 		VALUES($1::uuid,$2::uuid,$3,$4,$5::jsonb)`,characterID,request.RequestID,request.ItemID,request.Quantity,string(effectJSON)); err!=nil {
