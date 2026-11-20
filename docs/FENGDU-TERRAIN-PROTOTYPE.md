@@ -38,10 +38,12 @@ import/tiling test. The live map remains unchanged until that test passes.
 - `fengdu_terrain_streaming_manager.gd` incrementally creates and frees tile nodes
   around a focus node, with separate load/unload radii and a per-frame operation budget.
 - The prototype focus marker starts at the map center, so its current 4 x 4 sample
-  remains visible. A moving player/camera controller can drive the same focus node later.
+  remains visible. A moving player/camera controller can drive the same focus node later
+  through `set_focus_world_position()`. The manager emits `tile_loaded` and
+  `tile_unloaded` signals and exposes `get_loaded_tile_count()`.
 - Tile creation and collision cooking still run on the main thread; this is not
   threaded background streaming and has no LOD or visibility scheduler.
-- No LOD, navigation baking, vegetation scatter, or runtime region transitions.
+- No navigation baking, vegetation scatter, or runtime region transitions.
 - Water surfaces are visual placeholders; tides, currents, damage, and
   traversal are not implemented.
 - Each tile currently uses one trimesh collision surface; the prototype is not a production open-world setup.
