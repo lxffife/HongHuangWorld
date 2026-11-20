@@ -38,6 +38,10 @@ The terrain experiment now reads water and landmark placement from the catalog i
 
 These definitions are client presentation metadata, not gameplay permissions or authoritative world topology. A future Blood Sea deep-water, island, wreck, or ritual-island region must receive its authoritative region/POI and access rules from the server; adding a catalog entry alone does not make it traversable or discoverable.
 
+## Minimap integration
+
+The live world scene now supplies catalog landmarks to the shared minimap as normalized X/Z marker records. Catalog landmarks are rendered as purple diamond markers and can be clicked to set a navigation target, using the same world-to-radar projection as exploration points, NPCs, and monsters. The minimap remains a local radar centered on the player; this does not create a full-world map UI or reveal undiscovered server content.
+
 ## Why this is not Terrain3D yet
 
 The mesh is deliberately generated with built-in Godot APIs so the shape and
