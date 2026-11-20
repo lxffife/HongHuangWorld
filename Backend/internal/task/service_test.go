@@ -43,3 +43,19 @@ func TestSettleRejectsInvalidIdentityBeforeDatabaseAccess(t *testing.T) {
  }
  for _,test:=range tests{t.Run(test.name,func(t *testing.T){if _,err:=service.Settle(context.Background(),test.accountID,test.taskID,test.eventKey);err!=ErrInvalid{t.Fatalf("expected ErrInvalid, got %v",err)}})}
 }
+
+
+func TestCancelRejectsInvalidIdentityBeforeDatabaseAccess(t *testing.T) {
+ service:=NewService(nil,nil)
+ if _,err:=service.Cancel(context.Background(),"","task","event");err!=ErrInvalid { t.Fatalf("expected ErrInvalid for missing account, got %v",err) }
+ if _,err:=service.Cancel(context.Background(),"account","","event");err!=ErrInvalid { t.Fatalf("expected ErrInvalid for missing task, got %v",err) }
+ if _,err:=service.Cancel(context.Background(),"account","task","");err!=ErrInvalid { t.Fatalf("expected ErrInvalid for missing event key, got %v",err) }
+ if _,err:=service.Cancel(context.Background(),"account","task",strings.Repeat("x",129));err!=ErrInvalid { t.Fatalf("expected ErrInvalid for oversized event key, got %v",err) }
+}
+
+func TestExpireDueRejectsUnsafeBatchSizesBeforeDatabaseAccess(t *testing.T) {
+ service:=NewService(nil,nil)
+ for _,limit:=range []int{0,-1,101} {
+  if _,err:=service.ExpireDue(context.Background(),limit);err!=ErrInvalid { t.Fatalf("limit %d: expected ErrInvalid, got %v",limit,err) }
+ }
+}
