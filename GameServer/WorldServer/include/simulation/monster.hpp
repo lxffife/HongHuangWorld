@@ -185,9 +185,10 @@ inline bool tick_monster(const MonsterDefinition& definition, MonsterState& stat
     float dx = destination_x - state.x;
     float dz = destination_z - state.z;
 
+    const auto profile = monster_attack_profile(definition);
     double movement_attack_range = static_cast<double>(definition.attack_range);
+    double ranged_preferred_distance = 0.0;
     if (state.mode == MonsterMode::Chasing && target != nullptr) {
-        const auto profile = monster_attack_profile(definition);
         movement_attack_range = static_cast<double>(profile.range);
         const bool wolf_pack_position = std::string(profile.style) == "wolf_lunge" &&
             target->has_approach_position;
@@ -208,11 +209,11 @@ inline bool tick_monster(const MonsterDefinition& definition, MonsterState& stat
             // Ranged souls kite at roughly 72% of their attack range. They still
             // remain inside attack range, so a windup can complete if the player
             // does not keep closing the gap.
-            const double preferred_distance = static_cast<double>(profile.range) * 0.72;
+            ranged_preferred_distance = static_cast<double>(profile.range) * 0.72;
             const double target_distance = std::hypot(
                 static_cast<double>(target->x - state.x),
                 static_cast<double>(target->z - state.z));
-            retreating = target_distance < preferred_distance && target_distance > 0.001;
+            retreating = target_distance < ranged_preferred_distance && target_distance > 0.001;
             if (retreating) {
                 dx = state.x - target->x;
                 dz = state.z - target->z;
@@ -247,7 +248,7 @@ inline bool tick_monster(const MonsterDefinition& definition, MonsterState& stat
     const float step = definition.move_speed * std::min(delta_seconds, 0.1F);
     double desired_travel = state.mode == MonsterMode::Chasing
         ? (retreating
-            ? static_cast<double>(definition.attack_range) * 0.72 - distance
+            ? ranged_preferred_distance - distance
             : distance - movement_attack_range)
         : distance;
     if (retreating) {
