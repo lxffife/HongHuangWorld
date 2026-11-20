@@ -15,6 +15,7 @@ func TestAdminRoutesUnavailableWithoutDatabase(t *testing.T) {
  cases:=[]struct{method,path string}{
   {http.MethodPost,"/api/v1/admin/auth/login"},
   {http.MethodGet,"/api/v1/admin/auth/me"},
+  {http.MethodGet,"/api/v1/admin/analytics"},
   {http.MethodPost,"/api/v1/admin/auth/logout"},
   {http.MethodPost,"/api/v1/admin/auth/password"},
   {http.MethodGet,"/api/v1/admin/users"},
