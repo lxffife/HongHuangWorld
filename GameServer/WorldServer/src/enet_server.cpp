@@ -119,6 +119,15 @@ struct PlayerState {
 
 enum class MonsterAttackPhase { Ready, Windup, Recovery };
 
+struct MonsterDamageContribution {
+    std::string session_id;
+    std::string character_id;
+    std::int64_t total_damage{};
+    std::int64_t hit_count{};
+    Clock::time_point first_hit_at{};
+    Clock::time_point last_hit_at{};
+};
+
 struct MonsterRuntime {
     honghuang::simulation::MonsterDefinition definition;
     honghuang::simulation::MonsterState state;
@@ -136,6 +145,7 @@ struct MonsterRuntime {
     honghuang::simulation::TimedFreezeEffect freeze_effect;
     honghuang::simulation::PeriodicDamageEffect burn_effect;
     std::string burn_owner_character_id;
+    std::unordered_map<std::string, MonsterDamageContribution> damage_contributions;
 };
 
 
@@ -1489,6 +1499,66 @@ struct EnetServer::Impl {
             std::cerr << "Could not persist soul reward: " << error << '\n';
     }
 
+    void record_monster_damage(MonsterRuntime& monster, const PlayerState& player,
+                               std::int64_t effective_damage) {
+        if (effective_damage <= 0 || player.session_id.empty() || player.character_id.empty()) return;
+        // Keep the ledger bounded even if a spawn is attacked by a large crowd.
+        const std::string contributor_key = player.session_id + ":" + player.character_id;
+        auto found = monster.damage_contributions.find(contributor_key);
+        if (found == monster.damage_contributions.end()) {
+            constexpr std::size_t kMaximumContributorsPerSpawn = 64;
+            if (monster.damage_contributions.size() >= kMaximumContributorsPerSpawn) {
+                std::cerr << "Monster contribution ledger reached its participant limit: "
+                          << monster.runtime_id << '\n';
+                return;
+            }
+            MonsterDamageContribution contribution;
+            contribution.session_id = player.session_id;
+            contribution.character_id = player.character_id;
+            contribution.first_hit_at = Clock::now();
+            contribution.last_hit_at = contribution.first_hit_at;
+            found = monster.damage_contributions.emplace(contributor_key, std::move(contribution)).first;
+        }
+        auto& contribution = found->second;
+        if (contribution.total_damage > std::numeric_limits<std::int64_t>::max() - effective_damage)
+            contribution.total_damage = std::numeric_limits<std::int64_t>::max();
+        else
+            contribution.total_damage += effective_damage;
+        if (contribution.hit_count < std::numeric_limits<std::int64_t>::max())
+            ++contribution.hit_count;
+        contribution.last_hit_at = Clock::now();
+    }
+
+    Json monster_contribution_snapshot(const MonsterRuntime& monster) const {
+        std::vector<MonsterDamageContribution> contributors;
+        contributors.reserve(monster.damage_contributions.size());
+        for (const auto& [key, contribution] : monster.damage_contributions) {
+            (void)key;
+            contributors.push_back(contribution);
+        }
+        std::sort(contributors.begin(), contributors.end(), [](const auto& left, const auto& right) {
+            if (left.total_damage != right.total_damage) return left.total_damage > right.total_damage;
+            return left.character_id < right.character_id;
+        });
+        Json result = Json::array();
+        for (const auto& contribution : contributors) {
+            result.push_back({
+                {"session_id", contribution.session_id},
+                {"character_id", contribution.character_id},
+                {"damage", contribution.total_damage},
+                {"hit_count", contribution.hit_count}
+            });
+        }
+        return result;
+    }
+
+    void log_monster_contribution_snapshot(const MonsterRuntime& monster) const {
+        const auto snapshot = monster_contribution_snapshot(monster);
+        if (snapshot.empty()) return;
+        std::cout << "Monster defeated; authoritative damage contributors: monster="
+                  << monster.runtime_id << " contributors=" << snapshot.dump() << '\n';
+    }
+
     void enqueue_bounty_kill_events(const PlayerState& player, const MonsterRuntime& monster) {
         for (const auto& objective : player.bounty_objectives) {
             if (objective.event_type != "monster_killed" ||
@@ -2769,10 +2839,12 @@ struct EnetServer::Impl {
             return;
         }
         target->state.health = static_cast<float>(damage.remaining_health);
+        record_monster_damage(*target, player, damage.damage);
         std::int64_t experience_reward = 0;
         std::int64_t cultivation_reward = 0;
         if (damage.defeated) {
             target->state.mode = honghuang::simulation::MonsterMode::Dead;
+            log_monster_contribution_snapshot(*target);
             enqueue_bounty_kill_events(player, *target);
             target->slow_effect = {};
             target->burn_effect = {};
@@ -3206,10 +3278,12 @@ struct EnetServer::Impl {
                     if (applied_burn) target->burn_owner_character_id = projectile->owner_character_id;
                 }
                 target->state.health = static_cast<float>(damage.remaining_health);
+                record_monster_damage(*target, owner->second, damage.damage);
                 std::int64_t experience_reward = 0;
                 std::int64_t cultivation_reward = 0;
                 if (damage.defeated) {
                     target->state.mode = honghuang::simulation::MonsterMode::Dead;
+                    log_monster_contribution_snapshot(*target);
                     enqueue_bounty_kill_events(owner->second, *target);
                     honghuang::simulation::clear_negative_statuses(target->slow_effect,target->freeze_effect,target->burn_effect);
                     target->burn_owner_character_id.clear();
@@ -3276,6 +3350,7 @@ struct EnetServer::Impl {
                     }
                     monster.state = {monster.definition.spawn_x, monster.definition.spawn_z,
                                      monster.definition.max_health};
+                    monster.damage_contributions.clear();
                     monster.respawn_at = Clock::time_point{};
                     monster.attack_phase = MonsterAttackPhase::Ready;
                     honghuang::simulation::clear_negative_statuses(monster.slow_effect,monster.freeze_effect,monster.burn_effect);
@@ -3295,15 +3370,19 @@ struct EnetServer::Impl {
             }
             if (burn_damage > 0) {
                 const auto previous_health = static_cast<std::int64_t>(monster.state.health);
+                const auto applied_burn_damage = std::min(burn_damage, previous_health);
+                auto burn_owner = std::find_if(players.begin(), players.end(), [&](const auto& entry) {
+                    return entry.second.character_id == monster.burn_owner_character_id;
+                });
+                if (burn_owner != players.end())
+                    record_monster_damage(monster, burn_owner->second, applied_burn_damage);
                 monster.state.health = static_cast<float>(std::max<std::int64_t>(0, previous_health - burn_damage));
                 const bool burn_defeated = monster.state.health <= 0.0F;
                 std::int64_t experience_reward = 0;
                 std::int64_t cultivation_reward = 0;
-                auto burn_owner = std::find_if(players.begin(), players.end(), [&](const auto& entry) {
-                    return entry.second.character_id == monster.burn_owner_character_id;
-                });
                 if (burn_defeated) {
                     monster.state.mode = honghuang::simulation::MonsterMode::Dead;
+                    log_monster_contribution_snapshot(monster);
                     if (burn_owner != players.end())
                         enqueue_bounty_kill_events(burn_owner->second, monster);
                     monster.slow_effect = {};
