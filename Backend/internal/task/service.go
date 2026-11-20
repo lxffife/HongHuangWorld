@@ -236,10 +236,11 @@ func (s *Service) Settle(ctx context.Context,accountID,taskID,eventKey string)(S
  if err=tx.QueryRowContext(ctx,`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`,eventKey).Scan(&advisoryLockResult);err!=nil{return Settlement{},fmt.Errorf("lock bounty settlement idempotency key: %w",err)}
  var publisherID,treasuryID,currencyID,status,escrowStatus string
  var reward,escrowAmount int64
+ var isExpired bool
  err=tx.QueryRowContext(ctx,`SELECT t.publisher_id::text,e.treasury_account_id::text,t.currency_id,t.status,
-  t.reward_amount,e.amount,e.status
+  t.reward_amount,e.amount,e.status,(t.expires_at IS NOT NULL AND t.expires_at<=now())
   FROM bounty_tasks t JOIN bounty_task_escrows e ON e.task_id=t.id
-  WHERE t.id=$1 FOR UPDATE OF t,e`,taskID).Scan(&publisherID,&treasuryID,&currencyID,&status,&reward,&escrowAmount,&escrowStatus)
+  WHERE t.id=$1 FOR UPDATE OF t,e`,taskID).Scan(&publisherID,&treasuryID,&currencyID,&status,&reward,&escrowAmount,&escrowStatus,&isExpired)
  if errors.Is(err,sql.ErrNoRows){return Settlement{},ErrNotFound};if err!=nil{return Settlement{},fmt.Errorf("lock bounty and escrow: %w",err)}
  var role string
  err=tx.QueryRowContext(ctx,`SELECT m.role FROM factions f JOIN faction_members m ON m.faction_id=f.id
@@ -260,7 +261,7 @@ func (s *Service) Settle(ctx context.Context,accountID,taskID,eventKey string)(S
  var eventKeyUsed bool
  if err=tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM bounty_task_settlements WHERE event_key=$1 UNION ALL SELECT 1 FROM bounty_task_refunds WHERE event_key=$1)`,eventKey).Scan(&eventKeyUsed);err!=nil{return Settlement{},fmt.Errorf("check bounty settlement idempotency key: %w",err)}
  if eventKeyUsed{return Settlement{},ErrIdempotencyConflict}
- if status!="full"&&status!="in_progress"{return Settlement{},ErrTaskNotReady}
+ if isExpired || (status!="full"&&status!="in_progress"){return Settlement{},ErrTaskNotReady}
  if escrowStatus!="locked"{return Settlement{},ErrTaskNotReady}
  rows,err:=tx.QueryContext(ctx,`SELECT account_id::text FROM bounty_task_participants
   WHERE task_id=$1 AND status='accepted' ORDER BY account_id FOR UPDATE`,taskID)
