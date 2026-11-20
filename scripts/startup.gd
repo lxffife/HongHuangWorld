@@ -110,92 +110,116 @@ func _ready() -> void:
 
 func _build_ui() -> void:
 	var background := ColorRect.new()
-	background.color = Color("#101522")
+	background.color = Color("#080f19")
 	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(background)
+	var glow_left := ColorRect.new()
+	glow_left.color = Color(0.12, 0.28, 0.38, 0.18)
+	glow_left.position = Vector2(-180, -220)
+	glow_left.size = Vector2(620, 900)
+	glow_left.rotation = -0.18
+	add_child(glow_left)
+	var glow_right := ColorRect.new()
+	glow_right.color = Color(0.48, 0.31, 0.15, 0.10)
+	glow_right.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
+	glow_right.anchor_left = 0.72
+	glow_right.offset_left = 0
+	glow_right.offset_right = 280
+	glow_right.offset_top = -180
+	glow_right.offset_bottom = 180
+	add_child(glow_right)
 
 	var center := CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	center.add_theme_constant_override("margin_left", 24)
+	center.add_theme_constant_override("margin_right", 24)
 	add_child(center)
-
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(760, 500)
+	panel.custom_minimum_size = Vector2(940, 570)
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color("#111c28")
+	panel_style.border_color = Color("#425466")
+	panel_style.set_border_width_all(1)
+	panel_style.set_corner_radius_all(18)
+	panel_style.content_margin_left = 24
+	panel_style.content_margin_right = 24
+	panel_style.content_margin_top = 22
+	panel_style.content_margin_bottom = 22
+	panel.add_theme_stylebox_override("panel", panel_style)
 	center.add_child(panel)
 
 	var main_layout := HBoxContainer.new()
 	main_layout.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	main_layout.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	main_layout.add_theme_constant_override("separation", 18)
+	main_layout.add_theme_constant_override("separation", 24)
 	panel.add_child(main_layout)
-
 	var left_scroll := ScrollContainer.new()
-	left_scroll.custom_minimum_size = Vector2(430, 0)
+	left_scroll.custom_minimum_size = Vector2(530, 0)
 	left_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	left_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	main_layout.add_child(left_scroll)
-
 	content_box = VBoxContainer.new()
 	content_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	content_box.add_theme_constant_override("separation", 12)
+	content_box.add_theme_constant_override("separation", 13)
 	left_scroll.add_child(content_box)
 
-	var right_panel := PanelContainer.new()
-	right_panel_control = right_panel
-	right_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	main_layout.add_child(right_panel)
-	var right_content := VBoxContainer.new()
-	right_content.add_theme_constant_override("separation", 16)
-	right_panel.add_child(right_content)
-	var right_title := Label.new()
-	right_title.text = "轮回之门"
-	right_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	right_title.add_theme_font_size_override("font_size", 26)
-	right_content.add_child(right_title)
-	right_info_label = Label.new()
-	right_info_label.text = "登录中心服后，这里将显示灵魂档案、角色信息与世界入口。"
-	right_info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	right_info_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	right_info_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	right_info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	right_content.add_child(right_info_label)
 	account_label = Label.new()
 	account_label.hide()
+	account_label.add_theme_color_override("font_color", Color("#e5c78e"))
 	content_box.add_child(account_label)
-
+	var eyebrow := Label.new()
+	eyebrow.text = "THE IMMORTAL REALMS  ·  ONLINE"
+	eyebrow.add_theme_color_override("font_color", Color("#c6a46e"))
+	eyebrow.add_theme_font_size_override("font_size", 10)
+	content_box.add_child(eyebrow)
+	login_brand_controls.append(eyebrow)
 	var title := Label.new()
 	title.text = "洪荒：诸天轮回"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 30)
+	title.add_theme_color_override("font_color", Color("#f2e8d6"))
+	title.add_theme_font_size_override("font_size", 34)
 	content_box.add_child(title)
 	login_brand_controls.append(title)
-
 	var subtitle := Label.new()
-	subtitle.text = "中心服登录 · 灵魂档案 · 转世角色 · 世界入口"
-	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subtitle.add_theme_color_override("font_color", Color("#aab6cc"))
+	subtitle.text = "踏入诸天，开启你的第一世。"
+	subtitle.add_theme_color_override("font_color", Color("#a9bac7"))
+	subtitle.add_theme_font_size_override("font_size", 14)
 	content_box.add_child(subtitle)
 	login_brand_controls.append(subtitle)
+	var divider := HSeparator.new()
+	content_box.add_child(divider)
+	login_brand_controls.append(divider)
 
+	var section := Label.new()
+	section.text = "账号登录"
+	section.add_theme_color_override("font_color", Color("#e9dcc5"))
+	section.add_theme_font_size_override("font_size", 17)
+	content_box.add_child(section)
+	login_brand_controls.append(section)
 	api_input = _add_line_edit("中心服 API 地址", DEFAULT_API)
 	username_input = _add_line_edit("账号", "")
 	email_input = _add_line_edit("邮箱（注册时填写）", "")
 	password_input = _add_line_edit("密码", "")
 	password_input.secret = true
+	for field in [api_input, username_input, email_input, password_input]:
+		_style_login_input(field)
 	auth_controls.append_array([api_input, username_input, email_input, password_input])
-
 	login_button = Button.new()
-	login_button.text = "登录"
-	login_button.custom_minimum_size.y = 44
+	login_button.text = "进 入 洪 荒"
+	login_button.custom_minimum_size.y = 48
+	login_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	login_button.pressed.connect(_on_login_pressed)
+	_style_login_button(login_button, true)
 	content_box.add_child(login_button)
 	auth_controls.append(login_button)
 	var register_button := Button.new()
-	register_button.text = "注册新账号并登录"
+	register_button.text = "创建新账号"
+	register_button.custom_minimum_size.y = 40
+	register_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	register_button.pressed.connect(_on_register_pressed)
+	_style_login_button(register_button, false)
 	content_box.add_child(register_button)
 	auth_controls.append(register_button)
 	var auth_separator := HSeparator.new()
@@ -203,16 +227,18 @@ func _build_ui() -> void:
 	auth_controls.append(auth_separator)
 
 	var character_title := Label.new()
-	character_title.text = "首次进入：创建角色"
+	character_title.text = "初入洪荒 · 创建角色"
 	character_title.add_theme_font_size_override("font_size", 18)
+	character_title.add_theme_color_override("font_color", Color("#e9d7b8"))
 	content_box.add_child(character_title)
 	character_title_label = character_title
 	character_title_label.hide()
-
 	character_input = _add_line_edit("角色名（2–24 个字符）", "")
+	_style_login_input(character_input)
 	character_input.hide()
 	var race_label := Label.new()
 	race_label.text = "选择种族与修炼道路"
+	race_label.add_theme_color_override("font_color", Color("#b8c7d2"))
 	content_box.add_child(race_label)
 	race_label_control = race_label
 	race_label_control.hide()
@@ -223,11 +249,12 @@ func _build_ui() -> void:
 	race_select.hide()
 	cultivation_preview = Label.new()
 	cultivation_preview.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	cultivation_preview.add_theme_color_override("font_color", Color("#aab6cc"))
+	cultivation_preview.add_theme_color_override("font_color", Color("#b4c4d0"))
 	content_box.add_child(cultivation_preview)
 	cultivation_preview.hide()
 	var world_label := Label.new()
-	world_label.text = "出生世界（当前联调阶段仅开放：青云人界）"
+	world_label.text = "出生世界"
+	world_label.add_theme_color_override("font_color", Color("#b8c7d2"))
 	content_box.add_child(world_label)
 	world_label_control = world_label
 	world_label_control.hide()
@@ -235,24 +262,101 @@ func _build_ui() -> void:
 	world_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content_box.add_child(world_select)
 	world_select.hide()
-
 	action_button = Button.new()
 	action_button.text = "创建角色并进入世界"
 	action_button.disabled = true
-	action_button.custom_minimum_size.y = 44
+	action_button.custom_minimum_size.y = 48
 	action_button.pressed.connect(_on_create_character_pressed)
+	_style_login_button(action_button, true)
 	content_box.add_child(action_button)
 	action_button.hide()
-
 	status_label = Label.new()
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	status_label.custom_minimum_size.y = 42
+	status_label.custom_minimum_size.y = 38
+	status_label.add_theme_color_override("font_color", Color("#9db1bf"))
 	content_box.add_child(status_label)
+
+	right_panel_control = PanelContainer.new()
+	right_panel_control.custom_minimum_size = Vector2(300, 0)
+	var right_style := StyleBoxFlat.new()
+	right_style.bg_color = Color("#172635")
+	right_style.border_color = Color("#354b5c")
+	right_style.set_border_width_all(1)
+	right_style.set_corner_radius_all(14)
+	right_style.content_margin_left = 20
+	right_style.content_margin_right = 20
+	right_style.content_margin_top = 22
+	right_style.content_margin_bottom = 22
+	right_panel_control.add_theme_stylebox_override("panel", right_style)
+	main_layout.add_child(right_panel_control)
+	var right_content := VBoxContainer.new()
+	right_content.add_theme_constant_override("separation", 14)
+	right_panel_control.add_child(right_content)
+	var seal := Label.new()
+	seal.text = "☯"
+	seal.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	seal.add_theme_color_override("font_color", Color("#d4b47b"))
+	seal.add_theme_font_size_override("font_size", 66)
+	right_content.add_child(seal)
+	var right_title := Label.new()
+	right_title.text = "轮 回 之 门"
+	right_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	right_title.add_theme_color_override("font_color", Color("#e8d7b8"))
+	right_title.add_theme_font_size_override("font_size", 22)
+	right_content.add_child(right_title)
+	var right_rule := HSeparator.new()
+	right_content.add_child(right_rule)
+	right_info_label = Label.new()
+	right_info_label.text = "登录中心服后，这里将显示灵魂档案、角色信息与世界入口。"
+	right_info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	right_info_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right_info_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	right_info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	right_info_label.add_theme_color_override("font_color", Color("#a9bac7"))
+	right_content.add_child(right_info_label)
+	var footnote := Label.new()
+	footnote.text = "一念入轮回 · 万界皆有缘"
+	footnote.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	footnote.add_theme_color_override("font_color", Color("#b99b6b"))
+	footnote.add_theme_font_size_override("font_size", 11)
+	right_content.add_child(footnote)
 
 	http = HTTPRequest.new()
 	http.timeout = 12.0
 	add_child(http)
 	http.request_completed.connect(_on_http_completed)
+
+func _style_login_input(field: LineEdit) -> void:
+	field.custom_minimum_size.y = 44
+	field.add_theme_color_override("font_color", Color("#edf2f5"))
+	field.add_theme_color_override("font_placeholder_color", Color("#8295a4"))
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color("#172633")
+	normal.border_color = Color("#3d5365")
+	normal.set_border_width_all(1)
+	normal.set_corner_radius_all(7)
+	normal.content_margin_left = 12
+	normal.content_margin_right = 12
+	var focus := normal.duplicate() as StyleBoxFlat
+	focus.border_color = Color("#c4a36d")
+	field.add_theme_stylebox_override("normal", normal)
+	field.add_theme_stylebox_override("focus", focus)
+
+func _style_login_button(button: Button, primary: bool) -> void:
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color("#9c7947") if primary else Color("#263a49")
+	normal.border_color = Color("#d0b27c") if primary else Color("#455c6e")
+	normal.set_border_width_all(1)
+	normal.set_corner_radius_all(8)
+	normal.content_margin_left = 12
+	normal.content_margin_right = 12
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = Color("#b18d58") if primary else Color("#344c5d")
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", hover)
+	button.add_theme_color_override("font_color", Color("#fff8eb") if primary else Color("#d7e1e8"))
+	button.add_theme_font_size_override("font_size", 14)
 
 func _build_reincarnation_ui() -> void:
 	details_toggle_button = Button.new()
