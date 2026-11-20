@@ -553,6 +553,8 @@ func (s *Service) ApplyWorldEvent(ctx context.Context,nodeKey string,event World
   event.ObjectiveKey=="" || len(event.ObjectiveKey)>64 {
   return WorldEventResult{},ErrInvalidWorldEvent
  }
+ event.EventID=strings.ToLower(event.EventID); event.TaskID=strings.ToLower(event.TaskID)
+ event.SessionID=strings.ToLower(event.SessionID); event.CharacterID=strings.ToLower(event.CharacterID)
  tx,err:=s.db.BeginTx(ctx,nil)
  if err!=nil { return WorldEventResult{},fmt.Errorf("begin verified bounty event: %w",err) }
  defer tx.Rollback()
@@ -597,20 +599,21 @@ func (s *Service) ApplyWorldEvent(ctx context.Context,nodeKey string,event World
   FROM world_sessions ws
   JOIN server_registry node ON node.id=ws.server_id
   JOIN world_instances instance ON instance.id=ws.instance_id
-  JOIN characters character ON character.id=ws.character_id
-  JOIN souls soul ON soul.id=character.soul_id
+  JOIN characters c ON c.id=ws.character_id
+  JOIN souls soul ON soul.id=c.soul_id
   WHERE ws.id=$1::uuid AND ws.character_id=$2::uuid AND node.node_key=$3
-   AND ws.session_state='active' AND character.status='alive'
-   AND character.world_id=$4 AND instance.world_id=$4
-  FOR SHARE OF ws,character,soul`,event.SessionID,event.CharacterID,nodeKey,worldID).Scan(&accountID)
+   AND ws.session_state='active' AND c.status='alive'
+   AND c.world_id=$4 AND instance.world_id=$4
+  FOR SHARE OF ws,c,soul`,event.SessionID,event.CharacterID,nodeKey,worldID).Scan(&accountID)
  if errors.Is(err,sql.ErrNoRows) { return WorldEventResult{},ErrWorldEventSession }
  if err!=nil { return WorldEventResult{},fmt.Errorf("verify bounty world session: %w",err) }
 
  var participantStatus string
  err=tx.QueryRowContext(ctx,`SELECT status FROM bounty_task_participants
   WHERE task_id=$1::uuid AND account_id=$2::uuid FOR SHARE`,event.TaskID,accountID).Scan(&participantStatus)
- if errors.Is(err,sql.ErrNoRows) || participantStatus!="accepted" { return WorldEventResult{},ErrNotParticipant }
+ if errors.Is(err,sql.ErrNoRows) { return WorldEventResult{},ErrNotParticipant }
  if err!=nil { return WorldEventResult{},fmt.Errorf("verify bounty participant: %w",err) }
+ if participantStatus!="accepted" { return WorldEventResult{},ErrNotParticipant }
 
  var configuredType string
  var target int
