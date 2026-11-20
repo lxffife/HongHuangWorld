@@ -141,7 +141,7 @@ func (s *Service) ListLootTable(ctx context.Context) ([]LootEntry, error) {
 }
 
 func (s *Service) CurrentInventory(ctx context.Context, accountID string) ([]ItemStack, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT i.id, i.name, i.category, i.quality, ci.quantity, i.max_stack, i.icon_key, i.description, i.item_type, COALESCE(i.equipment_slot, ''), i.base_stats, COALESCE(es.id, ''), COALESCE(es.name, ''), COALESCE(es.description, ''), COALESCE(es.bonus_tiers, '{}'::jsonb)
+	rows, err := s.db.QueryContext(ctx, `SELECT i.id, i.name, i.category, i.quality, ci.quantity, i.max_stack, i.icon_key, i.description, i.item_type, COALESCE(i.equipment_slot, ''), COALESCE(i.weapon_type, ''), i.base_stats, COALESCE(es.id, ''), COALESCE(es.name, ''), COALESCE(es.description, ''), COALESCE(es.bonus_tiers, '{}'::jsonb)
 		FROM souls soul
 		JOIN characters c ON c.id = soul.current_character_id
 		JOIN character_inventory ci ON ci.character_id = c.id
