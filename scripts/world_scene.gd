@@ -2308,6 +2308,11 @@ func _on_monster_action_event(event: Dictionary) -> void:
 		attacker.set_meta("attack_phase_duration", windup)
 		attacker.set_meta("attack_phase_time", windup)
 		attacker.set_meta("attack_recovery_duration", maxf(float(event.get("recovery_ms", 420)) / 1000.0, 0.1))
+	elif phase == "cancelled":
+		attacker.set_meta("attack_phase", "idle")
+		attacker.set_meta("attack_phase_time", 0.0)
+		_set_iron_slam_telegraph(attacker, false)
+		_set_elemental_telegraph(attacker, false)
 	elif phase == "impact":
 		attacker.set_meta("attack_phase", "impact")
 		attacker.set_meta("attack_phase_duration", 0.2)
