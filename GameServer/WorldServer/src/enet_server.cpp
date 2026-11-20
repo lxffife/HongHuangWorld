@@ -2421,16 +2421,20 @@ struct EnetServer::Impl {
         auto player_it = players.find(peer);
         if (player_it == players.end()) return;
         auto& player = player_it->second;
+        const auto spell_id = command.value("spell_id", std::string{});
+        const auto* spell = honghuang::simulation::find_spell_definition(spell_id);
         const auto reject = [&](const std::string& reason) {
-            send_json(peer, honghuang::protocol::MessageType::CombatEvent,
-                      Json{{"accepted", false}, {"action", "spell_cast"}, {"reason", reason},
-                           {"mana", player.mana}, {"max_mana", player.max_mana}});
+            Json response{{"accepted", false}, {"action", "spell_cast"}, {"reason", reason},
+                          {"mana", player.mana}, {"max_mana", player.max_mana}};
+            if (!spell_id.empty() && spell_id.size() <= 64) response["spell_id"] = spell_id;
+            if (spell != nullptr && honghuang::simulation::valid_spell_definition(*spell)) {
+                response["cooldown_ms"] = spell->cooldown_ms;
+            }
+            send_json(peer, honghuang::protocol::MessageType::CombatEvent, response);
         };
         if (player.health <= 0) { reject("角色已倒地，无法施法。"); return; }
         const auto weapon = player_weapon_type(player);
         if (weapon != "staff" && weapon != "focus") { reject("装备法杖或法器后才能施展法术。"); return; }
-        const auto spell_id = command.value("spell_id", std::string{});
-        const auto* spell = honghuang::simulation::find_spell_definition(spell_id);
         if (spell == nullptr || !spell->enabled || !honghuang::simulation::valid_spell_definition(*spell)) {
             reject("未知或未开放的法术。"); return;
         }
@@ -2471,7 +2475,7 @@ struct EnetServer::Impl {
                   Json{{"accepted", true}, {"action", "spell_cast"}, {"phase", "casting"},
                        {"spell_id", std::string(spell->id)}, {"mana", player.mana},
                        {"max_mana", player.max_mana}, {"mana_cost", spell->mana_cost},
-                       {"cast_time_ms", spell->cast_time_ms}});
+                       {"cast_time_ms", spell->cast_time_ms}, {"cooldown_ms", spell->cooldown_ms}});
     }
 
     void broadcast_snapshot() {
@@ -2658,7 +2662,8 @@ struct EnetServer::Impl {
                 if (spell != nullptr) player.mana = std::min(player.max_mana, player.mana + spell->mana_cost);
                 send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                           Json{{"accepted", false}, {"action", "spell_cast"},
-                               {"reason", player.health <= 0 ? "施法中受到致命攻击，灵力已返还。" : "施法期间目标消失，灵力已返还。"},
+                               {"spell_id", pending.spell_id}, {"cooldown_ms", spell != nullptr ? spell->cooldown_ms : 0},
+                                {"reason", player.health <= 0 ? "施法中受到致命攻击，灵力已返还。" : "施法期间目标消失，灵力已返还。"},
                                {"mana", player.mana}, {"max_mana", player.max_mana}});
                 continue;
             }
@@ -2669,7 +2674,8 @@ struct EnetServer::Impl {
                 player.mana = std::min(player.max_mana, player.mana + spell->mana_cost);
                 send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                           Json{{"accepted", false}, {"action", "spell_cast"},
-                               {"reason", "法术释放条件已失效，灵力已返还。"},
+                               {"spell_id", pending.spell_id}, {"cooldown_ms", spell->cooldown_ms},
+                                {"reason", "法术释放条件已失效，灵力已返还。"},
                                {"mana", player.mana}, {"max_mana", player.max_mana}});
                 continue;
             }
