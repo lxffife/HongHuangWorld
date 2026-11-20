@@ -405,7 +405,6 @@ func (s *Service) Equip(ctx context.Context, accountID string, request Equipment
 		if errors.Is(err,sql.ErrNoRows) { return ErrInvalidRequest }; return fmt.Errorf("resolve current character: %w",err)
 	}
 	if err := ensureEquipmentSessionStable(ctx, tx, characterID); err != nil { return err }
-	if err := ensureEquipmentSessionStable(ctx, tx, characterID); err != nil { return err }
 	var itemSlot string
 	if err:=tx.QueryRowContext(ctx,`SELECT equipment_slot FROM item_definitions WHERE id=$1 AND enabled AND item_type='equipment'`,request.ItemID).Scan(&itemSlot); err!=nil {
 		if errors.Is(err,sql.ErrNoRows) { return ErrInvalidRequest }; return fmt.Errorf("load equipment definition: %w",err)
@@ -446,6 +445,7 @@ func (s *Service) Unequip(ctx context.Context, accountID, slot string) error {
 	if err:=tx.QueryRowContext(ctx,`SELECT c.id::text FROM souls soul JOIN characters c ON c.id=soul.current_character_id WHERE soul.account_id=$1 AND c.status='alive' FOR UPDATE OF c`,accountID).Scan(&characterID); err!=nil {
 		if errors.Is(err,sql.ErrNoRows) { return ErrInvalidRequest }; return fmt.Errorf("resolve current character: %w",err)
 	}
+	if err := ensureEquipmentSessionStable(ctx, tx, characterID); err != nil { return err }
 	if err:=tx.QueryRowContext(ctx,`SELECT item_id FROM character_equipment WHERE character_id=$1::uuid AND slot=$2 FOR UPDATE`,characterID,slot).Scan(&itemID); err!=nil {
 		if errors.Is(err,sql.ErrNoRows) { return ErrInvalidRequest }; return fmt.Errorf("load equipped item: %w",err)
 	}
