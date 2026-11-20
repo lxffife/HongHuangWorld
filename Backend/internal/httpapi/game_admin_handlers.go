@@ -276,6 +276,10 @@ func (h *gamePlayerAdminHandlers) setServerNodeState(w http.ResponseWriter, r *h
 	requested, err := h.serverService.SetAdminState(ctx, r.PathValue("nodeKey"), request.AdminState)
 	if errors.Is(err, serverregistry.ErrInvalidNodeState) { http.Error(w, "admin_state must be normal, draining or disabled", http.StatusBadRequest); return }
 	if errors.Is(err, serverregistry.ErrNodeNotFound) { http.Error(w, "world server node not found", http.StatusNotFound); return }
+	if errors.Is(err, serverregistry.ErrNodeHasSessions) {
+		writeJSON(w, http.StatusConflict, map[string]any{"error":"node still has active or pending sessions; set draining and retry after all sessions leave","remaining_sessions":requested})
+		return
+	}
 	if err != nil {
 		h.logger.Error("game admin server node state update failed", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
