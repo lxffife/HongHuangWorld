@@ -59,3 +59,24 @@ func TestExpireDueRejectsUnsafeBatchSizesBeforeDatabaseAccess(t *testing.T) {
   if _,err:=service.ExpireDue(context.Background(),limit);err!=ErrInvalid { t.Fatalf("limit %d: expected ErrInvalid, got %v",limit,err) }
  }
 }
+
+
+func TestJoinRejectsMissingIdentityBeforeDatabaseAccess(t *testing.T) {
+ service:=NewService(nil,nil)
+ if err:=service.Join(context.Background(),"","task");err!=ErrInvalid { t.Fatalf("expected ErrInvalid for missing account, got %v",err) }
+ if err:=service.Join(context.Background(),"account","");err!=ErrInvalid { t.Fatalf("expected ErrInvalid for missing task, got %v",err) }
+}
+
+func TestLeaveRejectsMissingIdentityBeforeDatabaseAccess(t *testing.T) {
+ service:=NewService(nil,nil)
+ if err:=service.Leave(context.Background(),"","task");err!=ErrInvalid { t.Fatalf("expected ErrInvalid for missing account, got %v",err) }
+ if err:=service.Leave(context.Background(),"account","");err!=ErrInvalid { t.Fatalf("expected ErrInvalid for missing task, got %v",err) }
+}
+
+func TestPublishFactionRequiresPositiveCharacterLevel(t *testing.T) {
+ service:=NewService(nil,nil)
+ request:=PublishRequest{EventKey:"event",FactionID:"faction",Title:"除祟任务",CurrencyID:"nether_stone",RewardAmount:5,MaxAssignees:1,DifficultyTier:1,RequiredRealmLevel:1}
+ if _,err:=service.PublishFaction(context.Background(),"account",request);err!=ErrInvalid { t.Fatalf("expected ErrInvalid for missing character level requirement, got %v",err) }
+ request.RequiredCharacterLevel=10001
+ if _,err:=service.PublishFaction(context.Background(),"account",request);err!=ErrInvalid { t.Fatalf("expected ErrInvalid for oversized character level requirement, got %v",err) }
+}
