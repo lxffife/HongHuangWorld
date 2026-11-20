@@ -2244,6 +2244,9 @@ func _on_combat_event(event: Dictionary) -> void:
 	if not bool(event.get("accepted", true)):
 		hud_label.text = str(event.get("reason", "攻击未命中。"))
 		return
+	if bool(event.get("projectile_spawned", false)):
+		_show_notification("箭矢已发射，等待命中……")
+		return
 	if str(event.get("source", "")) == "monster":
 		var incoming_damage := int(event.get("damage", 0))
 		if is_instance_valid(local_player) and local_player.has_method("play_hit_reaction"):
