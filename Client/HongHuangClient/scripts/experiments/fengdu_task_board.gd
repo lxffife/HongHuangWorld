@@ -81,7 +81,7 @@ func refresh() -> void:
 			var treasury_delta := int(entry.get("treasury_delta", 0))
 			var sign_text := "+" if player_delta > 0 else ""
 			var treasury_sign := "+" if treasury_delta > 0 else ""
-			history_lines.append("%s  玩家 %s%s  府库 %s%s  %s" % [_transaction_category_text(str(entry.get("category", ""))), sign_text, _format_amount(player_delta), treasury_sign, _format_amount(treasury_delta), str(entry.get("note", ""))])
+			history_lines.append("[%s] %s  玩家 %s%s  府库 %s%s  %s" % [str(entry.get("currency_name", "冥币")), _transaction_category_text(str(entry.get("category", ""))), sign_text, _format_amount(player_delta), treasury_sign, _format_amount(treasury_delta), str(entry.get("note", ""))])
 		_history_label.text = "\n".join(history_lines) if not history_lines.is_empty() else "暂无交易流水。"
 		_history_label.tooltip_text = "最近 8 笔经济流水（本地原型）"
 
@@ -294,6 +294,10 @@ func _transaction_category_text(category: String) -> String:
 			return "城主府拨款"
 		"opening_player_balance":
 			return "玩家初始余额"
+		"opening_stone_balance":
+			return "玩家初始冥石"
+		"opening_stone_treasury":
+			return "府库初始冥石"
 		"opening_treasury":
 			return "府库初始库银"
 	return "其他流水"
