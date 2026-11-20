@@ -3,6 +3,7 @@ extends CanvasLayer
 
 signal closed
 signal quest_action_requested(action: String, quest_id: String)
+signal story_choice_requested(choice_id: String)
 
 var _panel: PanelContainer
 var _name_label: Label
@@ -24,13 +25,16 @@ func is_open() -> bool:
 	return _is_open
 
 
-func present(data: Dictionary, quest_data: Dictionary = {}) -> void:
+func present(data: Dictionary, quest_data: Dictionary = {}, story_choices: Array[Dictionary] = []) -> void:
 	if _panel == null:
 		return
 	_name_label.text = str(data.get("name", "阴司来客"))
 	_authority_label.text = str(data.get("authority", "酆都 · 阴司"))
 	_body_label.text = str(data.get("description", "此处暂时没有更多信息。"))
-	_rebuild_options(_get_options(data))
+	var options := _get_options(data)
+	for choice in story_choices:
+		options.append({"label": "抉择 · " + str(choice.get("label", "作出选择")), "response": str(choice.get("response", "")), "choice_id": str(choice.get("id", ""))})
+	_rebuild_options(options)
 	_current_quest_id = str(quest_data.get("id", ""))
 	_update_quest_action(quest_data)
 	_panel.visible = true
@@ -252,6 +256,9 @@ func _rebuild_options(options: Array[Dictionary]) -> void:
 
 func _on_option_pressed(option: Dictionary) -> void:
 	_body_label.text = str(option.get("response", "暂时没有更多内容。"))
+	var choice_id := str(option.get("choice_id", ""))
+	if not choice_id.is_empty():
+		story_choice_requested.emit(choice_id)
 
 
 func _panel_style() -> StyleBoxFlat:
