@@ -107,6 +107,7 @@ struct PlayerState {
     std::optional<PendingSpellCast> pending_spell;
     Clock::time_point last_pickup_at{};
     Clock::time_point last_chat_at{};
+    Clock::time_point last_combat_refresh_at{};
 };
 
 enum class MonsterAttackPhase { Ready, Windup, Recovery };
@@ -185,6 +186,14 @@ struct ChatJobResult {
     bool accepted{};
     std::string message_id;
     std::string reason;
+};
+
+struct CombatRefreshJob { std::string session_id, character_id; };
+struct CombatRefreshResult {
+    std::string session_id, character_id;
+    bool success{};
+    Json stats{Json::object()};
+    std::string error;
 };
 
 struct ConsumableJob { std::string session_id, character_id, request_id, item_id; int quantity{}; };
@@ -952,6 +961,13 @@ struct EnetServer::Impl {
     std::unordered_map<std::string, PlayerState> pending_consumable_closes;
     bool consumable_stop_requested{false};
     std::thread consumable_thread;
+    std::mutex combat_refresh_mutex;
+    std::condition_variable combat_refresh_cv;
+    std::deque<CombatRefreshJob> pending_combat_refresh_jobs;
+    std::deque<CombatRefreshResult> completed_combat_refresh_jobs;
+    std::unordered_set<std::string> pending_combat_refresh_sessions;
+    bool combat_refresh_stop_requested{false};
+    std::thread combat_refresh_thread;
     std::mutex chat_outbox_mutex;
     std::condition_variable chat_outbox_cv;
     bool chat_outbox_stop_requested{false};
@@ -2029,6 +2045,127 @@ struct EnetServer::Impl {
         }
     }
 
+    bool enqueue_combat_refresh(const PlayerState& player) {
+        std::lock_guard lock(combat_refresh_mutex);
+        if (combat_refresh_stop_requested || !combat_refresh_thread.joinable() ||
+            pending_combat_refresh_jobs.size() >= 128 ||
+            pending_combat_refresh_sessions.contains(player.session_id)) return false;
+        pending_combat_refresh_sessions.insert(player.session_id);
+        pending_combat_refresh_jobs.push_back({player.session_id, player.character_id});
+        combat_refresh_cv.notify_one();
+        return true;
+    }
+
+    void start_combat_refresh_worker() {
+        combat_refresh_stop_requested = false;
+        combat_refresh_thread = std::thread([this] {
+            while (true) {
+                CombatRefreshJob job;
+                {
+                    std::unique_lock lock(combat_refresh_mutex);
+                    combat_refresh_cv.wait(lock, [this] { return combat_refresh_stop_requested || !pending_combat_refresh_jobs.empty(); });
+                    if (combat_refresh_stop_requested && pending_combat_refresh_jobs.empty()) return;
+                    job = std::move(pending_combat_refresh_jobs.front());
+                    pending_combat_refresh_jobs.pop_front();
+                }
+                CombatRefreshResult result;
+                result.session_id = job.session_id;
+                result.character_id = job.character_id;
+                const Json request{{"session_id", job.session_id}, {"character_id", job.character_id}};
+                long status = 0;
+                result.success = backend_inventory_request(config, "/api/v1/servers/sessions/combat-stats",
+                                                           &request, status, result.stats, result.error);
+                if (!result.success && result.error.empty()) {
+                    result.error = "combat stat refresh failed (HTTP " + std::to_string(status) + ")";
+                }
+                {
+                    std::lock_guard lock(combat_refresh_mutex);
+                    completed_combat_refresh_jobs.push_back(std::move(result));
+                }
+            }
+        });
+    }
+
+    void stop_combat_refresh_worker() {
+        {
+            std::lock_guard lock(combat_refresh_mutex);
+            combat_refresh_stop_requested = true;
+        }
+        combat_refresh_cv.notify_all();
+        if (combat_refresh_thread.joinable()) combat_refresh_thread.join();
+    }
+
+    void drain_combat_refresh_results() {
+        std::deque<CombatRefreshResult> completed;
+        {
+            std::lock_guard lock(combat_refresh_mutex);
+            completed.swap(completed_combat_refresh_jobs);
+        }
+        for (auto& result : completed) {
+            {
+                std::lock_guard lock(combat_refresh_mutex);
+                pending_combat_refresh_sessions.erase(result.session_id);
+            }
+            if (!result.success || !result.stats.is_object()) {
+                if (!result.error.empty()) std::cerr << "Equipment combat refresh failed: " << result.error << '\\n';
+                continue;
+            }
+            const auto found = std::find_if(players.begin(), players.end(), [&](const auto& entry) {
+                return entry.second.session_id == result.session_id && entry.second.character_id == result.character_id;
+            });
+            if (found == players.end()) continue;
+            const auto& stats = result.stats;
+            const auto integer_field = [&](const char* key) {
+                return stats.contains(key) && stats[key].is_number_integer();
+            };
+            if (!integer_field("attack") || !integer_field("defense") ||
+                !integer_field("max_health") || !integer_field("max_mana") ||
+                !integer_field("constitution") || !integer_field("agility") ||
+                !integer_field("spirit") || !integer_field("vitality") ||
+                !stats.contains("movement_speed") || !stats["movement_speed"].is_number() ||
+                !stats.contains("equipment") || !stats["equipment"].is_array()) {
+                std::cerr << "Equipment combat refresh returned an incomplete payload for " << result.character_id << '\\n';
+                continue;
+            }
+            const auto attack = stats["attack"].get<std::int64_t>();
+            const auto defense = stats["defense"].get<std::int64_t>();
+            const auto max_health = stats["max_health"].get<std::int64_t>();
+            const auto max_mana = stats["max_mana"].get<std::int64_t>();
+            const auto speed = stats["movement_speed"].get<double>();
+            if (attack < 1 || attack > 100000 || defense < 0 || defense > 100000 ||
+                max_health < 1 || max_health > 10000000 || max_mana < 0 || max_mana > 10000000 ||
+                !std::isfinite(speed) || speed <= 0.0 || speed > 10.0) {
+                std::cerr << "Equipment combat refresh returned out-of-range stats for " << result.character_id << '\\n';
+                continue;
+            }
+            auto& player = found->second;
+            const Json previous_equipment = player.equipment;
+            // Preserve the live resources: increasing an equipment cap must not heal or
+            // restore mana. Removing a cap clamps current resources to the new maximum.
+            player.health = std::clamp<std::int64_t>(player.health, 0, max_health);
+            player.mana = std::clamp<std::int64_t>(player.mana, 0, max_mana);
+            player.max_health = max_health;
+            player.max_mana = max_mana;
+            player.attack = attack;
+            player.defense = defense;
+            player.constitution = static_cast<std::int32_t>(std::clamp<std::int64_t>(stats["constitution"].get<std::int64_t>(), 0, 100000));
+            player.agility = static_cast<std::int32_t>(std::clamp<std::int64_t>(stats["agility"].get<std::int64_t>(), 0, 100000));
+            player.spirit = static_cast<std::int32_t>(std::clamp<std::int64_t>(stats["spirit"].get<std::int64_t>(), 0, 100000));
+            player.vitality = static_cast<std::int32_t>(std::clamp<std::int64_t>(stats["vitality"].get<std::int64_t>(), 0, 100000));
+            player.movement_speed = honghuang::simulation::effective_player_movement_speed(static_cast<float>(speed));
+            player.equipment = stats["equipment"];
+            if (player.equipment != previous_equipment) {
+                broadcast_player_event(honghuang::protocol::MessageType::PlayerJoined, player);
+            }
+            send_json(found->first, honghuang::protocol::MessageType::CombatEvent,
+                Json{{"action", "equipment_refresh"}, {"accepted", true},
+                     {"health", player.health}, {"max_health", player.max_health},
+                     {"mana", player.mana}, {"max_mana", player.max_mana},
+                     {"attack", player.attack}, {"defense", player.defense},
+                     {"movement_speed", player.movement_speed}});
+        }
+    }
+
     bool enqueue_chat_job(ChatJob job) {
         std::lock_guard lock(chat_mutex);
         if (chat_stop_requested || !chat_thread.joinable() || pending_chat_jobs.size() >= 256) return false;
@@ -2589,7 +2726,15 @@ struct EnetServer::Impl {
 
     void tick_world() {
         drain_drop_results();
+        drain_combat_refresh_results();
         const auto now = Clock::now();
+        for (auto& [peer, player] : players) {
+            (void)peer;
+            if (player.last_combat_refresh_at == Clock::time_point{} ||
+                now - player.last_combat_refresh_at >= std::chrono::seconds(2)) {
+                if (enqueue_combat_refresh(player)) player.last_combat_refresh_at = now;
+            }
+        }
         ground_drops.erase(std::remove_if(ground_drops.begin(), ground_drops.end(), [&](const GroundDropRuntime& drop) {
             return drop.expires_at <= now && !drop.pickup_pending;
         }), ground_drops.end());
@@ -3318,6 +3463,7 @@ bool EnetServer::start() {
     }
     impl_->start_drop_worker();
     impl_->start_consumable_worker();
+    impl_->start_combat_refresh_worker();
     impl_->start_outbox_worker();
     impl_->start_chat_outbox_worker();
     impl_->last_persistence = Clock::now();
@@ -3595,6 +3741,8 @@ void EnetServer::stop() {
         impl_->drain_chat_results();
         impl_->stop_consumable_worker();
         impl_->drain_consumable_results();
+        impl_->stop_combat_refresh_worker();
+        impl_->drain_combat_refresh_results();
         impl_->stop_chat_outbox_worker();
         impl_->stop_outbox_worker();
         impl_->stop_reward_worker();
