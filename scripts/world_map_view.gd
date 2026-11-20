@@ -12,6 +12,9 @@ var world_bounds := Vector4(-120.0, 120.0, -120.0, 120.0)
 var region_data: Array = []
 var water_data: Array = []
 var landmark_data: Array = []
+var exploration_points: Array = []
+var npc_points: Array = []
+var monster_points: Array = []
 var player_position := Vector3.ZERO
 var navigation_target: Dictionary = {}
 
@@ -77,6 +80,7 @@ func _draw() -> void:
 	_draw_regions(map_center, scale, map_rect)
 	_draw_water(map_center, scale, map_rect)
 	_draw_landmarks(map_center, scale, map_rect)
+	_draw_live_markers(map_center, scale, map_rect)
 	_draw_navigation(map_center, scale, map_rect)
 	_draw_player(map_center, scale, map_rect)
 	draw_rect(map_rect, Color("#62788b"), false, 1.4)
@@ -177,6 +181,37 @@ func _draw_landmarks(map_center: Vector2, scale: float, clip_rect: Rect2) -> voi
 		draw_string(ThemeDB.fallback_font, point + Vector2(9.0, -5.0), str(landmark.get("name", "地标")), HORIZONTAL_ALIGNMENT_LEFT, 150.0, 11, Color("#e2e8ed"))
 
 
+func _draw_live_markers(map_center: Vector2, scale: float, clip_rect: Rect2) -> void:
+	for point_variant in exploration_points:
+		if not point_variant is Dictionary:
+			continue
+		var point: Dictionary = point_variant
+		var world_point := Vector2(float(point.get("position_x", 0.0)), float(point.get("position_z", 0.0)))
+		var canvas_point := _world_to_canvas(world_point, map_center, scale)
+		if not clip_rect.has_point(canvas_point):
+			continue
+		var discovered := bool(point.get("discovered", false))
+		var danger := int(point.get("danger_level", 0))
+		var marker_color := Color("#91a0ad") if discovered else Color("#e4b967")
+		draw_circle(canvas_point, 4.5, marker_color)
+		if danger >= 7 and not discovered:
+			draw_arc(canvas_point, 8.0, 0.0, TAU, 20, Color("#e16c6c", 0.9), 1.5)
+	for npc_variant in npc_points:
+		if not npc_variant is Dictionary:
+			continue
+		var npc: Dictionary = npc_variant
+		var npc_point := _world_to_canvas(Vector2(float(npc.get("position_x", 0.0)), float(npc.get("position_z", 0.0))), map_center, scale)
+		if clip_rect.has_point(npc_point):
+			draw_circle(npc_point, 4.0, Color("#63d6c5"))
+	for monster_variant in monster_points:
+		if not monster_variant is Dictionary:
+			continue
+		var monster: Dictionary = monster_variant
+		var monster_point := _world_to_canvas(Vector2(float(monster.get("x", 0.0)), float(monster.get("z", 0.0))), map_center, scale)
+		if clip_rect.has_point(monster_point):
+			draw_colored_polygon(PackedVector2Array([monster_point + Vector2(0.0, -5.0), monster_point + Vector2(5.0, 4.0), monster_point + Vector2(-5.0, 4.0)]), Color("#e16c6c"))
+
+
 func _draw_navigation(map_center: Vector2, scale: float, clip_rect: Rect2) -> void:
 	if navigation_target.is_empty():
 		return
@@ -204,8 +239,43 @@ func _select_at(mouse_position: Vector2) -> void:
 	var scale := _pixels_per_meter(map_rect)
 	var map_center := map_rect.get_center() + _pan
 	var best_distance := 14.0
+	var best_kind := ""
 	var best_id := ""
 	var best_name := ""
+	for point_variant in exploration_points:
+		if not point_variant is Dictionary:
+			continue
+		var point_data: Dictionary = point_variant
+		var point := _world_to_canvas(Vector2(float(point_data.get("position_x", 0.0)), float(point_data.get("position_z", 0.0))), map_center, scale)
+		var distance := point.distance_to(mouse_position)
+		if distance < best_distance:
+			best_distance = distance
+			best_kind = "exploration"
+			best_id = str(point_data.get("id", ""))
+			best_name = str(point_data.get("name", "探索点"))
+			
+	for npc_variant in npc_points:
+		if not npc_variant is Dictionary:
+			continue
+		var npc_data: Dictionary = npc_variant
+		var npc_point := _world_to_canvas(Vector2(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_z", 0.0))), map_center, scale)
+		var npc_distance := npc_point.distance_to(mouse_position)
+		if npc_distance < best_distance:
+			best_distance = npc_distance
+			best_kind = "npc"
+			best_id = str(npc_data.get("id", ""))
+			best_name = str(npc_data.get("name", "NPC"))
+	for monster_variant in monster_points:
+		if not monster_variant is Dictionary:
+			continue
+		var monster_data: Dictionary = monster_variant
+		var monster_point := _world_to_canvas(Vector2(float(monster_data.get("x", 0.0)), float(monster_data.get("z", 0.0))), map_center, scale)
+		var monster_distance := monster_point.distance_to(mouse_position)
+		if monster_distance < best_distance:
+			best_distance = monster_distance
+			best_kind = "monster"
+			best_id = str(monster_data.get("id", ""))
+			best_name = str(monster_data.get("name", "妖兽"))
 	for landmark_variant in landmark_data:
 		if not landmark_variant is Dictionary:
 			continue
@@ -217,10 +287,11 @@ func _select_at(mouse_position: Vector2) -> void:
 		var distance := point.distance_to(mouse_position)
 		if distance < best_distance:
 			best_distance = distance
+			best_kind = "landmark"
 			best_id = str(landmark.get("id", ""))
 			best_name = str(landmark.get("name", "地标"))
 	if not best_id.is_empty():
-		marker_selected.emit("landmark", best_id, best_name)
+		marker_selected.emit(best_kind, best_id, best_name)
 	else:
 		var world := WorldMapProjection.map_to_world(mouse_position, Vector3.ZERO, map_center, Vector2(scale, scale))
 		if WorldMapProjection.world_xz_in_bounds(world, world_bounds.x, world_bounds.y, world_bounds.z, world_bounds.w):
