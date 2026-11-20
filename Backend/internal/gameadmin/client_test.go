@@ -10,8 +10,10 @@ import (
 
 func TestSetServerNodeStatePreservesSessionConflict(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPatch { t.Fatalf("expected PATCH, got %s", r.Method) }
-		if r.Header.Get("X-Game-Admin-Key") != "internal-test-key" { t.Fatal("missing internal admin credential") }
+		if r.Method != http.MethodPatch || r.Header.Get("X-Game-Admin-Key") != "internal-test-key" {
+			http.Error(w, "invalid internal request", http.StatusUnauthorized)
+			return
+		}
 		w.WriteHeader(http.StatusConflict)
 		_, _ = w.Write([]byte(`{"error":"node still has sessions","remaining_sessions":3}`))
 	}))
