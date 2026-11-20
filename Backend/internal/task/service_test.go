@@ -105,4 +105,32 @@ func TestValidateJoinParticipationErrorOrder(t *testing.T) {
   })
  }
 }
+func TestValidateObjectives(t *testing.T) {
+ tests:=[]struct{name string;items []ObjectiveRequest;wantErr bool}{
+  {"empty objectives remain valid for legacy manual tasks",nil,false},
+  {"valid kill objective",[]ObjectiveRequest{{Key:"kill_wraiths",EventType:"monster_killed",TargetCount:5}},false},
+  {"valid exploration objective",[]ObjectiveRequest{{Key:"discover_gate",EventType:"exploration_discovered",TargetCount:1}},false},
+  {"duplicate objective keys",[]ObjectiveRequest{{Key:"same",EventType:"monster_killed",TargetCount:1},{Key:"same",EventType:"item_collected",TargetCount:2}},true},
+  {"unknown event type",[]ObjectiveRequest{{Key:"objective",EventType:"client_claimed",TargetCount:1}},true},
+  {"invalid objective key",[]ObjectiveRequest{{Key:"bad key",EventType:"monster_killed",TargetCount:1}},true},
+  {"zero target",[]ObjectiveRequest{{Key:"objective",EventType:"monster_killed",TargetCount:0}},true},
+  {"too many objectives",make([]ObjectiveRequest,11),true},
+ }
+ for _,tt:=range tests { t.Run(tt.name,func(t *testing.T){err:=validateObjectives(tt.items);if (err!=nil)!=tt.wantErr {t.Fatalf("got %v, wantErr %v",err,tt.wantErr)}}) }
+}
 
+func TestValidUUID(t *testing.T) {
+ if !validUUID("00000000-0000-4000-8000-000000000001") { t.Fatal("expected valid UUID") }
+ if !validUUID("00000000-0000-4000-8000-00000000000A") { t.Fatal("expected uppercase hex UUID") }
+ for _,value:=range []string{"","not-a-uuid","00000000000040008000000000000001","00000000-0000-4000-8000-00000000000Z"} {
+  if validUUID(value) { t.Fatalf("expected invalid UUID %q",value) }
+ }
+}
+
+func TestApplyWorldEventRejectsInvalidPayloadBeforeDatabaseAccess(t *testing.T) {
+ service:=NewService(nil,nil)
+ _,err:=service.ApplyWorldEvent(context.Background(),"node",WorldEvent{})
+ if err!=ErrInvalidWorldEvent { t.Fatalf("expected ErrInvalidWorldEvent, got %v",err) }
+ _,err=service.ApplyWorldEvent(context.Background(),"",WorldEvent{EventID:"00000000-0000-4000-8000-000000000001",TaskID:"00000000-0000-4000-8000-000000000002",SessionID:"00000000-0000-4000-8000-000000000003",CharacterID:"00000000-0000-4000-8000-000000000004",ObjectiveKey:"kill",EventType:"monster_killed"})
+ if err!=ErrInvalidWorldEvent { t.Fatalf("expected invalid node identity, got %v",err) }
+}
