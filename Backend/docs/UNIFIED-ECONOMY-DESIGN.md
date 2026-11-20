@@ -98,6 +98,7 @@
 - `currency_balances`：账号统一钱包的可用/冻结余额。
 - `economy_ledger_entries`：不可变资产流水和幂等键。
 - `economy_escrows`：任务、拍卖等用途的托管资产。
+- `economy_treasury_accounts` / `economy_treasury_balances` / `economy_treasury_ledger_entries`：各世界城主府、世界公库、势力财政和兑换储备的独立财政账户与流水。
 - `currency_cultivation_affinities` / `currency_cultivation_costs`：修炼适配与制造/修炼消耗配置。
 - `currency_exchange_pairs`：官方汇率、市场偏离走廊、手续费和解锁条件。
 - `currency_exchange_reserves` / `currency_market_quotes` / `currency_exchange_events`：储备、市场报价和兑换执行记录。
