@@ -288,3 +288,17 @@ func TestBountySettlementUnavailableWithoutDatabase(t *testing.T) {
  res:=httptest.NewRecorder();handler.ServeHTTP(res,req)
  if res.Code!=http.StatusServiceUnavailable{t.Fatalf("expected status %d, got %d",http.StatusServiceUnavailable,res.Code)}
 }
+
+
+func TestBountyRefundEndpointsUnavailableWithoutDatabase(t *testing.T) {
+ handler:=NewRouter(slog.New(slog.NewTextHandler(io.Discard,nil)),nil)
+ for _,route:=range []struct{method,path string}{
+  {http.MethodPost,"/api/v1/bounties/00000000-0000-4000-8000-000000000001/cancel"},
+  {http.MethodPost,"/api/v1/servers/bounties/expire"},
+ } {
+  req:=httptest.NewRequest(route.method,route.path,strings.NewReader(`{}`))
+  res:=httptest.NewRecorder()
+  handler.ServeHTTP(res,req)
+  if res.Code!=http.StatusServiceUnavailable { t.Fatalf("%s %s: expected status %d, got %d",route.method,route.path,http.StatusServiceUnavailable,res.Code) }
+ }
+}
