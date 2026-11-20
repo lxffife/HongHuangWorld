@@ -116,6 +116,52 @@ func TestItemUseResultSerializesAuthoritativeResources(t *testing.T) {
 	}
 }
 
+func TestEquipmentPrimaryAttributesApplyTheirCombatEffects(t *testing.T) {
+	stats := CombatStats{Attack: 20, Defense: 3, MaxHealth: 100, Health: 80, MaxMana: 40, Mana: 20, MovementSpeed: 5}
+	bonuses := map[string]int{
+		"strength": 2, "constitution": 3, "agility": 4, "spirit": 5, "vitality": 6,
+	}
+	if err := applyEquipmentStatBonuses(&stats, bonuses); err != nil {
+		t.Fatalf("apply equipment bonuses: %v", err)
+	}
+	if stats.Strength != 2 || stats.Constitution != 3 || stats.Agility != 4 || stats.Spirit != 5 || stats.Vitality != 6 {
+		t.Fatalf("primary attributes not applied: %+v", stats)
+	}
+	if stats.Attack != 24 || stats.Defense != 9 || stats.MaxHealth != 160 || stats.MaxMana != 90 {
+		t.Fatalf("derived combat stats = attack:%d defense:%d max_health:%d max_mana:%d", stats.Attack, stats.Defense, stats.MaxHealth, stats.MaxMana)
+	}
+	if stats.MovementSpeed < 5.1999 || stats.MovementSpeed > 5.2001 {
+		t.Fatalf("movement speed = %v, want 5.2", stats.MovementSpeed)
+	}
+	if stats.Health != 80 || stats.Mana != 20 {
+		t.Fatalf("equipping gear must not directly restore current resources: health=%d mana=%d", stats.Health, stats.Mana)
+	}
+}
+
+func TestEquipmentSecondaryBonusesRemainAdditive(t *testing.T) {
+	stats := CombatStats{Attack: 10, Defense: 2, MaxHealth: 50, MaxMana: 10, MovementSpeed: 5}
+	bonuses := map[string]int{
+		"strength": 1, "attack": 3, "vitality": 2, "defense": 4,
+		"constitution": 1, "max_health": 7, "agility": 2, "movement_speed": 1,
+	}
+	if err := applyEquipmentStatBonuses(&stats, bonuses); err != nil {
+		t.Fatalf("apply equipment bonuses: %v", err)
+	}
+	if stats.Attack != 15 || stats.Defense != 8 || stats.MaxHealth != 72 || stats.MovementSpeed < 6.0999 || stats.MovementSpeed > 6.1001 {
+		t.Fatalf("hybrid equipment effects = %+v", stats)
+	}
+}
+
+func TestEquipmentAttributeBonusesRejectExtremeValues(t *testing.T) {
+	stats := CombatStats{Attack: 10}
+	if err := applyEquipmentStatBonuses(&stats, map[string]int{"strength": 100001}); err == nil {
+		t.Fatal("expected extreme equipment bonus to be rejected")
+	}
+	if err := applyEquipmentStatBonuses(nil, map[string]int{}); err == nil {
+		t.Fatal("expected nil combat stats to be rejected")
+	}
+}
+
 func TestCombatStatsSerializesAuthoritativeMovementSpeed(t *testing.T) {
 	stats := CombatStats{MovementSpeed: 5.75}
 	encoded, err := json.Marshal(stats)
