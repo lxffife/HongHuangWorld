@@ -55,6 +55,21 @@ func (h *bountyHandlers) progress(w http.ResponseWriter,r *http.Request) {
  if err!=nil { h.writeError(w,err);return }
  writeJSON(w,http.StatusOK,result)
 }
+// activeObjectives exposes the current character's accepted objective subscriptions to its hosting node.
+func (h *bountyHandlers) activeObjectives(w http.ResponseWriter,r *http.Request) {
+ provided:=r.Header.Get("X-World-Server-Key")
+ if h.apiKey=="" || len(provided)!=len(h.apiKey) || subtle.ConstantTimeCompare([]byte(provided),[]byte(h.apiKey))!=1 {
+  http.Error(w,"unauthorized",http.StatusUnauthorized);return
+ }
+ nodeKey:=strings.TrimSpace(r.Header.Get("X-World-Server-Node"))
+ if nodeKey=="" { http.Error(w,"missing world server node identity",http.StatusBadRequest);return }
+ sessionID:=r.URL.Query().Get("session_id")
+ characterID:=r.URL.Query().Get("character_id")
+ result,err:=h.service.ListActiveObjectives(r.Context(),nodeKey,sessionID,characterID)
+ if err!=nil { h.writeError(w,err);return }
+ writeJSON(w,http.StatusOK,map[string]any{"objectives":result})
+}
+
 // reportWorldEvent accepts verified objective events from an authenticated WorldServer node.
 func (h *bountyHandlers) reportWorldEvent(w http.ResponseWriter,r *http.Request) {
  provided:=r.Header.Get("X-World-Server-Key")
