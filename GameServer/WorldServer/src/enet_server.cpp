@@ -203,6 +203,18 @@ struct CombatRefreshResult {
     std::string error;
 };
 
+struct BountyRefreshJob {
+    std::string session_id;
+    std::string character_id;
+};
+struct BountyRefreshResult {
+    std::string session_id;
+    std::string character_id;
+    bool success{};
+    std::vector<BountyObjectiveSubscription> objectives;
+    std::string error;
+};
+
 struct ConsumableJob { std::string session_id, character_id, request_id, item_id; int quantity{}; std::int64_t health{}, max_health{}, mana{}, max_mana{}; };
 struct ConsumableJobResult {
     std::string session_id, character_id, request_id, item_id;
@@ -1036,6 +1048,14 @@ struct EnetServer::Impl {
     std::unordered_set<std::string> pending_combat_refresh_sessions;
     bool combat_refresh_stop_requested{false};
     std::thread combat_refresh_thread;
+    std::mutex bounty_refresh_mutex;
+    std::condition_variable bounty_refresh_cv;
+    std::deque<BountyRefreshJob> pending_bounty_refresh_jobs;
+    std::deque<BountyRefreshResult> completed_bounty_refresh_jobs;
+    std::unordered_set<std::string> pending_bounty_refresh_sessions;
+    bool bounty_refresh_stop_requested{false};
+    std::thread bounty_refresh_thread;
+    Clock::time_point last_bounty_refresh_enqueued_at{};
     std::mutex chat_outbox_mutex;
     std::condition_variable chat_outbox_cv;
     bool chat_outbox_stop_requested{false};
@@ -1841,6 +1861,97 @@ struct EnetServer::Impl {
         }
         monsters=std::move(merged);
         std::cout<<"Applied monster spawn configuration; active spawn points="<<monsters.size()<<'\n';
+    }
+
+    void start_bounty_refresh_worker() {
+        bounty_refresh_stop_requested = false;
+        bounty_refresh_thread = std::thread([this] {
+            while (true) {
+                BountyRefreshJob job;
+                {
+                    std::unique_lock lock(bounty_refresh_mutex);
+                    bounty_refresh_cv.wait(lock, [this] {
+                        return bounty_refresh_stop_requested || !pending_bounty_refresh_jobs.empty();
+                    });
+                    if (bounty_refresh_stop_requested) return;
+                    job = std::move(pending_bounty_refresh_jobs.front());
+                    pending_bounty_refresh_jobs.pop_front();
+                }
+
+                BountyRefreshResult result;
+                result.session_id = job.session_id;
+                result.character_id = job.character_id;
+                long status = 0;
+                result.success = fetch_bounty_objectives(
+                    config, job.session_id, job.character_id, result.objectives, status, result.error);
+                if (!result.success && result.error.empty()) {
+                    result.error = "bounty objective refresh failed (HTTP " + std::to_string(status) + ")";
+                }
+                {
+                    std::lock_guard lock(bounty_refresh_mutex);
+                    completed_bounty_refresh_jobs.push_back(std::move(result));
+                }
+            }
+        });
+    }
+
+    void stop_bounty_refresh_worker() {
+        {
+            std::lock_guard lock(bounty_refresh_mutex);
+            bounty_refresh_stop_requested = true;
+            pending_bounty_refresh_jobs.clear();
+        }
+        bounty_refresh_cv.notify_all();
+        if (bounty_refresh_thread.joinable()) bounty_refresh_thread.join();
+    }
+
+    void enqueue_periodic_bounty_refreshes() {
+        const auto now = Clock::now();
+        if (last_bounty_refresh_enqueued_at != Clock::time_point{} &&
+            now - last_bounty_refresh_enqueued_at < std::chrono::seconds(15)) return;
+        last_bounty_refresh_enqueued_at = now;
+
+        std::lock_guard lock(bounty_refresh_mutex);
+        if (bounty_refresh_stop_requested || !bounty_refresh_thread.joinable()) return;
+        for (const auto& [peer, player] : players) {
+            (void)peer;
+            if (player.session_id.empty() || player.character_id.empty() ||
+                pending_bounty_refresh_sessions.contains(player.session_id)) continue;
+            if (pending_bounty_refresh_jobs.size() >= 512) {
+                std::cerr << "Bounty objective refresh queue is full; remaining sessions will retry later\n";
+                break;
+            }
+            pending_bounty_refresh_sessions.insert(player.session_id);
+            pending_bounty_refresh_jobs.push_back({player.session_id, player.character_id});
+        }
+        bounty_refresh_cv.notify_one();
+    }
+
+    void drain_bounty_refresh_results() {
+        std::deque<BountyRefreshResult> completed;
+        {
+            std::lock_guard lock(bounty_refresh_mutex);
+            completed.swap(completed_bounty_refresh_jobs);
+            for (const auto& result : completed) pending_bounty_refresh_sessions.erase(result.session_id);
+        }
+        for (auto& result : completed) {
+            if (!result.success) {
+                std::cerr << "Bounty objective refresh failed for character "
+                          << result.character_id << "; keeping previous subscriptions: "
+                          << result.error << '\n';
+                continue;
+            }
+            const auto player = std::find_if(players.begin(), players.end(), [&](const auto& entry) {
+                return entry.second.session_id == result.session_id &&
+                       entry.second.character_id == result.character_id;
+            });
+            if (player == players.end()) continue;
+            const auto previous_count = player->second.bounty_objectives.size();
+            player->second.bounty_objectives = std::move(result.objectives);
+            std::cout << "Refreshed bounty objectives for character " << result.character_id
+                      << "; previous=" << previous_count
+                      << "; current=" << player->second.bounty_objectives.size() << '\n';
+        }
     }
 
     void start_loot_refresh_worker() {
@@ -3589,6 +3700,7 @@ bool EnetServer::start() {
         std::cout << "Loaded " << impl_->loot_table.size() << " monster loot entries\n";
     }
     impl_->start_loot_refresh_worker();
+    impl_->start_bounty_refresh_worker();
     std::string persisted_drop_error;
     if (!load_persisted_ground_drops(impl_->config, impl_->ground_drops, persisted_drop_error)) {
         std::cerr << "Persisted ground drops could not be restored: " << persisted_drop_error << '\n';
@@ -3865,6 +3977,8 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
     }
     impl_->drain_chat_results();
     impl_->drain_consumable_results();
+    impl_->drain_bounty_refresh_results();
+    impl_->enqueue_periodic_bounty_refreshes();
     impl_->disconnect_revoked_sessions();
     impl_->online_players.store(impl_->players.size(), std::memory_order_relaxed);
     impl_->tick_world();
@@ -3881,6 +3995,8 @@ void EnetServer::stop() {
         if (impl_->heartbeat_thread.joinable()) impl_->heartbeat_thread.join();
         impl_->stop_monster_config_refresh_worker();
         impl_->stop_loot_refresh_worker();
+        impl_->stop_bounty_refresh_worker();
+        impl_->drain_bounty_refresh_results();
 
         impl_->stop_chat_worker();
         impl_->drain_chat_results();
