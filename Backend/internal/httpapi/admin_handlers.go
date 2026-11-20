@@ -283,6 +283,8 @@ func (h *adminHandlers) listOnlinePlayers(w http.ResponseWriter, r *http.Request
 }
 func (h *adminHandlers) setPlayerStatus(w http.ResponseWriter,r *http.Request) {
  actor,ok:=h.require(w,r,"players.ban");if !ok{return}
+ id:=strings.TrimSpace(r.PathValue("id"))
+ if id==""||len(id)>64 { http.Error(w,"invalid player id",http.StatusBadRequest);return }
  var req struct { Status string `json:"status"`; Reason string `json:"reason"` }
  if err:=decodeJSON(w,r,&req);err!=nil{http.Error(w,"invalid request body",400);return}
  if req.Status!="active"&&req.Status!="locked"{http.Error(w,"status must be active or locked",400);return}
@@ -290,7 +292,6 @@ func (h *adminHandlers) setPlayerStatus(w http.ResponseWriter,r *http.Request) {
  if req.Status=="locked"&&(len([]rune(req.Reason))<2||len([]rune(req.Reason))>300){http.Error(w,"ban reason must contain 2 to 300 characters",400);return}
  if req.Status=="active"&&len([]rune(req.Reason))>300{http.Error(w,"reason is too long",400);return}
  ctx,cancel:=context.WithTimeout(r.Context(),6*time.Second);defer cancel()
- id:=r.PathValue("id")
  if err:=h.identity.SetAccountStatus(ctx,id,req.Status);err!=nil{
   if strings.Contains(err.Error(),"not found"){http.Error(w,"player not found",404);return}
   h.logger.Error("admin player status update failed","error",err);http.Error(w,"identity service unavailable",503);return
@@ -355,7 +356,7 @@ func (h *adminHandlers) playerDetail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *adminHandlers) disconnectPlayer(w http.ResponseWriter, r *http.Request) {
-	actor, ok := h.require(w, r, "players.ban")
+	actor, ok := h.require(w, r, "players.kick")
 	if !ok { return }
 	id := strings.TrimSpace(r.PathValue("id"))
 	if id == "" || len(id) > 64 {
