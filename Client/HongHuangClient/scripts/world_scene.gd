@@ -684,6 +684,8 @@ func _update_minimap_data() -> void:
 		world_map_canvas.set("region_data", WorldMapCatalog.get_regions(current_world_id))
 		world_map_canvas.set("water_data", WorldMapCatalog.get_world_map_water_bodies(current_world_id))
 		world_map_canvas.set("landmark_data", WorldMapCatalog.get_world_map_landmarks(current_world_id))
+		world_map_canvas.set("exploration_points", exploration_point_data.values())
+		world_map_canvas.set("npc_points", npc_definitions)
 		world_map_canvas.set("player_position", local_player.global_position if is_instance_valid(local_player) else Vector3.ZERO)
 		world_map_canvas.set("navigation_target", minimap_navigation_target)
 		world_map_canvas.queue_redraw()
@@ -693,6 +695,9 @@ func _update_minimap_data() -> void:
 		var monster_data: Dictionary = monster_entities.get(str(monster_id), {})
 		nearby_monsters.append({"id": str(monster_id), "name": str(monster_data.get("name", "妖兽")), "x": target.x, "z": target.z})
 	minimap_view.set("monster_points", nearby_monsters)
+	if is_instance_valid(world_map_canvas):
+		world_map_canvas.set("monster_points", nearby_monsters)
+		world_map_canvas.queue_redraw()
 	if not minimap_navigation_target.is_empty():
 		var nav_kind := str(minimap_navigation_target.get("kind", ""))
 		var nav_id := str(minimap_navigation_target.get("id", ""))
