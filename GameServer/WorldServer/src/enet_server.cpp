@@ -81,6 +81,7 @@ struct PlayerState {
     std::int32_t agility{};
     std::int32_t spirit{};
     std::int32_t vitality{};
+    float movement_speed{5.0F};
     honghuang::simulation::TimedSlowEffect slow_effect;
     honghuang::simulation::TimedFreezeEffect freeze_effect;
     honghuang::simulation::PeriodicDamageEffect poison_effect;
@@ -2669,7 +2670,8 @@ struct EnetServer::Impl {
             const float player_delta = honghuang::simulation::movement_delta_with_effect(
                 delta, player.slow_effect, effect_now_ms);
             honghuang::simulation::integrate_horizontal(
-                player.x, player.z, player.move_x, player.move_z, player_delta);
+                player.x, player.z, player.move_x, player.move_z, player_delta,
+                player.movement_speed);
             honghuang::simulation::integrate_vertical(
                 player.y, player.vertical_velocity, player.jump_requested, delta);
 
@@ -3367,6 +3369,7 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                             !combat_stats.is_object() || !combat_stats.contains("attack") ||
                             !combat_stats.contains("defense") || !combat_stats.contains("health") ||
                             !combat_stats.contains("max_health") || !combat_stats.contains("mana") || !combat_stats.contains("max_mana") ||
+                            !combat_stats.contains("movement_speed") || !combat_stats["movement_speed"].is_number() ||
                              !combat_stats.contains("constitution") || !combat_stats.contains("agility") || !combat_stats.contains("spirit") || !combat_stats.contains("vitality") ||
                               !combat_stats["constitution"].is_number_integer() || !combat_stats["agility"].is_number_integer() || !combat_stats["spirit"].is_number_integer() || !combat_stats["vitality"].is_number_integer() ||
                              !combat_stats["attack"].is_number_integer() ||
@@ -3375,7 +3378,10 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                             combat_stats["mana"].get<std::int64_t>() < 0 ||
                             combat_stats["max_mana"].get<std::int64_t>() < 0 ||
                             combat_stats["mana"].get<std::int64_t>() > combat_stats["max_mana"].get<std::int64_t>() ||
-                            combat_stats["max_mana"].get<std::int64_t>() > 10000000) {
+                            combat_stats["max_mana"].get<std::int64_t>() > 10000000 ||
+                            !std::isfinite(combat_stats["movement_speed"].get<double>()) ||
+                            combat_stats["movement_speed"].get<double>() <= 0.0 ||
+                            combat_stats["movement_speed"].get<double>() > 10.0) {
                             std::cerr << "Could not synchronize authoritative character combat stats: "
                                       << stats_error << std::endl;
                             send_json(event.peer, honghuang::protocol::MessageType::ServerReject,
@@ -3410,6 +3416,8 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                             combat_stats.at("spirit").get<std::int64_t>(), 0, 100000));
                         player.vitality = static_cast<std::int32_t>(std::clamp<std::int64_t>(
                             combat_stats.at("vitality").get<std::int64_t>(), 0, 100000));
+                        player.movement_speed = honghuang::simulation::effective_player_movement_speed(
+                            combat_stats.at("movement_speed").get<float>());
                         player.name = snapshot.value("name", std::string{});
                         player.birth_inheritance = snapshot.value("birth_inheritance", Json::object());
                         if (!player.birth_inheritance.is_object()) player.birth_inheritance = Json::object();
