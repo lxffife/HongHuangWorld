@@ -2309,6 +2309,8 @@ func _on_combat_event(event: Dictionary) -> void:
 			HHSession.world_snapshot["mana"] = int(event.get("mana", 0))
 		if event.has("max_mana"):
 			HHSession.world_snapshot["max_mana"] = int(event.get("max_mana", 0))
+		if is_instance_valid(mana_label):
+			mana_label.text = "灵力  " + str(int(HHSession.world_snapshot.get("mana", 0))) + " / " + str(int(HHSession.world_snapshot.get("max_mana", 0)))
 		_update_compact_hud()
 		if not bool(event.get("accepted", false)):
 			_show_notification(str(event.get("reason", "火球术施展失败。")), 3.0)
