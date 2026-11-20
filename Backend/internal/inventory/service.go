@@ -536,49 +536,92 @@ type ItemUseResult struct {
 }
 
 func (s *Service) UseConsumable(ctx context.Context, accountID string, request ItemUseRequest) (ItemUseResult,error) {
-	if strings.TrimSpace(accountID)=="" || !validUUID(request.RequestID) || strings.TrimSpace(request.ItemID)=="" || request.Quantity<1 || request.Quantity>20 {
+	if strings.TrimSpace(accountID)=="" || !validConsumableRequest(request) {
 		return ItemUseResult{},ErrInvalidRequest
 	}
-	tx,err:=s.db.BeginTx(ctx,nil); if err!=nil { return ItemUseResult{},fmt.Errorf("begin consumable use: %w",err) }; defer tx.Rollback()
+	tx,err:=s.db.BeginTx(ctx,nil)
+	if err!=nil { return ItemUseResult{},fmt.Errorf("begin consumable use: %w",err) }
+	defer tx.Rollback()
 	var characterID string
 	if err:=tx.QueryRowContext(ctx,`SELECT c.id::text FROM souls soul JOIN characters c ON c.id=soul.current_character_id
 		WHERE soul.account_id=$1 AND c.status='alive' FOR UPDATE OF c`,accountID).Scan(&characterID); err!=nil {
-		if errors.Is(err,sql.ErrNoRows) { return ItemUseResult{},ErrInvalidRequest }; return ItemUseResult{},fmt.Errorf("resolve current character for consumable: %w",err)
+		if errors.Is(err,sql.ErrNoRows) { return ItemUseResult{},ErrInvalidRequest }
+		return ItemUseResult{},fmt.Errorf("resolve current character for consumable: %w",err)
 	}
+	result,err:=s.useConsumableForCharacter(ctx,tx,characterID,request,true)
+	if err!=nil { return ItemUseResult{},err }
+	if err:=tx.Commit(); err!=nil { return ItemUseResult{},fmt.Errorf("commit consumable use: %w",err) }
+	return result,nil
+}
+
+// UseConsumableForSession is the trusted WorldServer path. The server identity,
+// live session and character are verified in one transaction before an item or
+// resource value is changed. WorldServer applies the returned resource values.
+func (s *Service) UseConsumableForSession(ctx context.Context,nodeKey,sessionID,characterID string,request ItemUseRequest) (ItemUseResult,error) {
+	if strings.TrimSpace(nodeKey)=="" || !validUUID(sessionID) || !validUUID(characterID) || !validConsumableRequest(request) {
+		return ItemUseResult{},ErrInvalidRequest
+	}
+	tx,err:=s.db.BeginTx(ctx,nil)
+	if err!=nil { return ItemUseResult{},fmt.Errorf("begin session consumable use: %w",err) }
+	defer tx.Rollback()
+	var resolvedCharacterID string
+	err=tx.QueryRowContext(ctx,`SELECT c.id::text
+		FROM world_sessions ws
+		JOIN server_registry sr ON sr.id=ws.server_id
+		JOIN characters c ON c.id=ws.character_id
+		WHERE sr.node_key=$1 AND ws.id=$2::uuid AND ws.character_id=$3::uuid
+		  AND ws.session_state='active' AND c.status='alive'
+		FOR UPDATE OF ws,c`,nodeKey,sessionID,characterID).Scan(&resolvedCharacterID)
+	if errors.Is(err,sql.ErrNoRows) { return ItemUseResult{},ErrSessionInvalid }
+	if err!=nil { return ItemUseResult{},fmt.Errorf("verify active session for consumable: %w",err) }
+	result,err:=s.useConsumableForCharacter(ctx,tx,resolvedCharacterID,request,false)
+	if err!=nil { return ItemUseResult{},err }
+	if err:=tx.Commit(); err!=nil { return ItemUseResult{},fmt.Errorf("commit session consumable use: %w",err) }
+	return result,nil
+}
+
+func validConsumableRequest(request ItemUseRequest) bool {
+	return validUUID(request.RequestID) && strings.TrimSpace(request.ItemID)!="" && request.Quantity>=1 && request.Quantity<=20
+}
+
+func (s *Service) useConsumableForCharacter(ctx context.Context,tx *sql.Tx,characterID string,request ItemUseRequest,blockActiveSession bool) (ItemUseResult,error) {
 	var previousItemID string
 	var previousQuantity int
-	err=tx.QueryRowContext(ctx,`SELECT item_id,quantity FROM item_use_events WHERE character_id=$1::uuid AND request_id=$2::uuid`,characterID,request.RequestID).Scan(&previousItemID,&previousQuantity)
+	err:=tx.QueryRowContext(ctx,`SELECT item_id,quantity FROM item_use_events WHERE character_id=$1::uuid AND request_id=$2::uuid`,characterID,request.RequestID).Scan(&previousItemID,&previousQuantity)
 	if err==nil {
 		if previousItemID!=request.ItemID || previousQuantity!=request.Quantity { return ItemUseResult{},ErrInvalidRequest }
-		return ItemUseResult{Applied:false,ItemID:request.ItemID,Quantity:request.Quantity},tx.Commit()
+		return ItemUseResult{Applied:false,ItemID:request.ItemID,Quantity:request.Quantity},nil
 	}
 	if !errors.Is(err,sql.ErrNoRows) { return ItemUseResult{},fmt.Errorf("check consumable idempotency: %w",err) }
-	// WorldServer owns live health/mana while a character is in a world.
-	// Until consumables are routed through its authoritative command path,
-	// never let the account API mutate database resources behind its back.
-	var inWorld bool
-	if err:=tx.QueryRowContext(ctx,`SELECT EXISTS(
-		SELECT 1 FROM world_sessions
-		WHERE character_id=$1::uuid AND session_state IN ('connecting','active','saving')
-	)`,characterID).Scan(&inWorld); err!=nil {
-		return ItemUseResult{},fmt.Errorf("check active character session before consumable use: %w",err)
+	if blockActiveSession {
+		// WorldServer owns live health/mana while a character is in a world.
+		// Until the item request is routed through its authoritative command path,
+		// never let the account API mutate database resources behind its back.
+		var inWorld bool
+		if err:=tx.QueryRowContext(ctx,`SELECT EXISTS(
+			SELECT 1 FROM world_sessions
+			WHERE character_id=$1::uuid AND session_state IN ('connecting','active','saving')
+		)`,characterID).Scan(&inWorld); err!=nil {
+			return ItemUseResult{},fmt.Errorf("check active character session before consumable use: %w",err)
+		}
+		if inWorld { return ItemUseResult{},ErrCharacterInWorld }
 	}
-	if inWorld { return ItemUseResult{},ErrCharacterInWorld }
 	var itemType string
 	var raw []byte
 	if err:=tx.QueryRowContext(ctx,`SELECT item_type,use_effect FROM item_definitions WHERE id=$1 AND enabled`,request.ItemID).Scan(&itemType,&raw); err!=nil {
-		if errors.Is(err,sql.ErrNoRows) { return ItemUseResult{},ErrInvalidRequest }; return ItemUseResult{},fmt.Errorf("load consumable definition: %w",err)
+		if errors.Is(err,sql.ErrNoRows) { return ItemUseResult{},ErrInvalidRequest }
+		return ItemUseResult{},fmt.Errorf("load consumable definition: %w",err)
 	}
 	if itemType!="consumable" { return ItemUseResult{},ErrInvalidRequest }
 	heal,restore,effect,parseErr:=parseConsumableEffect(raw)
 	if parseErr!=nil { return ItemUseResult{},ErrInvalidRequest }
 	var owned int
 	if err:=tx.QueryRowContext(ctx,`SELECT quantity FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2 FOR UPDATE`,characterID,request.ItemID).Scan(&owned); err!=nil {
-		if errors.Is(err,sql.ErrNoRows) { return ItemUseResult{},ErrInvalidRequest }; return ItemUseResult{},fmt.Errorf("lock consumable inventory stack: %w",err)
+		if errors.Is(err,sql.ErrNoRows) { return ItemUseResult{},ErrInvalidRequest }
+		return ItemUseResult{},fmt.Errorf("lock consumable inventory stack: %w",err)
 	}
 	if owned<request.Quantity { return ItemUseResult{},ErrInvalidRequest }
-	var result ItemUseResult
-	result.ItemID=request.ItemID; result.Quantity=request.Quantity
+	result:=ItemUseResult{ItemID:request.ItemID,Quantity:request.Quantity}
 	var oldHealth,oldMana int
 	if err:=tx.QueryRowContext(ctx,`SELECT health,mana FROM character_attributes WHERE character_id=$1::uuid FOR UPDATE`,characterID).Scan(&oldHealth,&oldMana); err!=nil {
 		return ItemUseResult{},fmt.Errorf("lock character consumable attributes: %w",err)
@@ -608,7 +651,6 @@ func (s *Service) UseConsumable(ctx context.Context, accountID string, request I
 		return ItemUseResult{},fmt.Errorf("record consumable use: %w",err)
 	}
 	result.Applied=true
-	if err:=tx.Commit(); err!=nil { return ItemUseResult{},fmt.Errorf("commit consumable use: %w",err) }
 	return result,nil
 }
 
