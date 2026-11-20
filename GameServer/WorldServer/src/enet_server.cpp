@@ -4,6 +4,7 @@
 #include "simulation/monster.hpp"
 #include "simulation/combat.hpp"
 #include "simulation/weapon_combat.hpp"
+#include "simulation/projectile.hpp"
 #include "persistence/durable_outbox.hpp"
 #include "network/chat_delivery_policy.hpp"
 
@@ -176,6 +177,21 @@ struct SoulAbsorptionEvent {
     std::string character_id;
     std::string source_entity_id;
     std::string source_entity_kind;
+};
+
+struct ProjectileRuntime {
+    std::string id;
+    std::string owner_character_id;
+    std::string target_entity_id;
+    float x{};
+    float y{};
+    float z{};
+    float velocity_x{};
+    float velocity_z{};
+    std::int64_t attack{};
+    std::int32_t power_basis_points{10000};
+    std::int32_t defense_penetration_basis_points{};
+    Clock::time_point expires_at{};
 };
 
 std::string make_event_uuid() {
@@ -832,6 +848,7 @@ struct EnetServer::Impl {
     bool loot_refresh_stop_requested{false};
     std::thread loot_refresh_thread;
     std::vector<GroundDropRuntime> ground_drops;
+    std::vector<ProjectileRuntime> projectiles;
     std::unique_ptr<honghuang::persistence::DurableOutbox> durable_outbox;
     std::mutex outbox_mutex;
     std::condition_variable outbox_cv;
