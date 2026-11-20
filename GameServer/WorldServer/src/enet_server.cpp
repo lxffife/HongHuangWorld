@@ -2190,6 +2190,17 @@ struct EnetServer::Impl {
                     {"yaw", monster.state.yaw}
                 });
             }
+            for (const auto& projectile : projectiles) {
+                if (projectile.expires_at <= Clock::now() ||
+                    !honghuang::simulation::within_interest_radius(
+                        projectile.x, projectile.z, recipient.x, recipient.z, kInterestRadius)) continue;
+                entities.push_back({
+                    {"entity_type", "projectile"}, {"entity_id", projectile.id},
+                    {"projectile_type", "arrow"}, {"owner_character_id", projectile.owner_character_id},
+                    {"x", projectile.x}, {"y", projectile.y}, {"z", projectile.z},
+                    {"velocity_x", projectile.velocity_x}, {"velocity_z", projectile.velocity_z}
+                });
+            }
             for (const auto& drop : ground_drops) {
                 if (drop.owner_character_id != recipient.character_id ||
                     drop.expires_at <= Clock::now() ||
