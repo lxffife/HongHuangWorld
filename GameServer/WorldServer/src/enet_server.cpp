@@ -2603,8 +2603,6 @@ struct EnetServer::Impl {
                 player.move_z = 0.0F;
                 player.jump_requested = false;
             }
-            const auto effect_now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                now.time_since_epoch()).count();
             const float player_delta = honghuang::simulation::movement_delta_with_effect(
                 delta, player.slow_effect, effect_now_ms);
             honghuang::simulation::integrate_horizontal(
@@ -3116,7 +3114,7 @@ struct EnetServer::Impl {
                                {"attack_style", attack_profile.style},
                                {"damage", damage.damage}, {"health", player.health},
                                {"max_health", player.max_health}, {"defeated", damage.defeated},
-                               {"status_effect", applied_slow ? "slow" : ""},
+                               {"status_effect", applied_poison ? "poison" : (applied_slow ? "slow" : "")},
                                {"status_duration_ms", applied_poison
                                     ? std::max<std::int64_t>(0, player.poison_effect.next_tick_at_ms -
                                         std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count()) +
