@@ -57,7 +57,7 @@ func _seed_quests() -> void:
 			"giver_name": "马面将军", "title": "南门巡防回报",
 			"summary": "巡查城内治安联络点，确认南门周边巡防情报。",
 			"reward_preview": "巡防贡献记录（演示奖励）", "status": "available",
-			"prerequisites": [], "repeatable": false,
+			"prerequisites": [], "repeatable": true,
 			"objectives": [
 				{"type": "interact", "target_id": "patrol_office", "label": "前往巡城司领取巡防简报", "required_count": 1},
 				{"type": "investigate", "target_id": "ghost_market", "label": "前往万魂鬼市核实街区情报", "required_count": 1}
