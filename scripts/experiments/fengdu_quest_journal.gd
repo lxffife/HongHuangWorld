@@ -2,14 +2,21 @@ extends CanvasLayer
 ## Local quest journal for the Fengdu greybox.
 
 var _manager: Node
+var _story_state: Node
 var _panel: PanelContainer
 var _list: VBoxContainer
 var _summary_label: Label
 var _is_open := false
 
 
-func configure(manager: Node) -> void:
+func configure(manager: Node, story_state: Node = null) -> void:
 	_manager = manager
+	_story_state = story_state
+	if _story_state != null:
+		if not _story_state.is_connected("choice_made", Callable(self, "_on_story_state_changed")):
+			_story_state.connect("choice_made", Callable(self, "_on_story_state_changed"))
+		if not _story_state.is_connected("reputation_changed", Callable(self, "_on_story_reputation_changed")):
+			_story_state.connect("reputation_changed", Callable(self, "_on_story_reputation_changed"))
 	if not _manager.is_connected("quest_log_changed", Callable(self, "refresh")):
 		_manager.connect("quest_log_changed", Callable(self, "refresh"))
 	refresh()
@@ -57,6 +64,41 @@ func refresh() -> void:
 	_summary_label.text = "差事 %d 项  ·  进行中 %d  ·  已完成 %d" % [all_quests.size(), active_count, completed_count]
 	for item in all_quests:
 		_add_quest_card(item)
+	_add_story_log()
+
+
+func _on_story_state_changed(_choice_id: String, _choice_data: Dictionary) -> void:
+	refresh()
+
+
+func _on_story_reputation_changed(_faction_id: String, _value: int) -> void:
+	refresh()
+
+
+func _add_story_log() -> void:
+	if _story_state == null:
+		return
+	var entries: Array = _story_state.call("get_story_log")
+	var heading := Label.new()
+	heading.text = "剧情记录 · 已作出的选择"
+	heading.add_theme_font_size_override("font_size", 16)
+	heading.add_theme_color_override("font_color", Color("#e8d7b8"))
+	_list.add_child(heading)
+	if entries.is_empty():
+		var empty_label := Label.new()
+		empty_label.text = "尚无关键剧情选择。完成白无常的引魂差事后，可决定如何对待新入城的亡魂。"
+		empty_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		empty_label.add_theme_font_size_override("font_size", 12)
+		empty_label.add_theme_color_override("font_color", Color("#a99c89"))
+		_list.add_child(empty_label)
+		return
+	for entry in entries:
+		var label := Label.new()
+		label.text = "◆ %s\n  %s" % [str(entry.get("title", "未命名选择")), str(entry.get("detail", ""))]
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		label.add_theme_font_size_override("font_size", 12)
+		label.add_theme_color_override("font_color", Color("#cbb58f"))
+		_list.add_child(label)
 
 
 func _build_ui() -> void:
