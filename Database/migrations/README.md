@@ -126,5 +126,5 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000058_bounty_ver
 - `000056_bounty_task_refunds` 增加悬赏取消/到期退款凭证、参与者 cancelled 状态和到期扫描索引。宗主/长老可主动取消并全额退回托管预算；可信 WorldServer 调度器通过 `POST /api/v1/servers/bounties/expire` 批量处理到期任务（`X-World-Server-Key`，limit 1–100，默认 50）。调度器需要由部署环境定期调用；本迁移和 API 不会自行创建定时任务。
 
 
-- `000058_bounty_verified_objectives` 为悬赏任务增加服务端配置的目标计数、玩家目标进度与不可变事件账本；事件仅由认证 WorldServer 按活动会话、当前角色、世界和已接取身份提交，中心服按目标配置每条事件增加 1 点进度，不接受客户端自报账号、奖励数值或进度增量。
 - `000057_bounty_character_eligibility` 为悬赏增加最低角色等级要求。接取时后端读取账号当前角色、存活状态、所在世界、角色等级和真实修炼境界；不接受客户端自报角色或境界。新增 `POST /api/v1/bounties/{taskID}/leave`，参与者可在任务结束/到期前主动退出并释放名额；已退出成员可在任务仍开放时重新接取。
+- `000058_bounty_verified_objectives` 为悬赏任务增加服务端配置的目标计数、玩家目标进度与不可变事件账本；事件仅由认证 WorldServer 按活动会话、当前角色、世界和已接取身份提交，中心服按目标配置每条事件增加 1 点进度，不接受客户端自报账号、奖励数值或进度增量。
