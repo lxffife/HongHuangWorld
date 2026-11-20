@@ -144,6 +144,7 @@ var exploration_event_buttons: Dictionary = {}
 var exploration_event_data: Dictionary = {}
 var pending_exploration_event_id := ""
 var exploration_animation_time := 0.0
+var player_slow_visual_remaining := 0.0
 var npc_current_interaction_id := ""
 var leaving_for_reincarnation := false
 var npc_selected_id := ""
@@ -2298,7 +2299,7 @@ func _on_monster_action_event(event: Dictionary) -> void:
 		attacker.set_meta("attack_phase", "windup")
 		if attack_style == "heavy_slam":
 			_set_iron_slam_telegraph(attacker, true)
-		if attack_style == "soul_bolt":
+		if attack_style == "soul_bolt" or attack_style == "frost_bolt":
 			_set_elemental_telegraph(attacker, true)
 		var windup := maxf(float(event.get("windup_ms", 520)) / 1000.0, 0.1)
 		attacker.set_meta("attack_phase_duration", windup)
@@ -2401,6 +2402,33 @@ func _spawn_soul_bolt_visual(attacker: Node3D) -> void:
 	tween.tween_property(bolt, "global_position", destination, 0.24)
 	tween.tween_callback(Callable(bolt, "queue_free"))
 
+func _set_player_slow_visual(enabled: bool) -> void:
+	if not is_instance_valid(local_player):
+		return
+	var ring := local_player.get_node_or_null("PlayerSlowStatusRing") as MeshInstance3D
+	if enabled and ring == null:
+		ring = MeshInstance3D.new()
+		ring.name = "PlayerSlowStatusRing"
+		var ring_mesh := TorusMesh.new()
+		ring_mesh.inner_radius = 0.48
+		ring_mesh.outer_radius = 0.56
+		ring_mesh.rings = 24
+		ring_mesh.ring_segments = 6
+		ring.mesh = ring_mesh
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color("#70dfff", 0.72)
+		material.emission_enabled = true
+		material.emission = Color("#48cfff")
+		material.emission_energy_multiplier = 1.6
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		ring.material_override = material
+		ring.position.y = 0.08
+		local_player.add_child(ring)
+	if ring != null:
+		ring.visible = enabled
+
+
 func _on_combat_event(event: Dictionary) -> void:
 	if str(event.get("action", "")) == "consumable_use":
 		if bool(event.get("pending", false)):
@@ -2460,6 +2488,9 @@ func _on_combat_event(event: Dictionary) -> void:
 					visual_nameplate.visible = false
 		return
 	if str(event.get("source", "")) == "monster":
+		if str(event.get("status_effect", "")) == "slow":
+			_set_player_slow_visual(true)
+			player_slow_visual_remaining = maxf(float(event.get("status_duration_ms", 0)) / 1000.0, 0.0)
 		var incoming_damage := int(event.get("damage", 0))
 		if is_instance_valid(local_player) and local_player.has_method("play_hit_reaction"):
 			local_player.call("play_hit_reaction", incoming_damage, str(event.get("attack_style", "")))
@@ -2474,7 +2505,10 @@ func _on_combat_event(event: Dictionary) -> void:
 			death_message_label.text = "角色已倒地，无法继续行动。\n受到 " + str(incoming_damage) + " 点伤害，生命 " + str(current_health) + "/" + str(max_health) + "。\n确认后将结算复活并返回角色界面。"
 			death_panel.visible = true
 		else:
-			_show_notification("受到怪物攻击 -" + str(incoming_damage) + " 生命")
+			var hit_message := "受到怪物攻击 -" + str(incoming_damage) + " 生命"
+			if str(event.get("status_effect", "")) == "slow":
+				hit_message += " · 冰霜减速"
+			_show_notification(hit_message)
 		return
 	var monster_name := str(event.get("target_name", "目标"))
 	var hit_target_id := str(event.get("target_entity_id", ""))
@@ -2736,6 +2770,10 @@ func _update_input_debug_hud() -> void:
 	input_debug_label.text = keys + "\n" + movement_text + " · 网络：" + network_text + "\n" + send_text + " · ESC 释放鼠标"
 
 func _process(delta: float) -> void:
+	if player_slow_visual_remaining > 0.0:
+		player_slow_visual_remaining = maxf(0.0, player_slow_visual_remaining - delta)
+		if player_slow_visual_remaining <= 0.0:
+			_set_player_slow_visual(false)
 	for projectile_id in projectile_targets:
 		var arrow := projectiles.get(projectile_id) as Node3D
 		if is_instance_valid(arrow):
