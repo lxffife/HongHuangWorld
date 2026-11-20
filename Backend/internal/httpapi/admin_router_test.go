@@ -38,6 +38,11 @@ func TestAdminRoutesUnavailableWithoutDatabase(t *testing.T) {
   {http.MethodPatch,"/api/v1/admin/worlds/underworld_fengdu/state"},
   {http.MethodGet,"/api/v1/admin/servers/nodes"},
   {http.MethodPatch,"/api/v1/admin/servers/nodes/test-node/state"},
+  {http.MethodGet,"/api/v1/admin/players"},
+  {http.MethodGet,"/api/v1/admin/players/online"},
+  {http.MethodGet,"/api/v1/admin/players/test-player"},
+  {http.MethodPatch,"/api/v1/admin/players/test-player/status"},
+  {http.MethodPost,"/api/v1/admin/players/test-player/disconnect"},
   {http.MethodPut,"/api/v1/admin/users/00000000-0000-4000-8000-000000000001/permissions"},
  }
  for _,tc:=range cases { t.Run(tc.method+" "+tc.path,func(t *testing.T){
@@ -50,6 +55,12 @@ func TestAdminPermissionChecks(t *testing.T) {
  user:=adminauth.User{Permissions:[]string{"players.read"}}
  if !hasPermission(user,"players.read"){t.Fatal("explicit permission should be accepted")}
  if hasPermission(user,"players.ban"){t.Fatal("ungranted permission must be rejected")}
+ kickOnly:=adminauth.User{Permissions:[]string{"players.kick"}}
+ if !hasPermission(kickOnly,"players.kick"){t.Fatal("explicit kick permission should be accepted")}
+ if hasPermission(kickOnly,"players.ban"){t.Fatal("kick permission must not grant ban permission")}
+ banOnly:=adminauth.User{Permissions:[]string{"players.ban"}}
+ if !hasPermission(banOnly,"players.ban"){t.Fatal("explicit ban permission should be accepted")}
+ if hasPermission(banOnly,"players.kick"){t.Fatal("ban permission must not grant manual kick permission")}
  if !hasPermission(adminauth.User{IsSuperAdmin:true},"servers.control"){t.Fatal("super administrator should have all permissions")}
  if !hasPermission(adminauth.User{IsSuperAdmin:true},"servers.manage"){t.Fatal("super administrator should have node management permission")}
  if hasPermission(user,"servers.manage"){t.Fatal("node management must require its own permission")}
