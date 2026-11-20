@@ -686,6 +686,17 @@ func validConsumableRequest(request ItemUseRequest) bool {
 	return validUUID(request.RequestID) && strings.TrimSpace(request.ItemID)!="" && request.Quantity>=1 && request.Quantity<=20
 }
 
+func applyLiveConsumableEffect(request ItemUseRequest, live LiveConsumableResources, heal, restore int) ItemUseResult {
+	result := ItemUseResult{ItemID: request.ItemID, Quantity: request.Quantity}
+	result.Health = min(live.MaxHealth, live.Health + heal*request.Quantity)
+	result.MaxHealth = live.MaxHealth
+	result.Mana = min(live.MaxMana, live.Mana + restore*request.Quantity)
+	result.MaxMana = live.MaxMana
+	result.HealthRestored = result.Health - live.Health
+	result.ManaRestored = result.Mana - live.Mana
+	return result
+}
+
 func validLiveConsumableResources(live LiveConsumableResources) bool {
 	return live.Health >= 0 && live.MaxHealth >= 1 && live.Health <= live.MaxHealth && live.MaxHealth <= 10000000 &&
 		live.Mana >= 0 && live.MaxMana >= 0 && live.Mana <= live.MaxMana && live.MaxMana <= 10000000
@@ -762,13 +773,8 @@ func (s *Service) useConsumableForCharacter(ctx context.Context,tx *sql.Tx,chara
 		return ItemUseResult{},fmt.Errorf("lock character consumable attributes: %w",err)
 	}
 	if live == nil { live = &LiveConsumableResources{Health: oldHealth, MaxHealth: baseMaxHealth, Mana: oldMana, MaxMana: baseMaxMana} }
-	if !validLiveConsumableResources(*live) || live.MaxHealth < baseMaxHealth || live.MaxMana < baseMaxMana { return ItemUseResult{}, ErrInvalidRequest }
-	result.Health = min(live.MaxHealth, live.Health + heal*request.Quantity)
-	result.MaxHealth = live.MaxHealth
-	result.Mana = min(live.MaxMana, live.Mana + restore*request.Quantity)
-	result.MaxMana = live.MaxMana
-	result.HealthRestored = result.Health - live.Health
-	result.ManaRestored = result.Mana - live.Mana
+	if !validLiveConsumableResources(*live) { return ItemUseResult{}, ErrInvalidRequest }
+	result = applyLiveConsumableEffect(request, *live, heal, restore)
 	// Persist only base-cap values; WorldServer owns equipment-derived excess.
 	_, err = tx.ExecContext(ctx, `UPDATE character_attributes SET health=LEAST($2,max_health), mana=LEAST($3,max_mana), updated_at=now() WHERE character_id=$1::uuid`, characterID, result.Health, result.Mana)
 	if err != nil { return ItemUseResult{}, fmt.Errorf("apply consumable effects: %w", err) }
