@@ -386,6 +386,8 @@ func (s *Service) CurrentEquipment(ctx context.Context, accountID string) ([]Equ
 	return items,nil
 }
 
+// Equip mutates the authoritative loadout even during an active world session.
+// WorldServer polls the session combat snapshot and applies the change asynchronously.
 func (s *Service) Equip(ctx context.Context, accountID string, request EquipmentRequest) error {
 	if strings.TrimSpace(accountID)=="" || strings.TrimSpace(request.ItemID)=="" || !validEquipmentSlots[request.Slot] { return ErrInvalidRequest }
 	tx,err:=s.db.BeginTx(ctx,nil); if err!=nil { return fmt.Errorf("begin equip item: %w",err) }; defer tx.Rollback()
@@ -542,6 +544,7 @@ func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessio
 		result.Equipment = append(result.Equipment, item)
 	}
 	if err := equipmentRows.Err(); err != nil { return CombatStats{}, fmt.Errorf("iterate session equipment: %w", err) }
+	if err := equipmentRows.Close(); err != nil { return CombatStats{}, fmt.Errorf("close session equipment: %w", err) }
 	if result.MaxHealth < 1 || result.MaxMana < 0 { return CombatStats{},ErrInvalidRequest }
 	if result.Health > result.MaxHealth { result.Health = result.MaxHealth }
 	if result.Mana > result.MaxMana { result.Mana = result.MaxMana }
