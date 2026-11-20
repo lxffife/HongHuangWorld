@@ -2055,9 +2055,8 @@ func _render_inventory_items() -> void:
 		elif str(item.get("item_type", "")) == "consumable":
 			var use_button := Button.new()
 			use_button.text = "使用"
-			var live_world_session := HHSession.world_network != null and HHSession.world_network.is_world_ready()
-			use_button.disabled = consumable_busy or live_world_session
-			use_button.text = "离开世界后使用" if live_world_session else "使用"
+			use_button.disabled = consumable_busy
+			use_button.text = "结算中…" if consumable_busy else "使用"
 			use_button.pressed.connect(_on_use_consumable_pressed.bind(str(item.get("item_id", ""))))
 			row.add_child(use_button)
 
@@ -2312,6 +2311,26 @@ func _spawn_soul_bolt_visual(attacker: Node3D) -> void:
 	tween.tween_callback(Callable(bolt, "queue_free"))
 
 func _on_combat_event(event: Dictionary) -> void:
+	if str(event.get("action", "")) == "consumable_use":
+		if bool(event.get("pending", false)):
+			inventory_status.text = str(event.get("reason", "正在结算消耗品……"))
+			return
+		consumable_busy = false
+		if bool(event.get("accepted", false)):
+			HHSession.world_snapshot["health"] = int(event.get("health", HHSession.world_snapshot.get("health", 0)))
+			HHSession.world_snapshot["max_health"] = int(event.get("max_health", HHSession.world_snapshot.get("max_health", 0)))
+			HHSession.world_snapshot["mana"] = int(event.get("mana", HHSession.world_snapshot.get("mana", 0)))
+			HHSession.world_snapshot["max_mana"] = int(event.get("max_mana", HHSession.world_snapshot.get("max_mana", 0)))
+			_update_vitals(int(HHSession.world_snapshot["health"]), int(HHSession.world_snapshot["max_health"]))
+			if is_instance_valid(mana_label):
+				mana_label.text = "灵力  " + str(int(HHSession.world_snapshot["mana"])) + " / " + str(int(HHSession.world_snapshot["max_mana"]))
+			_update_compact_hud()
+			_show_notification("消耗品使用成功：生命 +" + str(int(event.get("health_restored", 0))) + "，灵力 +" + str(int(event.get("mana_restored", 0))))
+			_refresh_inventory()
+		else:
+			_show_notification(str(event.get("reason", "消耗品使用失败。")), 3.0)
+			_refresh_inventory()
+		return
 	if str(event.get("action", "")) == "spell_cast":
 		if event.has("mana"):
 			HHSession.world_snapshot["mana"] = int(event.get("mana", 0))
@@ -3266,7 +3285,17 @@ func _make_request_uuid() -> String:
 	return hex.substr(0,8) + "-" + hex.substr(8,4) + "-4" + hex.substr(13,3) + "-a" + hex.substr(17,3) + "-" + hex.substr(20,12)
 
 func _on_use_consumable_pressed(item_id: String) -> void:
-	if consumable_busy or consumable_http == null or item_id.is_empty():
+	if consumable_busy or item_id.is_empty():
+		return
+	if HHSession.world_network != null and HHSession.world_network.is_world_ready():
+		consumable_busy = true
+		inventory_status.text = "正在向世界服务器提交消耗品请求……"
+		var send_error: Error = HHSession.world_network.send_consumable_use(item_id, 1)
+		if send_error != OK:
+			consumable_busy = false
+			inventory_status.text = "消耗品请求发送失败，错误码：" + str(send_error)
+		return
+	if consumable_http == null:
 		return
 	consumable_busy = true
 	var payload := {"request_id": _make_request_uuid(), "item_id": item_id, "quantity": 1}
