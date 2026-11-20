@@ -190,11 +190,13 @@ func _draw_live_markers(map_center: Vector2, scale: float, clip_rect: Rect2) -> 
 		var canvas_point := _world_to_canvas(world_point, map_center, scale)
 		if not clip_rect.has_point(canvas_point):
 			continue
-		var discovered := bool(point.get("discovered", false))
+		# Do not reveal undiscovered POI positions on the world map.
+		# The server remains authoritative for discovery; this is presentation-only fog.
+		if not bool(point.get("discovered", false)):
+			continue
+		draw_circle(canvas_point, 4.5, Color("#91a0ad"))
 		var danger := int(point.get("danger_level", 0))
-		var marker_color := Color("#91a0ad") if discovered else Color("#e4b967")
-		draw_circle(canvas_point, 4.5, marker_color)
-		if danger >= 7 and not discovered:
+		if danger >= 7:
 			draw_arc(canvas_point, 8.0, 0.0, TAU, 20, Color("#e16c6c", 0.9), 1.5)
 	for npc_variant in npc_points:
 		if not npc_variant is Dictionary:
@@ -246,6 +248,8 @@ func _select_at(mouse_position: Vector2) -> void:
 		if not point_variant is Dictionary:
 			continue
 		var point_data: Dictionary = point_variant
+		if not bool(point_data.get("discovered", false)):
+			continue
 		var exploration_canvas_point := _world_to_canvas(Vector2(float(point_data.get("position_x", 0.0)), float(point_data.get("position_z", 0.0))), map_center, scale)
 		var distance := exploration_canvas_point.distance_to(mouse_position)
 		if distance < best_distance:
