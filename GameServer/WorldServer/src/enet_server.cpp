@@ -2693,6 +2693,7 @@ struct EnetServer::Impl {
                 std::int64_t cultivation_reward = 0;
                 if (damage.defeated) {
                     target->state.mode = honghuang::simulation::MonsterMode::Dead;
+                    target->slow_effect = {};
                     target->state.target_id.clear();
                     target->respawn_at = now + std::chrono::seconds(target->retry_spawn_seconds);
                     experience_reward = 20 + static_cast<std::int64_t>(target->definition.level) * 10;
@@ -2950,6 +2951,7 @@ struct EnetServer::Impl {
                     continue;
                 }
                 player.health = damage.remaining_health;
+                if (damage.defeated) player.slow_effect = {};
                 bool applied_slow = false;
                 if (std::string(attack_profile.style) == "frost_bolt") {
                     const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -2962,7 +2964,9 @@ struct EnetServer::Impl {
                           Json{{"accepted", true}, {"source", "monster"},
                                {"source_entity_id", monster.runtime_id},
                                {"damage", damage.damage}, {"health", player.health},
-                               {"max_health", player.max_health}, {"defeated", damage.defeated},\n                               {"status_effect", applied_slow ? "slow" : ""},\n                               {"status_duration_ms", applied_slow ? 2200 : 0}});
+                               {"max_health", player.max_health}, {"defeated", damage.defeated},
+                               {"status_effect", applied_slow ? "slow" : ""},
+                               {"status_duration_ms", applied_slow ? 2200 : 0}});
             }
             monster.last_attack_at = now;
             monster.attack_phase = MonsterAttackPhase::Recovery;
