@@ -29,36 +29,36 @@ func _gui_input(event: InputEvent) -> void:
 	var best_kind := ""
 	var best_id := ""
 	var best_name := ""
-	for item in exploration_points:
-		if not item is Dictionary:
+	for exploration_item in exploration_points:
+		if not exploration_item is Dictionary:
 			continue
-		var point: Dictionary = item
+		var point: Dictionary = exploration_item
 		var point_pos := _map_point(float(point.get("position_x", 0.0)), float(point.get("position_z", 0.0)), center, radius)
-		var distance := point_pos.distance_to(mouse_event.position)
-		if distance < best_distance:
-			best_distance = distance
+		var exploration_distance := point_pos.distance_to(mouse_event.position)
+		if exploration_distance < best_distance:
+			best_distance = exploration_distance
 			best_kind = "exploration"
 			best_id = str(point.get("id", ""))
 			best_name = str(point.get("name", "探索点"))
-	for item in npc_points:
-		if not item is Dictionary:
+	for npc_item in npc_points:
+		if not npc_item is Dictionary:
 			continue
-		var npc: Dictionary = item
+		var npc: Dictionary = npc_item
 		var npc_pos := _map_point(float(npc.get("position_x", 0.0)), float(npc.get("position_z", 0.0)), center, radius)
-		var distance := npc_pos.distance_to(mouse_event.position)
-		if distance < best_distance:
-			best_distance = distance
+		var npc_distance := npc_pos.distance_to(mouse_event.position)
+		if npc_distance < best_distance:
+			best_distance = npc_distance
 			best_kind = "npc"
 			best_id = str(npc.get("id", ""))
 			best_name = str(npc.get("name", "NPC"))
-	for item in monster_points:
-		if not item is Dictionary:
+	for monster_item in monster_points:
+		if not monster_item is Dictionary:
 			continue
-		var monster: Dictionary = item
+		var monster: Dictionary = monster_item
 		var monster_pos := _map_point(float(monster.get("x", 0.0)), float(monster.get("z", 0.0)), center, radius)
-		var distance := monster_pos.distance_to(mouse_event.position)
-		if distance < best_distance:
-			best_distance = distance
+		var monster_distance := monster_pos.distance_to(mouse_event.position)
+		if monster_distance < best_distance:
+			best_distance = monster_distance
 			best_kind = "monster"
 			best_id = str(monster.get("id", ""))
 			best_name = str(monster.get("name", "怪物"))
@@ -98,6 +98,8 @@ func _draw() -> void:
 			continue
 		var discovered := bool(point.get("discovered", false))
 		draw_circle(exploration_pos, 3.0, Color("#8b9aa7") if discovered else Color("#e4b967"))
+		if str(navigation_target.get("id", "")) == str(point.get("id", "")) and navigation_target.get("kind", "") == "exploration":
+			draw_arc(exploration_pos, 7.0, 0.0, TAU, 24, Color("#f4d27f"), 1.8)
 	for npc_item in npc_points:
 		if not npc_item is Dictionary:
 			continue
