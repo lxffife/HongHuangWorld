@@ -135,7 +135,8 @@ func _add_task_card(task: Dictionary) -> void:
 	status.text = _status_text(str(task.get("status", "")))
 	heading.add_child(status)
 	var details := Label.new()
-	details.text = "%s\n发布者：%s    悬赏：%s 冥币    发布费：%s 冥币" % [str(task.get("description", "")), str(task.get("publisher_name", "匿名")), _format_amount(int(task.get("reward", 0))), _format_amount(int(task.get("listing_fee", 0)))]
+	var currency_name := "冥石" if str(task.get("currency_id", "nether_stone")) == "nether_stone" else "冥币"
+	details.text = "%s\n发布者：%s    悬赏：%s %s    发布费：%s %s" % [str(task.get("description", "")), str(task.get("publisher_name", "匿名")), _format_amount(int(task.get("reward", 0))), currency_name, _format_amount(int(task.get("listing_fee", 0))), currency_name]
 	details.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(details)
 	var actions := HBoxContainer.new()
