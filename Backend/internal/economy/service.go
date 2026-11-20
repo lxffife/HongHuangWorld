@@ -161,7 +161,11 @@ func validDeltaRequest(accountID, currencyID, eventKey, entryType string, delta 
 	if strings.TrimSpace(accountID) == "" || len(currencyID) == 0 || len(currencyID) > 64 ||
 		len(eventKey) == 0 || len(eventKey) > 128 || delta == 0 || delta == math.MinInt64 { return false }
 	switch entryType {
-	case "grant", "spend", "trade", "cultivation", "craft", "exchange_in", "exchange_out", "escrow_lock", "escrow_release", "system_adjustment":
+	case "grant", "exchange_in", "escrow_release":
+		return delta > 0
+	case "spend", "cultivation", "craft", "exchange_out", "escrow_lock":
+		return delta < 0
+	case "trade", "system_adjustment":
 		return true
 	default:
 		return false
