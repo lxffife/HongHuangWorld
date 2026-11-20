@@ -111,12 +111,12 @@ func (s *Service) PublishFaction(ctx context.Context, accountID string, req Publ
    difficulty_tier,required_realm_level,required_character_level,max_assignees,expires_at,created_by,request_key)
   VALUES ($1,'faction',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
   RETURNING id::text,world_id,publisher_type,publisher_id::text,title,description,currency_id,
-   reward_amount,escrow_amount,difficulty_tier,required_realm_level,max_assignees,status,expires_at::text,created_at::text`,
+   reward_amount,escrow_amount,difficulty_tier,required_realm_level,required_character_level,max_assignees,status,expires_at::text,created_at::text`,
   worldID,req.FactionID,req.Title,req.Description,req.CurrencyID,req.RewardAmount,total,req.DifficultyTier,
   req.RequiredRealmLevel,req.RequiredCharacterLevel,req.MaxAssignees,req.ExpiresAt,accountID,req.EventKey).
   Scan(&result.ID,&result.WorldID,&result.PublisherType,&result.PublisherID,&result.Title,
    &result.Description,&result.CurrencyID,&result.RewardAmount,&result.EscrowAmount,&result.DifficultyTier,
-   &result.RequiredRealmLevel,&result.MaxAssignees,&result.Status,&result.ExpiresAt,&result.CreatedAt)
+   &result.RequiredRealmLevel,&result.RequiredCharacterLevel,&result.MaxAssignees,&result.Status,&result.ExpiresAt,&result.CreatedAt)
  if err!=nil{return Task{},fmt.Errorf("insert bounty task: %w",err)}
  result.PublisherName=name
  if _,err=tx.ExecContext(ctx,`INSERT INTO bounty_task_escrows(task_id,treasury_account_id,currency_id,amount)
