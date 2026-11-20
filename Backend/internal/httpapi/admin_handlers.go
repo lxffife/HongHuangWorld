@@ -259,43 +259,18 @@ func (h *adminHandlers) setServerNodeState(w http.ResponseWriter, r *http.Reques
 	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 	defer cancel()
 
-	// Fail closed if the previous state cannot be read: the audit event must
-	// contain a real before/after transition rather than an empty guess.
-	raw, lookupErr := h.game.ServerNodes(ctx)
-	if lookupErr != nil {
-		h.logger.Error("admin server node preflight failed", "error", lookupErr)
-		http.Error(w, "game service unavailable; node state was not changed", http.StatusServiceUnavailable)
-		return
-	}
-	var snapshot struct {
-		Items []struct {
-			NodeKey string `json:"node_key"`
-			AdminState string `json:"admin_state"`
-		} `json:"items"`
-	}
-	if err := json.Unmarshal(raw, &snapshot); err != nil {
-		h.logger.Error("decode server node preflight failed", "error", err)
-		http.Error(w, "invalid Game service response; node state was not changed", http.StatusBadGateway)
-		return
-	}
 	var previousState string
-	found := false
-	for _, node := range snapshot.Items {
-		if node.NodeKey == nodeKey {
-			previousState = node.AdminState
-			found = true
-			break
-		}
-	}
-	if !found {
-		http.Error(w, "world server node not found", http.StatusNotFound)
-		return
-	}
 	result, err := h.game.SetServerNodeState(ctx, nodeKey, request.AdminState)
 	if err != nil {
 		outcome := "failure"
-		if errors.Is(err, gameadmin.ErrNodeHasSessions) { outcome = "denied" }
-		if auditErr := h.service.RecordAudit(ctx, actor, "server.node.state", "server_node", nodeKey, outcome, map[string]any{"previous_state":previousState,"requested_state":request.AdminState,"reason":request.Reason,"error":err.Error()}); auditErr != nil {
+		var conflict *gameadmin.NodeSessionsConflictError
+		if errors.As(err, &conflict) {
+			outcome = "denied"
+			previousState = conflict.PreviousState
+		}
+		details := map[string]any{"previous_state":previousState,"requested_state":request.AdminState,"reason":request.Reason,"error":err.Error()}
+		if conflict != nil { details["remaining_sessions"] = conflict.RemainingSessions }
+		if auditErr := h.service.RecordAudit(ctx, actor, "server.node.state", "server_node", nodeKey, outcome, details); auditErr != nil {
 			h.logger.Error("record failed server node state audit failed", "error", auditErr)
 		}
 		if errors.Is(err, gameadmin.ErrNodeHasSessions) { http.Error(w, err.Error(), http.StatusConflict); return }
@@ -305,6 +280,8 @@ func (h *adminHandlers) setServerNodeState(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "game service unavailable", http.StatusServiceUnavailable)
 		return
 	}
+	var transition struct { PreviousState string `json:"previous_state"` }
+	if err := json.Unmarshal(result, &transition); err == nil { previousState = transition.PreviousState }
 	if err := h.service.RecordAudit(ctx, actor, "server.node.state", "server_node", nodeKey, "success", map[string]any{"previous_state":previousState,"new_state":request.AdminState,"reason":request.Reason,"game_response":json.RawMessage(result)}); err != nil {
 		h.logger.Error("record server node state audit failed", "error", err)
 		http.Error(w, "node state changed but audit recording failed", http.StatusInternalServerError)
