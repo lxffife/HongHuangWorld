@@ -29,6 +29,7 @@ type ItemStack struct {
 	Description string `json:"description"`
 	ItemType string `json:"item_type"`
 	EquipmentSlot string `json:"equipment_slot,omitempty"`
+	WeaponType string `json:"weapon_type,omitempty"`
 	BaseStats map[string]int `json:"base_stats,omitempty"`
 	SetID string `json:"set_id,omitempty"`
 	SetName string `json:"set_name,omitempty"`
@@ -96,7 +97,7 @@ type Service struct { db *sql.DB }
 func NewService(db *sql.DB) *Service { return &Service{db: db} }
 
 func (s *Service) ListItems(ctx context.Context) ([]ItemStack, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT i.id, i.name, i.category, i.quality, i.max_stack, i.icon_key, i.description, i.item_type, COALESCE(i.equipment_slot, ''), i.base_stats, COALESCE(es.id, ''), COALESCE(es.name, ''), COALESCE(es.description, ''), COALESCE(es.bonus_tiers, '{}'::jsonb)
+	rows, err := s.db.QueryContext(ctx, `SELECT i.id, i.name, i.category, i.quality, i.max_stack, i.icon_key, i.description, i.item_type, COALESCE(i.equipment_slot, ''), COALESCE(i.weapon_type, ''), i.base_stats, COALESCE(es.id, ''), COALESCE(es.name, ''), COALESCE(es.description, ''), COALESCE(es.bonus_tiers, '{}'::jsonb)
 		FROM item_definitions i LEFT JOIN equipment_sets es ON es.id=i.equipment_set_id WHERE i.enabled ORDER BY i.quality DESC, i.category, i.id`)
 	if err != nil { return nil, fmt.Errorf("list item definitions: %w", err) }
 	defer rows.Close()
@@ -104,7 +105,7 @@ func (s *Service) ListItems(ctx context.Context) ([]ItemStack, error) {
 	for rows.Next() {
 		var item ItemStack
 		var stats, setTiers []byte
-		if err := rows.Scan(&item.ItemID, &item.Name, &item.Category, &item.Quality, &item.MaxStack, &item.IconKey, &item.Description, &item.ItemType, &item.EquipmentSlot, &stats, &item.SetID, &item.SetName, &item.SetDescription, &setTiers); err != nil {
+		if err := rows.Scan(&item.ItemID, &item.Name, &item.Category, &item.Quality, &item.MaxStack, &item.IconKey, &item.Description, &item.ItemType, &item.EquipmentSlot, &item.WeaponType, &stats, &item.SetID, &item.SetName, &item.SetDescription, &setTiers); err != nil {
 			return nil, fmt.Errorf("scan item definition: %w", err)
 		}
 		item.BaseStats = map[string]int{}
