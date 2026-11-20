@@ -2340,9 +2340,16 @@ func _on_player_action_event(event: Dictionary) -> void:
 	var remote := remote_players[character_id] as Node3D
 	if not is_instance_valid(remote):
 		return
+	# Hit reactions outrank attacks. Lower-priority events cannot replace an active hit.
+	var incoming_priority := 2 if action == "hit" else 1
+	var current_time := float(remote.get_meta("remote_action_time", 0.0))
+	var current_priority := int(remote.get_meta("remote_action_priority", 0))
+	if current_time > 0.0 and current_priority > incoming_priority:
+		return
 	var duration := 0.36 if action == "attack" else 0.32
 	remote.set_meta("remote_action_state", action)
-	remote.set_meta("remote_action_time", maxf(float(remote.get_meta("remote_action_time", 0.0)), duration))
+	remote.set_meta("remote_action_priority", incoming_priority)
+	remote.set_meta("remote_action_time", maxf(current_time, duration) if current_priority == incoming_priority else duration)
 	remote.set_meta("remote_action_duration", duration)
 	remote.set_meta("remote_action_style", str(event.get("attack_style", "")))
 
@@ -2466,6 +2473,8 @@ func _process(delta: float) -> void:
 		if action_time <= 0.0:
 			action_state = ""
 			remote.set_meta("remote_action_state", "")
+			remote.set_meta("remote_action_priority", 0)
+			remote.set_meta("remote_action_style", "")
 		var remote_animation_state := action_state if action_state != "" else ("walk" if remote_moving else "idle")
 		var action_duration := maxf(float(remote.get_meta("remote_action_duration", 0.36)), 0.01)
 		var action_weight := sin(clampf(1.0 - action_time / action_duration, 0.0, 1.0) * PI) if action_state != "" else 0.0
