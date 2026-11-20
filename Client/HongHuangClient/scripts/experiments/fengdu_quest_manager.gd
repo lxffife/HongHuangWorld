@@ -76,7 +76,8 @@ func _seed_quests() -> void:
 func get_quest(quest_id: String) -> Dictionary:
 	if not _quests.has(quest_id):
 		return {}
-	return (_quests[quest_id] as Dictionary).duplicate(true)
+	var quest: Dictionary = _quests[quest_id]
+	return quest.duplicate(true)
 
 
 func get_quest_for_giver(giver_id: String) -> Dictionary:
@@ -90,7 +91,8 @@ func get_quest_for_giver(giver_id: String) -> Dictionary:
 func get_all_quests() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for quest_id in _quests:
-		result.append((_quests[quest_id] as Dictionary).duplicate(true))
+		var quest: Dictionary = _quests[quest_id]
+		result.append(quest.duplicate(true))
 	return result
 
 
