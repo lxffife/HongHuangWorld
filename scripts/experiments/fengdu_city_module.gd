@@ -9,8 +9,6 @@ var module_kind := "district"
 var district_kind := "admin"
 var _materials: Dictionary = {}
 var _player_nearby := false
-var _patrol_origin := Vector3.ZERO
-var _patrol_time := 0.0
 var _citizen_body: MeshInstance3D
 var _citizen_time := 0.0
 var _route_origin := Vector3.ZERO
