@@ -193,6 +193,19 @@ func (s *Service) ListOpen(ctx context.Context,worldID string)([]Task,error){
  return result,nil
 }
 
+
+// validateJoinParticipation preserves stable domain errors for retries and
+// enforces capacity after excluding an existing accepted participant.
+func validateJoinParticipation(exists bool, participantStatus string, joined, max int) error {
+ if exists {
+  if participantStatus=="accepted" { return ErrAlreadyJoined }
+  if participantStatus!="withdrawn" { return ErrTaskNotReady }
+ }
+ if max<1 || joined<0 { return ErrInvalid }
+ if joined>=max { return ErrTaskFull }
+ return nil
+}
+
 // Join validates the server-owned current character and locks its progression rows.
 func (s *Service) Join(ctx context.Context,accountID,taskID string)error{
  if accountID==""||taskID==""{return ErrInvalid}
@@ -202,14 +215,22 @@ func (s *Service) Join(ctx context.Context,accountID,taskID string)error{
  var expires sql.NullTime
  err=tx.QueryRowContext(ctx,`SELECT max_assignees,status,expires_at,world_id,required_realm_level,required_character_level FROM bounty_tasks WHERE id=$1 FOR UPDATE`,taskID).Scan(&max,&status,&expires,&worldID,&requiredRealm,&requiredLevel)
  if errors.Is(err,sql.ErrNoRows){return ErrNotFound};if err!=nil{return fmt.Errorf("lock bounty task: %w",err)}
- if status=="full"{return ErrTaskFull};if status!="open"&&status!="in_progress"{return ErrTaskNotReady}
  if expires.Valid&&!expires.Time.After(time.Now()){return ErrTaskNotReady}
+ if status!="open"&&status!="in_progress"&&status!="full"{return ErrTaskNotReady}
+ // Check the caller's existing participation before capacity. Otherwise a member
+ // retrying Join on a full task receives "task full" instead of "already joined".
+ var priorStatus string
+ priorErr:=tx.QueryRowContext(ctx,`SELECT status FROM bounty_task_participants WHERE task_id=$1 AND account_id=$2 FOR UPDATE`,taskID,accountID).Scan(&priorStatus)
+ priorExists:=priorErr==nil
+ if priorErr!=nil&&!errors.Is(priorErr,sql.ErrNoRows){return fmt.Errorf("check existing bounty participation: %w",priorErr)}
+ if err:=validateJoinParticipation(priorExists,priorStatus,0,max);err!=nil{return err}
+ if status=="full"{return ErrTaskFull}
  var characterID string
  err=tx.QueryRowContext(ctx,`SELECT c.id::text FROM souls s JOIN characters c ON c.id=s.current_character_id AND c.soul_id=s.id JOIN character_progression p ON p.character_id=c.id JOIN cultivation_realms realm ON realm.id=p.realm_id AND realm.system_id=p.system_id WHERE s.account_id=$1 AND c.status='alive' AND c.world_id=$2 AND c.level >= $3 AND realm.realm_order >= $4 FOR SHARE OF s,c,p`,accountID,worldID,requiredLevel,requiredRealm).Scan(&characterID)
  if errors.Is(err,sql.ErrNoRows){return ErrCharacterNotEligible};if err!=nil{return fmt.Errorf("validate current character bounty eligibility: %w",err)}
  var joined int
  if err=tx.QueryRowContext(ctx,`SELECT count(*) FROM bounty_task_participants WHERE task_id=$1 AND status='accepted'`,taskID).Scan(&joined);err!=nil{return fmt.Errorf("count bounty participants: %w",err)}
- if joined>=max{return ErrTaskFull}
+ if err:=validateJoinParticipation(priorExists,priorStatus,joined,max);err!=nil{return err}
  insertResult,insertErr:=tx.ExecContext(ctx,`INSERT INTO bounty_task_participants(task_id,account_id) VALUES($1,$2) ON CONFLICT(task_id,account_id) DO UPDATE SET status='accepted',joined_at=now() WHERE bounty_task_participants.status='withdrawn'`,taskID,accountID)
  if insertErr!=nil{return fmt.Errorf("join bounty task: %w",insertErr)}
  inserted,rowsErr:=insertResult.RowsAffected();if rowsErr!=nil{return fmt.Errorf("read bounty participant insert result: %w",rowsErr)}
