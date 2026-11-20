@@ -388,6 +388,15 @@ func (s *Service) CurrentEquipment(ctx context.Context, accountID string) ([]Equ
 
 // Equip mutates the authoritative loadout even during an active world session.
 // WorldServer polls the session combat snapshot and applies the change asynchronously.
+func ensureEquipmentSessionStable(ctx context.Context, tx *sql.Tx, characterID string) error {
+	var transitioning bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM world_sessions WHERE character_id=$1::uuid AND session_state IN ('connecting','saving'))`, characterID).Scan(&transitioning); err != nil {
+		return fmt.Errorf("check equipment session transition: %w", err)
+	}
+	if transitioning { return ErrCharacterInWorld }
+	return nil
+}
+
 func (s *Service) Equip(ctx context.Context, accountID string, request EquipmentRequest) error {
 	if strings.TrimSpace(accountID)=="" || strings.TrimSpace(request.ItemID)=="" || !validEquipmentSlots[request.Slot] { return ErrInvalidRequest }
 	tx,err:=s.db.BeginTx(ctx,nil); if err!=nil { return fmt.Errorf("begin equip item: %w",err) }; defer tx.Rollback()
@@ -395,6 +404,8 @@ func (s *Service) Equip(ctx context.Context, accountID string, request Equipment
 	if err:=tx.QueryRowContext(ctx,`SELECT c.id::text FROM souls soul JOIN characters c ON c.id=soul.current_character_id WHERE soul.account_id=$1 AND c.status='alive' FOR UPDATE OF c`,accountID).Scan(&characterID); err!=nil {
 		if errors.Is(err,sql.ErrNoRows) { return ErrInvalidRequest }; return fmt.Errorf("resolve current character: %w",err)
 	}
+	if err := ensureEquipmentSessionStable(ctx, tx, characterID); err != nil { return err }
+	if err := ensureEquipmentSessionStable(ctx, tx, characterID); err != nil { return err }
 	var itemSlot string
 	if err:=tx.QueryRowContext(ctx,`SELECT equipment_slot FROM item_definitions WHERE id=$1 AND enabled AND item_type='equipment'`,request.ItemID).Scan(&itemSlot); err!=nil {
 		if errors.Is(err,sql.ErrNoRows) { return ErrInvalidRequest }; return fmt.Errorf("load equipment definition: %w",err)
