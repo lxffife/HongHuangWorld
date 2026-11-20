@@ -197,10 +197,14 @@ func _select_underworld_atlas_at(mouse_position: Vector2) -> void:
 		var node: Dictionary = node_variant
 		if _atlas_node_rect(node, map_rect).has_point(mouse_position):
 			_selected_atlas_id = str(node.get("id", ""))
+			var details := "权柄：" + str(node.get("authority", "未知")) + " · " + str(node.get("distance", ""))
+			details += " · 危险 " + str(node.get("danger_level", 0)) + "/10"
+			details += "\n" + str(node.get("access", ""))
+			details += "\n" + str(node.get("description", ""))
 			atlas_region_selected.emit(
 				_selected_atlas_id,
 				str(node.get("name", "区域")),
-				str(node.get("description", ""))
+				details
 			)
 			queue_redraw()
 			return
