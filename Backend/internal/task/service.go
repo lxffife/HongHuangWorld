@@ -191,6 +191,7 @@ func (s *Service) ListOpen(ctx context.Context,worldID string)([]Task,error){
 
 // Join locks the task row before checking capacity, so concurrent joiners cannot
 // overfill a party. Settlement is deliberately a separate, not-yet-exposed phase.
+// Join locks the task row before checking capacity, so concurrent joiners cannot overfill a party.
 func (s *Service) Join(ctx context.Context,accountID,taskID string)error{
  if accountID==""||taskID==""{return ErrInvalid}
  tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return fmt.Errorf("begin bounty join: %w",err)};defer tx.Rollback()
@@ -311,4 +312,126 @@ func (s *Service) Settle(ctx context.Context,accountID,taskID,eventKey string)(S
   VALUES($1,$2,$3,$4,$5,$6)`,taskID,eventKey,accountID,len(participantIDs),paid,refunded);err!=nil{return Settlement{},fmt.Errorf("write bounty settlement receipt: %w",err)}
  if err=tx.Commit();err!=nil{return Settlement{},fmt.Errorf("commit bounty settlement: %w",err)}
  return result,nil
+}
+
+
+type RefundReceipt struct {
+ TaskID string `json:"task_id"`
+ EventKey string `json:"event_key"`
+ RefundedAmount int64 `json:"refunded_amount"`
+ CurrencyID string `json:"currency_id"`
+ Status string `json:"status"`
+}
+
+// Cancel refunds the complete escrow. The publisher may cancel even after members
+// joined; accepted participants are marked cancelled in the same transaction.
+func (s *Service) Cancel(ctx context.Context, accountID, taskID, eventKey string) (RefundReceipt, error) {
+ if accountID == "" { return RefundReceipt{}, ErrInvalid }
+ return s.refund(ctx, accountID, taskID, eventKey, false)
+}
+
+// ExpireDue refunds due tasks in bounded batches. It is intended for a trusted
+// scheduler/worker authenticated by the World Server API key, not the game client.
+func (s *Service) ExpireDue(ctx context.Context, limit int) (int, error) {
+ if limit < 1 || limit > 100 { return 0, ErrInvalid }
+ rows, err := s.db.QueryContext(ctx, `SELECT t.id::text FROM bounty_tasks t
+  JOIN bounty_task_escrows e ON e.task_id=t.id
+  WHERE t.status IN ('open','in_progress','full') AND e.status='locked'
+   AND t.expires_at IS NOT NULL AND t.expires_at<=now()
+  ORDER BY t.expires_at,t.id LIMIT $1`, limit)
+ if err != nil { return 0, fmt.Errorf("list expired bounty tasks: %w", err) }
+ ids := make([]string,0,limit)
+ for rows.Next() { var id string; if err=rows.Scan(&id); err!=nil { rows.Close(); return 0, fmt.Errorf("scan expired bounty task: %w",err) }; ids=append(ids,id) }
+ if err=rows.Err(); err!=nil { rows.Close(); return 0, fmt.Errorf("iterate expired bounty tasks: %w",err) }
+ if err=rows.Close(); err!=nil { return 0, fmt.Errorf("close expired bounty tasks: %w",err) }
+ refunded := 0
+ for _, id := range ids {
+  _, err = s.refund(ctx, "", id, "bounty-expire:"+id, true)
+  if errors.Is(err, ErrTaskNotReady) { continue } // Another worker settled/cancelled it first.
+  if err != nil { return refunded, err }
+  refunded++
+ }
+ return refunded,nil
+}
+
+func (s *Service) refund(ctx context.Context, accountID, taskID, eventKey string, expired bool) (RefundReceipt,error) {
+ if taskID=="" || eventKey=="" || len(eventKey)>128 { return RefundReceipt{},ErrInvalid }
+ tx,err:=s.db.BeginTx(ctx,nil); if err!=nil { return RefundReceipt{},fmt.Errorf("begin bounty refund: %w",err) }; defer tx.Rollback()
+ var lockResult any
+ if err=tx.QueryRowContext(ctx,`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`,eventKey).Scan(&lockResult); err!=nil { return RefundReceipt{},fmt.Errorf("lock bounty refund idempotency key: %w",err) }
+ var publisherID,treasuryID,currencyID,status,escrowStatus string
+ var amount int64
+ err=tx.QueryRowContext(ctx,`SELECT t.publisher_id::text,e.treasury_account_id::text,t.currency_id,t.status,e.amount,e.status
+  FROM bounty_tasks t JOIN bounty_task_escrows e ON e.task_id=t.id
+  WHERE t.id=$1 FOR UPDATE OF t,e`,taskID).Scan(&publisherID,&treasuryID,&currencyID,&status,&amount,&escrowStatus)
+ if errors.Is(err,sql.ErrNoRows) { return RefundReceipt{},ErrNotFound }
+ if err!=nil { return RefundReceipt{},fmt.Errorf("lock bounty and escrow for refund: %w",err) }
+
+ if !expired {
+  var role string
+  err=tx.QueryRowContext(ctx,`SELECT m.role FROM factions f JOIN faction_members m ON m.faction_id=f.id
+   WHERE f.id=$1 AND f.status='active' AND m.account_id=$2 FOR UPDATE OF f,m`,publisherID,accountID).Scan(&role)
+  if errors.Is(err,sql.ErrNoRows) { return RefundReceipt{},ErrForbidden }
+  if err!=nil { return RefundReceipt{},fmt.Errorf("authorize bounty cancellation: %w",err) }
+  if role!="leader" && role!="officer" { return RefundReceipt{},ErrForbidden }
+ } else {
+  var due bool
+  if err=tx.QueryRowContext(ctx,`SELECT expires_at IS NOT NULL AND expires_at<=now() FROM bounty_tasks WHERE id=$1`,taskID).Scan(&due);err!=nil { return RefundReceipt{},fmt.Errorf("verify bounty expiry: %w",err) }
+  if !due { return RefundReceipt{},ErrTaskNotReady }
+ }
+
+ var prior RefundReceipt
+ var priorKey string
+ err=tx.QueryRowContext(ctx,`SELECT event_key,refunded_amount FROM bounty_task_refunds WHERE task_id=$1`,taskID).Scan(&priorKey,&prior.RefundedAmount)
+ if err==nil {
+  if priorKey!=eventKey { return RefundReceipt{},ErrIdempotencyConflict }
+  prior.TaskID=taskID; prior.EventKey=priorKey; prior.CurrencyID=currencyID
+  prior.Status=status
+  if err=tx.Commit();err!=nil { return RefundReceipt{},fmt.Errorf("commit idempotent bounty refund: %w",err) }
+  return prior,nil
+ }
+ if !errors.Is(err,sql.ErrNoRows) { return RefundReceipt{},fmt.Errorf("read bounty refund receipt: %w",err) }
+ var keyUsed bool
+ if err=tx.QueryRowContext(ctx,`SELECT EXISTS(
+   SELECT 1 FROM bounty_task_refunds WHERE event_key=$1
+   UNION ALL SELECT 1 FROM bounty_task_settlements WHERE event_key=$1
+  )`,eventKey).Scan(&keyUsed);err!=nil { return RefundReceipt{},fmt.Errorf("check bounty refund idempotency key: %w",err) }
+ if keyUsed { return RefundReceipt{},ErrIdempotencyConflict }
+ var settled bool
+ if err=tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM bounty_task_settlements WHERE task_id=$1)`,taskID).Scan(&settled);err!=nil { return RefundReceipt{},fmt.Errorf("check bounty settlement before refund: %w",err) }
+ if settled || escrowStatus!="locked" || (status!="open" && status!="in_progress" && status!="full") { return RefundReceipt{},ErrTaskNotReady }
+
+ var treasuryAvailable,treasuryFrozen int64
+ err=tx.QueryRowContext(ctx,`SELECT available_amount,frozen_amount FROM economy_treasury_balances
+  WHERE treasury_account_id=$1 AND currency_id=$2 FOR UPDATE`,treasuryID,currencyID).Scan(&treasuryAvailable,&treasuryFrozen)
+ if err!=nil { return RefundReceipt{},fmt.Errorf("lock bounty treasury for refund: %w",err) }
+ if treasuryFrozen<amount { return RefundReceipt{},fmt.Errorf("bounty treasury frozen balance invariant violated") }
+ if treasuryAvailable>math.MaxInt64-amount { return RefundReceipt{},fmt.Errorf("bounty treasury available balance overflow") }
+ if _,err=tx.ExecContext(ctx,`UPDATE economy_treasury_balances
+  SET available_amount=available_amount+$3,frozen_amount=frozen_amount-$4,updated_at=now()
+  WHERE treasury_account_id=$1 AND currency_id=$2`,treasuryID,currencyID,amount,amount);err!=nil { return RefundReceipt{},fmt.Errorf("release bounty escrow refund: %w",err) }
+
+ nextStatus:="cancelled"; ledgerType:="bounty_refund"; note:="宗门主动取消悬赏，全额退回托管预算"
+ if expired { nextStatus="expired"; note="悬赏到期，全额退回托管预算" }
+ if _,err=tx.ExecContext(ctx,`INSERT INTO economy_treasury_ledger_entries
+  (treasury_account_id,currency_id,event_key,entry_type,delta,balance_after,frozen_delta,frozen_after,source_type,source_id,note)
+  VALUES($1,$2,$3,$4,$5,$6,$7,$8,'bounty_task',$9,$10)`,
+  treasuryID,currencyID,"bounty-refund:"+taskID,ledgerType,amount,treasuryAvailable+amount,-amount,treasuryFrozen-amount,taskID,note);err!=nil {
+  return RefundReceipt{},fmt.Errorf("record bounty treasury refund: %w",err)
+ }
+ if _,err=tx.ExecContext(ctx,`UPDATE bounty_task_participants SET status='cancelled'
+  WHERE task_id=$1 AND status='accepted'`,taskID);err!=nil { return RefundReceipt{},fmt.Errorf("cancel bounty participants: %w",err) }
+ if _,err=tx.ExecContext(ctx,`UPDATE bounty_task_escrows SET status='refunded',updated_at=now()
+  WHERE task_id=$1 AND status='locked'`,taskID);err!=nil { return RefundReceipt{},fmt.Errorf("mark bounty escrow refunded: %w",err) }
+ if _,err=tx.ExecContext(ctx,`UPDATE bounty_tasks SET status=$2,updated_at=now() WHERE id=$1`,taskID,nextStatus);err!=nil { return RefundReceipt{},fmt.Errorf("update refunded bounty task: %w",err) }
+ if _,err=tx.ExecContext(ctx,`INSERT INTO bounty_task_refunds(task_id,event_key,refunded_by,refunded_amount,reason)
+  VALUES($1,$2,$3,$4,$5)`,taskID,eventKey,nullIfEmpty(accountID),amount,nextStatus);err!=nil { return RefundReceipt{},fmt.Errorf("write bounty refund receipt: %w",err) }
+ result:=RefundReceipt{TaskID:taskID,EventKey:eventKey,RefundedAmount:amount,CurrencyID:currencyID,Status:nextStatus}
+ if err=tx.Commit();err!=nil { return RefundReceipt{},fmt.Errorf("commit bounty refund: %w",err) }
+ return result,nil
+}
+
+func nullIfEmpty(value string) any {
+ if value=="" { return nil }
+ return value
 }
