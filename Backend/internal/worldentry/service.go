@@ -40,6 +40,7 @@ type PlayerSnapshot struct {
 	PositionZ   float64 `json:"position_z"`
 	RotationY   float64        `json:"rotation_y"`
 	BirthInheritance map[string]any `json:"birth_inheritance,omitempty"`
+	Equipment []map[string]any `json:"equipment,omitempty"`
 }
 
 type SessionSnapshot struct {
@@ -128,6 +129,7 @@ func (s *Service) Redeem(ctx context.Context, nodeKey, ticket string) (PlayerSna
 	var ticketID, characterID, instanceID, serverID string
 	var snapshot PlayerSnapshot
 	var birthInheritanceJSON []byte
+	var equipmentJSON []byte
 	err = tx.QueryRowContext(ctx,
 		`SELECT t.id::text, c.id::text, t.instance_id::text, t.server_id::text,
 		        c.world_id, c.name, c.position_x, c.position_y, c.position_z, c.rotation_y,
@@ -148,7 +150,15 @@ func (s *Service) Redeem(ctx context.Context, nodeKey, ticket string) (PlayerSna
 		            'applied_vitality', bi.applied_vitality,
 		            'dominant_attribute', bi.dominant_attribute
 		          ) FROM character_birth_inheritance bi WHERE bi.character_id = c.id
-		        ), '{}'::jsonb)
+		        ), '{}'::jsonb),
+		        COALESCE((
+		          SELECT jsonb_agg(jsonb_build_object(
+		            'slot', e.slot, 'item_id', i.id, 'name', i.name, 'quality', i.quality
+		          ) ORDER BY e.slot)
+		          FROM character_equipment e
+		          JOIN item_definitions i ON i.id = e.item_id AND i.enabled
+		          WHERE e.character_id = c.id
+		        ), '[]'::jsonb)
 		 FROM world_entry_tickets t
 		 JOIN server_registry sr ON sr.id = t.server_id
 		 JOIN world_instances wi ON wi.id = t.instance_id AND wi.status = 'ready'
@@ -159,7 +169,7 @@ func (s *Service) Redeem(ctx context.Context, nodeKey, ticket string) (PlayerSna
 		   AND c.status = 'alive'
 		 FOR UPDATE OF t`, tokenHash[:], nodeKey,
 	).Scan(&ticketID, &characterID, &instanceID, &serverID, &snapshot.WorldID, &snapshot.Name,
-		&snapshot.PositionX, &snapshot.PositionY, &snapshot.PositionZ, &snapshot.RotationY, &birthInheritanceJSON)
+		&snapshot.PositionX, &snapshot.PositionY, &snapshot.PositionZ, &snapshot.RotationY, &birthInheritanceJSON, &equipmentJSON)
 	if errors.Is(err, sql.ErrNoRows) {
 		return PlayerSnapshot{}, ErrInvalidTicket
 	}
@@ -171,6 +181,11 @@ func (s *Service) Redeem(ctx context.Context, nodeKey, ticket string) (PlayerSna
 	if len(birthInheritanceJSON) > 0 {
 		if err := json.Unmarshal(birthInheritanceJSON, &snapshot.BirthInheritance); err != nil {
 			return PlayerSnapshot{}, fmt.Errorf("decode character birth inheritance: %w", err)
+		}
+	}
+	if len(equipmentJSON) > 0 {
+		if err := json.Unmarshal(equipmentJSON, &snapshot.Equipment); err != nil {
+			return PlayerSnapshot{}, fmt.Errorf("decode character equipment: %w", err)
 		}
 	}
 
