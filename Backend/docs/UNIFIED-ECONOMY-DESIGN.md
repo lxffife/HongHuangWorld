@@ -198,3 +198,11 @@
 - 在容量判断前检查当前账号是否已有参与记录。已处于 `accepted` 的成员重复提交接取请求，稳定返回“已经接取”；不会因任务恰好满员而误报“名额已满”。
 - `withdrawn` 记录允许重新接取；`completed`、`cancelled` 等终态参与记录不允许复用。
 - 上述规则不改变任务名额、托管金额或结算规则，不需要数据库迁移。
+### 14.4 悬赏目标与可信事件进度（000058）
+
+- 发布悬赏时可选配置最多 10 个目标，每个目标包含唯一 `key`、受限 `event_type` 和 `target_count`。当前事件类型为 `monster_killed`、`exploration_discovered`、`escort_checkpoint`、`item_collected`；旧客户端不传目标时仍可创建人工验收任务。
+- WorldServer 使用 `X-World-Server-Key` 和 `X-World-Server-Node` 调用 `POST /api/v1/servers/bounties/events`，只提交 `event_id`、`task_id`、`session_id`、`character_id`、`objective_key`、`event_type`。不得提交 account_id、progress_delta、奖励金额或完成标志。
+- 中心服根据会话反查节点、活动会话、角色、账号和世界；再验证任务有效、账号仍是 accepted 参与者、目标事件类型匹配。每条合法事件只增加 1 点，进度不超过目标值。
+- `event_id` 全局唯一并使用事务级 advisory lock 幂等；同一 ID 携带不同事件内容时返回冲突。事件记录由数据库触发器禁止 UPDATE/DELETE；进度更新和事件插入在同一事务提交。
+- 玩家通过 `GET /api/v1/bounties/{taskID}/progress` 只能查看自己的目标进度。底层事件明细不对玩家接口开放。
+- 当前只建立服务端可信事件入口与进度计数；WorldServer 怪物/探索/护送/拾取逻辑尚未逐一接入此入口。当前结算仍按每名 accepted 参与者固定奖励平均支付，尚未按目标贡献加权；不能把“有进度记录”误认为“贡献度结算已上线”。
