@@ -47,6 +47,7 @@ type Task struct {
 }
 
 type PublishRequest struct {
+ EventKey string
  FactionID string
  Title string
  Description string
@@ -60,7 +61,7 @@ type PublishRequest struct {
 
 func (s *Service) PublishFaction(ctx context.Context, accountID string, req PublishRequest) (Task,error) {
  req.Title=strings.TrimSpace(req.Title); req.Description=strings.TrimSpace(req.Description)
- if accountID=="" || req.FactionID=="" || utf8.RuneCountInString(req.Title)<2 || utf8.RuneCountInString(req.Title)>96 ||
+ if accountID=="" || req.FactionID=="" || req.EventKey=="" || len(req.EventKey)>128 || utf8.RuneCountInString(req.Title)<2 || utf8.RuneCountInString(req.Title)>96 ||
   utf8.RuneCountInString(req.Description)>2000 || len(req.CurrencyID)==0 || len(req.CurrencyID)>64 ||
   req.RewardAmount<=0 || req.MaxAssignees<1 || req.MaxAssignees>20 ||
   req.DifficultyTier<1 || req.DifficultyTier>10 || req.RequiredRealmLevel<0 || req.RequiredRealmLevel>1000 ||
@@ -84,6 +85,10 @@ func (s *Service) PublishFaction(ctx context.Context, accountID string, req Publ
   WHERE c.id=$1 AND c.enabled AND w.world_id=$2 AND w.issue_enabled
  )`,req.CurrencyID,worldID).Scan(&currencyOK);err!=nil{return Task{},fmt.Errorf("validate bounty currency: %w",err)}
  if !currencyOK{return Task{},ErrInvalid}
+ var priorTaskID string
+ err=tx.QueryRowContext(ctx,`SELECT id::text FROM bounty_tasks WHERE created_by=$1 AND request_key=$2`,accountID,req.EventKey).Scan(&priorTaskID)
+ if err==nil{return Task{},ErrIdempotencyConflict}
+ if !errors.Is(err,sql.ErrNoRows){return Task{},fmt.Errorf("check bounty publication idempotency: %w",err)}
  var available,frozen int64
  err=tx.QueryRowContext(ctx,`SELECT available_amount,frozen_amount FROM economy_treasury_balances
   WHERE treasury_account_id=$1 AND currency_id=$2 FOR UPDATE`,treasuryID,req.CurrencyID).Scan(&available,&frozen)
@@ -98,12 +103,12 @@ func (s *Service) PublishFaction(ctx context.Context, accountID string, req Publ
  var result Task
  err=tx.QueryRowContext(ctx,`INSERT INTO bounty_tasks
   (world_id,publisher_type,publisher_id,title,description,currency_id,reward_amount,escrow_amount,
-   difficulty_tier,required_realm_level,max_assignees,expires_at,created_by)
-  VALUES ($1,'faction',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-  RETURNING id::text,world_id,publisher_type,publisher_id::text,$13,title,description,currency_id,
+   difficulty_tier,required_realm_level,max_assignees,expires_at,created_by,request_key)
+  VALUES ($1,'faction',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+  RETURNING id::text,world_id,publisher_type,publisher_id::text,$14,title,description,currency_id,
    reward_amount,escrow_amount,difficulty_tier,required_realm_level,max_assignees,status,expires_at::text,created_at::text`,
   worldID,req.FactionID,req.Title,req.Description,req.CurrencyID,req.RewardAmount,total,req.DifficultyTier,
-  req.RequiredRealmLevel,req.MaxAssignees,req.ExpiresAt,accountID,name).
+  req.RequiredRealmLevel,req.MaxAssignees,req.ExpiresAt,accountID,req.EventKey,name).
   Scan(&result.ID,&result.WorldID,&result.PublisherType,&result.PublisherID,&result.PublisherName,&result.Title,
    &result.Description,&result.CurrencyID,&result.RewardAmount,&result.EscrowAmount,&result.DifficultyTier,
    &result.RequiredRealmLevel,&result.MaxAssignees,&result.Status,&result.ExpiresAt,&result.CreatedAt)
