@@ -57,9 +57,10 @@ func (c *Client) PlayerGrowth(ctx context.Context, accountID string) (json.RawMe
 	return c.getAdminJSON(ctx, "/api/v1/internal/admin/players/"+url.PathEscape(accountID)+"/growth")
 }
 
-func (c *Client) OnlinePlayers(ctx context.Context) (json.RawMessage, error) {
+func (c *Client) OnlinePlayers(ctx context.Context, filters url.Values) (json.RawMessage, error) {
 	if !c.ready() { return nil, ErrUnavailable }
 	endpoint := c.baseURL + "/api/v1/internal/admin/players/online"
+	if encoded := filters.Encode(); encoded != "" { endpoint += "?" + encoded }
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil { return nil, err }
 	req.Header.Set("X-Game-Admin-Key", c.apiKey)
