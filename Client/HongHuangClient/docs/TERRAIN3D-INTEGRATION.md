@@ -52,3 +52,8 @@
 新增 `scripts/world_region_catalog.gd`，把原来写在 `world_scene.gd` 的区域显示名称判断独立出来。现有坐标判断顺序与范围保持一致，区域名仍是客户端展示提示，不作为服务端区域边界。
 
 血海 `fengdu_blood_sea` 仍是规划区域，尚未分配正式世界坐标边界、地形资源或服务端进入规则。完成区域设计和服务端元数据前，不把它显示成已经开放的地图区域。
+
+
+## 方案对比
+
+完整工具链对比、户外/室内分工、酆都首张样板制作顺序和血海地形组合见 [WORLD-LEVEL-DESIGN-PIPELINE.md](WORLD-LEVEL-DESIGN-PIPELINE.md)。当前最终方向是 Terrain3D + Blender GLB + MultiMesh 的户外组合；GridMap 用于规则地宫；FuncGodot/TrenchBroom 只作为复杂室内/洞窟候选；CSG 只用于灰盒。ProtonScatter 先独立验证版本与导出，不直接加入主项目。
