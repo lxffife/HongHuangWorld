@@ -3,6 +3,7 @@ extends CharacterBody3D
 const UnderworldVisualFactory = preload("res://scripts/underworld_visual_factory.gd")
 const VisualModelLibrary = preload("res://scripts/visual_model_library.gd")
 const EquipmentVisualFactory = preload("res://scripts/equipment_visual_factory.gd")
+const HumanoidAnimationDriver = preload("res://scripts/humanoid_animation_driver.gd")
 
 @export var move_speed := 5.5
 @export var acceleration := 18.0
@@ -547,19 +548,22 @@ func _process(delta: float) -> void:
 		var attack_weight := 0.0
 		if attack_animation_time > 0.0:
 			attack_weight = sin((1.0 - attack_animation_time / 0.34) * PI)
-		var left_arm := player_humanoid.get_node_or_null("ArmPivotLeft") as Node3D
-		var right_arm := player_humanoid.get_node_or_null("ArmPivotRight") as Node3D
-		var left_leg := player_humanoid.get_node_or_null("LegPivotLeft") as Node3D
-		var right_leg := player_humanoid.get_node_or_null("LegPivotRight") as Node3D
-		if is_instance_valid(left_arm):
-			left_arm.rotation.x = (swing if moving else sin(humanoid_animation_time * 1.1) * 0.018) - attack_weight * 0.20
-		if is_instance_valid(right_arm):
-			right_arm.rotation.x = (-swing if moving else sin(humanoid_animation_time * 1.1 + 0.5) * 0.018) - attack_weight * 1.18
-			right_arm.rotation.z = -attack_weight * 0.28
-		if is_instance_valid(left_leg):
-			left_leg.rotation.x = -swing * 0.82
-		if is_instance_valid(right_leg):
-			right_leg.rotation.x = swing * 0.82 + attack_weight * 0.035
+		var animation_state := "attack" if attack_animation_time > 0.0 else ("walk" if moving else "idle")
+		var native_animation := HumanoidAnimationDriver.apply_state(player_humanoid, animation_state)
+		if not native_animation:
+			var left_arm := player_humanoid.get_node_or_null("ArmPivotLeft") as Node3D
+			var right_arm := player_humanoid.get_node_or_null("ArmPivotRight") as Node3D
+			var left_leg := player_humanoid.get_node_or_null("LegPivotLeft") as Node3D
+			var right_leg := player_humanoid.get_node_or_null("LegPivotRight") as Node3D
+			if is_instance_valid(left_arm):
+				left_arm.rotation.x = (swing if moving else sin(humanoid_animation_time * 1.1) * 0.018) - attack_weight * 0.20
+			if is_instance_valid(right_arm):
+				right_arm.rotation.x = (-swing if moving else sin(humanoid_animation_time * 1.1 + 0.5) * 0.018) - attack_weight * 1.18
+				right_arm.rotation.z = -attack_weight * 0.28
+			if is_instance_valid(left_leg):
+				left_leg.rotation.x = -swing * 0.82
+			if is_instance_valid(right_leg):
+				right_leg.rotation.x = swing * 0.82 + attack_weight * 0.035
 		player_humanoid.position.y = -0.9 + (absf(stride) * 0.045 if moving else sin(humanoid_animation_time * 1.8) * 0.012)
 		if is_instance_valid(birth_resonance_root) and birth_resonance_root.visible:
 			birth_resonance_root.rotation.y += delta * 0.16
