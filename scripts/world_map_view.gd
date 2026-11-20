@@ -7,10 +7,13 @@ const WorldMapProjection = preload("res://scripts/world_map_projection.gd")
 signal marker_selected(kind: String, marker_id: String, marker_name: String)
 signal world_position_selected(world_position: Vector3)
 signal atlas_region_selected(region_id: String, region_name: String, description: String)
+signal city_district_selected(district_id: String, district_name: String, description: String)
 
 var world_id := ""
 var map_mode := "local"
 var atlas_data: Dictionary = {}
+var city_data: Dictionary = {}
+var _selected_city_id := ""
 var _selected_atlas_id := ""
 var world_bounds := Vector4(-120.0, 120.0, -120.0, 120.0)
 var region_data: Array = []
@@ -72,6 +75,9 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), Color("#0b1420"), true)
 	if map_mode == "underworld_atlas":
 		_draw_underworld_atlas()
+		return
+	if map_mode == "fengdu_city":
+		_draw_fengdu_city_plan()
 		return
 	var map_rect := _map_rect()
 	if map_rect.size.x <= 0.0 or map_rect.size.y <= 0.0:
@@ -141,6 +147,116 @@ func _draw_underworld_atlas() -> void:
 			draw_string(ThemeDB.fallback_font, Vector2(node_rect.position.x + 7.0, title_y + 15.0), str(node.get("distance", "")), HORIZONTAL_ALIGNMENT_LEFT, maxf(30.0, node_rect.size.x - 12.0), 9, Color("#c1cbd4"))
 	draw_string(ThemeDB.fallback_font, Vector2(14.0, size.y - 10.0), "点击区域查看设定 · 滚轮缩放 · 右键/中键拖动 · 示意连线不代表可直接通行", HORIZONTAL_ALIGNMENT_LEFT, -1.0, 10, Color("#91a5b6"))
 	draw_string(ThemeDB.fallback_font, Vector2(size.x - 14.0, 20.0), "比例 %.2fx" % _zoom, HORIZONTAL_ALIGNMENT_RIGHT, -1.0, 11, Color("#91a5b6"))
+
+
+func _draw_fengdu_city_plan() -> void:
+	var map_rect := _map_rect()
+	draw_rect(map_rect, Color("#171b20"), true)
+	draw_rect(map_rect, Color("#62788b"), false, 1.4)
+	draw_string(ThemeDB.fallback_font, Vector2(14.0, 20.0), "酆都天城 · 城区规划示意（非实际比例）", HORIZONTAL_ALIGNMENT_LEFT, -1.0, 13, Color("#e0c58f"))
+	var center := map_rect.get_center() + _pan
+	var scale := _city_scale(map_rect)
+	var moat_size: Array = city_data.get("moat_size", [820.0, 650.0])
+	var wall_size: Array = city_data.get("wall_size", [760.0, 590.0])
+	var moat_extent := Vector2(float(moat_size[0]), float(moat_size[1])) * scale
+	var wall_extent := Vector2(float(wall_size[0]), float(wall_size[1])) * scale
+	var moat_rect := Rect2(center - moat_extent * 0.5, moat_extent)
+	var wall_rect := Rect2(center - wall_extent * 0.5, wall_extent)
+	draw_rect(moat_rect, Color("#28505b"), false, 9.0)
+	draw_rect(wall_rect, Color("#9b8664"), false, 7.0)
+	var inner_extent := wall_extent * 0.72
+	draw_rect(Rect2(center - inner_extent * 0.5, inner_extent), Color("#8d795d", 0.48), false, 1.5)
+	var north := center + Vector2(0.0, -wall_extent.y * 0.5)
+	var south := center + Vector2(0.0, wall_extent.y * 0.5)
+	var west := center + Vector2(-wall_extent.x * 0.5, 0.0)
+	var east := center + Vector2(wall_extent.x * 0.5, 0.0)
+	draw_line(north, south, Color("#8e806b", 0.34), 7.0)
+	draw_line(west, east, Color("#8e806b", 0.34), 7.0)
+	var nodes: Array = city_data.get("nodes", [])
+	for road_variant in city_data.get("roads", []):
+		if not road_variant is Dictionary:
+			continue
+		var road: Dictionary = road_variant
+		var from_node := _find_atlas_node(nodes, str(road.get("from", "")))
+		var to_node := _find_atlas_node(nodes, str(road.get("to", "")))
+		if from_node.is_empty() or to_node.is_empty():
+			continue
+		draw_line(_city_to_canvas(from_node.get("position", []), map_rect), _city_to_canvas(to_node.get("position", []), map_rect), Color("#b39a70", 0.55), maxf(2.0, 5.0 * scale))
+	for node_variant in nodes:
+		if not node_variant is Dictionary:
+			continue
+		var node: Dictionary = node_variant
+		var node_rect := _city_node_rect(node, map_rect)
+		if node_rect.size.x < 5.0 or node_rect.size.y < 5.0:
+			continue
+		var fill := _city_kind_color(str(node.get("kind", "district")))
+		draw_rect(node_rect, fill, true)
+		var selected := str(node.get("id", "")) == _selected_city_id
+		draw_rect(node_rect, Color("#f4d69a") if selected else fill.lightened(0.48), false, 2.4 if selected else 1.0)
+		var title_y := node_rect.position.y + minf(17.0, node_rect.size.y * 0.52)
+		draw_string(ThemeDB.fallback_font, Vector2(node_rect.position.x + 4.0, title_y), str(node.get("name", "城区")), HORIZONTAL_ALIGNMENT_CENTER, maxf(18.0, node_rect.size.x - 8.0), 10 if node_rect.size.x > 58.0 else 8, Color("#f4ead9"))
+	draw_string(ThemeDB.fallback_font, Vector2(14.0, size.y - 10.0), "护城河 · 城墙 · 四方城门 · 九大功能区 · 点击城区查看职责 · 滚轮缩放 / 右键拖动", HORIZONTAL_ALIGNMENT_LEFT, -1.0, 10, Color("#b0bdc6"))
+	draw_string(ThemeDB.fallback_font, Vector2(size.x - 14.0, 20.0), "比例 %.2fx" % _zoom, HORIZONTAL_ALIGNMENT_RIGHT, -1.0, 11, Color("#91a5b6"))
+
+
+func _city_scale(map_rect: Rect2) -> float:
+	return minf(map_rect.size.x / 900.0, map_rect.size.y / 740.0) * _zoom
+
+
+func _city_to_canvas(position_data: Array, map_rect: Rect2) -> Vector2:
+	if position_data.size() < 2:
+		return map_rect.get_center() + _pan
+	return map_rect.get_center() + _pan + Vector2(float(position_data[0]), -float(position_data[1])) * _city_scale(map_rect)
+
+
+func _city_node_rect(node: Dictionary, map_rect: Rect2) -> Rect2:
+	var position_data: Array = node.get("position", [])
+	var size_data: Array = node.get("size", [])
+	if position_data.size() < 2 or size_data.size() < 2:
+		return Rect2()
+	var extent := Vector2(float(size_data[0]), float(size_data[1])) * _city_scale(map_rect)
+	return Rect2(_city_to_canvas(position_data, map_rect) - extent * 0.5, extent)
+
+
+func _city_kind_color(kind: String) -> Color:
+	match kind:
+		"palace":
+			return Color("#80633d")
+		"court":
+			return Color("#665044")
+		"admin":
+			return Color("#455d72")
+		"sacred":
+			return Color("#67558b")
+		"market":
+			return Color("#79613c")
+		"residential":
+			return Color("#52674f")
+		"military":
+			return Color("#74434a")
+		"transport":
+			return Color("#3f6870")
+		"gate":
+			return Color("#766c5c")
+		_:
+			return Color("#46596b")
+
+
+func _select_fengdu_city_at(mouse_position: Vector2) -> void:
+	var map_rect := _map_rect()
+	for node_variant in city_data.get("nodes", []):
+		if not node_variant is Dictionary:
+			continue
+		var node: Dictionary = node_variant
+		if _city_node_rect(node, map_rect).has_point(mouse_position):
+			_selected_city_id = str(node.get("id", ""))
+			var details := "职能：" + str(node.get("authority", "城市管理"))
+			details += " · 危险 " + str(node.get("danger_level", 0)) + "/10"
+			details += "\n" + str(node.get("access", ""))
+			details += "\n" + str(node.get("description", ""))
+			city_district_selected.emit(_selected_city_id, str(node.get("name", "城区")), details)
+			queue_redraw()
+			return
 
 
 func _atlas_scale(map_rect: Rect2) -> float:
@@ -362,6 +478,9 @@ func _select_at(mouse_position: Vector2) -> void:
 	if map_mode == "underworld_atlas":
 		_select_underworld_atlas_at(mouse_position)
 		return
+	if map_mode == "fengdu_city":
+		_select_fengdu_city_at(mouse_position)
+		return
 	var scale := _pixels_per_meter(map_rect)
 	var map_center := map_rect.get_center() + _pan
 	var best_distance := 14.0
@@ -429,6 +548,8 @@ func _select_at(mouse_position: Vector2) -> void:
 func _world_title() -> String:
 	if map_mode == "underworld_atlas":
 		return "冥界总览"
+	if map_mode == "fengdu_city":
+		return "酆都天城"
 	match world_id:
 		"underworld_fengdu":
 			return "冥界 · 酆都"
