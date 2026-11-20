@@ -107,6 +107,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("GET /api/v1/factions/mine", factionAPI.mine)
 		mux.HandleFunc("POST /api/v1/factions/{factionID}/applications", factionAPI.apply)
 		mux.HandleFunc("GET /api/v1/factions/{factionID}/applications", factionAPI.applications)
+		mux.HandleFunc("GET /api/v1/factions/{factionID}/members", factionAPI.members)
 		mux.HandleFunc("POST /api/v1/factions/{factionID}/applications/{applicationID}/review", factionAPI.review)
 		economyAPI := &economyHandlers{authService: authService, service: economy.NewService(db), logger: logger}
 		mux.HandleFunc("GET /api/v1/economy/currencies", economyAPI.catalog)
@@ -175,7 +176,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 			"POST /api/v1/characters/current/equipment/equip", "POST /api/v1/characters/current/equipment/unequip", "POST /api/v1/characters/current/inventory/use", "POST /api/v1/servers/inventory/use", "POST /api/v1/servers/sessions/combat-stats", "GET /api/v1/servers/loot-table", "GET /api/v1/servers/monster-spawn-config", "GET /api/v1/servers/drops", "POST /api/v1/servers/drops",
 			"POST /api/v1/servers/drops/pickup", "POST /api/v1/servers/heartbeat",
 			"POST /api/v1/servers/characters/rewards", "GET /api/v1/economy/currencies", "GET /api/v1/economy/wallet", "POST /api/v1/worlds/enter",
-			"POST /api/v1/factions", "GET /api/v1/factions/mine", "POST /api/v1/factions/{factionID}/applications", "GET /api/v1/factions/{factionID}/applications", "POST /api/v1/factions/{factionID}/applications/{applicationID}/review",
+			"POST /api/v1/factions", "GET /api/v1/factions/mine", "POST /api/v1/factions/{factionID}/applications", "GET /api/v1/factions/{factionID}/applications", "GET /api/v1/factions/{factionID}/members", "POST /api/v1/factions/{factionID}/applications/{applicationID}/review",
 			"POST /api/v1/servers/tickets/redeem", "POST /api/v1/servers/sessions/snapshot",
 			"POST /api/v1/servers/sessions/close",
 		} { mux.HandleFunc(route, unavailable) }
