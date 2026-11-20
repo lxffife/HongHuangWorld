@@ -336,6 +336,14 @@ bool redeem_ticket(const ServerConfig& config, const std::string& ticket, Json& 
     return true;
 }
 
+std::int64_t mana_for_session_close(const PlayerState& player) {
+    auto mana = player.mana;
+    if (player.pending_spell.has_value()) {
+        const auto* spell = honghuang::simulation::find_spell_definition(player.pending_spell->spell_id);
+        if (spell != nullptr) mana = std::min(player.max_mana, mana + spell->mana_cost);
+    }
+    return mana;
+}
 bool save_and_close_session(const ServerConfig& config, const PlayerState& player, std::string& error) {
     if (player.session_id.empty() || player.character_id.empty()) {
         error = "player session identity is missing";
@@ -354,7 +362,7 @@ bool save_and_close_session(const ServerConfig& config, const PlayerState& playe
         {"position_z", player.z},
         {"rotation_y", player.yaw},
         {"health", player.health},
-        {"mana", player.mana}
+        {"mana", mana_for_session_close(player)}
     }.dump();
     std::string response;
     struct curl_slist* headers = nullptr;
@@ -2350,11 +2358,12 @@ struct EnetServer::Impl {
             auto target = std::find_if(monsters.begin(), monsters.end(), [&](const MonsterRuntime& monster) {
                 return monster.runtime_id == pending.target_entity_id;
             });
-            if (spell == nullptr || target == monsters.end() || target->state.mode == honghuang::simulation::MonsterMode::Dead) {
+            if (player.health <= 0 || spell == nullptr || target == monsters.end() ||
+                target->state.mode == honghuang::simulation::MonsterMode::Dead) {
                 if (spell != nullptr) player.mana = std::min(player.max_mana, player.mana + spell->mana_cost);
                 send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                           Json{{"accepted", false}, {"action", "spell_cast"},
-                               {"reason", "施法期间目标消失，灵力已返还。"},
+                               {"reason", player.health <= 0 ? "施法中受到致命攻击，灵力已返还。" : "施法期间目标消失，灵力已返还。"},
                                {"mana", player.mana}, {"max_mana", player.max_mana}});
                 continue;
             }
