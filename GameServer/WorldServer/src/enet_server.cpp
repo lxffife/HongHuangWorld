@@ -1400,6 +1400,10 @@ struct EnetServer::Impl {
                         std::lock_guard lock(persistence_mutex);
                         if (persistence_stop_requested) break;
                     }
+                    {
+                        std::lock_guard lock(consumable_mutex);
+                        if (pending_consumable_sessions.contains(session_id)) continue;
+                    }
                     bool inactive = false;
                     std::string error;
                     if (save_periodic_position(config, player, inactive, error)) continue;
