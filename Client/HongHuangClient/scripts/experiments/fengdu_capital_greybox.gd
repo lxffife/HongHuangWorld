@@ -146,8 +146,6 @@ func _build_roads() -> void:
 	_add_box("EastWestImperialAvenue", Vector3(WALL_WIDTH - 80.0, 0.6, 52.0), Vector3(0.0, 0.27, 0.0), "road", false)
 	_add_box("NorthGateProcessionalRoad", Vector3(38.0, 0.5, 180.0), Vector3(0.0, 0.3, -635.0), "road_edge", false)
 	_add_box("SouthernSoulAvenue", Vector3(38.0, 0.5, 270.0), Vector3(0.0, 0.3, 500.0), "road_edge", false)
-	for side in [-1.0, 1.0]:
-		_add_box("CrossDistrictRoad_" + str(side), Vector3(560.0, 0.5, 26.0), Vector3(side * 280.0, 0.28, side * 300.0), "road", false)
 	_add_box("SouthGateToCityRoad", Vector3(44.0, 0.5, 260.0), Vector3(0.0, 0.28, 610.0), "road", false)
 	_add_box("WestInnerStreet", Vector3(26.0, 0.5, 520.0), Vector3(-260.0, 0.28, 150.0), "road", false)
 	_add_box("EastInnerStreet", Vector3(26.0, 0.5, 520.0), Vector3(260.0, 0.28, 150.0), "road", false)
@@ -155,7 +153,7 @@ func _build_roads() -> void:
 	_add_box("SouthernCrossStreet", Vector3(520.0, 0.5, 26.0), Vector3(0.0, 0.28, 310.0), "road", false)
 	_add_box("MarketApproachWest", Vector3(100.0, 0.5, 26.0), Vector3(-310.0, 0.28, 310.0), "road", false)
 	_add_box("MarketApproachEast", Vector3(100.0, 0.5, 26.0), Vector3(310.0, 0.28, 310.0), "road", false)
-	_add_box("ReincarnationApproach", Vector3(26.0, 0.5, 230.0), Vector3(380.0, 0.28, 490.0), "road", false)
+	_add_box("ReincarnationApproach", Vector3(26.0, 0.5, 140.0), Vector3(380.0, 0.28, 535.0), "road", false)
 
 
 func _build_districts() -> void:
