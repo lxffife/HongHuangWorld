@@ -1442,9 +1442,13 @@ struct EnetServer::Impl {
             {"target_entity_id", target_entity_id},
             {"attack_style", attack_style}
         };
+        const double interest_radius_squared =
+            static_cast<double>(kInterestRadius) * static_cast<double>(kInterestRadius);
         for (const auto& [peer, recipient] : players) {
-            (void)recipient;
             if (peer == excluded_peer) continue;
+            const double dx = static_cast<double>(recipient.x) - player.x;
+            const double dz = static_cast<double>(recipient.z) - player.z;
+            if (dx * dx + dz * dz > interest_radius_squared) continue;
             send_json(peer, honghuang::protocol::MessageType::PlayerActionEvent, event);
         }
     }
