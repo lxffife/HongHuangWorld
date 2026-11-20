@@ -30,7 +30,7 @@ int main() {
     assert(hammer.defense_penetration_basis_points == 1000);
     assert(hammer.cooldown > axe.cooldown);
 
-    // Ranged types must not accidentally gain long-range hits before projectiles exist.
+    // Bow range is enabled only alongside the server projectile path; spell weapons stay close-range.
     const auto bow = weapon_combat_profile("bow");
     const auto staff = weapon_combat_profile("staff");
     const auto focus = weapon_combat_profile("focus");
