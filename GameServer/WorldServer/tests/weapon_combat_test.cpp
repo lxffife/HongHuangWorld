@@ -34,7 +34,8 @@ int main() {
     const auto bow = weapon_combat_profile("bow");
     const auto staff = weapon_combat_profile("staff");
     const auto focus = weapon_combat_profile("focus");
-    assert(bow.range > sword.range);
+    assert(bow.range == 22.0F);
+    assert(bow.cooldown.count() == 900);
     assert(staff.range == sword.range);
     assert(focus.range == sword.range);
 
