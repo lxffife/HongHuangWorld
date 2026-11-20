@@ -7,6 +7,7 @@
 #include "simulation/projectile.hpp"
 #include "simulation/spell_combat.hpp"
 #include "simulation/consumable.hpp"
+#include "simulation/status_effect.hpp"
 #include "persistence/durable_outbox.hpp"
 #include "network/chat_delivery_policy.hpp"
 
@@ -107,6 +108,7 @@ struct MonsterRuntime {
     int spawn_chance_percent{100};
     int retry_spawn_seconds{60};
     int first_spawn_delay_seconds{0};
+    honghuang::simulation::TimedSlowEffect slow_effect;
 };
 
 
@@ -214,6 +216,8 @@ struct ProjectileRuntime {
     std::int32_t defense_penetration_basis_points{};
     Clock::time_point expires_at{};
     std::string projectile_type{"arrow"};
+    std::int32_t slow_duration_ms{};
+    float slow_multiplier{1.0F};
 };
 
 std::string make_event_uuid() {
@@ -2422,7 +2426,7 @@ struct EnetServer::Impl {
             reject("法术尚在冷却中。"); return;
         }
         if (!honghuang::simulation::can_pay_spell_cost(player.mana, spell->mana_cost)) {
-            reject("灵力不足，无法施展火球术。"); return;
+            reject("灵力不足，无法施展该法术。"); return;
         }
         const auto target_id = command.value("target_entity_id", std::string{});
         if (target_id.empty() || target_id.size() > 96) { reject("施法目标无效。"); return; }
@@ -2435,7 +2439,7 @@ struct EnetServer::Impl {
         const double dx = static_cast<double>(target->state.x) - player.x;
         const double dz = static_cast<double>(target->state.z) - player.z;
         if (dx * dx + dz * dz > static_cast<double>(spell->range) * spell->range) {
-            reject("目标超出火球术射程。"); return;
+            reject("目标超出法术射程。"); return;
         }
         if (projectiles.size() >= 128) { reject("当前投射物数量过多，请稍后再试。"); return; }
         player.mana -= spell->mana_cost;
@@ -2492,7 +2496,10 @@ struct EnetServer::Impl {
                     {"max_health", monster.definition.max_health},
                     {"mode", static_cast<int>(monster.state.mode)},
                     {"x", monster.state.x}, {"y", 0.0F}, {"z", monster.state.z},
-                    {"yaw", monster.state.yaw}
+                    {"yaw", monster.state.yaw},
+                    {"slowed", honghuang::simulation::slow_is_active(
+                        monster.slow_effect, std::chrono::duration_cast<std::chrono::milliseconds>(
+                            Clock::now().time_since_epoch()).count())}
                 });
             }
             for (const auto& projectile : projectiles) {
@@ -2598,7 +2605,7 @@ struct EnetServer::Impl {
                 player.mana = std::min(player.max_mana, player.mana + spell->mana_cost);
                 send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                           Json{{"accepted", false}, {"action", "spell_cast"},
-                               {"reason", "火球术释放条件已失效，灵力已返还。"},
+                               {"reason", "法术释放条件已失效，灵力已返还。"},
                                {"mana", player.mana}, {"max_mana", player.max_mana}});
                 continue;
             }
@@ -2610,7 +2617,8 @@ struct EnetServer::Impl {
                 static_cast<float>(dz / distance) * spell->projectile_speed,
                 player.attack, spell->power_basis_points, spell->defense_penetration_basis_points,
                 now + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<float>(spell->projectile_lifetime_seconds)),
-                "fireball"
+                spell->element == honghuang::simulation::SpellElement::Ice ? "ice_bolt" : "fireball",
+                spell->slow_duration_ms, spell->slow_multiplier
             });
             broadcast_player_action_event(player, "cast", target->runtime_id, "spell_fireball", peer);
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
@@ -2663,6 +2671,14 @@ struct EnetServer::Impl {
                 projectile->defense_penetration_basis_points
             };
             if (honghuang::simulation::calculate_damage(attacker, defender, attack_profile, damage)) {
+                bool applied_slow = false;
+                if (projectile->slow_duration_ms > 0) {
+                    const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        now.time_since_epoch()).count();
+                    applied_slow = honghuang::simulation::apply_slow(
+                        target->slow_effect, now_ms, projectile->slow_duration_ms,
+                        projectile->slow_multiplier);
+                }
                 target->state.health = static_cast<float>(damage.remaining_health);
                 std::int64_t experience_reward = 0;
                 std::int64_t cultivation_reward = 0;
@@ -2692,6 +2708,8 @@ struct EnetServer::Impl {
                                {"remaining_health", damage.remaining_health},
                                {"max_health", target->definition.max_health},
                                {"defeated", damage.defeated},
+                               {"status_effect", applied_slow ? "slow" : ""},
+                               {"status_duration_ms", applied_slow ? projectile->slow_duration_ms : 0},
                                {"experience_reward", experience_reward},
                                {"cultivation_reward", cultivation_reward},
                                {"soul_experience_reward", damage.defeated && config.world_id == "underworld_fengdu" ? 5 : 0}});
@@ -2699,7 +2717,9 @@ struct EnetServer::Impl {
                     {"accepted", true}, {"visual_only", true}, {"source", "projectile"},
                     {"target_entity_id", target->runtime_id}, {"target_name", target->definition.name},
                     {"projectile_type", projectile->projectile_type}, {"damage", damage.damage}, {"health", damage.remaining_health},
-                    {"max_health", target->definition.max_health}, {"defeated", damage.defeated}
+                    {"max_health", target->definition.max_health}, {"defeated", damage.defeated},
+                    {"status_effect", applied_slow ? "slow" : ""},
+                    {"status_duration_ms", applied_slow ? projectile->slow_duration_ms : 0}
                 };
                 for (const auto& [recipient_peer, recipient] : players) {
                     if (recipient_peer == owner->first ||
@@ -2725,6 +2745,7 @@ struct EnetServer::Impl {
                                      monster.definition.max_health};
                     monster.respawn_at = Clock::time_point{};
                     monster.attack_phase = MonsterAttackPhase::Ready;
+                    monster.slow_effect = {};
                     monster.attack_target_character_id.clear();
                     monster.last_attack_at = Clock::time_point{};
                 }
