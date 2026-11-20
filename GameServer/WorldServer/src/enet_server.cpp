@@ -2879,7 +2879,7 @@ struct EnetServer::Impl {
             const bool heavy_slam = std::string(attack_profile.style) == "heavy_slam";
             const double attack_range = heavy_slam
                 ? static_cast<double>(attack_profile.splash_radius)
-                : static_cast<double>(monster.definition.attack_range);
+                : static_cast<double>(attack_profile.range);
             const bool in_attack_range = attack_dx * attack_dx + attack_dz * attack_dz <=
                 attack_range * attack_range;
 
