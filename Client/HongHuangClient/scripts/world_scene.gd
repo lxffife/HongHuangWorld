@@ -2610,6 +2610,7 @@ func _on_combat_event(event: Dictionary) -> void:
 			if bool(event.get("defeated", false)):
 				visual_target.set_meta("burn_visual_remaining", 0.0)
 				_set_monster_burn_visual(visual_target, false)
+				_set_monster_freeze_visual(visual_target, false)
 				visual_target.set_meta("death_reaction_time", 1.15)
 				visual_target.set_meta("defeated_visual", true)
 				var visual_nameplate := visual_target.get_node_or_null("Nameplate") as Label3D
