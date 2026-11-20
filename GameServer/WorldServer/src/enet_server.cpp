@@ -2140,6 +2140,14 @@ struct EnetServer::Impl {
             }
             auto& player = found->second;
             const Json previous_equipment = player.equipment;
+            const bool equipment_changed = player.equipment != stats["equipment"];
+            const bool combat_stats_changed = player.attack != attack || player.defense != defense ||
+                player.max_health != max_health || player.max_mana != max_mana ||
+                player.constitution != stats["constitution"].get<std::int64_t>() ||
+                player.agility != stats["agility"].get<std::int64_t>() ||
+                player.spirit != stats["spirit"].get<std::int64_t>() ||
+                player.vitality != stats["vitality"].get<std::int64_t>() ||
+                std::abs(static_cast<double>(player.movement_speed) - speed) > 0.0001;
             // Preserve the live resources: increasing an equipment cap must not heal or
             // restore mana. Removing a cap clamps current resources to the new maximum.
             player.health = honghuang::simulation::clamp_current_resource_to_maximum(player.health, max_health);
@@ -2157,12 +2165,14 @@ struct EnetServer::Impl {
             if (player.equipment != previous_equipment) {
                 broadcast_player_event(honghuang::protocol::MessageType::PlayerJoined, player);
             }
-            send_json(found->first, honghuang::protocol::MessageType::CombatEvent,
-                Json{{"action", "equipment_refresh"}, {"accepted", true},
-                     {"health", player.health}, {"max_health", player.max_health},
-                     {"mana", player.mana}, {"max_mana", player.max_mana},
-                     {"attack", player.attack}, {"defense", player.defense},
-                     {"movement_speed", player.movement_speed}});
+            if (combat_stats_changed || equipment_changed) {
+                send_json(found->first, honghuang::protocol::MessageType::CombatEvent,
+                    Json{{"action", "equipment_refresh"}, {"accepted", true},
+                         {"health", player.health}, {"max_health", player.max_health},
+                         {"mana", player.mana}, {"max_mana", player.max_mana},
+                         {"attack", player.attack}, {"defense", player.defense},
+                         {"movement_speed", player.movement_speed}});
+            }
         }
     }
 
