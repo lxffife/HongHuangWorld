@@ -7,6 +7,7 @@ const HumanoidAnimationDriver = preload("res://scripts/humanoid_animation_driver
 const MonsterAnimationDriver = preload("res://scripts/monster_animation_driver.gd")
 const QingyunVisualFactory = preload("res://scripts/qingyun_visual_factory.gd")
 const FriendPanelScript = preload("res://scripts/friend_panel.gd")
+const WorldMiniMapScript = preload("res://scripts/world_minimap.gd")
 
 @onready var hud_label: Label = $HUD/Panel/Margin/Content/Status
 @onready var progression_label: Label = $HUD/Panel/Margin/Content/Progression
@@ -95,6 +96,10 @@ var selected_monster_id := ""
 var target_info_panel: PanelContainer
 var target_info_label: Label
 var target_health_bar: ProgressBar
+var minimap_panel: PanelContainer
+var minimap_view: Control
+var minimap_region_label: Label
+var minimap_refresh_accumulator := 0.0
 var target_selection_ring: MeshInstance3D
 var floating_combat_labels: Dictionary = {}
 var floating_combat_lifetimes: Dictionary = {}
@@ -175,6 +180,7 @@ func _ready() -> void:
 	if not HHSession.access_token.is_empty():
 		HHChatNetwork.connect_chat(HHSession.get_chat_api_base(), HHSession.access_token)
 	_build_combat_hud()
+	_build_minimap_hud()
 	_build_input_debug_hud()
 	if HHSession.world_network != null:
 		HHSession.world_network.entities_updated.connect(_on_entities_updated)
@@ -706,6 +712,58 @@ func _on_soul_choice_request_completed(result: int, response_code: int, _headers
 	pending_rare_choice_record_id = ""
 	_show_notification("无相灵魄已融入来世资质", 4.0)
 	_request_soul_essence()
+
+func _build_minimap_hud() -> void:
+	var hud := get_node_or_null("HUD") as CanvasLayer
+	if hud == null:
+		return
+	minimap_panel = PanelContainer.new()
+	minimap_panel.name = "WorldMiniMapPanel"
+	minimap_panel.custom_minimum_size = Vector2(184.0, 200.0)
+	_apply_panel_theme(minimap_panel)
+	hud.add_child(minimap_panel)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 4)
+	minimap_panel.add_child(layout)
+	var header := Label.new()
+	header.text = "附近地图 · 北向上"
+	header.add_theme_color_override("font_color", Color("#d4b47b"))
+	header.add_theme_font_size_override("font_size", 13)
+	layout.add_child(header)
+	minimap_region_label = Label.new()
+	minimap_region_label.text = current_region_name if not current_region_name.is_empty() else "正在定位区域…"
+	minimap_region_label.add_theme_color_override("font_color", Color("#a9bac7"))
+	minimap_region_label.add_theme_font_size_override("font_size", 11)
+	layout.add_child(minimap_region_label)
+	minimap_view = Control.new()
+	minimap_view.name = "LiveMapCanvas"
+	minimap_view.set_script(WorldMiniMapScript)
+	minimap_view.custom_minimum_size = Vector2(156.0, 156.0)
+	minimap_view.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	layout.add_child(minimap_view)
+	var legend := Label.new()
+	legend.text = "金 探索点   青 NPC   红 妖兽   白 你"
+	legend.add_theme_color_override("font_color", Color("#9eafbd"))
+	legend.add_theme_font_size_override("font_size", 10)
+	layout.add_child(legend)
+	_update_minimap_data()
+
+func _update_minimap_data() -> void:
+	if not is_instance_valid(minimap_view):
+		return
+	if is_instance_valid(local_player):
+		minimap_view.set("player_position", local_player.global_position)
+		minimap_view.set("player_yaw", local_player.global_rotation.y)
+	minimap_view.set("exploration_points", exploration_point_data.values())
+	minimap_view.set("npc_points", npc_definitions)
+	var nearby_monsters: Array = []
+	for monster_id in monster_targets.keys():
+		var target: Vector3 = monster_targets[monster_id]
+		nearby_monsters.append({"x": target.x, "z": target.z})
+	minimap_view.set("monster_points", nearby_monsters)
+	if is_instance_valid(minimap_region_label):
+		var world_name := _world_display_name(str(HHSession.world_snapshot.get("world_id", "")))
+		minimap_region_label.text = world_name + " · " + (current_region_name if not current_region_name.is_empty() else "区域载入中")
 
 func _build_combat_hud() -> void:
 	var hud := get_node_or_null("HUD") as CanvasLayer
@@ -1546,6 +1604,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			soul_choice_button.visible = hud_visible and soul_essence_profile.get("pending_rare_choices", []).size() > 0
 		if is_instance_valid(target_info_panel):
 			target_info_panel.visible = hud_visible and not selected_monster_id.is_empty()
+		if is_instance_valid(minimap_panel):
+			minimap_panel.visible = hud_visible and get_viewport().get_visible_rect().size.x >= 520.0
 		if is_instance_valid(input_debug_panel):
 			input_debug_panel.visible = hud_visible and input_debug_visible
 		if is_instance_valid(notification_panel) and not hud_visible:
@@ -1868,6 +1928,14 @@ func _layout_hud() -> void:
 		npc_interact_button.offset_right = -18.0
 		npc_interact_button.offset_top = -chat_height - 72.0
 		npc_interact_button.offset_bottom = -chat_height - 26.0
+	if is_instance_valid(minimap_panel):
+		var map_visible := viewport_size.x >= 520.0 and hud_visible
+		minimap_panel.visible = map_visible
+		minimap_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		minimap_panel.offset_left = -202.0
+		minimap_panel.offset_right = -18.0
+		minimap_panel.offset_top = 18.0
+		minimap_panel.offset_bottom = 218.0
 	if is_instance_valid(target_info_panel):
 		var target_width := minf(380.0, maxf(250.0, viewport_size.x - 32.0))
 		target_info_panel.position = Vector2(-target_width * 0.5, 18.0)
@@ -3265,6 +3333,10 @@ func _update_input_debug_hud() -> void:
 	input_debug_label.text = keys + "\n" + movement_text + " · 网络：" + network_text + "\n" + send_text + " · ESC 释放鼠标"
 
 func _process(delta: float) -> void:
+	minimap_refresh_accumulator += delta
+	if minimap_refresh_accumulator >= 0.2:
+		minimap_refresh_accumulator = 0.0
+		_update_minimap_data()
 	var cooldown_changed := false
 	for spell_id in spell_cooldown_remaining.keys():
 		var remaining := maxf(float(spell_cooldown_remaining[spell_id]) - delta, 0.0)
