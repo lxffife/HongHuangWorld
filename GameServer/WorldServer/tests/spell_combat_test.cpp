@@ -15,6 +15,10 @@ int main() {
     assert(fireball->mana_cost == 18);
     assert(fireball->cast_time_ms == 350);
     assert(fireball->cooldown_ms == 1800);
+    assert(fireball->range == 20.0F);
+    assert(fireball->projectile_speed == 16.0F);
+    assert(fireball->projectile_lifetime_seconds == 1.8F);
+    assert(fireball->power_basis_points == 12500);
     assert(valid_spell_definition(*fireball));
 
     // Unknown client-provided spell IDs are never resolved by the server catalog.
