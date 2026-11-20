@@ -2577,12 +2577,14 @@ func _on_combat_event(event: Dictionary) -> void:
 		if is_instance_valid(mana_label):
 			mana_label.text = "灵力  " + str(int(HHSession.world_snapshot.get("mana", 0))) + " / " + str(int(HHSession.world_snapshot.get("max_mana", 0)))
 		_update_compact_hud()
+		var spell_id := str(event.get("spell_id", "fireball"))
+		var spell_name := "冰锥术" if spell_id == "ice_bolt" else "火球术"
 		if not bool(event.get("accepted", false)):
-			_show_notification(str(event.get("reason", "火球术施展失败。")), 3.0)
+			_show_notification(str(event.get("reason", spell_name + "施展失败。")), 3.0)
 		elif str(event.get("phase", "")) == "casting":
-			_show_notification("正在凝聚火球 · 灵力 -" + str(int(event.get("mana_cost", 18))), 1.5)
+			_show_notification("正在凝聚" + spell_name + " · 灵力 -" + str(int(event.get("mana_cost", 18))), 1.5)
 		elif str(event.get("phase", "")) == "released":
-			_show_notification("火球已释放！", 1.5)
+			_show_notification(spell_name + "已释放！", 1.5)
 		return
 	if not bool(event.get("accepted", true)):
 		hud_label.text = str(event.get("reason", "攻击未命中。"))
