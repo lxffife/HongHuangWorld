@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 
 namespace honghuang::simulation {
 
@@ -16,9 +17,11 @@ inline bool apply_slow(TimedSlowEffect& effect, std::int64_t now_ms,
     if (now_ms < 0 || duration_ms <= 0 || duration_ms > 30000 ||
         !std::isfinite(movement_multiplier) ||
         movement_multiplier <= 0.0F || movement_multiplier >= 1.0F ||
-        now_ms > INT64_MAX - duration_ms) {
+        now_ms > std::numeric_limits<std::int64_t>::max() - duration_ms) {
         return false;
     }
+    // An expired effect must not leak its old multiplier into a new application.
+    if (effect.expires_at_ms <= now_ms) effect = {};
     // Refresh policy: keep the stronger slow and the later expiry; repeated
     // hits cannot shorten an existing effect or stack movement penalties.
     effect.expires_at_ms = std::max(effect.expires_at_ms, now_ms + duration_ms);
