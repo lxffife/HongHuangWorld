@@ -72,6 +72,7 @@ func _material(color_hex: String, transparency := 0.0, metallic := false) -> Sta
 	result.metallic = 0.22 if metallic else 0.0
 	if transparency > 0.0:
 		result.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		result.albedo_color.a = 0.72
 	return result
 
 
@@ -134,7 +135,7 @@ func _build_gatehouse(gate_name: String, center: Vector3, horizontal: bool) -> v
 func _build_roads() -> void:
 	_add_box("NorthSouthImperialAvenue", Vector3(52.0, 0.6, 1050.0), Vector3(0.0, 0.25, 175.0), "road", false)
 	_add_box("EastWestImperialAvenue", Vector3(WALL_WIDTH - 80.0, 0.6, 52.0), Vector3(0.0, 0.27, 0.0), "road", false)
-	_add_box("NorthernPalaceApproach", Vector3(38.0, 0.5, 260.0), Vector3(0.0, 0.3, -500.0), "road_edge", false)
+	_add_box("NorthGateProcessionalRoad", Vector3(38.0, 0.5, 180.0), Vector3(0.0, 0.3, -635.0), "road_edge", false)
 	_add_box("SouthernSoulAvenue", Vector3(38.0, 0.5, 270.0), Vector3(0.0, 0.3, 500.0), "road_edge", false)
 	for side in [-1.0, 1.0]:
 		_add_box("CrossDistrictRoad_" + str(side), Vector3(560.0, 0.5, 26.0), Vector3(side * 280.0, 0.28, side * 300.0), "road", false)
