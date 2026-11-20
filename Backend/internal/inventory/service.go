@@ -507,6 +507,7 @@ func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessio
 		}
 	}
 	if err:=rows.Err(); err!=nil { return CombatStats{},fmt.Errorf("iterate equipped combat bonuses: %w",err) }
+	if err:=rows.Close(); err!=nil { return CombatStats{},fmt.Errorf("close equipped combat bonuses: %w",err) }
 	for setID,count:=range setCounts {
 		bonuses,ok:=equipmentSetBonusForCount(setTiers[setID],count)
 		if !ok { continue }
