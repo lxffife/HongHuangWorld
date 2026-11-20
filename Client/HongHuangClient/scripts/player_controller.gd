@@ -2,6 +2,7 @@ extends CharacterBody3D
 
 const UnderworldVisualFactory = preload("res://scripts/underworld_visual_factory.gd")
 const VisualModelLibrary = preload("res://scripts/visual_model_library.gd")
+const EquipmentVisualFactory = preload("res://scripts/equipment_visual_factory.gd")
 
 @export var move_speed := 5.5
 @export var acceleration := 18.0
@@ -637,30 +638,9 @@ func set_equipment_visuals(items: Array) -> void:
 
 
 func _get_or_create_equipment_socket(slot: String, socket_name: String) -> Node3D:
-	var socket := player_humanoid.get_node_or_null(socket_name) as Node3D
-	if is_instance_valid(socket):
-		return socket
-	var socket_parent: Node3D = player_humanoid
-	if slot == "weapon":
-		var right_arm := player_humanoid.get_node_or_null("ArmPivotRight") as Node3D
-		if is_instance_valid(right_arm):
-			socket_parent = right_arm
-	elif slot == "offhand":
-		var left_arm := player_humanoid.get_node_or_null("ArmPivotLeft") as Node3D
-		if is_instance_valid(left_arm):
-			socket_parent = left_arm
-	socket = socket_parent.get_node_or_null(socket_name) as Node3D
-	if not is_instance_valid(socket):
-		socket = Node3D.new()
-		socket.name = socket_name
-		if socket_parent != player_humanoid and slot == "weapon":
-			socket.position = Vector3(0.03, -0.58, -0.06)
-		elif socket_parent != player_humanoid and slot == "offhand":
-			socket.position = Vector3(-0.03, -0.58, -0.06)
-		else:
-			socket.position = _equipment_socket_position(slot)
-		socket_parent.add_child(socket)
-	return socket
+	if not is_instance_valid(player_humanoid):
+		return null
+	return EquipmentVisualFactory.get_or_create_socket(player_humanoid, slot)
 
 
 func _build_equipment_slot_visual(root: Node3D, slot: String, quality: int) -> void:
