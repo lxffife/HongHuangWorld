@@ -158,10 +158,12 @@ func _build_palace_courtyard(width: float, depth: float, height: float, material
 		_add_roof("PalaceWingRoof_" + str(side), wing + Vector3(16.0, 8.0, 16.0), p + Vector3.UP * 21.0, "roof")
 		_add_box("PalaceSideWall_" + str(side), Vector3(12.0, 22.0, 250.0), Vector3(side * 270.0, 11.0, 8.0), "stone", true)
 	_add_box("ImperialTerrace", Vector3(520.0, 4.0, 180.0), Vector3(0.0, 2.0, -190.0), "stone", true)
-	for i in range(5):
-		var offset := (float(i) - 2.0) * 74.0
+	var pillar_offsets := [-148.0, -74.0, 74.0, 148.0]
+	for i in range(pillar_offsets.size()):
+		var offset := float(pillar_offsets[i])
 		_add_box("PalacePillar_%d" % i, Vector3(12.0, 32.0, 12.0), Vector3(offset, 16.0, depth * 0.5 + 42.0), "sign", true)
-	_add_box("ImperialAudiencePlatform", Vector3(width + 140.0, 5.0, 62.0), Vector3(0.0, 2.5, depth * 0.5 + 90.0), "sign", false)
+	for side in [-1.0, 1.0]:
+		_add_box("ImperialAudiencePlatform_" + str(side), Vector3(150.0, 5.0, 62.0), Vector3(side * 125.0, 2.5, depth * 0.5 + 90.0), "sign", false)
 
 
 func _build_office_wings(width: float, depth: float, height: float, material_key: String) -> void:
@@ -189,8 +191,9 @@ func _build_reincarnation_complex(material_key: String) -> void:
 		_add_box("ReincarnationSideHall_" + str(side), Vector3(58.0, 36.0, 68.0), p, material_key, true)
 		_add_roof("ReincarnationSideRoof_" + str(side), Vector3(68.0, 7.0, 78.0), p + Vector3.UP * 21.5, "roof")
 	_add_box("RebirthCeremonyCourt", Vector3(250.0, 0.4, 80.0), Vector3(0.0, 0.25, 145.0), "stone", false)
-	for index in range(5):
-		var x := (float(index) - 2.0) * 42.0
+	var stele_offsets := [-100.0, -70.0, 70.0, 100.0]
+	for index in range(stele_offsets.size()):
+		var x := float(stele_offsets[index])
 		_add_box("ReincarnationStele_%d" % index, Vector3(5.0, 18.0, 5.0), Vector3(x, 9.0, 150.0), "sacred", false)
 
 
