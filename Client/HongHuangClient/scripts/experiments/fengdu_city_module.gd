@@ -1,4 +1,6 @@
 extends Node3D
+
+const NpcBehaviorController = preload("res://scripts/experiments/npc_behavior_controller.gd")
 ## Reusable procedural blockout module for Fengdu districts and city props.
 
 signal player_entered(module_data: Dictionary)
@@ -17,6 +19,8 @@ var _route_index := 0
 var _route_speed := 2.8
 var _official_robe: MeshInstance3D
 var _official_time := 0.0
+var _official_status_label: Label3D
+var _behavior_controller: Node
 
 
 func configure(data: Dictionary) -> void:
@@ -34,6 +38,8 @@ func _ready() -> void:
 	if module_kind == "guard" and _route_points.is_empty():
 		_route_points = [Vector3(-7.0, 0.0, 0.0), Vector3(7.0, 0.0, 0.0)]
 	_create_materials()
+	if module_kind in ["guard", "citizen", "special_character"]:
+		_setup_behavior_controller()
 	match module_kind:
 		"district":
 			_build_district()
@@ -58,6 +64,23 @@ func _process(delta: float) -> void:
 	if module_kind == "special_character" and _official_robe != null:
 		_official_time += delta
 		_official_robe.position.y = 1.52 + sin(_official_time * 1.8) * 0.025
+
+
+func _setup_behavior_controller() -> void:
+	_behavior_controller = NpcBehaviorController.new()
+	_behavior_controller.name = "BehaviorController"
+	_behavior_controller.configure(str(module_data.get("behavior_profile", module_kind)), not _route_points.is_empty())
+	_behavior_controller.state_changed.connect(_on_behavior_state_changed)
+	add_child(_behavior_controller)
+
+
+func _on_behavior_state_changed(_previous_state: int, _current_state: int, _reason: String) -> void:
+	_refresh_official_status()
+
+
+func _refresh_official_status() -> void:
+	if _official_status_label != null and _behavior_controller != null:
+		_official_status_label.text = str(_behavior_controller.call("get_state_label"))
 
 
 func _advance_route(delta: float) -> void:
@@ -580,15 +603,16 @@ func _build_special_character() -> void:
 	title.no_depth_test = true
 	title.modulate = Color("#f1dfc1")
 	add_child(title)
-	var status_label := Label3D.new()
-	status_label.name = "OfficialStatus"
-	status_label.text = str(module_data.get("status_text", "巡守中"))
-	status_label.position = Vector3(0.0, 4.72, 0.0)
-	status_label.font_size = 18
-	status_label.pixel_size = 0.014
-	status_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	status_label.modulate = Color("#a9c6c2")
-	add_child(status_label)
+	_official_status_label = Label3D.new()
+	_official_status_label.name = "OfficialStatus"
+	_official_status_label.text = str(module_data.get("status_text", "巡守中"))
+	_official_status_label.position = Vector3(0.0, 4.72, 0.0)
+	_official_status_label.font_size = 18
+	_official_status_label.pixel_size = 0.014
+	_official_status_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_official_status_label.modulate = Color("#a9c6c2")
+	add_child(_official_status_label)
+	_refresh_official_status()
 	_build_character_interaction_zone()
 
 
@@ -632,11 +656,16 @@ func _build_character_interaction_zone() -> void:
 
 func _on_official_area_entered(body: Node3D) -> void:
 	if body.is_in_group("fengdu_player"):
+		if _behavior_controller != null:
+			_behavior_controller.call("transition_to", 2, "player_entered_interaction_range")
 		player_entered.emit(module_data)
 
 
 func _on_official_area_exited(body: Node3D) -> void:
 	if body.is_in_group("fengdu_player"):
+		if _behavior_controller != null:
+			var next_state := 1 if not _route_points.is_empty() else 0
+			_behavior_controller.call("transition_to", next_state, "player_left_interaction_range")
 		player_exited.emit(module_data)
 
 
