@@ -1813,8 +1813,8 @@ func _layout_hud() -> void:
 			chat_scroll.custom_minimum_size = Vector2(chat_width - 54.0, maxf(150.0, chat_height - 190.0))
 	# Inventory is a centered modal rather than competing with the friend/chat drawers.
 	if is_instance_valid(inventory_panel):
-		var inventory_width := minf(620.0, maxf(300.0, viewport_size.x - 32.0))
-		var inventory_height := minf(680.0, maxf(360.0, viewport_size.y - 36.0))
+		var inventory_width := minf(620.0, maxf(260.0, viewport_size.x - 32.0))
+		var inventory_height := minf(680.0, maxf(280.0, viewport_size.y - 36.0))
 		inventory_panel.set_anchors_preset(Control.PRESET_CENTER)
 		inventory_panel.offset_left = -inventory_width * 0.5
 		inventory_panel.offset_right = inventory_width * 0.5
@@ -1826,8 +1826,8 @@ func _layout_hud() -> void:
 				inventory_scroll.custom_minimum_size = Vector2(inventory_width - 44.0, maxf(120.0, inventory_height - 310.0))
 	# NPC dialogue is also centered and sized against the active viewport.
 	if is_instance_valid(npc_panel):
-		var npc_width := minf(600.0, maxf(290.0, viewport_size.x - 28.0))
-		var npc_height := minf(700.0, maxf(360.0, viewport_size.y - 28.0))
+		var npc_width := minf(600.0, maxf(260.0, viewport_size.x - 28.0))
+		var npc_height := minf(700.0, maxf(280.0, viewport_size.y - 28.0))
 		npc_panel.set_anchors_preset(Control.PRESET_CENTER)
 		npc_panel.offset_left = -npc_width * 0.5
 		npc_panel.offset_right = npc_width * 0.5
@@ -4005,6 +4005,7 @@ func _build_npc_ui() -> void:
 		return
 	npc_interact_button = Button.new()
 	npc_interact_button.text = "F · 与附近 NPC 交互"
+	_apply_button_theme(npc_interact_button, true)
 	npc_interact_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	npc_interact_button.offset_left = -250.0
 	npc_interact_button.offset_top = -76.0
@@ -4015,6 +4016,7 @@ func _build_npc_ui() -> void:
 	hud.add_child(npc_interact_button)
 	exploration_open_button = Button.new()
 	exploration_open_button.text = "探索本区域"
+	_apply_button_theme(exploration_open_button)
 	exploration_open_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	exploration_open_button.offset_left = 18.0
 	exploration_open_button.offset_top = -76.0
@@ -4032,9 +4034,16 @@ func _build_npc_ui() -> void:
 	npc_panel.visible = false
 	_apply_panel_theme(npc_panel)
 	hud.add_child(npc_panel)
+	var npc_scroll := ScrollContainer.new()
+	npc_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	npc_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	npc_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	npc_scroll.custom_minimum_size = Vector2(260.0, 260.0)
+	npc_panel.add_child(npc_scroll)
 	var layout := VBoxContainer.new()
+	layout.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	layout.add_theme_constant_override("separation", 10)
-	npc_panel.add_child(layout)
+	npc_scroll.add_child(layout)
 	npc_title_label = Label.new()
 	npc_title_label.add_theme_font_size_override("font_size", 22)
 	npc_title_label.add_theme_color_override("font_color", Color("#d4b47b"))
@@ -4246,6 +4255,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 					if choice_variant is Dictionary:
 						var choice: Dictionary = choice_variant
 						var choice_button := Button.new()
+						_apply_button_theme(choice_button, true)
 						choice_button.text = str(choice.get("text", "选择"))
 						choice_button.tooltip_text = str(choice.get("description", ""))
 						choice_button.pressed.connect(_submit_npc_fate_choice.bind(str(npc_data.get("id", "")), str(choice.get("id", ""))))
@@ -4675,6 +4685,7 @@ func _render_exploration_points(points: Variant) -> void:
 		var point_id := str(point.get("id", ""))
 		_create_exploration_marker(point)
 		var point_button := Button.new()
+		_apply_button_theme(point_button)
 		var danger := int(point.get("danger_level", 1))
 		var target := Vector3(float(point.get("position_x", 0.0)), float(point.get("position_y", 0.0)), float(point.get("position_z", 0.0)))
 		var distance: float = local_player.global_position.distance_to(target) if is_instance_valid(local_player) else INF
