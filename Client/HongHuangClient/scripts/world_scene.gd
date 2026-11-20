@@ -2499,6 +2499,8 @@ func _on_combat_event(event: Dictionary) -> void:
 		var max_health := int(event.get("max_health", 0))
 		_update_vitals(current_health, max_health)
 		if bool(event.get("defeated", false)):
+			player_slow_visual_remaining = 0.0
+			_set_player_slow_visual(false)
 			local_player.is_dead = true
 			local_target_position = local_player.position
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
