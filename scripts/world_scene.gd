@@ -2247,6 +2247,19 @@ func _on_combat_event(event: Dictionary) -> void:
 	if bool(event.get("projectile_spawned", false)):
 		_show_notification("箭矢已发射，等待命中……")
 		return
+	if bool(event.get("visual_only", false)):
+		var visual_target_id := str(event.get("target_entity_id", ""))
+		if monsters.has(visual_target_id):
+			var visual_target := monsters[visual_target_id] as Node3D
+			visual_target.set_meta("hit_reaction_time", 0.24)
+			_spawn_monster_hit_visual(visual_target, false)
+			if bool(event.get("defeated", false)):
+				visual_target.set_meta("death_reaction_time", 1.15)
+				visual_target.set_meta("defeated_visual", true)
+				var visual_nameplate := visual_target.get_node_or_null("Nameplate") as Label3D
+				if is_instance_valid(visual_nameplate):
+					visual_nameplate.visible = false
+		return
 	if str(event.get("source", "")) == "monster":
 		var incoming_damage := int(event.get("damage", 0))
 		if is_instance_valid(local_player) and local_player.has_method("play_hit_reaction"):
