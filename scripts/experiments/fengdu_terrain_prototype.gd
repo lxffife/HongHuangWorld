@@ -9,7 +9,6 @@ const WORLD_SIZE := 256.0
 const HALF_SIZE := WORLD_SIZE * 0.5
 const GRID_CELLS := 128
 const TILE_COUNT := 4
-const GRID_STEP := WORLD_SIZE / float(GRID_CELLS)
 
 const GROUND_LOW := Color("#292632")
 const GROUND_MID := Color("#45404c")
