@@ -297,6 +297,8 @@ func (h *adminHandlers) setPlayerStatus(w http.ResponseWriter,r *http.Request) {
  if req.Status=="active"&&len([]rune(req.Reason))>300{http.Error(w,"reason is too long",400);return}
  ctx,cancel:=context.WithTimeout(r.Context(),6*time.Second);defer cancel()
  if err:=h.identity.SetAccountStatus(ctx,id,req.Status);err!=nil{
+  action:="player.unban";if req.Status=="locked"{action="player.ban"}
+  if auditErr:=h.service.RecordAudit(ctx,actor,action,"player",id,"failure",map[string]any{"status":req.Status,"reason":req.Reason,"failure":"identity_service_error"});auditErr!=nil{h.logger.Error("record failed player status audit failed","error",auditErr)}
   if strings.Contains(err.Error(),"not found"){http.Error(w,"player not found",404);return}
   h.logger.Error("admin player status update failed","error",err);http.Error(w,"identity service unavailable",503);return
  }
@@ -380,6 +382,9 @@ func (h *adminHandlers) disconnectPlayer(w http.ResponseWriter, r *http.Request)
 	}
 	result, err := h.game.DisconnectPlayer(ctx, id)
 	if err != nil {
+		if auditErr := h.service.RecordAudit(ctx, actor, "player.disconnect", "player", id, "failure", map[string]any{"failure": "game_service_error"}); auditErr != nil {
+			h.logger.Error("record failed player disconnect audit failed", "error", auditErr)
+		}
 		h.logger.Error("admin disconnect player request failed", "error", err)
 		http.Error(w, "game service unavailable", http.StatusServiceUnavailable)
 		return
