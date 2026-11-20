@@ -11,6 +11,7 @@
 - `000005_items_inventory_drops` 创建物品目录、怪物掉落配置、地面掉落实体、角色背包和幂等拾取流水；初始配置荒原狼掉落荒狼獠牙与荒狼皮。
 - `000006_character_equipment` 增加物品类型/装备部位/基础属性/使用效果元数据，以及角色装备槽；兼容同步现有 category 与 item_type。
 - `000007_item_use_and_starter_catalog` 增加消耗品幂等流水、初始装备/丹药目录，并为已有角色发放一次性新手物品。
+- `000048_backfill_current_character_projection` 为已有角色补发当前角色投影事件，修复聊天侧当前角色状态缺失。
 - `000049_weapon_type_metadata` 为武器目录增加显式 `weapon_type`（sword/spear/bow/staff/dagger/axe/hammer/focus），现有武器按目录标识初始化；非武器禁止填写该字段。
 - `000008_character_death_and_respawn` 增加角色死亡事件与复活记录。
 - `000009_reincarnation_history` 增加肉身轮回历史。
@@ -100,6 +101,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000044_server_nod
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000045_monster_definitions_and_spawn_points.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000046_game_config_revisions.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000047_game_config_revision_reason.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000048_backfill_current_character_projection.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000049_weapon_type_metadata.up.sql
 ```
 
