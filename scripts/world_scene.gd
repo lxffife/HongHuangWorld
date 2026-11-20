@@ -94,6 +94,8 @@ var floating_combat_labels: Dictionary = {}
 var floating_combat_lifetimes: Dictionary = {}
 var drops: Dictionary = {}
 var drop_targets: Dictionary = {}
+var projectiles: Dictionary = {}
+var projectile_targets: Dictionary = {}
 var inventory_http: HTTPRequest
 var inventory_button: Button
 var inventory_panel: PanelContainer
@@ -967,6 +969,7 @@ func _on_entities_updated(entities: Array) -> void:
 	var seen: Dictionary = {}
 	var seen_monsters: Dictionary = {}
 	var seen_drops: Dictionary = {}
+	var seen_projectiles: Dictionary = {}
 	var own_id := str(HHSession.world_snapshot.get("character_id", ""))
 	for entity in entities:
 		if not (entity is Dictionary):
@@ -985,6 +988,13 @@ func _on_entities_updated(entities: Array) -> void:
 				continue
 			seen_drops[drop_id] = true
 			_upsert_drop(entity)
+			continue
+		if entity_type == "projectile":
+			var projectile_id := str(entity.get("entity_id", ""))
+			if projectile_id.is_empty():
+				continue
+			seen_projectiles[projectile_id] = true
+			_upsert_projectile(entity)
 			continue
 		var character_id := str(entity.get("character_id", ""))
 		if character_id.is_empty():
@@ -1022,6 +1032,11 @@ func _on_entities_updated(entities: Array) -> void:
 			drops[drop_id].queue_free()
 			drops.erase(drop_id)
 			drop_targets.erase(drop_id)
+	for projectile_id in projectiles.keys():
+		if not seen_projectiles.has(projectile_id):
+			projectiles[projectile_id].queue_free()
+			projectiles.erase(projectile_id)
+			projectile_targets.erase(projectile_id)
 
 func _upsert_remote_player(entity: Dictionary) -> void:
 	var character_id := str(entity.get("character_id", ""))
@@ -1233,6 +1248,52 @@ func _upsert_drop(entity: Dictionary) -> void:
 		float(entity.get("y", 0.15)),
 		float(entity.get("z", 0.0))
 	)
+
+func _upsert_projectile(entity: Dictionary) -> void:
+	var projectile_id := str(entity.get("entity_id", ""))
+	if projectile_id.is_empty() or str(entity.get("projectile_type", "")) != "arrow":
+		return
+	if not projectiles.has(projectile_id):
+		projectiles[projectile_id] = _create_arrow_projectile()
+	var target := Vector3(
+		float(entity.get("x", 0.0)),
+		float(entity.get("y", 1.15)),
+		float(entity.get("z", 0.0))
+	)
+	projectile_targets[projectile_id] = target
+	var direction := Vector3(float(entity.get("velocity_x", 0.0)), 0.0, float(entity.get("velocity_z", -1.0)))
+	var arrow := projectiles[projectile_id] as Node3D
+	if is_instance_valid(arrow) and direction.length_squared() > 0.001:
+		arrow.look_at(arrow.global_position + direction, Vector3.UP)
+
+func _create_arrow_projectile() -> Node3D:
+	var root := Node3D.new()
+	root.name = "AuthoritativeArrow"
+	var shaft := MeshInstance3D.new()
+	var shaft_mesh := BoxMesh.new()
+	shaft_mesh.size = Vector3(0.035, 0.035, 0.78)
+	shaft.mesh = shaft_mesh
+	shaft.position.z = -0.35
+	var wood := StandardMaterial3D.new()
+	wood.albedo_color = Color("#8a633b")
+	wood.roughness = 0.8
+	shaft.material_override = wood
+	root.add_child(shaft)
+	var head := MeshInstance3D.new()
+	var head_mesh := ConeMesh.new()
+	head_mesh.top_radius = 0.0
+	head_mesh.bottom_radius = 0.085
+	head_mesh.height = 0.22
+	head.mesh = head_mesh
+	head.position.z = -0.78
+	head.rotation.x = -PI * 0.5
+	var metal := StandardMaterial3D.new()
+	metal.albedo_color = Color("#c5cbd1")
+	metal.metallic = 0.72
+	head.material_override = metal
+	root.add_child(head)
+	add_child(root)
+	return root
 
 func _create_drop(item_name: String, quality: int, quantity: int) -> Node3D:
 	var root := Node3D.new()
@@ -2456,6 +2517,11 @@ func _update_input_debug_hud() -> void:
 	input_debug_label.text = keys + "\n" + movement_text + " · 网络：" + network_text + "\n" + send_text + " · ESC 释放鼠标"
 
 func _process(delta: float) -> void:
+	for projectile_id in projectile_targets:
+		var arrow := projectiles.get(projectile_id) as Node3D
+		if is_instance_valid(arrow):
+			var arrow_target: Vector3 = projectile_targets[projectile_id]
+			arrow.position = arrow.position.lerp(arrow_target, minf(delta * 30.0, 1.0))
 	if is_instance_valid(local_player):
 		local_player.position = local_player.position.lerp(local_target_position, minf(delta * 14.0, 1.0))
 	for character_id in remote_players:
