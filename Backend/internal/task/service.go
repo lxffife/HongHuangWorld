@@ -17,7 +17,7 @@ var (
  ErrInvalid = errors.New("invalid bounty task request")
  ErrNotFound = errors.New("bounty task not found")
  ErrForbidden = errors.New("bounty task permission denied")
- ErrInsufficientTreasury = errors.New("faction treasury has insufficient funds")
+ ErrInsufficientTreasury = errors.New("insufficient available balance")
  ErrAlreadyJoined = errors.New("account already joined this task")
  ErrIdempotencyConflict = errors.New("contribution idempotency key conflict")
  ErrTaskFull = errors.New("bounty task is full")
@@ -68,6 +68,7 @@ func (s *Service) PublishFaction(ctx context.Context, accountID string, req Publ
  // First authorization gives a clear domain error; membership and role are rechecked
  // under the faction row lock in the publishing transaction below.
  if err:=s.factions.AuthorizeTaskPublisher(ctx,accountID,req.FactionID); err!=nil { return Task{},ErrForbidden }
+ if req.ExpiresAt!=nil { expiry,parseErr:=time.Parse(time.RFC3339,*req.ExpiresAt); if parseErr!=nil || !expiry.After(time.Now()) { return Task{},ErrInvalid } }
  total:=req.RewardAmount*int64(req.MaxAssignees)
  tx,err:=s.db.BeginTx(ctx,nil); if err!=nil{return Task{},fmt.Errorf("begin bounty publication: %w",err)}
  defer tx.Rollback()
@@ -131,6 +132,9 @@ func (s *Service) Contribute(ctx context.Context,accountID,factionID,currencyID,
  err=tx.QueryRowContext(ctx,`SELECT currency_id,delta,source_id FROM economy_ledger_entries WHERE account_id=$1 AND event_key=$2`,accountID,eventKey).Scan(&oldCurrency,&oldDelta,&oldSource)
  if err==nil { if oldCurrency!=currencyID||oldDelta!=-amount||oldSource!=factionID{return ErrIdempotencyConflict}; if err=tx.Commit();err!=nil{return fmt.Errorf("commit recovered faction contribution: %w",err)};return nil }
  if !errors.Is(err,sql.ErrNoRows){return fmt.Errorf("check faction contribution idempotency: %w",err)}
+ var treasuryEventExists bool
+ if err=tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM economy_treasury_ledger_entries WHERE treasury_account_id=$1 AND event_key=$2)`,treasuryID,eventKey).Scan(&treasuryEventExists);err!=nil{return fmt.Errorf("check treasury contribution idempotency: %w",err)}
+ if treasuryEventExists{return ErrIdempotencyConflict}
  if _,err=tx.ExecContext(ctx,`INSERT INTO currency_balances(account_id,currency_id) VALUES($1,$2)
   ON CONFLICT(account_id,currency_id) DO NOTHING`,accountID,currencyID);err!=nil{return fmt.Errorf("initialize contributor wallet: %w",err)}
  var available,frozen int64
