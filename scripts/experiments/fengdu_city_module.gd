@@ -166,7 +166,8 @@ func _build_market_street() -> void:
 	_add_box("MarketStreet", Vector3(30.0, 0.4, 300.0), Vector3(0.0, 0.25, 110.0), "stone", false)
 	for row in range(3):
 		for column in range(4):
-			var x := (float(column) - 1.5) * 62.0
+			var shop_x_positions := [-132.0, -72.0, 72.0, 132.0]
+			var x := float(shop_x_positions[column])
 			var z := 18.0 + float(row) * 78.0
 			var size := Vector3(42.0, 17.0 + float((row + column) % 2) * 5.0, 48.0)
 			var p := Vector3(x, size.y * 0.5, z)
@@ -174,7 +175,7 @@ func _build_market_street() -> void:
 			_add_roof("MarketAwning_%d_%d" % [row, column], Vector3(48.0, 5.0, 54.0), p + Vector3.UP * (size.y * 0.5 + 2.5), "roof")
 			_add_box("ShopSign_%d_%d" % [row, column], Vector3(20.0, 5.0, 1.5), p + Vector3(0.0, 4.0, 25.0), "sign", false)
 	for side in [-1.0, 1.0]:
-		_add_box("MarketArcade_" + str(side), Vector3(10.0, 20.0, 300.0), Vector3(side * 150.0, 10.0, 110.0), "court", true)
+		_add_box("MarketArcade_" + str(side), Vector3(10.0, 20.0, 300.0), Vector3(side * 190.0, 10.0, 110.0), "court", true)
 
 
 func _build_residential_lane() -> void:
