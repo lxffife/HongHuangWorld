@@ -2142,8 +2142,8 @@ struct EnetServer::Impl {
             const Json previous_equipment = player.equipment;
             // Preserve the live resources: increasing an equipment cap must not heal or
             // restore mana. Removing a cap clamps current resources to the new maximum.
-            player.health = std::clamp<std::int64_t>(player.health, 0, max_health);
-            player.mana = std::clamp<std::int64_t>(player.mana, 0, max_mana);
+            player.health = honghuang::simulation::clamp_current_resource_to_maximum(player.health, max_health);
+            player.mana = honghuang::simulation::clamp_current_resource_to_maximum(player.mana, max_mana);
             player.max_health = max_health;
             player.max_mana = max_mana;
             player.attack = attack;
