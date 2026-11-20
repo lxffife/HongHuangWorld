@@ -29,3 +29,52 @@ func TestValidDeltaRequest(t *testing.T) {
 		})
 	}
 }
+
+func TestCalculateExchangeAmount(t *testing.T) {
+	tests := []struct {
+		name string
+		amount, numerator, denominator int64
+		feeBP int
+		gross, fee, net int64
+		wantErr bool
+	}{
+		{"official rational rate", 100, 4, 5, 100, 80, 1, 79, false},
+		{"fee rounds up", 1, 1, 1, 100, 1, 1, 0, true},
+		{"zero fee", 100, 3, 2, 0, 150, 0, 150, false},
+		{"fraction rounds down", 3, 1, 2, 0, 1, 0, 1, false},
+		{"zero input", 0, 1, 1, 0, 0, 0, 0, true},
+		{"invalid fee", 10, 1, 1, 3001, 0, 0, 0, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gross, fee, net, err := CalculateExchangeAmount(tt.amount, tt.numerator, tt.denominator, tt.feeBP)
+			if (err != nil) != tt.wantErr { t.Fatalf("error = %v, wantErr %v", err, tt.wantErr) }
+			if err == nil && (gross != tt.gross || fee != tt.fee || net != tt.net) {
+				t.Fatalf("got (%d,%d,%d), want (%d,%d,%d)", gross, fee, net, tt.gross, tt.fee, tt.net)
+			}
+		})
+	}
+}
+
+func TestResolveCultivationEfficiency(t *testing.T) {
+	affinities := []CultivationAffinity{
+		{TargetTag: "all", EfficiencyBP: 5000},
+		{TargetTag: "race:ghost", EfficiencyBP: 10000},
+		{TargetTag: "path:nether:orthodox", EfficiencyBP: 12000},
+	}
+	if got := ResolveCultivationEfficiency("fiat", false, affinities, []string{"race:ghost"}); got != 0 {
+		t.Fatalf("fiat efficiency = %d, want 0", got)
+	}
+	if got := ResolveCultivationEfficiency("cultivation", false, affinities, []string{"race:ghost"}); got != 0 {
+		t.Fatalf("disabled cultivation efficiency = %d, want 0", got)
+	}
+	if got := ResolveCultivationEfficiency("cultivation", true, affinities, []string{"race:ghost"}); got != 10000 {
+		t.Fatalf("ghost efficiency = %d, want 10000", got)
+	}
+	if got := ResolveCultivationEfficiency("cultivation", true, affinities, []string{"path:nether:orthodox"}); got != 12000 {
+		t.Fatalf("specific path efficiency = %d, want 12000", got)
+	}
+	if got := ResolveCultivationEfficiency("cultivation", true, affinities, []string{"race:human"}); got != 5000 {
+		t.Fatalf("fallback efficiency = %d, want 5000", got)
+	}
+}
