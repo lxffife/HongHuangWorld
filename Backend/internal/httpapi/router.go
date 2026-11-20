@@ -110,8 +110,9 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/factions/{factionID}/applications", factionAPI.apply)
 		mux.HandleFunc("GET /api/v1/factions/{factionID}/applications", factionAPI.applications)
 		mux.HandleFunc("GET /api/v1/factions/{factionID}/members", factionAPI.members)
-		mux.HandleFunc("POST /api/v1/factions/{factionID}/applications/{applicationID}/review", "POST /api/v1/factions/{factionID}/bounties", "GET /api/v1/bounties", "POST /api/v1/bounties/{taskID}/join", factionAPI.review)
+		mux.HandleFunc("POST /api/v1/factions/{factionID}/applications/{applicationID}/review", "POST /api/v1/factions/{factionID}/treasury/contributions", "POST /api/v1/factions/{factionID}/bounties", "GET /api/v1/bounties", "POST /api/v1/bounties/{taskID}/join", factionAPI.review)
 		bountyAPI := &bountyHandlers{authService: authService, service: task.NewService(db, factionService), logger: logger}
+		mux.HandleFunc("POST /api/v1/factions/{factionID}/treasury/contributions", bountyAPI.contribute)
 		mux.HandleFunc("POST /api/v1/factions/{factionID}/bounties", bountyAPI.publishFaction)
 		mux.HandleFunc("GET /api/v1/bounties", bountyAPI.list)
 		mux.HandleFunc("POST /api/v1/bounties/{taskID}/join", bountyAPI.join)
