@@ -13,5 +13,6 @@ DROP TABLE IF EXISTS economy_treasury_accounts;
 DROP TABLE IF EXISTS economy_ledger_entries;
 DROP TABLE IF EXISTS currency_balances;
 DROP TABLE IF EXISTS currency_world_rules;
+DROP TABLE IF EXISTS currency_issuance_policies;
 DROP TABLE IF EXISTS currency_definitions;
 COMMIT;
