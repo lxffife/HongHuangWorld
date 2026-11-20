@@ -165,7 +165,7 @@
 ## 14. 宗门悬赏任务（000054，第一阶段）
 
 - 新增 `bounty_tasks`、`bounty_task_escrows`、`bounty_task_participants`；财政流水新增 `bounty_lock`、`bounty_refund`、`contribution` 类型。
-- 宗门成员捐献接口：`POST /api/v1/factions/{factionID}/treasury/contributions`。请求必须携带客户端生成并在重试时复用的 `event_key`；个人钱包扣款、宗门财政入账及双方不可变流水在同一事务中提交。非成员不能捐献，货币必须属于宗门所在世界。\n- 宗门发布接口：`POST /api/v1/factions/{factionID}/bounties`。发布者身份由 Bearer 账号和数据库成员角色决定，客户端不能提交组织类型、组织名称或财政账户 ID。
+- 宗门成员捐献接口：`POST /api/v1/factions/{factionID}/treasury/contributions`。请求必须携带客户端生成并在重试时复用的 `event_key`；个人钱包扣款、宗门财政入账及双方不可变流水在同一事务中提交。非成员不能捐献，货币必须属于宗门所在世界。\n- 宗门发布接口：`POST /api/v1/factions/{factionID}/bounties`。请求必须提供 `event_key`，同一账号重试相同 key 不会再次冻结预算（重复请求返回冲突，客户端可通过任务列表确认原任务）。发布者身份由 Bearer 账号和数据库成员角色决定，客户端不能提交组织类型、组织名称或财政账户 ID。
 - 发布事务锁定宗门及发布者成员记录，复核宗门处于 active 且发布者为 leader/officer；货币必须在该宗门所属世界启用。
 - 托管预算按 `reward_amount × max_assignees` 计算；在同一事务内从宗门财政对应币种的 available 转入 frozen，并写不可变财政流水及任务托管记录。余额不足则整个事务回滚。
 - 查询接口：`GET /api/v1/bounties?world_id=underworld_fengdu`；接取接口：`POST /api/v1/bounties/{taskID}/join`。
