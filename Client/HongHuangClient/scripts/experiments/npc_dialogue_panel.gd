@@ -2,12 +2,17 @@ extends CanvasLayer
 ## Reusable local dialogue surface for Fengdu NPCs and interaction points.
 
 signal closed
+signal quest_action_requested(action: String, quest_id: String)
 
 var _panel: PanelContainer
 var _name_label: Label
 var _authority_label: Label
 var _body_label: Label
 var _options_row: HBoxContainer
+var _quest_hint_label: Label
+var _quest_button: Button
+var _current_quest_id := ""
+var _current_quest_action := ""
 var _is_open := false
 
 
@@ -19,15 +24,52 @@ func is_open() -> bool:
 	return _is_open
 
 
-func present(data: Dictionary) -> void:
+func present(data: Dictionary, quest_data: Dictionary = {}) -> void:
 	if _panel == null:
 		return
 	_name_label.text = str(data.get("name", "阴司来客"))
 	_authority_label.text = str(data.get("authority", "酆都 · 阴司"))
 	_body_label.text = str(data.get("description", "此处暂时没有更多信息。"))
 	_rebuild_options(_get_options(data))
+	_current_quest_id = str(quest_data.get("id", ""))
+	_update_quest_action(quest_data)
 	_panel.visible = true
 	_is_open = true
+
+
+func _update_quest_action(quest_data: Dictionary) -> void:
+	_quest_button.visible = not quest_data.is_empty()
+	_quest_hint_label.visible = not quest_data.is_empty()
+	_quest_button.disabled = false
+	_current_quest_action = ""
+	if quest_data.is_empty():
+		return
+	match str(quest_data.get("status", "")):
+		"available":
+			_current_quest_action = "accept"
+			_quest_button.text = "领取差事"
+			_quest_hint_label.text = "可领取差事 · " + str(quest_data.get("title", "阴司差事"))
+		"active":
+			_current_quest_action = "journal"
+			_quest_button.text = "查看任务簿"
+			_quest_hint_label.text = "差事进行中 · " + str(quest_data.get("title", "阴司差事"))
+		"completed":
+			_quest_button.text = "已完成 · 待结算"
+			_quest_button.disabled = true
+			_quest_hint_label.text = "差事已完成，奖励需由正式服务端结算"
+		_:
+			_quest_button.visible = false
+			_quest_hint_label.visible = false
+
+
+func update_quest_state(quest_data: Dictionary) -> void:
+	if str(quest_data.get("id", "")) == _current_quest_id:
+		_update_quest_action(quest_data)
+
+
+func _on_quest_button_pressed() -> void:
+	if not _current_quest_action.is_empty() and not _current_quest_id.is_empty():
+		quest_action_requested.emit(_current_quest_action, _current_quest_id)
 
 
 func close_dialogue() -> void:
@@ -127,6 +169,21 @@ func _build_ui() -> void:
 	_options_row = HBoxContainer.new()
 	_options_row.add_theme_constant_override("separation", 10)
 	column.add_child(_options_row)
+
+	_quest_hint_label = Label.new()
+	_quest_hint_label.add_theme_font_size_override("font_size", 12)
+	_quest_hint_label.add_theme_color_override("font_color", Color("#c8ad7b"))
+	_quest_hint_label.visible = false
+	column.add_child(_quest_hint_label)
+
+	_quest_button = Button.new()
+	_quest_button.custom_minimum_size = Vector2(0.0, 40.0)
+	_quest_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_quest_button.add_theme_stylebox_override("normal", _button_style(false))
+	_quest_button.add_theme_stylebox_override("hover", _button_style(true))
+	_quest_button.pressed.connect(_on_quest_button_pressed)
+	_quest_button.visible = false
+	column.add_child(_quest_button)
 
 
 func _get_options(data: Dictionary) -> Array[Dictionary]:
