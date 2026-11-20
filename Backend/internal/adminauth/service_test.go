@@ -31,3 +31,15 @@ func TestNewTokenReturnsOpaqueTokenAndExpiry(t *testing.T) {
  if token==""||len(hash)!=32{t.Fatal("expected opaque token and SHA-256 hash")}
  if expires.IsZero(){t.Fatal("expected expiry timestamp")}
 }
+
+func TestSetUserStatusRejectsInvalidStateBeforeDatabaseAccess(t *testing.T) {
+ service:=NewService(nil)
+ err:=service.SetUserStatus(context.Background(),User{ID:"actor"},"target","pending")
+ if !errors.Is(err,ErrInvalidInput){t.Fatalf("expected ErrInvalidInput, got %v",err)}
+}
+
+func TestSetUserStatusPreventsSelfDisableBeforeDatabaseAccess(t *testing.T) {
+ service:=NewService(nil)
+ err:=service.SetUserStatus(context.Background(),User{ID:"same-user"},"same-user","disabled")
+ if !errors.Is(err,ErrForbidden){t.Fatalf("expected ErrForbidden, got %v",err)}
+}
