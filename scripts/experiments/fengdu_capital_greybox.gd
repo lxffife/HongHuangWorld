@@ -41,6 +41,7 @@ func _ready() -> void:
 	_build_wall_defenses()
 	_build_gate_signs()
 	_build_patrol_guards()
+	_build_named_yin_officials()
 	_build_citizens()
 	_build_street_furniture()
 	_build_landmark_silhouette()
@@ -254,6 +255,75 @@ func _build_patrol_guards() -> void:
 		add_child(module)
 
 
+func _build_named_yin_officials() -> void:
+	var officials := [
+		{
+			"id": "black_impermanence",
+			"name": "黑无常 · 范无救",
+			"archetype": "black_impermanence",
+			"position": Vector3(-30.0, 0.0, 585.0),
+			"patrol_points": [Vector3(0.0, 0.0, -3.0), Vector3(0.0, 0.0, 3.0)],
+			"route_speed": 0.7,
+			"hat_text": "天下太平",
+			"robe_color": "#202127",
+			"face_color": "#d8d0c3",
+			"trim_color": "#b79a69",
+			"authority": "阴司拘魂使 · 黑无常",
+			"access": "亡魂接引、拘魂文牒与引魂差事",
+			"description": "黑无常范无救，负责拘魂与押送亡魂。当前为角色灰盒原型，后续接入魂魄任务、拘魂道具与专属对话。"
+		},
+		{
+			"id": "white_impermanence",
+			"name": "白无常 · 谢必安",
+			"archetype": "white_impermanence",
+			"position": Vector3(30.0, 0.0, 585.0),
+			"patrol_points": [Vector3(0.0, 0.0, 3.0), Vector3(0.0, 0.0, -3.0)],
+			"route_speed": 0.7,
+			"hat_text": "一见生财",
+			"robe_color": "#e4e0d8",
+			"face_color": "#e0d6c8",
+			"trim_color": "#8d765b",
+			"authority": "阴司拘魂使 · 白无常",
+			"access": "新魂登记、引路与轮回指引",
+			"description": "白无常谢必安，负责接引与引路。当前为角色灰盒原型，后续接入新魂引导、轮回流程和专属对话。"
+		},
+		{
+			"id": "ox_head",
+			"name": "牛头将军",
+			"archetype": "ox_head",
+			"position": Vector3(-30.0, 0.0, 675.0),
+			"patrol_points": [Vector3(-2.0, 0.0, 0.0), Vector3(2.0, 0.0, 0.0)],
+			"route_speed": 0.55,
+			"robe_color": "#604337",
+			"face_color": "#95614b",
+			"trim_color": "#b28b56",
+			"authority": "南幽门守将 · 牛头",
+			"access": "城门盘查、阴兵调度与边境通行",
+			"description": "牛头将军驻守南幽门，负责城门盘查与秩序维护。当前为守门角色灰盒原型，尚未接入阵营权限和战斗系统。"
+		},
+		{
+			"id": "horse_face",
+			"name": "马面将军",
+			"archetype": "horse_face",
+			"position": Vector3(30.0, 0.0, 675.0),
+			"patrol_points": [Vector3(2.0, 0.0, 0.0), Vector3(-2.0, 0.0, 0.0)],
+			"route_speed": 0.55,
+			"robe_color": "#3d505b",
+			"face_color": "#776b61",
+			"trim_color": "#a68a62",
+			"authority": "南幽门守将 · 马面",
+			"access": "城门巡查、通行核验与阴司军令",
+			"description": "马面将军与牛头共同守卫南幽门。当前为守门角色灰盒原型，后续接入门禁、巡防事件和战斗行为。"
+		}
+	]
+	for official_data in officials:
+		official_data["module_kind"] = "special_character"
+		var official := _spawn_city_module(official_data, official_data["position"])
+		official.name = "YinOfficial_" + str(official_data["id"])
+		official.connect("player_entered", Callable(self, "_on_district_entered"))
+		official.connect("player_exited", Callable(self, "_on_district_exited"))
+
+
 func _build_citizens() -> void:
 	var citizens := [
 		{"name": "鬼市灵材商", "role": "鬼市商贩", "position": Vector3(475.0, 0.0, 445.0), "patrol_points": [Vector3(-2.0, 0.0, 0.0), Vector3(2.0, 0.0, 0.0)], "route_speed": 1.2},
@@ -398,7 +468,7 @@ func _build_hud() -> void:
 	_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(_hint_label)
 	var note := Label.new()
-	note.text = "南门入城：中央御道直望皇城。当前为比例灰盒，建筑与服务尚未接入。"
+	note.text = "南门入城：牛头马面镇守城门，黑白无常接引新魂。当前为比例灰盒，角色服务尚未接入。"
 	note.add_theme_font_size_override("font_size", 11)
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(note)
