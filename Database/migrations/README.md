@@ -113,8 +113,12 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000052_unified_ec
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000053_faction_authority.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000054_faction_bounty_tasks.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000055_bounty_task_settlement.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000056_bounty_task_refunds.up.sql
 ```
 
 回滚时按相反顺序执行对应的 `.down.sql`。不要在已运行的生产库上重复执行非幂等迁移；后续接入迁移工具后，应由工具记录每个已应用版本，避免人工重复执行。
 
 - `000052_unified_economy_foundation` 建立跨世界统一货币目录、Identity UUID 账号级钱包、可用/冻结余额、不可变玩家账本、各世界财政账户/财政流水、悬赏托管、货币发行来源与额度策略、修炼适配与消耗配置、官方汇率/市场报价/兑换储备/兑换事件，以及账号逐步解锁跨界经济的记录。凡俗货币不可直接修炼；修炼石可交易并可作为修炼/制造资源。
+
+
+- `000056_bounty_task_refunds` 增加悬赏取消/到期退款凭证、参与者 cancelled 状态和到期扫描索引。宗主/长老可主动取消并全额退回托管预算；可信 WorldServer 调度器通过 `POST /api/v1/servers/bounties/expire` 批量处理到期任务（`X-World-Server-Key`，limit 1–100，默认 50）。调度器需要由部署环境定期调用；本迁移和 API 不会自行创建定时任务。
