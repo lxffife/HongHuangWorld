@@ -23,6 +23,8 @@ var _next_transaction_number := 1
 
 
 func _ready() -> void:
+	_record_transaction("opening_player_balance", "local_player", STARTING_BALANCE, 0, 0, "本地演示账户初始余额")
+	_record_transaction("opening_treasury", "city_treasury", 0, _treasury, 0, "城主府初始库银")
 	_seed_city_notices()
 
 
@@ -132,10 +134,11 @@ func publish_task(publisher_id: String, title: String, description: String, rewa
 	var balance := int(_wallets.get(publisher_id, 0))
 	if balance < reward + fee:
 		return {"ok": false, "reason": "余额不足，需要 %d 冥币（悬赏 %d + 发布费 %d）。" % [reward + fee, reward, fee]}
-	_wallets[publisher_id] = balance - reward - fee
+	_wallets[publisher_id] = balance - fee
 	_treasury += fee
-	_escrow_total += reward
 	_record_transaction("task_listing_fee", publisher_id, -fee, fee, 0, "发布公共委托手续费")
+	_wallets[publisher_id] = int(_wallets.get(publisher_id, 0)) - reward
+	_escrow_total += reward
 	_record_transaction("task_escrow_lock", publisher_id, -reward, 0, reward, "公共委托悬赏托管")
 	var task_id := "public_job_%06d" % _next_task_number
 	_next_task_number += 1
