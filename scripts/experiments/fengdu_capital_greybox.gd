@@ -261,6 +261,9 @@ func _build_named_yin_officials() -> void:
 			"id": "black_impermanence",
 			"name": "黑无常 · 范无救",
 			"archetype": "black_impermanence",
+			"behavior_profile": "soul_capture",
+			"interaction_type": "capture_and_escort",
+			"status_text": "拘魂巡查中",
 			"position": Vector3(-30.0, 0.0, 585.0),
 			"patrol_points": [Vector3(0.0, 0.0, -3.0), Vector3(0.0, 0.0, 3.0)],
 			"route_speed": 0.7,
@@ -270,12 +273,15 @@ func _build_named_yin_officials() -> void:
 			"trim_color": "#b79a69",
 			"authority": "阴司拘魂使 · 黑无常",
 			"access": "亡魂接引、拘魂文牒与引魂差事",
-			"description": "黑无常范无救，负责拘魂与押送亡魂。当前为角色灰盒原型，后续接入魂魄任务、拘魂道具与专属对话。"
+			"description": "黑无常范无救，负责拘魂与押送亡魂。交互原型：可查看拘魂文牒、了解押魂流程；当前不创建正式任务，也不改变玩家魂魄状态。"
 		},
 		{
 			"id": "white_impermanence",
 			"name": "白无常 · 谢必安",
 			"archetype": "white_impermanence",
+			"behavior_profile": "soul_guidance",
+			"interaction_type": "new_soul_guidance",
+			"status_text": "接引新魂中",
 			"position": Vector3(30.0, 0.0, 585.0),
 			"patrol_points": [Vector3(0.0, 0.0, 3.0), Vector3(0.0, 0.0, -3.0)],
 			"route_speed": 0.7,
@@ -285,12 +291,15 @@ func _build_named_yin_officials() -> void:
 			"trim_color": "#8d765b",
 			"authority": "阴司拘魂使 · 白无常",
 			"access": "新魂登记、引路与轮回指引",
-			"description": "白无常谢必安，负责接引与引路。当前为角色灰盒原型，后续接入新魂引导、轮回流程和专属对话。"
+			"description": "白无常谢必安，负责接引与引路。交互原型：可查看新魂登记说明、了解轮回引导流程；当前不登记真实角色数据，也不触发转生。"
 		},
 		{
 			"id": "ox_head",
 			"name": "牛头将军",
 			"archetype": "ox_head",
+			"behavior_profile": "gate_guard",
+			"interaction_type": "gate_inspection",
+			"status_text": "南门盘查中",
 			"position": Vector3(-30.0, 0.0, 675.0),
 			"patrol_points": [Vector3(-2.0, 0.0, 0.0), Vector3(2.0, 0.0, 0.0)],
 			"route_speed": 0.55,
@@ -299,12 +308,15 @@ func _build_named_yin_officials() -> void:
 			"trim_color": "#b28b56",
 			"authority": "南幽门守将 · 牛头",
 			"access": "城门盘查、阴兵调度与边境通行",
-			"description": "牛头将军驻守南幽门，负责城门盘查与秩序维护。当前为守门角色灰盒原型，尚未接入阵营权限和战斗系统。"
+			"description": "牛头将军驻守南幽门，负责城门盘查与秩序维护。交互原型：展示来魂核验、通行盘查与阴兵调度规则；当前不授予或拒绝真实通行权限。"
 		},
 		{
 			"id": "horse_face",
 			"name": "马面将军",
 			"archetype": "horse_face",
+			"behavior_profile": "gate_patrol",
+			"interaction_type": "pass_check",
+			"status_text": "南门巡防中",
 			"position": Vector3(30.0, 0.0, 675.0),
 			"patrol_points": [Vector3(2.0, 0.0, 0.0), Vector3(-2.0, 0.0, 0.0)],
 			"route_speed": 0.55,
@@ -313,7 +325,7 @@ func _build_named_yin_officials() -> void:
 			"trim_color": "#a68a62",
 			"authority": "南幽门守将 · 马面",
 			"access": "城门巡查、通行核验与阴司军令",
-			"description": "马面将军与牛头共同守卫南幽门。当前为守门角色灰盒原型，后续接入门禁、巡防事件和战斗行为。"
+			"description": "马面将军与牛头共同守卫南幽门。交互原型：展示通行核验、巡防告示与阴司军令说明；当前不执行服务端门禁或战斗行为。"
 		}
 	]
 	for official_data in officials:
