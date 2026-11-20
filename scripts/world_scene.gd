@@ -2325,7 +2325,10 @@ func _on_combat_event(event: Dictionary) -> void:
 			if is_instance_valid(mana_label):
 				mana_label.text = "灵力  " + str(int(HHSession.world_snapshot["mana"])) + " / " + str(int(HHSession.world_snapshot["max_mana"]))
 			_update_compact_hud()
-			_show_notification("消耗品使用成功：生命 +" + str(int(event.get("health_restored", 0))) + "，灵力 +" + str(int(event.get("mana_restored", 0))))
+			if bool(event.get("applied", true)):
+				_show_notification("消耗品使用成功：生命 +" + str(int(event.get("health_restored", 0))) + "，灵力 +" + str(int(event.get("mana_restored", 0))))
+			else:
+				_show_notification("该请求已结算，角色资源已重新同步。")
 			_refresh_inventory()
 		else:
 			_show_notification(str(event.get("reason", "消耗品使用失败。")), 3.0)
