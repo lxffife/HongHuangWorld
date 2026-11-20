@@ -47,6 +47,15 @@ int main() {
     assert(!can_pay_spell_cost(100, 0));
     assert(!can_pay_spell_cost(100, -1));
 
+    // Cooldowns are tracked per spell: casting one spell must not block another.
+    assert(spell_cooldown_remaining_ms(1000, 1000, fireball->cooldown_ms) == 1800);
+    assert(spell_cooldown_remaining_ms(1000, 1500, fireball->cooldown_ms) == 1300);
+    assert(spell_cooldown_remaining_ms(1000, 2800, fireball->cooldown_ms) == 0);
+    assert(spell_cooldown_remaining_ms(2000, 2000, ice_bolt->cooldown_ms) == 2200);
+    assert(spell_cooldown_remaining_ms(1000, 2000, ice_bolt->cooldown_ms) == 1200);
+    assert(spell_cooldown_remaining_ms(2000, 1000, ice_bolt->cooldown_ms) == 2200);
+    assert(spell_cooldown_remaining_ms(1000, 1000, 0) == 0);
+
     auto invalid = *fireball;
     invalid.range = std::numeric_limits<float>::quiet_NaN();
     assert(!valid_spell_definition(invalid));
