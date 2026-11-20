@@ -119,6 +119,17 @@ func send_attack(target_entity_id: String) -> Error:
 	return transport.send_frame(frame)
 
 
+func send_spell_cast(spell_id: String, target_entity_id: String) -> Error:
+	if not world_ready or transport == null:
+		return ERR_UNCONFIGURED
+	if spell_id != "fireball" or target_entity_id.is_empty() or target_entity_id.length() > 96:
+		return ERR_INVALID_PARAMETER
+	var payload := JSON.stringify({"spell_id": spell_id, "target_entity_id": target_entity_id}).to_utf8_buffer()
+	var frame := HHProtocolCodec.encode_frame(HHProtocolCodec.MessageType.SPELL_CAST_COMMAND, payload)
+	if frame.is_empty():
+		return ERR_INVALID_DATA
+	return transport.send_frame(frame)
+
 func send_pickup(drop_id: String) -> Error:
 	if not world_ready or transport == null or drop_id.is_empty() or drop_id.length() > 64:
 		return ERR_INVALID_PARAMETER
@@ -213,7 +224,7 @@ func _on_frame_received(bytes: PackedByteArray) -> void:
 			var player_action: Variant = JSON.parse_string(payload.get_string_from_utf8())
 			var character_id := str(player_action.get("character_id", "")) if player_action is Dictionary else ""
 			var action := str(player_action.get("action", "")) if player_action is Dictionary else ""
-			if player_action is Dictionary and not character_id.is_empty() and character_id.length() <= 96 and action in ["attack", "hit"]:
+			if player_action is Dictionary and not character_id.is_empty() and character_id.length() <= 96 and action in ["attack", "hit", "cast"]:
 				player_action_event.emit(player_action)
 			else:
 				rejected.emit("收到无效的 PlayerActionEvent。")
