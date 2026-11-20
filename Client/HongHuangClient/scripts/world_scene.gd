@@ -99,6 +99,7 @@ var target_health_bar: ProgressBar
 var minimap_panel: PanelContainer
 var minimap_view: Control
 var minimap_region_label: Label
+var minimap_exploration_label: Label
 var minimap_navigation_label: Label
 var minimap_clear_navigation_button: Button
 var minimap_navigation_target: Dictionary = {}
@@ -738,6 +739,11 @@ func _build_minimap_hud() -> void:
 	minimap_region_label.add_theme_color_override("font_color", Color("#a9bac7"))
 	minimap_region_label.add_theme_font_size_override("font_size", 11)
 	layout.add_child(minimap_region_label)
+	minimap_exploration_label = Label.new()
+	minimap_exploration_label.text = "本区域探索 0 / 0"
+	minimap_exploration_label.add_theme_color_override("font_color", Color("#d6c49f"))
+	minimap_exploration_label.add_theme_font_size_override("font_size", 10)
+	layout.add_child(minimap_exploration_label)
 	minimap_view = Control.new()
 	minimap_view.name = "LiveMapCanvas"
 	minimap_view.set_script(WorldMiniMapScript)
@@ -807,6 +813,19 @@ func _update_minimap_data() -> void:
 	if is_instance_valid(minimap_region_label):
 		var world_name := _world_display_name(str(HHSession.world_snapshot.get("world_id", "")))
 		minimap_region_label.text = world_name + " · " + (current_region_name if not current_region_name.is_empty() else "区域载入中")
+	if is_instance_valid(minimap_exploration_label):
+		var region_total := 0
+		var region_discovered := 0
+		for point_variant in exploration_point_data.values():
+			if not point_variant is Dictionary:
+				continue
+			var point: Dictionary = point_variant
+			if str(point.get("region_name", "")) != current_region_name:
+				continue
+			region_total += 1
+			if bool(point.get("discovered", false)):
+				region_discovered += 1
+		minimap_exploration_label.text = "本区域探索 %d / %d" % [region_discovered, region_total] if region_total > 0 else "本区域暂无探索点数据"
 
 func _on_minimap_marker_selected(kind: String, marker_id: String, marker_name: String) -> void:
 	if marker_id.is_empty():
