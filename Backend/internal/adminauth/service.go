@@ -228,3 +228,74 @@ func newToken(ttl time.Duration)(string,[32]byte,time.Time,error){
  var raw [32]byte;if _,err:=rand.Read(raw[:]);err!=nil{return "",[32]byte{},time.Time{},err}
  token:=base64.RawURLEncoding.EncodeToString(raw[:]);return token,sha256.Sum256([]byte(token)),time.Now().UTC().Add(ttl),nil
 }
+
+type AnalyticsDailyPoint struct {
+ Date string `json:"date"`
+ Registrations int64 `json:"registrations"`
+ NewCharacters int64 `json:"new_characters"`
+ ActiveCharacters int64 `json:"active_characters"`
+}
+type AnalyticsBreakdown struct {
+ Key string `json:"key"`
+ Name string `json:"name"`
+ Count int64 `json:"count"`
+}
+type Analytics struct {
+ From string `json:"from"`
+ To string `json:"to"`
+ TotalAccounts int64 `json:"total_accounts"`
+ TotalCharacters int64 `json:"total_characters"`
+ OnlineCharacters int64 `json:"online_characters"`
+ Daily []AnalyticsDailyPoint `json:"daily"`
+ Worlds []AnalyticsBreakdown `json:"worlds"`
+ Levels []AnalyticsBreakdown `json:"levels"`
+}
+
+func (s *Service) Analytics(ctx context.Context, from, to time.Time) (Analytics, error) {
+ out := Analytics{From: from.Format("2006-01-02"), To: to.Add(-time.Nanosecond).Format("2006-01-02"), Daily: []AnalyticsDailyPoint{}, Worlds: []AnalyticsBreakdown{}, Levels: []AnalyticsBreakdown{}}
+ if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM accounts`).Scan(&out.TotalAccounts); err != nil { return Analytics{}, err }
+ if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM characters`).Scan(&out.TotalCharacters); err != nil { return Analytics{}, err }
+ if err := s.db.QueryRowContext(ctx, `SELECT count(DISTINCT character_id) FROM world_sessions WHERE session_state IN ('connecting','active','saving')`).Scan(&out.OnlineCharacters); err != nil { return Analytics{}, err }
+
+ rows, err := s.db.QueryContext(ctx, `
+  WITH days AS (
+   SELECT generate_series($1::date, ($2::date - interval '1 day')::date, interval '1 day')::date AS day
+  ), registrations AS (
+   SELECT created_at::date day, count(*) amount FROM accounts WHERE created_at >= $1 AND created_at < $2 GROUP BY 1
+  ), characters AS (
+   SELECT created_at::date day, count(*) amount FROM characters WHERE created_at >= $1 AND created_at < $2 GROUP BY 1
+  ), active AS (
+   SELECT connected_at::date day, count(DISTINCT character_id) amount FROM world_sessions
+   WHERE connected_at >= $1 AND connected_at < $2 AND session_state IN ('active','saving') GROUP BY 1
+  )
+  SELECT days.day::text, COALESCE(registrations.amount,0), COALESCE(characters.amount,0), COALESCE(active.amount,0)
+  FROM days LEFT JOIN registrations USING(day) LEFT JOIN characters USING(day) LEFT JOIN active USING(day)
+  ORDER BY days.day`, from, to)
+ if err != nil { return Analytics{}, err }
+ for rows.Next() {
+  var p AnalyticsDailyPoint
+  if err := rows.Scan(&p.Date, &p.Registrations, &p.NewCharacters, &p.ActiveCharacters); err != nil { rows.Close(); return Analytics{}, err }
+  out.Daily = append(out.Daily, p)
+ }
+ if err := rows.Err(); err != nil { rows.Close(); return Analytics{}, err }; rows.Close()
+
+ rows, err = s.db.QueryContext(ctx, `
+  SELECT wd.id, wd.name, count(DISTINCT ws.character_id)
+  FROM world_sessions ws JOIN world_instances wi ON wi.id=ws.instance_id
+  JOIN world_definitions wd ON wd.id=wi.world_id
+  WHERE ws.session_state IN ('connecting','active','saving')
+  GROUP BY wd.id, wd.name ORDER BY count(DISTINCT ws.character_id) DESC, wd.id`)
+ if err != nil { return Analytics{}, err }
+ for rows.Next() { var p AnalyticsBreakdown; if err := rows.Scan(&p.Key,&p.Name,&p.Count); err != nil { rows.Close(); return Analytics{}, err }; out.Worlds=append(out.Worlds,p) }
+ if err := rows.Err(); err != nil { rows.Close(); return Analytics{}, err }; rows.Close()
+
+ rows, err = s.db.QueryContext(ctx, `
+  SELECT CASE WHEN level < 10 THEN '1-9' WHEN level < 20 THEN '10-19' WHEN level < 30 THEN '20-29' WHEN level < 40 THEN '30-39' ELSE '40+' END AS bucket,
+   CASE WHEN level < 10 THEN '1–9级' WHEN level < 20 THEN '10–19级' WHEN level < 30 THEN '20–29级' WHEN level < 40 THEN '30–39级' ELSE '40级以上' END AS label,
+   count(*) FROM characters GROUP BY 1,2
+  ORDER BY min(CASE WHEN level < 10 THEN 1 WHEN level < 20 THEN 10 WHEN level < 30 THEN 20 WHEN level < 40 THEN 30 ELSE 40 END)`)
+ if err != nil { return Analytics{}, err }
+ for rows.Next() { var p AnalyticsBreakdown; if err := rows.Scan(&p.Key,&p.Name,&p.Count); err != nil { rows.Close(); return Analytics{}, err }; out.Levels=append(out.Levels,p) }
+ if err := rows.Err(); err != nil { rows.Close(); return Analytics{}, err }; rows.Close()
+ return out, nil
+}
