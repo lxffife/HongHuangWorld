@@ -1439,9 +1439,14 @@ struct EnetServer::Impl {
             if (!item.is_object()) continue;
             const auto slot = item.value("slot", item.value("equipment_slot", std::string{}));
             if (slot != "weapon") continue;
-            std::string identity = item.value("name", std::string{});
-            identity += " ";
-            identity += item.value("item_id", std::string{});
+            const auto weapon_type = item.value("weapon_type", std::string{});
+            if (weapon_type == "spear") return "spear_thrust";
+            if (weapon_type == "bow") return "ranged_shot";
+            if (weapon_type == "staff" || weapon_type == "focus") return "staff_cast";
+            if (weapon_type == "axe" || weapon_type == "hammer") return "heavy_swing";
+            if (weapon_type == "sword" || weapon_type == "dagger") return "sword_slash";
+            // Compatibility for clients/world-entry snapshots created before migration 000049.
+            std::string identity = item.value("name", std::string{}) + " " + item.value("item_id", std::string{});
             std::transform(identity.begin(), identity.end(), identity.begin(),
                            [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
             if (identity.find("spear") != std::string::npos || identity.find("lance") != std::string::npos ||
