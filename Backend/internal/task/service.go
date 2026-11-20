@@ -19,7 +19,7 @@ var (
  ErrForbidden = errors.New("bounty task permission denied")
  ErrInsufficientTreasury = errors.New("insufficient available balance")
  ErrAlreadyJoined = errors.New("account already joined this task")
- ErrIdempotencyConflict = errors.New("contribution idempotency key conflict")
+ ErrIdempotencyConflict = errors.New("idempotency key conflict")
  ErrTaskFull = errors.New("bounty task is full")
  ErrTaskNotReady = errors.New("bounty task is not ready for settlement")
 )
