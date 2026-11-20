@@ -14,6 +14,8 @@ const LISTING_FEE_RATE := 0.03
 const COMPLETION_TAX_RATE := 0.05
 const MIN_REWARD := 50
 const MAX_REWARD := 1000000
+const MIN_STONE_REWARD := 5
+const MAX_STONE_REWARD := 100000
 
 var _wallets: Dictionary = {"local_player": STARTING_BALANCE}
 var _stone_wallets: Dictionary = {"local_player": 500}
@@ -134,7 +136,9 @@ func get_board_tasks() -> Array[Dictionary]:
 	return result
 
 
-func get_listing_fee(reward: int) -> int:
+func get_listing_fee(reward: int, currency_id: String = FIAT_CURRENCY_ID) -> int:
+	if currency_id == CULTIVATION_CURRENCY_ID:
+		return 1 + ceili(float(maxi(0, reward)) * 0.02)
 	return BASE_LISTING_FEE + ceili(float(maxi(0, reward)) * LISTING_FEE_RATE)
 
 
@@ -147,10 +151,12 @@ func publish_task(publisher_id: String, title: String, description: String, rewa
 		return {"ok": false, "reason": "任务说明需为 4 至 240 个字。"}
 	if currency_id != FIAT_CURRENCY_ID and currency_id != CULTIVATION_CURRENCY_ID:
 		return {"ok": false, "reason": "任务货币类型无效。"}
-	if reward < MIN_REWARD or reward > MAX_REWARD:
-		return {"ok": false, "reason": "悬赏金额范围为 50 至 1,000,000。"}
-	var fee := get_listing_fee(reward)
 	var is_stone := currency_id == CULTIVATION_CURRENCY_ID
+	var minimum_reward := MIN_STONE_REWARD if is_stone else MIN_REWARD
+	var maximum_reward := MAX_STONE_REWARD if is_stone else MAX_REWARD
+	if reward < minimum_reward or reward > maximum_reward:
+		return {"ok": false, "reason": "悬赏金额范围为 %d 至 %d。" % [minimum_reward, maximum_reward]}
+	var fee := get_listing_fee(reward, currency_id)
 	var balances: Dictionary = _stone_wallets if is_stone else _wallets
 	var balance := int(balances.get(publisher_id, 0))
 	if balance < reward + fee:
