@@ -732,6 +732,11 @@ func (s *Service) useConsumableForCharacter(ctx context.Context,tx *sql.Tx,chara
 		if live != nil {
 			var saved map[string]int
 			if err := json.Unmarshal(previousEffect, &saved); err != nil { return ItemUseResult{}, fmt.Errorf("decode duplicate consumable result: %w", err) }
+			if _, exists := saved["result_health"]; !exists {
+				// Replay an event created before effective resource results were stored.
+				// The WorldServer only retries when it did not receive the first response.
+				return applyLiveConsumableEffect(request, *live, saved["heal_health"], saved["restore_mana"]), nil
+			}
 			health, maxHealth = saved["result_health"], saved["effective_max_health"]
 			mana, maxMana = saved["result_mana"], saved["effective_max_mana"]
 			healthRestored, manaRestored = saved["health_restored"], saved["mana_restored"]
