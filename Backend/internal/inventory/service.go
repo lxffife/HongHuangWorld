@@ -155,7 +155,7 @@ func (s *Service) CurrentInventory(ctx context.Context, accountID string) ([]Ite
 	for rows.Next() {
 		var item ItemStack
 		var stats, setTiers []byte
-		if err := rows.Scan(&item.ItemID, &item.Name, &item.Category, &item.Quality, &item.Quantity, &item.MaxStack, &item.IconKey, &item.Description, &item.ItemType, &item.EquipmentSlot, &stats, &item.SetID, &item.SetName, &item.SetDescription, &setTiers); err != nil {
+		if err := rows.Scan(&item.ItemID, &item.Name, &item.Category, &item.Quality, &item.Quantity, &item.MaxStack, &item.IconKey, &item.Description, &item.ItemType, &item.EquipmentSlot, &item.WeaponType, &stats, &item.SetID, &item.SetName, &item.SetDescription, &setTiers); err != nil {
 			return nil, fmt.Errorf("scan inventory stack: %w", err)
 		}
 		item.BaseStats = map[string]int{}
