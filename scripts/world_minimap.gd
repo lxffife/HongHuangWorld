@@ -12,6 +12,7 @@ var world_radius: float = 55.0
 var exploration_points: Array = []
 var npc_points: Array = []
 var monster_points: Array = []
+var landmark_points: Array = []
 var navigation_target: Dictionary = {}
 var _redraw_elapsed: float = 0.0
 
@@ -70,6 +71,19 @@ func _gui_input(event: InputEvent) -> void:
 			best_kind = "monster"
 			best_id = str(monster.get("id", ""))
 			best_name = str(monster.get("name", "怪物"))
+	for landmark_item in landmark_points:
+		if not landmark_item is Dictionary:
+			continue
+		var landmark: Dictionary = landmark_item
+		var landmark_pos := _map_point(float(landmark.get("position_x", 0.0)), float(landmark.get("position_z", 0.0)), center, radius)
+		if not _is_inside_radar(landmark_pos, center, radius):
+			continue
+		var landmark_distance := landmark_pos.distance_to(mouse_event.position)
+		if landmark_distance < best_distance:
+			best_distance = landmark_distance
+			best_kind = "landmark"
+			best_id = str(landmark.get("id", ""))
+			best_name = str(landmark.get("name", "地标"))
 	if not best_id.is_empty():
 		marker_selected.emit(best_kind, best_id, best_name)
 		accept_event()
@@ -135,6 +149,22 @@ func _draw() -> void:
 			draw_circle(monster_pos, 3.0, Color("#e16c6c"))
 			if str(navigation_target.get("id", "")) == str(monster.get("id", "")) and navigation_target.get("kind", "") == "monster":
 				draw_arc(monster_pos, 7.0, 0.0, TAU, 24, Color("#f4d27f"), 1.8)
+	for landmark_item in landmark_points:
+		if not landmark_item is Dictionary:
+			continue
+		var landmark: Dictionary = landmark_item
+		var landmark_pos := _map_point(float(landmark.get("position_x", 0.0)), float(landmark.get("position_z", 0.0)), center, radius)
+		if not _is_inside_radar(landmark_pos, center, radius):
+			continue
+		var diamond := PackedVector2Array([
+			landmark_pos + Vector2(0.0, -4.5),
+			landmark_pos + Vector2(4.5, 0.0),
+			landmark_pos + Vector2(0.0, 4.5),
+			landmark_pos + Vector2(-4.5, 0.0)
+		])
+		draw_colored_polygon(diamond, Color("#c5a7ed"))
+		if str(navigation_target.get("id", "")) == str(landmark.get("id", "")) and navigation_target.get("kind", "") == "landmark":
+			draw_arc(landmark_pos, 8.0, 0.0, TAU, 24, Color("#f4d27f"), 1.8)
 	if not navigation_target.is_empty():
 		var target_point := _map_point(float(navigation_target.get("x", 0.0)), float(navigation_target.get("z", 0.0)), center, radius)
 		if _is_inside_radar(target_point, center, radius):
