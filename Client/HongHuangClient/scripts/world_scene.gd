@@ -9,6 +9,7 @@ const QingyunVisualFactory = preload("res://scripts/qingyun_visual_factory.gd")
 const FriendPanelScript = preload("res://scripts/friend_panel.gd")
 const WorldMiniMapScript = preload("res://scripts/world_minimap.gd")
 const WorldRegionCatalog = preload("res://scripts/world_region_catalog.gd")
+const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
 const WorldTerrainBuilder = preload("res://scripts/world_terrain_builder.gd")
 const WorldEnvironmentBuilder = preload("res://scripts/world_environment_builder.gd")
 
@@ -601,6 +602,8 @@ func _update_minimap_data() -> void:
 		minimap_view.set("player_yaw", local_player.global_rotation.y)
 	minimap_view.set("exploration_points", exploration_point_data.values())
 	minimap_view.set("npc_points", npc_definitions)
+	var current_world_id := str(HHSession.world_snapshot.get("world_id", ""))
+	minimap_view.set("landmark_points", WorldMapCatalog.get_minimap_landmarks(current_world_id))
 	var nearby_monsters: Array = []
 	for monster_id in monster_targets.keys():
 		var target: Vector3 = monster_targets[monster_id]
@@ -674,6 +677,16 @@ func _on_minimap_marker_selected(kind: String, marker_id: String, marker_name: S
 				return
 			var point: Dictionary = exploration_point_data[marker_id]
 			target_position = Vector3(float(point.get("position_x", 0.0)), float(point.get("position_y", 0.0)), float(point.get("position_z", 0.0)))
+		"landmark":
+			var landmark_found := false
+			var world_id := str(HHSession.world_snapshot.get("world_id", ""))
+			for landmark in WorldMapCatalog.get_minimap_landmarks(world_id):
+				if str(landmark.get("id", "")) == marker_id:
+					target_position = Vector3(float(landmark.get("position_x", 0.0)), 0.0, float(landmark.get("position_z", 0.0)))
+					landmark_found = true
+					break
+			if not landmark_found:
+				return
 		_:
 			return
 	minimap_navigation_target = {"kind": kind, "id": marker_id, "name": marker_name, "x": target_position.x, "z": target_position.z}
