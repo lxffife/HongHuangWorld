@@ -16,6 +16,8 @@ func TestValidDeltaRequest(t *testing.T) {
 		{"missing currency", "account-1", "", "event-5", "grant", 1, false},
 		{"long event key", "account-1", "nether_stone", string(make([]byte, 129)), "grant", 1, false},
 		{"unknown entry type", "account-1", "nether_stone", "event-6", "mint", 1, false},
+		{"negative grant", "account-1", "nether_stone", "event-7", "grant", -1, false},
+		{"positive cultivation", "account-1", "nether_stone", "event-8", "cultivation", 1, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
