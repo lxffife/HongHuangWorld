@@ -2790,6 +2790,10 @@ struct EnetServer::Impl {
                 now.time_since_epoch()).count();
             const auto burn_damage = honghuang::simulation::consume_periodic_damage_tick(
                 monster.burn_effect, effect_now_ms);
+            if (burn_damage <= 0 &&
+                !honghuang::simulation::periodic_damage_is_active(monster.burn_effect, effect_now_ms)) {
+                monster.burn_owner_character_id.clear();
+            }
             if (burn_damage > 0) {
                 const auto previous_health = static_cast<std::int64_t>(monster.state.health);
                 monster.state.health = static_cast<float>(std::max<std::int64_t>(0, previous_health - burn_damage));
