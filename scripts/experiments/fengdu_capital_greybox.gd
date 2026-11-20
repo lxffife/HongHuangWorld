@@ -8,6 +8,7 @@ const CityModuleScene = preload("res://scenes/experiments/FengduCityModule.tscn"
 const NpcDialoguePanel = preload("res://scripts/experiments/npc_dialogue_panel.gd")
 const FengduQuestManager = preload("res://scripts/experiments/fengdu_quest_manager.gd")
 const FengduQuestJournal = preload("res://scripts/experiments/fengdu_quest_journal.gd")
+const FengduQuestTracker = preload("res://scripts/experiments/fengdu_quest_tracker.gd")
 
 const CITY_SCALE := 2.5
 const WALL_WIDTH := 1900.0
@@ -29,6 +30,7 @@ var _nearby_district_data: Dictionary = {}
 var _dialogue_panel: CanvasLayer
 var _quest_manager: Node
 var _quest_journal: CanvasLayer
+var _quest_tracker: CanvasLayer
 
 
 func _ready() -> void:
@@ -404,6 +406,8 @@ func _open_interaction_dialogue(data: Dictionary) -> void:
 		_hint_label.text = "差事目标已更新 · 按 J 查看阴司差事簿"
 	var quest_id := str(data.get("quest_id", ""))
 	var quest_data: Dictionary = _quest_manager.call("get_quest", quest_id) if _quest_manager != null and not quest_id.is_empty() else {}
+	if not quest_data.is_empty():
+		quest_data["can_accept"] = bool(_quest_manager.call("can_accept_quest", quest_id))
 	_dialogue_panel.call("present", data, quest_data)
 
 
@@ -550,6 +554,10 @@ func _build_hud() -> void:
 	_quest_journal.name = "FengduQuestJournal"
 	add_child(_quest_journal)
 	_quest_journal.call("configure", _quest_manager)
+	_quest_tracker = FengduQuestTracker.new()
+	_quest_tracker.name = "FengduQuestTracker"
+	add_child(_quest_tracker)
+	_quest_tracker.call("configure", _quest_manager)
 
 	_dialogue_panel = NpcDialoguePanel.new()
 	_dialogue_panel.name = "NpcDialoguePanel"
