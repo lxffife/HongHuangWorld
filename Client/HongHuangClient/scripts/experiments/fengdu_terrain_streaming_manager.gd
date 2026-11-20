@@ -5,6 +5,7 @@ extends Node3D
 @export var source_path: NodePath = NodePath("..")
 @export var focus_path: NodePath = NodePath("../StreamingFocus")
 @export_range(1, 32, 1) var tile_count := 4
+@export_range(1, 256, 1) var cells_per_tile := 32
 @export_range(1.0, 4096.0, 1.0) var world_size := 256.0
 @export_range(0, 8, 1) var load_radius := 2
 @export_range(0, 10, 1) var unload_radius := 3
@@ -51,7 +52,8 @@ func _process(delta: float) -> void:
 func _refresh_pending_tiles() -> void:
 	_pending_load.clear()
 	_pending_unload.clear()
-	var focus_tile := _world_to_tile(_focus.global_position)
+	var source_local_focus := _source.to_local(_focus.global_position)
+	var focus_tile := _world_to_tile(source_local_focus)
 	var desired_tiles: Dictionary = {}
 
 	for tile_z in range(tile_count):
@@ -75,7 +77,6 @@ func _refresh_pending_tiles() -> void:
 func _load_tile(tile_key: Vector2i) -> void:
 	if _active_tiles.has(tile_key):
 		return
-	var cells_per_tile := 128 / tile_count
 	var tile_variant: Variant = _source.call("_build_terrain_tile", tile_key.x, tile_key.y, cells_per_tile)
 	if not tile_variant is Node3D:
 		push_warning("Terrain source failed to build tile %s." % [tile_key])
