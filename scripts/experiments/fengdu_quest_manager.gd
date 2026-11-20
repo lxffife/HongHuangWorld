@@ -67,7 +67,7 @@ func _seed_quests() -> void:
 			"id": "new_soul_wish", "giver_id": "white_impermanence",
 			"giver_name": "白无常 · 谢必安", "title": "未了心愿寻访",
 			"summary": "你选择先安抚亡魂后，谢必安请你倾听新魂心愿，并查明其是否还有未了牵挂。",
-			"reward_preview": "新魂接引善意记录", "reward_amount": 180, "completion_count": 0, "status": "available",
+			"reward_preview": "新魂接引善意记录", "reward_currency_id": "nether_stone", "reward_amount": 18, "completion_count": 0, "status": "available",
 			"prerequisites": [], "story_prerequisites": ["protected_new_soul"], "repeatable": false,
 			"objectives": [
 				{"type": "interact", "target_id": "soul_waystation", "label": "在引魂驿站倾听新魂心愿", "required_count": 1},
