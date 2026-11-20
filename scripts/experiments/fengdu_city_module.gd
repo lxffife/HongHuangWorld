@@ -41,12 +41,14 @@ func _ready() -> void:
 			_build_watchtower()
 		"citizen":
 			_build_citizen()
+		"special_character":
+			_build_special_character()
 		"gatehouse":
 			_build_gatehouse()
 
 
 func _process(delta: float) -> void:
-	if module_kind == "guard" or (module_kind == "citizen" and not _route_points.is_empty()):
+	if module_kind == "guard" or module_kind == "special_character" or (module_kind == "citizen" and not _route_points.is_empty()):
 		_advance_route(delta)
 	if module_kind == "citizen" and _citizen_body != null:
 		_citizen_time += delta
@@ -397,7 +399,6 @@ func _add_nameplate(text_value: String, local_position: Vector3) -> void:
 
 
 func _build_guard() -> void:
-	_patrol_origin = position
 	var body := MeshInstance3D.new()
 	body.name = "GuardBody"
 	var body_mesh := CapsuleMesh.new()
@@ -477,6 +478,151 @@ func _build_citizen() -> void:
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.modulate = Color("#e2d5c2")
 	add_child(label)
+
+
+func _build_special_character() -> void:
+	var archetype := str(module_data.get("archetype", "black_impermanence"))
+	var robe_color := str(module_data.get("robe_color", "#24242b"))
+	var face_color := str(module_data.get("face_color", "#d7cbb9"))
+	var trim_color := str(module_data.get("trim_color", "#b89b70"))
+	var robe_material := _material(robe_color)
+	var face_material := _material(face_color)
+	var trim_material := _material(trim_color)
+	var eye_material := _emissive("#c44a42", "#8d171d", 1.4)
+
+	var robe := MeshInstance3D.new()
+	robe.name = "OfficialRobe"
+	var robe_mesh := CapsuleMesh.new()
+	robe_mesh.radius = 0.66
+	robe_mesh.height = 3.0
+	robe.mesh = robe_mesh
+	robe.position.y = 1.52
+	robe.material_override = robe_material
+	add_child(robe)
+	_add_character_box("RobeFrontPanel", Vector3(0.72, 1.85, 0.12), Vector3(0.0, 1.52, -0.55), trim_material)
+	_add_character_box("ShoulderMantle", Vector3(1.62, 0.34, 0.78), Vector3(0.0, 2.52, 0.0), robe_material)
+
+	var head := MeshInstance3D.new()
+	head.name = "OfficialHead"
+	if archetype == "horse_face":
+		var horse_head := CapsuleMesh.new()
+		horse_head.radius = 0.42
+		horse_head.height = 1.22
+		head.mesh = horse_head
+		head.rotation.x = PI * 0.5
+	else:
+		var round_head := SphereMesh.new()
+		round_head.radius = 0.58
+		round_head.height = 1.05
+		head.mesh = round_head
+	head.position = Vector3(0.0, 2.92, 0.0)
+	head.material_override = face_material
+	add_child(head)
+
+	for side in [-1.0, 1.0]:
+		var eye := MeshInstance3D.new()
+		var eye_mesh := SphereMesh.new()
+		eye_mesh.radius = 0.075
+		eye.mesh = eye_mesh
+		eye.position = Vector3(side * 0.22, 2.98, -0.48)
+		eye.material_override = eye_material
+		add_child(eye)
+
+	if archetype == "black_impermanence" or archetype == "white_impermanence":
+		var hat_material := _material("#17191e" if archetype == "black_impermanence" else "#e8e4dc")
+		_add_character_box("OfficialHatBrim", Vector3(1.22, 0.12, 0.82), Vector3(0.0, 3.48, 0.0), hat_material)
+		_add_character_box("OfficialTallHat", Vector3(0.78, 1.02, 0.62), Vector3(0.0, 4.02, 0.0), hat_material)
+		_add_character_box("HatInscriptionPlate", Vector3(0.62, 0.34, 0.055), Vector3(0.0, 4.05, -0.34), trim_material)
+		var hat_text := Label3D.new()
+		hat_text.name = "HatInscription"
+		hat_text.text = str(module_data.get("hat_text", "拘魂"))
+		hat_text.position = Vector3(0.0, 4.05, -0.39)
+		hat_text.font_size = 24
+		hat_text.pixel_size = 0.012
+		hat_text.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+		hat_text.modulate = Color("#251e1b")
+		add_child(hat_text)
+		_add_character_box("SoulLedger", Vector3(0.62, 0.82, 0.1), Vector3(0.88, 1.78, -0.2), trim_material)
+	else:
+		if archetype == "ox_head":
+			for side in [-1.0, 1.0]:
+				var horn := MeshInstance3D.new()
+				var horn_mesh := ConeMesh.new()
+				horn_mesh.bottom_radius = 0.2
+				horn_mesh.height = 0.92
+				horn.mesh = horn_mesh
+				horn.position = Vector3(side * 0.46, 3.58, 0.0)
+				horn.rotation.z = side * 0.48
+				horn.material_override = trim_material
+				add_child(horn)
+			_add_character_sphere("OxMuzzle", 0.32, Vector3(0.0, 2.7, -0.53), _material("#a66b52"))
+		else:
+			for side in [-1.0, 1.0]:
+				_add_character_box("HorseEar_%s" % side, Vector3(0.2, 0.86, 0.24), Vector3(side * 0.43, 3.58, 0.02), face_material)
+			_add_character_sphere("HorseMuzzle", 0.27, Vector3(0.0, 2.76, -0.58), _material("#8a7669"))
+		_add_character_box("IronShoulderGuard", Vector3(1.72, 0.26, 0.72), Vector3(0.0, 2.45, 0.0), trim_material)
+		_add_character_box("WeaponShaft", Vector3(0.12, 3.5, 0.12), Vector3(0.98, 1.9, 0.0), _material("#59483c"))
+		_add_character_box("WeaponCrossbar", Vector3(0.82, 0.12, 0.12), Vector3(0.98, 3.32, 0.0), trim_material)
+
+	var title := Label3D.new()
+	title.name = "OfficialNameplate"
+	title.text = str(module_data.get("name", "阴司差官"))
+	title.position = Vector3(0.0, 5.12, 0.0)
+	title.font_size = 30
+	title.pixel_size = 0.018
+	title.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	title.no_depth_test = true
+	title.modulate = Color("#f1dfc1")
+	add_child(title)
+	_build_character_interaction_zone()
+
+
+func _add_character_box(node_name: String, dimensions: Vector3, local_position: Vector3, material: Material) -> void:
+	var visual := MeshInstance3D.new()
+	visual.name = node_name
+	var mesh := BoxMesh.new()
+	mesh.size = dimensions
+	visual.mesh = mesh
+	visual.position = local_position
+	visual.material_override = material
+	add_child(visual)
+
+
+func _add_character_sphere(node_name: String, radius: float, local_position: Vector3, material: Material) -> void:
+	var visual := MeshInstance3D.new()
+	visual.name = node_name
+	var mesh := SphereMesh.new()
+	mesh.radius = radius
+	mesh.height = radius * 2.0
+	visual.mesh = mesh
+	visual.position = local_position
+	visual.material_override = material
+	add_child(visual)
+
+
+func _build_character_interaction_zone() -> void:
+	var area := Area3D.new()
+	area.name = "OfficialInteractionArea"
+	area.collision_layer = 0
+	area.collision_mask = 1
+	var collision := CollisionShape3D.new()
+	var shape := SphereShape3D.new()
+	shape.radius = 20.0
+	collision.shape = shape
+	area.add_child(collision)
+	area.body_entered.connect(_on_official_area_entered)
+	area.body_exited.connect(_on_official_area_exited)
+	add_child(area)
+
+
+func _on_official_area_entered(body: Node3D) -> void:
+	if body.is_in_group("fengdu_player"):
+		player_entered.emit(module_data)
+
+
+func _on_official_area_exited(body: Node3D) -> void:
+	if body.is_in_group("fengdu_player"):
+		player_exited.emit(module_data)
 
 
 func _build_watchtower() -> void:
