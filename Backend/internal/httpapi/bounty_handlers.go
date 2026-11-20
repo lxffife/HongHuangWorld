@@ -27,10 +27,10 @@ func (h *bountyHandlers) contribute(w http.ResponseWriter,r *http.Request){
 }
 func (h *bountyHandlers) publishFaction(w http.ResponseWriter,r *http.Request){
  account,ok:=h.accountID(w,r);if !ok{return}
- var body struct{EventKey string `json:"event_key"`;Title string `json:"title"`;Description string `json:"description"`;CurrencyID string `json:"currency_id"`;RewardAmount int64 `json:"reward_amount"`;MaxAssignees int `json:"max_assignees"`;DifficultyTier int `json:"difficulty_tier"`;RequiredRealmLevel int `json:"required_realm_level"`;RequiredCharacterLevel int `json:"required_character_level"`;ExpiresAt *string `json:"expires_at"`}
+ var body struct{EventKey string `json:"event_key"`;Title string `json:"title"`;Description string `json:"description"`;CurrencyID string `json:"currency_id"`;RewardAmount int64 `json:"reward_amount"`;MaxAssignees int `json:"max_assignees"`;DifficultyTier int `json:"difficulty_tier"`;RequiredRealmLevel int `json:"required_realm_level"`;RequiredCharacterLevel int `json:"required_character_level"`;Objectives []task.ObjectiveRequest `json:"objectives"`;ExpiresAt *string `json:"expires_at"`}
  if err:=decodeJSON(w,r,&body);err!=nil{http.Error(w,"invalid request body",http.StatusBadRequest);return}
  if body.RequiredCharacterLevel==0 { body.RequiredCharacterLevel=1 }
- result,err:=h.service.PublishFaction(r.Context(),account,task.PublishRequest{EventKey:body.EventKey,FactionID:r.PathValue("factionID"),Title:body.Title,Description:body.Description,CurrencyID:body.CurrencyID,RewardAmount:body.RewardAmount,MaxAssignees:body.MaxAssignees,DifficultyTier:body.DifficultyTier,RequiredRealmLevel:body.RequiredRealmLevel,RequiredCharacterLevel:body.RequiredCharacterLevel,ExpiresAt:body.ExpiresAt})
+ result,err:=h.service.PublishFaction(r.Context(),account,task.PublishRequest{EventKey:body.EventKey,FactionID:r.PathValue("factionID"),Title:body.Title,Description:body.Description,CurrencyID:body.CurrencyID,RewardAmount:body.RewardAmount,MaxAssignees:body.MaxAssignees,DifficultyTier:body.DifficultyTier,RequiredRealmLevel:body.RequiredRealmLevel,RequiredCharacterLevel:body.RequiredCharacterLevel,Objectives:body.Objectives,ExpiresAt:body.ExpiresAt})
  if err!=nil{h.writeError(w,err);return};writeJSON(w,http.StatusCreated,result)
 }
 func (h *bountyHandlers) list(w http.ResponseWriter,r *http.Request){
@@ -48,14 +48,31 @@ func (h *bountyHandlers) settle(w http.ResponseWriter,r *http.Request){
  if err!=nil{h.writeError(w,err);return}
  writeJSON(w,http.StatusOK,result)
 }
+
+// reportWorldEvent accepts verified objective events from an authenticated WorldServer node.
+func (h *bountyHandlers) reportWorldEvent(w http.ResponseWriter,r *http.Request) {
+ provided:=r.Header.Get("X-World-Server-Key")
+ if h.apiKey=="" || len(provided)!=len(h.apiKey) || subtle.ConstantTimeCompare([]byte(provided),[]byte(h.apiKey))!=1 {
+  http.Error(w,"unauthorized",http.StatusUnauthorized);return
+ }
+ nodeKey:=strings.TrimSpace(r.Header.Get("X-World-Server-Node"))
+ if nodeKey=="" { http.Error(w,"missing world server node identity",http.StatusBadRequest);return }
+ var event task.WorldEvent
+ if err:=decodeJSON(w,r,&event);err!=nil { http.Error(w,"invalid request body",http.StatusBadRequest);return }
+ result,err:=h.service.ApplyWorldEvent(r.Context(),nodeKey,event)
+ if err!=nil { h.writeError(w,err);return }
+ writeJSON(w,http.StatusOK,result)
+}
 func (h *bountyHandlers) writeError(w http.ResponseWriter,err error){
  switch{
- case errors.Is(err,task.ErrInvalid):http.Error(w,"invalid bounty task request",http.StatusBadRequest)
+ case errors.Is(err,task.ErrInvalid),errors.Is(err,task.ErrInvalidWorldEvent):http.Error(w,"invalid bounty task request",http.StatusBadRequest)
  case errors.Is(err,task.ErrNotFound):http.Error(w,"bounty task not found",http.StatusNotFound)
  case errors.Is(err,task.ErrForbidden):http.Error(w,"bounty task permission denied",http.StatusForbidden)
  case errors.Is(err,task.ErrIdempotencyConflict):http.Error(w,"idempotency key conflict",http.StatusConflict)
  case errors.Is(err,task.ErrTaskNotReady):http.Error(w,"bounty task is not ready for this operation",http.StatusConflict)
  case errors.Is(err,task.ErrCharacterNotEligible):http.Error(w,"current character does not meet bounty requirements",http.StatusConflict)
+ case errors.Is(err,task.ErrWorldEventSession):http.Error(w,"world session is not valid for this node and task",http.StatusForbidden)
+ case errors.Is(err,task.ErrWorldEventObjective):http.Error(w,"event does not match a configured bounty objective",http.StatusConflict)
  case errors.Is(err,task.ErrNotParticipant):http.Error(w,"account is not an active bounty participant",http.StatusConflict)
  case errors.Is(err,task.ErrInsufficientTreasury),errors.Is(err,task.ErrAlreadyJoined),errors.Is(err,task.ErrTaskFull):http.Error(w,err.Error(),http.StatusConflict)
  default:h.logger.Error("bounty task request failed","error",err);http.Error(w,"internal server error",http.StatusInternalServerError)
