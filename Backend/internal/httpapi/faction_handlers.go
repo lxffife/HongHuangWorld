@@ -76,3 +76,11 @@ func (h *factionHandlers) writeError(w http.ResponseWriter, err error) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 	}
 }
+
+func (h *factionHandlers) members(w http.ResponseWriter, r *http.Request) {
+	accountID, ok := h.accountID(w, r)
+	if !ok { return }
+	result, err := h.service.ListMembers(r.Context(), accountID, r.PathValue("factionID"))
+	if err != nil { h.writeError(w, err); return }
+	writeJSON(w, http.StatusOK, map[string]any{"members": result})
+}
