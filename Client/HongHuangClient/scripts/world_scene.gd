@@ -2578,6 +2578,7 @@ func _on_combat_event(event: Dictionary) -> void:
 		if is_instance_valid(mana_label):
 			mana_label.text = "灵力  " + str(int(HHSession.world_snapshot["mana"])) + " / " + str(int(HHSession.world_snapshot["max_mana"]))
 		_update_compact_hud()
+		inventory_status.text = "装备属性已同步。"
 		_refresh_inventory()
 		_refresh_equipment()
 		_show_notification("装备属性已同步。")
@@ -3629,7 +3630,7 @@ func _on_equipment_action_completed(result: int, response_code: int, _headers: P
 	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
 		inventory_status.text = "装备操作失败：" + body.get_string_from_utf8()
 		return
-	inventory_status.text = "装备已更新。"
+	inventory_status.text = "装备操作已提交，正在同步世界属性……"
 	_refresh_inventory()
 	_refresh_equipment()
 
