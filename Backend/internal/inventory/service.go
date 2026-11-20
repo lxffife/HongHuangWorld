@@ -459,6 +459,7 @@ func (s *Service) Unequip(ctx context.Context, accountID, slot string) error {
 
 type CombatStats struct {
 	Health int `json:"health"`
+	Mana int `json:"mana"`
 	Attack int `json:"attack"`
 	Defense int `json:"defense"`
 	Strength int `json:"strength"`
@@ -475,12 +476,12 @@ type CombatStats struct {
 func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessionID, characterID string) (CombatStats, error) {
 	if strings.TrimSpace(nodeKey)=="" || !validUUID(sessionID) || !validUUID(characterID) { return CombatStats{}, ErrInvalidRequest }
 	var result CombatStats
-	err:=s.db.QueryRowContext(ctx,`SELECT a.health,a.attack,a.defense,a.strength,a.constitution,a.agility,a.spirit,a.vitality,a.max_health,a.max_mana
+	err:=s.db.QueryRowContext(ctx,`SELECT a.health,a.mana,a.attack,a.defense,a.strength,a.constitution,a.agility,a.spirit,a.vitality,a.max_health,a.max_mana
 		FROM world_sessions ws
 		JOIN server_registry sr ON sr.id=ws.server_id
 		JOIN character_attributes a ON a.character_id=ws.character_id
 		WHERE sr.node_key=$1 AND ws.id=$2::uuid AND ws.character_id=$3::uuid AND ws.session_state='active'`,
-		nodeKey,sessionID,characterID).Scan(&result.Health,&result.Attack,&result.Defense,&result.Strength,&result.Constitution,&result.Agility,&result.Spirit,&result.Vitality,&result.MaxHealth,&result.MaxMana)
+		nodeKey,sessionID,characterID).Scan(&result.Health,&result.Mana,&result.Attack,&result.Defense,&result.Strength,&result.Constitution,&result.Agility,&result.Spirit,&result.Vitality,&result.MaxHealth,&result.MaxMana)
 	if errors.Is(err,sql.ErrNoRows) { return CombatStats{},ErrSessionInvalid }
 	if err!=nil { return CombatStats{},fmt.Errorf("load session combat attributes: %w",err) }
 	rows,err:=s.db.QueryContext(ctx,`SELECT i.base_stats FROM character_equipment e
@@ -509,7 +510,8 @@ func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessio
 	if err:=rows.Err(); err!=nil { return CombatStats{},fmt.Errorf("iterate equipped combat bonuses: %w",err) }
 	if result.MaxHealth < 1 || result.MaxMana < 0 { return CombatStats{},ErrInvalidRequest }
 	if result.Health > result.MaxHealth { result.Health = result.MaxHealth }
-	if result.Health<0 || result.Health>result.MaxHealth || result.Attack<1 || result.Attack>100000 || result.Defense<0 || result.Defense>100000 ||
+	if result.Mana > result.MaxMana { result.Mana = result.MaxMana }
+	if result.Health<0 || result.Health>result.MaxHealth || result.Mana<0 || result.Mana>result.MaxMana || result.Attack<1 || result.Attack>100000 || result.Defense<0 || result.Defense>100000 ||
 		result.MaxHealth<1 || result.MaxHealth>10000000 || result.MaxMana<0 || result.MaxMana>10000000 {
 		return CombatStats{},ErrInvalidRequest
 	}
