@@ -215,7 +215,7 @@ func _build_ui() -> void:
 	audience_hint.add_theme_font_size_override("font_size", 11)
 	column.add_child(audience_hint)
 	var policy := Label.new()
-	policy.text = "规则：不同市场独立记账；发布时冻结全额悬赏；发布费 = 10 + 悬赏的 3%；完成结算时城主府收取 5% 税。发布费不退，未接取任务可取消并退回悬赏。冥石可交易及用于修炼，冥币仅用于凡俗交易。"
+	policy.text = "规则：不同市场独立记账；发布时冻结全额悬赏；冥石市场发布费 = 1 + 悬赏的 2%，冥币市场发布费 = 10 + 悬赏的 3%；完成结算时城主府收取 5% 税。发布费不退，未接取任务可取消并退回悬赏。冥石可交易及用于修炼，冥币仅用于凡俗交易。"
 	policy.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	policy.add_theme_font_size_override("font_size", 11)
 	column.add_child(policy)
@@ -270,6 +270,9 @@ func _build_ui() -> void:
 
 func _on_market_selected(index: int) -> void:
 	_active_currency_id = "ghost_cash" if index == 1 else "nether_stone"
+	_reward_input.min_value = 50.0 if index == 1 else 5.0
+	_reward_input.max_value = 1000000.0 if index == 1 else 100000.0
+	_reward_input.value = maxf(_reward_input.value, _reward_input.min_value)
 	_feedback.text = "已切换至凡俗事务市场。" if index == 1 else "已切换至修炼悬赏市场。"
 	refresh()
 
