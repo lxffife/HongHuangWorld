@@ -167,6 +167,7 @@ func (h *gamePlayerAdminHandlers) detail(w http.ResponseWriter, r *http.Request)
 
 type adminOnlinePlayer struct {
 	AccountID string `json:"account_id"`
+	SessionState string `json:"session_state"`
 	CharacterID string `json:"character_id"`
 	CharacterName string `json:"character_name"`
 	Level int `json:"level"`
@@ -212,7 +213,7 @@ func (h *gamePlayerAdminHandlers) online(w http.ResponseWriter, r *http.Request)
 		JOIN souls soul ON soul.id = c.soul_id
 		JOIN world_definitions wd ON wd.id = c.world_id
 		JOIN server_registry sr ON sr.id = ws.server_id
-		WHERE ws.session_state = 'active'
+		WHERE ws.session_state IN ('connecting', 'active', 'saving')
 		  AND ($1 = '' OR c.name ILIKE '%' || $1 || '%' OR wd.name ILIKE '%' || $1 || '%' OR soul.account_id::text ILIKE '%' || $1 || '%')
 		  AND ($2 = '' OR c.world_id = $2)
 		  AND ($3 = '' OR sr.node_key = $3)`
@@ -223,7 +224,7 @@ func (h *gamePlayerAdminHandlers) online(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	rows, err := h.db.QueryContext(ctx, `SELECT soul.account_id::text, c.id::text, c.name, c.level, c.world_id,
+	rows, err := h.db.QueryContext(ctx, `SELECT soul.account_id::text, ws.session_state, c.id::text, c.name, c.level, c.world_id,
 		       wd.name, ws.id::text, ws.connected_at, sr.node_key, sr.host,
 		       sr.udp_port, sr.region, CASE WHEN sr.admin_state = 'disabled' THEN 'offline' WHEN sr.admin_state = 'draining' THEN 'draining' WHEN sr.last_heartbeat_at IS NULL OR sr.last_heartbeat_at < now() - interval '30 seconds' THEN 'offline' ELSE sr.status END, sr.last_heartbeat_at, sr.capacity, sr.current_players `+from+`
 		ORDER BY ws.connected_at DESC, ws.id DESC LIMIT $4 OFFSET $5`, q, worldID, nodeKey, limit, offset)
@@ -236,7 +237,7 @@ func (h *gamePlayerAdminHandlers) online(w http.ResponseWriter, r *http.Request)
 	items := make([]adminOnlinePlayer, 0, limit)
 	for rows.Next() {
 		var item adminOnlinePlayer
-		if err := rows.Scan(&item.AccountID, &item.CharacterID, &item.CharacterName, &item.Level, &item.WorldID, &item.WorldName, &item.SessionID, &item.ConnectedAt, &item.NodeKey, &item.Host, &item.UDPPort, &item.Region, &item.NodeStatus, &item.HeartbeatAt, &item.Capacity, &item.CurrentPlayers); err != nil {
+		if err := rows.Scan(&item.AccountID, &item.SessionState, &item.CharacterID, &item.CharacterName, &item.Level, &item.WorldID, &item.WorldName, &item.SessionID, &item.ConnectedAt, &item.NodeKey, &item.Host, &item.UDPPort, &item.Region, &item.NodeStatus, &item.HeartbeatAt, &item.Capacity, &item.CurrentPlayers); err != nil {
 			h.logger.Error("scan game admin online player failed", "error", err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
