@@ -106,26 +106,26 @@ func (s *Service) SetAdminState(ctx context.Context, nodeKey, state string) (Nod
 	var serverID, previousState string
 	if err := tx.QueryRowContext(ctx, `SELECT id::text, admin_state FROM server_registry WHERE node_key = $1 FOR UPDATE`, nodeKey).Scan(&serverID, &previousState); err != nil {
 		if errors.Is(err, sql.ErrNoRows) { return NodeStateChange{}, ErrNodeNotFound }
-		return 0, fmt.Errorf("load world server node: %w", err)
+		return NodeStateChange{}, fmt.Errorf("load world server node: %w", err)
 	}
 	// Disabling is only safe after the node has drained naturally. Never
 	// rewrite live sessions to "saving": that is not a confirmed disconnect.
 	if state == "disabled" {
 		var remaining int64
 		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM world_sessions WHERE server_id = $1::uuid AND session_state IN ('connecting','active','saving')`, serverID).Scan(&remaining); err != nil {
-			return 0, fmt.Errorf("count node sessions before disable: %w", err)
+			return NodeStateChange{}, fmt.Errorf("count node sessions before disable: %w", err)
 		}
 		if remaining > 0 { return NodeStateChange{PreviousState: previousState, AdminState: state, RemainingSessions: remaining}, ErrNodeHasSessions }
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE server_registry SET admin_state = $2, updated_at = now() WHERE id = $1::uuid`, serverID, state); err != nil { return 0, fmt.Errorf("update world server node state: %w", err) }
+	if _, err := tx.ExecContext(ctx, `UPDATE server_registry SET admin_state = $2, updated_at = now() WHERE id = $1::uuid`, serverID, state); err != nil { return NodeStateChange{}, fmt.Errorf("update world server node state: %w", err) }
 	instanceStatus := "offline"
 	if state == "draining" { instanceStatus = "draining" }
 	if state == "normal" {
-		if _, err := tx.ExecContext(ctx, `UPDATE world_instances wi SET status = CASE WHEN sr.status = 'ready' AND sr.last_heartbeat_at > now() - interval '30 seconds' THEN 'ready' ELSE 'offline' END, updated_at = now() FROM server_registry sr WHERE wi.server_id = sr.id AND sr.id = $1::uuid`, serverID); err != nil { return 0, fmt.Errorf("restore world server instances: %w", err) }
+		if _, err := tx.ExecContext(ctx, `UPDATE world_instances wi SET status = CASE WHEN sr.status = 'ready' AND sr.last_heartbeat_at > now() - interval '30 seconds' THEN 'ready' ELSE 'offline' END, updated_at = now() FROM server_registry sr WHERE wi.server_id = sr.id AND sr.id = $1::uuid`, serverID); err != nil { return NodeStateChange{}, fmt.Errorf("restore world server instances: %w", err) }
 	} else {
-		if _, err := tx.ExecContext(ctx, `UPDATE world_instances SET status = $2, updated_at = now() WHERE server_id = $1::uuid`, serverID, instanceStatus); err != nil { return 0, fmt.Errorf("update world server instances: %w", err) }
+		if _, err := tx.ExecContext(ctx, `UPDATE world_instances SET status = $2, updated_at = now() WHERE server_id = $1::uuid`, serverID, instanceStatus); err != nil { return NodeStateChange{}, fmt.Errorf("update world server instances: %w", err) }
 	}
-	if err := tx.Commit(); err != nil { return 0, fmt.Errorf("commit world server node state: %w", err) }
+	if err := tx.Commit(); err != nil { return NodeStateChange{}, fmt.Errorf("commit world server node state: %w", err) }
 	return NodeStateChange{PreviousState: previousState, AdminState: state}, nil
 }
 
