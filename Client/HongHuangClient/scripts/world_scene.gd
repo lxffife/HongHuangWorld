@@ -106,6 +106,7 @@ var world_map_panel: PanelContainer
 var world_map_canvas: Control
 var world_map_open_button: Button
 var world_map_mode_button: Button
+var world_map_city_button: Button
 var world_map_hint_label: Label
 var world_map_restore_mouse_captured := false
 var minimap_view: Control
@@ -632,6 +633,11 @@ func _build_world_map_hud() -> void:
 	_apply_button_theme(world_map_mode_button)
 	world_map_mode_button.pressed.connect(_toggle_world_map_mode)
 	header.add_child(world_map_mode_button)
+	world_map_city_button = Button.new()
+	world_map_city_button.text = "酆都城图"
+	_apply_button_theme(world_map_city_button)
+	world_map_city_button.pressed.connect(_toggle_fengdu_city_mode)
+	header.add_child(world_map_city_button)
 	var close_button := Button.new()
 	close_button.text = "关闭"
 	_apply_button_theme(close_button)
@@ -646,6 +652,7 @@ func _build_world_map_hud() -> void:
 	world_map_canvas.connect("marker_selected", Callable(self, "_on_world_map_marker_selected"))
 	world_map_canvas.connect("world_position_selected", Callable(self, "_on_world_map_position_selected"))
 	world_map_canvas.connect("atlas_region_selected", Callable(self, "_on_underworld_atlas_region_selected"))
+	world_map_canvas.connect("city_district_selected", Callable(self, "_on_fengdu_city_district_selected"))
 	layout.add_child(world_map_canvas)
 	world_map_hint_label = Label.new()
 	world_map_hint_label.text = "灰色：已发现探索点 · 青色：NPC · 红色：妖兽 · 紫色：地标 · 未发现地点隐藏 · 点击标记导航"
@@ -661,20 +668,42 @@ func _build_world_map_hud() -> void:
 func _toggle_world_map_mode() -> void:
 	if not is_instance_valid(world_map_canvas):
 		return
-	var current_world_id := str(HHSession.world_snapshot.get("world_id", ""))
-	if current_world_id != "underworld_fengdu":
+	var current_mode := str(world_map_canvas.get("map_mode"))
+	_set_world_map_mode("local" if current_mode == "underworld_atlas" else "underworld_atlas")
+
+
+func _toggle_fengdu_city_mode() -> void:
+	if not is_instance_valid(world_map_canvas):
 		return
-	var next_mode := "underworld_atlas" if str(world_map_canvas.get("map_mode")) != "underworld_atlas" else "local"
+	var current_mode := str(world_map_canvas.get("map_mode"))
+	_set_world_map_mode("local" if current_mode == "fengdu_city" else "fengdu_city")
+
+
+func _set_world_map_mode(next_mode: String) -> void:
+	if not is_instance_valid(world_map_canvas):
+		return
 	world_map_canvas.set("map_mode", next_mode)
 	world_map_mode_button.text = "返回区域地图" if next_mode == "underworld_atlas" else "冥界总览"
+	world_map_city_button.text = "返回区域地图" if next_mode == "fengdu_city" else "酆都城图"
 	if is_instance_valid(world_map_hint_label):
-		world_map_hint_label.text = "点击区域查看设定；示意位置和连线不代表真实坐标或可直接通行" if next_mode == "underworld_atlas" else "灰色：已发现探索点 · 青色：NPC · 红色：妖兽 · 紫色：地标 · 未发现地点隐藏 · 点击标记导航"
+		match next_mode:
+			"underworld_atlas":
+				world_map_hint_label.text = "点击区域查看权柄、危险和进入条件；示意位置不代表真实坐标或可直接通行"
+			"fengdu_city":
+				world_map_hint_label.text = "点击城区查看职能与服务；这是酆都总体规划图，非实际比例和已建成场景"
+			_:
+				world_map_hint_label.text = "灰色：已发现探索点 · 青色：NPC · 红色：妖兽 · 紫色：地标 · 未发现地点隐藏 · 点击标记导航"
 	world_map_canvas.queue_redraw()
 
 
 func _on_underworld_atlas_region_selected(region_id: String, region_name: String, description: String) -> void:
 	if is_instance_valid(world_map_hint_label):
 		world_map_hint_label.text = region_name + " · " + description
+
+
+func _on_fengdu_city_district_selected(district_id: String, district_name: String, description: String) -> void:
+	if is_instance_valid(world_map_hint_label):
+		world_map_hint_label.text = district_name + " · " + description
 
 
 func _toggle_world_map() -> void:
@@ -710,11 +739,14 @@ func _update_minimap_data() -> void:
 	if is_instance_valid(world_map_canvas):
 		world_map_canvas.set("world_id", current_world_id)
 		world_map_canvas.set("atlas_data", WorldMapCatalog.get_underworld_atlas())
+		world_map_canvas.set("city_data", WorldMapCatalog.get_fengdu_city_plan())
 		if current_world_id != "underworld_fengdu":
 			world_map_canvas.set("map_mode", "local")
 			world_map_mode_button.visible = false
+			world_map_city_button.visible = false
 		else:
 			world_map_mode_button.visible = true
+			world_map_city_button.visible = true
 		world_map_canvas.set("world_bounds", WorldMapCatalog.get_world_bounds(current_world_id))
 		world_map_canvas.set("region_data", WorldMapCatalog.get_regions(current_world_id))
 		world_map_canvas.set("water_data", WorldMapCatalog.get_world_map_water_bodies(current_world_id))
