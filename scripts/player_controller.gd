@@ -619,7 +619,7 @@ func set_equipment_visuals(items: Array) -> void:
 		"offhand": "EquipmentOffhandSocket"
 	}
 	for slot_key in sockets.keys():
-		var socket := _get_or_create_equipment_socket(str(slot_key), str(sockets[slot_key]))
+		var socket := _get_or_create_equipment_socket(str(slot_key))
 		for child in socket.get_children():
 			if child.name == "EquipmentVisual":
 				child.queue_free()
@@ -629,7 +629,7 @@ func set_equipment_visuals(items: Array) -> void:
 		var slot := str(item.get("slot", item.get("equipment_slot", "")))
 		if not sockets.has(slot):
 			continue
-		var socket := _get_or_create_equipment_socket(slot, str(sockets[slot]))
+		var socket := _get_or_create_equipment_socket(slot)
 		var visual_root := Node3D.new()
 		visual_root.name = "EquipmentVisual"
 		visual_root.set_meta("item_id", str(item.get("item_id", "")))
@@ -637,7 +637,7 @@ func set_equipment_visuals(items: Array) -> void:
 		_build_equipment_slot_visual(visual_root, slot, int(item.get("quality", 1)))
 
 
-func _get_or_create_equipment_socket(slot: String, socket_name: String) -> Node3D:
+func _get_or_create_equipment_socket(slot: String) -> Node3D:
 	if not is_instance_valid(player_humanoid):
 		return null
 	return EquipmentVisualFactory.get_or_create_socket(player_humanoid, slot)
