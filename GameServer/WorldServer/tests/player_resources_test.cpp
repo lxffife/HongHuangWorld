@@ -7,6 +7,13 @@
 
 int main() {
     using honghuang::simulation::mana_regeneration_amount;
+    using honghuang::simulation::mana_regeneration_interval_ms;
+
+    // Combat halves the regeneration rate without changing normal recovery.
+    assert(mana_regeneration_interval_ms(false, 3000, 6000) == 3000);
+    assert(mana_regeneration_interval_ms(true, 3000, 6000) == 6000);
+    assert(mana_regeneration_interval_ms(false, 0, 6000) == 0);
+    assert(mana_regeneration_interval_ms(true, 3000, 0) == 0);
 
     // One point every three seconds; partial intervals do not round up.
     assert(mana_regeneration_amount(0, 20, 100, 3000) == 0);
