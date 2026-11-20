@@ -467,8 +467,11 @@ type CombatStats struct {
 // node. Equipment bonuses are combined with the character's persisted base stats.
 func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessionID, characterID string) (CombatStats, error) {
 	if strings.TrimSpace(nodeKey)=="" || !validUUID(sessionID) || !validUUID(characterID) { return CombatStats{}, ErrInvalidRequest }
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true, Isolation: sql.LevelRepeatableRead})
+	if err != nil { return CombatStats{}, fmt.Errorf("begin combat stats snapshot: %w", err) }
+	defer tx.Rollback()
 	var result CombatStats
-	err:=s.db.QueryRowContext(ctx,`SELECT a.health,a.mana,a.attack,a.defense,a.strength,a.constitution,a.agility,a.spirit,a.vitality,a.movement_speed,a.max_health,a.max_mana
+	err=tx.QueryRowContext(ctx,`SELECT a.health,a.mana,a.attack,a.defense,a.strength,a.constitution,a.agility,a.spirit,a.vitality,a.movement_speed,a.max_health,a.max_mana
 		FROM world_sessions ws
 		JOIN server_registry sr ON sr.id=ws.server_id
 		JOIN character_attributes a ON a.character_id=ws.character_id
@@ -476,7 +479,7 @@ func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessio
 		nodeKey,sessionID,characterID).Scan(&result.Health,&result.Mana,&result.Attack,&result.Defense,&result.Strength,&result.Constitution,&result.Agility,&result.Spirit,&result.Vitality,&result.MovementSpeed,&result.MaxHealth,&result.MaxMana)
 	if errors.Is(err,sql.ErrNoRows) { return CombatStats{},ErrSessionInvalid }
 	if err!=nil { return CombatStats{},fmt.Errorf("load session combat attributes: %w",err) }
-	rows,err:=s.db.QueryContext(ctx,`SELECT i.base_stats, COALESCE(i.equipment_set_id, ''), COALESCE(es.bonus_tiers, '{}'::jsonb)
+	rows,err:=tx.QueryContext(ctx,`SELECT i.base_stats, COALESCE(i.equipment_set_id, ''), COALESCE(es.bonus_tiers, '{}'::jsonb)
 		FROM character_equipment e
 		JOIN item_definitions i ON i.id=e.item_id
 		LEFT JOIN equipment_sets es ON es.id=i.equipment_set_id AND es.enabled
@@ -516,7 +519,7 @@ func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessio
 	result.MovementSpeed = math.Max(1.0, math.Min(10.0, result.MovementSpeed))
 	// Return the authoritative equipment list with combat stats so WorldServer
 	// can refresh weapon behavior and replicated appearance in the same update.
-	equipmentRows, err := s.db.QueryContext(ctx, `SELECT e.slot, i.id, i.name, i.quality, COALESCE(i.weapon_type, ''), i.icon_key, i.description, i.base_stats, COALESCE(es.id, ''), COALESCE(es.name, ''), COALESCE(es.description, ''), COALESCE(es.bonus_tiers, '{}'::jsonb)
+	equipmentRows, err := tx.QueryContext(ctx, `SELECT e.slot, i.id, i.name, i.quality, COALESCE(i.weapon_type, ''), i.icon_key, i.description, i.base_stats, COALESCE(es.id, ''), COALESCE(es.name, ''), COALESCE(es.description, ''), COALESCE(es.bonus_tiers, '{}'::jsonb)
 		FROM world_sessions ws
 		JOIN server_registry sr ON sr.id=ws.server_id
 		JOIN character_equipment e ON e.character_id=ws.character_id
@@ -546,6 +549,7 @@ func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessio
 		result.MaxHealth<1 || result.MaxHealth>10000000 || result.MaxMana<0 || result.MaxMana>10000000 {
 		return CombatStats{},ErrInvalidRequest
 	}
+	if err := tx.Commit(); err != nil { return CombatStats{}, fmt.Errorf("commit combat stats snapshot: %w", err) }
 	return result,nil
 }
 
