@@ -50,6 +50,8 @@ using Clock = std::chrono::steady_clock;
 constexpr auto kSnapshotInterval = std::chrono::milliseconds(50);
 constexpr auto kInputTimeout = std::chrono::milliseconds(500);
 constexpr auto kManaRegenerationInterval = std::chrono::milliseconds(3000);
+constexpr auto kCombatManaRegenerationInterval = std::chrono::milliseconds(6000);
+constexpr auto kCombatInactivityWindow = std::chrono::seconds(8);
 // The client sends at 20 Hz. Accept modest jitter, but cap command processing at 100 Hz.
 constexpr auto kMinimumInputInterval = std::chrono::milliseconds(10);
 constexpr float kInterestRadius = 80.0F;
@@ -96,6 +98,7 @@ struct PlayerState {
     Clock::time_point last_movement_diagnostic_at{Clock::now()};
     Clock::time_point last_attack_at{};
     Clock::time_point last_mana_regen_at{Clock::now()};
+    Clock::time_point last_combat_at{};
     std::unordered_map<std::string, Clock::time_point> last_spell_at_by_id;
     std::optional<PendingSpellCast> pending_spell;
     Clock::time_point last_pickup_at{};
@@ -2333,6 +2336,7 @@ struct EnetServer::Impl {
                       Json{{"accepted", false}, {"reason", "距离目标太远。"}});
             return;
         }
+        player.last_combat_at = now;
         if (player_weapon_type(player) == "bow") {
             if (projectiles.size() >= 128) {
                 send_json(peer, honghuang::protocol::MessageType::CombatEvent,
@@ -2599,6 +2603,7 @@ struct EnetServer::Impl {
                 if (poison_damage > 0) {
                     const auto applied_damage = std::min(player.health, poison_damage);
                     player.health -= applied_damage;
+                    player.last_combat_at = now;
                     const bool poison_defeated = player.health <= 0;
                     const auto remaining_poison_ms = player.poison_effect.ticks_remaining <= 0 ? 0 :
                         std::max<std::int64_t>(0, player.poison_effect.next_tick_at_ms - effect_now_ms) +
@@ -2629,16 +2634,20 @@ struct EnetServer::Impl {
             } else if (player.mana >= player.max_mana) {
                 player.last_mana_regen_at = now;
             } else {
+                const bool in_combat = player.last_combat_at.time_since_epoch().count() != 0 &&
+                    now - player.last_combat_at < kCombatInactivityWindow;
+                const auto regen_interval_ms = honghuang::simulation::mana_regeneration_interval_ms(
+                    in_combat, static_cast<std::int32_t>(kManaRegenerationInterval.count()),
+                    static_cast<std::int32_t>(kCombatManaRegenerationInterval.count()));
                 const auto regen_elapsed_ms =
                     std::chrono::duration_cast<std::chrono::milliseconds>(
                         now - player.last_mana_regen_at).count();
                 const auto restored = honghuang::simulation::mana_regeneration_amount(
-                    regen_elapsed_ms, player.mana, player.max_mana,
-                    static_cast<std::int32_t>(kManaRegenerationInterval.count()));
+                    regen_elapsed_ms, player.mana, player.max_mana, regen_interval_ms);
                 if (restored > 0) {
                     player.mana += restored;
                     player.last_mana_regen_at +=
-                        kManaRegenerationInterval * restored;
+                        std::chrono::milliseconds(regen_interval_ms) * restored;
                 }
             }
 
@@ -3119,6 +3128,7 @@ struct EnetServer::Impl {
                         continue;
                     }
                     target_player.health = damage.remaining_health;
+                    target_player.last_combat_at = now;
                     if (damage.defeated) {
                         target_player.slow_effect = {};
                         target_player.poison_effect = {};
@@ -3147,6 +3157,7 @@ struct EnetServer::Impl {
                     continue;
                 }
                 player.health = damage.remaining_health;
+                player.last_combat_at = now;
                 if (damage.defeated) {
                     honghuang::simulation::clear_negative_statuses(player.slow_effect,player.freeze_effect,player.poison_effect);
                     player.poison_source_entity_id.clear();
