@@ -122,7 +122,7 @@ func send_attack(target_entity_id: String) -> Error:
 func send_spell_cast(spell_id: String, target_entity_id: String) -> Error:
 	if not world_ready or transport == null:
 		return ERR_UNCONFIGURED
-	if spell_id != "fireball" or target_entity_id.is_empty() or target_entity_id.length() > 96:
+	if spell_id not in ["fireball", "ice_bolt"] or target_entity_id.is_empty() or target_entity_id.length() > 96:
 		return ERR_INVALID_PARAMETER
 	var payload := JSON.stringify({"spell_id": spell_id, "target_entity_id": target_entity_id}).to_utf8_buffer()
 	var frame := HHProtocolCodec.encode_frame(HHProtocolCodec.MessageType.SPELL_CAST_COMMAND, payload)
