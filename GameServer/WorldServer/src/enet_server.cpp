@@ -1443,6 +1443,7 @@ struct EnetServer::Impl {
             {"name", player.name},
             {"birth_inheritance", player.birth_inheritance},
             {"equipment", player.equipment},
+            {"mana", player.mana}, {"max_mana", player.max_mana},
             {"x", player.x}, {"y", player.y}, {"z", player.z},
             {"yaw", player.yaw}
         };
@@ -2793,6 +2794,8 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                         impl_->broadcast_player_event(
                             honghuang::protocol::MessageType::PlayerJoined, impl_->players.at(event.peer));
                         Json client_welcome = snapshot;
+                        client_welcome["mana"] = impl_->players.at(event.peer).mana;
+                        client_welcome["max_mana"] = impl_->players.at(event.peer).max_mana;
                         client_welcome.erase("session_id");
                         send_json(event.peer, honghuang::protocol::MessageType::ServerWelcome, client_welcome);
                         std::cout << "Authenticated character entered world: "
