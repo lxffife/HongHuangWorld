@@ -145,6 +145,7 @@ var exploration_event_data: Dictionary = {}
 var pending_exploration_event_id := ""
 var exploration_animation_time := 0.0
 var player_slow_visual_remaining := 0.0
+var player_poison_visual_remaining := 0.0
 var npc_current_interaction_id := ""
 var leaving_for_reincarnation := false
 var npc_selected_id := ""
@@ -2299,7 +2300,7 @@ func _on_monster_action_event(event: Dictionary) -> void:
 		attacker.set_meta("attack_phase", "windup")
 		if attack_style == "heavy_slam":
 			_set_iron_slam_telegraph(attacker, true)
-		if attack_style == "soul_bolt" or attack_style == "frost_bolt":
+		if attack_style == "soul_bolt" or attack_style == "frost_bolt" or attack_style == "poison_bolt":
 			_set_elemental_telegraph(attacker, true)
 		var windup := maxf(float(event.get("windup_ms", 520)) / 1000.0, 0.1)
 		attacker.set_meta("attack_phase_duration", windup)
@@ -2312,10 +2313,13 @@ func _on_monster_action_event(event: Dictionary) -> void:
 		if attack_style == "heavy_slam":
 			_set_iron_slam_telegraph(attacker, false)
 			_spawn_iron_slam_impact_visual(attacker, float(attacker.get_meta("attack_radius", 3.6)))
-		if attack_style == "soul_bolt":
+		if attack_style == "soul_bolt" or attack_style == "poison_bolt":
 			_set_elemental_telegraph(attacker, false)
 			if str(event.get("target_character_id", "")) == str(HHSession.world_snapshot.get("character_id", "")):
-				_spawn_soul_bolt_visual(attacker)
+				if attack_style == "poison_bolt":
+					_spawn_poison_bolt_visual(attacker)
+				else:
+					_spawn_soul_bolt_visual(attacker)
 
 func _set_elemental_telegraph(monster: Node3D, enabled: bool) -> void:
 	var telegraph := monster.get_node_or_null("ElementalTelegraph") as MeshInstance3D
@@ -2401,6 +2405,57 @@ func _spawn_soul_bolt_visual(attacker: Node3D) -> void:
 	var tween := create_tween()
 	tween.tween_property(bolt, "global_position", destination, 0.24)
 	tween.tween_callback(Callable(bolt, "queue_free"))
+
+func _spawn_poison_bolt_visual(attacker: Node3D) -> void:
+	if not is_instance_valid(local_player):
+		return
+	var bolt := MeshInstance3D.new()
+	bolt.name = "PoisonBoltImpactVisual"
+	var orb := SphereMesh.new()
+	orb.radius = 0.15
+	orb.height = 0.30
+	bolt.mesh = orb
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#8ee36b")
+	material.emission_enabled = true
+	material.emission = Color("#55c52d")
+	material.emission_energy_multiplier = 2.4
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bolt.material_override = material
+	add_child(bolt)
+	bolt.global_position = attacker.global_position + Vector3(0.0, 1.05, 0.0)
+	var destination: Vector3 = local_player.global_position + Vector3(0.0, 1.0, 0.0)
+	var tween := create_tween()
+	tween.tween_property(bolt, "global_position", destination, 0.26)
+	tween.tween_callback(Callable(bolt, "queue_free"))
+
+
+func _set_player_poison_visual(enabled: bool) -> void:
+	if not is_instance_valid(local_player):
+		return
+	var ring := local_player.get_node_or_null("PlayerPoisonStatusRing") as MeshInstance3D
+	if enabled and ring == null:
+		ring = MeshInstance3D.new()
+		ring.name = "PlayerPoisonStatusRing"
+		var ring_mesh := TorusMesh.new()
+		ring_mesh.inner_radius = 0.58
+		ring_mesh.outer_radius = 0.68
+		ring_mesh.rings = 24
+		ring_mesh.ring_segments = 6
+		ring.mesh = ring_mesh
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color("#8bd65c", 0.76)
+		material.emission_enabled = true
+		material.emission = Color("#58b82f")
+		material.emission_energy_multiplier = 1.9
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		ring.material_override = material
+		ring.position.y = 0.09
+		local_player.add_child(ring)
+	if ring != null:
+		ring.visible = enabled
+
 
 func _set_player_slow_visual(enabled: bool) -> void:
 	if not is_instance_valid(local_player):
@@ -2527,6 +2582,9 @@ func _on_combat_event(event: Dictionary) -> void:
 		if str(event.get("status_effect", "")) == "slow":
 			_set_player_slow_visual(true)
 			player_slow_visual_remaining = maxf(float(event.get("status_duration_ms", 0)) / 1000.0, 0.0)
+		if str(event.get("status_effect", "")) == "poison":
+			player_poison_visual_remaining = maxf(float(event.get("status_duration_ms", 0)) / 1000.0, 0.0)
+			_set_player_poison_visual(player_poison_visual_remaining > 0.0)
 		var incoming_damage := int(event.get("damage", 0))
 		if is_instance_valid(local_player) and local_player.has_method("play_hit_reaction"):
 			local_player.call("play_hit_reaction", incoming_damage, str(event.get("attack_style", "")))
@@ -2537,6 +2595,8 @@ func _on_combat_event(event: Dictionary) -> void:
 		if bool(event.get("defeated", false)):
 			player_slow_visual_remaining = 0.0
 			_set_player_slow_visual(false)
+			player_poison_visual_remaining = 0.0
+			_set_player_poison_visual(false)
 			local_player.is_dead = true
 			local_target_position = local_player.position
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -2546,6 +2606,10 @@ func _on_combat_event(event: Dictionary) -> void:
 			var hit_message := "受到怪物攻击 -" + str(incoming_damage) + " 生命"
 			if str(event.get("status_effect", "")) == "slow":
 				hit_message += " · 冰霜减速"
+			elif str(event.get("status_effect", "")) == "poison":
+				hit_message += " · 中毒"
+			elif str(event.get("attack_style", "")) == "poison_tick":
+				hit_message = "毒素持续侵蚀 -" + str(incoming_damage) + " 生命"
 			_show_notification(hit_message)
 		return
 	var monster_name := str(event.get("target_name", "目标"))
@@ -2832,6 +2896,10 @@ func _process(delta: float) -> void:
 		player_slow_visual_remaining = maxf(0.0, player_slow_visual_remaining - delta)
 		if player_slow_visual_remaining <= 0.0:
 			_set_player_slow_visual(false)
+	if player_poison_visual_remaining > 0.0:
+		player_poison_visual_remaining = maxf(0.0, player_poison_visual_remaining - delta)
+		if player_poison_visual_remaining <= 0.0:
+			_set_player_poison_visual(false)
 	for projectile_id in projectile_targets:
 		var arrow := projectiles.get(projectile_id) as Node3D
 		if is_instance_valid(arrow):
