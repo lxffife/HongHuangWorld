@@ -177,6 +177,7 @@ inline bool tick_monster(const MonsterDefinition& definition, MonsterState& stat
     double movement_attack_range = static_cast<double>(definition.attack_range);
     if (state.mode == MonsterMode::Chasing && target != nullptr) {
         const auto profile = monster_attack_profile(definition);
+        movement_attack_range = static_cast<double>(profile.range);
         const bool wolf_pack_position = std::string(profile.style) == "wolf_lunge" &&
             target->has_approach_position;
         const float movement_target_x = wolf_pack_position ? target->approach_x : target->x;
@@ -195,7 +196,7 @@ inline bool tick_monster(const MonsterDefinition& definition, MonsterState& stat
             // Ranged souls kite at roughly 72% of their attack range. They still
             // remain inside attack range, so a windup can complete if the player
             // does not keep closing the gap.
-            const double preferred_distance = static_cast<double>(definition.attack_range) * 0.72;
+            const double preferred_distance = static_cast<double>(profile.range) * 0.72;
             const double target_distance = std::hypot(
                 static_cast<double>(target->x - state.x),
                 static_cast<double>(target->z - state.z));
