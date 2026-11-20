@@ -2164,11 +2164,16 @@ struct EnetServer::Impl {
             auto& player = found->second;
             const Json previous_equipment = player.equipment;
             const bool equipment_changed = player.equipment != stats["equipment"];
+            const auto previous_spirit = player.spirit;
+            const bool spirit_changed = previous_spirit != spirit;
             const bool combat_stats_changed = player.attack != attack || player.defense != defense ||
                 player.max_health != max_health || player.max_mana != max_mana ||
                 player.constitution != constitution || player.agility != agility ||
-                player.spirit != spirit || player.vitality != vitality ||
+                spirit_changed || player.vitality != vitality ||
                 std::abs(static_cast<double>(player.movement_speed) - speed) > 0.0001;
+            // Spirit changes alter the regeneration interval. Start a fresh interval
+            // instead of interpreting elapsed time using two different rates.
+            if (spirit_changed) player.last_mana_regen_at = Clock::now();
             // Preserve the live resources: increasing an equipment cap must not heal or
             // restore mana. Removing a cap clamps current resources to the new maximum.
             player.health = honghuang::simulation::clamp_current_resource_to_maximum(player.health, max_health);
