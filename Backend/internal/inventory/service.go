@@ -495,19 +495,9 @@ func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessio
 		if err:=rows.Scan(&raw); err!=nil { return CombatStats{},fmt.Errorf("scan equipped combat bonuses: %w",err) }
 		bonuses:=map[string]int{}
 		if len(raw)>0 { if err:=json.Unmarshal(raw,&bonuses); err!=nil { return CombatStats{},fmt.Errorf("decode equipped combat bonuses: %w",err) } }
-		for _,value:=range bonuses {
-			if value < -100000 || value > 100000 { return CombatStats{},ErrInvalidRequest }
+		if err := applyEquipmentStatBonuses(&result, bonuses); err != nil {
+			return CombatStats{}, err
 		}
-		result.Attack+=bonuses["attack"]
-		result.Defense+=bonuses["defense"]
-		result.Strength+=bonuses["strength"]
-		result.Constitution+=bonuses["constitution"]
-		result.Agility+=bonuses["agility"]
-		result.Spirit+=bonuses["spirit"]
-		result.Vitality+=bonuses["vitality"]
-		result.MovementSpeed+=float64(bonuses["movement_speed"])
-		result.MaxHealth+=bonuses["max_health"]
-		result.MaxMana+=bonuses["max_mana"]
 	}
 	if err:=rows.Err(); err!=nil { return CombatStats{},fmt.Errorf("iterate equipped combat bonuses: %w",err) }
 	if math.IsNaN(result.MovementSpeed) || math.IsInf(result.MovementSpeed, 0) || result.MovementSpeed <= 0 {
@@ -524,6 +514,38 @@ func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessio
 		return CombatStats{},ErrInvalidRequest
 	}
 	return result,nil
+}
+
+// applyEquipmentStatBonuses keeps equipment primary attributes consistent with
+// the effects granted by allocating those same attributes to a character.
+// Direct secondary bonuses remain additive, so hybrid equipment can provide both.
+func applyEquipmentStatBonuses(stats *CombatStats, bonuses map[string]int) error {
+	if stats == nil {
+		return ErrInvalidRequest
+	}
+	for _, value := range bonuses {
+		if value < -100000 || value > 100000 {
+			return ErrInvalidRequest
+		}
+	}
+
+	strength := bonuses["strength"]
+	constitution := bonuses["constitution"]
+	agility := bonuses["agility"]
+	spirit := bonuses["spirit"]
+	vitality := bonuses["vitality"]
+
+	stats.Strength += strength
+	stats.Constitution += constitution
+	stats.Agility += agility
+	stats.Spirit += spirit
+	stats.Vitality += vitality
+	stats.Attack += bonuses["attack"] + strength*2
+	stats.Defense += bonuses["defense"] + vitality
+	stats.MaxHealth += bonuses["max_health"] + constitution*10 + vitality*5
+	stats.MaxMana += bonuses["max_mana"] + spirit*10
+	stats.MovementSpeed += float64(bonuses["movement_speed"]) + float64(agility)*0.05
+	return nil
 }
 
 type ItemUseRequest struct {
