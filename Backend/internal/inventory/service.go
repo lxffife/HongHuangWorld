@@ -590,7 +590,19 @@ func (s *Service) useConsumableForCharacter(ctx context.Context,tx *sql.Tx,chara
 	err:=tx.QueryRowContext(ctx,`SELECT item_id,quantity FROM item_use_events WHERE character_id=$1::uuid AND request_id=$2::uuid`,characterID,request.RequestID).Scan(&previousItemID,&previousQuantity)
 	if err==nil {
 		if previousItemID!=request.ItemID || previousQuantity!=request.Quantity { return ItemUseResult{},ErrInvalidRequest }
-		return ItemUseResult{Applied:false,ItemID:request.ItemID,Quantity:request.Quantity},nil
+		// A retry may arrive after the original transaction committed but its HTTP
+		// response was lost. Return current authoritative resources so WorldServer
+		// can reconcile its in-memory snapshot without consuming the item twice.
+		var current ItemUseResult
+		current.Applied=false
+		current.ItemID=request.ItemID
+		current.Quantity=request.Quantity
+		if err:=tx.QueryRowContext(ctx,`SELECT health,max_health,mana,max_mana
+			FROM character_attributes WHERE character_id=$1::uuid`,characterID).
+			Scan(&current.Health,&current.MaxHealth,&current.Mana,&current.MaxMana); err!=nil {
+			return ItemUseResult{},fmt.Errorf("load resources for duplicate consumable request: %w",err)
+		}
+		return current,nil
 	}
 	if !errors.Is(err,sql.ErrNoRows) { return ItemUseResult{},fmt.Errorf("check consumable idempotency: %w",err) }
 	if blockActiveSession {
