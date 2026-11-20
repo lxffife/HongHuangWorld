@@ -5,6 +5,7 @@
 #include "simulation/combat.hpp"
 #include "simulation/weapon_combat.hpp"
 #include "simulation/projectile.hpp"
+#include "simulation/spell_combat.hpp"
 #include "persistence/durable_outbox.hpp"
 #include "network/chat_delivery_policy.hpp"
 
@@ -27,6 +28,7 @@
 #include <memory>
 #include <limits>
 #include <mutex>
+#include <optional>
 #include <random>
 #include <sstream>
 #include <span>
@@ -50,6 +52,12 @@ constexpr float kInterestRadius = 80.0F;
 constexpr auto kHeartbeatInterval = std::chrono::seconds(10);
 
 constexpr auto kHeartbeatRetryInterval = std::chrono::seconds(5);
+
+struct PendingSpellCast {
+    std::string spell_id;
+    std::string target_entity_id;
+    Clock::time_point completes_at{};
+};
 
 struct PlayerState {
     std::string session_id;
@@ -77,7 +85,9 @@ struct PlayerState {
     Clock::time_point last_input_received_at{};
     Clock::time_point last_movement_diagnostic_at{Clock::now()};
     Clock::time_point last_attack_at{};
-    Clock::time_point last_pickup_at{};
+    Clock::time_point last_spell_at{};
+    std::optional<PendingSpellCast> pending_spell;
+    Clock::time_point last_pickup_at;
     Clock::time_point last_chat_at{};
 };
 
@@ -194,6 +204,7 @@ struct ProjectileRuntime {
     std::int32_t power_basis_points{10000};
     std::int32_t defense_penetration_basis_points{};
     Clock::time_point expires_at{};
+    std::string projectile_type{"arrow"};
 };
 
 std::string make_event_uuid() {
@@ -2155,6 +2166,57 @@ struct EnetServer::Impl {
         send_json(peer, honghuang::protocol::MessageType::CombatEvent, event);
     }
 
+    void handle_spell_cast(ENetPeer* peer, const Json& command) {
+        auto player_it = players.find(peer);
+        if (player_it == players.end()) return;
+        auto& player = player_it->second;
+        const auto reject = [&](const std::string& reason) {
+            send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                      Json{{"accepted", false}, {"action", "spell_cast"}, {"reason", reason},
+                           {"mana", player.mana}, {"max_mana", player.max_mana}});
+        };
+        if (player.health <= 0) { reject("角色已倒地，无法施法。"); return; }
+        const auto weapon = player_weapon_type(player);
+        if (weapon != "staff" && weapon != "focus") { reject("装备法杖或法器后才能施展法术。"); return; }
+        const auto spell_id = command.value("spell_id", std::string{});
+        const auto* spell = honghuang::simulation::find_spell_definition(spell_id);
+        if (spell == nullptr || !spell->enabled || !honghuang::simulation::valid_spell_definition(*spell)) {
+            reject("未知或未开放的法术。"); return;
+        }
+        if (player.pending_spell.has_value()) { reject("正在施法，请稍候。"); return; }
+        const auto now = Clock::now();
+        if (player.last_spell_at.time_since_epoch().count() != 0 &&
+            now - player.last_spell_at < std::chrono::milliseconds(spell->cooldown_ms)) {
+            reject("法术尚在冷却中。"); return;
+        }
+        if (!honghuang::simulation::can_pay_spell_cost(player.mana, spell->mana_cost)) {
+            reject("灵力不足，无法施展火球术。"); return;
+        }
+        const auto target_id = command.value("target_entity_id", std::string{});
+        if (target_id.empty() || target_id.size() > 96) { reject("施法目标无效。"); return; }
+        const auto target = std::find_if(monsters.begin(), monsters.end(), [&](const MonsterRuntime& monster) {
+            return monster.runtime_id == target_id;
+        });
+        if (target == monsters.end() || target->state.mode == honghuang::simulation::MonsterMode::Dead) {
+            reject("目标已消失或已被击败。"); return;
+        }
+        const double dx = static_cast<double>(target->state.x) - player.x;
+        const double dz = static_cast<double>(target->state.z) - player.z;
+        if (dx * dx + dz * dz > static_cast<double>(spell->range) * spell->range) {
+            reject("目标超出火球术射程。"); return;
+        }
+        if (projectiles.size() >= 128) { reject("当前投射物数量过多，请稍后再试。"); return; }
+        player.mana -= spell->mana_cost;
+        player.last_spell_at = now;
+        player.pending_spell = PendingSpellCast{std::string(spell->id), target_id,
+            now + std::chrono::milliseconds(spell->cast_time_ms)};
+        send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                  Json{{"accepted", true}, {"action", "spell_cast"}, {"phase", "casting"},
+                       {"spell_id", spell->id}, {"mana", player.mana},
+                       {"max_mana", player.max_mana}, {"mana_cost", spell->mana_cost},
+                       {"cast_time_ms", spell->cast_time_ms}});
+    }
+
     void broadcast_snapshot() {
         if (players.empty()) return;
 
@@ -2207,7 +2269,7 @@ struct EnetServer::Impl {
                         projectile.x, projectile.z, recipient.x, recipient.z, kInterestRadius)) continue;
                 entities.push_back({
                     {"entity_type", "projectile"}, {"entity_id", projectile.id},
-                    {"projectile_type", "arrow"}, {"owner_character_id", projectile.owner_character_id},
+                    {"projectile_type", projectile.projectile_type}, {"owner_character_id", projectile.owner_character_id},
                     {"x", projectile.x}, {"y", projectile.y}, {"z", projectile.z},
                     {"velocity_x", projectile.velocity_x}, {"velocity_z", projectile.velocity_z}
                 });
@@ -2280,6 +2342,49 @@ struct EnetServer::Impl {
                 player.last_movement_diagnostic_at = now;
             }
         }
+        for (auto& [peer, player] : players) {
+            if (!player.pending_spell.has_value() || player.pending_spell->completes_at > now) continue;
+            const auto pending = *player.pending_spell;
+            player.pending_spell.reset();
+            const auto* spell = honghuang::simulation::find_spell_definition(pending.spell_id);
+            auto target = std::find_if(monsters.begin(), monsters.end(), [&](const MonsterRuntime& monster) {
+                return monster.runtime_id == pending.target_entity_id;
+            });
+            if (spell == nullptr || target == monsters.end() || target->state.mode == honghuang::simulation::MonsterMode::Dead) {
+                if (spell != nullptr) player.mana = std::min(player.max_mana, player.mana + spell->mana_cost);
+                send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                          Json{{"accepted", false}, {"action", "spell_cast"},
+                               {"reason", "施法期间目标消失，灵力已返还。"},
+                               {"mana", player.mana}, {"max_mana", player.max_mana}});
+                continue;
+            }
+            const double dx = static_cast<double>(target->state.x) - player.x;
+            const double dz = static_cast<double>(target->state.z) - player.z;
+            const double distance = std::sqrt(dx * dx + dz * dz);
+            if (distance < 0.001 || distance > spell->range || projectiles.size() >= 128) {
+                player.mana = std::min(player.max_mana, player.mana + spell->mana_cost);
+                send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                          Json{{"accepted", false}, {"action", "spell_cast"},
+                               {"reason", "火球术释放条件已失效，灵力已返还。"},
+                               {"mana", player.mana}, {"max_mana", player.max_mana}});
+                continue;
+            }
+            const auto projectile_id = make_event_uuid();
+            projectiles.push_back(ProjectileRuntime{
+                projectile_id, player.character_id, target->runtime_id,
+                player.x, player.y + 1.15F, player.z,
+                static_cast<float>(dx / distance) * spell->projectile_speed,
+                static_cast<float>(dz / distance) * spell->projectile_speed,
+                player.attack, spell->power_basis_points, spell->defense_penetration_basis_points,
+                now + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<float>(spell->projectile_lifetime_seconds)),
+                "fireball"
+            });
+            broadcast_player_action_event(player, "cast", target->runtime_id, "spell_fireball", peer);
+            send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                      Json{{"accepted", true}, {"action", "spell_cast"}, {"phase", "released"},
+                           {"spell_id", spell->id}, {"projectile_id", projectile_id},
+                           {"mana", player.mana}, {"max_mana", player.max_mana}});
+        }
         for (auto projectile = projectiles.begin(); projectile != projectiles.end();) {
             const auto owner = std::find_if(players.begin(), players.end(), [&](const auto& entry) {
                 return entry.second.character_id == projectile->owner_character_id;
@@ -2346,6 +2451,7 @@ struct EnetServer::Impl {
                 send_json(owner->first, honghuang::protocol::MessageType::CombatEvent,
                           Json{{"accepted", true}, {"source", "projectile"},
                                {"source_entity_id", projectile->id},
+                               {"projectile_type", projectile->projectile_type},
                                {"target_entity_id", target->runtime_id},
                                {"target_name", target->definition.name},
                                {"damage", damage.damage},
@@ -2359,7 +2465,7 @@ struct EnetServer::Impl {
                 const Json visual_event{
                     {"accepted", true}, {"visual_only", true}, {"source", "projectile"},
                     {"target_entity_id", target->runtime_id}, {"target_name", target->definition.name},
-                    {"damage", damage.damage}, {"health", damage.remaining_health},
+                    {"projectile_type", projectile->projectile_type}, {"damage", damage.damage}, {"health", damage.remaining_health},
                     {"max_health", target->definition.max_health}, {"defeated", damage.defeated}
                 };
                 for (const auto& [recipient_peer, recipient] : players) {
@@ -2843,6 +2949,17 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                 } catch (const std::exception&) {
                     send_json(event.peer, honghuang::protocol::MessageType::ServerReject,
                               Json{{"reason", "invalid attack command"}});
+                }
+            } else if (frame.type == honghuang::protocol::MessageType::SpellCastCommand &&
+                       impl_->players.contains(event.peer)) {
+                try {
+                    const std::string payload(frame.payload.begin(), frame.payload.end());
+                    const auto command = Json::parse(payload);
+                    if (!command.is_object()) throw std::runtime_error("spell payload must be an object");
+                    impl_->handle_spell_cast(event.peer, command);
+                } catch (const std::exception&) {
+                    send_json(event.peer, honghuang::protocol::MessageType::CombatEvent,
+                              Json{{"accepted", false}, {"action", "spell_cast"}, {"reason", "法术请求格式无效。"}});
                 }
             } else if (frame.type == honghuang::protocol::MessageType::InputCommand &&
                        impl_->players.contains(event.peer)) {
