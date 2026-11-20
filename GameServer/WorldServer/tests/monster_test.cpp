@@ -64,6 +64,18 @@ int main() {
     assert(std::string(frost_profile.style) == "frost_bolt");
     assert(frost_profile.range >= 6.0F);
 
+    auto poison_soul = wolf;
+    poison_soul.id = "poison_soul";
+    poison_soul.name = "毒系游魂";
+    const auto poison_profile = monster_attack_profile(poison_soul);
+    assert(poison_profile.windup_ms == 720 && poison_profile.cooldown_ms == 2300);
+    assert(std::string(poison_profile.style) == "poison_bolt");
+    assert(poison_profile.range >= 6.0F);
+    MonsterState poison_state{.x = 0.0F, .z = 0.0F, .health = poison_soul.max_health};
+    const MonsterTarget poison_target{.id = "player-poison", .x = 10.0F, .z = 0.0F, .alive = true};
+    assert(tick_monster(poison_soul, poison_state, &poison_target, 0.05F));
+    assert(poison_state.mode == MonsterMode::Chasing && poison_state.x > 0.0F);
+
     auto soul = wolf;
     soul.id = "wind_soul";
     soul.name = "风系游魂";
