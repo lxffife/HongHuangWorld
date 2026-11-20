@@ -116,3 +116,14 @@ Godot 4.6 第三人称 3D 国风仙侠 MMO。先建立统一、可读、可替�
 - 当前这是防止数据覆盖的安全闸，不代表在线回蓝已开放。Godot背包在世界会话中会禁用消耗品按钮并说明需先离开世界；HTTP 409也有单独提示。
 - 在线消耗品后端基础已铺设：新增 `POST /api/v1/servers/inventory/use`，只接受WorldServer密钥、节点标识、活动session、角色ID、请求ID、物品ID和数量；后端在同一数据库事务中锁定活动session/角色、幂等校验、扣除背包物品并更新health/mana，返回最终资源值。普通玩家API仍禁止在线直改。
 - 下一步将WorldServer消耗品命令接入 ENet 和后台任务队列：客户端只发送物品ID/数量/请求ID，WorldServer向该可信接口提交会话身份；成功后在主线程应用后端返回的health/mana，再通过快照同步。请求需幂等，网络失败不能先扣本地资源。
+
+
+### 在线消耗品 ENet 结算链路
+
+- 协议新增 UseConsumableCommand（类型23）。Godot客户端只发送物品ID、数量和随机请求UUID；会话ID、角色ID由WorldServer从已认证玩家状态中读取，客户端不能伪造身份。
+- WorldServer 使用独立单线程消耗品队列执行 HTTP 请求，主世界循环不等待网络；每个会话同一时间只允许一笔消耗品请求，队列容量有限。
+- 请求使用 X-World-Server-Key 与 X-World-Server-Node 认证头，调用后端 POST /api/v1/servers/inventory/use。后端在事务中核验活动会话、锁定角色、幂等扣除物品并返回最终 health/mana。
+- 只有主线程收到成功结果且仍找到相同 session/character 时，才更新 WorldServer 玩家资源并发送 CombatEvent(action=consumable_use)；失败不提前扣本地资源。Godot同步生命/灵力HUD并刷新背包。
+- HTTP超时或服务端错误时，WorldServer使用同一 request UUID 最多重试三次；后端幂等重复请求返回当前权威资源值，避免重复扣物品。
+- 消耗品结算期间，WorldServer跳过该会话的周期快照，避免旧内存资源值覆盖正在结算的数据库结果。
+- 目前仍需补充断线与结算并发专项测试；本轮尚未执行Go测试、C++构建或Godot运行验证。
