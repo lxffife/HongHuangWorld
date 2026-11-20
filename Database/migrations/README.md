@@ -13,6 +13,9 @@
 - `000007_item_use_and_starter_catalog` 增加消耗品幂等流水、初始装备/丹药目录，并为已有角色发放一次性新手物品。
 - `000048_backfill_current_character_projection` 为已有角色补发当前角色投影事件，修复聊天侧当前角色状态缺失。
 - `000049_weapon_type_metadata` 为武器目录增加显式 `weapon_type`（sword/spear/bow/staff/dagger/axe/hammer/focus），现有武器按目录标识初始化；非武器禁止填写该字段。
+- `000052_unified_economy_foundation` 建立跨世界统一货币目录、账号钱包、不可变账本、世界/势力财政、托管、发行额度、修炼适配和兑换基础。
+- `000053_faction_authority` 建立宗门/势力身份、成员角色、入宗申请与组织财政账户。
+- `000054_faction_bounty_tasks` 建立宗门悬赏、预算托管、成员捐献流水与多人接取；扩展财政流水类型。
 - `000008_character_death_and_respawn` 增加角色死亡事件与复活记录。
 - `000009_reincarnation_history` 增加肉身轮回历史。
 - `000010_soul_progression` 增加跨世保留的灵魂境界、灵魂经验与幂等奖励事件。
@@ -103,6 +106,9 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000046_game_confi
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000047_game_config_revision_reason.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000048_backfill_current_character_projection.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000049_weapon_type_metadata.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000052_unified_economy_foundation.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000053_faction_authority.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000054_faction_bounty_tasks.up.sql
 ```
 
 回滚时按相反顺序执行对应的 `.down.sql`。不要在已运行的生产库上重复执行非幂等迁移；后续接入迁移工具后，应由工具记录每个已应用版本，避免人工重复执行。
