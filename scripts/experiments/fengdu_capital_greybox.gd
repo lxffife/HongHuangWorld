@@ -145,6 +145,12 @@ func _build_roads() -> void:
 	for side in [-1.0, 1.0]:
 		_add_box("CrossDistrictRoad_" + str(side), Vector3(560.0, 0.5, 26.0), Vector3(side * 280.0, 0.28, side * 300.0), "road", false)
 	_add_box("SouthGateToCityRoad", Vector3(44.0, 0.5, 260.0), Vector3(0.0, 0.28, 610.0), "road", false)
+	_add_box("WestCourtStreet", Vector3(26.0, 0.5, 610.0), Vector3(-475.0, 0.28, 80.0), "road", false)
+	_add_box("EastCourtStreet", Vector3(26.0, 0.5, 610.0), Vector3(475.0, 0.28, 80.0), "road", false)
+	_add_box("NorthernDistrictCrossStreet", Vector3(950.0, 0.5, 26.0), Vector3(0.0, 0.28, -245.0), "road", false)
+	_add_box("MiddleDistrictCrossStreet", Vector3(950.0, 0.5, 26.0), Vector3(0.0, 0.28, 145.0), "road", false)
+	_add_box("SouthernDistrictCrossStreet", Vector3(1050.0, 0.5, 26.0), Vector3(0.0, 0.28, 410.0), "road", false)
+	_add_box("ReincarnationApproach", Vector3(26.0, 0.5, 280.0), Vector3(170.0, 0.28, 520.0), "road", false)
 
 
 func _build_districts() -> void:
@@ -158,6 +164,13 @@ func _build_districts() -> void:
 			continue
 		var p: Array = district.get("position", [0.0, 0.0])
 		var center := Vector3(float(p[0]) * CITY_SCALE, 0.0, -float(p[1]) * CITY_SCALE)
+		match str(district.get("id", "")):
+			"ghost_registry", "merit_bureau":
+				center.z += 125.0
+			"patrol_office":
+				center += Vector3(155.0, 0.0, 145.0)
+			"reincarnation_bureau":
+				center.x += 170.0
 		_build_district_cluster(district, center)
 
 
