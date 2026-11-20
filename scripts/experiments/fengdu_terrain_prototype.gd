@@ -42,7 +42,7 @@ func _build_heightfield() -> void:
 	streaming_manager.set("source_path", NodePath(".."))
 	streaming_manager.set("focus_path", NodePath("../StreamingFocus"))
 	streaming_manager.set("tile_count", TILE_COUNT)
-	streaming_manager.set("cells_per_tile", GRID_CELLS / TILE_COUNT)
+	streaming_manager.set("cells_per_tile", int(GRID_CELLS / TILE_COUNT))
 	streaming_manager.set("world_size", WORLD_SIZE)
 	streaming_manager.set("load_radius", 2)
 	streaming_manager.set("unload_radius", 3)
@@ -51,7 +51,6 @@ func _build_heightfield() -> void:
 
 
 func _build_terrain_tile(tile_x: int, tile_z: int, cells_per_tile: int) -> Node3D:
-
 	var tile_size := WORLD_SIZE / float(TILE_COUNT)
 	var tile_min_x := -HALF_SIZE + float(tile_x) * tile_size
 	var tile_min_z := -HALF_SIZE + float(tile_z) * tile_size
