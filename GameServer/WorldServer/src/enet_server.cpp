@@ -87,7 +87,7 @@ struct PlayerState {
     Clock::time_point last_attack_at{};
     Clock::time_point last_spell_at{};
     std::optional<PendingSpellCast> pending_spell;
-    Clock::time_point last_pickup_at;
+    Clock::time_point last_pickup_at{};
     Clock::time_point last_chat_at{};
 };
 
@@ -2212,7 +2212,7 @@ struct EnetServer::Impl {
             now + std::chrono::milliseconds(spell->cast_time_ms)};
         send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                   Json{{"accepted", true}, {"action", "spell_cast"}, {"phase", "casting"},
-                       {"spell_id", spell->id}, {"mana", player.mana},
+                       {"spell_id", std::string(spell->id)}, {"mana", player.mana},
                        {"max_mana", player.max_mana}, {"mana_cost", spell->mana_cost},
                        {"cast_time_ms", spell->cast_time_ms}});
     }
@@ -2382,7 +2382,7 @@ struct EnetServer::Impl {
             broadcast_player_action_event(player, "cast", target->runtime_id, "spell_fireball", peer);
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", true}, {"action", "spell_cast"}, {"phase", "released"},
-                           {"spell_id", spell->id}, {"projectile_id", projectile_id},
+                           {"spell_id", std::string(spell->id)}, {"projectile_id", projectile_id},
                            {"mana", player.mana}, {"max_mana", player.max_mana}});
         }
         for (auto projectile = projectiles.begin(); projectile != projectiles.end();) {
@@ -2398,13 +2398,13 @@ struct EnetServer::Impl {
             }
             if (projectile->expires_at <= now) {
                 send_json(owner->first, honghuang::protocol::MessageType::CombatEvent,
-                          Json{{"accepted", false}, {"reason", "箭矢未命中目标。"}});
+                          Json{{"accepted", false}, {"reason", projectile->projectile_type == "fireball" ? "火球术未命中目标。" : "箭矢未命中目标。"}});
                 projectile = projectiles.erase(projectile);
                 continue;
             }
             if (target == monsters.end() || target->state.mode == honghuang::simulation::MonsterMode::Dead) {
                 send_json(owner->first, honghuang::protocol::MessageType::CombatEvent,
-                          Json{{"accepted", false}, {"reason", "目标已消失，箭矢失效。"}});
+                          Json{{"accepted", false}, {"reason", projectile->projectile_type == "fireball" ? "目标已消失，火球术失效。" : "目标已消失，箭矢失效。"}});
                 projectile = projectiles.erase(projectile);
                 continue;
             }
