@@ -2828,8 +2828,10 @@ struct EnetServer::Impl {
                     {"target_name", monster.definition.name}, {"damage", std::min(burn_damage, previous_health)},
                     {"health", static_cast<std::int64_t>(monster.state.health)},
                     {"max_health", monster.definition.max_health}, {"defeated", burn_defeated},
-                    {"status_duration_ms", burn_defeated ? 0 :
-                        std::max<std::int64_t>(0, monster.burn_effect.expires_at_ms - effect_now_ms)},
+                    {"status_duration_ms", burn_defeated || monster.burn_effect.ticks_remaining <= 0 ? 0 :
+                        std::max<std::int64_t>(0, monster.burn_effect.next_tick_at_ms - effect_now_ms) +
+                        static_cast<std::int64_t>(monster.burn_effect.ticks_remaining - 1) *
+                            monster.burn_effect.interval_ms},
                     {"experience_reward", experience_reward}, {"cultivation_reward", cultivation_reward}
                 };
                 if (burn_owner != players.end()) send_json(burn_owner->first,
