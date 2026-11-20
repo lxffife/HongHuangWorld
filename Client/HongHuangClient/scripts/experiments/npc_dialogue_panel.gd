@@ -135,7 +135,7 @@ func _get_options(data: Dictionary) -> Array[Dictionary]:
 		"capture_and_escort":
 			return [
 				{"label": "查看拘魂文牒", "response": "拘魂文牒需记录亡魂姓名、阳寿终点与引魂凭据。未核实生死簿前，不可擅自拘魂。"},
-				{"label": "了解押魂流程", "response": "押魂先验明魂籍，再由由引魂使押送至鬼籍司复核。此处仅展示流程，尚未生成真实差事。"},
+				{"label": "了解押魂流程", "response": "押魂先验明魂籍，再由引魂使押送至鬼籍司复核。此处仅展示流程，尚未生成真实差事。"},
 				{"label": "暂不接差", "response": "范无救合上拘魂簿：时辰未到，不必急于领差。"}
 			]
 		"new_soul_guidance":
