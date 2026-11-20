@@ -2579,6 +2579,7 @@ func _on_combat_event(event: Dictionary) -> void:
 			mana_label.text = "灵力  " + str(int(HHSession.world_snapshot["mana"])) + " / " + str(int(HHSession.world_snapshot["max_mana"]))
 		_update_compact_hud()
 		_refresh_inventory()
+		_refresh_equipment()
 		_show_notification("装备属性已同步。")
 		return
 	if str(event.get("action", "")) == "consumable_use":
