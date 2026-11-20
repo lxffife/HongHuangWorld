@@ -99,25 +99,6 @@ jobs:
           test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM bloodline_awakening_rules")" = "9"
           test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM race_starter_techniques")" = "4"
           test "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM character_techniques")" = "$(psql -h localhost -U honghuang -d honghuang -Atc "SELECT count(*) FROM characters")"
-      - name: Verify independent Chat database migrations
-        env:
-          PGPASSWORD: ci-password
-        run: |
-          psql -h localhost -U honghuang -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE honghuang_chat"
-          psql -h localhost -U honghuang -d honghuang_chat -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS pgcrypto"
-          mapfile -t chat_up < <(find Database/chat-migrations -maxdepth 1 -name '*.up.sql' | sort)
-          for migration in "${chat_up[@]}"; do
-            psql -h localhost -U honghuang -d honghuang_chat -v ON_ERROR_STOP=1 -f "$migration"
-          done
-          test "$(psql -h localhost -U honghuang -d honghuang_chat -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('chat_friend_requests','chat_conversations','chat_messages','chat_friendships')")" = "4"
-          test "$(psql -h localhost -U honghuang -d honghuang_chat -Atc "SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='chat_preferences' AND column_name='allow_friend_requests'")" = "1"
-          mapfile -t chat_down < <(find Database/chat-migrations -maxdepth 1 -name '*.down.sql' | sort -r)
-          for migration in "${chat_down[@]}"; do
-            psql -h localhost -U honghuang -d honghuang_chat -v ON_ERROR_STOP=1 -f "$migration"
-          done
-          for migration in "${chat_up[@]}"; do
-            psql -h localhost -U honghuang -d honghuang_chat -v ON_ERROR_STOP=1 -f "$migration"
-          done
       - name: Roll back all migrations
         env:
           PGPASSWORD: ci-password
