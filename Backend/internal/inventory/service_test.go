@@ -22,6 +22,20 @@ func TestValidUUID(t *testing.T) {
 	}
 }
 
+func TestValidConsumableRequest(t *testing.T) {
+	valid := ItemUseRequest{RequestID: "00000000-0000-4000-8000-000000000001", ItemID: "small_mana_pill", Quantity: 1}
+	if !validConsumableRequest(valid) { t.Fatal("expected valid consumable request") }
+	invalid := []ItemUseRequest{
+		{ItemID: valid.ItemID, Quantity: 1},
+		{RequestID: valid.RequestID, Quantity: 1},
+		{RequestID: valid.RequestID, ItemID: valid.ItemID, Quantity: 0},
+		{RequestID: valid.RequestID, ItemID: valid.ItemID, Quantity: 21},
+	}
+	for i, request := range invalid {
+		if validConsumableRequest(request) { t.Errorf("invalid request %d accepted", i) }
+	}
+}
+
 func TestParseConsumableEffect(t *testing.T) {
 	tests:=[]struct{name string; raw string; wantHealth,wantMana int; wantErr bool}{
 		{"health restore",`{"heal_health":30}`,30,0,false},
