@@ -1,4 +1,7 @@
 extends Control
+
+const WorldMapProjection = preload("res://scripts/world_map_projection.gd")
+
 ## Full-world map canvas. All coordinates are world X/Z meters and use the shared projection.
 
 signal marker_selected(kind: String, marker_id: String, marker_name: String)
