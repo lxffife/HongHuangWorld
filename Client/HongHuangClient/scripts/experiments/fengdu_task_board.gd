@@ -262,6 +262,10 @@ func _transaction_category_text(category: String) -> String:
 			return "悬赏退款"
 		"system_escrow":
 			return "城主府拨款"
+		"opening_player_balance":
+			return "玩家初始余额"
+		"opening_treasury":
+			return "府库初始库银"
 	return "其他流水"
 
 
