@@ -255,7 +255,7 @@ func TestConsumableRestorationUsesEffectiveEquipmentCaps(t *testing.T) {
 
 func TestLiveConsumableEffectReportsRequestedAmountForLateApplication(t *testing.T) {
 	request := ItemUseRequest{ItemID: "greater_potion", Quantity: 2}
-	live := LiveConsumableResources{Health: 100, MaxHealth: 180, Mana: 40, MaxMana: 100}
+	live := LiveConsumableResources{Health: 180, MaxHealth: 180, Mana: 100, MaxMana: 100}
 	result := applyLiveConsumableEffect(request, live, 30, 20)
 	if result.HealthRestored != 0 || result.ManaRestored != 0 {
 		t.Fatalf("resources already full at request time should have zero immediate restore: %+v", result)
