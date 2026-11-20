@@ -79,6 +79,7 @@ LANGUAGE plpgsql
 AS $
 BEGIN
     RAISE EXCEPTION 'economy ledger records are immutable';
+    RETURN NULL;
 END;
 $;
 
