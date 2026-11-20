@@ -67,6 +67,20 @@ func TestWeaponTypeSerializesForInventoryAndEquipment(t *testing.T) {
 	if equippedDecoded["weapon_type"] != "sword" { t.Fatalf("equipped weapon_type = %v, want sword", equippedDecoded["weapon_type"]) }
 }
 
+func TestItemUseResultSerializesAuthoritativeResources(t *testing.T) {
+	result := ItemUseResult{
+		Applied: true, ItemID: "small_mana_pill", Quantity: 1,
+		ManaRestored: 20, Mana: 40, MaxMana: 60,
+	}
+	encoded, err := json.Marshal(result)
+	if err != nil { t.Fatalf("marshal item use result: %v", err) }
+	var decoded map[string]any
+	if err := json.Unmarshal(encoded, &decoded); err != nil { t.Fatalf("unmarshal item use result: %v", err) }
+	if decoded["mana_restored"] != float64(20) || decoded["mana"] != float64(40) || decoded["max_mana"] != float64(60) {
+		t.Fatalf("resource fields = restored:%v mana:%v max:%v", decoded["mana_restored"], decoded["mana"], decoded["max_mana"])
+	}
+}
+
 func TestCombatStatsSerializesCurrentAndMaximumMana(t *testing.T) {
 	stats := CombatStats{Health: 80, MaxHealth: 100, Mana: 12, MaxMana: 40}
 	encoded, err := json.Marshal(stats)
