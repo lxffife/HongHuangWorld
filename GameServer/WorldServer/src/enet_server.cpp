@@ -1562,6 +1562,7 @@ struct EnetServer::Impl {
             {"birth_inheritance", player.birth_inheritance},
             {"equipment", player.equipment},
             {"mana", player.mana}, {"max_mana", player.max_mana},
+            {"poisoned", player.poison_effect.ticks_remaining > 0},
             {"x", player.x}, {"y", player.y}, {"z", player.z},
             {"yaw", player.yaw}
         };
