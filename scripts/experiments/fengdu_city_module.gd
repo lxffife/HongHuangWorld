@@ -136,6 +136,10 @@ func _build_district() -> void:
 		_build_barracks()
 	elif kind == "transport":
 		_build_waystation()
+	elif str(module_data.get("id", "")) == "patrol_office":
+		_build_patrol_office(material_key)
+	elif kind == "sacred":
+		_build_reincarnation_complex(material_key)
 	else:
 		_build_office_wings(main_width, main_depth, main_height, material_key)
 
@@ -167,6 +171,27 @@ func _build_office_wings(width: float, depth: float, height: float, material_key
 		_add_box("SideOffice_" + str(side), wing, p, material_key, true)
 		_add_roof("SideOfficeRoof_" + str(side), wing + Vector3(12.0, 6.0, 12.0), p + Vector3.UP * (wing.y * 0.5 + 3.0), "roof")
 	_add_box("OfficeSideCourt", Vector3(width * 1.9, 0.5, 44.0), Vector3(0.0, 0.3, depth * 0.5 + 56.0), "stone", false)
+
+
+func _build_patrol_office(material_key: String) -> void:
+	for side in [-1.0, 1.0]:
+		var p := Vector3(side * 60.0, 14.0, 0.0)
+		_add_box("PatrolSideOffice_" + str(side), Vector3(48.0, 28.0, 58.0), p, material_key, true)
+		_add_roof("PatrolSideOfficeRoof_" + str(side), Vector3(56.0, 6.0, 66.0), p + Vector3.UP * 17.0, "roof")
+	_add_box("PatrolAssemblyYard", Vector3(190.0, 0.4, 70.0), Vector3(0.0, 0.25, 125.0), "stone", false)
+	for index in range(3):
+		_add_box("PatrolTrainingMarker_%d" % index, Vector3(4.0, 8.0, 4.0), Vector3(-48.0 + float(index) * 48.0, 4.0, 125.0), "lantern", false)
+
+
+func _build_reincarnation_complex(material_key: String) -> void:
+	for side in [-1.0, 1.0]:
+		var p := Vector3(side * 170.0, 18.0, 0.0)
+		_add_box("ReincarnationSideHall_" + str(side), Vector3(58.0, 36.0, 68.0), p, material_key, true)
+		_add_roof("ReincarnationSideRoof_" + str(side), Vector3(68.0, 7.0, 78.0), p + Vector3.UP * 21.5, "roof")
+	_add_box("RebirthCeremonyCourt", Vector3(250.0, 0.4, 80.0), Vector3(0.0, 0.25, 145.0), "stone", false)
+	for index in range(5):
+		var x := (float(index) - 2.0) * 42.0
+		_add_box("ReincarnationStele_%d" % index, Vector3(5.0, 18.0, 5.0), Vector3(x, 9.0, 150.0), "sacred", true)
 
 
 func _build_market_street() -> void:
