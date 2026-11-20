@@ -82,7 +82,7 @@ func (s *Service) PublishFaction(ctx context.Context, accountID string, req Publ
  var currencyOK bool
  if err:=tx.QueryRowContext(ctx,`SELECT EXISTS(
   SELECT 1 FROM currency_definitions c JOIN currency_world_rules w ON w.currency_id=c.id
-  WHERE c.id=$1 AND c.enabled AND w.world_id=$2 AND w.issue_enabled
+  WHERE c.id=$1 AND c.enabled AND w.world_id=$2
  )`,req.CurrencyID,worldID).Scan(&currencyOK);err!=nil{return Task{},fmt.Errorf("validate bounty currency: %w",err)}
  if !currencyOK{return Task{},ErrInvalid}
  var priorTaskID string
