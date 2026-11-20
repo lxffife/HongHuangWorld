@@ -73,6 +73,7 @@ struct PlayerState {
     std::int64_t max_health{100};
     std::int64_t mana{};
     std::int64_t max_mana{};
+    honghuang::simulation::TimedSlowEffect slow_effect;
     float x{};
     float y{};
     float z{};
@@ -2477,7 +2478,10 @@ struct EnetServer::Impl {
                     {"mana", entity.mana}, {"max_mana", entity.max_mana},
                     {"x", entity.x}, {"y", entity.y}, {"z", entity.z},
                     {"yaw", entity.yaw},
-                    {"last_input_sequence", entity.last_input_sequence}
+                    {"last_input_sequence", entity.last_input_sequence},
+                    {"slowed", honghuang::simulation::slow_is_active(
+                        entity.slow_effect, std::chrono::duration_cast<std::chrono::milliseconds>(
+                            Clock::now().time_since_epoch()).count())}
                 });
             }
             for (const auto& monster : monsters) {
@@ -2557,8 +2561,12 @@ struct EnetServer::Impl {
                 player.move_z = 0.0F;
                 player.jump_requested = false;
             }
+            const auto effect_now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now.time_since_epoch()).count();
+            const float player_delta = honghuang::simulation::movement_delta_with_effect(
+                delta, player.slow_effect, effect_now_ms);
             honghuang::simulation::integrate_horizontal(
-                player.x, player.z, player.move_x, player.move_z, delta);
+                player.x, player.z, player.move_x, player.move_z, player_delta);
             honghuang::simulation::integrate_vertical(
                 player.y, player.vertical_velocity, player.jump_requested, delta);
 
@@ -2942,12 +2950,19 @@ struct EnetServer::Impl {
                     continue;
                 }
                 player.health = damage.remaining_health;
+                bool applied_slow = false;
+                if (std::string(attack_profile.style) == "frost_bolt") {
+                    const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        now.time_since_epoch()).count();
+                    applied_slow = honghuang::simulation::apply_slow(
+                        player.slow_effect, now_ms, 2200, 0.70F);
+                }
                 broadcast_player_action_event(player, "hit", monster.runtime_id, attack_profile.style, victim->first);
                 send_json(victim->first, honghuang::protocol::MessageType::CombatEvent,
                           Json{{"accepted", true}, {"source", "monster"},
                                {"source_entity_id", monster.runtime_id},
                                {"damage", damage.damage}, {"health", player.health},
-                               {"max_health", player.max_health}, {"defeated", damage.defeated}});
+                               {"max_health", player.max_health}, {"defeated", damage.defeated},\n                               {"status_effect", applied_slow ? "slow" : ""},\n                               {"status_duration_ms", applied_slow ? 2200 : 0}});
             }
             monster.last_attack_at = now;
             monster.attack_phase = MonsterAttackPhase::Recovery;
