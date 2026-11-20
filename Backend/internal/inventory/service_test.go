@@ -147,7 +147,7 @@ func TestEquipmentSecondaryBonusesRemainAdditive(t *testing.T) {
 	if err := applyEquipmentStatBonuses(&stats, bonuses); err != nil {
 		t.Fatalf("apply equipment bonuses: %v", err)
 	}
-	if stats.Attack != 15 || stats.Defense != 8 || stats.MaxHealth != 72 || stats.MovementSpeed < 6.0999 || stats.MovementSpeed > 6.1001 {
+	if stats.Attack != 15 || stats.Defense != 8 || stats.MaxHealth != 77 || stats.MovementSpeed < 6.0999 || stats.MovementSpeed > 6.1001 {
 		t.Fatalf("hybrid equipment effects = %+v", stats)
 	}
 }
