@@ -2928,6 +2928,7 @@ struct EnetServer::Impl {
                         continue;
                     }
                     target_player.health = damage.remaining_health;
+                    if (damage.defeated) target_player.slow_effect = {};
                     broadcast_player_action_event(target_player, "hit", monster.runtime_id, "heavy_slam", target_peer);
                     send_json(target_peer, honghuang::protocol::MessageType::CombatEvent,
                               Json{{"accepted", true}, {"source", "monster"},
@@ -2953,7 +2954,7 @@ struct EnetServer::Impl {
                 player.health = damage.remaining_health;
                 if (damage.defeated) player.slow_effect = {};
                 bool applied_slow = false;
-                if (std::string(attack_profile.style) == "frost_bolt") {
+                if (!damage.defeated && std::string(attack_profile.style) == "frost_bolt") {
                     const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                         now.time_since_epoch()).count();
                     applied_slow = honghuang::simulation::apply_slow(
@@ -2963,6 +2964,7 @@ struct EnetServer::Impl {
                 send_json(victim->first, honghuang::protocol::MessageType::CombatEvent,
                           Json{{"accepted", true}, {"source", "monster"},
                                {"source_entity_id", monster.runtime_id},
+                               {"attack_style", attack_profile.style},
                                {"damage", damage.damage}, {"health", player.health},
                                {"max_health", player.max_health}, {"defeated", damage.defeated},
                                {"status_effect", applied_slow ? "slow" : ""},
