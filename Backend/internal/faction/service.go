@@ -28,6 +28,7 @@ type Faction struct {
 	Name string `json:"name"`
 	Description string `json:"description"`
 	Level int `json:"level"`
+	TreasuryAccountID string `json:"treasury_account_id,omitempty"`
 	Role string `json:"my_role,omitempty"`
 	MemberCount int `json:"member_count,omitempty"`
 }
@@ -82,12 +83,23 @@ func (s *Service) CreateSect(ctx context.Context, accountID, worldID, name, desc
 		if strings.Contains(strings.ToLower(err.Error()), "uq_factions_world_name") { return Faction{}, ErrInvalid }
 		return Faction{}, fmt.Errorf("insert sect: %w", err)
 	}
+	var treasuryID string
+	if err := tx.QueryRowContext(ctx, `INSERT INTO economy_treasury_accounts
+		(world_id, account_key, display_name, account_type)
+		VALUES ($1, $2, $3, 'faction_treasury') RETURNING id::text`,
+		worldID, "faction:"+result.ID, name+"库").Scan(&treasuryID); err != nil {
+		return Faction{}, fmt.Errorf("create sect treasury account: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE factions SET treasury_account_id=$2 WHERE id=$1`, result.ID, treasuryID); err != nil {
+		return Faction{}, fmt.Errorf("attach sect treasury account: %w", err)
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO faction_members(faction_id, account_id, role)
 		VALUES ($1, $2, 'leader')`, result.ID, accountID); err != nil {
 		return Faction{}, fmt.Errorf("appoint sect founder: %w", err)
 	}
 	if err := tx.Commit(); err != nil { return Faction{}, fmt.Errorf("commit sect creation: %w", err) }
 	result.Role = "leader"
+	result.TreasuryAccountID = treasuryID
 	result.MemberCount = 1
 	return result, nil
 }
@@ -150,7 +162,7 @@ func (s *Service) ReviewApplication(ctx context.Context, reviewerID, factionID, 
 		FOR UPDATE OF a`, factionID, reviewerID, applicationID).Scan(&role, &applicantID, &status)
 	if errors.Is(err, sql.ErrNoRows) { return ErrForbidden }
 	if err != nil { return fmt.Errorf("authorize faction application review: %w", err) }
-	if role != "leader" && role != "officer" { return ErrForbidden }
+	if !canManageRole(role) { return ErrForbidden }
 	if status != "pending" { return ErrInvalid }
 	if decision == "approve" {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO faction_members(faction_id, account_id, role)
@@ -175,7 +187,7 @@ func (s *Service) ListApplications(ctx context.Context, reviewerID, factionID st
 		if errors.Is(err, sql.ErrNoRows) { return nil, ErrForbidden }
 		return nil, fmt.Errorf("authorize application listing: %w", err)
 	}
-	if role != "leader" && role != "officer" { return nil, ErrForbidden }
+	if !canManageRole(role) { return nil, ErrForbidden }
 	rows, err := s.db.QueryContext(ctx, `SELECT id::text, faction_id::text, account_id::text, message, status, created_at::text
 		FROM faction_membership_applications WHERE faction_id=$1 AND status='pending' ORDER BY created_at`, factionID)
 	if err != nil { return nil, fmt.Errorf("list pending applications: %w", err) }
@@ -191,6 +203,8 @@ func (s *Service) ListApplications(ctx context.Context, reviewerID, factionID st
 	if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate faction applications: %w", err) }
 	return result, nil
 }
+
+func canManageRole(role string) bool { return role == "leader" || role == "officer" }
 
 func (s *Service) AuthorizeTaskPublisher(ctx context.Context, accountID, factionID string) error {
 	if accountID == "" || factionID == "" { return ErrForbidden }
