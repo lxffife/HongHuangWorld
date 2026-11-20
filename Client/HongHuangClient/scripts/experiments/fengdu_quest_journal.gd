@@ -226,7 +226,11 @@ func _add_quest_card(quest: Dictionary) -> void:
 		column.add_child(objective_label)
 
 	var reward := Label.new()
-	reward.text = "预期记录：" + str(quest.get("reward_preview", "无"))
+	var reward_amount := int(quest.get("reward_amount", 0))
+	var reward_text := "完成奖励：%d 冥币" % reward_amount if reward_amount > 0 else "完成奖励：待设定"
+	if str(quest.get("status", "")) == "completed" and int(quest.get("last_reward_paid", 0)) > 0:
+		reward_text += " · 已到账"
+	reward.text = reward_text + "    记录：" + str(quest.get("reward_preview", "无"))
 	reward.add_theme_font_size_override("font_size", 11)
 	reward.add_theme_color_override("font_color", Color("#b99a68"))
 	column.add_child(reward)
