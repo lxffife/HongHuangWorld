@@ -576,15 +576,17 @@ func _build_lobby_ui() -> void:
 	header.add_child(account)
 	layout.add_child(HSeparator.new())
 
-	var body := HBoxContainer.new()
+	var body := BoxContainer.new()
+	body.vertical = get_viewport_rect().size.x < 980.0
 	lobby_body_container = body
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 18)
 	layout.add_child(body)
+	get_viewport().size_changed.connect(_on_lobby_viewport_resized)
 
 	var preview_panel := PanelContainer.new()
-	preview_panel.custom_minimum_size = Vector2(300, 0)
+	preview_panel.custom_minimum_size = Vector2(260, 0)
 	preview_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	preview_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	preview_panel.size_flags_stretch_ratio = 0.82
@@ -746,11 +748,13 @@ func _build_lobby_ui() -> void:
 	archive_button.text = "灵魂档案 / 轮回"
 	archive_button.custom_minimum_size = Vector2(160, 46)
 	archive_button.pressed.connect(_toggle_lobby_details)
+	_style_lobby_button(archive_button, false)
 	footer.add_child(archive_button)
 	var equipment_button := Button.new()
 	equipment_button.text = "装备管理"
 	equipment_button.custom_minimum_size = Vector2(120, 46)
 	equipment_button.pressed.connect(_toggle_lobby_equipment_panel)
+	_style_lobby_button(equipment_button, false)
 	footer.add_child(equipment_button)
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -759,6 +763,7 @@ func _build_lobby_ui() -> void:
 	lobby_enter_button.text = "进入世界"
 	lobby_enter_button.custom_minimum_size = Vector2(220, 48)
 	lobby_enter_button.pressed.connect(_on_create_character_pressed)
+	_style_lobby_button(lobby_enter_button, true)
 	footer.add_child(lobby_enter_button)
 
 	lobby_equipment_panel = PanelContainer.new()
@@ -789,6 +794,36 @@ func _build_lobby_ui() -> void:
 		if details_container.get_parent() != null:
 			details_container.get_parent().remove_child(details_container)
 		lobby_details_host.add_child(details_container)
+
+
+func _on_lobby_viewport_resized() -> void:
+	if not is_instance_valid(lobby_body_container):
+		return
+	var compact := get_viewport_rect().size.x < 980.0
+	lobby_body_container.vertical = compact
+	for child in lobby_body_container.get_children():
+		if child is PanelContainer and child.get_child_count() > 0:
+			if child.custom_minimum_size.x > 0:
+				child.custom_minimum_size = Vector2(0, 300) if compact else Vector2(260, 0)
+
+
+func _style_lobby_button(button: Button, primary: bool) -> void:
+	button.custom_minimum_size.y = maxi(int(button.custom_minimum_size.y), 44)
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color("#9c7947") if primary else Color("#1c2b3d")
+	normal.border_color = Color("#d0b27c") if primary else Color("#40566d")
+	normal.set_border_width_all(1)
+	normal.set_corner_radius_all(8)
+	normal.content_margin_left = 14
+	normal.content_margin_right = 14
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = Color("#b18d58") if primary else Color("#2b4055")
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", hover)
+	button.add_theme_stylebox_override("disabled", normal)
+	button.add_theme_color_override("font_color", Color("#fff8eb") if primary else Color("#cbd8e2"))
+	button.add_theme_font_size_override("font_size", 14)
 
 
 func _build_lobby_preview_model() -> void:
