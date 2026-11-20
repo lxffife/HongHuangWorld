@@ -6,6 +6,8 @@ const WorldEnvironmentBuilder = preload("res://scripts/world_environment_builder
 const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
 const CityModuleScene = preload("res://scenes/experiments/FengduCityModule.tscn")
 const NpcDialoguePanel = preload("res://scripts/experiments/npc_dialogue_panel.gd")
+const FengduQuestManager = preload("res://scripts/experiments/fengdu_quest_manager.gd")
+const FengduQuestJournal = preload("res://scripts/experiments/fengdu_quest_journal.gd")
 
 const CITY_SCALE := 2.5
 const WALL_WIDTH := 1900.0
@@ -25,6 +27,8 @@ var _mouse_captured := false
 var _hint_label: Label
 var _nearby_district_data: Dictionary = {}
 var _dialogue_panel: CanvasLayer
+var _quest_manager: Node
+var _quest_journal: CanvasLayer
 
 
 func _ready() -> void:
@@ -265,6 +269,7 @@ func _build_named_yin_officials() -> void:
 			"archetype": "black_impermanence",
 			"behavior_profile": "soul_capture",
 			"interaction_type": "capture_and_escort",
+			"quest_id": "black_soul_document",
 			"status_text": "拘魂巡查中",
 			"position": Vector3(-30.0, 0.0, 585.0),
 			"patrol_points": [Vector3(0.0, 0.0, -3.0), Vector3(0.0, 0.0, 3.0)],
@@ -283,6 +288,7 @@ func _build_named_yin_officials() -> void:
 			"archetype": "white_impermanence",
 			"behavior_profile": "soul_guidance",
 			"interaction_type": "new_soul_guidance",
+			"quest_id": "white_soul_registration",
 			"status_text": "接引新魂中",
 			"position": Vector3(30.0, 0.0, 585.0),
 			"patrol_points": [Vector3(0.0, 0.0, 3.0), Vector3(0.0, 0.0, -3.0)],
@@ -301,6 +307,7 @@ func _build_named_yin_officials() -> void:
 			"archetype": "ox_head",
 			"behavior_profile": "gate_guard",
 			"interaction_type": "gate_inspection",
+			"quest_id": "ox_gate_records",
 			"status_text": "南门盘查中",
 			"position": Vector3(-30.0, 0.0, 675.0),
 			"patrol_points": [Vector3(-2.0, 0.0, 0.0), Vector3(2.0, 0.0, 0.0)],
@@ -318,6 +325,7 @@ func _build_named_yin_officials() -> void:
 			"archetype": "horse_face",
 			"behavior_profile": "gate_patrol",
 			"interaction_type": "pass_check",
+			"quest_id": "horse_patrol_report",
 			"status_text": "南门巡防中",
 			"position": Vector3(30.0, 0.0, 675.0),
 			"patrol_points": [Vector3(2.0, 0.0, 0.0), Vector3(-2.0, 0.0, 0.0)],
@@ -388,7 +396,37 @@ func _open_interaction_dialogue(data: Dictionary) -> void:
 		return
 	_mouse_captured = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	_dialogue_panel.call("present", data)
+	var target_id := str(data.get("id", ""))
+	if _quest_manager != null:
+		_quest_manager.call("notify_interaction", target_id)
+	var quest_id := str(data.get("quest_id", ""))
+	var quest_data: Dictionary = _quest_manager.call("get_quest", quest_id) if _quest_manager != null and not quest_id.is_empty() else {}
+	_dialogue_panel.call("present", data, quest_data)
+
+
+func _on_quest_updated(quest_data: Dictionary) -> void:
+	if _dialogue_panel != null:
+		_dialogue_panel.call("update_quest_state", quest_data)
+
+
+func _on_quest_action_requested(action: String, quest_id: String) -> void:
+	if _quest_manager == null:
+		return
+	if action == "accept":
+		_quest_manager.call("accept_quest", quest_id)
+	elif action == "journal":
+		if _quest_journal != null:
+			_quest_journal.call("toggle")
+
+
+func _toggle_quest_journal() -> void:
+	if _quest_journal == null:
+		return
+	if _dialogue_panel != null and _dialogue_panel.call("is_open"):
+		_dialogue_panel.call("close_dialogue")
+	_mouse_captured = false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_quest_journal.call("toggle")
 
 
 func _on_district_exited(data: Dictionary) -> void:
@@ -472,7 +510,7 @@ func _build_hud() -> void:
 	layer.name = "GreyboxHUD"
 	var panel := PanelContainer.new()
 	panel.position = Vector2(18.0, 18.0)
-	panel.custom_minimum_size = Vector2(560.0, 150.0)
+	panel.custom_minimum_size = Vector2(560.0, 184.0)
 	layer.add_child(panel)
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 12)
@@ -495,10 +533,26 @@ func _build_hud() -> void:
 	note.add_theme_font_size_override("font_size", 11)
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(note)
+	var journal_button := Button.new()
+	journal_button.text = "打开阴司差事簿  [J]"
+	journal_button.custom_minimum_size = Vector2(220.0, 34.0)
+	journal_button.pressed.connect(_toggle_quest_journal)
+	column.add_child(journal_button)
 	add_child(layer)
+
+	_quest_manager = FengduQuestManager.new()
+	_quest_manager.name = "FengduQuestManager"
+	add_child(_quest_manager)
+	_quest_journal = FengduQuestJournal.new()
+	_quest_journal.name = "FengduQuestJournal"
+	add_child(_quest_journal)
+	_quest_journal.call("configure", _quest_manager)
+
 	_dialogue_panel = NpcDialoguePanel.new()
 	_dialogue_panel.name = "NpcDialoguePanel"
 	_dialogue_panel.connect("closed", Callable(self, "_on_dialogue_closed"))
+	_dialogue_panel.connect("quest_action_requested", Callable(self, "_on_quest_action_requested"))
+	_quest_manager.connect("quest_updated", Callable(self, "_on_quest_updated"))
 	add_child(_dialogue_panel)
 
 
@@ -515,7 +569,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			_mouse_captured = true
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	elif event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_E and _dialogue_panel != null and _dialogue_panel.call("is_open"):
+		if event.keycode == KEY_J:
+			_toggle_quest_journal()
+			get_viewport().set_input_as_handled()
+		elif event.keycode == KEY_E and _quest_journal != null and _quest_journal.call("is_open"):
+			_quest_journal.call("close_journal")
+			get_viewport().set_input_as_handled()
+		elif event.keycode == KEY_E and _dialogue_panel != null and _dialogue_panel.call("is_open"):
 			_dialogue_panel.call("close_dialogue")
 			get_viewport().set_input_as_handled()
 		elif event.keycode == KEY_E and not _nearby_district_data.is_empty():
@@ -538,7 +598,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(delta: float) -> void:
 	if _player == null:
 		return
-	if _dialogue_panel != null and _dialogue_panel.call("is_open"):
+	if (_dialogue_panel != null and _dialogue_panel.call("is_open")) or (_quest_journal != null and _quest_journal.call("is_open")):
 		_player.velocity.x = 0.0
 		_player.velocity.z = 0.0
 		if not _player.is_on_floor():
