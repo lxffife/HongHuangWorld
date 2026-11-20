@@ -51,7 +51,7 @@ var lobby_cultivation_bar: ProgressBar
 var lobby_points_label: Label
 var lobby_stats_grid: GridContainer
 var lobby_details_host: VBoxContainer
-var lobby_body_container: HBoxContainer
+var lobby_body_container: BoxContainer
 var lobby_enter_button: Button
 var lobby_preview_root: Node3D
 var lobby_equipment: Array = []
@@ -797,14 +797,13 @@ func _build_lobby_ui() -> void:
 
 
 func _on_lobby_viewport_resized() -> void:
-	if not is_instance_valid(lobby_body_container):
+	if not is_instance_valid(lobby_body_container) or lobby_body_container.get_child_count() < 1:
 		return
 	var compact := get_viewport_rect().size.x < 980.0
 	lobby_body_container.vertical = compact
-	for child in lobby_body_container.get_children():
-		if child is PanelContainer and child.get_child_count() > 0:
-			if child.custom_minimum_size.x > 0:
-				child.custom_minimum_size = Vector2(0, 300) if compact else Vector2(260, 0)
+	var preview_panel := lobby_body_container.get_child(0) as Control
+	if is_instance_valid(preview_panel):
+		preview_panel.custom_minimum_size = Vector2(0, 300) if compact else Vector2(260, 0)
 
 
 func _style_lobby_button(button: Button, primary: bool) -> void:
