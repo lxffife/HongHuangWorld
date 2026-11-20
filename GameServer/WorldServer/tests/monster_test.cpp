@@ -63,7 +63,6 @@ int main() {
     assert(frost_profile.windup_ms == 820 && frost_profile.cooldown_ms == 2400);
     assert(std::string(frost_profile.style) == "frost_bolt");
     assert(frost_profile.range >= 6.0F);
-    frost_soul.attack_range = frost_profile.range;
 
     auto soul = wolf;
     soul.id = "wind_soul";
@@ -71,7 +70,6 @@ int main() {
     const auto soul_profile = monster_attack_profile(soul);
     assert(soul_profile.range >= 6.0F);
     assert(std::string(soul_profile.style) == "soul_bolt");
-    soul.attack_range = soul_profile.range;
 
     // Frost souls use the same ranged kite spacing while retaining their own attack style.\n    MonsterState frost_state{.x = 0.0F, .z = 0.0F, .health = frost_soul.max_health};\n    assert(tick_monster(frost_soul, frost_state, &distant_player, 0.05F));\n    assert(frost_state.mode == MonsterMode::Chasing && frost_state.x > 0.0F);\n\n    // Ranged souls approach from outside attack range, then retreat when rushed.
     MonsterState soul_state{.x = 0.0F, .z = 0.0F, .health = soul.max_health};
