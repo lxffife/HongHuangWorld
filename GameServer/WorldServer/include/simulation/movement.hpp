@@ -27,6 +27,14 @@ inline bool within_interest_radius(float ax, float az, float bx, float bz, float
     return dx * dx + dz * dz <= r * r;
 }
 
+// Character and equipment movement bonuses are authoritative backend values.
+// Keep a conservative range so malformed snapshots or extreme attributes cannot
+// create teleport-like movement; invalid values fall back to the base speed.
+inline float effective_player_movement_speed(float requested_speed) {
+    if (!std::isfinite(requested_speed)) return 5.0F;
+    return std::clamp(requested_speed, 1.0F, 10.0F);
+}
+
 inline void integrate_horizontal(float& x, float& z, float move_x, float move_z,
                                  float delta, float speed = 5.0F, float bound = 100.0F) {
     const float dt = std::clamp(delta, 0.0F, 0.1F);
