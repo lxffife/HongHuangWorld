@@ -150,17 +150,6 @@ CREATE TABLE currency_cultivation_costs (
     PRIMARY KEY (action_key, currency_id)
 );
 
-INSERT INTO currency_issuance_policies
-(world_id, currency_id, source_type, max_per_event, daily_cap, requires_trusted_server)
-VALUES
-('qingyun_human', 'human_gold', 'npc_quest_reward', 5000, 100000, TRUE),
-('underworld_fengdu', 'ghost_cash', 'npc_quest_reward', 2000, 50000, TRUE),
-('underworld_fengdu', 'nether_stone', 'world_drop', 5, 200, TRUE),
-('myriad_demon', 'demon_coin', 'npc_quest_reward', 2000, 50000, TRUE),
-('myriad_demon', 'demon_stone', 'world_drop', 5, 200, TRUE),
-('qingyun_human', 'spirit_stone', 'world_drop', 5, 500, TRUE)
-ON CONFLICT (world_id, currency_id, source_type) DO NOTHING;
-
 CREATE TABLE currency_exchange_pairs (
     from_currency_id VARCHAR(64) NOT NULL REFERENCES currency_definitions(id),
     to_currency_id VARCHAR(64) NOT NULL REFERENCES currency_definitions(id),
@@ -268,6 +257,17 @@ VALUES
 ON CONFLICT (currency_id, target_tag) DO NOTHING;
 
 
+
+INSERT INTO currency_issuance_policies
+(world_id, currency_id, source_type, max_per_event, daily_cap, requires_trusted_server)
+VALUES
+('qingyun_human', 'human_gold', 'npc_quest_reward', 5000, 100000, TRUE),
+('underworld_fengdu', 'ghost_cash', 'npc_quest_reward', 2000, 50000, TRUE),
+('underworld_fengdu', 'nether_stone', 'world_drop', 5, 200, TRUE),
+('myriad_demon', 'demon_coin', 'npc_quest_reward', 2000, 50000, TRUE),
+('myriad_demon', 'demon_stone', 'world_drop', 5, 200, TRUE),
+('qingyun_human', 'spirit_stone', 'world_drop', 5, 500, TRUE)
+ON CONFLICT (world_id, currency_id, source_type) DO NOTHING;
 
 INSERT INTO currency_world_rules (world_id, currency_id, is_primary, unlock_key)
 VALUES
