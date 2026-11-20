@@ -17,6 +17,9 @@ var _treasury := 10000
 var _escrow_total := 0
 var _tasks: Dictionary = {}
 var _next_task_number := 1
+var _transactions: Array[Dictionary] = []
+var _reward_claims: Dictionary = {}
+var _next_transaction_number := 1
 
 
 func _ready() -> void:
@@ -34,6 +37,7 @@ func _seed_city_notices() -> void:
 			continue
 		_treasury -= reward
 		_escrow_total += reward
+		_record_transaction("system_escrow", str(notice["publisher_id"]), -reward, 0, reward, "城主府拨付示范悬赏：" + str(notice["title"]))
 		_tasks[str(notice["id"])] = {
 			"id": str(notice["id"]),
 			"title": str(notice["title"]),
@@ -57,6 +61,49 @@ func get_wallet_snapshot(player_id: String = "local_player") -> Dictionary:
 		"treasury": _treasury,
 		"escrow": _escrow_total
 	}
+
+
+func get_transaction_history(limit: int = 20) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	var start_index := maxi(0, _transactions.size() - maxi(1, limit))
+	for index in range(_transactions.size() - 1, start_index - 1, -1):
+		result.append(_transactions[index].duplicate(true))
+	return result
+
+
+func get_treasury_snapshot() -> Dictionary:
+	return {"balance": _treasury, "escrow": _escrow_total, "currency": CURRENCY_NAME}
+
+
+func _record_transaction(category: String, player_id: String, player_delta: int, treasury_delta: int, escrow_delta: int, note: String) -> void:
+	var transaction_id := "fengdu_tx_%08d" % _next_transaction_number
+	_next_transaction_number += 1
+	_transactions.append({
+		"id": transaction_id,
+		"category": category,
+		"player_id": player_id,
+		"player_delta": player_delta,
+		"treasury_delta": treasury_delta,
+		"escrow_delta": escrow_delta,
+		"balance_after": int(_wallets.get(player_id, 0)),
+		"treasury_after": _treasury,
+		"escrow_after": _escrow_total,
+		"note": note,
+		"created_at": int(Time.get_unix_time_from_system())
+	})
+
+
+func grant_quest_reward(player_id: String, quest_id: String, reward_key: String, amount: int) -> Dictionary:
+	if player_id.is_empty() or quest_id.is_empty() or reward_key.is_empty() or amount <= 0:
+		return {"ok": false, "reason": "任务奖励参数无效。"}
+	if _reward_claims.has(reward_key):
+		return {"ok": false, "reason": "该轮任务奖励已经结算。"}
+	var before := int(_wallets.get(player_id, 0))
+	_wallets[player_id] = before + amount
+	_reward_claims[reward_key] = true
+	_record_transaction("quest_reward", player_id, amount, 0, 0, "完成差事：" + quest_id)
+	economy_changed.emit()
+	return {"ok": true, "amount": amount, "balance": int(_wallets[player_id])}
 
 
 func get_board_tasks() -> Array[Dictionary]:
@@ -88,6 +135,8 @@ func publish_task(publisher_id: String, title: String, description: String, rewa
 	_wallets[publisher_id] = balance - reward - fee
 	_treasury += fee
 	_escrow_total += reward
+	_record_transaction("task_listing_fee", publisher_id, -fee, fee, 0, "发布公共委托手续费")
+	_record_transaction("task_escrow_lock", publisher_id, -reward, 0, reward, "公共委托悬赏托管")
 	var task_id := "public_job_%06d" % _next_task_number
 	_next_task_number += 1
 	_tasks[task_id] = {
@@ -135,6 +184,7 @@ func complete_task(task_id: String, worker_id: String) -> Dictionary:
 	_wallets[worker_id] = int(_wallets.get(worker_id, 0)) + payout
 	_treasury += tax
 	_escrow_total = maxi(0, _escrow_total - gross)
+	_record_transaction("task_payout", worker_id, payout, tax, -gross, "完成公共委托：" + task_id)
 	task["status"] = "completed"
 	task["tax_paid"] = tax
 	task["paid_out"] = payout
@@ -153,6 +203,7 @@ func cancel_task(task_id: String, publisher_id: String) -> Dictionary:
 	var reward := int(task.get("reward", 0))
 	_wallets[publisher_id] = int(_wallets.get(publisher_id, 0)) + reward
 	_escrow_total = maxi(0, _escrow_total - reward)
+	_record_transaction("task_escrow_refund", publisher_id, reward, 0, -reward, "取消公共委托退回悬赏：" + task_id)
 	task["status"] = "cancelled"
 	_tasks[task_id] = task
 	economy_changed.emit()
