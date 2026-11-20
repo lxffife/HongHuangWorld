@@ -115,7 +115,11 @@ func _build_city_walls() -> void:
 		_add_box("EastWall_" + str(side), Vector3(WALL_THICKNESS, WALL_HEIGHT, depth_segment), Vector3(half_x, WALL_HEIGHT * 0.5, side * (GATE_OPENING * 0.5 + depth_segment * 0.5)), "wall", true)
 	for x_side in [-1.0, 1.0]:
 		for z_side in [-1.0, 1.0]:
-			_add_box("CornerWatchtower_%s_%s" % [x_side, z_side], Vector3(42.0, 78.0, 42.0), Vector3(x_side * (half_x - 12.0), 39.0, z_side * (half_z - 12.0)), "wall_top", true)
+			_spawn_city_module({"module_kind": "watchtower"}, Vector3(x_side * (half_x - 12.0), 0.0, z_side * (half_z - 12.0)))
+	for side in [-1.0, 1.0]:
+		for offset in [-320.0, 320.0]:
+			_spawn_city_module({"module_kind": "watchtower"}, Vector3(offset, 0.0, side * half_z))
+			_spawn_city_module({"module_kind": "watchtower"}, Vector3(side * half_x, 0.0, offset))
 
 
 func _build_gatehouses() -> void:
@@ -145,12 +149,13 @@ func _build_roads() -> void:
 	for side in [-1.0, 1.0]:
 		_add_box("CrossDistrictRoad_" + str(side), Vector3(560.0, 0.5, 26.0), Vector3(side * 280.0, 0.28, side * 300.0), "road", false)
 	_add_box("SouthGateToCityRoad", Vector3(44.0, 0.5, 260.0), Vector3(0.0, 0.28, 610.0), "road", false)
-	_add_box("WestCourtStreet", Vector3(26.0, 0.5, 610.0), Vector3(-475.0, 0.28, 80.0), "road", false)
-	_add_box("EastCourtStreet", Vector3(26.0, 0.5, 610.0), Vector3(475.0, 0.28, 80.0), "road", false)
-	_add_box("NorthernDistrictCrossStreet", Vector3(950.0, 0.5, 26.0), Vector3(0.0, 0.28, -245.0), "road", false)
-	_add_box("MiddleDistrictCrossStreet", Vector3(950.0, 0.5, 26.0), Vector3(0.0, 0.28, 145.0), "road", false)
-	_add_box("SouthernDistrictCrossStreet", Vector3(1050.0, 0.5, 26.0), Vector3(0.0, 0.28, 410.0), "road", false)
-	_add_box("ReincarnationApproach", Vector3(26.0, 0.5, 280.0), Vector3(170.0, 0.28, 520.0), "road", false)
+	_add_box("WestInnerStreet", Vector3(26.0, 0.5, 520.0), Vector3(-260.0, 0.28, 150.0), "road", false)
+	_add_box("EastInnerStreet", Vector3(26.0, 0.5, 520.0), Vector3(260.0, 0.28, 150.0), "road", false)
+	_add_box("NorthernCrossStreet", Vector3(520.0, 0.5, 26.0), Vector3(0.0, 0.28, -100.0), "road", false)
+	_add_box("SouthernCrossStreet", Vector3(520.0, 0.5, 26.0), Vector3(0.0, 0.28, 310.0), "road", false)
+	_add_box("MarketApproachWest", Vector3(100.0, 0.5, 26.0), Vector3(-310.0, 0.28, 310.0), "road", false)
+	_add_box("MarketApproachEast", Vector3(100.0, 0.5, 26.0), Vector3(310.0, 0.28, 310.0), "road", false)
+	_add_box("ReincarnationApproach", Vector3(26.0, 0.5, 230.0), Vector3(380.0, 0.28, 490.0), "road", false)
 
 
 func _build_districts() -> void:
@@ -170,20 +175,25 @@ func _build_districts() -> void:
 			"patrol_office":
 				center += Vector3(155.0, 0.0, 145.0)
 			"reincarnation_bureau":
-				center.x += 170.0
+				center.x += 380.0
 		_build_district_cluster(district, center)
 
 
 func _build_district_cluster(district: Dictionary, center: Vector3) -> void:
-	var module := CityModuleScene.instantiate() as Node3D
-	module.name = "District_" + str(district.get("id", "unknown"))
 	var module_data := district.duplicate(true)
 	module_data["module_kind"] = "district"
-	module.call("configure", module_data)
+	var module := _spawn_city_module(module_data, center)
+	module.name = "District_" + str(district.get("id", "unknown"))
 	module.connect("player_entered", Callable(self, "_on_district_entered"))
 	module.connect("player_exited", Callable(self, "_on_district_exited"))
-	module.position = center
+
+
+func _spawn_city_module(data: Dictionary, world_position: Vector3) -> Node3D:
+	var module := CityModuleScene.instantiate() as Node3D
+	module.call("configure", data)
+	module.position = world_position
 	add_child(module)
+	return module
 
 
 func _build_wall_defenses() -> void:
