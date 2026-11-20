@@ -2516,8 +2516,18 @@ func _update_target_info() -> void:
 	var title := str(entity.get("name", "怪物")) + "  ·  Lv." + str(int(entity.get("level", 1)))
 	var hp_line := "目标已锁定"
 	if entity.has("health") and entity.has("max_health"):
-		hp_line = "生命 " + str(int(entity.get("health", 0))) + " / " + str(int(entity.get("max_health", 0)))
-	target_info_label.text = title + "\n" + hp_line + "    ·    Tab 切换目标"
+		var current_hp := maxi(0, int(entity.get("health", 0)))
+		var maximum_hp := maxi(1, int(entity.get("max_health", 1)))
+		hp_line = "生命  " + str(current_hp) + " / " + str(maximum_hp) + "    ·    Tab 切换目标"
+		if is_instance_valid(target_health_bar):
+			target_health_bar.max_value = maximum_hp
+			target_health_bar.value = clampi(current_hp, 0, maximum_hp)
+			target_health_bar.visible = true
+	else:
+		if is_instance_valid(target_health_bar):
+			target_health_bar.visible = false
+		hp_line += "    ·    Tab 切换目标"
+	target_info_label.text = title + "\n" + hp_line
 	target_info_panel.visible = hud_visible
 
 func _request_nearest_monster_attack() -> void:
