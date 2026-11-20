@@ -25,14 +25,14 @@ const FENGDU_PROTOTYPE := {
 	"heightfield_cells": 128,
 	"tile_count": 4,
 	"water_bodies": [
-		{"id": "forgotten_river", "name": "忘川河", "kind": "river_visual", "size": [8.0, 150.0], "center": [22.0, 8.0], "height": -0.62, "color": "#344b69", "alpha": 0.76},
-		{"id": "blood_sea", "name": "血海", "kind": "sea_visual", "size": [56.0, 236.0], "center": [100.0, 0.0], "height": -1.25, "color": "#681d32", "alpha": 0.84}
+		{"id": "forgotten_river", "name": "忘川河", "kind": "river_visual", "size": [8.0, 150.0], "center": [22.0, 8.0], "height": -0.62, "color": "#344b69", "alpha": 0.76, "map_visible": false},
+		{"id": "blood_sea", "name": "血海", "kind": "sea_visual", "size": [56.0, 236.0], "center": [100.0, 0.0], "height": -1.25, "color": "#681d32", "alpha": 0.84, "map_visible": false}
 	],
 	"landmarks": [
-		{"id": "naihe_bridge_valley", "name": "奈何桥 / 忘川河谷", "position": [22.0, 2.0, 2.0], "color": "#9ebce8", "kind": "visual"},
-		{"id": "reincarnation_terrace", "name": "轮回殿台地", "position": [-34.0, 8.0, -55.0], "color": "#c7b6dc", "kind": "visual"},
-		{"id": "blood_sea_coast", "name": "血海岸线（样板）", "position": [78.0, -6.0, 18.0], "color": "#e58b9e", "kind": "visual"},
-		{"id": "fengdu_outer_ridge", "name": "酆都北部山脊", "position": [-42.0, 12.0, -112.0], "color": "#b6a8a0", "kind": "visual"}
+		{"id": "naihe_bridge_valley", "name": "奈何桥 / 忘川河谷", "position": [22.0, 2.0, 2.0], "color": "#9ebce8", "kind": "visual", "map_visible": true},
+		{"id": "reincarnation_terrace", "name": "轮回殿台地", "position": [-34.0, 8.0, -55.0], "color": "#c7b6dc", "kind": "visual", "map_visible": true},
+		{"id": "blood_sea_coast", "name": "血海岸线（样板）", "position": [78.0, -6.0, 18.0], "color": "#e58b9e", "kind": "visual", "map_visible": false},
+		{"id": "fengdu_outer_ridge", "name": "酆都北部山脊", "position": [-42.0, 12.0, -112.0], "color": "#b6a8a0", "kind": "visual", "map_visible": false}
 	]
 }
 
@@ -63,7 +63,7 @@ static func get_landmarks(world_id: String) -> Array:
 
 static func get_minimap_landmarks(world_id: String) -> Array:
 	var result: Array = []
-	for landmark in get_landmarks(world_id):
+	for landmark in get_world_map_landmarks(world_id):
 		var position_data: Array = landmark.get("position", [])
 		if position_data.size() < 3:
 			continue
@@ -74,6 +74,22 @@ static func get_minimap_landmarks(world_id: String) -> Array:
 			"position_z": float(position_data[2]),
 			"kind": str(landmark.get("kind", "visual"))
 		})
+	return result
+
+
+static func get_world_map_landmarks(world_id: String) -> Array:
+	var result: Array = []
+	for landmark in get_landmarks(world_id):
+		if bool(landmark.get("map_visible", true)):
+			result.append(landmark)
+	return result
+
+
+static func get_world_map_water_bodies(world_id: String) -> Array:
+	var result: Array = []
+	for water_body in get_water_bodies(world_id):
+		if bool(water_body.get("map_visible", true)):
+			result.append(water_body)
 	return result
 
 
