@@ -187,7 +187,7 @@ VALUES
 ('spirit_stone', '灵石', '灵石', 'cultivation', NULL, 'spiritual', 1, TRUE, TRUE, TRUE, '通用灵气修炼资源，可在具备兑换渠道的世界流通'),
 ('monster_coin', '妖币', '妖', 'fiat', NULL, 'none', 1, FALSE, TRUE, TRUE, '妖界凡俗交易货币'),
 ('monster_stone', '妖石', '妖石', 'cultivation', NULL, 'demonic_nature', 1, TRUE, TRUE, TRUE, '蕴含妖气，可交易、修炼与炼器'),
-('仙钱', '仙钱', '仙', 'fiat', NULL, 'none', 1, FALSE, TRUE, TRUE, '仙界凡俗交易货币'),
+('immortal_coin', '仙钱', '仙', 'fiat', NULL, 'none', 1, FALSE, TRUE, TRUE, '仙界凡俗交易货币'),
 ('immortal_crystal', '仙晶', '仙晶', 'cultivation', NULL, 'immortal', 1, TRUE, TRUE, TRUE, '蕴含仙灵之气的高阶修炼资源'),
 ('buddhist_crystal', '佛晶', '佛晶', 'cultivation', NULL, 'buddhist', 1, TRUE, TRUE, TRUE, '蕴含佛力与愿力的修炼资源'),
 ('dragon_crystal', '龙晶', '龙晶', 'cultivation', NULL, 'dragon', 1, TRUE, TRUE, TRUE, '蕴含龙族血脉本源的修炼资源'),
