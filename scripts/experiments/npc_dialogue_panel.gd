@@ -48,15 +48,25 @@ func _update_quest_action(quest_data: Dictionary) -> void:
 		"available":
 			_current_quest_action = "accept"
 			_quest_button.text = "领取差事"
-			_quest_hint_label.text = "可领取差事 · " + str(quest_data.get("title", "阴司差事"))
+			_quest_button.disabled = not bool(quest_data.get("can_accept", true))
+			_quest_hint_label.text = ("可领取差事 · " if not _quest_button.disabled else "尚未满足前置条件 · ") + str(quest_data.get("title", "阴司差事"))
 		"active":
 			_current_quest_action = "journal"
 			_quest_button.text = "查看任务簿"
 			_quest_hint_label.text = "差事进行中 · " + str(quest_data.get("title", "阴司差事"))
 		"completed":
-			_quest_button.text = "已完成 · 待结算"
+			_current_quest_action = "journal"
+			_quest_button.text = "查看任务簿"
+			_quest_button.disabled = false
+			_quest_hint_label.text = "差事已完成 · 奖励需由正式服务端结算"
+		"failed":
+			_quest_button.text = "差事已失败"
 			_quest_button.disabled = true
-			_quest_hint_label.text = "差事已完成，奖励需由正式服务端结算"
+			_quest_hint_label.text = str(quest_data.get("failure_reason", "此差事暂不可继续"))
+		"abandoned":
+			_quest_button.text = "差事已放弃"
+			_quest_button.disabled = true
+			_quest_hint_label.text = "此差事不可重复领取"
 		_:
 			_quest_button.visible = false
 			_quest_hint_label.visible = false
