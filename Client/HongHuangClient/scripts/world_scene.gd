@@ -10,6 +10,7 @@ const FriendPanelScript = preload("res://scripts/friend_panel.gd")
 const WorldMiniMapScript = preload("res://scripts/world_minimap.gd")
 const WorldRegionCatalog = preload("res://scripts/world_region_catalog.gd")
 const WorldTerrainBuilder = preload("res://scripts/world_terrain_builder.gd")
+const WorldEnvironmentBuilder = preload("res://scripts/world_environment_builder.gd")
 
 @onready var hud_label: Label = $HUD/Panel/Margin/Content/Status
 @onready var progression_label: Label = $HUD/Panel/Margin/Content/Progression
@@ -425,40 +426,7 @@ func _on_progression_request_completed(result: int, response_code: int, _headers
 
 func _build_environment() -> void:
 	var world_id := str(HHSession.world_snapshot.get("world_id", "qingyun_human"))
-	var is_underworld := world_id == "underworld_fengdu"
-	var world_environment := WorldEnvironment.new()
-	var environment := Environment.new()
-	environment.background_mode = Environment.BG_SKY
-	var sky := Sky.new()
-	var sky_material := ProceduralSkyMaterial.new()
-	if is_underworld:
-		sky_material.sky_top_color = Color("#080d20")
-		sky_material.sky_horizon_color = Color("#382b4d")
-		sky_material.ground_bottom_color = Color("#080b14")
-		sky_material.ground_horizon_color = Color("#241d32")
-	else:
-		sky_material.sky_top_color = Color("#142b49")
-		sky_material.sky_horizon_color = Color("#d3a878")
-		sky_material.ground_bottom_color = Color("#182333")
-		sky_material.ground_horizon_color = Color("#a58b6b")
-	sky.sky_material = sky_material
-	environment.sky = sky
-	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color("#66708f") if is_underworld else Color("#9fb4d0")
-	environment.ambient_light_energy = 0.32 if is_underworld else 0.65
-	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	environment.fog_enabled = true
-	environment.fog_light_color = Color("#51445f") if is_underworld else Color("#9ba9b8")
-	environment.fog_density = 0.012 if is_underworld else 0.0018
-	world_environment.environment = environment
-	add_child(world_environment)
-
-	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-48.0, -32.0, 0.0)
-	sun.light_energy = 0.42 if is_underworld else 1.35
-	sun.light_color = Color("#9a8abf") if is_underworld else Color("#fff0d2")
-	sun.shadow_enabled = true
-	add_child(sun)
+	add_child(WorldEnvironmentBuilder.build(world_id))
 
 func _build_terrain() -> void:
 	var world_id := str(HHSession.world_snapshot.get("world_id", "qingyun_human"))
