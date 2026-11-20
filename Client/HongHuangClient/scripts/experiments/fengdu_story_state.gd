@@ -47,19 +47,18 @@ func get_choices_for_npc(npc_id: String, quest_manager: Node) -> Array[Dictionar
 		return result
 	var quest: Dictionary = quest_manager.call("get_quest", "white_soul_registration")
 	if str(quest.get("status", "")) == "completed" and get_choice("new_soul_registration").is_empty():
-		if str(quest.get("status", "")) == "completed":
-			result.append({
-				"id": "register_by_the_book",
-				"label": "按章登记",
-				"response": "谢必安展开魂籍簿：先核实来历、登记执念，再交由轮回司审理。此举维护阴司秩序。",
-				"choice_key": "new_soul_registration"
-			})
-			result.append({
-				"id": "comfort_the_soul",
-				"label": "先安抚亡魂",
-				"response": "谢必安沉吟片刻：先听亡魂说完心愿，再补录魂籍。规矩不可废，但也不该让新魂带着恐惧受审。",
-				"choice_key": "new_soul_registration"
-			})
+		result.append({
+			"id": "register_by_the_book",
+			"label": "按章登记",
+			"response": "谢必安展开魂籍簿：先核实来历、登记执念，再交由轮回司审理。此举维护阴司秩序。",
+			"choice_key": "new_soul_registration"
+		})
+		result.append({
+			"id": "comfort_the_soul",
+			"label": "先安抚亡魂",
+			"response": "谢必安沉吟片刻：先听亡魂说完心愿，再补录魂籍。规矩不可废，但也不该让新魂带着恐惧受审。",
+			"choice_key": "new_soul_registration"
+		})
 	return result
 
 
