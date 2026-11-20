@@ -160,3 +160,15 @@
 - 城主府与官署属于系统组织，只能由受信任的管理/世界服务创建与授予权限，玩家端 API 不提供创建这些组织的入口。
 - 已提供接口：`POST /api/v1/factions` 创建宗门、`GET /api/v1/factions/mine` 查询我的宗门、`POST /api/v1/factions/{factionID}/applications` 申请加入、`GET /api/v1/factions/{factionID}/applications` 查看待审批申请、`GET /api/v1/factions/{factionID}/members` 查询本宗门成员、`POST /api/v1/factions/{factionID}/applications/{applicationID}/review` 审批。
 - 后续任务服务必须调用后端 `AuthorizeTaskPublisher` 验证活跃成员身份与 leader/officer 角色，不能信任客户端传入的 `publisher_type`、组织名称或财政账户 ID。
+
+
+## 14. 宗门悬赏任务（000054，第一阶段）
+
+- 新增 `bounty_tasks`、`bounty_task_escrows`、`bounty_task_participants`。
+- 宗门发布接口：`POST /api/v1/factions/{factionID}/bounties`。发布者身份由 Bearer 账号和数据库成员角色决定，客户端不能提交组织类型、组织名称或财政账户 ID。
+- 发布事务锁定宗门及发布者成员记录，复核宗门处于 active 且发布者为 leader/officer；货币必须在该宗门所属世界启用。
+- 托管预算按 `reward_amount × max_assignees` 计算；在同一事务内从宗门财政对应币种的 available 转入 frozen，并写不可变财政流水及任务托管记录。余额不足则整个事务回滚。
+- 查询接口：`GET /api/v1/bounties?world_id=underworld_fengdu`；接取接口：`POST /api/v1/bounties/{taskID}/join`。
+- 接取时锁定任务行后统计有效参与人数并插入参与者，防止并发超员；唯一主键阻止同一账号重复加入。
+- 当前只完成宗门发布、财政预算冻结、任务查询和多人接取。任务验收、贡献度计算、奖励支付、退款、贡献点发放及官方城主府/官署任务仍未开放。托管资金不会因玩家接取任务而自动支付。
+- 宗门财政需要先通过可信后台/世界服务注资；普通玩家接口没有财政任意增发入口。任务奖励结算必须后续实现为同一事务内的托管释放、玩家钱包入账、财政流水和幂等事件，不能调用单边 `ApplyDelta` 拼接。
