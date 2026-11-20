@@ -69,6 +69,8 @@ var vitals_panel: PanelContainer
 var health_label: Label
 var mana_label: Label
 var health_bar: ProgressBar
+var spell_cooldown_labels: Dictionary = {}
+var spell_cooldown_remaining: Dictionary = {"fireball": 0.0, "ice_bolt": 0.0}
 var notification_panel: PanelContainer
 var notification_label: Label
 var notification_timer: Timer
@@ -727,6 +729,15 @@ func _build_combat_hud() -> void:
 	health_bar.value = 0.0
 	health_bar.show_percentage = false
 	vitals_layout.add_child(health_bar)
+	var spell_hint := Label.new()
+	spell_hint.text = "Q 火球术  ·  R 冰锥术"
+	vitals_layout.add_child(spell_hint)
+	for spell_id in ["fireball", "ice_bolt"]:
+		var cooldown_label := Label.new()
+		cooldown_label.text = "火球术：就绪" if spell_id == "fireball" else "冰锥术：就绪"
+		spell_cooldown_labels[spell_id] = cooldown_label
+		vitals_layout.add_child(cooldown_label)
+	_update_spell_cooldown_hud()
 	notification_panel = PanelContainer.new()
 	notification_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	notification_panel.position = Vector2(-220.0, 112.0)
@@ -2246,6 +2257,16 @@ func _request_nearest_monster_attack() -> void:
 		# 本地挥剑只反馈输入；命中、伤害与攻击结果仍由 WorldServer 决定。
 		local_player.call("play_attack_animation")
 
+func _update_spell_cooldown_hud() -> void:
+	for spell_id in spell_cooldown_labels:
+		var label := spell_cooldown_labels[spell_id] as Label
+		if not is_instance_valid(label):
+			continue
+		var spell_name := "火球术" if spell_id == "fireball" else "冰锥术"
+		var remaining := float(spell_cooldown_remaining.get(spell_id, 0.0))
+		label.text = spell_name + "：冷却 " + ("%.1f" % remaining) + " 秒" if remaining > 0.0 else spell_name + "：就绪"
+
+
 func _request_fireball() -> void:
 	var network := HHSession.world_network
 	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
@@ -2577,8 +2598,11 @@ func _on_combat_event(event: Dictionary) -> void:
 		if is_instance_valid(mana_label):
 			mana_label.text = "灵力  " + str(int(HHSession.world_snapshot.get("mana", 0))) + " / " + str(int(HHSession.world_snapshot.get("max_mana", 0)))
 		_update_compact_hud()
-		var spell_id := str(event.get("spell_id", "fireball"))
+		var spell_id := str(event.get("spell_id", ""))
 		var spell_name := "冰锥术" if spell_id == "ice_bolt" else "火球术"
+		if bool(event.get("accepted", false)) and str(event.get("phase", "")) == "casting" and spell_cooldown_remaining.has(spell_id):
+			spell_cooldown_remaining[spell_id] = maxf(float(event.get("cooldown_ms", 0)) / 1000.0, 0.0)
+			_update_spell_cooldown_hud()
 		if not bool(event.get("accepted", false)):
 			_show_notification(str(event.get("reason", spell_name + "施展失败。")), 3.0)
 		elif str(event.get("phase", "")) == "casting":
@@ -2930,6 +2954,14 @@ func _update_input_debug_hud() -> void:
 	input_debug_label.text = keys + "\n" + movement_text + " · 网络：" + network_text + "\n" + send_text + " · ESC 释放鼠标"
 
 func _process(delta: float) -> void:
+	var cooldown_changed := false
+	for spell_id in spell_cooldown_remaining.keys():
+		var remaining := maxf(float(spell_cooldown_remaining[spell_id]) - delta, 0.0)
+		if not is_equal_approx(remaining, float(spell_cooldown_remaining[spell_id])):
+			spell_cooldown_remaining[spell_id] = remaining
+			cooldown_changed = true
+	if cooldown_changed:
+		_update_spell_cooldown_hud()
 	for monster_value in monsters.values():
 		var burning_monster := monster_value as Node3D
 		if not is_instance_valid(burning_monster):
