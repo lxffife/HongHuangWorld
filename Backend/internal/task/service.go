@@ -7,6 +7,7 @@ import (
  "fmt"
  "math"
  "strings"
+ "time"
  "unicode/utf8"
 
  "github.com/liflife/HongHuangWorld/Backend/internal/faction"
@@ -91,7 +92,7 @@ func (s *Service) PublishFaction(ctx context.Context, accountID string, req Publ
   frozen_amount=frozen_amount+$3,updated_at=now() WHERE treasury_account_id=$1 AND currency_id=$2`,treasuryID,req.CurrencyID,total);err!=nil{return Task{},fmt.Errorf("freeze faction bounty budget: %w",err)}
  if _,err=tx.ExecContext(ctx,`INSERT INTO economy_treasury_ledger_entries
   (treasury_account_id,currency_id,event_key,entry_type,delta,balance_after,source_type,note)
-  VALUES ($1,$2,$3,'bounty_lock',$4,$5,'bounty_task','宗门悬赏预算托管')`,treasuryID,req.CurrencyID,"bounty-lock:"+req.FactionID+":"+strings.TrimSpace(req.Title),-total,available-total);err!=nil{return Task{},fmt.Errorf("record bounty treasury lock: %w",err)}
+  VALUES ($1,$2,concat('bounty-lock:',gen_random_uuid()::text),'bounty_lock',$3,$4,'bounty_task','宗门悬赏预算托管')`,treasuryID,req.CurrencyID,-total,available-total);err!=nil{return Task{},fmt.Errorf("record bounty treasury lock: %w",err)}
  var result Task
  err=tx.QueryRowContext(ctx,`INSERT INTO bounty_tasks
   (world_id,publisher_type,publisher_id,title,description,currency_id,reward_amount,escrow_amount,
