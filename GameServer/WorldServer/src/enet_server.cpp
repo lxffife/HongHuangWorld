@@ -920,6 +920,7 @@ struct EnetServer::Impl {
     std::deque<ConsumableJob> pending_consumable_jobs;
     std::deque<ConsumableJobResult> completed_consumable_jobs;
     std::unordered_set<std::string> pending_consumable_sessions;
+    std::unordered_set<std::string> skip_stale_consumable_snapshots;
     std::unordered_map<std::string, PlayerState> pending_consumable_closes;
     bool consumable_stop_requested{false};
     std::thread consumable_thread;
@@ -1404,6 +1405,7 @@ struct EnetServer::Impl {
                     {
                         std::lock_guard lock(consumable_mutex);
                         if (pending_consumable_sessions.contains(session_id)) continue;
+                        if (skip_stale_consumable_snapshots.erase(session_id) > 0) continue;
                     }
                     bool inactive = false;
                     std::string error;
@@ -1855,6 +1857,7 @@ struct EnetServer::Impl {
                 pending_consumable_jobs.size() >= 128 ||
                 pending_consumable_sessions.contains(session_id)) return false;
             pending_consumable_sessions.insert(session_id);
+            skip_stale_consumable_snapshots.insert(session_id);
             pending_consumable_jobs.push_back(std::move(job));
         }
         {
