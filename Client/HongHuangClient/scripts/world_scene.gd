@@ -172,6 +172,7 @@ func _ready() -> void:
 		HHSession.world_network.player_left.connect(_on_player_left)
 		HHSession.world_network.combat_event.connect(_on_combat_event)
 		HHSession.world_network.monster_action_event.connect(_on_monster_action_event)
+		HHSession.world_network.player_action_event.connect(_on_player_action_event)
 		HHSession.world_network.pickup_event.connect(_on_pickup_event)
 		HHSession.world_network.chat_event.connect(_on_chat_event)
 		HHSession.world_network.disconnected.connect(_on_world_disconnected)
@@ -2329,6 +2330,22 @@ func _refresh_reward_status_later() -> void:
 	if progression_request_context.is_empty():
 		_refresh_character_status()
 
+func _on_player_action_event(event: Dictionary) -> void:
+	var character_id := str(event.get("character_id", ""))
+	if character_id.is_empty() or not remote_players.has(character_id):
+		return
+	var action := str(event.get("action", ""))
+	if action not in ["attack", "hit"]:
+		return
+	var remote := remote_players[character_id] as Node3D
+	if not is_instance_valid(remote):
+		return
+	var duration := 0.36 if action == "attack" else 0.32
+	remote.set_meta("remote_action_state", action)
+	remote.set_meta("remote_action_time", maxf(float(remote.get_meta("remote_action_time", 0.0)), duration))
+	remote.set_meta("remote_action_duration", duration)
+	remote.set_meta("remote_action_style", str(event.get("attack_style", "")))
+
 func _on_player_joined(player: Dictionary) -> void:
 	_upsert_remote_player(player)
 
@@ -2443,16 +2460,26 @@ func _process(delta: float) -> void:
 		remote.rotation.y = lerp_angle(remote.rotation.y, target_yaw, minf(delta * 12.0, 1.0))
 		var remote_time := float(remote.get_meta("remote_animation_time", 0.0)) + delta
 		remote.set_meta("remote_animation_time", remote_time)
+		var action_time := maxf(float(remote.get_meta("remote_action_time", 0.0)) - delta, 0.0)
+		remote.set_meta("remote_action_time", action_time)
+		var action_state := str(remote.get_meta("remote_action_state", ""))
+		if action_time <= 0.0:
+			action_state = ""
+			remote.set_meta("remote_action_state", "")
+		var remote_animation_state := action_state if action_state != "" else ("walk" if remote_moving else "idle")
+		var action_duration := maxf(float(remote.get_meta("remote_action_duration", 0.36)), 0.01)
+		var action_weight := sin(clampf(1.0 - action_time / action_duration, 0.0, 1.0) * PI) if action_state != "" else 0.0
 		var bob := sin(remote_time * (9.0 if remote_moving else 1.8)) * (0.035 if remote_moving else 0.012)
 		if bool(remote.get_meta("is_underworld", false)):
 			var remote_body := remote.get_node_or_null("RemoteBody") as MeshInstance3D
 			if is_instance_valid(remote_body):
 				remote_body.position.y = 0.42 + bob
+				remote_body.scale = Vector3.ONE * (1.0 + action_weight * (0.30 if action_state == "attack" else 0.18))
 		else:
 			var remote_humanoid := remote.get_node_or_null("RemoteHumanoid") as Node3D
 			if is_instance_valid(remote_humanoid):
 				remote_humanoid.position.y = bob
-				var native_animation := HumanoidAnimationDriver.apply_state(remote_humanoid, "walk" if remote_moving else "idle")
+				var native_animation := HumanoidAnimationDriver.apply_state(remote_humanoid, remote_animation_state)
 				if not native_animation:
 					var remote_stride := sin(remote_time * (9.0 if remote_moving else 1.8)) * (0.38 if remote_moving else 0.012)
 					var remote_left_arm := remote_humanoid.get_node_or_null("ArmPivotLeft") as Node3D
@@ -2460,9 +2487,10 @@ func _process(delta: float) -> void:
 					var remote_left_leg := remote_humanoid.get_node_or_null("LegPivotLeft") as Node3D
 					var remote_right_leg := remote_humanoid.get_node_or_null("LegPivotRight") as Node3D
 					if is_instance_valid(remote_left_arm):
-						remote_left_arm.rotation.x = remote_stride
+						remote_left_arm.rotation.x = remote_stride - action_weight * (0.18 if action_state == "attack" else 0.34)
 					if is_instance_valid(remote_right_arm):
-						remote_right_arm.rotation.x = -remote_stride
+						remote_right_arm.rotation.x = -remote_stride - action_weight * (1.18 if action_state == "attack" else -0.48)
+						remote_right_arm.rotation.z = -action_weight * 0.28 if action_state == "attack" else action_weight * 0.16
 					if is_instance_valid(remote_left_leg):
 						remote_left_leg.rotation.x = -remote_stride * 0.82
 					if is_instance_valid(remote_right_leg):
@@ -2470,6 +2498,7 @@ func _process(delta: float) -> void:
 		var remote_halo := remote.get_node_or_null("RemoteHalo") as MeshInstance3D
 		if is_instance_valid(remote_halo):
 			remote_halo.rotation.y += delta * (1.05 if remote_moving else 0.34)
+			remote_halo.scale = Vector3.ONE * (1.0 + action_weight * 0.24)
 	for monster_id in monsters:
 		var monster: Node3D = monsters[monster_id]
 		var target: Vector3 = monster_targets.get(monster_id, monster.position)
