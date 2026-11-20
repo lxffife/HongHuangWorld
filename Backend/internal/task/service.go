@@ -22,6 +22,8 @@ var (
  ErrIdempotencyConflict = errors.New("idempotency key conflict")
  ErrTaskFull = errors.New("bounty task is full")
  ErrTaskNotReady = errors.New("bounty task is not ready for this operation")
+ ErrCharacterNotEligible = errors.New("current character does not meet bounty requirements")
+ ErrNotParticipant = errors.New("account is not an active bounty participant")
 )
 
 type Service struct { db *sql.DB; factions *faction.Service }
@@ -40,6 +42,7 @@ type Task struct {
  EscrowAmount int64 `json:"escrow_amount"`
  DifficultyTier int `json:"difficulty_tier"`
  RequiredRealmLevel int `json:"required_realm_level"`
+ RequiredCharacterLevel int `json:"required_character_level"`
  MaxAssignees int `json:"max_assignees"`
  ParticipantCount int `json:"participant_count"`
  Status string `json:"status"`
@@ -57,6 +60,7 @@ type PublishRequest struct {
  MaxAssignees int
  DifficultyTier int
  RequiredRealmLevel int
+ RequiredCharacterLevel int
  ExpiresAt *string
 }
 
@@ -65,7 +69,7 @@ func (s *Service) PublishFaction(ctx context.Context, accountID string, req Publ
  if accountID=="" || req.FactionID=="" || req.EventKey=="" || len(req.EventKey)>128 || utf8.RuneCountInString(req.Title)<2 || utf8.RuneCountInString(req.Title)>96 ||
   utf8.RuneCountInString(req.Description)>2000 || len(req.CurrencyID)==0 || len(req.CurrencyID)>64 ||
   req.RewardAmount<=0 || req.MaxAssignees<1 || req.MaxAssignees>20 ||
-  req.DifficultyTier<1 || req.DifficultyTier>10 || req.RequiredRealmLevel<0 || req.RequiredRealmLevel>1000 ||
+  req.DifficultyTier<1 || req.DifficultyTier>10 || req.RequiredRealmLevel<0 || req.RequiredRealmLevel>1000 || req.RequiredCharacterLevel<1 || req.RequiredCharacterLevel>10000 ||
   req.RewardAmount>math.MaxInt64/int64(req.MaxAssignees) { return Task{},ErrInvalid }
  // First authorization gives a clear domain error; membership and role are rechecked
  // under the faction row lock in the publishing transaction below.
@@ -104,12 +108,12 @@ func (s *Service) PublishFaction(ctx context.Context, accountID string, req Publ
  var result Task
  err=tx.QueryRowContext(ctx,`INSERT INTO bounty_tasks
   (world_id,publisher_type,publisher_id,title,description,currency_id,reward_amount,escrow_amount,
-   difficulty_tier,required_realm_level,max_assignees,expires_at,created_by,request_key)
-  VALUES ($1,'faction',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+   difficulty_tier,required_realm_level,required_character_level,max_assignees,expires_at,created_by,request_key)
+  VALUES ($1,'faction',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
   RETURNING id::text,world_id,publisher_type,publisher_id::text,title,description,currency_id,
    reward_amount,escrow_amount,difficulty_tier,required_realm_level,max_assignees,status,expires_at::text,created_at::text`,
   worldID,req.FactionID,req.Title,req.Description,req.CurrencyID,req.RewardAmount,total,req.DifficultyTier,
-  req.RequiredRealmLevel,req.MaxAssignees,req.ExpiresAt,accountID,req.EventKey).
+  req.RequiredRealmLevel,req.RequiredCharacterLevel,req.MaxAssignees,req.ExpiresAt,accountID,req.EventKey).
   Scan(&result.ID,&result.WorldID,&result.PublisherType,&result.PublisherID,&result.Title,
    &result.Description,&result.CurrencyID,&result.RewardAmount,&result.EscrowAmount,&result.DifficultyTier,
    &result.RequiredRealmLevel,&result.MaxAssignees,&result.Status,&result.ExpiresAt,&result.CreatedAt)
@@ -173,7 +177,7 @@ func (s *Service) Contribute(ctx context.Context,accountID,factionID,currencyID,
 func (s *Service) ListOpen(ctx context.Context,worldID string)([]Task,error){
  if strings.TrimSpace(worldID)=="" || len(worldID)>64{return nil,ErrInvalid}
  rows,err:=s.db.QueryContext(ctx,`SELECT t.id::text,t.world_id,t.publisher_type,t.publisher_id::text,f.name,
-  t.title,t.description,t.currency_id,t.reward_amount,t.escrow_amount,t.difficulty_tier,t.required_realm_level,
+  t.title,t.description,t.currency_id,t.reward_amount,t.escrow_amount,t.difficulty_tier,t.required_realm_level,t.required_character_level,
   t.max_assignees,(SELECT count(*) FROM bounty_task_participants p WHERE p.task_id=t.id AND p.status='accepted'),
   t.status,t.expires_at::text,t.created_at::text
   FROM bounty_tasks t JOIN factions f ON f.id=t.publisher_id
@@ -183,7 +187,7 @@ func (s *Service) ListOpen(ctx context.Context,worldID string)([]Task,error){
  result:=make([]Task,0)
  for rows.Next(){var item Task;if err:=rows.Scan(&item.ID,&item.WorldID,&item.PublisherType,&item.PublisherID,&item.PublisherName,
   &item.Title,&item.Description,&item.CurrencyID,&item.RewardAmount,&item.EscrowAmount,&item.DifficultyTier,
-  &item.RequiredRealmLevel,&item.MaxAssignees,&item.ParticipantCount,&item.Status,&item.ExpiresAt,&item.CreatedAt);err!=nil{return nil,fmt.Errorf("scan bounty task: %w",err)}
+  &item.RequiredRealmLevel,&item.RequiredCharacterLevel,&item.MaxAssignees,&item.ParticipantCount,&item.Status,&item.ExpiresAt,&item.CreatedAt);err!=nil{return nil,fmt.Errorf("scan bounty task: %w",err)}
   result=append(result,item)}
  if err:=rows.Err();err!=nil{return nil,fmt.Errorf("iterate bounty tasks: %w",err)}
  return result,nil
