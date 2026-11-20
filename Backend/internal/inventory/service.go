@@ -15,7 +15,7 @@ var (
 	ErrSessionInvalid = errors.New("world session is not active on this server")
 	ErrDropUnavailable = errors.New("drop is unavailable")
 	ErrInventoryFull = errors.New("inventory stack is full")
-	ErrCharacterInWorld = errors.New("character must leave the world before changing equipment")
+	ErrCharacterInWorld = errors.New("character has an active world session")
 )
 
 type ItemStack struct {
