@@ -3,6 +3,7 @@ extends Control
 ## snapshot/entities; the player remains centered and nearby markers move around it.
 
 var player_position: Vector3 = Vector3.ZERO
+var player_yaw: float = 0.0
 var world_radius: float = 55.0
 var exploration_points: Array = []
 var npc_points: Array = []
@@ -60,9 +61,9 @@ func _draw() -> void:
 		if Rect2(center - Vector2(radius, radius), Vector2(radius * 2.0, radius * 2.0)).has_point(p):
 			draw_circle(p, 3.0, Color("#e16c6c"))
 	var player_triangle := PackedVector2Array([
-		center + Vector2(0.0, -8.0),
-		center + Vector2(-6.0, 6.0),
-		center + Vector2(6.0, 6.0)
+		center + Vector2(0.0, -8.0).rotated(-player_yaw),
+		center + Vector2(-6.0, 6.0).rotated(-player_yaw),
+		center + Vector2(6.0, 6.0).rotated(-player_yaw)
 	])
 	draw_colored_polygon(player_triangle, Color("#f2e8d6"))
 	draw_string(ThemeDB.fallback_font, Vector2(5.0, 13.0), "N", HORIZONTAL_ALIGNMENT_LEFT, -1.0, 10, Color("#a9bac7"))
