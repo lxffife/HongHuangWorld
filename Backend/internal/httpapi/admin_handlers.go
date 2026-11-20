@@ -274,7 +274,8 @@ func (h *adminHandlers) listOnlinePlayers(w http.ResponseWriter, r *http.Request
 	if _, ok := h.require(w, r, "players.read"); !ok { return }
 	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 	defer cancel()
-	result, err := h.game.OnlinePlayers(ctx)
+	filters := r.URL.Query()
+	result, err := h.game.OnlinePlayers(ctx, filters)
 	if err != nil {
 		h.logger.Error("admin online player lookup failed", "error", err)
 		http.Error(w, "game service unavailable", http.StatusServiceUnavailable)
