@@ -2490,6 +2490,9 @@ struct EnetServer::Impl {
                     {"last_input_sequence", entity.last_input_sequence},
                     {"slowed", honghuang::simulation::slow_is_active(
                         entity.slow_effect, std::chrono::duration_cast<std::chrono::milliseconds>(
+                            Clock::now().time_since_epoch()).count())},
+                    {"poisoned", honghuang::simulation::periodic_damage_is_active(
+                        entity.poison_effect, std::chrono::duration_cast<std::chrono::milliseconds>(
                             Clock::now().time_since_epoch()).count())}
                 });
             }
