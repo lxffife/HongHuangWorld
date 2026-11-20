@@ -32,5 +32,25 @@ int main() {
     assert(!apply_slow(effect, 0, 1000, std::numeric_limits<float>::quiet_NaN()));
     assert(!apply_slow(effect, INT64_MAX - 10, 1000, 0.5F));
     assert(movement_delta_with_effect(-1.0F, effect, 4500) == 0.0F);
+    PeriodicDamageEffect burn;
+    assert(!periodic_damage_is_active(burn, 1000));
+    assert(apply_periodic_damage(burn, 1000, 3000, 1000, 5));
+    assert(periodic_damage_is_active(burn, 1001));
+    assert(consume_periodic_damage_tick(burn, 1999) == 0);
+    assert(consume_periodic_damage_tick(burn, 2000) == 5);
+    assert(burn.next_tick_at_ms == 3000);
+    assert(apply_periodic_damage(burn, 2500, 3000, 1000, 3));
+    assert(burn.expires_at_ms == 5500 && burn.damage_per_tick == 5);
+    assert(consume_periodic_damage_tick(burn, 3000) == 5);
+    // A delayed world frame emits one tick, never a catch-up burst.
+    assert(consume_periodic_damage_tick(burn, 5100) == 5);
+    assert(consume_periodic_damage_tick(burn, 5500) == 0);
+    assert(!periodic_damage_is_active(burn, 5500));
+    assert(apply_periodic_damage(burn, 6000, 2000, 500, 2));
+    assert(burn.damage_per_tick == 2 && burn.next_tick_at_ms == 6500);
+    assert(!apply_periodic_damage(burn, 0, 0, 1000, 1));
+    assert(!apply_periodic_damage(burn, 0, 1000, 0, 1));
+    assert(!apply_periodic_damage(burn, 0, 1000, 1000, 0));
+    assert(!apply_periodic_damage(burn, INT64_MAX - 10, 1000, 500, 1));
     return 0;
 }
