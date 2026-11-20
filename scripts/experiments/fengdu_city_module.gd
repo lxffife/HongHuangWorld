@@ -191,7 +191,7 @@ func _build_reincarnation_complex(material_key: String) -> void:
 	_add_box("RebirthCeremonyCourt", Vector3(250.0, 0.4, 80.0), Vector3(0.0, 0.25, 145.0), "stone", false)
 	for index in range(5):
 		var x := (float(index) - 2.0) * 42.0
-		_add_box("ReincarnationStele_%d" % index, Vector3(5.0, 18.0, 5.0), Vector3(x, 9.0, 150.0), "sacred", true)
+		_add_box("ReincarnationStele_%d" % index, Vector3(5.0, 18.0, 5.0), Vector3(x, 9.0, 150.0), "sacred", false)
 
 
 func _build_market_street() -> void:
