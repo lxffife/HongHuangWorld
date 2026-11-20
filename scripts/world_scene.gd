@@ -1545,17 +1545,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		if is_instance_valid(soul_choice_button):
 			soul_choice_button.visible = hud_visible and soul_essence_profile.get("pending_rare_choices", []).size() > 0
 		if is_instance_valid(target_info_panel):
-		var target_width := minf(380.0, maxf(250.0, viewport_size.x - 32.0))
-		target_info_panel.position = Vector2(-target_width * 0.5, 18.0)
-		target_info_panel.custom_minimum_size.x = target_width
-		if is_instance_valid(target_health_bar):
-			target_health_bar.custom_minimum_size.x = target_width - 40.0
-	if is_instance_valid(notification_panel):
-		var notice_width := minf(520.0, maxf(250.0, viewport_size.x - 32.0))
-		notification_panel.position = Vector2(-notice_width * 0.5, 112.0)
-		notification_panel.custom_minimum_size.x = notice_width
-	if is_instance_valid(vitals_panel):
-			vitals_panel.visible = hud_visible
+			target_info_panel.visible = hud_visible and not selected_monster_id.is_empty()
+		if is_instance_valid(input_debug_panel):
+			input_debug_panel.visible = hud_visible and input_debug_visible
+		if is_instance_valid(notification_panel) and not hud_visible:
+			notification_panel.visible = false
 		if is_instance_valid(target_info_panel):
 			target_info_panel.visible = hud_visible and not selected_monster_id.is_empty()
 		if is_instance_valid(input_debug_panel):
@@ -1880,6 +1874,16 @@ func _layout_hud() -> void:
 		npc_interact_button.offset_right = -18.0
 		npc_interact_button.offset_top = -chat_height - 72.0
 		npc_interact_button.offset_bottom = -chat_height - 26.0
+	if is_instance_valid(target_info_panel):
+		var target_width := minf(380.0, maxf(250.0, viewport_size.x - 32.0))
+		target_info_panel.position = Vector2(-target_width * 0.5, 18.0)
+		target_info_panel.custom_minimum_size.x = target_width
+		if is_instance_valid(target_health_bar):
+			target_health_bar.custom_minimum_size.x = target_width - 40.0
+	if is_instance_valid(notification_panel):
+		var notice_width := minf(520.0, maxf(250.0, viewport_size.x - 32.0))
+		notification_panel.position = Vector2(-notice_width * 0.5, 112.0)
+		notification_panel.custom_minimum_size.x = notice_width
 	if is_instance_valid(vitals_panel):
 		var vitals_width := minf(340.0, maxf(250.0, viewport_size.x - 36.0))
 		vitals_panel.custom_minimum_size = Vector2(vitals_width, 154.0)
