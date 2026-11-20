@@ -855,7 +855,15 @@ func (s *Service) AllocateAttributePoints(ctx context.Context, accountID, attrib
 	case "spirit":
 		updateSQL = `UPDATE character_attributes SET spirit = spirit + $1, max_mana = max_mana + ($1 * 10), mana = LEAST(mana + ($1 * 10), max_mana + ($1 * 10)), updated_at = now() WHERE character_id = $2`
 	case "vitality":
-		updateSQL = `UPDATE character_attributes SET vitality = vitality + $1, defense = defense + $1, updated_at = now() WHERE character_id = $2`
+		// Vitality reinforces survivability: each point adds 5 max health and
+		// 1 defense, matching the reincarnation baseline formula.
+		updateSQL = `UPDATE character_attributes
+			SET vitality = vitality + $1,
+			    defense = defense + $1,
+			    max_health = max_health + ($1 * 5),
+			    health = LEAST(health + ($1 * 5), max_health + ($1 * 5)),
+			    updated_at = now()
+			WHERE character_id = $2`
 	default:
 		return ErrInvalidAllocation
 	}
