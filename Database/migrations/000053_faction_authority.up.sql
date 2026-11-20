@@ -27,6 +27,7 @@ CREATE TABLE faction_members (
     PRIMARY KEY (faction_id, account_id)
 );
 CREATE INDEX idx_faction_members_account ON faction_members(account_id, joined_at DESC);
+CREATE UNIQUE INDEX uq_faction_single_leader ON faction_members(faction_id) WHERE role = 'leader';
 
 CREATE TABLE faction_membership_applications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
