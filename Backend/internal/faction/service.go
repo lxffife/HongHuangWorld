@@ -223,7 +223,7 @@ func (s *Service) AuthorizeTaskPublisher(ctx context.Context, accountID, faction
 		WHERE m.faction_id=$1 AND m.account_id=$2 AND f.status='active'`, factionID, accountID).Scan(&role)
 	if errors.Is(err, sql.ErrNoRows) { return ErrForbidden }
 	if err != nil { return fmt.Errorf("authorize faction task publisher: %w", err) }
-	if role != "leader" && role != "officer" { return ErrForbidden }
+	if !canManageRole(role) { return ErrForbidden }
 	return nil
 }
 
