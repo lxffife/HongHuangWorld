@@ -11,6 +11,8 @@ var _materials: Dictionary = {}
 var _player_nearby := false
 var _patrol_origin := Vector3.ZERO
 var _patrol_time := 0.0
+var _citizen_body: MeshInstance3D
+var _citizen_time := 0.0
 
 
 func configure(data: Dictionary) -> void:
@@ -28,16 +30,20 @@ func _ready() -> void:
 			_build_guard()
 		"watchtower":
 			_build_watchtower()
+		"citizen":
+			_build_citizen()
 		"gatehouse":
 			_build_gatehouse()
 
 
 func _process(delta: float) -> void:
-	if module_kind != "guard":
-		return
-	_patrol_time += delta
-	position.x = _patrol_origin.x + sin(_patrol_time * 0.48) * 7.0
-	rotation.y = sin(_patrol_time * 0.48) * 0.22
+	if module_kind == "guard":
+		_patrol_time += delta
+		position.x = _patrol_origin.x + sin(_patrol_time * 0.48) * 7.0
+		rotation.y = sin(_patrol_time * 0.48) * 0.22
+	elif module_kind == "citizen" and _citizen_body != null:
+		_citizen_time += delta
+		_citizen_body.position.y = 1.0 + sin(_citizen_time * 1.6) * 0.035
 
 
 func _create_materials() -> void:
@@ -285,6 +291,52 @@ func _build_guard() -> void:
 	label.pixel_size = 0.02
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.modulate = Color("#d8c9ad")
+	add_child(label)
+
+
+func _build_citizen() -> void:
+	var role := str(module_data.get("role", "居民"))
+	var robe_color := "#a17b58"
+	match role:
+		"鬼市商贩":
+			robe_color = "#9a6948"
+		"鬼籍书吏", "判官文吏":
+			robe_color = "#536a83"
+		"引魂使":
+			robe_color = "#6d648c"
+		"坊民":
+			robe_color = "#65765e"
+	_citizen_body = MeshInstance3D.new()
+	_citizen_body.name = "CitizenBody"
+	var body_mesh := CapsuleMesh.new()
+	body_mesh.radius = 0.42
+	body_mesh.height = 1.85
+	_citizen_body.mesh = body_mesh
+	_citizen_body.position.y = 1.0
+	_citizen_body.material_override = _material(robe_color)
+	add_child(_citizen_body)
+	var head := MeshInstance3D.new()
+	var head_mesh := SphereMesh.new()
+	head_mesh.radius = 0.34
+	head_mesh.height = 0.58
+	head.mesh = head_mesh
+	head.position = Vector3(0.0, 2.05, 0.0)
+	head.material_override = _material("#c6ad91")
+	add_child(head)
+	var sash := MeshInstance3D.new()
+	var sash_mesh := BoxMesh.new()
+	sash_mesh.size = Vector3(0.9, 0.16, 0.48)
+	sash.mesh = sash_mesh
+	sash.position = Vector3(0.0, 1.35, -0.04)
+	sash.material_override = _material("#b69b6d")
+	add_child(sash)
+	var label := Label3D.new()
+	label.text = str(module_data.get("name", role))
+	label.position = Vector3(0.0, 2.75, 0.0)
+	label.font_size = 24
+	label.pixel_size = 0.02
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.modulate = Color("#e2d5c2")
 	add_child(label)
 
 
