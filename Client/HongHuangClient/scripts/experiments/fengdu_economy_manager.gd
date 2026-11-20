@@ -62,7 +62,8 @@ func get_wallet_snapshot(player_id: String = "local_player") -> Dictionary:
 func get_board_tasks() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for task_id in _tasks:
-		result.append((_tasks[task_id] as Dictionary).duplicate(true))
+		var task: Dictionary = _tasks[task_id]
+		result.append(task.duplicate(true))
 	result.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a.get("created_at", 0)) > int(b.get("created_at", 0)))
 	return result
 
@@ -103,7 +104,8 @@ func publish_task(publisher_id: String, title: String, description: String, rewa
 	}
 	economy_changed.emit()
 	board_changed.emit()
-	return {"ok": true, "task": (_tasks[task_id] as Dictionary).duplicate(true)}
+	var published_task: Dictionary = _tasks[task_id]
+	return {"ok": true, "task": published_task.duplicate(true)}
 
 
 func accept_task(task_id: String, worker_id: String) -> Dictionary:
@@ -161,4 +163,5 @@ func cancel_task(task_id: String, publisher_id: String) -> Dictionary:
 func get_task(task_id: String) -> Dictionary:
 	if not _tasks.has(task_id):
 		return {}
-	return (_tasks[task_id] as Dictionary).duplicate(true)
+	var task: Dictionary = _tasks[task_id]
+	return task.duplicate(true)
