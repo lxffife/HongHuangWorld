@@ -62,6 +62,52 @@ CREATE TABLE economy_ledger_entries (
 CREATE INDEX idx_economy_ledger_account_time ON economy_ledger_entries(account_id, created_at DESC);
 CREATE INDEX idx_economy_ledger_source ON economy_ledger_entries(source_type, source_id);
 
+CREATE TABLE economy_treasury_accounts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    world_id VARCHAR(64) NOT NULL,
+    account_key VARCHAR(64) NOT NULL,
+    display_name VARCHAR(96) NOT NULL,
+    account_type VARCHAR(24) NOT NULL DEFAULT 'world_treasury'
+        CHECK (account_type IN ('world_treasury', 'city_treasury', 'faction_treasury', 'exchange_reserve')),
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (world_id, account_key)
+);
+
+CREATE TABLE economy_treasury_balances (
+    treasury_account_id UUID NOT NULL REFERENCES economy_treasury_accounts(id) ON DELETE CASCADE,
+    currency_id VARCHAR(64) NOT NULL REFERENCES currency_definitions(id),
+    available_amount BIGINT NOT NULL DEFAULT 0 CHECK (available_amount >= 0),
+    frozen_amount BIGINT NOT NULL DEFAULT 0 CHECK (frozen_amount >= 0),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (treasury_account_id, currency_id)
+);
+
+CREATE TABLE economy_treasury_ledger_entries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    treasury_account_id UUID NOT NULL REFERENCES economy_treasury_accounts(id),
+    currency_id VARCHAR(64) NOT NULL REFERENCES currency_definitions(id),
+    event_key VARCHAR(128) NOT NULL,
+    entry_type VARCHAR(32) NOT NULL,
+    delta BIGINT NOT NULL CHECK (delta <> 0),
+    balance_after BIGINT NOT NULL CHECK (balance_after >= 0),
+    source_type VARCHAR(32) NOT NULL DEFAULT '',
+    source_id VARCHAR(128) NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (treasury_account_id, event_key)
+);
+CREATE INDEX idx_economy_treasury_ledger_time
+    ON economy_treasury_ledger_entries(treasury_account_id, created_at DESC);
+
+INSERT INTO economy_treasury_accounts (world_id, account_key, display_name, account_type)
+VALUES
+('underworld_fengdu', 'city_treasury', '酆都城主府库银', 'city_treasury'),
+('qingyun_human', 'world_treasury', '青云人界公库', 'world_treasury'),
+('myriad_demon', 'world_treasury', '万妖界公库', 'world_treasury')
+ON CONFLICT (world_id, account_key) DO NOTHING;
+
 CREATE TABLE economy_escrows (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     account_id UUID NOT NULL,
