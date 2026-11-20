@@ -6,17 +6,18 @@ ALTER TABLE item_definitions
 -- Existing weapon catalog entries predate explicit weapon metadata.
 -- Preserve the current starter sword as a sword; future weapon entries must declare a type.
 UPDATE item_definitions
-SET weapon_type = CASE
-    WHEN id LIKE '%spear%' OR name LIKE '%枪%' OR name LIKE '%矛%' THEN 'spear'
-    WHEN id LIKE '%bow%' OR name LIKE '%弓%' THEN 'bow'
-    WHEN id LIKE '%staff%' OR id LIKE '%wand%' OR name LIKE '%法杖%' OR name LIKE '%拂尘%' THEN 'staff'
-    WHEN id LIKE '%axe%' OR name LIKE '%斧%' THEN 'axe'
-    WHEN id LIKE '%hammer%' OR name LIKE '%锤%' THEN 'hammer'
-    WHEN id LIKE '%dagger%' OR name LIKE '%匕首%' THEN 'dagger'
-    WHEN id LIKE '%focus%' OR name LIKE '%法器%' THEN 'focus'
-    ELSE 'sword'
-END
-WHERE equipment_slot = 'weapon';
+SET weapon_type = 'sword'
+WHERE id = 'starter_iron_sword' AND equipment_slot = 'weapon';
+
+-- Fail safely if a custom weapon exists without an explicit classification.
+-- Add its weapon_type before applying this migration rather than guessing from its name.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM item_definitions WHERE equipment_slot = 'weapon' AND weapon_type IS NULL) THEN
+        RAISE EXCEPTION 'weapon_type is missing for one or more weapon items; classify them before applying migration 000049';
+    END IF;
+END;
+$$;
 
 ALTER TABLE item_definitions
     ADD CONSTRAINT item_weapon_type_valid CHECK (
