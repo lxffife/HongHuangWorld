@@ -22,7 +22,7 @@ Windows 开发机在仓库根目录运行：
 powershell -ExecutionPolicy Bypass -File .\Client\NativeNet\build_windows.ps1
 ```
 
-然后使用 Godot 4.3 打开本目录中的 `project.godot`。确保 `bin/honghuang_native_net.dll` 已生成。
+然后使用与 NativeNet godot-cpp 构建版本一致的 Godot 编辑器打开本目录中的 `project.godot`。仓库当前 NativeNet 仍固定 Godot 4.3；如果开发机已使用 Godot 4.6，必须先同步升级 NativeNet 构建链，不能只替换编辑器。确保 `bin/honghuang_native_net.dll` 已生成。
 
 ## 服务端前置条件
 
@@ -113,3 +113,8 @@ WorldServer 在玩家完成认证后广播可靠 `PlayerJoined`，在断线或�
 - 新增“因果簿·功德与业力”面板，通过 `GET /api/v1/souls/current/fate` 读取灵魂累计功德、业力和最近 20 条因果记录。酆都游祟讨伐由可信世界服验证后，每次增加 1 点功德；前世记录与功德、业力均归属于灵魂，不随肉身轮回清零。
 - 轮回操作必须在世界会话关闭后执行；资格查询只是展示，中心服创建肉身事务仍会重新校验门槛。若 ENet 断开或 WorldServer 最终保存失败，客户端不会绕过服务端校验强行创建肉身。
 - 当前 NPC 美术为程序化占位模型；完整角色模型、动画和对话树仍待接入。
+
+
+## 世界地图与 Terrain3D
+
+地图采用与渲染器解耦的坐标投影和区域目录。当前 Terrain3D 尚未安装到正式客户端；请先阅读 [Terrain3D 接入记录与版本门禁](docs/TERRAIN3D-INTEGRATION.md)，确认 Godot、NativeNet 和 Terrain3D 的精确版本匹配后再接入。
