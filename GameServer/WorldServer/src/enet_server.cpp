@@ -6,6 +6,7 @@
 #include "simulation/weapon_combat.hpp"
 #include "simulation/projectile.hpp"
 #include "simulation/spell_combat.hpp"
+#include "simulation/consumable.hpp"
 #include "persistence/durable_outbox.hpp"
 #include "network/chat_delivery_policy.hpp"
 
@@ -1914,11 +1915,13 @@ struct EnetServer::Impl {
                     response.contains("max_health") && response["max_health"].is_number_integer() &&
                     response.contains("mana") && response["mana"].is_number_integer() &&
                     response.contains("max_mana") && response["max_mana"].is_number_integer()) {
-                    const auto hp = response["health"].get<std::int64_t>();
-                    const auto max_hp = response["max_health"].get<std::int64_t>();
-                    const auto mp = response["mana"].get<std::int64_t>();
-                    const auto max_mp = response["max_mana"].get<std::int64_t>();
-                    if (hp >= 0 && max_hp > 0 && hp <= max_hp && mp >= 0 && max_mp >= mp) {
+                    const honghuang::simulation::ConsumableResources resources{
+                        response["health"].get<std::int64_t>(),
+                        response["max_health"].get<std::int64_t>(),
+                        response["mana"].get<std::int64_t>(),
+                        response["max_mana"].get<std::int64_t>()
+                    };
+                    if (honghuang::simulation::valid_consumable_resources(resources)) {
                         result.result = std::move(response);
                     } else {
                         result.success = false;
@@ -2240,7 +2243,7 @@ struct EnetServer::Impl {
                      {"item_id", item_id}, {"reason", reason}});
         };
         if (player.health <= 0) { reject("角色已倒地，无法使用消耗品。"); return; }
-        if (request_id.size() != 36 || item_id.empty() || item_id.size() > 96 || quantity < 1 || quantity > 20) {
+        if (!honghuang::simulation::valid_consumable_request(request_id, item_id, quantity)) {
             reject("消耗品请求格式无效。"); return;
         }
         if (!enqueue_consumable_job(ConsumableJob{player.session_id, player.character_id, request_id, item_id, quantity})) {
