@@ -61,6 +61,8 @@ struct PlayerState {
     std::int64_t defense{};
     std::int64_t health{100};
     std::int64_t max_health{100};
+    std::int64_t mana{};
+    std::int64_t max_mana{};
     float x{};
     float y{};
     float z{};
@@ -340,7 +342,8 @@ bool save_and_close_session(const ServerConfig& config, const PlayerState& playe
         {"position_y", player.y},
         {"position_z", player.z},
         {"rotation_y", player.yaw},
-        {"health", player.health}
+        {"health", player.health},
+        {"mana", player.mana}
     }.dump();
     std::string response;
     struct curl_slist* headers = nullptr;
@@ -395,7 +398,8 @@ bool save_periodic_position(const ServerConfig& config, const PlayerState& playe
         {"position_y", player.y},
         {"position_z", player.z},
         {"rotation_y", player.yaw},
-        {"health", player.health}
+        {"health", player.health},
+        {"mana", player.mana}
     }.dump();
     std::string response;
     struct curl_slist* headers = nullptr;
@@ -2171,6 +2175,7 @@ struct EnetServer::Impl {
                     {"name", entity.name},
                     {"birth_inheritance", entity.birth_inheritance},
                     {"equipment", entity.equipment},
+                    {"mana", entity.mana}, {"max_mana", entity.max_mana},
                     {"x", entity.x}, {"y", entity.y}, {"z", entity.z},
                     {"yaw", entity.yaw},
                     {"last_input_sequence", entity.last_input_sequence}
@@ -2729,9 +2734,9 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                                                        &stats_request, stats_http_status, combat_stats, stats_error) ||
                             !combat_stats.is_object() || !combat_stats.contains("attack") ||
                             !combat_stats.contains("defense") || !combat_stats.contains("health") ||
-                            !combat_stats.contains("max_health") || !combat_stats["attack"].is_number_integer() ||
+                            !combat_stats.contains("max_health") || !combat_stats.contains("mana") || !combat_stats.contains("max_mana") || !combat_stats["attack"].is_number_integer() ||
                             !combat_stats["defense"].is_number_integer() || !combat_stats["health"].is_number_integer() ||
-                            !combat_stats["max_health"].is_number_integer()) {
+                            !combat_stats["max_health"].is_number_integer() || !combat_stats["mana"].is_number_integer() || !combat_stats["max_mana"].is_number_integer()) {
                             std::cerr << "Could not synchronize authoritative character combat stats: "
                                       << stats_error << std::endl;
                             send_json(event.peer, honghuang::protocol::MessageType::ServerReject,
@@ -2756,6 +2761,8 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                         player.defense = combat_stats.at("defense").get<std::int64_t>();
                         player.health = combat_stats.at("health").get<std::int64_t>();
                         player.max_health = combat_stats.at("max_health").get<std::int64_t>();
+                        player.mana = combat_stats.at("mana").get<std::int64_t>();
+                        player.max_mana = combat_stats.at("max_mana").get<std::int64_t>();
                         player.name = snapshot.value("name", std::string{});
                         player.birth_inheritance = snapshot.value("birth_inheritance", Json::object());
                         if (!player.birth_inheritance.is_object()) player.birth_inheritance = Json::object();
