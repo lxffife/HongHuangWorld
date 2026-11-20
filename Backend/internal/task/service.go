@@ -196,13 +196,16 @@ func (s *Service) Join(ctx context.Context,accountID,taskID string)error{
  var max int;var status string;var expires sql.NullTime
  err=tx.QueryRowContext(ctx,`SELECT max_assignees,status,expires_at FROM bounty_tasks WHERE id=$1 FOR UPDATE`,taskID).Scan(&max,&status,&expires)
  if errors.Is(err,sql.ErrNoRows){return ErrNotFound};if err!=nil{return fmt.Errorf("lock bounty task: %w",err)}
- if status!="open"&&status!="in_progress"{return ErrTaskFull}
+ if status=="full"{return ErrTaskFull};if status!="open"&&status!="in_progress"{return ErrNotFound}
  if expires.Valid && !expires.Time.After(time.Now()){return ErrNotFound}
  var joined int
  if err=tx.QueryRowContext(ctx,`SELECT count(*) FROM bounty_task_participants WHERE task_id=$1 AND status='accepted'`,taskID).Scan(&joined);err!=nil{return fmt.Errorf("count bounty participants: %w",err)}
  if joined>=max{return ErrTaskFull}
- _,err=tx.ExecContext(ctx,`INSERT INTO bounty_task_participants(task_id,account_id) VALUES($1,$2)`,taskID,accountID)
- if err!=nil{if strings.Contains(strings.ToLower(err.Error()),"duplicate key"){return ErrAlreadyJoined};return fmt.Errorf("join bounty task: %w",err)}
+ insertResult,insertErr:=tx.ExecContext(ctx,`INSERT INTO bounty_task_participants(task_id,account_id) VALUES($1,$2)
+  ON CONFLICT(task_id,account_id) DO NOTHING`,taskID,accountID)
+ if insertErr!=nil{return fmt.Errorf("join bounty task: %w",insertErr)}
+ inserted,rowsErr:=insertResult.RowsAffected();if rowsErr!=nil{return fmt.Errorf("read bounty participant insert result: %w",rowsErr)}
+ if inserted==0{return ErrAlreadyJoined}
  next:="in_progress";if joined+1>=max{next="full"}
  if _,err=tx.ExecContext(ctx,`UPDATE bounty_tasks SET status=$2,updated_at=now() WHERE id=$1`,taskID,next);err!=nil{return fmt.Errorf("update bounty task capacity: %w",err)}
  if err=tx.Commit();err!=nil{return fmt.Errorf("commit bounty join: %w",err)}
