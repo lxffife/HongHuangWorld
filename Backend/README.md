@@ -198,3 +198,14 @@ P0 采用模块化单体，按领域划分 internal 包。HTTP 层负责协议�
 Migrations `000036_equipment_sets` and `000037_qingyun_starter_equipment_set` add reusable equipment-set definitions. Item definitions reference an optional `equipment_set_id`; each set stores display metadata and JSONB `bonus_tiers`, keyed by required equipped-piece count (for example, `{"2":{"attack":2},"4":{"defense":3}}`). Inventory and current-equipment responses expose `set_id`, `set_name`, `set_description`, and `set_bonus_tiers` for lobby display and try-on comparison.
 
 The first configured example is the six-piece 青云初修套装: 2 pieces grant +2 attack, 4 pieces grant +3 defense, and 6 pieces add +2 defense and +20 max health. These fields are configuration/display metadata only. They do not alter combat calculations; equipment combat stats remain server-authoritative and must be integrated separately before any set bonus affects gameplay.
+
+## 统一经济系统（第一阶段）
+
+- 设计文档：`docs/UNIFIED-ECONOMY-DESIGN.md`。
+- 数据迁移：`Database/migrations/000052_unified_economy_foundation.up.sql`。
+- `GET /api/v1/economy/currencies`：读取统一货币目录。
+- `GET /api/v1/economy/wallet`：Bearer 认证后读取账号级统一钱包；钱包跨角色轮回和世界切换保留。
+- `internal/economy` 提供统一账户余额、整数金额、事务行锁、幂等事件和不可变流水原语。
+- 凡俗货币标记为不可直接修炼；灵石、冥石、魔石等修炼货币同时支持交易与修炼/制造用途；世界本源资源默认不可自由兑换。
+- 官方汇率、市场报价走廊、手续费、兑换储备、逐步解锁条件已建立数据库结构。兑换执行接口尚未开放。
+- 本阶段没有把 Godot 本地任务大厅切换到正式钱包；NPC 差事奖励、公共悬赏、修炼扣除、炼器消耗和兑换事务仍待后续接入。
