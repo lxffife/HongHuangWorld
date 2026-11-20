@@ -116,3 +116,77 @@ static func _bone_offset(slot: String) -> Vector3:
 		"back": return Vector3(0.0, 0.0, 0.16)
 		"accessory": return Vector3(0.12, 0.0, -0.12)
 	return Vector3.ZERO
+
+# Shared slot mesh generation keeps local and remote player equipment identical.
+static func create_equipment_visual(slot: String, quality: int, item_id: String = "") -> Node3D:
+	if not SOCKET_NAMES.has(slot):
+		return null
+	var root := Node3D.new()
+	root.name = "EquipmentVisual"
+	root.set_meta("item_id", item_id)
+	var accent := Color("#c5a66d")
+	if quality >= 5:
+		accent = Color("#e9a7ff")
+	elif quality == 4:
+		accent = Color("#8fc8ff")
+	elif quality == 3:
+		accent = Color("#8ee0b0")
+	var material := StandardMaterial3D.new()
+	material.albedo_color = accent
+	material.metallic = 0.42
+	material.roughness = 0.34
+	match slot:
+		"weapon", "offhand":
+			var blade_mesh := BoxMesh.new()
+			blade_mesh.size = Vector3(0.075, 0.78, 0.035)
+			var blade := _add_mesh(root, "EquipmentBlade", blade_mesh, material)
+			blade.position = Vector3(0.0, 0.42, -0.06)
+			blade.rotation.z = -0.12 if slot == "weapon" else 0.12
+			var grip_mesh := BoxMesh.new()
+			grip_mesh.size = Vector3(0.11, 0.20, 0.09)
+			var grip := _add_mesh(root, "EquipmentGrip", grip_mesh, _dark_material())
+			grip.position.y = -0.02
+		"head":
+			var mesh := SphereMesh.new()
+			mesh.radius = 0.27
+			mesh.height = 0.30
+			_add_mesh(root, "EquipmentHelmet", mesh, material)
+		"chest":
+			var mesh := BoxMesh.new()
+			mesh.size = Vector3(0.58, 0.64, 0.16)
+			_add_mesh(root, "EquipmentChestArmor", mesh, material)
+		"legs":
+			var mesh := BoxMesh.new()
+			mesh.size = Vector3(0.58, 0.30, 0.13)
+			var armor := _add_mesh(root, "EquipmentLegArmor", mesh, material)
+			armor.position.y = -0.12
+		"boots":
+			for side in [-1.0, 1.0]:
+				var mesh := BoxMesh.new()
+				mesh.size = Vector3(0.20, 0.16, 0.34)
+				var boot := _add_mesh(root, "EquipmentBoot" + str(side), mesh, material)
+				boot.position = Vector3(side * 0.17, -0.10, -0.04)
+		"accessory":
+			var mesh := TorusMesh.new()
+			mesh.inner_radius = 0.07
+			mesh.outer_radius = 0.11
+			_add_mesh(root, "EquipmentOrnament", mesh, material)
+		"back":
+			var mesh := BoxMesh.new()
+			mesh.size = Vector3(0.58, 0.76, 0.10)
+			_add_mesh(root, "EquipmentBackMantle", mesh, material)
+	return root
+
+static func _add_mesh(parent: Node3D, node_name: String, mesh: Mesh, material: Material) -> MeshInstance3D:
+	var instance := MeshInstance3D.new()
+	instance.name = node_name
+	instance.mesh = mesh
+	instance.material_override = material
+	parent.add_child(instance)
+	return instance
+
+static func _dark_material() -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#493b32")
+	material.roughness = 0.72
+	return material
