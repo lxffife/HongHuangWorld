@@ -2620,7 +2620,8 @@ struct EnetServer::Impl {
                 spell->element == honghuang::simulation::SpellElement::Ice ? "ice_bolt" : "fireball",
                 spell->slow_duration_ms, spell->slow_multiplier
             });
-            broadcast_player_action_event(player, "cast", target->runtime_id, "spell_fireball", peer);
+            broadcast_player_action_event(player, "cast", target->runtime_id,
+                spell->element == honghuang::simulation::SpellElement::Ice ? "spell_ice_bolt" : "spell_fireball", peer);
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", true}, {"action", "spell_cast"}, {"phase", "released"},
                            {"spell_id", std::string(spell->id)}, {"projectile_id", projectile_id},
@@ -2803,8 +2804,12 @@ struct EnetServer::Impl {
                 target_storage.approach_z = target_storage.z + static_cast<float>(std::sin(angle) * slot_radius);
                 target_storage.has_approach_position = true;
             }
+            const auto effect_now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now.time_since_epoch()).count();
+            const float monster_delta = honghuang::simulation::movement_delta_with_effect(
+                delta, monster.slow_effect, effect_now_ms);
             if (!honghuang::simulation::tick_monster(
-                    monster.definition, monster.state, nearest_target, delta)) {
+                    monster.definition, monster.state, nearest_target, monster_delta)) {
                 std::cerr << "Skipping invalid monster simulation state: "
                           << monster.runtime_id << '\n';
                 continue;
