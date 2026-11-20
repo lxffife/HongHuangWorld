@@ -72,6 +72,14 @@ func (s *Service) CreateSect(ctx context.Context, accountID, worldID, name, desc
 		return Faction{}, fmt.Errorf("validate sect world: %w", err)
 	}
 	if !exists { return Faction{}, ErrInvalid }
+	var characterInWorld bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(
+		SELECT 1 FROM souls s JOIN characters c ON c.id=s.current_character_id
+		WHERE s.account_id=$1 AND c.world_id=$2 AND c.status='alive'
+	)`, accountID, worldID).Scan(&characterInWorld); err != nil {
+		return Faction{}, fmt.Errorf("validate founder world presence: %w", err)
+	}
+	if !characterInWorld { return Faction{}, ErrForbidden }
 	var result Faction
 	err = tx.QueryRowContext(ctx, `INSERT INTO factions
 		(world_id, faction_type, name, description, created_by)
@@ -107,7 +115,7 @@ func (s *Service) CreateSect(ctx context.Context, accountID, worldID, name, desc
 func (s *Service) ListMine(ctx context.Context, accountID string) ([]Faction, error) {
 	if accountID == "" { return nil, ErrInvalid }
 	rows, err := s.db.QueryContext(ctx, `SELECT f.id::text, f.world_id, f.faction_type, f.name,
-		f.description, f.level, m.role,
+		f.description, f.level, COALESCE(f.treasury_account_id::text, ''), m.role,
 		(SELECT count(*) FROM faction_members count_members WHERE count_members.faction_id=f.id)
 		FROM faction_members m JOIN factions f ON f.id=m.faction_id
 		WHERE m.account_id=$1 AND f.status='active'
@@ -118,7 +126,7 @@ func (s *Service) ListMine(ctx context.Context, accountID string) ([]Faction, er
 	for rows.Next() {
 		var item Faction
 		if err := rows.Scan(&item.ID, &item.WorldID, &item.Type, &item.Name,
-			&item.Description, &item.Level, &item.Role, &item.MemberCount); err != nil {
+			&item.Description, &item.Level, &item.TreasuryAccountID, &item.Role, &item.MemberCount); err != nil {
 			return nil, fmt.Errorf("scan faction: %w", err)
 		}
 		result = append(result, item)
@@ -158,6 +166,7 @@ func (s *Service) ReviewApplication(ctx context.Context, reviewerID, factionID, 
 	err = tx.QueryRowContext(ctx, `SELECT m.role, a.account_id::text, a.status
 		FROM faction_members m
 		JOIN faction_membership_applications a ON a.faction_id=m.faction_id
+		JOIN factions f ON f.id=m.faction_id AND f.status='active'
 		WHERE m.faction_id=$1 AND m.account_id=$2 AND a.id=$3
 		FOR UPDATE OF a`, factionID, reviewerID, applicationID).Scan(&role, &applicantID, &status)
 	if errors.Is(err, sql.ErrNoRows) { return ErrForbidden }
