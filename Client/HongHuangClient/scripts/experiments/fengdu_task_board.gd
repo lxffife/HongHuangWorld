@@ -13,6 +13,8 @@ var _title_input: LineEdit
 var _description_input: LineEdit
 var _reward_input: SpinBox
 var _currency_option: OptionButton
+var _difficulty_option: OptionButton
+var _realm_option: OptionButton
 var _active_currency_id := "nether_stone"
 var _is_open := false
 
@@ -90,7 +92,10 @@ func _publish_pressed() -> void:
 	if _economy == null:
 		return
 	var reward := int(_reward_input.value)
-	var result: Dictionary = _economy.call("publish_task", "local_player", _title_input.text, _description_input.text, reward, _active_currency_id)
+	var tier_ids := ["entry", "low", "mid", "high", "danger", "sect", "official"]
+	var selected_tier := tier_ids[_difficulty_option.selected]
+	var required_realm := _realm_option.get_item_id(_realm_option.selected)
+	var result: Dictionary = _economy.call("publish_task", "local_player", _title_input.text, _description_input.text, reward, _active_currency_id, selected_tier, required_realm, "player")
 	_feedback.text = str(result.get("reason", "委托已发布。"))
 	if bool(result.get("ok", false)):
 		_title_input.clear()
@@ -245,6 +250,24 @@ func _build_ui() -> void:
 	publish.text = "支付费用并发布"
 	publish.pressed.connect(_publish_pressed)
 	form_row.add_child(publish)
+	var qualification_row := HBoxContainer.new()
+	column.add_child(qualification_row)
+	_difficulty_option = OptionButton.new()
+	for tier_name in ["凡俗/入门", "低阶", "中阶", "高阶", "险地", "宗门", "官方"]:
+		_difficulty_option.add_item(tier_name)
+	_difficulty_option.select(1)
+	_difficulty_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	qualification_row.add_child(_difficulty_option)
+	_realm_option = OptionButton.new()
+	_realm_option.add_item("不限境界", 0)
+	_realm_option.add_item("境界 1", 1)
+	_realm_option.add_item("境界 2", 2)
+	_realm_option.add_item("境界 3", 3)
+	_realm_option.add_item("境界 4", 4)
+	_realm_option.add_item("境界 5", 5)
+	_realm_option.select(1)
+	_realm_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	qualification_row.add_child(_realm_option)
 	_feedback = Label.new()
 	_feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(_feedback)
@@ -273,8 +296,28 @@ func _on_market_selected(index: int) -> void:
 	_reward_input.min_value = 50.0 if index == 1 else 5.0
 	_reward_input.max_value = 1000000.0 if index == 1 else 100000.0
 	_reward_input.value = maxf(_reward_input.value, _reward_input.min_value)
+	_difficulty_option.select(0 if index == 1 else 1)
+	_realm_option.select(0 if index == 1 else 1)
+	_realm_option.disabled = index == 1
 	_feedback.text = "已切换至凡俗事务市场。" if index == 1 else "已切换至修炼悬赏市场。"
 	refresh()
+
+
+func _publisher_type_text(publisher_type: String) -> String:
+	match publisher_type:
+		"sect": return "宗门"
+		"city_government": return "城主府"
+		"official_agency": return "官署"
+	return "个人"
+
+
+func _difficulty_text(tier: String) -> String:
+	var names := {"entry": "凡俗/入门", "low": "低阶", "mid": "中阶", "high": "高阶", "danger": "险地", "sect": "宗门", "official": "官方"}
+	return str(names.get(tier, "未定级"))
+
+
+func _realm_text(level: int) -> String:
+	return "不限" if level <= 0 else "境界 %d" % level
 
 
 func _format_amount(value: int) -> String:
