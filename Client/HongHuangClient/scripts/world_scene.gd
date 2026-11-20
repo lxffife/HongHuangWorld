@@ -99,6 +99,9 @@ var target_health_bar: ProgressBar
 var minimap_panel: PanelContainer
 var minimap_view: Control
 var minimap_region_label: Label
+var minimap_navigation_label: Label
+var minimap_clear_navigation_button: Button
+var minimap_navigation_target: Dictionary = {}
 var minimap_refresh_accumulator := 0.0
 var target_selection_ring: MeshInstance3D
 var floating_combat_labels: Dictionary = {}
@@ -719,7 +722,7 @@ func _build_minimap_hud() -> void:
 		return
 	minimap_panel = PanelContainer.new()
 	minimap_panel.name = "WorldMiniMapPanel"
-	minimap_panel.custom_minimum_size = Vector2(184.0, 226.0)
+	minimap_panel.custom_minimum_size = Vector2(184.0, 278.0)
 	_apply_panel_theme(minimap_panel)
 	hud.add_child(minimap_panel)
 	var layout := VBoxContainer.new()
@@ -738,6 +741,7 @@ func _build_minimap_hud() -> void:
 	minimap_view = Control.new()
 	minimap_view.name = "LiveMapCanvas"
 	minimap_view.set_script(WorldMiniMapScript)
+	minimap_view.connect("marker_selected", Callable(self, "_on_minimap_marker_selected"))
 	minimap_view.custom_minimum_size = Vector2(156.0, 156.0)
 	minimap_view.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	layout.add_child(minimap_view)
@@ -746,6 +750,18 @@ func _build_minimap_hud() -> void:
 	legend.add_theme_color_override("font_color", Color("#9eafbd"))
 	legend.add_theme_font_size_override("font_size", 10)
 	layout.add_child(legend)
+	minimap_navigation_label = Label.new()
+	minimap_navigation_label.text = "点击地图标记开始导航"
+	minimap_navigation_label.add_theme_color_override("font_color", Color("#f0d18b"))
+	minimap_navigation_label.add_theme_font_size_override("font_size", 10)
+	minimap_navigation_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	layout.add_child(minimap_navigation_label)
+	minimap_clear_navigation_button = Button.new()
+	minimap_clear_navigation_button.text = "取消导航"
+	_apply_button_theme(minimap_clear_navigation_button)
+	minimap_clear_navigation_button.pressed.connect(_clear_minimap_navigation)
+	minimap_clear_navigation_button.visible = false
+	layout.add_child(minimap_clear_navigation_button)
 	_update_minimap_data()
 
 func _update_minimap_data() -> void:
@@ -762,11 +778,68 @@ func _update_minimap_data() -> void:
 	var nearby_monsters: Array = []
 	for monster_id in monster_targets.keys():
 		var target: Vector3 = monster_targets[monster_id]
-		nearby_monsters.append({"x": target.x, "z": target.z})
+		var monster_data: Dictionary = monster_entities.get(str(monster_id), {})
+		nearby_monsters.append({"id": str(monster_id), "name": str(monster_data.get("name", "妖兽")), "x": target.x, "z": target.z})
 	minimap_view.set("monster_points", nearby_monsters)
+	if not minimap_navigation_target.is_empty():
+		var nav_kind := str(minimap_navigation_target.get("kind", ""))
+		var nav_id := str(minimap_navigation_target.get("id", ""))
+		var nav_position := Vector3(float(minimap_navigation_target.get("x", 0.0)), 0.0, float(minimap_navigation_target.get("z", 0.0)))
+		if nav_kind == "monster" and monster_targets.has(nav_id):
+			nav_position = monster_targets[nav_id]
+			minimap_navigation_target["x"] = nav_position.x
+			minimap_navigation_target["z"] = nav_position.z
+		var distance_text := "距离 %.0f 米" % local_player.global_position.distance_to(nav_position) if is_instance_valid(local_player) else "距离计算中"
+		if is_instance_valid(minimap_navigation_label):
+			minimap_navigation_label.text = "导航：%s · %s" % [str(minimap_navigation_target.get("name", "目标")), distance_text]
+		if is_instance_valid(minimap_clear_navigation_button):
+			minimap_clear_navigation_button.visible = true
+	else:
+		if is_instance_valid(minimap_navigation_label):
+			minimap_navigation_label.text = "点击地图标记开始导航"
+		if is_instance_valid(minimap_clear_navigation_button):
+			minimap_clear_navigation_button.visible = false
+	minimap_view.set("navigation_target", minimap_navigation_target)
 	if is_instance_valid(minimap_region_label):
 		var world_name := _world_display_name(str(HHSession.world_snapshot.get("world_id", "")))
 		minimap_region_label.text = world_name + " · " + (current_region_name if not current_region_name.is_empty() else "区域载入中")
+
+func _on_minimap_marker_selected(kind: String, marker_id: String, marker_name: String) -> void:
+	if marker_id.is_empty():
+		return
+	var target_position := Vector3.ZERO
+	match kind:
+		"monster":
+			if not monster_targets.has(marker_id):
+				return
+			target_position = monster_targets[marker_id]
+			_set_monster_target(marker_id)
+		"npc":
+			var found_npc := false
+			for npc_variant in npc_definitions:
+				if npc_variant is Dictionary and str(npc_variant.get("id", "")) == marker_id:
+					target_position = Vector3(float(npc_variant.get("position_x", 0.0)), float(npc_variant.get("position_y", 0.0)), float(npc_variant.get("position_z", 0.0)))
+					found_npc = true
+					break
+			if not found_npc:
+				return
+		"exploration":
+			if not exploration_point_data.has(marker_id):
+				return
+			var point: Dictionary = exploration_point_data[marker_id]
+			target_position = Vector3(float(point.get("position_x", 0.0)), float(point.get("position_y", 0.0)), float(point.get("position_z", 0.0)))
+		_:
+			return
+	minimap_navigation_target = {"kind": kind, "id": marker_id, "name": marker_name, "x": target_position.x, "z": target_position.z}
+		if kind != "monster":
+			_show_notification("导航目标：" + marker_name)
+	_update_minimap_data()
+
+func _clear_minimap_navigation() -> void:
+	minimap_navigation_target.clear()
+	if is_instance_valid(minimap_view):
+		minimap_view.set("navigation_target", {})
+	_update_minimap_data()
 
 func _build_combat_hud() -> void:
 	var hud := get_node_or_null("HUD") as CanvasLayer
@@ -1938,7 +2011,7 @@ func _layout_hud() -> void:
 		minimap_panel.offset_left = -202.0
 		minimap_panel.offset_right = -18.0
 		minimap_panel.offset_top = 18.0
-		minimap_panel.offset_bottom = 244.0
+		minimap_panel.offset_bottom = 296.0
 	if is_instance_valid(target_info_panel):
 		var target_width := minf(380.0, maxf(250.0, viewport_size.x - 32.0))
 		target_info_panel.position = Vector2(-target_width * 0.5, 18.0)
