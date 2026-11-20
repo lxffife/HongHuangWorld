@@ -14,7 +14,8 @@ const ATTACK_STYLE_TOKENS := {
 	"sword_slash": ["slash", "sword", "blade", "swing"],
 	"spear_thrust": ["thrust", "stab", "spear", "lance", "pierce"],
 	"ranged_shot": ["shoot", "bow", "arrow", "crossbow", "ranged"],
-	"staff_cast": ["cast", "spell", "magic", "staff", "wand", "channel"]
+	"staff_cast": ["cast", "spell", "magic", "staff", "wand", "channel"],
+	"heavy_swing": ["heavy", "overhead", "smash", "axe", "hammer"]
 }
 
 static func apply_state(root: Node3D, state: String, fade_seconds: float = 0.16, attack_style: String = "") -> bool:
