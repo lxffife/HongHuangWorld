@@ -73,7 +73,10 @@ inline std::int64_t resist_status_damage(std::int64_t base_damage,
                                          std::int32_t resistance_basis_points) {
     if (base_damage <= 0) return 0;
     const auto resistance = std::clamp(resistance_basis_points, 0, 10000);
-    return std::max<std::int64_t>(1, base_damage * (10000 - resistance) / 10000);
+    const auto remaining_basis_points = 10000 - resistance;
+    const auto reduced = (base_damage / 10000) * remaining_basis_points +
+                         (base_damage % 10000) * remaining_basis_points / 10000;
+    return std::max<std::int64_t>(1, reduced);
 }
 
 inline std::int32_t resist_status_duration(std::int32_t base_duration_ms,
