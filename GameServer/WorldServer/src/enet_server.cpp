@@ -1408,9 +1408,9 @@ struct EnetServer::Impl {
                         std::lock_guard lock(consumable_mutex);
                         if (pending_consumable_sessions.contains(session_id)) continue;
                         if (skip_stale_consumable_snapshots.erase(session_id) > 0) continue;
-                        // Reserve this session before issuing the HTTP write. A
-                        // consumable command checks the same mutex and will wait
-                        // until this snapshot finishes, so DB writes cannot cross.
+                        // Reserve this session before issuing the HTTP write.
+                        // Consumable commands are rejected while this reservation
+                        // exists, so the two database writes cannot cross.
                         snapshot_inflight_sessions.insert(session_id);
                     }
                     bool inactive = false;
