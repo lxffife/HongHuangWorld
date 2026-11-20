@@ -722,7 +722,7 @@ func _build_minimap_hud() -> void:
 		return
 	minimap_panel = PanelContainer.new()
 	minimap_panel.name = "WorldMiniMapPanel"
-	minimap_panel.custom_minimum_size = Vector2(184.0, 278.0)
+	minimap_panel.custom_minimum_size = Vector2(184.0, 300.0)
 	_apply_panel_theme(minimap_panel)
 	hud.add_child(minimap_panel)
 	var layout := VBoxContainer.new()
@@ -2018,7 +2018,7 @@ func _layout_hud() -> void:
 		minimap_panel.offset_left = -202.0
 		minimap_panel.offset_right = -18.0
 		minimap_panel.offset_top = 18.0
-		minimap_panel.offset_bottom = 296.0
+		minimap_panel.offset_bottom = 318.0
 	if is_instance_valid(target_info_panel):
 		var target_width := minf(380.0, maxf(250.0, viewport_size.x - 32.0))
 		target_info_panel.position = Vector2(-target_width * 0.5, 18.0)
