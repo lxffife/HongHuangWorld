@@ -707,7 +707,7 @@ func _build_combat_hud() -> void:
 	vitals_panel = PanelContainer.new()
 	vitals_panel.position = Vector2(18.0, -104.0)
 	vitals_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	vitals_panel.custom_minimum_size = Vector2(300.0, 82.0)
+	vitals_panel.custom_minimum_size = Vector2(300.0, 104.0)
 	hud.add_child(vitals_panel)
 	var vitals_layout := VBoxContainer.new()
 	vitals_layout.add_theme_constant_override("separation", 6)
@@ -716,7 +716,7 @@ func _build_combat_hud() -> void:
 	health_label.text = "生命：等待服务端战斗状态"
 	vitals_layout.add_child(health_label)
 	mana_label = Label.new()
-	mana_label.text = "灵力：等待世界服务器"
+	mana_label.text = "灵力  " + str(int(HHSession.world_snapshot.get("mana", 0))) + " / " + str(int(HHSession.world_snapshot.get("max_mana", 0)))
 	vitals_layout.add_child(mana_label)
 	health_bar = ProgressBar.new()
 	health_bar.custom_minimum_size = Vector2(270.0, 16.0)
@@ -2494,7 +2494,7 @@ func _on_player_action_event(event: Dictionary) -> void:
 	if character_id.is_empty() or not remote_players.has(character_id):
 		return
 	var action := str(event.get("action", ""))
-	if action not in ["attack", "hit"]:
+	if action not in ["attack", "hit", "cast"]:
 		return
 	var remote := remote_players[character_id] as Node3D
 	if not is_instance_valid(remote):
@@ -2505,7 +2505,7 @@ func _on_player_action_event(event: Dictionary) -> void:
 	var current_priority := int(remote.get_meta("remote_action_priority", 0))
 	if current_time > 0.0 and current_priority > incoming_priority:
 		return
-	var duration := 0.36 if action == "attack" else 0.32
+	var duration := 0.42 if action == "cast" else (0.36 if action == "attack" else 0.32)
 	remote.set_meta("remote_action_state", action)
 	remote.set_meta("remote_action_priority", incoming_priority)
 	remote.set_meta("remote_action_time", maxf(current_time, duration) if current_priority == incoming_priority else duration)
