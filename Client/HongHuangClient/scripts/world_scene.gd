@@ -651,6 +651,8 @@ func _build_world_map_hud() -> void:
 	world_map_hint_label.text = "灰色：已发现探索点 · 青色：NPC · 红色：妖兽 · 紫色：地标 · 未发现地点隐藏 · 点击标记导航"
 	world_map_hint_label.add_theme_color_override("font_color", Color("#a9bac7"))
 	world_map_hint_label.add_theme_font_size_override("font_size", 11)
+	world_map_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	world_map_hint_label.custom_minimum_size.y = 28.0
 	layout.add_child(world_map_hint_label)
 	_layout_hud()
 	_update_minimap_data()
