@@ -122,6 +122,7 @@ const FENGDU_CITY_PLAN := {
 		{"id": "judge_court", "name": "判官司", "kind": "court", "position": [190.0, 94.0], "size": [132.0, 76.0], "authority": "判官首座", "danger_level": 2, "access": "鬼籍查询与审判任务", "description": "汇总生死簿案卷、复核功过、签发审判文书。"},
 		{"id": "ghost_registry", "name": "鬼籍司", "kind": "admin", "position": [-190.0, -8.0], "size": [132.0, 70.0], "authority": "鬼籍主簿", "danger_level": 1, "access": "新魂登记与身份服务", "description": "亡魂登记、身份核验、来历追溯与居留凭籍。"},
 		{"id": "merit_bureau", "name": "功过司", "kind": "admin", "position": [190.0, -8.0], "size": [132.0, 70.0], "authority": "功过判官", "danger_level": 2, "access": "功德记录与因果委托", "description": "记录善恶功过、因果债契与轮回资格建议。"},
+		{"id": "patrol_office", "name": "巡城司", "kind": "admin", "position": [0.0, 12.0], "size": [118.0, 62.0], "authority": "巡城统领", "danger_level": 2, "access": "治安巡查、失魂寻人和城市事件", "description": "负责城内治安、街区巡逻、夜禁、失魂案件与突发鬼患处置。"},
 		{"id": "reincarnation_bureau", "name": "轮回司", "kind": "sacred", "position": [0.0, -142.0], "size": [150.0, 78.0], "authority": "轮回司主", "danger_level": 5, "access": "完成审判与轮回资格流程", "description": "管理轮回流程、转生文牒与通往忘川流域的官方通道；六道根本法则仍归后土。"},
 		{"id": "ghost_market", "name": "万魂鬼市", "kind": "market", "position": [190.0, -166.0], "size": [142.0, 76.0], "authority": "鬼市行会", "danger_level": 4, "access": "交易、拍卖与玩家社交", "description": "冥界最大交易区，经营灵材、法器、情报、委托与跨阵营贸易。"},
 		{"id": "residential_quarter", "name": "万家魂坊", "kind": "residential", "position": [-190.0, -166.0], "size": [142.0, 76.0], "authority": "坊正与巡城司", "danger_level": 1, "access": "居住、生活技能与社区活动", "description": "亡魂居民、商户、工匠与玩家居所聚集的生活城区。"},
@@ -134,6 +135,7 @@ const FENGDU_CITY_PLAN := {
 	],
 	"roads": [
 		{"from": "imperial_palace", "to": "ten_kings_manors"},
+		{"from": "imperial_palace", "to": "patrol_office"},
 		{"from": "imperial_palace", "to": "judge_court"},
 		{"from": "ten_kings_manors", "to": "ghost_registry"},
 		{"from": "judge_court", "to": "merit_bureau"},
