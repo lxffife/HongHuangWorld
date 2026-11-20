@@ -2519,6 +2519,9 @@ struct EnetServer::Impl {
                     {"yaw", monster.state.yaw},
                     {"slowed", honghuang::simulation::slow_is_active(
                         monster.slow_effect, std::chrono::duration_cast<std::chrono::milliseconds>(
+                            Clock::now().time_since_epoch()).count())},
+                    {"frozen", honghuang::simulation::freeze_is_active(
+                        monster.freeze_effect, std::chrono::duration_cast<std::chrono::milliseconds>(
                             Clock::now().time_since_epoch()).count())}
                 });
             }
@@ -2802,7 +2805,7 @@ struct EnetServer::Impl {
                     {"projectile_type", projectile->projectile_type}, {"damage", damage.damage}, {"health", damage.remaining_health},
                     {"max_health", target->definition.max_health}, {"defeated", damage.defeated},
                     {"status_effect", applied_freeze ? "freeze" : (applied_slow ? "slow" : "")},
-                    {"status_duration_ms", applied_slow ? projectile->slow_duration_ms : 0},
+                    {"status_duration_ms", applied_freeze ? applied_freeze_duration_ms : (applied_slow ? projectile->slow_duration_ms : 0)},
                     {"burn_applied", applied_burn},
                     {"burn_duration_ms", applied_burn ? projectile->burn_duration_ms : 0}
                 };
