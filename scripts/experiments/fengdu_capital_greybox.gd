@@ -5,6 +5,7 @@ extends Node3D
 const WorldEnvironmentBuilder = preload("res://scripts/world_environment_builder.gd")
 const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
 const CityModuleScene = preload("res://scenes/experiments/FengduCityModule.tscn")
+const NpcDialoguePanel = preload("res://scripts/experiments/npc_dialogue_panel.gd")
 
 const CITY_SCALE := 2.5
 const WALL_WIDTH := 1900.0
@@ -23,6 +24,7 @@ var _pitch := -0.08
 var _mouse_captured := false
 var _hint_label: Label
 var _nearby_district_data: Dictionary = {}
+var _dialogue_panel: CanvasLayer
 
 
 func _ready() -> void:
@@ -378,13 +380,22 @@ func _build_street_furniture() -> void:
 func _on_district_entered(data: Dictionary) -> void:
 	_nearby_district_data = data.duplicate(true)
 	var title := str(data.get("name", "城区"))
-	_hint_label.text = "已到达：%s · 按 E 查看城区信息" % title
+	_hint_label.text = "已接近：%s · 按 E 交谈 / 查看" % title
+
+
+func _open_interaction_dialogue(data: Dictionary) -> void:
+	if _dialogue_panel == null:
+		return
+	_mouse_captured = false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_dialogue_panel.call("present", data)
 
 
 func _on_district_exited(data: Dictionary) -> void:
 	if str(_nearby_district_data.get("id", "")) == str(data.get("id", "")):
 		_nearby_district_data.clear()
-		_hint_label.text = "WASD 移动 · 鼠标观察 · Shift 奔跑 · Space 跳跃 · E 查看城区 · Esc 释放鼠标"
+		if _dialogue_panel == null or not _dialogue_panel.call("is_open"):
+			_hint_label.text = "WASD 移动 · 鼠标观察 · Shift 奔跑 · Space 跳跃 · E 交谈 / 查看 · Esc 释放鼠标"
 
 
 func _build_landmark_silhouette() -> void:
@@ -485,6 +496,17 @@ func _build_hud() -> void:
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(note)
 	add_child(layer)
+	_dialogue_panel = NpcDialoguePanel.new()
+	_dialogue_panel.name = "NpcDialoguePanel"
+	_dialogue_panel.connect("closed", Callable(self, "_on_dialogue_closed"))
+	add_child(_dialogue_panel)
+
+
+func _on_dialogue_closed() -> void:
+	if _nearby_district_data.is_empty():
+		_hint_label.text = "WASD 移动 · 鼠标观察 · Shift 奔跑 · Space 跳跃 · E 交谈 / 查看 · Esc 释放鼠标"
+	else:
+		_hint_label.text = "已接近：%s · 按 E 交谈 / 查看" % str(_nearby_district_data.get("name", "目标"))
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -493,10 +515,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			_mouse_captured = true
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	elif event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_E and not _nearby_district_data.is_empty():
-			var data := _nearby_district_data
-			_hint_label.text = "%s\n主管：%s · 开放条件：%s\n%s" % [str(data.get("name", "城区")), str(data.get("authority", "未知")), str(data.get("access", "无")), str(data.get("description", ""))]
+		if event.keycode == KEY_E and _dialogue_panel != null and _dialogue_panel.call("is_open"):
+			_dialogue_panel.call("close_dialogue")
+			get_viewport().set_input_as_handled()
+		elif event.keycode == KEY_E and not _nearby_district_data.is_empty():
+			_open_interaction_dialogue(_nearby_district_data)
+			get_viewport().set_input_as_handled()
 		elif event.keycode == KEY_ESCAPE:
+			if _dialogue_panel != null and _dialogue_panel.call("is_open"):
+				_dialogue_panel.call("close_dialogue")
+				get_viewport().set_input_as_handled()
 			_mouse_captured = false
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		elif event.keycode == KEY_SPACE and _player != null and _player.is_on_floor():
@@ -509,6 +537,13 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _physics_process(delta: float) -> void:
 	if _player == null:
+		return
+	if _dialogue_panel != null and _dialogue_panel.call("is_open"):
+		_player.velocity.x = 0.0
+		_player.velocity.z = 0.0
+		if not _player.is_on_floor():
+			_player.velocity.y -= 24.0 * delta
+		_player.move_and_slide()
 		return
 	var input_vector := Vector2.ZERO
 	input_vector.x = float(Input.is_key_pressed(KEY_D)) - float(Input.is_key_pressed(KEY_A))
