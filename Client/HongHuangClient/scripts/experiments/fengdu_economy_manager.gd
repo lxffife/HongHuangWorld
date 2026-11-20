@@ -29,8 +29,10 @@ var _next_transaction_number := 1
 
 
 func _ready() -> void:
-	_record_transaction("opening_player_balance", "local_player", STARTING_BALANCE, 0, 0, "本地演示账户初始余额")
-	_record_transaction("opening_treasury", "city_treasury", 0, _treasury, 0, "城主府初始库银")
+	_record_transaction("opening_player_balance", "local_player", STARTING_BALANCE, 0, 0, "本地演示账户初始余额", FIAT_CURRENCY_ID)
+	_record_transaction("opening_stone_balance", "local_player", int(_stone_wallets.get("local_player", 0)), 0, 0, "本地演示账户初始冥石", CULTIVATION_CURRENCY_ID)
+	_record_transaction("opening_treasury", "city_treasury", 0, _treasury, 0, "城主府初始库银", FIAT_CURRENCY_ID)
+	_record_transaction("opening_stone_treasury", "city_treasury", 0, _stone_treasury, 0, "城主府初始冥石储备", CULTIVATION_CURRENCY_ID)
 	_seed_city_notices()
 
 
