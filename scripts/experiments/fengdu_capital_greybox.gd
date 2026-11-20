@@ -301,7 +301,7 @@ func _on_district_entered(data: Dictionary) -> void:
 func _on_district_exited(data: Dictionary) -> void:
 	if str(_nearby_district_data.get("id", "")) == str(data.get("id", "")):
 		_nearby_district_data.clear()
-		_hint_label.text = "WASD 移动 · 鼠标观察 · Shift 奔跑 · Space 跳跃 · Esc 释放鼠标"
+		_hint_label.text = "WASD 移动 · 鼠标观察 · Shift 奔跑 · Space 跳跃 · E 查看城区 · Esc 释放鼠标"
 
 
 func _build_landmark_silhouette() -> void:
@@ -377,7 +377,7 @@ func _build_hud() -> void:
 	layer.name = "GreyboxHUD"
 	var panel := PanelContainer.new()
 	panel.position = Vector2(18.0, 18.0)
-	panel.custom_minimum_size = Vector2(440.0, 94.0)
+	panel.custom_minimum_size = Vector2(560.0, 150.0)
 	layer.add_child(panel)
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 12)
