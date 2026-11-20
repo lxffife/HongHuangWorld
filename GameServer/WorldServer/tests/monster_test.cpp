@@ -83,9 +83,18 @@ int main() {
     assert(soul_profile.range >= 6.0F);
     assert(std::string(soul_profile.style) == "soul_bolt");
 
-    // Frost souls use the same ranged kite spacing while retaining their own attack style.\n    MonsterState frost_state{.x = 0.0F, .z = 0.0F, .health = frost_soul.max_health};\n    assert(tick_monster(frost_soul, frost_state, &distant_player, 0.05F));\n    assert(frost_state.mode == MonsterMode::Chasing && frost_state.x > 0.0F);\n\n    // Ranged souls approach from outside attack range, then retreat when rushed.
-    MonsterState soul_state{.x = 0.0F, .z = 0.0F, .health = soul.max_health};
+    // Ranged souls approach from outside attack range, then retreat when rushed.
     const MonsterTarget distant_player{.id = "player-ranged", .x = 10.0F, .z = 0.0F, .alive = true};
+    MonsterState frost_state{.x = 0.0F, .z = 0.0F, .health = frost_soul.max_health};
+    assert(tick_monster(frost_soul, frost_state, &distant_player, 0.05F));
+    assert(frost_state.mode == MonsterMode::Chasing && frost_state.x > 0.0F);
+    MonsterState poison_close_state{.x = 0.0F, .z = 0.0F, .health = poison_soul.max_health};
+    const MonsterTarget poison_close_player{.id = "player-poison", .x = 3.0F, .z = 0.0F, .alive = true};
+    assert(tick_monster(poison_soul, poison_close_state, &poison_close_player, 0.05F));
+    assert(poison_close_state.x < 0.0F);
+
+    // Ranged souls approach from outside attack range, then retreat when rushed.
+    MonsterState soul_state{.x = 0.0F, .z = 0.0F, .health = soul.max_health};
     assert(tick_monster(soul, soul_state, &distant_player, 0.05F));
     assert(soul_state.mode == MonsterMode::Chasing);
     assert(soul_state.x > 0.0F);
