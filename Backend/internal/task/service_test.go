@@ -1,6 +1,7 @@
 package task
 
 import (
+ "context"
  "math"
  "testing"
 )
@@ -16,7 +17,7 @@ func TestPublishFactionRejectsInvalidRequestsBeforeDatabaseAccess(t *testing.T) 
   {"overflow",PublishRequest{FactionID:"f",Title:"除祟",CurrencyID:"nether_stone",RewardAmount:math.MaxInt64,MaxAssignees:2,DifficultyTier:1}},
   {"invalid difficulty",PublishRequest{FactionID:"f",Title:"除祟",CurrencyID:"nether_stone",RewardAmount:5,MaxAssignees:1,DifficultyTier:11}},
  }
- for _,test:=range tests{t.Run(test.name,func(t *testing.T){if _,err:=service.PublishFaction(t.Context(),"account",test.request);err!=ErrInvalid{t.Fatalf("expected ErrInvalid, got %v",err)}})}
+ for _,test:=range tests{t.Run(test.name,func(t *testing.T){if _,err:=service.PublishFaction(context.Background(),"account",test.request);err!=ErrInvalid{t.Fatalf("expected ErrInvalid, got %v",err)}})}
 }
 
 func TestJoinRejectsMissingIdentityBeforeDatabaseAccess(t *testing.T) {
