@@ -364,11 +364,12 @@ func _build_player() -> void:
 	_player.add_child(body_visual)
 	_camera_pivot = Node3D.new()
 	_camera_pivot.name = "CameraPivot"
-	_camera_pivot.position = Vector3(0.0, 1.55, 0.0)
+	_camera_pivot.position = Vector3(0.0, 2.8, 0.0)
 	_player.add_child(_camera_pivot)
 	_camera = Camera3D.new()
 	_camera.current = true
 	_camera.fov = 74.0
+	_camera.position = Vector3(0.0, 0.0, 5.5)
 	_camera_pivot.add_child(_camera)
 	add_child(_player)
 
