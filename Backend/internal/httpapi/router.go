@@ -112,12 +112,14 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("GET /api/v1/factions/{factionID}/applications", factionAPI.applications)
 		mux.HandleFunc("GET /api/v1/factions/{factionID}/members", factionAPI.members)
 		mux.HandleFunc("POST /api/v1/factions/{factionID}/applications/{applicationID}/review", factionAPI.review)
-		bountyAPI := &bountyHandlers{authService: authService, service: task.NewService(db, factionService), logger: logger}
+		bountyAPI := &bountyHandlers{authService: authService, service: task.NewService(db, factionService), logger: logger, apiKey: os.Getenv("WORLD_SERVER_API_KEY")}
 		mux.HandleFunc("POST /api/v1/factions/{factionID}/treasury/contributions", bountyAPI.contribute)
 		mux.HandleFunc("POST /api/v1/factions/{factionID}/bounties", bountyAPI.publishFaction)
 		mux.HandleFunc("GET /api/v1/bounties", bountyAPI.list)
 		mux.HandleFunc("POST /api/v1/bounties/{taskID}/join", bountyAPI.join)
-		mux.HandleFunc("POST /api/v1/bounties/{taskID}/complete", bountyAPI.settle)
+		mux.HandleFunc("POST /api/v1/bounties/{taskID}/complete", "POST /api/v1/bounties/{taskID}/cancel", "POST /api/v1/servers/bounties/expire", bountyAPI.settle)
+		mux.HandleFunc("POST /api/v1/bounties/{taskID}/cancel", bountyAPI.cancel)
+		mux.HandleFunc("POST /api/v1/servers/bounties/expire", bountyAPI.expireDue)
 		economyAPI := &economyHandlers{authService: authService, service: economy.NewService(db), logger: logger}
 		mux.HandleFunc("GET /api/v1/economy/currencies", economyAPI.catalog)
 		mux.HandleFunc("GET /api/v1/economy/wallet", economyAPI.wallet)
