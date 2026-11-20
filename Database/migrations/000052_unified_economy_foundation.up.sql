@@ -76,6 +76,40 @@ CREATE TABLE economy_escrows (
 );
 CREATE INDEX idx_economy_escrows_account ON economy_escrows(account_id, status);
 
+CREATE TABLE currency_cultivation_affinities (
+    currency_id VARCHAR(64) NOT NULL REFERENCES currency_definitions(id),
+    target_tag VARCHAR(96) NOT NULL,
+    efficiency_bp INTEGER NOT NULL CHECK (efficiency_bp BETWEEN 0 AND 20000),
+    min_quality_grade SMALLINT NOT NULL DEFAULT 1 CHECK (min_quality_grade BETWEEN 1 AND 9),
+    PRIMARY KEY (currency_id, target_tag)
+);
+
+CREATE TABLE currency_cultivation_costs (
+    action_key VARCHAR(96) NOT NULL,
+    currency_id VARCHAR(64) NOT NULL REFERENCES currency_definitions(id),
+    amount_per_unit BIGINT NOT NULL CHECK (amount_per_unit > 0),
+    PRIMARY KEY (action_key, currency_id)
+);
+
+INSERT INTO currency_cultivation_affinities (currency_id, target_tag, efficiency_bp)
+VALUES
+('spirit_stone', 'all', 10000),
+('nether_stone', 'all', 5000),
+('nether_stone', 'race:ghost', 10000),
+('demon_stone', 'all', 4000),
+('demon_stone', 'race:demon', 10000),
+('monster_stone', 'all', 5000),
+('monster_stone', 'race:monster', 10000),
+('immortal_crystal', 'all', 8000),
+('immortal_crystal', 'realm:immortal', 10000),
+('buddhist_crystal', 'all', 5000),
+('buddhist_crystal', 'path:buddhist', 10000),
+('dragon_crystal', 'all', 5000),
+('dragon_crystal', 'race:dragon', 10000),
+('witch_crystal', 'all', 5000),
+('witch_crystal', 'race:witch', 10000)
+ON CONFLICT (currency_id, target_tag) DO NOTHING;
+
 CREATE TABLE currency_exchange_pairs (
     from_currency_id VARCHAR(64) NOT NULL REFERENCES currency_definitions(id),
     to_currency_id VARCHAR(64) NOT NULL REFERENCES currency_definitions(id),
@@ -151,11 +185,11 @@ VALUES
 ('demon_coin', '魔币', '魔', 'fiat', 'myriad_demon', 'none', 1, FALSE, TRUE, TRUE, '魔界凡俗交易货币，不可直接用于修炼'),
 ('demon_stone', '魔石', '魔石', 'cultivation', 'myriad_demon', 'demonic', 1, TRUE, TRUE, TRUE, '蕴含魔气，可交易、修炼、炼器与布阵'),
 ('spirit_stone', '灵石', '灵石', 'cultivation', NULL, 'spiritual', 1, TRUE, TRUE, TRUE, '通用灵气修炼资源，可在具备兑换渠道的世界流通'),
-('妖币', '妖币', '妖', 'fiat', NULL, 'none', 1, FALSE, TRUE, TRUE, '妖界凡俗交易货币'),
-('妖石', '妖石', '妖石', 'cultivation', NULL, 'demonic_nature', 1, TRUE, TRUE, TRUE, '蕴含妖气，可交易、修炼与炼器'),
+('monster_coin', '妖币', '妖', 'fiat', NULL, 'none', 1, FALSE, TRUE, TRUE, '妖界凡俗交易货币'),
+('monster_stone', '妖石', '妖石', 'cultivation', NULL, 'demonic_nature', 1, TRUE, TRUE, TRUE, '蕴含妖气，可交易、修炼与炼器'),
 ('仙钱', '仙钱', '仙', 'fiat', NULL, 'none', 1, FALSE, TRUE, TRUE, '仙界凡俗交易货币'),
 ('immortal_crystal', '仙晶', '仙晶', 'cultivation', NULL, 'immortal', 1, TRUE, TRUE, TRUE, '蕴含仙灵之气的高阶修炼资源'),
-('佛晶', '佛晶', '佛晶', 'cultivation', NULL, 'buddhist', 1, TRUE, TRUE, TRUE, '蕴含佛力与愿力的修炼资源'),
+('buddhist_crystal', '佛晶', '佛晶', 'cultivation', NULL, 'buddhist', 1, TRUE, TRUE, TRUE, '蕴含佛力与愿力的修炼资源'),
 ('dragon_crystal', '龙晶', '龙晶', 'cultivation', NULL, 'dragon', 1, TRUE, TRUE, TRUE, '蕴含龙族血脉本源的修炼资源'),
 ('witch_crystal', '巫晶', '巫晶', 'cultivation', NULL, 'bloodline', 1, TRUE, TRUE, TRUE, '蕴含气血与巫力的修炼资源'),
 ('world_origin_crystal', '世界本源晶', '源晶', 'origin', NULL, 'world_origin', 5, TRUE, FALSE, FALSE, '世界本源战略资源，默认不可自由兑换'),
