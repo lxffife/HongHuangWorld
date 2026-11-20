@@ -584,6 +584,18 @@ func validConsumableRequest(request ItemUseRequest) bool {
 	return validUUID(request.RequestID) && strings.TrimSpace(request.ItemID)!="" && request.Quantity>=1 && request.Quantity<=20
 }
 
+func consumableReplayResult(request ItemUseRequest, health, maxHealth, mana, maxMana int) ItemUseResult {
+	return ItemUseResult{
+		Applied: false,
+		ItemID: request.ItemID,
+		Quantity: request.Quantity,
+		Health: health,
+		MaxHealth: maxHealth,
+		Mana: mana,
+		MaxMana: maxMana,
+	}
+}
+
 func (s *Service) useConsumableForCharacter(ctx context.Context,tx *sql.Tx,characterID string,request ItemUseRequest,blockActiveSession bool) (ItemUseResult,error) {
 	var previousItemID string
 	var previousQuantity int
@@ -593,16 +605,13 @@ func (s *Service) useConsumableForCharacter(ctx context.Context,tx *sql.Tx,chara
 		// A retry may arrive after the original transaction committed but its HTTP
 		// response was lost. Return current authoritative resources so WorldServer
 		// can reconcile its in-memory snapshot without consuming the item twice.
-		var current ItemUseResult
-		current.Applied=false
-		current.ItemID=request.ItemID
-		current.Quantity=request.Quantity
+		var health, maxHealth, mana, maxMana int
 		if err:=tx.QueryRowContext(ctx,`SELECT health,max_health,mana,max_mana
 			FROM character_attributes WHERE character_id=$1::uuid`,characterID).
-			Scan(&current.Health,&current.MaxHealth,&current.Mana,&current.MaxMana); err!=nil {
+			Scan(&health,&maxHealth,&mana,&maxMana); err!=nil {
 			return ItemUseResult{},fmt.Errorf("load resources for duplicate consumable request: %w",err)
 		}
-		return current,nil
+		return consumableReplayResult(request,health,maxHealth,mana,maxMana),nil
 	}
 	if !errors.Is(err,sql.ErrNoRows) { return ItemUseResult{},fmt.Errorf("check consumable idempotency: %w",err) }
 	if blockActiveSession {
