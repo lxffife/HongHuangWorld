@@ -5,6 +5,8 @@
 城市生成器：`scripts/experiments/fengdu_capital_greybox.gd`
 可复用模块场景：`scenes/experiments/FengduCityModule.tscn`
 可复用模块脚本：`scripts/experiments/fengdu_city_module.gd`
+NPC 对话面板：`scripts/experiments/npc_dialogue_panel.gd`
+NPC 状态机：`scripts/experiments/npc_behavior_controller.gd`
 
 ## 1. 本阶段目标
 
@@ -50,6 +52,8 @@
 | guard | 阴兵守卫和简易往返巡逻 |
 | citizen | 商贩、居民、文吏和引魂使占位 NPC |
 | special_character | 黑白无常、牛头马面等有独立外形、路点和交互数据的阴司重要角色 |
+
+NPC 行为状态由 `npc_behavior_controller.gd` 统一管理；对话 UI 由 `npc_dialogue_panel.gd` 统一呈现。角色专属话题由 `interaction_type` 数据选择，避免在城市生成器里堆叠角色对话分支。
 
 每个城区模块可独立生成碰撞体、屋顶、建筑群、名称牌和交互触发区。建筑仍是基础几何体，不是最终美术模型。
 
