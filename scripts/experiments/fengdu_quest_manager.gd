@@ -154,7 +154,11 @@ func report_objective_event(event_type: String, target_id: String, amount: int =
 
 
 func notify_interaction(target_id: String) -> bool:
-	return report_objective_event("interact", target_id)
+	var changed := false
+	for event_type in ["interact", "investigate", "deliver"]:
+		if report_objective_event(event_type, target_id):
+			changed = true
+	return changed
 
 
 func track_quest(quest_id: String) -> bool:
