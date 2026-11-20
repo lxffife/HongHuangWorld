@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <string_view>
 
 namespace honghuang::simulation {
 
@@ -90,6 +91,20 @@ inline std::int32_t resist_status_duration(std::int32_t base_duration_ms,
     return static_cast<std::int32_t>(std::max<std::int64_t>(minimum_duration_ms, reduced));
 }
 
+
+struct TimedFreezeEffect { std::int64_t expires_at_ms{}; };
+inline bool apply_freeze(TimedFreezeEffect& e,std::int64_t now,std::int32_t duration){
+ if(now<0||duration<=0||duration>5000||now>std::numeric_limits<std::int64_t>::max()-duration)return false;
+ e.expires_at_ms=std::max(e.expires_at_ms,now+duration);return true;
+}
+inline bool freeze_is_active(const TimedFreezeEffect& e,std::int64_t now){return e.expires_at_ms>now;}
+inline std::int32_t monster_freeze_duration_ms(std::int32_t base,std::string_view id,std::string_view name,bool rare){
+ if(base<=0||base>5000)return 0;
+ const bool elite=rare||id.find("elite")!=std::string_view::npos||id.find("boss")!=std::string_view::npos||
+ name.find("精英")!=std::string_view::npos||name.find("首领")!=std::string_view::npos||
+ name.find("Boss")!=std::string_view::npos||name.find("boss")!=std::string_view::npos;
+ return elite?std::max<std::int32_t>(150,base*35/100):base;
+}
 struct TimedSlowEffect {
     std::int64_t expires_at_ms{};
     float movement_multiplier{1.0F};
@@ -125,4 +140,8 @@ inline float movement_delta_with_effect(float delta_seconds,
         ? effect.movement_multiplier : 1.0F);
 }
 
+
+inline void clear_negative_statuses(TimedSlowEffect& slow,TimedFreezeEffect& freeze,PeriodicDamageEffect& dot){
+ slow={};freeze={};dot={};
+}
 } // namespace honghuang::simulation
