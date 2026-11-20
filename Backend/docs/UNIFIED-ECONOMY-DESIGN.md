@@ -154,8 +154,8 @@
 ## 势力与宗门权限（000053）
 
 - 玩家公开创建组织时只能创建“宗门”，不能通过请求参数自选“城主府”或“官署”身份。
-- 每个宗门创建时在统一经济财政体系中建立独立的 `faction_treasury` 库房账户；宗门悬赏后续必须从该财政账户托管，不得挪用成员个人余额。
-- 宗门成员角色为 `leader / officer / member`。只有宗主和长老可以审批入宗申请、查看待审批申请，并被授权代表宗门发布任务；普通成员不能代替组织发布悬赏。
+- 创建宗门要求创建者当前拥有该世界的存活角色；每个宗门创建时在统一经济财政体系中建立独立的 `faction_treasury` 库房账户；宗门悬赏后续必须从该财政账户托管，不得挪用成员个人余额。
+- 宗门成员角色为 `leader / officer / member`。每个宗门只能有一名宗主；只有宗主和长老可以审批入宗申请、查看待审批申请，并被授权代表宗门发布任务；普通成员不能代替组织发布悬赏。
 - 入宗采用申请与审批两阶段；待审批申请在同一宗门内唯一，审批和成员写入处于同一数据库事务。
 - 城主府与官署属于系统组织，只能由受信任的管理/世界服务创建与授予权限，玩家端 API 不提供创建这些组织的入口。
 - 已提供接口：`POST /api/v1/factions` 创建宗门、`GET /api/v1/factions/mine` 查询我的宗门、`POST /api/v1/factions/{factionID}/applications` 申请加入、`GET /api/v1/factions/{factionID}/applications` 查看待审批申请、`POST /api/v1/factions/{factionID}/applications/{applicationID}/review` 审批。
