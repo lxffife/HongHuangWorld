@@ -198,6 +198,30 @@ type useConsumableRequest struct {
 	Quantity int `json:"quantity"`
 }
 
+type serverUseConsumableRequest struct {
+	SessionID string `json:"session_id"`
+	CharacterID string `json:"character_id"`
+	RequestID string `json:"request_id"`
+	ItemID string `json:"item_id"`
+	Quantity int `json:"quantity"`
+}
+
+func (h *inventoryHandlers) useConsumableForSession(w http.ResponseWriter,r *http.Request) {
+	nodeKey,ok:=h.authorizeServer(w,r)
+	if !ok { return }
+	var request serverUseConsumableRequest
+	if err:=decodeJSON(w,r,&request); err!=nil { http.Error(w,"invalid request body",http.StatusBadRequest); return }
+	result,err:=h.service.UseConsumableForSession(r.Context(),nodeKey,request.SessionID,request.CharacterID,inventory.ItemUseRequest{
+		RequestID:request.RequestID,ItemID:request.ItemID,Quantity:request.Quantity,
+	})
+	switch {
+	case err==nil: writeJSON(w,http.StatusOK,result)
+	case errors.Is(err,inventory.ErrInvalidRequest): http.Error(w,"invalid consumable request, item is not owned, or quantity is insufficient",http.StatusBadRequest)
+	case errors.Is(err,inventory.ErrSessionInvalid): http.Error(w,"active character session not found on this server",http.StatusConflict)
+	default: h.logger.Error("world server consumable use failed","node_key",nodeKey,"error",err); http.Error(w,"internal server error",http.StatusInternalServerError)
+	}
+}
+
 func (h *inventoryHandlers) useConsumable(w http.ResponseWriter,r *http.Request) {
 	account,ok:=h.authenticateAccount(w,r); if !ok { return }
 	var request useConsumableRequest
