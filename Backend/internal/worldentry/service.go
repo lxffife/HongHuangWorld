@@ -321,7 +321,8 @@ func (s *Service) SaveAndClose(ctx context.Context, input SessionSnapshot) error
 		input.PositionX < -100 || input.PositionX > 100 ||
 		input.PositionZ < -100 || input.PositionZ > 100 ||
 		input.PositionY < 0 || input.PositionY > 100 ||
-		(input.Health != nil && (*input.Health < 0 || *input.Health > 100000)) {
+		(input.Health != nil && (*input.Health < 0 || *input.Health > 100000)) ||
+		(input.Mana != nil && (*input.Mana < 0 || *input.Mana > 100000)) {
 		return ErrInvalidSessionSnapshot
 	}
 
