@@ -133,3 +133,39 @@ func TestPlayerSnapshotSerializesBirthInheritance(t *testing.T) {
 		t.Fatalf("weapon appearance = %v, want iron_sword in weapon slot", equipment[0])
 	}
 }
+
+func TestWorldSnapshotsRejectInvalidMana(t *testing.T) {
+	service := NewService(nil)
+	valid := SessionSnapshot{
+		NodeKey: "node-1", SessionID: "00000000-0000-4000-8000-000000000001",
+		CharacterID: "00000000-0000-4000-8000-000000000002",
+		PositionX: 1, PositionY: 0, PositionZ: -1, RotationY: 0,
+	}
+	negative := -1
+	tooLarge := 100001
+	for _, test := range []struct {
+		name string
+		mana *int
+	}{
+		{name: "negative mana", mana: &negative},
+		{name: "mana above server bound", mana: &tooLarge},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			input := valid
+			input.Mana = test.mana
+			if err := service.SavePosition(context.Background(), input); !errors.Is(err, ErrInvalidSessionSnapshot) {
+				t.Fatalf("SavePosition error = %v, want ErrInvalidSessionSnapshot", err)
+			}
+			if err := service.SaveAndClose(context.Background(), input); !errors.Is(err, ErrInvalidSessionSnapshot) {
+				t.Fatalf("SaveAndClose error = %v, want ErrInvalidSessionSnapshot", err)
+			}
+		})
+	}
+}
+
+func TestWorldSnapshotAllowsOmittedMana(t *testing.T) {
+	var input SessionSnapshot
+	if input.Mana != nil {
+		t.Fatal("omitted mana must remain nil for backward-compatible position-only snapshots")
+	}
+}
