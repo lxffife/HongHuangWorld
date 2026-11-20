@@ -166,6 +166,14 @@ struct ChatJobResult {
     std::string reason;
 };
 
+struct ConsumableJob { std::string session_id, character_id, request_id, item_id; int quantity{}; };
+struct ConsumableJobResult {
+    std::string session_id, character_id, request_id, item_id;
+    bool success{};
+    Json result{Json::object()};
+    std::string error;
+};
+
 struct CharacterRewardEvent {
     std::string event_id;
     std::string session_id;
@@ -907,6 +915,13 @@ struct EnetServer::Impl {
     std::deque<ChatJobResult> completed_chat_jobs;
     bool chat_stop_requested{false};
     std::thread chat_thread;
+    std::mutex consumable_mutex;
+    std::condition_variable consumable_cv;
+    std::deque<ConsumableJob> pending_consumable_jobs;
+    std::deque<ConsumableJobResult> completed_consumable_jobs;
+    std::unordered_set<std::string> pending_consumable_sessions;
+    bool consumable_stop_requested{false};
+    std::thread consumable_thread;
     std::mutex chat_outbox_mutex;
     std::condition_variable chat_outbox_cv;
     bool chat_outbox_stop_requested{false};
@@ -1415,10 +1430,18 @@ struct EnetServer::Impl {
         const auto now = Clock::now();
         if (now - last_persistence < std::chrono::seconds(1)) return;
         last_persistence = now;
+        std::unordered_set<std::string> consumable_sessions;
+        {
+            std::lock_guard lock(consumable_mutex);
+            consumable_sessions = pending_consumable_sessions;
+        }
         {
             std::lock_guard lock(persistence_mutex);
             for (const auto& [peer, player] : players) {
                 (void)peer;
+                // Never write an older in-memory resource snapshot while a DB
+                // consumable transaction is in flight for this character.
+                if (consumable_sessions.contains(player.session_id)) continue;
                 pending_snapshots[player.session_id] = player;
             }
         }
@@ -1803,6 +1826,122 @@ struct EnetServer::Impl {
         }
     }
 
+    bool enqueue_consumable_job(ConsumableJob job) {
+        std::lock_guard lock(consumable_mutex);
+        if (consumable_stop_requested || !consumable_thread.joinable() ||
+            pending_consumable_jobs.size() >= 128 ||
+            pending_consumable_sessions.contains(job.session_id)) return false;
+        pending_consumable_sessions.insert(job.session_id);
+        pending_consumable_jobs.push_back(std::move(job));
+        consumable_cv.notify_one();
+        return true;
+    }
+
+    void start_consumable_worker() {
+        consumable_stop_requested = false;
+        consumable_thread = std::thread([this] {
+            while (true) {
+                ConsumableJob job;
+                {
+                    std::unique_lock lock(consumable_mutex);
+                    consumable_cv.wait(lock, [this] { return consumable_stop_requested || !pending_consumable_jobs.empty(); });
+                    if (consumable_stop_requested && pending_consumable_jobs.empty()) return;
+                    job = std::move(pending_consumable_jobs.front());
+                    pending_consumable_jobs.pop_front();
+                }
+                ConsumableJobResult result;
+                result.session_id = job.session_id;
+                result.character_id = job.character_id;
+                result.request_id = job.request_id;
+                result.item_id = job.item_id;
+                const Json request{{"session_id", job.session_id}, {"character_id", job.character_id},
+                    {"request_id", job.request_id}, {"item_id", job.item_id}, {"quantity", job.quantity}};
+                long status = 0;
+                Json response;
+                std::string error;
+                for (int attempt = 0; attempt < 3; ++attempt) {
+                    error.clear();
+                    response = Json::object();
+                    result.success = backend_inventory_request(config, "/api/v1/servers/inventory/use",
+                                                                 &request, status, response, error);
+                    if (result.success || (status != 0 && status < 500)) break;
+                    if (attempt < 2) std::this_thread::sleep_for(std::chrono::milliseconds(150 * (attempt + 1)));
+                }
+                if (result.success && response.is_object() &&
+                    response.contains("health") && response["health"].is_number_integer() &&
+                    response.contains("max_health") && response["max_health"].is_number_integer() &&
+                    response.contains("mana") && response["mana"].is_number_integer() &&
+                    response.contains("max_mana") && response["max_mana"].is_number_integer()) {
+                    const auto hp = response["health"].get<std::int64_t>();
+                    const auto max_hp = response["max_health"].get<std::int64_t>();
+                    const auto mp = response["mana"].get<std::int64_t>();
+                    const auto max_mp = response["max_mana"].get<std::int64_t>();
+                    if (hp >= 0 && max_hp > 0 && hp <= max_hp && mp >= 0 && max_mp >= mp) {
+                        result.result = std::move(response);
+                    } else {
+                        result.success = false;
+                        result.error = "后端返回的生命/灵力数值无效。";
+                    }
+                } else if (result.success) {
+                    result.success = false;
+                    result.error = "后端消耗品响应缺少资源字段。";
+                } else {
+                    result.error = error.empty() ? "消耗品结算失败（HTTP " + std::to_string(status) + "）。" : error;
+                }
+                {
+                    std::lock_guard lock(consumable_mutex);
+                    completed_consumable_jobs.push_back(std::move(result));
+                }
+            }
+        });
+    }
+
+    void stop_consumable_worker() {
+        {
+            std::lock_guard lock(consumable_mutex);
+            consumable_stop_requested = true;
+        }
+        consumable_cv.notify_all();
+        if (consumable_thread.joinable()) consumable_thread.join();
+    }
+
+    void drain_consumable_results() {
+        std::deque<ConsumableJobResult> completed;
+        {
+            std::lock_guard lock(consumable_mutex);
+            completed.swap(completed_consumable_jobs);
+        }
+        for (auto& result : completed) {
+            {
+                std::lock_guard lock(consumable_mutex);
+                pending_consumable_sessions.erase(result.session_id);
+            }
+            const auto player = std::find_if(players.begin(), players.end(), [&](const auto& entry) {
+                return entry.second.session_id == result.session_id && entry.second.character_id == result.character_id;
+            });
+            if (player == players.end()) continue;
+            Json event{{"action", "consumable_use"}, {"accepted", result.success},
+                       {"request_id", result.request_id}, {"item_id", result.item_id}};
+            if (result.success) {
+                auto& state = player->second;
+                state.health = result.result.at("health").get<std::int64_t>();
+                state.max_health = result.result.at("max_health").get<std::int64_t>();
+                state.mana = result.result.at("mana").get<std::int64_t>();
+                state.max_mana = result.result.at("max_mana").get<std::int64_t>();
+                event["health"] = state.health;
+                event["max_health"] = state.max_health;
+                event["mana"] = state.mana;
+                event["max_mana"] = state.max_mana;
+                event["health_restored"] = result.result.value("health_restored", 0);
+                event["mana_restored"] = result.result.value("mana_restored", 0);
+                event["applied"] = result.result.value("applied", true);
+            } else {
+                event["reason"] = result.error;
+            }
+            send_json(player->first, honghuang::protocol::MessageType::CombatEvent, event);
+        }
+    }
+
     bool enqueue_chat_job(ChatJob job) {
         std::lock_guard lock(chat_mutex);
         if (chat_stop_requested || !chat_thread.joinable() || pending_chat_jobs.size() >= 256) return false;
@@ -2028,6 +2167,30 @@ struct EnetServer::Impl {
         }
         send_json(peer, honghuang::protocol::MessageType::PickupEvent,
                   Json{{"accepted", false}, {"pending", true}, {"drop_id", drop_id}, {"reason", "正在结算拾取……"}});
+    }
+
+    void handle_consumable_use(ENetPeer* peer, const Json& command) {
+        const auto found = players.find(peer);
+        if (found == players.end()) return;
+        const auto& player = found->second;
+        const auto request_id = command.value("request_id", std::string{});
+        const auto item_id = command.value("item_id", std::string{});
+        const auto quantity = command.value("quantity", 1);
+        const auto reject = [&](const std::string& reason) {
+            send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                Json{{"action", "consumable_use"}, {"accepted", false}, {"request_id", request_id},
+                     {"item_id", item_id}, {"reason", reason}});
+        };
+        if (player.health <= 0) { reject("角色已倒地，无法使用消耗品。"); return; }
+        if (request_id.size() != 36 || item_id.empty() || item_id.size() > 96 || quantity < 1 || quantity > 20) {
+            reject("消耗品请求格式无效。"); return;
+        }
+        if (!enqueue_consumable_job(ConsumableJob{player.session_id, player.character_id, request_id, item_id, quantity})) {
+            reject("消耗品结算队列繁忙，或当前角色已有一笔请求正在结算。"); return;
+        }
+        send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+            Json{{"action", "consumable_use"}, {"accepted", true}, {"pending", true},
+                 {"request_id", request_id}, {"item_id", item_id}, {"reason", "正在结算消耗品……"}});
     }
 
     void enqueue_monster_drops(const MonsterRuntime& monster, const PlayerState& player) {
@@ -2800,6 +2963,7 @@ bool EnetServer::start() {
         std::cout << "Restored " << impl_->ground_drops.size() << " persisted ground drops\n";
     }
     impl_->start_drop_worker();
+    impl_->start_consumable_worker();
     impl_->start_outbox_worker();
     impl_->start_chat_outbox_worker();
     impl_->last_persistence = Clock::now();
@@ -2959,6 +3123,18 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                     send_json(event.peer, honghuang::protocol::MessageType::ServerReject,
                               Json{{"reason", "invalid attack command"}});
                 }
+            } else if (frame.type == honghuang::protocol::MessageType::UseConsumableCommand &&
+                       impl_->players.contains(event.peer)) {
+                try {
+                    const std::string payload(frame.payload.begin(), frame.payload.end());
+                    const auto command = Json::parse(payload);
+                    if (!command.is_object()) throw std::runtime_error("consumable payload must be an object");
+                    impl_->handle_consumable_use(event.peer, command);
+                } catch (const std::exception&) {
+                    send_json(event.peer, honghuang::protocol::MessageType::CombatEvent,
+                              Json{{"action", "consumable_use"}, {"accepted", false},
+                                   {"reason", "消耗品请求格式无效。"}});
+                }
             } else if (frame.type == honghuang::protocol::MessageType::SpellCastCommand &&
                        impl_->players.contains(event.peer)) {
                 try {
@@ -3031,6 +3207,7 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
         }
     }
     impl_->drain_chat_results();
+    impl_->drain_consumable_results();
     impl_->disconnect_revoked_sessions();
     impl_->online_players.store(impl_->players.size(), std::memory_order_relaxed);
     impl_->tick_world();
@@ -3050,6 +3227,8 @@ void EnetServer::stop() {
 
         impl_->stop_chat_worker();
         impl_->drain_chat_results();
+        impl_->stop_consumable_worker();
+        impl_->drain_consumable_results();
         impl_->stop_chat_outbox_worker();
         impl_->stop_outbox_worker();
         impl_->stop_reward_worker();
