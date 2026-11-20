@@ -213,3 +213,42 @@ func TestCombatStatsSerializesCurrentAndMaximumMana(t *testing.T) {
 		t.Fatalf("mana fields = (%v, %v), want (12, 40)", decoded["mana"], decoded["max_mana"])
 	}
 }
+
+func TestLiveConsumableResourcesAcceptEquipmentCaps(t *testing.T) {
+	valid := []LiveConsumableResources{
+		{Health: 140, MaxHealth: 180, Mana: 75, MaxMana: 100},
+		{Health: 80, MaxHealth: 80, Mana: 0, MaxMana: 0},
+		// Unequipping a bonus may lower the effective cap below the base cap.
+		{Health: 60, MaxHealth: 60, Mana: 20, MaxMana: 20},
+	}
+	for i, resources := range valid {
+		if !validLiveConsumableResources(resources) { t.Errorf("valid live resources %d rejected: %+v", i, resources) }
+	}
+	invalid := []LiveConsumableResources{
+		{Health: -1, MaxHealth: 100, Mana: 0, MaxMana: 20},
+		{Health: 101, MaxHealth: 100, Mana: 0, MaxMana: 20},
+		{Health: 0, MaxHealth: 0, Mana: 0, MaxMana: 20},
+		{Health: 0, MaxHealth: 10000001, Mana: 0, MaxMana: 20},
+		{Health: 0, MaxHealth: 100, Mana: 21, MaxMana: 20},
+	}
+	for i, resources := range invalid {
+		if validLiveConsumableResources(resources) { t.Errorf("invalid live resources %d accepted: %+v", i, resources) }
+	}
+}
+
+func TestConsumableRestorationUsesEffectiveEquipmentCaps(t *testing.T) {
+	request := ItemUseRequest{ItemID: "greater_potion", Quantity: 2}
+	live := LiveConsumableResources{Health: 140, MaxHealth: 180, Mana: 75, MaxMana: 100}
+	result := applyLiveConsumableEffect(request, live, 30, 20)
+	if result.Health != 180 || result.MaxHealth != 180 || result.HealthRestored != 40 {
+		t.Fatalf("health restoration ignored equipment cap: %+v", result)
+	}
+	if result.Mana != 100 || result.MaxMana != 100 || result.ManaRestored != 25 {
+		t.Fatalf("mana restoration ignored equipment cap: %+v", result)
+	}
+	// A lower effective cap after unequipping must never leave resources above it.
+	lower := applyLiveConsumableEffect(request, LiveConsumableResources{Health: 60, MaxHealth: 60, Mana: 20, MaxMana: 20}, 30, 20)
+	if lower.Health != 60 || lower.Mana != 20 || lower.HealthRestored != 0 || lower.ManaRestored != 0 {
+		t.Fatalf("restoration exceeded reduced equipment caps: %+v", lower)
+	}
+}
