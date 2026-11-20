@@ -46,7 +46,7 @@ type adminPlayerLife struct {
 type adminPlayerWorldSession struct {
 	ID string `json:"id"`
 	State string `json:"state"`
-	ConnectedAt time.Time `json:"connected_at"`
+	ConnectedAt *time.Time `json:"connected_at,omitempty"`
 	WorldID string `json:"world_id"`
 	ServerID string `json:"server_id"`
 	NodeKey string `json:"node_key,omitempty"`
@@ -180,7 +180,7 @@ type adminOnlinePlayer struct {
 	UDPPort int `json:"udp_port"`
 	Region string `json:"region"`
 	NodeStatus string `json:"node_status"`
-	HeartbeatAt time.Time `json:"heartbeat_at"`
+	HeartbeatAt *time.Time `json:"heartbeat_at,omitempty"`
 	Capacity int `json:"capacity"`
 	CurrentPlayers int `json:"current_players"`
 }
@@ -237,11 +237,14 @@ func (h *gamePlayerAdminHandlers) online(w http.ResponseWriter, r *http.Request)
 	items := make([]adminOnlinePlayer, 0, limit)
 	for rows.Next() {
 		var item adminOnlinePlayer
-		if err := rows.Scan(&item.AccountID, &item.SessionState, &item.CharacterID, &item.CharacterName, &item.Level, &item.WorldID, &item.WorldName, &item.SessionID, &item.ConnectedAt, &item.NodeKey, &item.Host, &item.UDPPort, &item.Region, &item.NodeStatus, &item.HeartbeatAt, &item.Capacity, &item.CurrentPlayers); err != nil {
+		var connectedAt, heartbeatAt sql.NullTime
+		if err := rows.Scan(&item.AccountID, &item.SessionState, &item.CharacterID, &item.CharacterName, &item.Level, &item.WorldID, &item.WorldName, &item.SessionID, &connectedAt, &item.NodeKey, &item.Host, &item.UDPPort, &item.Region, &item.NodeStatus, &heartbeatAt, &item.Capacity, &item.CurrentPlayers); err != nil {
 			h.logger.Error("scan game admin online player failed", "error", err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
+		if connectedAt.Valid { value := connectedAt.Time; item.ConnectedAt = &value }
+		if heartbeatAt.Valid { value := heartbeatAt.Time; item.HeartbeatAt = &value }
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
