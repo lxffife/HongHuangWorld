@@ -130,6 +130,19 @@ func send_spell_cast(spell_id: String, target_entity_id: String) -> Error:
 		return ERR_INVALID_DATA
 	return transport.send_frame(frame)
 
+func send_consumable_use(item_id: String, quantity: int = 1) -> Error:
+	if not world_ready or transport == null:
+		return ERR_UNCONFIGURED
+	if item_id.is_empty() or item_id.length() > 96 or quantity < 1 or quantity > 20:
+		return ERR_INVALID_PARAMETER
+	var raw_id := Crypto.new().generate_random_bytes(16).hex_encode()
+	var request_id := "%s-%s-%s-%s-%s" % [raw_id.substr(0, 8), raw_id.substr(8, 4), raw_id.substr(12, 4), raw_id.substr(16, 4), raw_id.substr(20, 12)]
+	var payload := JSON.stringify({"request_id": request_id, "item_id": item_id, "quantity": quantity}).to_utf8_buffer()
+	var frame := HHProtocolCodec.encode_frame(HHProtocolCodec.MessageType.USE_CONSUMABLE_COMMAND, payload)
+	if frame.is_empty():
+		return ERR_INVALID_DATA
+	return transport.send_frame(frame)
+
 func send_pickup(drop_id: String) -> Error:
 	if not world_ready or transport == null or drop_id.is_empty() or drop_id.length() > 64:
 		return ERR_INVALID_PARAMETER
