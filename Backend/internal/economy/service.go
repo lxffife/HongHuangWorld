@@ -105,9 +105,8 @@ func (s *Service) ApplyDelta(ctx context.Context, accountID, currencyID, eventKe
 	if err != nil { return LedgerResult{}, fmt.Errorf("begin economy ledger transaction: %w", err) }
 	defer tx.Rollback()
 
-	if err := tx.QueryRowContext(ctx, `SELECT id FROM accounts WHERE id = $1 FOR UPDATE`, accountID).Scan(new(string)); err != nil {
-		if errors.Is(err, sql.ErrNoRows) { return LedgerResult{}, ErrInvalidRequest }
-		return LedgerResult{}, fmt.Errorf("lock economy account: %w", err)
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, accountID); err != nil {
+		return LedgerResult{}, fmt.Errorf("lock economy account scope: %w", err)
 	}
 
 	var existing LedgerResult
