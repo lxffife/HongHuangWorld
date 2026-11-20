@@ -67,6 +67,7 @@ var details_toggle_button: Button
 var details_visible := false
 var vitals_panel: PanelContainer
 var health_label: Label
+var mana_label: Label
 var health_bar: ProgressBar
 var notification_panel: PanelContainer
 var notification_label: Label
@@ -619,7 +620,7 @@ func _build_compact_hud() -> void:
 	$HUD/Panel.offset_bottom = 548.0
 	compact_hud_panel = PanelContainer.new()
 	compact_hud_panel.position = Vector2(18.0, 18.0)
-	compact_hud_panel.custom_minimum_size = Vector2(340.0, 92.0)
+	compact_hud_panel.custom_minimum_size = Vector2(340.0, 112.0)
 	var compact_style := StyleBoxFlat.new()
 	compact_style.bg_color = Color(0.035, 0.055, 0.085, 0.88)
 	compact_style.border_color = Color("#526783")
@@ -634,7 +635,7 @@ func _build_compact_hud() -> void:
 	compact_hud_label = Label.new()
 	compact_hud_label.text = "洪荒 · 正在载入角色状态……"
 	compact_hud_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	compact_hud_label.custom_minimum_size = Vector2(316.0, 72.0)
+	compact_hud_label.custom_minimum_size = Vector2(316.0, 92.0)
 	compact_hud_label.add_theme_font_size_override("font_size", 13)
 	compact_hud_label.add_theme_color_override("font_color", Color("#e2e8f0"))
 	compact_hud_panel.add_child(compact_hud_label)
@@ -714,6 +715,9 @@ func _build_combat_hud() -> void:
 	health_label = Label.new()
 	health_label.text = "生命：等待服务端战斗状态"
 	vitals_layout.add_child(health_label)
+	mana_label = Label.new()
+	mana_label.text = "灵力：等待世界服务器"
+	vitals_layout.add_child(mana_label)
 	health_bar = ProgressBar.new()
 	health_bar.custom_minimum_size = Vector2(270.0, 16.0)
 	health_bar.min_value = 0.0
@@ -836,7 +840,8 @@ func _update_compact_hud(progression: Dictionary = {}) -> void:
 	var lines := [
 		world_name + "  /  " + region_name,
 		character_name + "  ·  " + system_name + " " + realm_name + stage_name,
-		"修为 " + str(cultivation)
+		"修为 " + str(cultivation),
+		"灵力 " + str(int(snapshot.get("mana", 0))) + " / " + str(int(snapshot.get("max_mana", 0)))
 	]
 	if world_id == "underworld_fengdu":
 		lines.append("魂力 " + str(soul_essence_profile.get("soul_power", 0)) + "  ·  吞噬 " + str(soul_essence_profile.get("absorbed_count", 0)) + "  ·  " + str(soul_essence_profile.get("growth_name", "初生魂团")))
@@ -873,8 +878,8 @@ func _update_compact_hud(progression: Dictionary = {}) -> void:
 			if not pending_choices.is_empty():
 				soul_choice_button.text = "分配无相灵魄 · " + str(pending_choices.size())
 	else:
-		compact_hud_panel.custom_minimum_size = Vector2(340.0, 92.0)
-		compact_hud_label.custom_minimum_size = Vector2(316.0, 72.0)
+		compact_hud_panel.custom_minimum_size = Vector2(340.0, 112.0)
+		compact_hud_label.custom_minimum_size = Vector2(316.0, 92.0)
 	compact_hud_label.text = "\n".join(PackedStringArray(lines))
 
 func _apply_world_player_form() -> void:
@@ -959,7 +964,7 @@ func _update_hud() -> void:
 	var world_id := str(snapshot.get("world_id", ""))
 	var world_name := _world_display_name(world_id)
 	var character_name := str(snapshot.get("name", "初入洪荒"))
-	hud_label.text = "当前世界 · " + world_name + " · 所在区域 " + (current_region_name if not current_region_name.is_empty() else "区域载入中") + "\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\nF NPC交互 · E 拾取 · I 背包 · C 聊天 · 鼠标左键攻击附近怪物 · 首次点击画面锁定鼠标 · F2 网络诊断"
+	hud_label.text = "当前世界 · " + world_name + " · 所在区域 " + (current_region_name if not current_region_name.is_empty() else "区域载入中") + "\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\nF NPC交互 · E 拾取 · I 背包 · Q 火球术（法杖/法器） · C 聊天 · 鼠标左键攻击 · F2 网络诊断"
 	_update_compact_hud()
 
 func _exit_tree() -> void:
@@ -1251,24 +1256,58 @@ func _upsert_drop(entity: Dictionary) -> void:
 
 func _upsert_projectile(entity: Dictionary) -> void:
 	var projectile_id := str(entity.get("entity_id", ""))
-	if projectile_id.is_empty() or str(entity.get("projectile_type", "")) != "arrow":
+	var projectile_type := str(entity.get("projectile_type", ""))
+	if projectile_id.is_empty() or projectile_type not in ["arrow", "fireball"]:
 		return
-	var target := Vector3(
-		float(entity.get("x", 0.0)),
-		float(entity.get("y", 1.15)),
-		float(entity.get("z", 0.0))
-	)
+	var target := Vector3(float(entity.get("x", 0.0)), float(entity.get("y", 1.15)), float(entity.get("z", 0.0)))
 	var is_new := not projectiles.has(projectile_id)
 	if is_new:
-		projectiles[projectile_id] = _create_arrow_projectile()
+		projectiles[projectile_id] = _create_fireball_projectile() if projectile_type == "fireball" else _create_arrow_projectile()
 	projectile_targets[projectile_id] = target
 	var direction := Vector3(float(entity.get("velocity_x", 0.0)), 0.0, float(entity.get("velocity_z", -1.0)))
-	var arrow := projectiles[projectile_id] as Node3D
-	if is_instance_valid(arrow):
+	var projectile_node := projectiles[projectile_id] as Node3D
+	if is_instance_valid(projectile_node):
 		if is_new:
-			arrow.position = target
+			projectile_node.position = target
 		if direction.length_squared() > 0.001:
-			arrow.look_at(arrow.global_position + direction, Vector3.UP)
+			projectile_node.look_at(projectile_node.global_position + direction, Vector3.UP)
+
+func _create_fireball_projectile() -> Node3D:
+	var root := Node3D.new()
+	root.name = "AuthoritativeFireball"
+	var core := MeshInstance3D.new()
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.22
+	sphere.height = 0.44
+	sphere.radial_segments = 12
+	sphere.rings = 6
+	core.mesh = sphere
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#ff8a32")
+	material.emission_enabled = true
+	material.emission = Color("#ff4b12")
+	material.emission_energy_multiplier = 2.8
+	material.roughness = 0.3
+	core.material_override = material
+	root.add_child(core)
+	var glow := MeshInstance3D.new()
+	var glow_mesh := SphereMesh.new()
+	glow_mesh.radius = 0.32
+	glow_mesh.height = 0.64
+	glow_mesh.radial_segments = 10
+	glow_mesh.rings = 5
+	glow.mesh = glow_mesh
+	var glow_material := StandardMaterial3D.new()
+	glow_material.albedo_color = Color(1.0, 0.28, 0.06, 0.28)
+	glow_material.emission_enabled = true
+	glow_material.emission = Color("#ff5b18")
+	glow_material.emission_energy_multiplier = 1.4
+	glow_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glow_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	glow.material_override = glow_material
+	root.add_child(glow)
+	add_child(root)
+	return root
 
 func _create_arrow_projectile() -> Node3D:
 	var root := Node3D.new()
@@ -1379,6 +1418,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.keycode == KEY_I:
 		_on_inventory_button_pressed()
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_Q:
+		_request_fireball()
 		get_viewport().set_input_as_handled()
 		return
 	if event.keycode == KEY_C:
@@ -2121,6 +2164,26 @@ func _request_nearest_monster_attack() -> void:
 		# 本地挥剑只反馈输入；命中、伤害与攻击结果仍由 WorldServer 决定。
 		local_player.call("play_attack_animation")
 
+func _request_fireball() -> void:
+	var network := HHSession.world_network
+	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
+		return
+	var target_id := selected_monster_id if monsters.has(selected_monster_id) else ""
+	var nearest_distance := 20.0
+	if target_id.is_empty():
+		for monster_id in monster_targets:
+			var target: Vector3 = monster_targets[monster_id]
+			var distance := Vector2(local_player.global_position.x, local_player.global_position.z).distance_to(Vector2(target.x, target.z))
+			if distance <= nearest_distance:
+				nearest_distance = distance
+				target_id = str(monster_id)
+	if target_id.is_empty():
+		_show_notification("20 米内没有可施法的目标。")
+		return
+	var error: Error = network.send_spell_cast("fireball", target_id)
+	if error != OK:
+		_show_notification("火球术请求发送失败：" + str(error))
+
 func _on_monster_action_event(event: Dictionary) -> void:
 	var attacker_id := str(event.get("source_entity_id", ""))
 	if attacker_id.is_empty() or not monsters.has(attacker_id):
@@ -2241,6 +2304,19 @@ func _spawn_soul_bolt_visual(attacker: Node3D) -> void:
 	tween.tween_callback(Callable(bolt, "queue_free"))
 
 func _on_combat_event(event: Dictionary) -> void:
+	if str(event.get("action", "")) == "spell_cast":
+		if event.has("mana"):
+			HHSession.world_snapshot["mana"] = int(event.get("mana", 0))
+		if event.has("max_mana"):
+			HHSession.world_snapshot["max_mana"] = int(event.get("max_mana", 0))
+		_update_compact_hud()
+		if not bool(event.get("accepted", false)):
+			_show_notification(str(event.get("reason", "火球术施展失败。")), 3.0)
+		elif str(event.get("phase", "")) == "casting":
+			_show_notification("正在凝聚火球 · 灵力 -" + str(int(event.get("mana_cost", 18))), 1.5)
+		elif str(event.get("phase", "")) == "released":
+			_show_notification("火球已释放！", 1.5)
+		return
 	if not bool(event.get("accepted", true)):
 		hud_label.text = str(event.get("reason", "攻击未命中。"))
 		return
