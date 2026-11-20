@@ -7,14 +7,14 @@ const WorldEnvironmentBuilder = preload("res://scripts/world_environment_builder
 const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
 const WorldTerrainStreamingManager = preload("res://scripts/experiments/fengdu_terrain_streaming_manager.gd")
 
-var _map_definition: Dictionary = {}
-
 const GROUND_LOW := Color("#292632")
 const GROUND_MID := Color("#45404c")
 const GROUND_HIGH := Color("#655d68")
 const SHORE_COLOR := Color("#51404a")
 const RIVER_COLOR := Color("#344b69")
 const BLOOD_COLOR := Color("#681d32")
+
+var _map_definition: Dictionary = {}
 
 func _ready() -> void:
 	_map_definition = WorldMapCatalog.get_prototype_definition("underworld_fengdu")
@@ -154,7 +154,7 @@ func _build_water() -> void:
 		var center_data: Array = water_data["center"]
 		var size := Vector2(float(size_data[0]), float(size_data[1]))
 		var position := Vector3(float(center_data[0]), float(water_data["height"]), float(center_data[1]))
-		_add_water_plane("%sSurface" % str(water_data["id"]).capitalize(), size, position, Color(str(water_data["color"])), float(water_data["alpha"]))
+		_add_water_plane("Water_" + str(water_data["id"]), size, position, Color(str(water_data["color"])), float(water_data["alpha"]))
 
 
 func _add_water_plane(node_name: String, size: Vector2, world_position: Vector3, color: Color, alpha: float) -> void:
@@ -180,7 +180,7 @@ func _build_landmark_markers() -> void:
 	for landmark in WorldMapCatalog.get_landmarks("underworld_fengdu"):
 		var position_data: Array = landmark["position"]
 		var world_position := Vector3(float(position_data[0]), float(position_data[1]), float(position_data[2]))
-		_add_marker(str(landmark["id"]).to_pascal_case(), str(landmark["name"]), world_position, Color(str(landmark["color"])))
+		_add_marker("Landmark_" + str(landmark["id"]), str(landmark["name"]), world_position, Color(str(landmark["color"])))
 
 
 func _add_marker(node_name: String, title: String, world_position: Vector3, color: Color) -> void:
