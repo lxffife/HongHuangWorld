@@ -16,6 +16,7 @@
 - `000052_unified_economy_foundation` 建立跨世界统一货币目录、账号钱包、不可变账本、世界/势力财政、托管、发行额度、修炼适配和兑换基础。
 - `000053_faction_authority` 建立宗门/势力身份、成员角色、入宗申请与组织财政账户。
 - `000054_faction_bounty_tasks` 建立宗门悬赏、预算托管、成员捐献流水与多人接取；扩展财政流水类型。
+- `000055_bounty_task_settlement` 增加财政冻结余额流水字段、结算幂等凭证，并支持悬赏预算原子支付和未使用额度退回。
 - `000008_character_death_and_respawn` 增加角色死亡事件与复活记录。
 - `000009_reincarnation_history` 增加肉身轮回历史。
 - `000010_soul_progression` 增加跨世保留的灵魂境界、灵魂经验与幂等奖励事件。
@@ -111,6 +112,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000051_admin_anal
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000052_unified_economy_foundation.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000053_faction_authority.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000054_faction_bounty_tasks.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000055_bounty_task_settlement.up.sql
 ```
 
 回滚时按相反顺序执行对应的 `.down.sql`。不要在已运行的生产库上重复执行非幂等迁移；后续接入迁移工具后，应由工具记录每个已应用版本，避免人工重复执行。
