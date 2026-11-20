@@ -2281,8 +2281,19 @@ struct EnetServer::Impl {
             auto target = std::find_if(monsters.begin(), monsters.end(), [&](const MonsterRuntime& monster) {
                 return monster.runtime_id == projectile->target_entity_id;
             });
-            if (projectile->expires_at <= now || owner == players.end() || target == monsters.end() ||
-                target->state.mode == honghuang::simulation::MonsterMode::Dead) {
+            if (owner == players.end()) {
+                projectile = projectiles.erase(projectile);
+                continue;
+            }
+            if (projectile->expires_at <= now) {
+                send_json(owner->first, honghuang::protocol::MessageType::CombatEvent,
+                          Json{{"accepted", false}, {"reason", "箭矢未命中目标。"}});
+                projectile = projectiles.erase(projectile);
+                continue;
+            }
+            if (target == monsters.end() || target->state.mode == honghuang::simulation::MonsterMode::Dead) {
+                send_json(owner->first, honghuang::protocol::MessageType::CombatEvent,
+                          Json{{"accepted", false}, {"reason", "目标已消失，箭矢失效。"}});
                 projectile = projectiles.erase(projectile);
                 continue;
             }
