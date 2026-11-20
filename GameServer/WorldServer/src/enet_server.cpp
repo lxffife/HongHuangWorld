@@ -2700,13 +2700,13 @@ struct EnetServer::Impl {
             }
             if (projectile->expires_at <= now) {
                 send_json(owner->first, honghuang::protocol::MessageType::CombatEvent,
-                          Json{{"accepted", false}, {"reason", projectile->projectile_type == "fireball" ? "火球术未命中目标。" : "箭矢未命中目标。"}});
+                          Json{{"accepted", false}, {"reason", projectile->projectile_type == "fireball" ? "火球术未命中目标。" : (projectile->projectile_type == "ice_bolt" ? "冰锥术未命中目标。" : "箭矢未命中目标。")}});
                 projectile = projectiles.erase(projectile);
                 continue;
             }
             if (target == monsters.end() || target->state.mode == honghuang::simulation::MonsterMode::Dead) {
                 send_json(owner->first, honghuang::protocol::MessageType::CombatEvent,
-                          Json{{"accepted", false}, {"reason", projectile->projectile_type == "fireball" ? "目标已消失，火球术失效。" : "目标已消失，箭矢失效。"}});
+                          Json{{"accepted", false}, {"reason", projectile->projectile_type == "fireball" ? "目标已消失，火球术失效。" : (projectile->projectile_type == "ice_bolt" ? "目标已消失，冰锥术失效。" : "目标已消失，箭矢失效。")}});
                 projectile = projectiles.erase(projectile);
                 continue;
             }
