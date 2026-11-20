@@ -392,7 +392,7 @@ func _build_hud() -> void:
 	title.add_theme_font_size_override("font_size", 18)
 	column.add_child(title)
 	_hint_label = Label.new()
-	_hint_label.text = "WASD 移动 · 鼠标观察 · Shift 奔跑 · Space 跳跃 · Esc 释放鼠标"
+	_hint_label.text = "WASD 移动 · 鼠标观察 · Shift 奔跑 · Space 跳跃 · E 查看城区 · Esc 释放鼠标"
 	_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(_hint_label)
 	var note := Label.new()
