@@ -152,7 +152,7 @@ func _build_palace_courtyard(width: float, depth: float, height: float, material
 		_add_box("PalaceWing_" + str(side), wing, p, material_key, true)
 		_add_roof("PalaceWingRoof_" + str(side), wing + Vector3(16.0, 8.0, 16.0), p + Vector3.UP * 21.0, "roof")
 		_add_box("PalaceSideWall_" + str(side), Vector3(12.0, 22.0, 250.0), Vector3(side * 270.0, 11.0, 8.0), "stone", true)
-	_add_box("ImperialTerrace", Vector3(590.0, 4.0, 420.0), Vector3(0.0, 2.0, 100.0), "stone", true)
+	_add_box("ImperialTerrace", Vector3(520.0, 4.0, 180.0), Vector3(0.0, 2.0, -190.0), "stone", true)
 	for i in range(5):
 		var offset := (float(i) - 2.0) * 74.0
 		_add_box("PalacePillar_%d" % i, Vector3(12.0, 32.0, 12.0), Vector3(offset, 16.0, depth * 0.5 + 42.0), "sign", true)
@@ -201,11 +201,11 @@ func _build_barracks() -> void:
 	for row in range(2):
 		for column in range(3):
 			var x := (float(column) - 1.0) * 58.0
-			var z := 52.0 + float(row) * 76.0
+			var z := 90.0 + float(row) * 76.0
 			_add_box("Barracks_%d_%d" % [row, column], Vector3(42.0, 22.0, 52.0), Vector3(x, 11.0, z), "military", true)
-	_add_box("DrillYard", Vector3(250.0, 0.4, 150.0), Vector3(0.0, 0.25, 190.0), "stone", false)
+	_add_box("DrillYard", Vector3(250.0, 0.4, 150.0), Vector3(0.0, 0.25, 250.0), "stone", false)
 	for i in range(4):
-		_add_box("WeaponRack_%d" % i, Vector3(22.0, 7.0, 4.0), Vector3(-90.0 + float(i) * 60.0, 3.5, 200.0), "gate", false)
+		_add_box("WeaponRack_%d" % i, Vector3(22.0, 7.0, 4.0), Vector3(-90.0 + float(i) * 60.0, 3.5, 260.0), "gate", false)
 
 
 func _build_waystation() -> void:
