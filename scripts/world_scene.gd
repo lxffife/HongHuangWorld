@@ -1253,18 +1253,22 @@ func _upsert_projectile(entity: Dictionary) -> void:
 	var projectile_id := str(entity.get("entity_id", ""))
 	if projectile_id.is_empty() or str(entity.get("projectile_type", "")) != "arrow":
 		return
-	if not projectiles.has(projectile_id):
-		projectiles[projectile_id] = _create_arrow_projectile()
 	var target := Vector3(
 		float(entity.get("x", 0.0)),
 		float(entity.get("y", 1.15)),
 		float(entity.get("z", 0.0))
 	)
+	var is_new := not projectiles.has(projectile_id)
+	if is_new:
+		projectiles[projectile_id] = _create_arrow_projectile()
 	projectile_targets[projectile_id] = target
 	var direction := Vector3(float(entity.get("velocity_x", 0.0)), 0.0, float(entity.get("velocity_z", -1.0)))
 	var arrow := projectiles[projectile_id] as Node3D
-	if is_instance_valid(arrow) and direction.length_squared() > 0.001:
-		arrow.look_at(arrow.global_position + direction, Vector3.UP)
+	if is_instance_valid(arrow):
+		if is_new:
+			arrow.position = target
+		if direction.length_squared() > 0.001:
+			arrow.look_at(arrow.global_position + direction, Vector3.UP)
 
 func _create_arrow_projectile() -> Node3D:
 	var root := Node3D.new()
