@@ -120,11 +120,17 @@ func (s *Service) CreateUser(ctx context.Context,actor User,username,email,passw
  username=strings.TrimSpace(username); email=strings.TrimSpace(email)
  if !adminUsernamePattern.MatchString(username)||len(password)<12||len(password)>72||(email!=""&&(len(email)>254||!strings.Contains(email,"@"))) { return User{},ErrInvalidInput }
  hash,err:=bcrypt.GenerateFromPassword([]byte(password),bcrypt.DefaultCost); if err!=nil { return User{},err }
+ tx,err:=s.db.BeginTx(ctx,nil); if err!=nil { return User{},fmt.Errorf("begin admin user creation: %w",err) }; defer tx.Rollback()
  var u User; var em sql.NullString
- err=s.db.QueryRowContext(ctx,`INSERT INTO admin_users(username,email,password_hash,created_by) VALUES($1,NULLIF($2,''),$3,$4) RETURNING id::text,username,email,is_super_admin`,username,email,string(hash),actor.ID).Scan(&u.ID,&u.Username,&em,&u.IsSuperAdmin)
- if err!=nil { var pgErr *pgconn.PgError; if errors.As(err,&pgErr)&&pgErr.Code=="23505" { return User{},ErrConflict }; return User{},err }
+ err=tx.QueryRowContext(ctx,`INSERT INTO admin_users(username,email,password_hash,created_by) VALUES($1,NULLIF($2,''),$3,$4) RETURNING id::text,username,email,is_super_admin`,username,email,string(hash),actor.ID).Scan(&u.ID,&u.Username,&em,&u.IsSuperAdmin)
+ if err!=nil { var pgErr *pgconn.PgError; if errors.As(err,&pgErr)&&pgErr.Code=="23505" { return User{},ErrConflict }; return User{},fmt.Errorf("insert admin user: %w",err) }
  if em.Valid { u.Email=&em.String }
- _=s.audit(ctx,&actor.ID,"admin.user.create","admin_user",u.ID,"success",`{"username":"`+username+`"}`,"","")
+ details,err:=json.Marshal(map[string]string{"username":u.Username})
+ if err!=nil { return User{},fmt.Errorf("encode admin user audit: %w",err) }
+ if _,err=tx.ExecContext(ctx,`INSERT INTO admin_audit_logs(actor_user_id,action,resource_type,resource_id,result,details) VALUES($1,'admin.user.create','admin_user',$2,'success',$3::jsonb)`,actor.ID,u.ID,string(details)); err!=nil {
+  return User{},fmt.Errorf("record admin user creation audit: %w",err)
+ }
+ if err=tx.Commit(); err!=nil { return User{},fmt.Errorf("commit admin user creation: %w",err) }
  return u,nil
 }
 
