@@ -105,6 +105,7 @@ var minimap_panel: PanelContainer
 var world_map_panel: PanelContainer
 var world_map_canvas: Control
 var world_map_open_button: Button
+var world_map_restore_mouse_captured := false
 var minimap_view: Control
 var minimap_region_label: Label
 var minimap_exploration_label: Label
@@ -652,8 +653,16 @@ func _toggle_world_map() -> void:
 		return
 	world_map_panel.visible = not world_map_panel.visible
 	if world_map_panel.visible:
+		world_map_restore_mouse_captured = Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		_update_minimap_data()
 		world_map_canvas.grab_focus()
+	else:
+		if is_instance_valid(world_map_canvas):
+			world_map_canvas.release_focus()
+		if world_map_restore_mouse_captured:
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		world_map_restore_mouse_captured = false
 
 
 func _update_minimap_data() -> void:
@@ -1589,6 +1598,10 @@ func _create_drop(item_name: String, quality: int, quantity: int) -> Node3D:
 	return root
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE and is_instance_valid(world_map_panel) and world_map_panel.visible:
+		_toggle_world_map()
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F2:
 		input_debug_visible = not input_debug_visible
 		if is_instance_valid(input_debug_panel):
@@ -1826,6 +1839,9 @@ func _style_chat_button(button: Button, active: bool) -> void:
 	button.add_theme_font_size_override("font_size", 11)
 
 func is_gameplay_input_blocked() -> bool:
+	# Modal map and social drawers own keyboard/mouse input while visible.
+	if is_instance_valid(world_map_panel) and world_map_panel.visible:
+		return true
 	# Keep movement disabled for the entire time the chat drawer is open,
 	# including Chinese IME candidate/composition states.
 	if chat_expanded or (is_instance_valid(friend_panel) and friend_panel.visible):
