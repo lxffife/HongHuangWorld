@@ -19,6 +19,17 @@ CREATE TABLE currency_definitions (
 );
 CREATE INDEX idx_currency_definitions_world ON currency_definitions(home_world_id, enabled);
 
+CREATE TABLE currency_issuance_policies (
+    world_id VARCHAR(64) NOT NULL,
+    currency_id VARCHAR(64) NOT NULL REFERENCES currency_definitions(id),
+    source_type VARCHAR(32) NOT NULL,
+    max_per_event BIGINT NOT NULL CHECK (max_per_event > 0),
+    daily_cap BIGINT NOT NULL CHECK (daily_cap >= max_per_event),
+    requires_trusted_server BOOLEAN NOT NULL DEFAULT TRUE,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    PRIMARY KEY (world_id, currency_id, source_type)
+);
+
 CREATE TABLE currency_world_rules (
     world_id VARCHAR(64) NOT NULL,
     currency_id VARCHAR(64) NOT NULL REFERENCES currency_definitions(id),
@@ -89,7 +100,7 @@ CREATE TABLE economy_treasury_ledger_entries (
     treasury_account_id UUID NOT NULL REFERENCES economy_treasury_accounts(id),
     currency_id VARCHAR(64) NOT NULL REFERENCES currency_definitions(id),
     event_key VARCHAR(128) NOT NULL,
-    entry_type VARCHAR(32) NOT NULL,
+    entry_type VARCHAR(32) NOT NULL CHECK (entry_type IN ('tax', 'listing_fee', 'exchange_fee', 'issuance', 'subsidy', 'system_adjustment')),
     delta BIGINT NOT NULL CHECK (delta <> 0),
     balance_after BIGINT NOT NULL CHECK (balance_after >= 0),
     source_type VARCHAR(32) NOT NULL DEFAULT '',
@@ -100,6 +111,8 @@ CREATE TABLE economy_treasury_ledger_entries (
 );
 CREATE INDEX idx_economy_treasury_ledger_time
     ON economy_treasury_ledger_entries(treasury_account_id, created_at DESC);
+
+
 
 INSERT INTO economy_treasury_accounts (world_id, account_key, display_name, account_type)
 VALUES
