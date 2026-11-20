@@ -596,7 +596,7 @@ func (s *Service) ListActiveObjectives(ctx context.Context, nodeKey, sessionID, 
  }
  sessionID=strings.ToLower(sessionID)
  characterID=strings.ToLower(characterID)
- tx,err:=s.db.BeginTx(ctx,&sql.TxOptions{ReadOnly:true})
+ tx,err:=s.db.BeginTx(ctx,nil)
  if err!=nil { return nil,fmt.Errorf("begin active bounty objective lookup: %w",err) }
  defer tx.Rollback()
  var accountID, worldID string
