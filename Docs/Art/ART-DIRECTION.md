@@ -79,3 +79,10 @@ Godot 4.6 第三人称 3D 国风仙侠 MMO。先建立统一、可读、可替�
 - WorldServer 从入场时保存的服务端装备快照读取 `weapon` 槽位，按武器名称/标识映射为 `sword_slash`、`spear_thrust`、`ranged_shot`、`staff_cast`；未知武器回退 `melee`。该映射只决定客户端动作，不开放客户端指定攻击类型，也不改变当前服务器近战距离、伤害或冷却。
 - `HHHumanoidAnimationDriver` 对应优先匹配武器动作片段，找不到时再匹配通用 attack 片段；没有可用原生片段时继续走程序化动作。
 - 本地与远程人形均使用同一动作分类。确认受击会打断本地攻击；远程动作采用 `hit > attack > move/idle` 优先级，低优先级攻击事件不会覆盖正在播放的受击反馈。
+
+
+### 武器目录类型
+
+- `item_definitions.weapon_type` 是武器的正式数据字段，非武器必须为空；允许 `sword/spear/bow/staff/dagger/axe/hammer/focus`。武器动作分类由 WorldServer 根据角色服务端装备快照中的该字段决定，不再以物品名称作为主判断依据。
+- 背包目录、当前背包、当前装备和世界入场快照统一返回 `weapon_type`。旧快照或旧数据缺失该字段时保留名称回退逻辑，以便分阶段部署。
+- `spear` 使用突刺、`bow` 使用射击、`staff/focus` 使用施法、`axe/hammer` 使用重型挥击、`sword/dagger` 使用斩击动作；动画缺失时回退通用或程序化动作。以上只定义表现分类，实际攻击模式、射程和伤害仍由后续独立战斗规则实现。
