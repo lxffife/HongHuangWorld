@@ -204,6 +204,10 @@ type serverUseConsumableRequest struct {
 	RequestID string `json:"request_id"`
 	ItemID string `json:"item_id"`
 	Quantity int `json:"quantity"`
+	Health int `json:"health"`
+	MaxHealth int `json:"max_health"`
+	Mana int `json:"mana"`
+	MaxMana int `json:"max_mana"`
 }
 
 func (h *inventoryHandlers) useConsumableForSession(w http.ResponseWriter,r *http.Request) {
@@ -213,7 +217,7 @@ func (h *inventoryHandlers) useConsumableForSession(w http.ResponseWriter,r *htt
 	if err:=decodeJSON(w,r,&request); err!=nil { http.Error(w,"invalid request body",http.StatusBadRequest); return }
 	result,err:=h.service.UseConsumableForSession(r.Context(),nodeKey,request.SessionID,request.CharacterID,inventory.ItemUseRequest{
 		RequestID:request.RequestID,ItemID:request.ItemID,Quantity:request.Quantity,
-	})
+	}, inventory.LiveConsumableResources{Health:request.Health,MaxHealth:request.MaxHealth,Mana:request.Mana,MaxMana:request.MaxMana})
 	switch {
 	case err==nil: writeJSON(w,http.StatusOK,result)
 	case errors.Is(err,inventory.ErrInvalidRequest): http.Error(w,"invalid consumable request, item is not owned, or quantity is insufficient",http.StatusBadRequest)
