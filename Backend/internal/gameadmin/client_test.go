@@ -15,7 +15,7 @@ func TestSetServerNodeStatePreservesSessionConflict(t *testing.T) {
 			return
 		}
 		w.WriteHeader(http.StatusConflict)
-		_, _ = w.Write([]byte(`{"error":"node still has sessions","remaining_sessions":3}`))
+		_, _ = w.Write([]byte(`{"error":"node still has sessions","previous_state":"draining","remaining_sessions":3}`))
 	}))
 	defer server.Close()
 
@@ -23,5 +23,10 @@ func TestSetServerNodeStatePreservesSessionConflict(t *testing.T) {
 	_, err := client.SetServerNodeState(context.Background(), "node-1", "disabled")
 	if !errors.Is(err, ErrNodeHasSessions) {
 		t.Fatalf("expected ErrNodeHasSessions, got %v", err)
+	}
+	var conflict *NodeSessionsConflictError
+	if !errors.As(err, &conflict) { t.Fatalf("expected typed session conflict, got %T", err) }
+	if conflict.PreviousState != "draining" || conflict.RemainingSessions != 3 {
+		t.Fatalf("unexpected conflict details: %+v", conflict)
 	}
 }
