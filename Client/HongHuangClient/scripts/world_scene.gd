@@ -2055,7 +2055,9 @@ func _render_inventory_items() -> void:
 		elif str(item.get("item_type", "")) == "consumable":
 			var use_button := Button.new()
 			use_button.text = "使用"
-			use_button.disabled = consumable_busy
+			var live_world_session := HHSession.world_network != null and HHSession.world_network.is_world_ready()
+			use_button.disabled = consumable_busy or live_world_session
+			use_button.text = "离开世界后使用" if live_world_session else "使用"
 			use_button.pressed.connect(_on_use_consumable_pressed.bind(str(item.get("item_id", ""))))
 			row.add_child(use_button)
 
@@ -3280,7 +3282,10 @@ func _on_use_consumable_pressed(item_id: String) -> void:
 func _on_consumable_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	consumable_busy = false
 	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
-		inventory_status.text = "使用物品失败：" + body.get_string_from_utf8()
+		if response_code == 409:
+			inventory_status.text = "为保护在线角色资源，请先退出世界，再使用恢复类物品。"
+		else:
+			inventory_status.text = "使用物品失败：" + body.get_string_from_utf8()
 		return
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
 	if parsed is Dictionary:
