@@ -107,6 +107,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/characters/current/equipment/equip", items.equip)
 		mux.HandleFunc("POST /api/v1/characters/current/equipment/unequip", items.unequip)
 		mux.HandleFunc("POST /api/v1/characters/current/inventory/use", items.useConsumable)
+		mux.HandleFunc("POST /api/v1/servers/inventory/use", items.useConsumableForSession)
 		mux.HandleFunc("POST /api/v1/servers/sessions/combat-stats", items.sessionCombatStats)
 		mux.HandleFunc("GET /api/v1/servers/loot-table", items.lootTable)
 		mux.HandleFunc("GET /api/v1/servers/monster-spawn-config", items.monsterSpawnConfig)
