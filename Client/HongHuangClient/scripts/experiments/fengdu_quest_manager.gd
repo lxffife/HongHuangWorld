@@ -11,6 +11,12 @@ const COMPLETED_STATUS := "completed"
 
 var _quests: Dictionary = {}
 var _tracked_quest_id := ""
+var _story_state: Node
+
+
+func configure_story_state(story_state: Node) -> void:
+	_story_state = story_state
+	quest_log_changed.emit()
 
 
 func _ready() -> void:
@@ -39,6 +45,28 @@ func _seed_quests() -> void:
 			"objectives": [
 				{"type": "interact", "target_id": "soul_waystation", "label": "前往引魂驿站登记来历", "required_count": 1},
 				{"type": "interact", "target_id": "reincarnation_bureau", "label": "前往轮回司了解后续审理流程", "required_count": 1}
+			], "progress": 0, "objective_progress": 0
+		},
+		"yin_official_audit": {
+			"id": "yin_official_audit", "giver_id": "white_impermanence",
+			"giver_name": "白无常 · 谢必安", "title": "官署魂籍复核",
+			"summary": "你选择按章登记后，谢必安请你协助核对一份存疑魂籍，并将复核结论递交功过司。",
+			"reward_preview": "阴司官署协办记录（演示奖励）", "status": "available",
+			"prerequisites": [], "story_prerequisites": ["supported_yin_official_order"], "repeatable": false,
+			"objectives": [
+				{"type": "investigate", "target_id": "ghost_registry", "label": "在鬼籍司复核存疑魂籍", "required_count": 1},
+				{"type": "deliver", "target_id": "merit_bureau", "label": "向功过司递交复核结论", "required_count": 1}
+			], "progress": 0, "objective_progress": 0
+		},
+		"new_soul_wish": {
+			"id": "new_soul_wish", "giver_id": "white_impermanence",
+			"giver_name": "白无常 · 谢必安", "title": "未了心愿寻访",
+			"summary": "你选择先安抚亡魂后，谢必安请你倾听新魂心愿，并查明其是否还有未了牵挂。",
+			"reward_preview": "新魂接引善意记录（演示奖励）", "status": "available",
+			"prerequisites": [], "story_prerequisites": ["protected_new_soul"], "repeatable": false,
+			"objectives": [
+				{"type": "interact", "target_id": "soul_waystation", "label": "在引魂驿站倾听新魂心愿", "required_count": 1},
+				{"type": "investigate", "target_id": "reincarnation_bureau", "label": "向轮回司查明心愿后续去向", "required_count": 1}
 			], "progress": 0, "objective_progress": 0
 		},
 		"ox_gate_records": {
@@ -86,6 +114,8 @@ func get_all_quests() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for quest_id in _quests:
 		var quest: Dictionary = _quests[quest_id]
+		if not _story_prerequisites_met(quest):
+			continue
 		result.append(quest.duplicate(true))
 	return result
 
@@ -210,6 +240,18 @@ func _prerequisites_met(quest: Dictionary) -> bool:
 			return false
 		var prerequisite: Dictionary = _quests[str(prerequisite_id)]
 		if str(prerequisite.get("status", "")) != COMPLETED_STATUS:
+			return false
+	return _story_prerequisites_met(quest)
+
+
+func _story_prerequisites_met(quest: Dictionary) -> bool:
+	var required_flags: Array = quest.get("story_prerequisites", [])
+	if required_flags.is_empty():
+		return true
+	if _story_state == null:
+		return false
+	for flag_id in required_flags:
+		if not bool(_story_state.call("has_flag", str(flag_id))):
 			return false
 	return true
 
