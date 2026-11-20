@@ -311,6 +311,13 @@ func TestBountyLeaveEndpointUnavailableWithoutDatabase(t *testing.T) {
  handler.ServeHTTP(res,req)
  if res.Code!=http.StatusServiceUnavailable { t.Fatalf("expected status %d, got %d",http.StatusServiceUnavailable,res.Code) }
 }
+func TestBountyObjectiveDiscoveryEndpointUnavailableWithoutDatabase(t *testing.T) {
+ handler:=NewRouter(slog.New(slog.NewTextHandler(io.Discard,nil)),nil)
+ req:=httptest.NewRequest(http.MethodGet,"/api/v1/servers/bounties/objectives?session_id=00000000-0000-4000-8000-000000000001&character_id=00000000-0000-4000-8000-000000000002",nil)
+ res:=httptest.NewRecorder()
+ handler.ServeHTTP(res,req)
+ if res.Code!=http.StatusServiceUnavailable { t.Fatalf("expected status %d, got %d",http.StatusServiceUnavailable,res.Code) }
+}
 func TestBountyWorldEventEndpointUnavailableWithoutDatabase(t *testing.T) {
  handler:=NewRouter(slog.New(slog.NewTextHandler(io.Discard,nil)),nil)
  req:=httptest.NewRequest(http.MethodPost,"/api/v1/servers/bounties/events",strings.NewReader("{}"))
