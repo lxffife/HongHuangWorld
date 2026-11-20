@@ -46,15 +46,18 @@ int main() {
     assert(consume_periodic_damage_tick(burn, 5100) == 5);
     assert(consume_periodic_damage_tick(burn, 5500) == 0);
     assert(periodic_damage_is_active(burn, 5500));
-    assert(!periodic_damage_is_active(burn, 5501));
-    assert(apply_periodic_damage(burn, 6000, 2000, 500, 2));
-    assert(burn.damage_per_tick == 2 && burn.next_tick_at_ms == 6500);
+    assert(periodic_damage_is_active(burn, 5501));
+    // The last scheduled tick is preserved even when the world loop runs after nominal expiry.
+    assert(consume_periodic_damage_tick(burn, 6100) == 5);
+    assert(!periodic_damage_is_active(burn, 6100));
+    assert(apply_periodic_damage(burn, 7000, 2000, 500, 2));
+    assert(burn.damage_per_tick == 2 && burn.next_tick_at_ms == 7500);
     assert(!apply_periodic_damage(burn, 0, 0, 1000, 1));
     assert(!apply_periodic_damage(burn, 0, 1000, 0, 1));
     assert(!apply_periodic_damage(burn, 0, 1000, 1000, 0));
     assert(!apply_periodic_damage(burn, INT64_MAX - 10, 1000, 500, 1));
     PeriodicDamageEffect final_tick;
     assert(apply_periodic_damage(final_tick, 100, 1000, 1000, 7));
-    assert(consume_periodic_damage_tick(final_tick, 1100) == 7); // Expiry boundary is inclusive.
+    assert(consume_periodic_damage_tick(final_tick, 1200) == 7); // A delayed final tick is not lost.
     return 0;
 }
