@@ -572,7 +572,7 @@ func _build_hud() -> void:
 	_quest_journal = FengduQuestJournal.new()
 	_quest_journal.name = "FengduQuestJournal"
 	add_child(_quest_journal)
-	_quest_journal.call("configure", _quest_manager)
+	_quest_journal.call("configure", _quest_manager, _story_state)
 	_quest_tracker = FengduQuestTracker.new()
 	_quest_tracker.name = "FengduQuestTracker"
 	add_child(_quest_tracker)
