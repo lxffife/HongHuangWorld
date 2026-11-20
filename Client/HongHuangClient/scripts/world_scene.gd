@@ -2903,7 +2903,7 @@ func _process(delta: float) -> void:
 	if player_poison_visual_remaining > 0.0:
 		player_poison_visual_remaining = maxf(0.0, player_poison_visual_remaining - delta)
 		if player_poison_visual_remaining <= 0.0:
-			_set_player_poison_visual(false)
+			_set_player_poison_visual(local_player, false)
 	for projectile_id in projectile_targets:
 		var arrow := projectiles.get(projectile_id) as Node3D
 		if is_instance_valid(arrow):
