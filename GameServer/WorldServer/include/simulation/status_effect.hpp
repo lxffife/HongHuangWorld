@@ -59,6 +59,34 @@ inline std::int64_t consume_periodic_damage_tick(PeriodicDamageEffect& effect,
     return damage;
 }
 
+// Constitution and vitality contribute to resistance against negative status effects.
+ // The cap prevents high-level characters from becoming fully immune.
+inline std::int32_t negative_status_resistance_basis_points(std::int32_t constitution,
+                                                             std::int32_t vitality) {
+    if (constitution < 0 || vitality < 0) return 0;
+    const auto raw = static_cast<std::int64_t>(constitution) * 20 +
+                     static_cast<std::int64_t>(vitality) * 10;
+    return static_cast<std::int32_t>(std::min<std::int64_t>(5000, raw));
+}
+
+inline std::int64_t resist_status_damage(std::int64_t base_damage,
+                                         std::int32_t resistance_basis_points) {
+    if (base_damage <= 0) return 0;
+    const auto resistance = std::clamp(resistance_basis_points, 0, 10000);
+    return std::max<std::int64_t>(1, base_damage * (10000 - resistance) / 10000);
+}
+
+inline std::int32_t resist_status_duration(std::int32_t base_duration_ms,
+                                           std::int32_t minimum_duration_ms,
+                                           std::int32_t resistance_basis_points) {
+    if (base_duration_ms <= 0 || minimum_duration_ms < 0 ||
+        minimum_duration_ms > base_duration_ms) return 0;
+    const auto resistance = std::clamp(resistance_basis_points, 0, 10000);
+    const auto reduced = static_cast<std::int64_t>(base_duration_ms) *
+                         (10000 - resistance) / 10000;
+    return static_cast<std::int32_t>(std::max<std::int64_t>(minimum_duration_ms, reduced));
+}
+
 struct TimedSlowEffect {
     std::int64_t expires_at_ms{};
     float movement_multiplier{1.0F};
