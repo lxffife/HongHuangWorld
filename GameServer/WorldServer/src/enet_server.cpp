@@ -2737,7 +2737,11 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                             !combat_stats.contains("defense") || !combat_stats.contains("health") ||
                             !combat_stats.contains("max_health") || !combat_stats.contains("mana") || !combat_stats.contains("max_mana") || !combat_stats["attack"].is_number_integer() ||
                             !combat_stats["defense"].is_number_integer() || !combat_stats["health"].is_number_integer() ||
-                            !combat_stats["max_health"].is_number_integer() || !combat_stats["mana"].is_number_integer() || !combat_stats["max_mana"].is_number_integer()) {
+                            !combat_stats["max_health"].is_number_integer() || !combat_stats["mana"].is_number_integer() || !combat_stats["max_mana"].is_number_integer() ||
+                            combat_stats["mana"].get<std::int64_t>() < 0 ||
+                            combat_stats["max_mana"].get<std::int64_t>() < 0 ||
+                            combat_stats["mana"].get<std::int64_t>() > combat_stats["max_mana"].get<std::int64_t>() ||
+                            combat_stats["max_mana"].get<std::int64_t>() > 10000000) {
                             std::cerr << "Could not synchronize authoritative character combat stats: "
                                       << stats_error << std::endl;
                             send_json(event.peer, honghuang::protocol::MessageType::ServerReject,
