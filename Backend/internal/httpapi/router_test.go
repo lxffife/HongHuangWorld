@@ -266,3 +266,17 @@ func TestFactionEndpointsUnavailableWithoutDatabase(t *testing.T) {
 		})
 	}
 }
+
+
+func TestBountyEndpointsUnavailableWithoutDatabase(t *testing.T) {
+ handler := NewRouter(slog.New(slog.NewTextHandler(io.Discard,nil)),nil)
+ for _,route:=range []struct{method,path string}{
+  {http.MethodPost,"/api/v1/factions/00000000-0000-4000-8000-000000000001/treasury/contributions"},
+  {http.MethodPost,"/api/v1/factions/00000000-0000-4000-8000-000000000001/bounties"},
+  {http.MethodGet,"/api/v1/bounties?world_id=underworld_fengdu"},
+  {http.MethodPost,"/api/v1/bounties/00000000-0000-4000-8000-000000000001/join"},
+ }{
+  req:=httptest.NewRequest(route.method,route.path,strings.NewReader("{}"));res:=httptest.NewRecorder();handler.ServeHTTP(res,req)
+  if res.Code!=http.StatusServiceUnavailable{t.Fatalf("%s %s: expected status %d, got %d",route.method,route.path,http.StatusServiceUnavailable,res.Code)}
+ }
+}
