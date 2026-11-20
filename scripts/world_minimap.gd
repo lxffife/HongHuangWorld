@@ -104,7 +104,7 @@ func _draw() -> void:
 			continue
 		var point: Dictionary = exploration_item
 		var exploration_pos := _map_point(float(point.get("position_x", 0.0)), float(point.get("position_z", 0.0)), center, radius)
-		if not Rect2(center - Vector2(radius, radius), Vector2(radius * 2.0, radius * 2.0)).has_point(exploration_pos):
+		if not _is_inside_radar(exploration_pos, center, radius):
 			continue
 		var discovered := bool(point.get("discovered", false))
 		draw_circle(exploration_pos, 3.0, Color("#8b9aa7") if discovered else Color("#e4b967"))
