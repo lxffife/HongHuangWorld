@@ -13,15 +13,26 @@ var _patrol_origin := Vector3.ZERO
 var _patrol_time := 0.0
 var _citizen_body: MeshInstance3D
 var _citizen_time := 0.0
+var _route_origin := Vector3.ZERO
+var _route_points: Array[Vector3] = []
+var _route_index := 0
+var _route_speed := 2.8
 
 
 func configure(data: Dictionary) -> void:
 	module_data = data.duplicate(true)
 	module_kind = str(module_data.get("module_kind", "district"))
 	district_kind = str(module_data.get("kind", "admin"))
+	_route_speed = float(module_data.get("route_speed", 2.8))
+	for point in module_data.get("patrol_points", []):
+		if point is Vector3:
+			_route_points.append(point)
 
 
 func _ready() -> void:
+	_route_origin = position
+	if module_kind == "guard" and _route_points.is_empty():
+		_route_points = [Vector3(-7.0, 0.0, 0.0), Vector3(7.0, 0.0, 0.0)]
 	_create_materials()
 	match module_kind:
 		"district":
@@ -37,13 +48,25 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if module_kind == "guard":
-		_patrol_time += delta
-		position.x = _patrol_origin.x + sin(_patrol_time * 0.48) * 7.0
-		rotation.y = sin(_patrol_time * 0.48) * 0.22
-	elif module_kind == "citizen" and _citizen_body != null:
+	if module_kind == "guard" or (module_kind == "citizen" and not _route_points.is_empty()):
+		_advance_route(delta)
+	if module_kind == "citizen" and _citizen_body != null:
 		_citizen_time += delta
 		_citizen_body.position.y = 1.0 + sin(_citizen_time * 1.6) * 0.035
+
+
+func _advance_route(delta: float) -> void:
+	if _route_points.is_empty():
+		return
+	var target := _route_origin + _route_points[_route_index]
+	var offset := target - position
+	if offset.length() <= 0.18:
+		_route_index = (_route_index + 1) % _route_points.size()
+		return
+	var direction := offset.normalized()
+	position += direction * minf(_route_speed * delta, offset.length())
+	if direction.length_squared() > 0.001:
+		rotation.y = atan2(direction.x, direction.z)
 
 
 func _create_materials() -> void:
@@ -121,9 +144,12 @@ func _build_district() -> void:
 			main_depth = 92.0
 			main_height = 42.0
 
-	_add_box("MainHall", Vector3(main_width, main_height, main_depth), Vector3(0.0, main_height * 0.5, 0.0), material_key, true)
+	if kind == "palace":
+		_build_palace_main_hall(main_width, main_depth, main_height, material_key)
+	else:
+		_add_box("MainHall", Vector3(main_width, main_height, main_depth), Vector3(0.0, main_height * 0.5, 0.0), material_key, true)
 	_add_roof("MainHallRoof", Vector3(main_width + 24.0, 12.0, main_depth + 24.0), Vector3(0.0, main_height + 6.0, 0.0), "roof")
-	_add_box("MainHallUpperTier", Vector3(main_width * 0.58, 20.0, main_depth * 0.58), Vector3(0.0, main_height + 15.0, 0.0), material_key, true)
+	_add_box("MainHallUpperTier", Vector3(main_width * 0.58, 20.0, main_depth * 0.58), Vector3(0.0, main_height + 15.0, 0.0), material_key, kind != "palace")
 	_add_roof("UpperTierRoof", Vector3(main_width * 0.64, 8.0, main_depth * 0.64), Vector3(0.0, main_height + 29.0, 0.0), "roof")
 
 	if kind == "palace":
@@ -148,6 +174,21 @@ func _build_district() -> void:
 		_add_box("FrontStep_%d" % step, Vector3(main_width * 0.72, 1.0, 10.0), Vector3(0.0, 0.5 + float(step), main_depth * 0.5 + 5.0 + float(step) * 9.0), "stone", true)
 	_add_nameplate(title, Vector3(0.0, main_height + 50.0, -main_depth * 0.5 - 12.0))
 	_build_interaction_zone(Vector3(0.0, 0.0, main_depth * 0.5 + 62.0))
+
+
+func _build_palace_main_hall(width: float, depth: float, height: float, material_key: String) -> void:
+	# The front (+Z) is deliberately open: the hall is a walk-in shell, not a solid collision box.
+	_add_box("PalaceHallFloor", Vector3(width - 12.0, 2.0, depth - 12.0), Vector3(0.0, 1.0, 0.0), "stone", true)
+	_add_box("PalaceHallLeftWall", Vector3(8.0, height - 10.0, depth - 12.0), Vector3(-width * 0.5 + 4.0, height * 0.5, 0.0), material_key, true)
+	_add_box("PalaceHallRightWall", Vector3(8.0, height - 10.0, depth - 12.0), Vector3(width * 0.5 - 4.0, height * 0.5, 0.0), material_key, true)
+	_add_box("PalaceHallRearWall", Vector3(width - 12.0, height - 10.0, 8.0), Vector3(0.0, height * 0.5, -depth * 0.5 + 4.0), material_key, true)
+	for side in [-1.0, 1.0]:
+		_add_box("PalaceHallFrontPillar_" + str(side), Vector3(12.0, height - 10.0, 12.0), Vector3(side * (width * 0.5 - 18.0), height * 0.5, depth * 0.5 - 8.0), "sign", true)
+	_add_box("PalaceHallThroneDais", Vector3(68.0, 5.0, 28.0), Vector3(0.0, 4.5, -depth * 0.5 + 28.0), "sign", true)
+	_add_box("PalaceHallThrone", Vector3(12.0, 18.0, 10.0), Vector3(0.0, 16.0, -depth * 0.5 + 28.0), "gate", false)
+	for side in [-1.0, 1.0]:
+		for row in range(2):
+			_add_box("PalaceHallInnerColumn_%s_%d" % [side, row], Vector3(7.0, height - 18.0, 7.0), Vector3(side * 72.0, height * 0.5, -24.0 + float(row) * 58.0), "sign", true)
 
 
 func _build_palace_courtyard(width: float, depth: float, height: float, material_key: String) -> void:
@@ -209,8 +250,60 @@ func _build_market_street() -> void:
 			_add_box("MarketShop_%d_%d" % [row, column], size, p, "market", true)
 			_add_roof("MarketAwning_%d_%d" % [row, column], Vector3(48.0, 5.0, 54.0), p + Vector3.UP * (size.y * 0.5 + 2.5), "roof")
 			_add_box("ShopSign_%d_%d" % [row, column], Vector3(20.0, 5.0, 1.5), p + Vector3(0.0, 4.0, 25.0), "sign", false)
+			var shop_names := ["灵材铺", "法器铺", "魂灯铺", "符箓铺"]
+			var shop_data := {
+				"name": "%s · %02d" % [shop_names[column], row + 1],
+				"authority": "鬼市商会",
+				"access": "靠近摊位即可查看",
+				"description": "此处为鬼市交易摊位灰盒交互点。后续接入真实商品、货币与服务端交易校验。"
+			}
+			_build_market_interaction("ShopInteraction_%d_%d" % [row, column], p + Vector3(0.0, 0.0, 34.0), shop_data)
 	for side in [-1.0, 1.0]:
 		_add_box("MarketArcade_" + str(side), Vector3(10.0, 20.0, 300.0), Vector3(side * 190.0, 10.0, 110.0), "court", true)
+	_add_box("AuctionSquare", Vector3(180.0, 0.8, 100.0), Vector3(0.0, 0.4, 286.0), "stone", false)
+	_add_box("AuctionDais", Vector3(58.0, 5.0, 34.0), Vector3(0.0, 2.9, 280.0), "sign", true)
+	for index in range(8):
+		var angle := TAU * float(index) / 8.0
+		var marker := Vector3(cos(angle) * 72.0, 5.0, 286.0 + sin(angle) * 38.0)
+		_add_box("AuctionPillar_%d" % index, Vector3(4.0, 10.0, 4.0), marker, "gate", false)
+	_add_box("BlackMarketStair_1", Vector3(30.0, 2.0, 16.0), Vector3(228.0, -1.0, 230.0), "stone", false)
+	_add_box("BlackMarketStair_2", Vector3(30.0, 2.0, 16.0), Vector3(228.0, -3.0, 246.0), "stone", false)
+	_add_box("BlackMarketGateLeft", Vector3(5.0, 18.0, 5.0), Vector3(210.0, 9.0, 258.0), "gate", true)
+	_add_box("BlackMarketGateRight", Vector3(5.0, 18.0, 5.0), Vector3(246.0, 9.0, 258.0), "gate", true)
+	_add_box("BlackMarketGateLintel", Vector3(40.0, 4.0, 5.0), Vector3(228.0, 18.0, 258.0), "gate", false)
+	_add_nameplate("地下黑市入口", Vector3(228.0, 25.0, 250.0))
+	_build_market_interaction("BlackMarketEntranceInteraction", Vector3(228.0, 0.0, 270.0), {
+		"name": "地下黑市入口",
+		"authority": "黑市引路人",
+		"access": "入口尚未开放",
+		"description": "此处预留地下黑市入口与后续独立地下场景连接。当前仅展示入口和交互说明，不会传送或生成交易。"
+	})
+
+
+func _build_market_interaction(node_name: String, local_position: Vector3, interaction_data: Dictionary) -> void:
+	var area := Area3D.new()
+	area.name = node_name
+	area.position = local_position
+	area.collision_layer = 0
+	area.collision_mask = 1
+	var collision := CollisionShape3D.new()
+	var shape := SphereShape3D.new()
+	shape.radius = 11.0
+	collision.shape = shape
+	area.add_child(collision)
+	area.body_entered.connect(_on_market_area_entered.bind(interaction_data))
+	area.body_exited.connect(_on_market_area_exited.bind(interaction_data))
+	add_child(area)
+
+
+func _on_market_area_entered(body: Node3D, interaction_data: Dictionary) -> void:
+	if body.is_in_group("fengdu_player"):
+		player_entered.emit(interaction_data)
+
+
+func _on_market_area_exited(body: Node3D, interaction_data: Dictionary) -> void:
+	if body.is_in_group("fengdu_player"):
+		player_exited.emit(interaction_data)
 
 
 func _build_residential_lane() -> void:
@@ -219,11 +312,23 @@ func _build_residential_lane() -> void:
 		for side in [-1.0, 1.0]:
 			var p := Vector3(side * 62.0, 0.0, -12.0 + float(row) * 96.0)
 			var size := Vector3(42.0, 22.0 + float(row % 2) * 5.0, 54.0)
-			_add_box("SoulResidence_%d_%s" % [row, side], size, p + Vector3.UP * size.y * 0.5, "residential", true)
-			_add_roof("ResidenceRoof_%d_%s" % [row, side], size + Vector3(8.0, 6.0, 8.0), p + Vector3.UP * (size.y + 3.0), "roof")
-			_add_box("ResidenceDoor_%d_%s" % [row, side], Vector3(8.0, 13.0, 1.0), p + Vector3(0.0, 6.5, 27.6), "gate", false)
+			_build_open_residence("SoulResidence_%d_%s" % [row, side], p, size)
 	for i in range(3):
 		_add_box("CommunityLantern_%d" % i, Vector3(3.0, 12.0, 3.0), Vector3(0.0, 6.0, float(i) * 82.0), "lantern", false)
+
+
+func _build_open_residence(prefix: String, center: Vector3, size: Vector3) -> void:
+	var wall_height := size.y - 3.0
+	_add_box(prefix + "_Floor", Vector3(size.x - 4.0, 1.0, size.z - 4.0), center + Vector3.UP * 0.5, "stone", true)
+	for side in [-1.0, 1.0]:
+		_add_box(prefix + "_SideWall_" + str(side), Vector3(3.0, wall_height, size.z), center + Vector3(side * (size.x * 0.5 - 1.5), wall_height * 0.5 + 1.0, 0.0), "residential", true)
+	_add_box(prefix + "_RearWall", Vector3(size.x, wall_height, 3.0), center + Vector3(0.0, wall_height * 0.5 + 1.0, -size.z * 0.5 + 1.5), "residential", true)
+	for side in [-1.0, 1.0]:
+		_add_box(prefix + "_DoorPost_" + str(side), Vector3(4.0, wall_height, 3.0), center + Vector3(side * 10.0, wall_height * 0.5 + 1.0, size.z * 0.5 - 1.5), "gate", true)
+	_add_box(prefix + "_DoorLintel", Vector3(20.0, 4.0, 3.0), center + Vector3(0.0, wall_height - 1.0, size.z * 0.5 - 1.5), "gate", true)
+	_add_roof(prefix + "_Roof", size + Vector3(8.0, 6.0, 8.0), center + Vector3.UP * (size.y + 3.0), "roof")
+	_add_box(prefix + "_Bed", Vector3(12.0, 2.0, 18.0), center + Vector3(-10.0, 2.0, -10.0), "court", false)
+	_add_box(prefix + "_Table", Vector3(10.0, 5.0, 8.0), center + Vector3(9.0, 3.5, -5.0), "sign", false)
 
 
 func _build_barracks() -> void:
