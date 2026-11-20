@@ -39,6 +39,16 @@ int main() {
     assert(staff.range == sword.range);
     assert(focus.range == sword.range);
 
+    // Agility improves attack cadence by 0.1% per point, with a 20% cap.
+    assert(agility_adjusted_attack_cooldown(std::chrono::milliseconds(1000), 0).count() == 1000);
+    assert(agility_adjusted_attack_cooldown(std::chrono::milliseconds(1000), 50).count() == 950);
+    assert(agility_adjusted_attack_cooldown(std::chrono::milliseconds(1000), 100).count() == 900);
+    assert(agility_adjusted_attack_cooldown(std::chrono::milliseconds(1000), 200).count() == 800);
+    assert(agility_adjusted_attack_cooldown(std::chrono::milliseconds(1000), 100000).count() == 800);
+    assert(agility_adjusted_attack_cooldown(std::chrono::milliseconds(1000), -10).count() == 1000);
+    assert(agility_adjusted_attack_cooldown(std::chrono::milliseconds(1), 200).count() == 100);
+    assert(agility_adjusted_attack_cooldown(std::chrono::milliseconds::zero(), 100).count() == 0);
+
     const auto unknown = weapon_combat_profile("unknown");
     assert(unknown.range < dagger.range);
     assert(unknown.power_basis_points < sword.power_basis_points);
