@@ -153,7 +153,7 @@ func (s *Service) Redeem(ctx context.Context, nodeKey, ticket string) (PlayerSna
 		        ), '{}'::jsonb),
 		        COALESCE((
 		          SELECT jsonb_agg(jsonb_build_object(
-		            'slot', e.slot, 'item_id', i.id, 'name', i.name, 'quality', i.quality
+		            'slot', e.slot, 'item_id', i.id, 'name', i.name, 'quality', i.quality, 'weapon_type', COALESCE(i.weapon_type, '')
 		          ) ORDER BY e.slot)
 		          FROM character_equipment e
 		          JOIN item_definitions i ON i.id = e.item_id AND i.enabled
