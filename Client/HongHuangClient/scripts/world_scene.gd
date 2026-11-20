@@ -2495,11 +2495,28 @@ func _process(delta: float) -> void:
 					var remote_right_arm := remote_humanoid.get_node_or_null("ArmPivotRight") as Node3D
 					var remote_left_leg := remote_humanoid.get_node_or_null("LegPivotLeft") as Node3D
 					var remote_right_leg := remote_humanoid.get_node_or_null("LegPivotRight") as Node3D
+					var remote_style := str(remote.get_meta("remote_action_style", ""))
+					var remote_left_lift := 0.20
+					var remote_right_lift := 1.18
+					var remote_sweep := 0.28
+					match remote_style:
+						"spear_thrust":
+							remote_left_lift = 0.38
+							remote_right_lift = 0.92
+							remote_sweep = 0.04
+						"staff_cast":
+							remote_left_lift = 0.72
+							remote_right_lift = 0.82
+							remote_sweep = -0.12
+						"ranged_shot":
+							remote_left_lift = 0.58
+							remote_right_lift = 1.02
+							remote_sweep = -0.08
 					if is_instance_valid(remote_left_arm):
-						remote_left_arm.rotation.x = remote_stride - action_weight * (0.18 if action_state == "attack" else 0.34)
+						remote_left_arm.rotation.x = remote_stride - action_weight * (remote_left_lift if action_state == "attack" else -0.34)
 					if is_instance_valid(remote_right_arm):
-						remote_right_arm.rotation.x = -remote_stride - action_weight * (1.18 if action_state == "attack" else -0.48)
-						remote_right_arm.rotation.z = -action_weight * 0.28 if action_state == "attack" else action_weight * 0.16
+						remote_right_arm.rotation.x = -remote_stride - action_weight * (remote_right_lift if action_state == "attack" else -0.48)
+						remote_right_arm.rotation.z = -action_weight * remote_sweep if action_state == "attack" else action_weight * 0.16
 					if is_instance_valid(remote_left_leg):
 						remote_left_leg.rotation.x = -remote_stride * 0.82
 					if is_instance_valid(remote_right_leg):
