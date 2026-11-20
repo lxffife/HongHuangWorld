@@ -9,6 +9,7 @@ const NpcDialoguePanel = preload("res://scripts/experiments/npc_dialogue_panel.g
 const FengduQuestManager = preload("res://scripts/experiments/fengdu_quest_manager.gd")
 const FengduQuestJournal = preload("res://scripts/experiments/fengdu_quest_journal.gd")
 const FengduQuestTracker = preload("res://scripts/experiments/fengdu_quest_tracker.gd")
+const FengduStoryState = preload("res://scripts/experiments/fengdu_story_state.gd")
 
 const CITY_SCALE := 2.5
 const WALL_WIDTH := 1900.0
@@ -31,6 +32,7 @@ var _dialogue_panel: CanvasLayer
 var _quest_manager: Node
 var _quest_journal: CanvasLayer
 var _quest_tracker: CanvasLayer
+var _story_state: Node
 
 
 func _ready() -> void:
@@ -406,14 +408,28 @@ func _open_interaction_dialogue(data: Dictionary) -> void:
 		_hint_label.text = "差事目标已更新 · 按 J 查看阴司差事簿"
 	var quest_id := str(data.get("quest_id", ""))
 	var quest_data: Dictionary = _quest_manager.call("get_quest", quest_id) if _quest_manager != null and not quest_id.is_empty() else {}
+	var npc_id := str(data.get("id", ""))
+	var dialogue_data := data.duplicate(true)
+	if _story_state != null:
+		dialogue_data["description"] = _story_state.call("get_npc_description", npc_id, str(data.get("description", "")))
+	var story_choices: Array[Dictionary] = _story_state.call("get_choices_for_npc", npc_id, _quest_manager) if _story_state != null else []
 	if not quest_data.is_empty():
 		quest_data["can_accept"] = bool(_quest_manager.call("can_accept_quest", quest_id))
-	_dialogue_panel.call("present", data, quest_data)
+	_dialogue_panel.call("present", dialogue_data, quest_data, story_choices)
 
 
 func _on_quest_updated(quest_data: Dictionary) -> void:
 	if _dialogue_panel != null:
 		_dialogue_panel.call("update_quest_state", quest_data)
+
+
+func _on_story_choice_requested(choice_id: String) -> void:
+	if _story_state == null:
+		return
+	if _story_state.call("make_choice", choice_id):
+		_hint_label.text = "剧情选择已记录 · 后续对白与线索将发生变化"
+		if not _nearby_district_data.is_empty():
+			_open_interaction_dialogue(_nearby_district_data)
 
 
 func _on_quest_action_requested(action: String, quest_id: String) -> void:
@@ -547,6 +563,9 @@ func _build_hud() -> void:
 	column.add_child(journal_button)
 	add_child(layer)
 
+	_story_state = FengduStoryState.new()
+	_story_state.name = "FengduStoryState"
+	add_child(_story_state)
 	_quest_manager = FengduQuestManager.new()
 	_quest_manager.name = "FengduQuestManager"
 	add_child(_quest_manager)
@@ -563,6 +582,7 @@ func _build_hud() -> void:
 	_dialogue_panel.name = "NpcDialoguePanel"
 	_dialogue_panel.connect("closed", Callable(self, "_on_dialogue_closed"))
 	_dialogue_panel.connect("quest_action_requested", Callable(self, "_on_quest_action_requested"))
+	_dialogue_panel.connect("story_choice_requested", Callable(self, "_on_story_choice_requested"))
 	_quest_manager.connect("quest_updated", Callable(self, "_on_quest_updated"))
 	add_child(_dialogue_panel)
 
