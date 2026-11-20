@@ -139,7 +139,9 @@ func _build_landmark_markers() -> void:
 func _add_marker(node_name: String, title: String, world_position: Vector3, color: Color) -> void:
 	var marker := Node3D.new()
 	marker.name = node_name
-	marker.position = world_position
+	var marker_position := world_position
+	marker_position.y = _height_at(world_position.x, world_position.z) + 1.5
+	marker.position = marker_position
 	var pillar := MeshInstance3D.new()
 	var pillar_mesh := CylinderMesh.new()
 	pillar_mesh.top_radius = 0.16
