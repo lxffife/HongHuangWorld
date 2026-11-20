@@ -640,7 +640,8 @@ func (s *Service) ApplyWorldEvent(ctx context.Context,nodeKey string,event World
   JOIN characters c ON c.id=ws.character_id
   JOIN souls soul ON soul.id=c.soul_id
   WHERE ws.id=$1::uuid AND ws.character_id=$2::uuid AND node.node_key=$3
-   AND ws.session_state='active' AND c.status='alive'
+   AND ws.session_state='active' AND node.admin_state='normal'
+   AND c.status='alive' AND soul.current_character_id=c.id
    AND c.world_id=$4 AND instance.world_id=$4
   FOR SHARE OF ws,c,soul`,event.SessionID,event.CharacterID,nodeKey,worldID).Scan(&accountID)
  if errors.Is(err,sql.ErrNoRows) { return WorldEventResult{},ErrWorldEventSession }
@@ -671,7 +672,7 @@ func (s *Service) ApplyWorldEvent(ctx context.Context,nodeKey string,event World
   (task_id,account_id,objective_key,progress_count,completed_at)
   VALUES($1::uuid,$2::uuid,$3,1,CASE WHEN $4=1 THEN now() ELSE NULL END)
   ON CONFLICT(task_id,account_id,objective_key) DO UPDATE SET
-   progress_count=LEAST(bounty_task_objective_progress.progress_count+1,EXCLUDED.progress_count+$4-1),
+   progress_count=LEAST(bounty_task_objective_progress.progress_count+1,$4),
    completed_at=CASE WHEN bounty_task_objective_progress.progress_count+1 >= $4
     THEN COALESCE(bounty_task_objective_progress.completed_at,now())
     ELSE bounty_task_objective_progress.completed_at END,
