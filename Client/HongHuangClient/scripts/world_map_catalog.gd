@@ -53,6 +53,22 @@ static func get_landmarks(world_id: String) -> Array:
 	return FENGDU_PROTOTYPE["landmarks"].duplicate(true)
 
 
+static func get_minimap_landmarks(world_id: String) -> Array:
+	var result: Array = []
+	for landmark in get_landmarks(world_id):
+		var position_data: Array = landmark.get("position", [])
+		if position_data.size() < 3:
+			continue
+		result.append({
+			"id": str(landmark.get("id", "")),
+			"name": str(landmark.get("name", "地标")),
+			"position_x": float(position_data[0]),
+			"position_z": float(position_data[2]),
+			"kind": str(landmark.get("kind", "visual"))
+		})
+	return result
+
+
 static func get_water_bodies(world_id: String) -> Array:
 	if world_id != "underworld_fengdu":
 		return []
