@@ -175,7 +175,7 @@ func (s *Service) ListOpen(ctx context.Context,worldID string)([]Task,error){
   t.max_assignees,(SELECT count(*) FROM bounty_task_participants p WHERE p.task_id=t.id AND p.status='accepted'),
   t.status,t.expires_at::text,t.created_at::text
   FROM bounty_tasks t JOIN factions f ON f.id=t.publisher_id
-  WHERE t.world_id=$1 AND t.status IN ('open','full','in_progress')
+  WHERE t.world_id=$1 AND f.status='active' AND t.status IN ('open','in_progress')
    AND (t.expires_at IS NULL OR t.expires_at>now()) ORDER BY t.created_at DESC LIMIT 100`,worldID)
  if err!=nil{return nil,fmt.Errorf("list open bounty tasks: %w",err)}; defer rows.Close()
  result:=make([]Task,0)
