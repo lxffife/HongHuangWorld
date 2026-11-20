@@ -2429,6 +2429,33 @@ func _set_player_slow_visual(enabled: bool) -> void:
 		ring.visible = enabled
 
 
+func _set_monster_burn_visual(monster: Node3D, enabled: bool) -> void:
+	if not is_instance_valid(monster):
+		return
+	var ring := monster.get_node_or_null("MonsterBurnStatusRing") as MeshInstance3D
+	if enabled and ring == null:
+		ring = MeshInstance3D.new()
+		ring.name = "MonsterBurnStatusRing"
+		var ring_mesh := TorusMesh.new()
+		ring_mesh.inner_radius = 0.52
+		ring_mesh.outer_radius = 0.62
+		ring_mesh.rings = 24
+		ring_mesh.ring_segments = 6
+		ring.mesh = ring_mesh
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color("#ff9a42", 0.78)
+		material.emission_enabled = true
+		material.emission = Color("#ff5b24")
+		material.emission_energy_multiplier = 1.8
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		ring.material_override = material
+		ring.position.y = 0.07
+		monster.add_child(ring)
+	if ring != null:
+		ring.visible = enabled
+
+
 func _on_combat_event(event: Dictionary) -> void:
 	if str(event.get("action", "")) == "consumable_use":
 		if bool(event.get("pending", false)):
@@ -2478,6 +2505,12 @@ func _on_combat_event(event: Dictionary) -> void:
 		var visual_target_id := str(event.get("target_entity_id", ""))
 		if monsters.has(visual_target_id):
 			var visual_target := monsters[visual_target_id] as Node3D
+			if bool(event.get("burn_applied", false)):
+				visual_target.set_meta("burn_visual_remaining", maxf(float(event.get("burn_duration_ms", 0)) / 1000.0, 0.0))
+				_set_monster_burn_visual(visual_target, true)
+			if str(event.get("status_effect", "")) == "burn":
+				visual_target.set_meta("burn_visual_remaining", 0.8)
+				_set_monster_burn_visual(visual_target, true)
 			visual_target.set_meta("hit_reaction_time", 0.24)
 			_spawn_monster_hit_visual(visual_target, false)
 			if bool(event.get("defeated", false)):
@@ -2516,6 +2549,15 @@ func _on_combat_event(event: Dictionary) -> void:
 	var hit_target_id := str(event.get("target_entity_id", ""))
 	if monsters.has(hit_target_id):
 		var hit_monster := monsters[hit_target_id] as Node3D
+		if bool(event.get("burn_applied", false)):
+			hit_monster.set_meta("burn_visual_remaining", maxf(float(event.get("burn_duration_ms", 0)) / 1000.0, 0.0))
+			_set_monster_burn_visual(hit_monster, true)
+		if str(event.get("status_effect", "")) == "burn":
+			hit_monster.set_meta("burn_visual_remaining", 0.8)
+			_set_monster_burn_visual(hit_monster, true)
+		if bool(event.get("defeated", false)):
+			hit_monster.set_meta("burn_visual_remaining", 0.0)
+			_set_monster_burn_visual(hit_monster, false)
 		hit_monster.set_meta("hit_reaction_time", 0.24)
 		_spawn_monster_hit_visual(hit_monster, bool(event.get("critical", false)))
 		if bool(event.get("defeated", false)):
@@ -2772,6 +2814,16 @@ func _update_input_debug_hud() -> void:
 	input_debug_label.text = keys + "\n" + movement_text + " · 网络：" + network_text + "\n" + send_text + " · ESC 释放鼠标"
 
 func _process(delta: float) -> void:
+	for monster_value in monsters.values():
+		var burning_monster := monster_value as Node3D
+		if not is_instance_valid(burning_monster):
+			continue
+		var burn_remaining := float(burning_monster.get_meta("burn_visual_remaining", 0.0))
+		if burn_remaining > 0.0:
+			burn_remaining = maxf(0.0, burn_remaining - delta)
+			burning_monster.set_meta("burn_visual_remaining", burn_remaining)
+			if burn_remaining <= 0.0:
+				_set_monster_burn_visual(burning_monster, false)
 	if player_slow_visual_remaining > 0.0:
 		player_slow_visual_remaining = maxf(0.0, player_slow_visual_remaining - delta)
 		if player_slow_visual_remaining <= 0.0:
