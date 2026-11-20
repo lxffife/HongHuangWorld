@@ -1,6 +1,6 @@
 # 洪荒世界统一经济与修炼资源体系
 
-状态：统一经济底座与宗门悬赏结算基础已落地（货币目录、钱包、账本、宗门财政、成员捐献、悬赏预算冻结、多人接取、宗门审批结算及奖励原子支付）；主动取消/过期退款、境界资格校验、贡献度分配、贡献点、官方组织任务和兑换执行仍待后续阶段
+状态：统一经济底座与宗门悬赏结算基础已落地（货币目录、钱包、账本、宗门财政、成员捐献、悬赏预算冻结、多人接取、宗门审批结算及奖励原子支付）；境界资格校验、贡献度分配、贡献点、官方组织任务和兑换执行仍待后续阶段
 
 ## 1. 已确认的产品决策
 
@@ -162,7 +162,7 @@
 - 后续任务服务必须调用后端 `AuthorizeTaskPublisher` 验证活跃成员身份与 leader/officer 角色，不能信任客户端传入的 `publisher_type`、组织名称或财政账户 ID。
 
 
-## 14. 宗门悬赏任务（000054–000055）
+## 14. 宗门悬赏任务（000054–000056）
 
 - 新增 `bounty_tasks`、`bounty_task_escrows`、`bounty_task_participants`；财政流水新增 `bounty_lock`、`bounty_refund`、`contribution` 类型。
 - 宗门成员捐献接口：`POST /api/v1/factions/{factionID}/treasury/contributions`。请求必须携带客户端生成并在重试时复用的 `event_key`；个人钱包扣款、宗门财政入账及双方不可变流水在同一事务中提交。非成员不能捐献，货币必须属于宗门所在世界。\n- 宗门发布接口：`POST /api/v1/factions/{factionID}/bounties`。请求必须提供 `event_key`，同一账号重试相同 key 不会再次冻结预算（重复请求返回冲突，客户端可通过任务列表确认原任务）。发布者身份由 Bearer 账号和数据库成员角色决定，客户端不能提交组织类型、组织名称或财政账户 ID。
@@ -170,5 +170,15 @@
 - 托管预算按 `reward_amount × max_assignees` 计算；在同一事务内从宗门财政对应币种的 available 转入 frozen，并写不可变财政流水及任务托管记录。余额不足则整个事务回滚。
 - 查询接口：`GET /api/v1/bounties?world_id=underworld_fengdu`；接取接口：`POST /api/v1/bounties/{taskID}/join`。
 - 接取时锁定任务行后统计有效参与人数并插入参与者，防止并发超员；唯一主键阻止同一账号重复加入。当前接取资格尚未关联角色境界/职业校验，`required_realm_level` 与难度先作为任务配置字段，不能视为已执行的门槛。
-- 宗门结算接口：`POST /api/v1/bounties/{taskID}/complete`。仅发布宗门的 leader/officer 可以审批结算；服务端读取当前所有 accepted 参与者，按任务固定的单人奖励逐人付款，不接受客户端传入奖励金额或收款人列表。\n- 结算事务锁定任务、托管、宗门、参与者、财政和玩家钱包；同一事务完成玩家钱包入账、玩家不可变账本、财政可用/冻结余额变更、财政不可变账本、参与者完成、托管标记 paid、任务标记 completed 及结算凭证。任何一步失败全部回滚。\n- 实际支付金额为 `reward_amount × accepted_participant_count`；未被实际接取的剩余预算退回宗门财政可用余额。全程使用任务原币种。结算 event_key 唯一，同任务相同 key 重试返回原结算凭证；其他任务复用 key 会冲突。\n- 当前结算代表发布方批准所有已接取成员完成，尚无逐成员贡献评分/分批验收；不允许客户端自行提交贡献值。主动取消、任务过期和失败任务的全额退款流程仍未开放。贡献点发放及官方城主府/官署任务仍未开放。
+- 宗门结算接口：`POST /api/v1/bounties/{taskID}/complete`。仅发布宗门的 leader/officer 可以审批结算；服务端读取当前所有 accepted 参与者，按任务固定的单人奖励逐人付款，不接受客户端传入奖励金额或收款人列表。\n- 结算事务锁定任务、托管、宗门、参与者、财政和玩家钱包；同一事务完成玩家钱包入账、玩家不可变账本、财政可用/冻结余额变更、财政不可变账本、参与者完成、托管标记 paid、任务标记 completed 及结算凭证。任何一步失败全部回滚。\n- 实际支付金额为 `reward_amount × accepted_participant_count`；未被实际接取的剩余预算退回宗门财政可用余额。全程使用任务原币种。结算 event_key 唯一，同任务相同 key 重试返回原结算凭证；其他任务复用 key 会冲突。\n- 当前结算代表发布方批准所有已接取成员完成，尚无逐成员贡献评分/分批验收；不允许客户端自行提交贡献值。贡献点发放及官方城主府/官署任务仍未开放。
 - 宗门财政可由成员通过上述捐献接口注资；不存在客户端任意增发入口。任务奖励结算已由 000055 在同一事务内实现托管释放、玩家钱包入账、财政流水和幂等凭证，不能调用单边 `ApplyDelta` 拼接。
+
+
+### 14.1 取消与到期退款（000056）
+
+- 发布宗门的 leader/officer 可调用 `POST /api/v1/bounties/{taskID}/cancel`，请求体携带稳定的 `event_key`。允许在已有成员接取后取消；所有仍处于 accepted 的参与者统一标记为 cancelled。
+- 主动取消会将 escrow 的全部金额原币种退回宗门财政 available，并从 frozen 中释放同额预算；任务变为 cancelled、托管变为 refunded。财政流水写入正向 `bounty_refund` delta 和负向 `frozen_delta`，并记录退款后的两个余额。
+- 到期处理由可信调度器调用 `POST /api/v1/servers/bounties/expire`，使用 `X-World-Server-Key` 认证；每批 1–100 条，默认 50 条。服务端只处理 expires_at 已到且 escrow 仍 locked 的 open/in_progress/full 任务，使用任务 ID 派生稳定幂等键。
+- 退款事务与结算事务都先锁任务和 escrow，再锁财政；两者竞争时只有一个能将 locked escrow 转为 paid/refunded。相同 event_key 在结算和退款之间共享 advisory lock，并交叉检查凭证表，防止跨业务复用。
+- `bounty_task_refunds` 对 task_id 和 event_key 分别建立唯一约束，保存退款金额、执行人及 cancelled/expired 原因。所有余额、财政流水、参与者状态、托管状态、任务状态和凭证在同一事务提交。
+- 取消和过期退款均为全额退款；当前没有接取者违约扣罚、部分退款或失败任务自动判定。调度器需要部署环境定期调用，仓库目前只提供受信任批处理 API，不宣称已部署定时任务。
