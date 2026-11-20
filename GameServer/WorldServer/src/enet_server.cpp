@@ -920,6 +920,7 @@ struct EnetServer::Impl {
     std::deque<ConsumableJob> pending_consumable_jobs;
     std::deque<ConsumableJobResult> completed_consumable_jobs;
     std::unordered_set<std::string> pending_consumable_sessions;
+    std::unordered_set<std::string> snapshot_inflight_sessions;
     std::unordered_set<std::string> skip_stale_consumable_snapshots;
     std::unordered_map<std::string, PlayerState> pending_consumable_closes;
     bool consumable_stop_requested{false};
@@ -1406,10 +1407,19 @@ struct EnetServer::Impl {
                         std::lock_guard lock(consumable_mutex);
                         if (pending_consumable_sessions.contains(session_id)) continue;
                         if (skip_stale_consumable_snapshots.erase(session_id) > 0) continue;
+                        // Reserve this session before issuing the HTTP write. A
+                        // consumable command checks the same mutex and will wait
+                        // until this snapshot finishes, so DB writes cannot cross.
+                        snapshot_inflight_sessions.insert(session_id);
                     }
                     bool inactive = false;
                     std::string error;
-                    if (save_periodic_position(config, player, inactive, error)) continue;
+                    const bool saved = save_periodic_position(config, player, inactive, error);
+                    {
+                        std::lock_guard lock(consumable_mutex);
+                        snapshot_inflight_sessions.erase(session_id);
+                    }
+                    if (saved) continue;
                     if (inactive) {
                         std::lock_guard lock(persistence_mutex);
                         revoked_sessions.insert(session_id);
@@ -1855,7 +1865,8 @@ struct EnetServer::Impl {
             std::lock_guard lock(consumable_mutex);
             if (consumable_stop_requested || !consumable_thread.joinable() ||
                 pending_consumable_jobs.size() >= 128 ||
-                pending_consumable_sessions.contains(session_id)) return false;
+                pending_consumable_sessions.contains(session_id) ||
+                snapshot_inflight_sessions.contains(session_id)) return false;
             pending_consumable_sessions.insert(session_id);
             skip_stale_consumable_snapshots.insert(session_id);
             pending_consumable_jobs.push_back(std::move(job));
