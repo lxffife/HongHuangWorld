@@ -27,6 +27,9 @@ struct SpellDefinition {
     std::int32_t defense_penetration_basis_points;
     std::int32_t slow_duration_ms;
     float slow_multiplier;
+    std::int32_t burn_duration_ms;
+    std::int32_t burn_interval_ms;
+    std::int32_t burn_damage_basis_points;
     bool enabled;
 };
 
@@ -34,12 +37,12 @@ struct SpellDefinition {
 // request an ID, but it must never submit or override any value in this table.
 inline constexpr SpellDefinition kFireballSpell{
     "fireball", SpellElement::Fire, 18, 350, 1800,
-    20.0F, 16.0F, 1.8F, 12500, 0, 0, 1.0F, true
+    20.0F, 16.0F, 1.8F, 12500, 0, 0, 1.0F, 3000, 1000, 2000, true
 };
 
 inline constexpr SpellDefinition kIceBoltSpell{
     "ice_bolt", SpellElement::Ice, 16, 300, 2200,
-    18.0F, 18.0F, 1.5F, 8500, 0, 3000, 0.55F, true
+    18.0F, 18.0F, 1.5F, 8500, 0, 3000, 0.55F, 0, 0, 0, true
 };
 
 inline const SpellDefinition* find_spell_definition(std::string_view id) {
@@ -66,7 +69,14 @@ inline bool valid_spell_definition(const SpellDefinition& spell) {
         std::isfinite(spell.slow_multiplier) && spell.slow_multiplier > 0.0F &&
         spell.slow_multiplier <= 1.0F &&
         ((spell.slow_duration_ms == 0 && spell.slow_multiplier == 1.0F) ||
-         (spell.slow_duration_ms > 0 && spell.slow_multiplier < 1.0F));
+         (spell.slow_duration_ms > 0 && spell.slow_multiplier < 1.0F)) &&
+        spell.burn_duration_ms >= 0 && spell.burn_duration_ms <= 30000 &&
+        spell.burn_interval_ms >= 0 && spell.burn_interval_ms <= 10000 &&
+        spell.burn_damage_basis_points >= 0 && spell.burn_damage_basis_points <= 10000 &&
+        ((spell.burn_duration_ms == 0 && spell.burn_interval_ms == 0 &&
+          spell.burn_damage_basis_points == 0) ||
+         (spell.burn_duration_ms > 0 && spell.burn_interval_ms > 0 &&
+          spell.burn_damage_basis_points > 0));
 }
 
 inline bool can_pay_spell_cost(std::int64_t current_mana, std::int32_t mana_cost) {
