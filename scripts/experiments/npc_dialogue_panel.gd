@@ -94,10 +94,10 @@ func _build_ui() -> void:
 	_panel.anchor_right = 0.5
 	_panel.anchor_bottom = 1.0
 	_panel.offset_left = -390.0
-	_panel.offset_top = -286.0
+	_panel.offset_top = -350.0
 	_panel.offset_right = 390.0
 	_panel.offset_bottom = -22.0
-	_panel.custom_minimum_size = Vector2(780.0, 264.0)
+	_panel.custom_minimum_size = Vector2(780.0, 328.0)
 	_panel.visible = false
 	_panel.add_theme_stylebox_override("panel", _panel_style())
 	root.add_child(_panel)
