@@ -15,4 +15,5 @@ DROP TABLE IF EXISTS currency_balances;
 DROP TABLE IF EXISTS currency_world_rules;
 DROP TABLE IF EXISTS currency_issuance_policies;
 DROP TABLE IF EXISTS currency_definitions;
+DROP FUNCTION IF EXISTS prevent_economy_ledger_mutation();
 COMMIT;
