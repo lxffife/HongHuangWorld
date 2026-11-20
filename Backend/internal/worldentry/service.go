@@ -168,7 +168,7 @@ func (s *Service) Redeem(ctx context.Context, nodeKey, ticket string) (PlayerSna
 		 WHERE t.token_hash = $1 AND t.expires_at > now() AND t.consumed_at IS NULL
 		   AND sr.node_key = $2 AND sr.status = 'ready' AND sr.admin_state = 'normal' AND sr.last_heartbeat_at > now() - INTERVAL '30 seconds'
 		   AND c.status = 'alive'
-		 FOR UPDATE OF t, c`, tokenHash[:], nodeKey,
+		 FOR UPDATE OF t, c, sr`, tokenHash[:], nodeKey,
 	).Scan(&ticketID, &characterID, &instanceID, &serverID, &snapshot.WorldID, &snapshot.Name,
 		&snapshot.PositionX, &snapshot.PositionY, &snapshot.PositionZ, &snapshot.RotationY, &birthInheritanceJSON, &equipmentJSON)
 	if errors.Is(err, sql.ErrNoRows) {
