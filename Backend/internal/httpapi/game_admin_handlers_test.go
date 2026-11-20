@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/liflife/HongHuangWorld/Backend/internal/serverregistry"
 )
 
 func TestGameAdminOnlineRejectsInvalidFiltersBeforeDatabaseAccess(t *testing.T) {
@@ -46,6 +48,37 @@ func TestGameAdminOnlineRequiresInternalCredential(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/internal/admin/players/online", nil)
 	res := httptest.NewRecorder()
 	handler.online(res, req)
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("expected HTTP %d, got %d", http.StatusUnauthorized, res.Code)
+	}
+}
+
+func TestGameAdminNodeStateRejectsInvalidStateBeforeDatabaseAccess(t *testing.T) {
+	handler := &gamePlayerAdminHandlers{
+		apiKey: "test-internal-key",
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		serverService: serverregistry.NewService(nil),
+	}
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/internal/admin/servers/nodes/test-node/state", strings.NewReader(`{"admin_state":"stopped"}`))
+	req.Header.Set("X-Game-Admin-Key", "test-internal-key")
+	req.SetPathValue("nodeKey", "test-node")
+	res := httptest.NewRecorder()
+	handler.setServerNodeState(res, req)
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("expected HTTP %d, got %d: %s", http.StatusBadRequest, res.Code, res.Body.String())
+	}
+}
+
+func TestGameAdminNodeStateRequiresInternalCredential(t *testing.T) {
+	handler := &gamePlayerAdminHandlers{
+		apiKey: "test-internal-key",
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		serverService: serverregistry.NewService(nil),
+	}
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/internal/admin/servers/nodes/test-node/state", strings.NewReader(`{"admin_state":"draining"}`))
+	req.SetPathValue("nodeKey", "test-node")
+	res := httptest.NewRecorder()
+	handler.setServerNodeState(res, req)
 	if res.Code != http.StatusUnauthorized {
 		t.Fatalf("expected HTTP %d, got %d", http.StatusUnauthorized, res.Code)
 	}
