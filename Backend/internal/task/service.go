@@ -112,6 +112,49 @@ func (s *Service) PublishFaction(ctx context.Context, accountID string, req Publ
  return result,nil
 }
 
+
+func (s *Service) Contribute(ctx context.Context,accountID,factionID,currencyID string,amount int64) error {
+ if accountID==""||factionID==""||currencyID==""||len(currencyID)>64||amount<=0{return ErrInvalid}
+ tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return fmt.Errorf("begin faction contribution: %w",err)};defer tx.Rollback()
+ var worldID,treasuryID string
+ err=tx.QueryRowContext(ctx,`SELECT f.world_id,f.treasury_account_id::text FROM factions f
+  JOIN faction_members m ON m.faction_id=f.id WHERE f.id=$1 AND f.status='active' AND m.account_id=$2
+  FOR UPDATE OF f`,factionID,accountID).Scan(&worldID,&treasuryID)
+ if errors.Is(err,sql.ErrNoRows){return ErrForbidden};if err!=nil{return fmt.Errorf("authorize faction contribution: %w",err)}
+ var valid bool
+ if err=tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM currency_definitions c JOIN currency_world_rules w ON w.currency_id=c.id
+  WHERE c.id=$1 AND c.enabled AND w.world_id=$2)`,currencyID,worldID).Scan(&valid);err!=nil{return fmt.Errorf("validate contribution currency: %w",err)}
+ if !valid{return ErrInvalid}
+ if _,err=tx.ExecContext(ctx,`INSERT INTO currency_balances(account_id,currency_id) VALUES($1,$2)
+  ON CONFLICT(account_id,currency_id) DO NOTHING`,accountID,currencyID);err!=nil{return fmt.Errorf("initialize contributor wallet: %w",err)}
+ var available,frozen int64
+ if err=tx.QueryRowContext(ctx,`SELECT available_amount,frozen_amount FROM currency_balances
+  WHERE account_id=$1 AND currency_id=$2 FOR UPDATE`,accountID,currencyID).Scan(&available,&frozen);err!=nil{return fmt.Errorf("lock contributor wallet: %w",err)}
+ if available<amount{return ErrInsufficientTreasury}
+ if _,err=tx.ExecContext(ctx,`INSERT INTO economy_treasury_balances(treasury_account_id,currency_id)
+  VALUES($1,$2) ON CONFLICT(treasury_account_id,currency_id) DO NOTHING`,treasuryID,currencyID);err!=nil{return fmt.Errorf("initialize faction treasury balance: %w",err)}
+ var treasuryAvailable int64
+ if err=tx.QueryRowContext(ctx,`SELECT available_amount FROM economy_treasury_balances
+  WHERE treasury_account_id=$1 AND currency_id=$2 FOR UPDATE`,treasuryID,currencyID).Scan(&treasuryAvailable);err!=nil{return fmt.Errorf("lock faction treasury balance: %w",err)}
+ if treasuryAvailable>math.MaxInt64-amount{return ErrInvalid}
+ if _,err=tx.ExecContext(ctx,`UPDATE currency_balances SET available_amount=available_amount-$3,updated_at=now()
+  WHERE account_id=$1 AND currency_id=$2`,accountID,currencyID,amount);err!=nil{return fmt.Errorf("debit contributor wallet: %w",err)}
+ if _,err=tx.ExecContext(ctx,`UPDATE economy_treasury_balances SET available_amount=available_amount+$3,updated_at=now()
+  WHERE treasury_account_id=$1 AND currency_id=$2`,treasuryID,currencyID,amount);err!=nil{return fmt.Errorf("credit faction treasury: %w",err)}
+ var eventKey string
+ if err=tx.QueryRowContext(ctx,`SELECT concat('faction-contribution:',gen_random_uuid()::text)`).Scan(&eventKey);err!=nil{return fmt.Errorf("create contribution event key: %w",err)}
+ if _,err=tx.ExecContext(ctx,`INSERT INTO economy_ledger_entries
+  (account_id,currency_id,event_key,entry_type,delta,available_after,frozen_delta,frozen_after,source_type,source_id,note)
+  VALUES($1,$2,$3,'spend',$4,$5,0,$6,'faction_contribution',$7,'宗门成员捐献')`,
+  accountID,currencyID,eventKey,-amount,available-amount,frozen,factionID);err!=nil{return fmt.Errorf("record contributor ledger: %w",err)}
+ if _,err=tx.ExecContext(ctx,`INSERT INTO economy_treasury_ledger_entries
+  (treasury_account_id,currency_id,event_key,entry_type,delta,balance_after,source_type,source_id,note)
+  VALUES($1,$2,$3,'contribution',$4,$5,'faction_contribution',$6,'成员向宗门财政捐献')`,
+  treasuryID,currencyID,eventKey,amount,treasuryAvailable+amount,factionID);err!=nil{return fmt.Errorf("record faction treasury contribution: %w",err)}
+ if err=tx.Commit();err!=nil{return fmt.Errorf("commit faction contribution: %w",err)}
+ return nil
+}
+
 func (s *Service) ListOpen(ctx context.Context,worldID string)([]Task,error){
  if strings.TrimSpace(worldID)=="" || len(worldID)>64{return nil,ErrInvalid}
  rows,err:=s.db.QueryContext(ctx,`SELECT t.id::text,t.world_id,t.publisher_type,t.publisher_id::text,f.name,
