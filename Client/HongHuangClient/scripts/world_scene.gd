@@ -1046,7 +1046,7 @@ func _apply_remote_equipment_visuals(remote: Node3D, items: Array) -> void:
 	if str(remote.get_meta("remote_equipment_signature", "")) == signature:
 		return
 	remote.set_meta("remote_equipment_signature", signature)
-	for socket_name in ["EquipmentWeaponSocket", "EquipmentOffhandSocket", "EquipmentHeadSocket", "EquipmentChestSocket", "EquipmentLegsSocket", "EquipmentBootsSocket", "EquipmentAccessorySocket"]:
+	for socket_name in ["EquipmentWeaponSocket", "EquipmentOffhandSocket", "EquipmentHeadSocket", "EquipmentChestSocket", "EquipmentLegsSocket", "EquipmentBootsSocket", "EquipmentAccessorySocket", "EquipmentBackSocket"]:
 		var existing_socket := humanoid.find_child(socket_name, true, false) as Node3D
 		if existing_socket != null:
 			for old_visual in existing_socket.get_children():
@@ -1057,6 +1057,8 @@ func _apply_remote_equipment_visuals(remote: Node3D, items: Array) -> void:
 			continue
 		var item: Dictionary = item_value
 		var slot := str(item.get("slot", ""))
+		if slot not in ["weapon", "offhand", "head", "chest", "legs", "boots", "accessory", "back"]:
+			continue
 		var quality := int(item.get("quality", 1))
 		var tint := Color("#c5a66d")
 		if quality >= 5:
