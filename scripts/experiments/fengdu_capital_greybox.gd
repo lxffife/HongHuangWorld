@@ -637,6 +637,7 @@ func _build_hud() -> void:
 	_economy_manager = FengduEconomyManager.new()
 	_economy_manager.name = "FengduEconomyManager"
 	add_child(_economy_manager)
+	_quest_manager.call("configure_economy", _economy_manager)
 	_task_board = FengduTaskBoard.new()
 	_task_board.name = "FengduPublicTaskBoard"
 	_task_board.connect("closed", Callable(self, "_on_task_board_closed"))
