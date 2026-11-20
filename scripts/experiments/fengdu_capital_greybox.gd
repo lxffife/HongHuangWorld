@@ -233,16 +233,16 @@ func _add_world_label(value: String, p: Vector3, yaw: float) -> void:
 
 func _build_patrol_guards() -> void:
 	var guards := [
-		{"name": "南门守城阴兵", "position": Vector3(-52.0, 0.0, 660.0)},
-		{"name": "南门巡逻阴兵", "position": Vector3(52.0, 0.0, 660.0)},
-		{"name": "北门守城阴兵", "position": Vector3(-52.0, 0.0, -660.0)},
-		{"name": "北门巡逻阴兵", "position": Vector3(52.0, 0.0, -660.0)},
-		{"name": "西门守城阴兵", "position": Vector3(-875.0, 0.0, -52.0)},
-		{"name": "东门守城阴兵", "position": Vector3(875.0, 0.0, 52.0)},
-		{"name": "皇城巡逻阴兵", "position": Vector3(-92.0, 0.0, -260.0)},
-		{"name": "皇城巡逻阴兵", "position": Vector3(92.0, 0.0, -260.0)},
-		{"name": "鬼市巡逻阴兵", "position": Vector3(430.0, 0.0, 420.0)},
-		{"name": "魂坊巡逻阴兵", "position": Vector3(-430.0, 0.0, 420.0)}
+		{"name": "南门守城阴兵", "position": Vector3(-52.0, 0.0, 660.0), "patrol_points": [Vector3(0.0, 0.0, -9.0), Vector3(0.0, 0.0, 9.0)]},
+		{"name": "南门巡逻阴兵", "position": Vector3(52.0, 0.0, 660.0), "patrol_points": [Vector3(0.0, 0.0, 9.0), Vector3(0.0, 0.0, -9.0)]},
+		{"name": "北门守城阴兵", "position": Vector3(-52.0, 0.0, -660.0), "patrol_points": [Vector3(0.0, 0.0, -9.0), Vector3(0.0, 0.0, 9.0)]},
+		{"name": "北门巡逻阴兵", "position": Vector3(52.0, 0.0, -660.0), "patrol_points": [Vector3(0.0, 0.0, 9.0), Vector3(0.0, 0.0, -9.0)]},
+		{"name": "西门守城阴兵", "position": Vector3(-875.0, 0.0, -52.0), "patrol_points": [Vector3(-9.0, 0.0, 0.0), Vector3(9.0, 0.0, 0.0)]},
+		{"name": "东门守城阴兵", "position": Vector3(875.0, 0.0, 52.0), "patrol_points": [Vector3(9.0, 0.0, 0.0), Vector3(-9.0, 0.0, 0.0)]},
+		{"name": "皇城巡逻阴兵", "position": Vector3(-92.0, 0.0, -260.0), "patrol_points": [Vector3(0.0, 0.0, -12.0), Vector3(0.0, 0.0, 12.0)]},
+		{"name": "皇城巡逻阴兵", "position": Vector3(92.0, 0.0, -260.0), "patrol_points": [Vector3(0.0, 0.0, 12.0), Vector3(0.0, 0.0, -12.0)]},
+		{"name": "鬼市巡逻阴兵", "position": Vector3(430.0, 0.0, 420.0), "patrol_points": [Vector3(-10.0, 0.0, 0.0), Vector3(10.0, 0.0, 0.0), Vector3(10.0, 0.0, 12.0), Vector3(-10.0, 0.0, 12.0)]},
+		{"name": "魂坊巡逻阴兵", "position": Vector3(-430.0, 0.0, 420.0), "patrol_points": [Vector3(-10.0, 0.0, 0.0), Vector3(10.0, 0.0, 0.0), Vector3(10.0, 0.0, 12.0), Vector3(-10.0, 0.0, 12.0)]}
 	]
 	for index in range(guards.size()):
 		var guard_data: Dictionary = guards[index]
@@ -256,12 +256,12 @@ func _build_patrol_guards() -> void:
 
 func _build_citizens() -> void:
 	var citizens := [
-		{"name": "鬼市灵材商", "role": "鬼市商贩", "position": Vector3(475.0, 0.0, 445.0)},
-		{"name": "鬼市法器商", "role": "鬼市商贩", "position": Vector3(475.0, 0.0, 515.0)},
-		{"name": "鬼市情报贩", "role": "鬼市商贩", "position": Vector3(475.0, 0.0, 585.0)},
-		{"name": "魂坊居民", "role": "坊民", "position": Vector3(-475.0, 0.0, 455.0)},
-		{"name": "魂坊工匠", "role": "坊民", "position": Vector3(-475.0, 0.0, 545.0)},
-		{"name": "魂坊引路人", "role": "坊民", "position": Vector3(-475.0, 0.0, 625.0)},
+		{"name": "鬼市灵材商", "role": "鬼市商贩", "position": Vector3(475.0, 0.0, 445.0), "patrol_points": [Vector3(-2.0, 0.0, 0.0), Vector3(2.0, 0.0, 0.0)], "route_speed": 1.2},
+		{"name": "鬼市法器商", "role": "鬼市商贩", "position": Vector3(475.0, 0.0, 515.0), "patrol_points": [Vector3(2.0, 0.0, 0.0), Vector3(-2.0, 0.0, 0.0)], "route_speed": 1.0},
+		{"name": "鬼市情报贩", "role": "鬼市商贩", "position": Vector3(475.0, 0.0, 585.0), "patrol_points": [Vector3(0.0, 0.0, -2.0), Vector3(0.0, 0.0, 2.0)], "route_speed": 0.9},
+		{"name": "魂坊居民", "role": "坊民", "position": Vector3(-475.0, 0.0, 455.0), "patrol_points": [Vector3(-4.0, 0.0, 0.0), Vector3(4.0, 0.0, 0.0)], "route_speed": 1.1},
+		{"name": "魂坊工匠", "role": "坊民", "position": Vector3(-475.0, 0.0, 545.0), "patrol_points": [Vector3(0.0, 0.0, -3.0), Vector3(0.0, 0.0, 3.0)], "route_speed": 0.8},
+		{"name": "魂坊引路人", "role": "坊民", "position": Vector3(-475.0, 0.0, 625.0), "patrol_points": [Vector3(-3.0, 0.0, 0.0), Vector3(3.0, 0.0, 0.0)], "route_speed": 1.0},
 		{"name": "鬼籍登记书吏", "role": "鬼籍书吏", "position": Vector3(-475.0, 0.0, 250.0)},
 		{"name": "功过司文吏", "role": "判官文吏", "position": Vector3(475.0, 0.0, 250.0)},
 		{"name": "巡城司值守", "role": "判官文吏", "position": Vector3(155.0, 0.0, 245.0)},
