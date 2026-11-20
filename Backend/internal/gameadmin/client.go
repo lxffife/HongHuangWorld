@@ -19,6 +19,7 @@ var (
 	ErrInvalidLootRequest = errors.New("invalid loot administration request")
 	ErrLootNotFound = errors.New("loot item or entry not found")
 	ErrLootConflict = errors.New("loot resource already exists")
+	ErrNodeHasSessions = errors.New("server node still has active or pending sessions")
 )
 
 type Client struct {
@@ -171,6 +172,10 @@ func (c *Client) SetServerNodeState(ctx context.Context, nodeKey, state string) 
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound { return nil, fmt.Errorf("world server node not found") }
 	if resp.StatusCode == http.StatusBadRequest { return nil, fmt.Errorf("invalid world server node state") }
+	if resp.StatusCode == http.StatusConflict {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("%w: %s", ErrNodeHasSessions, strings.TrimSpace(string(body)))
+	}
 	if resp.StatusCode != http.StatusOK { return nil, fmt.Errorf("%w: game returned %d", ErrUnavailable, resp.StatusCode) }
 	var result json.RawMessage
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil { return nil, err }
