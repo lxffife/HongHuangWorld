@@ -1067,6 +1067,7 @@ func _upsert_remote_player(entity: Dictionary) -> void:
 	_apply_remote_birth_visuals(remote_players[character_id], birth_data if birth_data is Dictionary else {})
 	var equipment_data: Variant = entity.get("equipment", [])
 	_apply_remote_equipment_visuals(remote_players[character_id], equipment_data if equipment_data is Array else [])
+	_set_player_poison_visual(remote_players[character_id], bool(entity.get("poisoned", false)))
 
 func _apply_remote_equipment_visuals(remote: Node3D, items: Array) -> void:
 	if not is_instance_valid(remote) or bool(remote.get_meta("is_underworld", false)):
@@ -2430,10 +2431,10 @@ func _spawn_poison_bolt_visual(attacker: Node3D) -> void:
 	tween.tween_callback(Callable(bolt, "queue_free"))
 
 
-func _set_player_poison_visual(enabled: bool) -> void:
-	if not is_instance_valid(local_player):
+func _set_player_poison_visual(player_node: Node3D, enabled: bool) -> void:
+	if not is_instance_valid(player_node):
 		return
-	var ring := local_player.get_node_or_null("PlayerPoisonStatusRing") as MeshInstance3D
+	var ring := player_node.get_node_or_null("PlayerPoisonStatusRing") as MeshInstance3D
 	if enabled and ring == null:
 		ring = MeshInstance3D.new()
 		ring.name = "PlayerPoisonStatusRing"
@@ -2452,7 +2453,7 @@ func _set_player_poison_visual(enabled: bool) -> void:
 		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		ring.material_override = material
 		ring.position.y = 0.09
-		local_player.add_child(ring)
+		player_node.add_child(ring)
 	if ring != null:
 		ring.visible = enabled
 
@@ -2584,9 +2585,9 @@ func _on_combat_event(event: Dictionary) -> void:
 			player_slow_visual_remaining = maxf(float(event.get("status_duration_ms", 0)) / 1000.0, 0.0)
 		if str(event.get("status_effect", "")) == "poison":
 			player_poison_visual_remaining = maxf(float(event.get("status_duration_ms", 0)) / 1000.0, 0.0)
-			_set_player_poison_visual(player_poison_visual_remaining > 0.0)
+			_set_player_poison_visual(local_player, player_poison_visual_remaining > 0.0)
 		var incoming_damage := int(event.get("damage", 0))
-		if is_instance_valid(local_player) and local_player.has_method("play_hit_reaction"):
+		if str(event.get("attack_style", "")) != "poison_tick" and is_instance_valid(local_player) and local_player.has_method("play_hit_reaction"):
 			local_player.call("play_hit_reaction", incoming_damage, str(event.get("attack_style", "")))
 		_spawn_combat_number(incoming_damage, true, false)
 		var current_health := int(event.get("health", 0))
@@ -2596,7 +2597,7 @@ func _on_combat_event(event: Dictionary) -> void:
 			player_slow_visual_remaining = 0.0
 			_set_player_slow_visual(false)
 			player_poison_visual_remaining = 0.0
-			_set_player_poison_visual(false)
+			_set_player_poison_visual(local_player, false)
 			local_player.is_dead = true
 			local_target_position = local_player.position
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
