@@ -116,6 +116,28 @@ func TestItemUseResultSerializesAuthoritativeResources(t *testing.T) {
 	}
 }
 
+func TestEquipmentSetBonusUsesHighestUnlockedTier(t *testing.T) {
+	tiers := map[int]map[string]int{
+		2: {"attack": 5},
+		4: {"attack": 12, "defense": 8},
+	}
+	bonus, ok := equipmentSetBonusForCount(tiers, 1)
+	if ok || bonus != nil { t.Fatalf("one piece should unlock no tier: %v, %v", bonus, ok) }
+	bonus, ok = equipmentSetBonusForCount(tiers, 3)
+	if !ok || bonus["attack"] != 5 || len(bonus) != 1 { t.Fatalf("three pieces should use tier 2: %v, %v", bonus, ok) }
+	bonus, ok = equipmentSetBonusForCount(tiers, 4)
+	if !ok || bonus["attack"] != 12 || bonus["defense"] != 8 { t.Fatalf("four pieces should use tier 4 only: %v, %v", bonus, ok) }
+	bonus, ok = equipmentSetBonusForCount(tiers, 6)
+	if !ok || bonus["attack"] != 12 { t.Fatalf("extra pieces should retain highest tier: %v, %v", bonus, ok) }
+}
+
+func TestEquipmentSetBonusIgnoresInvalidThresholds(t *testing.T) {
+	tiers := map[int]map[string]int{0: {"attack": 99}, -1: {"attack": 88}, 2: {"attack": 5}}
+	bonus, ok := equipmentSetBonusForCount(tiers, 2)
+	if !ok || bonus["attack"] != 5 { t.Fatalf("invalid thresholds must be ignored: %v, %v", bonus, ok) }
+	if bonus, ok := equipmentSetBonusForCount(tiers, 0); ok || bonus != nil { t.Fatalf("zero pieces should unlock nothing: %v, %v", bonus, ok) }
+}
+
 func TestEquipmentPrimaryAttributesApplyTheirCombatEffects(t *testing.T) {
 	stats := CombatStats{Attack: 20, Defense: 3, MaxHealth: 100, Health: 80, MaxMana: 40, Mana: 20, MovementSpeed: 5}
 	bonuses := map[string]int{
