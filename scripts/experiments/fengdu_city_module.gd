@@ -69,8 +69,8 @@ func _process(delta: float) -> void:
 func _setup_behavior_controller() -> void:
 	_behavior_controller = NpcBehaviorController.new()
 	_behavior_controller.name = "BehaviorController"
-	_behavior_controller.configure(str(module_data.get("behavior_profile", module_kind)), not _route_points.is_empty())
-	_behavior_controller.state_changed.connect(_on_behavior_state_changed)
+	_behavior_controller.call("configure", str(module_data.get("behavior_profile", module_kind)), not _route_points.is_empty())
+	_behavior_controller.connect("state_changed", Callable(self, "_on_behavior_state_changed"))
 	add_child(_behavior_controller)
 
 
