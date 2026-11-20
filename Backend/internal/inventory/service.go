@@ -393,11 +393,6 @@ func (s *Service) Equip(ctx context.Context, accountID string, request Equipment
 	if err:=tx.QueryRowContext(ctx,`SELECT c.id::text FROM souls soul JOIN characters c ON c.id=soul.current_character_id WHERE soul.account_id=$1 AND c.status='alive' FOR UPDATE OF c`,accountID).Scan(&characterID); err!=nil {
 		if errors.Is(err,sql.ErrNoRows) { return ErrInvalidRequest }; return fmt.Errorf("resolve current character: %w",err)
 	}
-	var inWorld bool
-	if err:=tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM world_sessions WHERE character_id=$1::uuid AND session_state='active')`,characterID).Scan(&inWorld); err!=nil {
-		return fmt.Errorf("check active character session: %w",err)
-	}
-	if inWorld { return ErrCharacterInWorld }
 	var itemSlot string
 	if err:=tx.QueryRowContext(ctx,`SELECT equipment_slot FROM item_definitions WHERE id=$1 AND enabled AND item_type='equipment'`,request.ItemID).Scan(&itemSlot); err!=nil {
 		if errors.Is(err,sql.ErrNoRows) { return ErrInvalidRequest }; return fmt.Errorf("load equipment definition: %w",err)
@@ -458,6 +453,7 @@ func (s *Service) Unequip(ctx context.Context, accountID, slot string) error {
 }
 
 type CombatStats struct {
+	Equipment []EquippedItem `json:"equipment"`
 	Health int `json:"health"`
 	Mana int `json:"mana"`
 	Attack int `json:"attack"`
@@ -522,6 +518,31 @@ func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessio
 	// Keep movement bonuses meaningful without allowing extreme equipment or
 	// inherited attributes to bypass server-side movement limits.
 	result.MovementSpeed = math.Max(1.0, math.Min(10.0, result.MovementSpeed))
+	// Return the authoritative equipment list with combat stats so WorldServer
+	// can refresh weapon behavior and replicated appearance in the same update.
+	equipmentRows, err := s.db.QueryContext(ctx, `SELECT e.slot, i.id, i.name, i.quality, COALESCE(i.weapon_type, ''), i.icon_key, i.description, i.base_stats, COALESCE(es.id, ''), COALESCE(es.name, ''), COALESCE(es.description, ''), COALESCE(es.bonus_tiers, '{}'::jsonb)
+		FROM world_sessions ws
+		JOIN server_registry sr ON sr.id=ws.server_id
+		JOIN character_equipment e ON e.character_id=ws.character_id
+		JOIN item_definitions i ON i.id=e.item_id
+		LEFT JOIN equipment_sets es ON es.id=i.equipment_set_id AND es.enabled
+		WHERE sr.node_key=$1 AND ws.id=$2::uuid AND ws.character_id=$3::uuid AND ws.session_state='active' AND i.enabled
+		ORDER BY e.slot`, nodeKey, sessionID, characterID)
+	if err != nil { return CombatStats{}, fmt.Errorf("load session equipment: %w", err) }
+	defer equipmentRows.Close()
+	result.Equipment = make([]EquippedItem, 0)
+	for equipmentRows.Next() {
+		var item EquippedItem
+		var rawStats, rawTiers []byte
+		if err := equipmentRows.Scan(&item.Slot, &item.ItemID, &item.Name, &item.Quality, &item.WeaponType, &item.IconKey, &item.Description, &rawStats, &item.SetID, &item.SetName, &item.SetDescription, &rawTiers); err != nil {
+			return CombatStats{}, fmt.Errorf("scan session equipment: %w", err)
+		}
+		item.BaseStats = map[string]int{}
+		if len(rawStats) > 0 { if err := json.Unmarshal(rawStats, &item.BaseStats); err != nil { return CombatStats{}, fmt.Errorf("decode session equipment stats: %w", err) } }
+		if len(rawTiers) > 0 { if err := json.Unmarshal(rawTiers, &item.SetBonusTiers); err != nil { return CombatStats{}, fmt.Errorf("decode session equipment set tiers: %w", err) } }
+		result.Equipment = append(result.Equipment, item)
+	}
+	if err := equipmentRows.Err(); err != nil { return CombatStats{}, fmt.Errorf("iterate session equipment: %w", err) }
 	if result.MaxHealth < 1 || result.MaxMana < 0 { return CombatStats{},ErrInvalidRequest }
 	if result.Health > result.MaxHealth { result.Health = result.MaxHealth }
 	if result.Mana > result.MaxMana { result.Mana = result.MaxMana }
