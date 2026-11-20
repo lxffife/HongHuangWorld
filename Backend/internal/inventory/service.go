@@ -618,6 +618,13 @@ type ItemUseRequest struct {
 	ItemID string
 	Quantity int
 }
+
+type LiveConsumableResources struct {
+	Health int
+	MaxHealth int
+	Mana int
+	MaxMana int
+}
 type ItemUseResult struct {
 	Applied bool `json:"applied"`
 	ItemID string `json:"item_id"`
@@ -643,7 +650,7 @@ func (s *Service) UseConsumable(ctx context.Context, accountID string, request I
 		if errors.Is(err,sql.ErrNoRows) { return ItemUseResult{},ErrInvalidRequest }
 		return ItemUseResult{},fmt.Errorf("resolve current character for consumable: %w",err)
 	}
-	result,err:=s.useConsumableForCharacter(ctx,tx,characterID,request,true)
+	result,err:=s.useConsumableForCharacter(ctx,tx,characterID,request,true,nil)
 	if err!=nil { return ItemUseResult{},err }
 	if err:=tx.Commit(); err!=nil { return ItemUseResult{},fmt.Errorf("commit consumable use: %w",err) }
 	return result,nil
@@ -652,8 +659,8 @@ func (s *Service) UseConsumable(ctx context.Context, accountID string, request I
 // UseConsumableForSession is the trusted WorldServer path. The server identity,
 // live session and character are verified in one transaction before an item or
 // resource value is changed. WorldServer applies the returned resource values.
-func (s *Service) UseConsumableForSession(ctx context.Context,nodeKey,sessionID,characterID string,request ItemUseRequest) (ItemUseResult,error) {
-	if strings.TrimSpace(nodeKey)=="" || !validUUID(sessionID) || !validUUID(characterID) || !validConsumableRequest(request) {
+func (s *Service) UseConsumableForSession(ctx context.Context,nodeKey,sessionID,characterID string,request ItemUseRequest, live LiveConsumableResources) (ItemUseResult,error) {
+	if strings.TrimSpace(nodeKey)=="" || !validUUID(sessionID) || !validUUID(characterID) || !validConsumableRequest(request) || !validLiveConsumableResources(live) {
 		return ItemUseResult{},ErrInvalidRequest
 	}
 	tx,err:=s.db.BeginTx(ctx,nil)
@@ -669,7 +676,7 @@ func (s *Service) UseConsumableForSession(ctx context.Context,nodeKey,sessionID,
 		FOR UPDATE OF ws,c`,nodeKey,sessionID,characterID).Scan(&resolvedCharacterID)
 	if errors.Is(err,sql.ErrNoRows) { return ItemUseResult{},ErrSessionInvalid }
 	if err!=nil { return ItemUseResult{},fmt.Errorf("verify active session for consumable: %w",err) }
-	result,err:=s.useConsumableForCharacter(ctx,tx,resolvedCharacterID,request,false)
+	result,err:=s.useConsumableForCharacter(ctx,tx,resolvedCharacterID,request,false,&live)
 	if err!=nil { return ItemUseResult{},err }
 	if err:=tx.Commit(); err!=nil { return ItemUseResult{},fmt.Errorf("commit session consumable use: %w",err) }
 	return result,nil
@@ -677,6 +684,11 @@ func (s *Service) UseConsumableForSession(ctx context.Context,nodeKey,sessionID,
 
 func validConsumableRequest(request ItemUseRequest) bool {
 	return validUUID(request.RequestID) && strings.TrimSpace(request.ItemID)!="" && request.Quantity>=1 && request.Quantity<=20
+}
+
+func validLiveConsumableResources(live LiveConsumableResources) bool {
+	return live.Health >= 0 && live.MaxHealth >= 1 && live.Health <= live.MaxHealth && live.MaxHealth <= 10000000 &&
+		live.Mana >= 0 && live.MaxMana >= 0 && live.Mana <= live.MaxMana && live.MaxMana <= 10000000
 }
 
 func consumableReplayResult(request ItemUseRequest, health, maxHealth, mana, maxMana int) ItemUseResult {
@@ -691,22 +703,29 @@ func consumableReplayResult(request ItemUseRequest, health, maxHealth, mana, max
 	}
 }
 
-func (s *Service) useConsumableForCharacter(ctx context.Context,tx *sql.Tx,characterID string,request ItemUseRequest,blockActiveSession bool) (ItemUseResult,error) {
+func (s *Service) useConsumableForCharacter(ctx context.Context,tx *sql.Tx,characterID string,request ItemUseRequest,blockActiveSession bool,live *LiveConsumableResources) (ItemUseResult,error) {
 	var previousItemID string
 	var previousQuantity int
-	err:=tx.QueryRowContext(ctx,`SELECT item_id,quantity FROM item_use_events WHERE character_id=$1::uuid AND request_id=$2::uuid`,characterID,request.RequestID).Scan(&previousItemID,&previousQuantity)
+	var previousEffect []byte
+	err:=tx.QueryRowContext(ctx,`SELECT item_id,quantity,effect_applied FROM item_use_events WHERE character_id=$1::uuid AND request_id=$2::uuid`,characterID,request.RequestID).Scan(&previousItemID,&previousQuantity,&previousEffect)
 	if err==nil {
 		if previousItemID!=request.ItemID || previousQuantity!=request.Quantity { return ItemUseResult{},ErrInvalidRequest }
 		// A retry may arrive after the original transaction committed but its HTTP
 		// response was lost. Return current authoritative resources so WorldServer
 		// can reconcile its in-memory snapshot without consuming the item twice.
-		var health, maxHealth, mana, maxMana int
-		if err:=tx.QueryRowContext(ctx,`SELECT health,max_health,mana,max_mana
-			FROM character_attributes WHERE character_id=$1::uuid`,characterID).
-			Scan(&health,&maxHealth,&mana,&maxMana); err!=nil {
+ 		var health, maxHealth, mana, maxMana, healthRestored, manaRestored int
+		if live != nil {
+			var saved map[string]int
+			if err := json.Unmarshal(previousEffect, &saved); err != nil { return ItemUseResult{}, fmt.Errorf("decode duplicate consumable result: %w", err) }
+			health, maxHealth = saved["result_health"], saved["effective_max_health"]
+			mana, maxMana = saved["result_mana"], saved["effective_max_mana"]
+			healthRestored, manaRestored = saved["health_restored"], saved["mana_restored"]
+		} else if err:=tx.QueryRowContext(ctx,`SELECT health,max_health,mana,max_mana FROM character_attributes WHERE character_id=$1::uuid`,characterID).Scan(&health,&maxHealth,&mana,&maxMana); err!=nil {
 			return ItemUseResult{},fmt.Errorf("load resources for duplicate consumable request: %w",err)
 		}
-		return consumableReplayResult(request,health,maxHealth,mana,maxMana),nil
+		result := consumableReplayResult(request,health,maxHealth,mana,maxMana)
+		result.HealthRestored, result.ManaRestored = healthRestored, manaRestored
+		return result,nil
 	}
 	if !errors.Is(err,sql.ErrNoRows) { return ItemUseResult{},fmt.Errorf("check consumable idempotency: %w",err) }
 	if blockActiveSession {
@@ -738,18 +757,21 @@ func (s *Service) useConsumableForCharacter(ctx context.Context,tx *sql.Tx,chara
 	}
 	if owned<request.Quantity { return ItemUseResult{},ErrInvalidRequest }
 	result:=ItemUseResult{ItemID:request.ItemID,Quantity:request.Quantity}
-	var oldHealth,oldMana int
-	if err:=tx.QueryRowContext(ctx,`SELECT health,mana FROM character_attributes WHERE character_id=$1::uuid FOR UPDATE`,characterID).Scan(&oldHealth,&oldMana); err!=nil {
+	var oldHealth,oldMana,baseMaxHealth,baseMaxMana int
+	if err:=tx.QueryRowContext(ctx,`SELECT health,mana,max_health,max_mana FROM character_attributes WHERE character_id=$1::uuid FOR UPDATE`,characterID).Scan(&oldHealth,&oldMana,&baseMaxHealth,&baseMaxMana); err!=nil {
 		return ItemUseResult{},fmt.Errorf("lock character consumable attributes: %w",err)
 	}
-	err=tx.QueryRowContext(ctx,`UPDATE character_attributes
-		SET health=LEAST(max_health,health+$2), mana=LEAST(max_mana,mana+$3)
-		WHERE character_id=$1::uuid
-		RETURNING health,max_health,mana,max_mana`,characterID,heal*request.Quantity,restore*request.Quantity).
-		Scan(&result.Health,&result.MaxHealth,&result.Mana,&result.MaxMana)
-	if err!=nil { return ItemUseResult{},fmt.Errorf("apply consumable effects: %w",err) }
-	result.HealthRestored=result.Health-oldHealth
-	result.ManaRestored=result.Mana-oldMana
+	if live == nil { live = &LiveConsumableResources{Health: oldHealth, MaxHealth: baseMaxHealth, Mana: oldMana, MaxMana: baseMaxMana} }
+	if !validLiveConsumableResources(*live) || live.MaxHealth < baseMaxHealth || live.MaxMana < baseMaxMana { return ItemUseResult{}, ErrInvalidRequest }
+	result.Health = min(live.MaxHealth, live.Health + heal*request.Quantity)
+	result.MaxHealth = live.MaxHealth
+	result.Mana = min(live.MaxMana, live.Mana + restore*request.Quantity)
+	result.MaxMana = live.MaxMana
+	result.HealthRestored = result.Health - live.Health
+	result.ManaRestored = result.Mana - live.Mana
+	// Persist only base-cap values; WorldServer owns equipment-derived excess.
+	_, err = tx.ExecContext(ctx, `UPDATE character_attributes SET health=LEAST($2,max_health), mana=LEAST($3,max_mana), updated_at=now() WHERE character_id=$1::uuid`, characterID, result.Health, result.Mana)
+	if err != nil { return ItemUseResult{}, fmt.Errorf("apply consumable effects: %w", err) }
 	if owned==request.Quantity {
 		if _,err:=tx.ExecContext(ctx,`DELETE FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2`,characterID,request.ItemID); err!=nil {
 			return ItemUseResult{},fmt.Errorf("remove consumed inventory stack: %w",err)
@@ -761,7 +783,12 @@ func (s *Service) useConsumableForCharacter(ctx context.Context,tx *sql.Tx,chara
 		affected,err:=res.RowsAffected()
 		if err!=nil || affected!=1 { return ItemUseResult{},ErrInvalidRequest }
 	}
-	effectJSON,_:=json.Marshal(effect)
+	effectResult := map[string]int{}
+	for key, value := range effect { effectResult[key] = value }
+	effectResult["result_health"], effectResult["effective_max_health"] = result.Health, result.MaxHealth
+	effectResult["result_mana"], effectResult["effective_max_mana"] = result.Mana, result.MaxMana
+	effectResult["health_restored"], effectResult["mana_restored"] = result.HealthRestored, result.ManaRestored
+	effectJSON,_:=json.Marshal(effectResult)
 	if _,err:=tx.ExecContext(ctx,`INSERT INTO item_use_events(character_id,request_id,item_id,quantity,effect_applied)
 		VALUES($1::uuid,$2::uuid,$3,$4,$5::jsonb)`,characterID,request.RequestID,request.ItemID,request.Quantity,string(effectJSON)); err!=nil {
 		return ItemUseResult{},fmt.Errorf("record consumable use: %w",err)
