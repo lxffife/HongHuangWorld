@@ -31,7 +31,7 @@ CREATE TABLE currency_world_rules (
 CREATE UNIQUE INDEX uq_currency_world_primary ON currency_world_rules(world_id) WHERE is_primary;
 
 CREATE TABLE currency_balances (
-    account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    account_id UUID NOT NULL,
     currency_id VARCHAR(64) NOT NULL REFERENCES currency_definitions(id),
     available_amount BIGINT NOT NULL DEFAULT 0 CHECK (available_amount >= 0),
     frozen_amount BIGINT NOT NULL DEFAULT 0 CHECK (frozen_amount >= 0),
@@ -42,7 +42,7 @@ CREATE INDEX idx_currency_balances_currency ON currency_balances(currency_id, av
 
 CREATE TABLE economy_ledger_entries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    account_id UUID NOT NULL REFERENCES accounts(id),
+    account_id UUID NOT NULL,
     currency_id VARCHAR(64) NOT NULL REFERENCES currency_definitions(id),
     event_key VARCHAR(128) NOT NULL,
     entry_type VARCHAR(32) NOT NULL CHECK (entry_type IN (
@@ -64,7 +64,7 @@ CREATE INDEX idx_economy_ledger_source ON economy_ledger_entries(source_type, so
 
 CREATE TABLE economy_escrows (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    account_id UUID NOT NULL REFERENCES accounts(id),
+    account_id UUID NOT NULL,
     currency_id VARCHAR(64) NOT NULL REFERENCES currency_definitions(id),
     reference_type VARCHAR(32) NOT NULL,
     reference_id VARCHAR(128) NOT NULL,
@@ -131,7 +131,7 @@ CREATE INDEX idx_currency_market_quotes_pair_time ON currency_market_quotes(from
 
 CREATE TABLE currency_exchange_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    account_id UUID NOT NULL REFERENCES accounts(id),
+    account_id UUID NOT NULL,
     event_key VARCHAR(128) NOT NULL,
     from_currency_id VARCHAR(64) NOT NULL REFERENCES currency_definitions(id),
     to_currency_id VARCHAR(64) NOT NULL REFERENCES currency_definitions(id),
@@ -146,7 +146,7 @@ CREATE TABLE currency_exchange_events (
 );
 
 CREATE TABLE account_world_economy_unlocks (
-    account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    account_id UUID NOT NULL,
     world_id VARCHAR(64) NOT NULL,
     unlock_key VARCHAR(96) NOT NULL,
     unlocked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -161,7 +161,7 @@ VALUES
 ('human_gold', '金币', '金', 'fiat', 'qingyun_human', 'none', 1, FALSE, TRUE, TRUE, '人间界通用凡俗货币'),
 ('human_silver', '银币', '银', 'fiat', 'qingyun_human', 'none', 1, FALSE, TRUE, TRUE, '人间界常用辅币'),
 ('human_copper', '铜钱', '文', 'fiat', 'qingyun_human', 'none', 1, FALSE, TRUE, TRUE, '人间界日常小额货币'),
-('ghost_cash', '冥钱', '冥', 'fiat', 'underworld_fengdu', 'none', 1, FALSE, TRUE, TRUE, '幽冥界凡俗交易货币，不可直接用于修炼'),
+('ghost_cash', '冥币', '冥', 'fiat', 'underworld_fengdu', 'none', 1, FALSE, TRUE, TRUE, '幽冥界凡俗交易货币，不可直接用于修炼'),
 ('nether_stone', '冥石', '冥石', 'cultivation', 'underworld_fengdu', 'nether', 1, TRUE, TRUE, TRUE, '蕴含幽冥之气，可交易、修炼、炼器与布阵'),
 ('demon_coin', '魔币', '魔', 'fiat', 'myriad_demon', 'none', 1, FALSE, TRUE, TRUE, '魔界凡俗交易货币，不可直接用于修炼'),
 ('demon_stone', '魔石', '魔石', 'cultivation', 'myriad_demon', 'demonic', 1, TRUE, TRUE, TRUE, '蕴含魔气，可交易、修炼、炼器与布阵'),
