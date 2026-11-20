@@ -38,3 +38,21 @@ The outbox retains delivered and dead-letter rows for diagnosis; they do not cou
 ## Soul reward events
 
 The worker also delivers `soul_reward` events to the center service endpoint `POST /api/v1/servers/souls/rewards`. Payload fields are `session_id`, `character_id`, `experience`, and `source`; the outbox event UUID is the reward idempotency key. Fengdu monster defeats enqueue this event with 5 soul experience and source `underworld_trial:monster_hunt`. The center service validates the node and hosted session, then atomically updates permanent soul experience and the first Fengdu trial progress. The twentieth defeat completes the trial and grants its one-time 100 soul-experience bonus.
+
+
+## Bounty objective discovery contract
+
+The center service exposes an authenticated objective-discovery endpoint for the WorldServer that currently hosts a character:
+
+`GET /api/v1/servers/bounties/objectives?session_id=<uuid>&character_id=<uuid>`
+
+Required headers:
+
+- `X-World-Server-Key`: the configured shared server API key.
+- `X-World-Server-Node`: this node's registered `node_key`.
+
+The response contains only accepted objectives for that active character's current world and non-expired `in_progress` / `full` tasks. It does not expose other participants' progress. The lookup validates the live session, current character, world instance, and normal node state in one read-only database transaction.
+
+For monster objectives, the agreed mapping is that `objective_key` identifies the stable monster catalogue ID (for example, `wandering_wraith`), not the runtime spawn instance ID. A future WorldServer integration should refresh subscriptions on login/session change and enqueue one independently idempotent `monster_killed` event per matching task after authoritative death resolution. It must never construct events from client-supplied kill claims.
+
+**Current boundary:** this endpoint and contract are implemented in the center service; the WorldServer combat death paths have not yet been connected to it or to bounty-event delivery. Existing reward and soul-progression outbox events remain unchanged.
