@@ -32,6 +32,8 @@ type User struct {
  Username string `json:"username"`
  Email *string `json:"email,omitempty"`
  IsSuperAdmin bool `json:"is_super_admin"`
+ Status string `json:"status"`
+ LastLoginAt *time.Time `json:"last_login_at,omitempty"`
  Permissions []string `json:"permissions"`
 }
 
@@ -68,21 +70,24 @@ func (s *Service) Login(ctx context.Context,username,password,remote,agent strin
   return User{},"",time.Time{},ErrInvalidCredentials
  }
  if email.Valid { user.Email=&email.String }
+ user.Status = status
  token,tokenHash,expires,err:=newToken(s.sessionTTL); if err!=nil { return User{},"",time.Time{},err }
  tx,err:=s.db.BeginTx(ctx,nil); if err!=nil { return User{},"",time.Time{},err }; defer tx.Rollback()
  if _,err=tx.ExecContext(ctx,`INSERT INTO admin_sessions(user_id,token_hash,expires_at) VALUES($1,$2,$3)`,user.ID,tokenHash[:],expires); err!=nil { return User{},"",time.Time{},err }
  if _,err=tx.ExecContext(ctx,`UPDATE admin_users SET last_login_at=now(),updated_at=now() WHERE id=$1`,user.ID); err!=nil { return User{},"",time.Time{},err }
  if _,err=tx.ExecContext(ctx,`INSERT INTO admin_audit_logs(actor_user_id,action,resource_type,resource_id,result,details,remote_addr,user_agent) VALUES($1,'admin.login','admin_user',$2,'success','{}'::jsonb,NULLIF($3,'')::inet,$4)`,user.ID,user.ID,remote,agent); err!=nil { return User{},"",time.Time{},err }
  if err=tx.Commit(); err!=nil { return User{},"",time.Time{},err }
+ loggedInAt := time.Now().UTC()
+ user.LastLoginAt = &loggedInAt
  user,err=s.loadPermissions(ctx,user); if err!=nil { return User{},"",time.Time{},err }
  return user,token,expires,nil
 }
 
 func (s *Service) Authenticate(ctx context.Context,token string) (User,error) {
  if token=="" || len(token)>128 { return User{},ErrUnauthorized }
- sum:=sha256.Sum256([]byte(token)); var u User; var email sql.NullString
- err:=s.db.QueryRowContext(ctx,`SELECT u.id::text,u.username,u.email,u.is_super_admin FROM admin_sessions ss JOIN admin_users u ON u.id=ss.user_id WHERE ss.token_hash=$1 AND ss.expires_at>now() AND ss.revoked_at IS NULL AND u.status='active'`,sum[:]).Scan(&u.ID,&u.Username,&email,&u.IsSuperAdmin)
- if err!=nil { return User{},ErrUnauthorized }; if email.Valid { u.Email=&email.String }
+ sum:=sha256.Sum256([]byte(token)); var u User; var email sql.NullString; var lastLogin sql.NullTime
+ err:=s.db.QueryRowContext(ctx,`SELECT u.id::text,u.username,u.email,u.is_super_admin,u.status,u.last_login_at FROM admin_sessions ss JOIN admin_users u ON u.id=ss.user_id WHERE ss.token_hash=$1 AND ss.expires_at>now() AND ss.revoked_at IS NULL AND u.status='active'`,sum[:]).Scan(&u.ID,&u.Username,&email,&u.IsSuperAdmin,&u.Status,&lastLogin)
+ if err!=nil { return User{},ErrUnauthorized }; if email.Valid { u.Email=&email.String }; if lastLogin.Valid { value:=lastLogin.Time; u.LastLoginAt=&value }
  u,err=s.loadPermissions(ctx,u); if err!=nil { return User{},err }; return u,nil
 }
 
@@ -122,7 +127,8 @@ func (s *Service) CreateUser(ctx context.Context,actor User,username,email,passw
  hash,err:=bcrypt.GenerateFromPassword([]byte(password),bcrypt.DefaultCost); if err!=nil { return User{},err }
  tx,err:=s.db.BeginTx(ctx,nil); if err!=nil { return User{},fmt.Errorf("begin admin user creation: %w",err) }; defer tx.Rollback()
  var u User; var em sql.NullString
- err=tx.QueryRowContext(ctx,`INSERT INTO admin_users(username,email,password_hash,created_by) VALUES($1,NULLIF($2,''),$3,$4) RETURNING id::text,username,email,is_super_admin`,username,email,string(hash),actor.ID).Scan(&u.ID,&u.Username,&em,&u.IsSuperAdmin)
+ var lastLogin sql.NullTime
+ err=tx.QueryRowContext(ctx,`INSERT INTO admin_users(username,email,password_hash,created_by) VALUES($1,NULLIF($2,''),$3,$4) RETURNING id::text,username,email,is_super_admin,status,last_login_at`,username,email,string(hash),actor.ID).Scan(&u.ID,&u.Username,&em,&u.IsSuperAdmin,&u.Status,&lastLogin)
  if err!=nil { var pgErr *pgconn.PgError; if errors.As(err,&pgErr)&&pgErr.Code=="23505" { return User{},ErrConflict }; return User{},fmt.Errorf("insert admin user: %w",err) }
  if em.Valid { u.Email=&em.String }
  details,err:=json.Marshal(map[string]string{"username":u.Username})
@@ -178,7 +184,7 @@ func (s *Service) Dashboard(ctx context.Context) (Dashboard,error) {
 
 func (s *Service) ListUsers(ctx context.Context) ([]User,error) {
  rows,err:=s.db.QueryContext(ctx,`
-  SELECT u.id::text,u.username,u.email,u.is_super_admin,p.permission_key
+  SELECT u.id::text,u.username,u.email,u.is_super_admin,u.status,u.last_login_at,p.permission_key
   FROM admin_users u
   LEFT JOIN (
    SELECT user_id,permission_key FROM admin_user_permissions
@@ -195,12 +201,15 @@ func (s *Service) ListUsers(ctx context.Context) ([]User,error) {
   var id,username string
   var email sql.NullString
   var superAdmin bool
+  var status string
+  var lastLogin sql.NullTime
   var permission sql.NullString
-  if err:=rows.Scan(&id,&username,&email,&superAdmin,&permission);err!=nil{return nil,err}
+  if err:=rows.Scan(&id,&username,&email,&superAdmin,&status,&lastLogin,&permission);err!=nil{return nil,err}
   index,exists:=byUser[id]
   if !exists {
-   user:=User{ID:id,Username:username,IsSuperAdmin:superAdmin,Permissions:[]string{}}
+   user:=User{ID:id,Username:username,IsSuperAdmin:superAdmin,Status:status,Permissions:[]string{}}
    if email.Valid { user.Email=&email.String }
+   if lastLogin.Valid { value:=lastLogin.Time; user.LastLoginAt=&value }
    out=append(out,user)
    index=len(out)-1
    byUser[id]=index
