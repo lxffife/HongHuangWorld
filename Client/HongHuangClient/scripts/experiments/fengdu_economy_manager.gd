@@ -156,12 +156,16 @@ func publish_task(publisher_id: String, title: String, description: String, rewa
 	if balance < reward + fee:
 		return {"ok": false, "reason": "余额不足，需要 %d %s（悬赏 %d + 发布费 %d）。" % [reward + fee, CULTIVATION_CURRENCY_NAME if is_stone else FIAT_CURRENCY_NAME, reward, fee]}
 	balances[publisher_id] = balance - fee
-	if is_stone: _stone_treasury += fee
-	else: _treasury += fee
+	if is_stone:
+		_stone_treasury += fee
+	else:
+		_treasury += fee
 	_record_transaction("task_listing_fee", publisher_id, -fee, fee, 0, "发布公共委托手续费", currency_id)
 	balances[publisher_id] = int(balances.get(publisher_id, 0)) - reward
-	if is_stone: _stone_escrow_total += reward
-	else: _escrow_total += reward
+	if is_stone:
+		_stone_escrow_total += reward
+	else:
+		_escrow_total += reward
 	_record_transaction("task_escrow_lock", publisher_id, -reward, 0, reward, "公共委托悬赏托管", currency_id)
 	var task_id := "public_job_%06d" % _next_task_number
 	_next_task_number += 1
@@ -212,8 +216,12 @@ func complete_task(task_id: String, worker_id: String) -> Dictionary:
 	var tax := ceili(float(gross) * COMPLETION_TAX_RATE)
 	var payout := gross - tax
 	balances[worker_id] = int(balances.get(worker_id, 0)) + payout
-	if is_stone: _stone_treasury += tax; _stone_escrow_total = maxi(0, _stone_escrow_total - gross)
-	else: _treasury += tax; _escrow_total = maxi(0, _escrow_total - gross)
+	if is_stone:
+		_stone_treasury += tax
+		_stone_escrow_total = maxi(0, _stone_escrow_total - gross)
+	else:
+		_treasury += tax
+		_escrow_total = maxi(0, _escrow_total - gross)
 	_record_transaction("task_payout", worker_id, payout, tax, -gross, "完成公共委托：" + task_id, currency_id)
 	task["status"] = "completed"
 	task["tax_paid"] = tax
