@@ -2009,10 +2009,12 @@ struct EnetServer::Impl {
             auto closing = pending_consumable_closes.find(result.session_id);
             if (closing != pending_consumable_closes.end()) {
                 if (result.success) {
-                    closing->second.health = result.result.at("health").get<std::int64_t>();
-                    closing->second.max_health = result.result.at("max_health").get<std::int64_t>();
-                    closing->second.mana = result.result.at("mana").get<std::int64_t>();
-                    closing->second.max_mana = result.result.at("max_mana").get<std::int64_t>();
+                    const auto health_effect = result.result.value("health_effect", result.result.value("health_restored", 0));
+                    const auto mana_effect = result.result.value("mana_effect", result.result.value("mana_restored", 0));
+                    closing->second.health = honghuang::simulation::clamp_current_resource_to_maximum(
+                        closing->second.health + health_effect, closing->second.max_health);
+                    closing->second.mana = honghuang::simulation::clamp_current_resource_to_maximum(
+                        closing->second.mana + mana_effect, closing->second.max_mana);
                 }
                 std::string close_error;
                 if (!save_and_close_session(config, closing->second, close_error)) {
@@ -2030,16 +2032,20 @@ struct EnetServer::Impl {
                        {"request_id", result.request_id}, {"item_id", result.item_id}};
             if (result.success) {
                 auto& state = player->second;
-                state.health = result.result.at("health").get<std::int64_t>();
-                state.max_health = result.result.at("max_health").get<std::int64_t>();
-                state.mana = result.result.at("mana").get<std::int64_t>();
-                state.max_mana = result.result.at("max_mana").get<std::int64_t>();
+                const auto previous_health = state.health;
+                const auto previous_mana = state.mana;
+                const auto health_effect = result.result.value("health_effect", result.result.value("health_restored", 0));
+                const auto mana_effect = result.result.value("mana_effect", result.result.value("mana_restored", 0));
+                state.health = honghuang::simulation::clamp_current_resource_to_maximum(
+                    state.health + health_effect, state.max_health);
+                state.mana = honghuang::simulation::clamp_current_resource_to_maximum(
+                    state.mana + mana_effect, state.max_mana);
                 event["health"] = state.health;
                 event["max_health"] = state.max_health;
                 event["mana"] = state.mana;
                 event["max_mana"] = state.max_mana;
-                event["health_restored"] = result.result.value("health_restored", 0);
-                event["mana_restored"] = result.result.value("mana_restored", 0);
+                event["health_restored"] = state.health - previous_health;
+                event["mana_restored"] = state.mana - previous_mana;
                 event["applied"] = result.result.value("applied", true);
             } else {
                 event["reason"] = result.error;
