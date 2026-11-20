@@ -18,6 +18,8 @@ func TestValidDeltaRequest(t *testing.T) {
 		{"unknown entry type", "account-1", "nether_stone", "event-6", "mint", 1, false},
 		{"negative grant", "account-1", "nether_stone", "event-7", "grant", -1, false},
 		{"positive cultivation", "account-1", "nether_stone", "event-8", "cultivation", 1, false},
+		{"standalone escrow lock", "account-1", "nether_stone", "event-9", "escrow_lock", -5, false},
+		{"standalone exchange leg", "account-1", "nether_stone", "event-10", "exchange_out", -5, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
