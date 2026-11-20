@@ -183,6 +183,35 @@ func _add_quest_card(quest: Dictionary) -> void:
 	reward.add_theme_color_override("font_color", Color("#b99a68"))
 	column.add_child(reward)
 
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 8)
+	column.add_child(actions)
+	var status_value := str(quest.get("status", ""))
+	if status_value == "active" or status_value == "completed":
+		var track_button := Button.new()
+		track_button.text = "追踪此差事"
+		track_button.custom_minimum_size = Vector2(112.0, 32.0)
+		track_button.pressed.connect(_on_track_pressed.bind(str(quest.get("id", ""))))
+		actions.add_child(track_button)
+	if status_value == "active":
+		var abandon_button := Button.new()
+		abandon_button.text = "放弃差事"
+		abandon_button.custom_minimum_size = Vector2(100.0, 32.0)
+		abandon_button.pressed.connect(_on_abandon_pressed.bind(str(quest.get("id", ""))))
+		actions.add_child(abandon_button)
+
+
+func _on_track_pressed(quest_id: String) -> void:
+	if _manager != null:
+		_manager.call("track_quest", quest_id)
+
+
+func _on_abandon_pressed(quest_id: String) -> void:
+	if _manager != null:
+		_manager.call("abandon_quest", quest_id)
+
+
+
 
 func _status_text(status: String) -> String:
 	match status:
@@ -192,6 +221,10 @@ func _status_text(status: String) -> String:
 			return "进行中"
 		"completed":
 			return "已完成 · 待结算"
+		"failed":
+			return "已失败"
+		"abandoned":
+			return "已放弃"
 	return "未知"
 
 
