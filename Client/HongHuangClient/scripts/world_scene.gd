@@ -3,6 +3,7 @@ extends Node3D
 const UnderworldVisualFactory = preload("res://scripts/underworld_visual_factory.gd")
 const VisualModelLibrary = preload("res://scripts/visual_model_library.gd")
 const EquipmentVisualFactory = preload("res://scripts/equipment_visual_factory.gd")
+const HumanoidAnimationDriver = preload("res://scripts/humanoid_animation_driver.gd")
 const QingyunVisualFactory = preload("res://scripts/qingyun_visual_factory.gd")
 const FriendPanelScript = preload("res://scripts/friend_panel.gd")
 
@@ -2450,19 +2451,21 @@ func _process(delta: float) -> void:
 			var remote_humanoid := remote.get_node_or_null("RemoteHumanoid") as Node3D
 			if is_instance_valid(remote_humanoid):
 				remote_humanoid.position.y = bob
-				var remote_stride := sin(remote_time * (9.0 if remote_moving else 1.8)) * (0.38 if remote_moving else 0.012)
-				var remote_left_arm := remote_humanoid.get_node_or_null("ArmPivotLeft") as Node3D
-				var remote_right_arm := remote_humanoid.get_node_or_null("ArmPivotRight") as Node3D
-				var remote_left_leg := remote_humanoid.get_node_or_null("LegPivotLeft") as Node3D
-				var remote_right_leg := remote_humanoid.get_node_or_null("LegPivotRight") as Node3D
-				if is_instance_valid(remote_left_arm):
-					remote_left_arm.rotation.x = remote_stride
-				if is_instance_valid(remote_right_arm):
-					remote_right_arm.rotation.x = -remote_stride
-				if is_instance_valid(remote_left_leg):
-					remote_left_leg.rotation.x = -remote_stride * 0.82
-				if is_instance_valid(remote_right_leg):
-					remote_right_leg.rotation.x = remote_stride * 0.82
+				var native_animation := HumanoidAnimationDriver.apply_state(remote_humanoid, "walk" if remote_moving else "idle")
+				if not native_animation:
+					var remote_stride := sin(remote_time * (9.0 if remote_moving else 1.8)) * (0.38 if remote_moving else 0.012)
+					var remote_left_arm := remote_humanoid.get_node_or_null("ArmPivotLeft") as Node3D
+					var remote_right_arm := remote_humanoid.get_node_or_null("ArmPivotRight") as Node3D
+					var remote_left_leg := remote_humanoid.get_node_or_null("LegPivotLeft") as Node3D
+					var remote_right_leg := remote_humanoid.get_node_or_null("LegPivotRight") as Node3D
+					if is_instance_valid(remote_left_arm):
+						remote_left_arm.rotation.x = remote_stride
+					if is_instance_valid(remote_right_arm):
+						remote_right_arm.rotation.x = -remote_stride
+					if is_instance_valid(remote_left_leg):
+						remote_left_leg.rotation.x = -remote_stride * 0.82
+					if is_instance_valid(remote_right_leg):
+						remote_right_leg.rotation.x = remote_stride * 0.82
 		var remote_halo := remote.get_node_or_null("RemoteHalo") as MeshInstance3D
 		if is_instance_valid(remote_halo):
 			remote_halo.rotation.y += delta * (1.05 if remote_moving else 0.34)
