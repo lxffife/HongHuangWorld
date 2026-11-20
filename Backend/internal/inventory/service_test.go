@@ -105,13 +105,13 @@ func TestConsumableReplayReturnsCurrentResourcesWithoutApplyingAgain(t *testing.
 func TestItemUseResultSerializesAuthoritativeResources(t *testing.T) {
 	result := ItemUseResult{
 		Applied: true, ItemID: "small_mana_pill", Quantity: 1,
-		ManaRestored: 20, Mana: 40, MaxMana: 60,
+		ManaRestored: 20, ManaEffect: 25, HealthEffect: 15, Mana: 40, MaxMana: 60,
 	}
 	encoded, err := json.Marshal(result)
 	if err != nil { t.Fatalf("marshal item use result: %v", err) }
 	var decoded map[string]any
 	if err := json.Unmarshal(encoded, &decoded); err != nil { t.Fatalf("unmarshal item use result: %v", err) }
-	if decoded["mana_restored"] != float64(20) || decoded["mana"] != float64(40) || decoded["max_mana"] != float64(60) {
+	if decoded["mana_restored"] != float64(20) || decoded["mana_effect"] != float64(25) || decoded["health_effect"] != float64(15) || decoded["mana"] != float64(40) || decoded["max_mana"] != float64(60) {
 		t.Fatalf("resource fields = restored:%v mana:%v max:%v", decoded["mana_restored"], decoded["mana"], decoded["max_mana"])
 	}
 }
