@@ -40,7 +40,9 @@ CREATE TABLE bounty_task_events (
     session_id UUID NOT NULL REFERENCES world_sessions(id),
     node_key VARCHAR(96) NOT NULL,
     objective_key VARCHAR(64) NOT NULL,
-    event_type VARCHAR(32) NOT NULL,
+    event_type VARCHAR(32) NOT NULL CHECK (event_type IN (
+        'monster_killed','exploration_discovered','escort_checkpoint','item_collected'
+    )),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     FOREIGN KEY (task_id, account_id)
         REFERENCES bounty_task_participants(task_id, account_id),
