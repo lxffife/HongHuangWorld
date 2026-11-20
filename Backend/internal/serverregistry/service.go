@@ -39,6 +39,12 @@ type Service struct {
 	db *sql.DB
 }
 
+type NodeStateChange struct {
+	PreviousState string
+	AdminState string
+	RemainingSessions int64
+}
+
 func NewService(db *sql.DB) *Service {
 	return &Service{db: db}
 }
@@ -91,15 +97,15 @@ func (s *Service) ListNodes(ctx context.Context) ([]Node, error) {
 	return nodes, nil
 }
 
-func (s *Service) SetAdminState(ctx context.Context, nodeKey, state string) (int64, error) {
+func (s *Service) SetAdminState(ctx context.Context, nodeKey, state string) (NodeStateChange, error) {
 	nodeKey = strings.TrimSpace(nodeKey)
-	if nodeKey == "" || len(nodeKey) > 96 || (state != "normal" && state != "draining" && state != "disabled") { return 0, ErrInvalidNodeState }
+	if nodeKey == "" || len(nodeKey) > 96 || (state != "normal" && state != "draining" && state != "disabled") { return NodeStateChange{}, ErrInvalidNodeState }
 	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil { return 0, fmt.Errorf("begin world server node control: %w", err) }
+	if err != nil { return NodeStateChange{}, fmt.Errorf("begin world server node control: %w", err) }
 	defer tx.Rollback()
-	var serverID string
-	if err := tx.QueryRowContext(ctx, `SELECT id::text FROM server_registry WHERE node_key = $1 FOR UPDATE`, nodeKey).Scan(&serverID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) { return 0, ErrNodeNotFound }
+	var serverID, previousState string
+	if err := tx.QueryRowContext(ctx, `SELECT id::text, admin_state FROM server_registry WHERE node_key = $1 FOR UPDATE`, nodeKey).Scan(&serverID, &previousState); err != nil {
+		if errors.Is(err, sql.ErrNoRows) { return NodeStateChange{}, ErrNodeNotFound }
 		return 0, fmt.Errorf("load world server node: %w", err)
 	}
 	// Disabling is only safe after the node has drained naturally. Never
@@ -109,7 +115,7 @@ func (s *Service) SetAdminState(ctx context.Context, nodeKey, state string) (int
 		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM world_sessions WHERE server_id = $1::uuid AND session_state IN ('connecting','active','saving')`, serverID).Scan(&remaining); err != nil {
 			return 0, fmt.Errorf("count node sessions before disable: %w", err)
 		}
-		if remaining > 0 { return remaining, ErrNodeHasSessions }
+		if remaining > 0 { return NodeStateChange{PreviousState: previousState, AdminState: state, RemainingSessions: remaining}, ErrNodeHasSessions }
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE server_registry SET admin_state = $2, updated_at = now() WHERE id = $1::uuid`, serverID, state); err != nil { return 0, fmt.Errorf("update world server node state: %w", err) }
 	instanceStatus := "offline"
@@ -120,7 +126,7 @@ func (s *Service) SetAdminState(ctx context.Context, nodeKey, state string) (int
 		if _, err := tx.ExecContext(ctx, `UPDATE world_instances SET status = $2, updated_at = now() WHERE server_id = $1::uuid`, serverID, instanceStatus); err != nil { return 0, fmt.Errorf("update world server instances: %w", err) }
 	}
 	if err := tx.Commit(); err != nil { return 0, fmt.Errorf("commit world server node state: %w", err) }
-	return 0, nil
+	return NodeStateChange{PreviousState: previousState, AdminState: state}, nil
 }
 
 func (s *Service) Heartbeat(ctx context.Context, input Heartbeat) (Result, error) {
