@@ -41,6 +41,8 @@ func _ready() -> void:
 	_build_wall_defenses()
 	_build_gate_signs()
 	_build_patrol_guards()
+	_build_citizens()
+	_build_street_furniture()
 	_build_landmark_silhouette()
 	_build_player()
 	_build_hud()
@@ -250,6 +252,44 @@ func _build_patrol_guards() -> void:
 		module.call("configure", guard_data)
 		module.position = guard_data["position"]
 		add_child(module)
+
+
+func _build_citizens() -> void:
+	var citizens := [
+		{"name": "鬼市灵材商", "role": "鬼市商贩", "position": Vector3(475.0, 0.0, 445.0)},
+		{"name": "鬼市法器商", "role": "鬼市商贩", "position": Vector3(475.0, 0.0, 515.0)},
+		{"name": "鬼市情报贩", "role": "鬼市商贩", "position": Vector3(475.0, 0.0, 585.0)},
+		{"name": "魂坊居民", "role": "坊民", "position": Vector3(-475.0, 0.0, 455.0)},
+		{"name": "魂坊工匠", "role": "坊民", "position": Vector3(-475.0, 0.0, 545.0)},
+		{"name": "魂坊引路人", "role": "坊民", "position": Vector3(-475.0, 0.0, 625.0)},
+		{"name": "鬼籍登记书吏", "role": "鬼籍书吏", "position": Vector3(-475.0, 0.0, 250.0)},
+		{"name": "功过司文吏", "role": "判官文吏", "position": Vector3(475.0, 0.0, 250.0)},
+		{"name": "巡城司值守", "role": "判官文吏", "position": Vector3(155.0, 0.0, 245.0)},
+		{"name": "引魂驿接引使", "role": "引魂使", "position": Vector3(762.0, 0.0, 95.0)},
+		{"name": "十王府案牍吏", "role": "判官文吏", "position": Vector3(-475.0, 0.0, -115.0)},
+		{"name": "判官司执事", "role": "判官文吏", "position": Vector3(475.0, 0.0, -115.0)},
+		{"name": "轮回司引路使", "role": "引魂使", "position": Vector3(380.0, 0.0, 500.0)}
+	]
+	for index in range(citizens.size()):
+		var citizen_data: Dictionary = citizens[index]
+		citizen_data["module_kind"] = "citizen"
+		_spawn_city_module(citizen_data, citizen_data["position"]).name = "Citizen_%02d" % index
+
+
+func _build_street_furniture() -> void:
+	for side in [-1.0, 1.0]:
+		for index in range(5):
+			var z := -70.0 + float(index) * 110.0
+			var post_position := Vector3(side * 278.0, 4.5, z)
+			_add_box("InnerStreetLampPost_%s_%d" % [side, index], Vector3(2.4, 9.0, 2.4), post_position, "stone", true)
+			_add_box("InnerStreetLampGlow_%s_%d" % [side, index], Vector3(3.2, 3.2, 3.2), post_position + Vector3.UP * 5.6, "lantern", false)
+	for index in range(8):
+		var x := -770.0 + float(index) * 220.0
+		for side in [-1.0, 1.0]:
+			var p := Vector3(x, 4.5, side * 42.0)
+			_add_box("CrossAvenueLampPost_%d_%s" % [index, side], Vector3(2.2, 9.0, 2.2), p, "stone", true)
+			_add_box("CrossAvenueLampGlow_%d_%s" % [index, side], Vector3(3.0, 3.0, 3.0), p + Vector3.UP * 5.6, "lantern", false)
+	_add_box("CentralAvenuePlaza", Vector3(110.0, 0.5, 110.0), Vector3(0.0, 0.3, 0.0), "road_edge", false)
 
 
 func _on_district_entered(data: Dictionary) -> void:
