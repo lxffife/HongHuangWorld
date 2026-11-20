@@ -177,17 +177,37 @@ func (s *Service) Dashboard(ctx context.Context) (Dashboard,error) {
 }
 
 func (s *Service) ListUsers(ctx context.Context) ([]User,error) {
- rows,err:=s.db.QueryContext(ctx,`SELECT id::text,username,email,is_super_admin FROM admin_users ORDER BY created_at DESC`)
+ rows,err:=s.db.QueryContext(ctx,`
+  SELECT u.id::text,u.username,u.email,u.is_super_admin,p.permission_key
+  FROM admin_users u
+  LEFT JOIN (
+   SELECT user_id,permission_key FROM admin_user_permissions
+   UNION
+   SELECT ur.user_id,rp.permission_key
+   FROM admin_user_roles ur JOIN admin_role_permissions rp ON rp.role_id=ur.role_id
+  ) p ON p.user_id=u.id
+  ORDER BY u.created_at DESC,p.permission_key`)
  if err!=nil{return nil,err}
+ defer rows.Close()
  out:=[]User{}
- for rows.Next(){var u User;var e sql.NullString;if err:=rows.Scan(&u.ID,&u.Username,&e,&u.IsSuperAdmin);err!=nil{rows.Close();return nil,err};if e.Valid{u.Email=&e.String};u.Permissions=[]string{};out=append(out,u)}
- if err:=rows.Err();err!=nil{rows.Close();return nil,err};rows.Close()
- grants,err:=s.db.QueryContext(ctx,`SELECT user_id::text,permission_key FROM admin_user_permissions ORDER BY permission_key`)
- if err!=nil{return nil,err};defer grants.Close()
- byUser:=map[string][]string{}
- for grants.Next(){var id,key string;if err:=grants.Scan(&id,&key);err!=nil{return nil,err};byUser[id]=append(byUser[id],key)}
- if err:=grants.Err();err!=nil{return nil,err}
- for i:=range out{out[i].Permissions=byUser[out[i].ID]}
+ byUser:=map[string]int{}
+ for rows.Next(){
+  var id,username string
+  var email sql.NullString
+  var superAdmin bool
+  var permission sql.NullString
+  if err:=rows.Scan(&id,&username,&email,&superAdmin,&permission);err!=nil{return nil,err}
+  index,exists:=byUser[id]
+  if !exists {
+   user:=User{ID:id,Username:username,IsSuperAdmin:superAdmin,Permissions:[]string{}}
+   if email.Valid { user.Email=&email.String }
+   out=append(out,user)
+   index=len(out)-1
+   byUser[id]=index
+  }
+  if permission.Valid { out[index].Permissions=append(out[index].Permissions,permission.String) }
+ }
+ if err:=rows.Err();err!=nil{return nil,err}
  return out,nil
 }
 
