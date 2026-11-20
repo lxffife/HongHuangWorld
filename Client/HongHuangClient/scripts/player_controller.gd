@@ -562,11 +562,27 @@ func _process(delta: float) -> void:
 			var right_arm := player_humanoid.get_node_or_null("ArmPivotRight") as Node3D
 			var left_leg := player_humanoid.get_node_or_null("LegPivotLeft") as Node3D
 			var right_leg := player_humanoid.get_node_or_null("LegPivotRight") as Node3D
+			var left_attack_lift := 0.20
+			var right_attack_lift := 1.18
+			var attack_sweep := 0.28
+			match attack_animation_style:
+				"spear_thrust":
+					left_attack_lift = 0.38
+					right_attack_lift = 0.92
+					attack_sweep = 0.04
+				"staff_cast":
+					left_attack_lift = 0.72
+					right_attack_lift = 0.82
+					attack_sweep = -0.12
+				"ranged_shot":
+					left_attack_lift = 0.58
+					right_attack_lift = 1.02
+					attack_sweep = -0.08
 			if is_instance_valid(left_arm):
-				left_arm.rotation.x = (swing if moving else sin(humanoid_animation_time * 1.1) * 0.018) - attack_weight * 0.20
+				left_arm.rotation.x = (swing if moving else sin(humanoid_animation_time * 1.1) * 0.018) - attack_weight * left_attack_lift
 			if is_instance_valid(right_arm):
-				right_arm.rotation.x = (-swing if moving else sin(humanoid_animation_time * 1.1 + 0.5) * 0.018) - attack_weight * 1.18 + hit_weight * 0.48
-				right_arm.rotation.z = -attack_weight * 0.28 + hit_weight * 0.16
+				right_arm.rotation.x = (-swing if moving else sin(humanoid_animation_time * 1.1 + 0.5) * 0.018) - attack_weight * right_attack_lift + hit_weight * 0.48
+				right_arm.rotation.z = -attack_weight * attack_sweep + hit_weight * 0.16
 			if is_instance_valid(left_leg):
 				left_leg.rotation.x = -swing * 0.82
 			if is_instance_valid(right_leg):
