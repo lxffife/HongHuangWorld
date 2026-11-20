@@ -178,9 +178,8 @@ func publish_task(publisher_id: String, title: String, description: String, rewa
 	var resolved_realm := required_realm_level if required_realm_level >= 0 else (1 if is_stone else 0)
 	if resolved_realm < 0 or resolved_realm > 10:
 		return {"ok": false, "reason": "最低境界等级必须在 0 至 10 之间。"}
-	var valid_publishers := ["player", "sect", "city_government", "official_agency"]
-	if not valid_publishers.has(publisher_type):
-		return {"ok": false, "reason": "发布者身份类型无效。"}
+	if publisher_type != "player":
+		return {"ok": false, "reason": "本地公开委托只能由个人发布；宗门、城主府和官署任务必须通过服务端势力权限发布。"}
 	if not is_stone and resolved_realm > 0:
 		return {"ok": false, "reason": "凡俗事务市场不能设置修炼境界门槛。"}
 	var fee := get_listing_fee(reward, currency_id)
