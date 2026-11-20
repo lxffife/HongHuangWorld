@@ -99,6 +99,7 @@ struct PlayerState {
     Clock::time_point last_attack_at{};
     Clock::time_point last_mana_regen_at{Clock::now()};
     Clock::time_point last_combat_at{};
+    bool mana_regen_was_in_combat{false};
     std::unordered_map<std::string, Clock::time_point> last_spell_at_by_id;
     std::optional<PendingSpellCast> pending_spell;
     Clock::time_point last_pickup_at{};
@@ -2639,6 +2640,10 @@ struct EnetServer::Impl {
                 const auto regen_interval_ms = honghuang::simulation::mana_regeneration_interval_ms(
                     in_combat, static_cast<std::int32_t>(kManaRegenerationInterval.count()),
                     static_cast<std::int32_t>(kCombatManaRegenerationInterval.count()));
+                if (in_combat != player.mana_regen_was_in_combat) {
+                    player.mana_regen_was_in_combat = in_combat;
+                    player.last_mana_regen_at = now;
+                }
                 const auto regen_elapsed_ms =
                     std::chrono::duration_cast<std::chrono::milliseconds>(
                         now - player.last_mana_regen_at).count();
