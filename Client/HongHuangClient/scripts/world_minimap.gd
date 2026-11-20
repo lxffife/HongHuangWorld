@@ -37,29 +37,29 @@ func _draw() -> void:
 	draw_arc(center, radius, 0.0, TAU, 48, Color("#526a7c", 0.9), 1.2, true)
 	draw_line(Vector2(center.x, center.y - radius), Vector2(center.x, center.y + radius), Color("#354b5c", 0.65), 1.0)
 	draw_line(Vector2(center.x - radius, center.y), Vector2(center.x + radius, center.y), Color("#354b5c", 0.65), 1.0)
-	for item in exploration_points:
-		if not item is Dictionary:
+	for exploration_item in exploration_points:
+		if not exploration_item is Dictionary:
 			continue
-		var point: Dictionary = item
-		var p := _map_point(float(point.get("position_x", 0.0)), float(point.get("position_z", 0.0)), center, radius)
-		if not Rect2(center - Vector2(radius, radius), Vector2(radius * 2.0, radius * 2.0)).has_point(p):
+		var point: Dictionary = exploration_item
+		var exploration_pos := _map_point(float(point.get("position_x", 0.0)), float(point.get("position_z", 0.0)), center, radius)
+		if not Rect2(center - Vector2(radius, radius), Vector2(radius * 2.0, radius * 2.0)).has_point(exploration_pos):
 			continue
 		var discovered := bool(point.get("discovered", false))
-		draw_circle(p, 3.0, Color("#8b9aa7") if discovered else Color("#e4b967"))
-	for item in npc_points:
-		if not item is Dictionary:
+		draw_circle(exploration_pos, 3.0, Color("#8b9aa7") if discovered else Color("#e4b967"))
+	for npc_item in npc_points:
+		if not npc_item is Dictionary:
 			continue
-		var npc: Dictionary = item
-		var p := _map_point(float(npc.get("position_x", 0.0)), float(npc.get("position_z", 0.0)), center, radius)
-		if Rect2(center - Vector2(radius, radius), Vector2(radius * 2.0, radius * 2.0)).has_point(p):
-			draw_circle(p, 3.5, Color("#63d6c5"))
-	for item in monster_points:
-		if not item is Dictionary:
+		var npc: Dictionary = npc_item
+		var npc_pos := _map_point(float(npc.get("position_x", 0.0)), float(npc.get("position_z", 0.0)), center, radius)
+		if Rect2(center - Vector2(radius, radius), Vector2(radius * 2.0, radius * 2.0)).has_point(npc_pos):
+			draw_circle(npc_pos, 3.5, Color("#63d6c5"))
+	for monster_item in monster_points:
+		if not monster_item is Dictionary:
 			continue
-		var monster: Dictionary = item
-		var p := _map_point(float(monster.get("x", 0.0)), float(monster.get("z", 0.0)), center, radius)
-		if Rect2(center - Vector2(radius, radius), Vector2(radius * 2.0, radius * 2.0)).has_point(p):
-			draw_circle(p, 3.0, Color("#e16c6c"))
+		var monster: Dictionary = monster_item
+		var monster_pos := _map_point(float(monster.get("x", 0.0)), float(monster.get("z", 0.0)), center, radius)
+		if Rect2(center - Vector2(radius, radius), Vector2(radius * 2.0, radius * 2.0)).has_point(monster_pos):
+			draw_circle(monster_pos, 3.0, Color("#e16c6c"))
 	var player_triangle := PackedVector2Array([
 		center + Vector2(0.0, -8.0).rotated(-player_yaw),
 		center + Vector2(-6.0, 6.0).rotated(-player_yaw),
