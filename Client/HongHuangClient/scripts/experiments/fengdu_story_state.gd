@@ -46,7 +46,7 @@ func get_choices_for_npc(npc_id: String, quest_manager: Node) -> Array[Dictionar
 	if npc_id != "white_impermanence" or quest_manager == null:
 		return result
 	var quest: Dictionary = quest_manager.call("get_quest", "white_soul_registration")
-	if str(quest.get("status", "")) != "completed" or not get_choice("new_soul_registration"):
+	if str(quest.get("status", "")) == "completed" and get_choice("new_soul_registration").is_empty():
 		if str(quest.get("status", "")) == "completed":
 			result.append({
 				"id": "register_by_the_book",
