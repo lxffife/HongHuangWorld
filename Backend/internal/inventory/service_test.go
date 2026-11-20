@@ -116,6 +116,21 @@ func TestItemUseResultSerializesAuthoritativeResources(t *testing.T) {
 	}
 }
 
+func TestCombatStatsSerializesAuthoritativeMovementSpeed(t *testing.T) {
+	stats := CombatStats{MovementSpeed: 5.75}
+	encoded, err := json.Marshal(stats)
+	if err != nil {
+		t.Fatalf("marshal combat stats: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("unmarshal combat stats: %v", err)
+	}
+	if decoded["movement_speed"] != 5.75 {
+		t.Fatalf("movement_speed = %v, want 5.75", decoded["movement_speed"])
+	}
+}
+
 func TestCombatStatsSerializesCurrentAndMaximumMana(t *testing.T) {
 	stats := CombatStats{Health: 80, MaxHealth: 100, Mana: 12, MaxMana: 40}
 	encoded, err := json.Marshal(stats)
