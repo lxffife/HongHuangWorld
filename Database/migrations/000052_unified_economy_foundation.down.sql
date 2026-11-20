@@ -1,0 +1,12 @@
+BEGIN;
+DROP TABLE IF EXISTS account_world_economy_unlocks;
+DROP TABLE IF EXISTS currency_exchange_events;
+DROP TABLE IF EXISTS currency_market_quotes;
+DROP TABLE IF EXISTS currency_exchange_reserves;
+DROP TABLE IF EXISTS currency_exchange_pairs;
+DROP TABLE IF EXISTS economy_escrows;
+DROP TABLE IF EXISTS economy_ledger_entries;
+DROP TABLE IF EXISTS currency_balances;
+DROP TABLE IF EXISTS currency_world_rules;
+DROP TABLE IF EXISTS currency_definitions;
+COMMIT;
