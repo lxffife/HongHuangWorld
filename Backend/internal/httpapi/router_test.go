@@ -244,3 +244,24 @@ func TestServerMonsterSpawnConfigUnavailableWithoutDatabase(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, res.Code)
 	}
 }
+
+
+func TestFactionEndpointsUnavailableWithoutDatabase(t *testing.T) {
+	handler := NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	for _, route := range []struct{ method, path string }{
+		{http.MethodPost, "/api/v1/factions"},
+		{http.MethodGet, "/api/v1/factions/mine"},
+		{http.MethodPost, "/api/v1/factions/00000000-0000-4000-8000-000000000001/applications"},
+		{http.MethodGet, "/api/v1/factions/00000000-0000-4000-8000-000000000001/applications"},
+		{http.MethodPost, "/api/v1/factions/00000000-0000-4000-8000-000000000001/applications/00000000-0000-4000-8000-000000000002/review"},
+	} {
+		t.Run(route.method+" "+route.path, func(t *testing.T) {
+			req := httptest.NewRequest(route.method, route.path, strings.NewReader("{}"))
+			res := httptest.NewRecorder()
+			handler.ServeHTTP(res, req)
+			if res.Code != http.StatusServiceUnavailable {
+				t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, res.Code)
+			}
+		})
+	}
+}
