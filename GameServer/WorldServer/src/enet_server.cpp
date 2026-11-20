@@ -1431,6 +1431,24 @@ struct EnetServer::Impl {
         }
     }
 
+    void broadcast_player_action_event(const PlayerState& player,
+                                       const std::string& action,
+                                       const std::string& target_entity_id = {},
+                                       const std::string& attack_style = {},
+                                       ENetPeer* excluded_peer = nullptr) {
+        const Json event{
+            {"character_id", player.character_id},
+            {"action", action},
+            {"target_entity_id", target_entity_id},
+            {"attack_style", attack_style}
+        };
+        for (const auto& [peer, recipient] : players) {
+            (void)recipient;
+            if (peer == excluded_peer) continue;
+            send_json(peer, honghuang::protocol::MessageType::PlayerActionEvent, event);
+        }
+    }
+
     void stop_persistence_worker() {
         {
             std::lock_guard lock(persistence_mutex);
@@ -1988,6 +2006,7 @@ struct EnetServer::Impl {
                       Json{{"accepted", false}, {"reason", "距离目标太远。"}});
             return;
         }
+        broadcast_player_action_event(player, "attack", target->runtime_id, "melee", peer);
         const honghuang::simulation::CombatantStats attacker{player.attack, player.defense, 100, 100};
         const honghuang::simulation::CombatantStats defender{
             static_cast<std::int64_t>(target->definition.attack),
@@ -2335,6 +2354,7 @@ struct EnetServer::Impl {
                         continue;
                     }
                     target_player.health = damage.remaining_health;
+                    broadcast_player_action_event(target_player, "hit", monster.runtime_id, "heavy_slam", target_peer);
                     send_json(target_peer, honghuang::protocol::MessageType::CombatEvent,
                               Json{{"accepted", true}, {"source", "monster"},
                                    {"source_entity_id", monster.runtime_id},
@@ -2357,6 +2377,7 @@ struct EnetServer::Impl {
                     continue;
                 }
                 player.health = damage.remaining_health;
+                broadcast_player_action_event(player, "hit", monster.runtime_id, attack_profile.style, victim->first);
                 send_json(victim->first, honghuang::protocol::MessageType::CombatEvent,
                           Json{{"accepted", true}, {"source", "monster"},
                                {"source_entity_id", monster.runtime_id},
