@@ -91,25 +91,6 @@ CREATE TABLE currency_cultivation_costs (
     PRIMARY KEY (action_key, currency_id)
 );
 
-INSERT INTO currency_cultivation_affinities (currency_id, target_tag, efficiency_bp)
-VALUES
-('spirit_stone', 'all', 10000),
-('nether_stone', 'all', 5000),
-('nether_stone', 'race:ghost', 10000),
-('demon_stone', 'all', 4000),
-('demon_stone', 'race:demon', 10000),
-('monster_stone', 'all', 5000),
-('monster_stone', 'race:monster', 10000),
-('immortal_crystal', 'all', 8000),
-('immortal_crystal', 'realm:immortal', 10000),
-('buddhist_crystal', 'all', 5000),
-('buddhist_crystal', 'path:buddhist', 10000),
-('dragon_crystal', 'all', 5000),
-('dragon_crystal', 'race:dragon', 10000),
-('witch_crystal', 'all', 5000),
-('witch_crystal', 'race:witch', 10000)
-ON CONFLICT (currency_id, target_tag) DO NOTHING;
-
 CREATE TABLE currency_exchange_pairs (
     from_currency_id VARCHAR(64) NOT NULL REFERENCES currency_definitions(id),
     to_currency_id VARCHAR(64) NOT NULL REFERENCES currency_definitions(id),
@@ -196,6 +177,27 @@ VALUES
 ('heavenly_rule_shard', '天道碎晶', '道碎', 'origin', NULL, 'heavenly_rule', 7, TRUE, FALSE, FALSE, '蕴含规则碎片的稀有战略资源'),
 ('chaos_origin_crystal', '混沌源晶', '混沌', 'origin', NULL, 'chaos', 9, TRUE, FALSE, FALSE, '蕴含混沌本源的极稀有战略资源')
 ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO currency_cultivation_affinities (currency_id, target_tag, efficiency_bp)
+VALUES
+('spirit_stone', 'all', 10000),
+('nether_stone', 'all', 5000),
+('nether_stone', 'race:ghost', 10000),
+('demon_stone', 'all', 4000),
+('demon_stone', 'race:demon', 10000),
+('monster_stone', 'all', 5000),
+('monster_stone', 'race:monster', 10000),
+('immortal_crystal', 'all', 8000),
+('immortal_crystal', 'realm:immortal', 10000),
+('buddhist_crystal', 'all', 5000),
+('buddhist_crystal', 'path:buddhist', 10000),
+('dragon_crystal', 'all', 5000),
+('dragon_crystal', 'race:dragon', 10000),
+('witch_crystal', 'all', 5000),
+('witch_crystal', 'race:witch', 10000)
+ON CONFLICT (currency_id, target_tag) DO NOTHING;
+
+
 
 INSERT INTO currency_world_rules (world_id, currency_id, is_primary, unlock_key)
 VALUES
