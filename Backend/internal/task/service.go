@@ -582,6 +582,54 @@ func (s *Service) GetProgress(ctx context.Context,accountID,taskID string)(Parti
  return result,nil
 }
 
+type ObjectiveSubscription struct {
+ TaskID string `json:"task_id"`
+ ObjectiveKey string `json:"objective_key"`
+ EventType string `json:"event_type"`
+}
+
+// ListActiveObjectives returns only objectives belonging to the authenticated
+// character's accepted, active bounty tasks on the node that hosts its session.
+func (s *Service) ListActiveObjectives(ctx context.Context, nodeKey, sessionID, characterID string) ([]ObjectiveSubscription, error) {
+ if strings.TrimSpace(nodeKey)=="" || len(nodeKey)>96 || !validUUID(sessionID) || !validUUID(characterID) {
+  return nil, ErrInvalidWorldEvent
+ }
+ sessionID=strings.ToLower(sessionID)
+ characterID=strings.ToLower(characterID)
+ var accountID, worldID string
+ err:=s.db.QueryRowContext(ctx,`SELECT soul.account_id::text,c.world_id
+  FROM world_sessions ws
+  JOIN server_registry node ON node.id=ws.server_id
+  JOIN world_instances instance ON instance.id=ws.instance_id
+  JOIN characters c ON c.id=ws.character_id
+  JOIN souls soul ON soul.id=c.soul_id
+  WHERE ws.id=$1::uuid AND ws.character_id=$2::uuid AND node.node_key=$3
+   AND ws.session_state='active' AND node.admin_state='normal'
+   AND c.status='alive' AND soul.current_character_id=c.id
+   AND c.world_id=instance.world_id
+  FOR SHARE OF ws,c,soul`,sessionID,characterID,nodeKey).Scan(&accountID,&worldID)
+ if errors.Is(err,sql.ErrNoRows) { return nil,ErrWorldEventSession }
+ if err!=nil { return nil,fmt.Errorf("resolve active bounty objective session: %w",err) }
+ rows,err:=s.db.QueryContext(ctx,`SELECT t.id::text,o.objective_key,o.event_type
+  FROM bounty_tasks t
+  JOIN bounty_task_participants p ON p.task_id=t.id
+  JOIN bounty_task_objectives o ON o.task_id=t.id
+  WHERE p.account_id=$1::uuid AND p.status='accepted'
+   AND t.world_id=$2 AND t.status IN ('in_progress','full')
+   AND (t.expires_at IS NULL OR t.expires_at>now())
+  ORDER BY t.id,o.objective_key`,accountID,worldID)
+ if err!=nil { return nil,fmt.Errorf("list active bounty objectives: %w",err) }
+ defer rows.Close()
+ result:=make([]ObjectiveSubscription,0)
+ for rows.Next() {
+  var item ObjectiveSubscription
+  if err:=rows.Scan(&item.TaskID,&item.ObjectiveKey,&item.EventType);err!=nil { return nil,fmt.Errorf("scan active bounty objective: %w",err) }
+  result=append(result,item)
+ }
+ if err:=rows.Err();err!=nil { return nil,fmt.Errorf("iterate active bounty objectives: %w",err) }
+ return result,nil
+}
+
 // ApplyWorldEvent accepts one unit of progress from the authenticated node that
 // currently hosts the character. Account identity and progress increments are
 // derived by the center service; callers cannot submit either value.
