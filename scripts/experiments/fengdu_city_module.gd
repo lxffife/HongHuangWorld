@@ -15,6 +15,8 @@ var _route_origin := Vector3.ZERO
 var _route_points: Array[Vector3] = []
 var _route_index := 0
 var _route_speed := 2.8
+var _official_robe: MeshInstance3D
+var _official_time := 0.0
 
 
 func configure(data: Dictionary) -> void:
@@ -53,6 +55,9 @@ func _process(delta: float) -> void:
 	if module_kind == "citizen" and _citizen_body != null:
 		_citizen_time += delta
 		_citizen_body.position.y = 1.0 + sin(_citizen_time * 1.6) * 0.035
+	if module_kind == "special_character" and _official_robe != null:
+		_official_time += delta
+		_official_robe.position.y = 1.52 + sin(_official_time * 1.8) * 0.025
 
 
 func _advance_route(delta: float) -> void:
@@ -499,6 +504,7 @@ func _build_special_character() -> void:
 	robe.position.y = 1.52
 	robe.material_override = robe_material
 	add_child(robe)
+	_official_robe = robe
 	_add_character_box("RobeFrontPanel", Vector3(0.72, 1.85, 0.12), Vector3(0.0, 1.52, -0.55), trim_material)
 	_add_character_box("ShoulderMantle", Vector3(1.62, 0.34, 0.78), Vector3(0.0, 2.52, 0.0), robe_material)
 
@@ -574,6 +580,15 @@ func _build_special_character() -> void:
 	title.no_depth_test = true
 	title.modulate = Color("#f1dfc1")
 	add_child(title)
+	var status_label := Label3D.new()
+	status_label.name = "OfficialStatus"
+	status_label.text = str(module_data.get("status_text", "巡守中"))
+	status_label.position = Vector3(0.0, 4.72, 0.0)
+	status_label.font_size = 18
+	status_label.pixel_size = 0.014
+	status_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	status_label.modulate = Color("#a9c6c2")
+	add_child(status_label)
 	_build_character_interaction_zone()
 
 
