@@ -10,6 +10,7 @@ signal player_joined(player: Dictionary)
 signal player_left(character_id: String)
 signal combat_event(event: Dictionary)
 signal monster_action_event(event: Dictionary)
+signal player_action_event(event: Dictionary)
 signal pickup_event(event: Dictionary)
 signal chat_event(event: Dictionary)
 
@@ -208,6 +209,14 @@ func _on_frame_received(bytes: PackedByteArray) -> void:
 				combat_event.emit(combat)
 			else:
 				rejected.emit("收到无效的 CombatEvent。")
+		HHProtocolCodec.MessageType.PLAYER_ACTION_EVENT:
+			var player_action: Variant = JSON.parse_string(payload.get_string_from_utf8())
+			var character_id := str(player_action.get("character_id", "")) if player_action is Dictionary else ""
+			var action := str(player_action.get("action", "")) if player_action is Dictionary else ""
+			if player_action is Dictionary and not character_id.is_empty() and character_id.length() <= 96 and action in ["attack", "hit"]:
+				player_action_event.emit(player_action)
+			else:
+				rejected.emit("收到无效的 PlayerActionEvent。")
 		HHProtocolCodec.MessageType.MONSTER_ACTION_EVENT:
 			var monster_action: Variant = JSON.parse_string(payload.get_string_from_utf8())
 			var source_id := str(monster_action.get("source_entity_id", "")) if monster_action is Dictionary else ""
