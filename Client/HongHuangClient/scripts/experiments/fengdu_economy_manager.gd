@@ -27,6 +27,7 @@ var _tasks: Dictionary = {}
 var _next_task_number := 1
 var _transactions: Array[Dictionary] = []
 var _reward_claims: Dictionary = {}
+var _player_realm_levels: Dictionary = {"local_player": 1}
 var _next_transaction_number := 1
 
 
@@ -71,8 +72,22 @@ func _seed_city_notices() -> void:
 			"status": "open",
 			"worker_id": "",
 			"created_at": int(Time.get_unix_time_from_system()),
-			"system_notice": true
+			"system_notice": true,
+			"difficulty_tier": "entry" if not is_stone else ("low" if reward <= 12 else "mid"),
+			"required_realm_level": 0 if not is_stone else (1 if reward <= 12 else 2),
+			"publisher_type": "city_government" if str(notice["publisher_id"]) == "city_treasury" else "player",
+			"audience": "mundane" if not is_stone else "cultivator"
 		}
+
+
+func set_player_realm_level(player_id: String, realm_level: int) -> void:
+	if player_id.is_empty():
+		return
+	_player_realm_levels[player_id] = clampi(realm_level, 0, 10)
+
+
+func get_player_realm_level(player_id: String) -> int:
+	return int(_player_realm_levels.get(player_id, 0))
 
 
 func get_wallet_snapshot(player_id: String = "local_player", currency_id: String = FIAT_CURRENCY_ID) -> Dictionary:
@@ -142,7 +157,7 @@ func get_listing_fee(reward: int, currency_id: String = FIAT_CURRENCY_ID) -> int
 	return BASE_LISTING_FEE + ceili(float(maxi(0, reward)) * LISTING_FEE_RATE)
 
 
-func publish_task(publisher_id: String, title: String, description: String, reward: int, currency_id: String = CULTIVATION_CURRENCY_ID) -> Dictionary:
+func publish_task(publisher_id: String, title: String, description: String, reward: int, currency_id: String = CULTIVATION_CURRENCY_ID, difficulty_tier: String = "", required_realm_level: int = -1, publisher_type: String = "player") -> Dictionary:
 	var clean_title := title.strip_edges()
 	var clean_description := description.strip_edges()
 	if publisher_id.is_empty() or clean_title.length() < 2 or clean_title.length() > 32:
@@ -156,6 +171,18 @@ func publish_task(publisher_id: String, title: String, description: String, rewa
 	var maximum_reward := MAX_STONE_REWARD if is_stone else MAX_REWARD
 	if reward < minimum_reward or reward > maximum_reward:
 		return {"ok": false, "reason": "悬赏金额范围为 %d 至 %d。" % [minimum_reward, maximum_reward]}
+	var resolved_tier := difficulty_tier if not difficulty_tier.is_empty() else ("entry" if not is_stone else "low")
+	var valid_tiers := ["entry", "low", "mid", "high", "danger", "sect", "official"]
+	if not valid_tiers.has(resolved_tier):
+		return {"ok": false, "reason": "任务难度等级无效。"}
+	var resolved_realm := required_realm_level if required_realm_level >= 0 else (1 if is_stone else 0)
+	if resolved_realm < 0 or resolved_realm > 10:
+		return {"ok": false, "reason": "最低境界等级必须在 0 至 10 之间。"}
+	var valid_publishers := ["player", "sect", "city_government", "official_agency"]
+	if not valid_publishers.has(publisher_type):
+		return {"ok": false, "reason": "发布者身份类型无效。"}
+	if not is_stone and resolved_realm > 0:
+		return {"ok": false, "reason": "凡俗事务市场不能设置修炼境界门槛。"}
 	var fee := get_listing_fee(reward, currency_id)
 	var balances: Dictionary = _stone_wallets if is_stone else _wallets
 	var balance := int(balances.get(publisher_id, 0))
@@ -184,6 +211,10 @@ func publish_task(publisher_id: String, title: String, description: String, rewa
 		"reward": reward,
 		"currency_id": currency_id,
 		"listing_fee": fee,
+		"difficulty_tier": resolved_tier,
+		"required_realm_level": resolved_realm,
+		"publisher_type": publisher_type,
+		"audience": "cultivator" if is_stone else "mundane",
 		"status": "open",
 		"worker_id": "",
 		"created_at": int(Time.get_unix_time_from_system())
@@ -202,6 +233,10 @@ func accept_task(task_id: String, worker_id: String) -> Dictionary:
 		return {"ok": false, "reason": "该任务已被接取或关闭。"}
 	if str(task.get("publisher_id", "")) == worker_id:
 		return {"ok": false, "reason": "不能接取自己发布的任务。"}
+	var required_realm := int(task.get("required_realm_level", 0))
+	var actual_realm := get_player_realm_level(worker_id)
+	if actual_realm < required_realm:
+		return {"ok": false, "reason": "境界不足：该任务要求境界等级 %d，你当前为 %d。" % [required_realm, actual_realm]}
 	task["worker_id"] = worker_id
 	task["status"] = "accepted"
 	_tasks[task_id] = task
