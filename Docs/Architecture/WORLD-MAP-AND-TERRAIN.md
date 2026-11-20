@@ -47,11 +47,13 @@
 - https://terrain3d.readthedocs.io/en/stable/docs/platforms.html
 
 兼容性约束：
-- 项目美术方向文档当前写明 Godot 4.6；正式导入前必须在开发环境锁定精确 Godot 版本，并下载对应版本/平台的 Terrain3D GDExtension 二进制。
+- 项目美术方向文档当前写明 Godot 4.6。经核对官方 Release，Terrain3D v1.1.0-stable 支持 Godot 4.5–4.8，并新增 Ocean Mesh；它是当前候选版本，但在锁定精确 Godot 补丁版本、渲染器和目标平台之前，不将二进制正式放入主项目。若开发环境最终固定在 4.6，也可评估 v1.0.2-stable（官方注明支持 4.4–4.6+），但优先用同一套测试场景比较后再锁版本。
 - 不把其他 Godot 小版本或操作系统的 GDExtension 二进制混用。
 - Terrain3D 官方说明移动端、macOS、D3D12、Web 有额外平台限制；本项目先以 Windows/Linux 桌面客户端验证，再评估移动端。
 - Asset Store 页面可能标记某个发布包为不稳定版本；以官方 GitHub Release 的版本说明、二进制文件和平台文档为准，不能盲目追最新版。
 - Terrain3D 只负责地形渲染、编辑、地形数据和相关碰撞；它不负责 MMO 世界分区、玩家会话、怪物刷怪、兴趣点权限、区域切换或服务端权威。
+
+官方版本核对（2026-11-20）：[Terrain3D v1.1.0 Release](https://github.com/TokisanGames/Terrain3D/releases) 声明支持 Godot 4.5–4.8；官方安装文档要求按 Release 选择对应 Godot 版本的包。1.1.0 的 Ocean Mesh 对血海环境有帮助，但海面潮汐、危险判定和服务端玩法仍由项目自己实现。
 
 ## 4. 动态世界与流式加载由项目自己实现
 
