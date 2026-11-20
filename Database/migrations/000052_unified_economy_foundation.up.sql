@@ -76,12 +76,12 @@ CREATE INDEX idx_economy_ledger_source ON economy_ledger_entries(source_type, so
 CREATE OR REPLACE FUNCTION prevent_economy_ledger_mutation()
 RETURNS trigger
 LANGUAGE plpgsql
-AS $
+AS $$
 BEGIN
     RAISE EXCEPTION 'economy ledger records are immutable';
     RETURN NULL;
 END;
-$;
+$$;
 
 CREATE TRIGGER trg_economy_ledger_immutable
 BEFORE UPDATE OR DELETE ON economy_ledger_entries
