@@ -162,14 +162,14 @@
 - 后续任务服务必须调用后端 `AuthorizeTaskPublisher` 验证活跃成员身份与 leader/officer 角色，不能信任客户端传入的 `publisher_type`、组织名称或财政账户 ID。
 
 
-## 14. 宗门悬赏任务（000054–000056）
+## 14. 宗门悬赏任务（000054–000057）
 
 - 新增 `bounty_tasks`、`bounty_task_escrows`、`bounty_task_participants`；财政流水新增 `bounty_lock`、`bounty_refund`、`contribution` 类型。
 - 宗门成员捐献接口：`POST /api/v1/factions/{factionID}/treasury/contributions`。请求必须携带客户端生成并在重试时复用的 `event_key`；个人钱包扣款、宗门财政入账及双方不可变流水在同一事务中提交。非成员不能捐献，货币必须属于宗门所在世界。\n- 宗门发布接口：`POST /api/v1/factions/{factionID}/bounties`。请求必须提供 `event_key`，同一账号重试相同 key 不会再次冻结预算（重复请求返回冲突，客户端可通过任务列表确认原任务）。发布者身份由 Bearer 账号和数据库成员角色决定，客户端不能提交组织类型、组织名称或财政账户 ID。
 - 发布事务锁定宗门及发布者成员记录，复核宗门处于 active 且发布者为 leader/officer；货币必须在该宗门所属世界启用。
 - 托管预算按 `reward_amount × max_assignees` 计算；在同一事务内从宗门财政对应币种的 available 转入 frozen，并写不可变财政流水及任务托管记录。余额不足则整个事务回滚。
 - 查询接口：`GET /api/v1/bounties?world_id=underworld_fengdu`；接取接口：`POST /api/v1/bounties/{taskID}/join`。
-- 接取时锁定任务行后统计有效参与人数并插入参与者，防止并发超员；唯一主键阻止同一账号重复加入。当前接取资格尚未关联角色境界/职业校验，`required_realm_level` 与难度先作为任务配置字段，不能视为已执行的门槛。
+- 接取时锁定任务行后统计有效参与人数并插入参与者，防止并发超员；唯一主键阻止重复接取。000057 起，接取必须匹配账号当前角色：角色状态必须 alive、角色所在世界必须与任务一致、角色等级不得低于 `required_character_level`、真实修炼体系的 `realm_order` 不得低于 `required_realm_level`。境界从 `character_progression` 与 `cultivation_realms` 联查，不能由客户端自报；事务对 soul、character、progression 加共享锁，避免接取过程中切换角色或突破境界造成竞态。职业限制暂未建模。
 - 宗门结算接口：`POST /api/v1/bounties/{taskID}/complete`。仅发布宗门的 leader/officer 可以审批结算；服务端读取当前所有 accepted 参与者，按任务固定的单人奖励逐人付款，不接受客户端传入奖励金额或收款人列表。\n- 结算事务锁定任务、托管、宗门、参与者、财政和玩家钱包；同一事务完成玩家钱包入账、玩家不可变账本、财政可用/冻结余额变更、财政不可变账本、参与者完成、托管标记 paid、任务标记 completed 及结算凭证。任何一步失败全部回滚。\n- 实际支付金额为 `reward_amount × accepted_participant_count`；未被实际接取的剩余预算退回宗门财政可用余额。全程使用任务原币种。结算 event_key 唯一，同任务相同 key 重试返回原结算凭证；其他任务复用 key 会冲突。\n- 当前结算代表发布方批准所有已接取成员完成，尚无逐成员贡献评分/分批验收；不允许客户端自行提交贡献值。贡献点发放及官方城主府/官署任务仍未开放。
 - 宗门财政可由成员通过上述捐献接口注资；不存在客户端任意增发入口。任务奖励结算已由 000055 在同一事务内实现托管释放、玩家钱包入账、财政流水和幂等凭证，不能调用单边 `ApplyDelta` 拼接。
 
@@ -182,3 +182,13 @@
 - 退款事务与结算事务都先锁任务和 escrow，再锁财政；两者竞争时只有一个能将 locked escrow 转为 paid/refunded。相同 event_key 在结算和退款之间共享 advisory lock，并交叉检查凭证表，防止跨业务复用。
 - `bounty_task_refunds` 对 task_id 和 event_key 分别建立唯一约束，保存退款金额、执行人及 cancelled/expired 原因。所有余额、财政流水、参与者状态、托管状态、任务状态和凭证在同一事务提交。
 - 取消和过期退款均为全额退款；当前没有接取者违约扣罚、部分退款或失败任务自动判定。调度器需要部署环境定期调用，仓库目前只提供受信任批处理 API，不宣称已部署定时任务。
+
+
+### 14.2 角色资格与主动退出（000057）
+
+- 发布悬赏新增 `required_character_level`，范围 1–10000；旧客户端未传时 API 默认最低角色等级 1。已有任务迁移后默认值为 1。
+- `required_realm_level` 对应角色修炼体系中的 `cultivation_realms.realm_order`，不使用客户端传入的数值。不同种族/修炼体系通过各自 realm_order 做阶段门槛比较；这是当前跨体系的粗粒度门槛，不代表不同种族境界战力完全等价。
+- 接取时后端以 Identity account 找到 soul.current_character_id，再校验角色 alive、同世界、角色等级、真实境界。死亡、退役、无当前角色、角色不在任务世界或等级/境界不足均不能接取。
+- `POST /api/v1/bounties/{taskID}/leave` 允许 accepted 参与者主动退出。任务仍开放且未过期时，事务将其状态改为 withdrawn，并重算名额：无人接取时任务回到 open，有其他参与者时回到 in_progress。
+- 退出后可重新接取；重新接取会将原参与记录从 withdrawn 恢复为 accepted，不会产生重复参与记录。任务 full 状态下退出会释放一个名额，结算只支付当前 accepted 参与者。
+- 目前没有职业/功法/装备门槛、队长机制、退出惩罚和贡献度分配；这些应在可信角色能力快照和任务规则完善后再增加。
