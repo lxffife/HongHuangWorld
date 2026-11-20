@@ -32,6 +32,7 @@ enum class MessageType : std::uint16_t {
     MonsterActionEvent = 20,
     PlayerActionEvent = 21,
     SpellCastCommand = 22,
+    UseConsumableCommand = 23,
 };
 
 struct Frame {
