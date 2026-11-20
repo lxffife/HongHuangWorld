@@ -19,6 +19,36 @@ var _tasks: Dictionary = {}
 var _next_task_number := 1
 
 
+func _ready() -> void:
+	_seed_city_notices()
+
+
+func _seed_city_notices() -> void:
+	var notices := [
+		{"id": "city_notice_001", "title": "鬼市寻回遗失魂灯", "description": "协助鬼市商贩找回遗失在东侧巷道的魂灯。", "publisher_id": "ghost_market_vendor", "publisher_name": "鬼市灵材商", "reward": 180},
+		{"id": "city_notice_002", "title": "魂坊运送安魂木", "description": "将一批安魂木从城西仓房送至引魂驿站。", "publisher_id": "soul_district_craftsman", "publisher_name": "魂坊工匠", "reward": 260}
+	]
+	for notice in notices:
+		var reward := int(notice["reward"])
+		if _treasury < reward:
+			continue
+		_treasury -= reward
+		_escrow_total += reward
+		_tasks[str(notice["id"])] = {
+			"id": str(notice["id"]),
+			"title": str(notice["title"]),
+			"description": str(notice["description"]),
+			"publisher_id": str(notice["publisher_id"]),
+			"publisher_name": str(notice["publisher_name"]),
+			"reward": reward,
+			"listing_fee": 0,
+			"status": "open",
+			"worker_id": "",
+			"created_at": int(Time.get_unix_time_from_system()),
+			"system_notice": true
+		}
+
+
 func get_wallet_snapshot(player_id: String = "local_player") -> Dictionary:
 	return {
 		"player_id": player_id,
