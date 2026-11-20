@@ -4,6 +4,7 @@ extends Node3D
 ## and does not define server-authoritative region boundaries.
 
 const WorldEnvironmentBuilder = preload("res://scripts/world_environment_builder.gd")
+const WorldTerrainStreamingManager = preload("res://scripts/experiments/fengdu_terrain_streaming_manager.gd")
 
 const WORLD_SIZE := 256.0
 const HALF_SIZE := WORLD_SIZE * 0.5
@@ -30,13 +31,26 @@ func _build_environment() -> void:
 
 
 func _build_heightfield() -> void:
-	var cells_per_tile := GRID_CELLS / TILE_COUNT
-	for tile_z in range(TILE_COUNT):
-		for tile_x in range(TILE_COUNT):
-			_build_terrain_tile(tile_x, tile_z, cells_per_tile)
+	var focus := Marker3D.new()
+	focus.name = "StreamingFocus"
+	focus.position = Vector3.ZERO
+	add_child(focus)
+
+	var streaming_manager := Node3D.new()
+	streaming_manager.name = "TerrainStreamingManager"
+	streaming_manager.set_script(WorldTerrainStreamingManager)
+	streaming_manager.set("source_path", NodePath(".."))
+	streaming_manager.set("focus_path", NodePath("../StreamingFocus"))
+	streaming_manager.set("tile_count", TILE_COUNT)
+	streaming_manager.set("world_size", WORLD_SIZE)
+	streaming_manager.set("load_radius", 2)
+	streaming_manager.set("unload_radius", 3)
+	streaming_manager.set("max_operations_per_frame", 2)
+	add_child(streaming_manager)
 
 
-func _build_terrain_tile(tile_x: int, tile_z: int, cells_per_tile: int) -> void:
+func _build_terrain_tile(tile_x: int, tile_z: int, cells_per_tile: int) -> Node3D:
+
 	var tile_size := WORLD_SIZE / float(TILE_COUNT)
 	var tile_min_x := -HALF_SIZE + float(tile_x) * tile_size
 	var tile_min_z := -HALF_SIZE + float(tile_z) * tile_size
@@ -86,7 +100,7 @@ func _build_terrain_tile(tile_x: int, tile_z: int, cells_per_tile: int) -> void:
 	collision.shape = terrain_mesh.create_trimesh_shape()
 	body.add_child(collision)
 	tile.add_child(body)
-	add_child(tile)
+	return tile
 
 
 func _add_terrain_vertex(surface: SurfaceTool, vertex: Vector3) -> void:
