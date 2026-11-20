@@ -34,6 +34,8 @@ func _gui_input(event: InputEvent) -> void:
 			continue
 		var point: Dictionary = exploration_item
 		var point_pos := _map_point(float(point.get("position_x", 0.0)), float(point.get("position_z", 0.0)), center, radius)
+		if not Rect2(center - Vector2(radius, radius), Vector2(radius * 2.0, radius * 2.0)).has_point(point_pos):
+			continue
 		var exploration_distance := point_pos.distance_to(mouse_event.position)
 		if exploration_distance < best_distance:
 			best_distance = exploration_distance
@@ -45,6 +47,8 @@ func _gui_input(event: InputEvent) -> void:
 			continue
 		var npc: Dictionary = npc_item
 		var npc_pos := _map_point(float(npc.get("position_x", 0.0)), float(npc.get("position_z", 0.0)), center, radius)
+		if not Rect2(center - Vector2(radius, radius), Vector2(radius * 2.0, radius * 2.0)).has_point(npc_pos):
+			continue
 		var npc_distance := npc_pos.distance_to(mouse_event.position)
 		if npc_distance < best_distance:
 			best_distance = npc_distance
@@ -56,6 +60,8 @@ func _gui_input(event: InputEvent) -> void:
 			continue
 		var monster: Dictionary = monster_item
 		var monster_pos := _map_point(float(monster.get("x", 0.0)), float(monster.get("z", 0.0)), center, radius)
+		if not Rect2(center - Vector2(radius, radius), Vector2(radius * 2.0, radius * 2.0)).has_point(monster_pos):
+			continue
 		var monster_distance := monster_pos.distance_to(mouse_event.position)
 		if monster_distance < best_distance:
 			best_distance = monster_distance
