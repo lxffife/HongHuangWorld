@@ -1,4 +1,6 @@
 extends Control
+
+const WorldMapProjection = preload("res://scripts/world_map_projection.gd")
 ## Lightweight live minimap. Coordinates are supplied by the authoritative world
 ## snapshot/entities; the player remains centered and nearby markers move around it.
 
@@ -80,10 +82,15 @@ func _process(delta: float) -> void:
 
 func _map_point(world_x: float, world_z: float, center: Vector2, radius: float) -> Vector2:
 	var scale := radius / maxf(world_radius, 1.0)
-	return center + Vector2(world_x - player_position.x, world_z - player_position.z) * scale * Vector2(1.0, -1.0)
+	return WorldMapProjection.world_to_map(
+		Vector3(world_x, player_position.y, world_z),
+		player_position,
+		center,
+		Vector2(scale, scale)
+	)
 
 func _is_inside_radar(point: Vector2, center: Vector2, radius: float) -> bool:
-	return point.distance_squared_to(center) <= radius * radius
+	return WorldMapProjection.is_inside_circle(point, center, radius)
 
 func _draw() -> void:
 	var bounds := Rect2(Vector2.ZERO, size)
