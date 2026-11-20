@@ -31,6 +31,13 @@ int main() {
     assert(!within_interest_radius(0.0F, 0.0F, 0.0F, 0.0F, -1.0F));
     assert(!within_interest_radius(std::numeric_limits<float>::infinity(), 0.0F, 0.0F, 0.0F, 80.0F));
 
+    assert(effective_player_movement_speed(5.0F) == 5.0F);
+    assert(effective_player_movement_speed(5.5F) == 5.5F);
+    assert(effective_player_movement_speed(0.1F) == 1.0F);
+    assert(effective_player_movement_speed(50.0F) == 10.0F);
+    assert(effective_player_movement_speed(std::numeric_limits<float>::quiet_NaN()) == 5.0F);
+    assert(effective_player_movement_speed(std::numeric_limits<float>::infinity()) == 5.0F);
+
     float world_x = 99.9F;
     float world_z = 0.0F;
     integrate_horizontal(world_x, world_z, 1.0F, 0.0F, 0.1F);
