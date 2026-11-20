@@ -142,7 +142,7 @@ func _add_task_card(task: Dictionary) -> void:
 	heading.add_child(status)
 	var details := Label.new()
 	var currency_name := "冥石" if str(task.get("currency_id", "nether_stone")) == "nether_stone" else "冥币"
-	details.text = "%s\n发布者：%s    悬赏：%s %s    发布费：%s %s" % [str(task.get("description", "")), str(task.get("publisher_name", "匿名")), _format_amount(int(task.get("reward", 0))), currency_name, _format_amount(int(task.get("listing_fee", 0))), currency_name]
+	details.text = "%s\n发布者：%s（%s）    难度：%s    最低境界：%s    悬赏：%s %s    发布费：%s %s" % [str(task.get("description", "")), str(task.get("publisher_name", "匿名")), _publisher_type_text(str(task.get("publisher_type", "player"))), _difficulty_text(str(task.get("difficulty_tier", "entry"))), _realm_text(int(task.get("required_realm_level", 0))), _format_amount(int(task.get("reward", 0))), currency_name, _format_amount(int(task.get("listing_fee", 0))), currency_name]
 	details.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(details)
 	var actions := HBoxContainer.new()
