@@ -85,4 +85,16 @@ inline bool can_pay_spell_cost(std::int64_t current_mana, std::int32_t mana_cost
     return current_mana >= 0 && mana_cost > 0 && current_mana >= mana_cost;
 }
 
+// Returns the remaining cooldown in milliseconds. Each spell keeps its own
+// last-cast timestamp; invalid timestamps fail closed with a full cooldown.
+inline std::int32_t spell_cooldown_remaining_ms(std::int64_t last_cast_ms,
+                                                std::int64_t now_ms,
+                                                std::int32_t cooldown_ms) {
+    if (last_cast_ms < 0 || now_ms < last_cast_ms ||
+        cooldown_ms <= 0 || cooldown_ms > 300000) return std::max(0, cooldown_ms);
+    const auto elapsed = now_ms - last_cast_ms;
+    return elapsed >= cooldown_ms ? 0 :
+        static_cast<std::int32_t>(cooldown_ms - elapsed);
+}
+
 } // namespace honghuang::simulation
