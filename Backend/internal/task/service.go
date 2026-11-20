@@ -413,6 +413,8 @@ func (s *Service) refund(ctx context.Context, accountID, taskID, eventKey string
 
  nextStatus:="cancelled"; ledgerType:="bounty_refund"; note:="宗门主动取消悬赏，全额退回托管预算"
  if expired { nextStatus="expired"; note="悬赏到期，全额退回托管预算" }
+ var refundedBy any
+ if accountID!="" { refundedBy=accountID }
  if _,err=tx.ExecContext(ctx,`INSERT INTO economy_treasury_ledger_entries
   (treasury_account_id,currency_id,event_key,entry_type,delta,balance_after,frozen_delta,frozen_after,source_type,source_id,note)
   VALUES($1,$2,$3,$4,$5,$6,$7,$8,'bounty_task',$9,$10)`,
@@ -425,13 +427,9 @@ func (s *Service) refund(ctx context.Context, accountID, taskID, eventKey string
   WHERE task_id=$1 AND status='locked'`,taskID);err!=nil { return RefundReceipt{},fmt.Errorf("mark bounty escrow refunded: %w",err) }
  if _,err=tx.ExecContext(ctx,`UPDATE bounty_tasks SET status=$2,updated_at=now() WHERE id=$1`,taskID,nextStatus);err!=nil { return RefundReceipt{},fmt.Errorf("update refunded bounty task: %w",err) }
  if _,err=tx.ExecContext(ctx,`INSERT INTO bounty_task_refunds(task_id,event_key,refunded_by,refunded_amount,reason)
-  VALUES($1,$2,$3,$4,$5)`,taskID,eventKey,nullIfEmpty(accountID),amount,nextStatus);err!=nil { return RefundReceipt{},fmt.Errorf("write bounty refund receipt: %w",err) }
+  VALUES($1,$2,$3,$4,$5)`,taskID,eventKey,refundedBy,amount,nextStatus);err!=nil { return RefundReceipt{},fmt.Errorf("write bounty refund receipt: %w",err) }
  result:=RefundReceipt{TaskID:taskID,EventKey:eventKey,RefundedAmount:amount,CurrencyID:currencyID,Status:nextStatus}
  if err=tx.Commit();err!=nil { return RefundReceipt{},fmt.Errorf("commit bounty refund: %w",err) }
  return result,nil
 }
 
-func nullIfEmpty(value string) any {
- if value=="" { return nil }
- return value
-}
