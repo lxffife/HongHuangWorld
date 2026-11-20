@@ -2066,6 +2066,30 @@ struct EnetServer::Impl {
                       Json{{"accepted", false}, {"reason", "距离目标太远。"}});
             return;
         }
+        if (player_weapon_type(player) == "bow") {
+            const double distance = std::sqrt(dx * dx + dz * dz);
+            if (distance < 0.001) {
+                send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                          Json{{"accepted", false}, {"reason", "目标距离异常，无法发射箭矢。"}});
+                return;
+            }
+            constexpr float projectile_speed = 24.0F;
+            const auto projectile_id = make_event_uuid();
+            projectiles.push_back(ProjectileRuntime{
+                projectile_id, player.character_id, target->runtime_id,
+                player.x, player.y + 1.15F, player.z,
+                static_cast<float>(dx / distance) * projectile_speed,
+                static_cast<float>(dz / distance) * projectile_speed,
+                player.attack, combat_profile.power_basis_points,
+                combat_profile.defense_penetration_basis_points,
+                now + std::chrono::milliseconds(2200)
+            });
+            broadcast_player_action_event(player, "attack", target->runtime_id, "ranged_shot", peer);
+            send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                      Json{{"accepted", true}, {"projectile_spawned", true},
+                           {"projectile_id", projectile_id}, {"target_entity_id", target->runtime_id}});
+            return;
+        }
         broadcast_player_action_event(player, "attack", target->runtime_id, player_attack_style(player), peer);
         const honghuang::simulation::CombatantStats attacker{player.attack, player.defense, 100, 100};
         const honghuang::simulation::CombatantStats defender{
