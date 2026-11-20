@@ -1610,6 +1610,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			target_info_panel.visible = hud_visible and not selected_monster_id.is_empty()
 		if is_instance_valid(minimap_panel):
 			minimap_panel.visible = hud_visible and get_viewport().get_visible_rect().size.x >= 520.0 and not (is_instance_valid(friend_panel) and friend_panel.visible)
+		if is_instance_valid(world_map_panel) and not hud_visible:
+			world_map_panel.visible = false
 		if is_instance_valid(input_debug_panel):
 			input_debug_panel.visible = hud_visible and input_debug_visible
 		if is_instance_valid(notification_panel) and not hud_visible:
