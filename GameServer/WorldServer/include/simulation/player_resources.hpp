@@ -21,6 +21,14 @@ inline std::int32_t mana_regeneration_interval_ms(bool in_combat,
         static_cast<std::int64_t>(base_interval) * (10000 - reduction_basis_points) / 10000);
 }
 
+// Equipment cap changes preserve current resources unless the new cap is lower.
+// Invalid negative caps fail closed to zero.
+inline std::int64_t clamp_current_resource_to_maximum(std::int64_t current,
+                                                       std::int64_t new_maximum) {
+    if (new_maximum < 0) return 0;
+    return std::clamp<std::int64_t>(current, 0, new_maximum);
+}
+
 inline std::int64_t mana_regeneration_amount(std::int64_t elapsed_ms,
                                              std::int64_t current_mana,
                                              std::int64_t max_mana,
