@@ -640,7 +640,7 @@ func _build_world_map_hud() -> void:
 	world_map_canvas.connect("world_position_selected", Callable(self, "_on_world_map_position_selected"))
 	layout.add_child(world_map_canvas)
 	var hint := Label.new()
-	hint.text = "紫色菱形：地标 · 点击空白区域设置坐标导航"
+	hint.text = "金色：探索点 · 青色：NPC · 红色：妖兽 · 紫色：地标 · 点击标记导航，点击空白处设置坐标"
 	hint.add_theme_color_override("font_color", Color("#a9bac7"))
 	hint.add_theme_font_size_override("font_size", 11)
 	layout.add_child(hint)
