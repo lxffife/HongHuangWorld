@@ -1047,9 +1047,11 @@ func _apply_remote_equipment_visuals(remote: Node3D, items: Array) -> void:
 		return
 	remote.set_meta("remote_equipment_signature", signature)
 	for socket_name in ["EquipmentWeaponSocket", "EquipmentOffhandSocket", "EquipmentHeadSocket", "EquipmentChestSocket", "EquipmentLegsSocket", "EquipmentBootsSocket", "EquipmentAccessorySocket"]:
-		var old_socket := humanoid.get_node_or_null(socket_name)
-		if old_socket != null:
-			old_socket.queue_free()
+		var existing_socket := humanoid.find_child(socket_name, true, false) as Node3D
+		if existing_socket != null:
+			for old_visual in existing_socket.get_children():
+				if old_visual.name == "EquipmentVisual":
+					old_visual.queue_free()
 	for item_value in items:
 		if not (item_value is Dictionary):
 			continue
@@ -1064,27 +1066,37 @@ func _apply_remote_equipment_visuals(remote: Node3D, items: Array) -> void:
 		elif quality == 3:
 			tint = Color("#8ee0b0")
 		var socket_name := "Equipment" + slot.capitalize() + "Socket"
-		var socket_parent: Node3D = humanoid
-		var socket_position := Vector3.ZERO
-		if slot == "weapon":
-			socket_parent = humanoid.get_node_or_null("ArmPivotRight") as Node3D if humanoid.get_node_or_null("ArmPivotRight") is Node3D else humanoid
-			socket_position = Vector3(0.03, -0.58, -0.06) if socket_parent != humanoid else Vector3(0.34, 0.9, -0.18)
-		elif slot == "offhand":
-			socket_parent = humanoid.get_node_or_null("ArmPivotLeft") as Node3D if humanoid.get_node_or_null("ArmPivotLeft") is Node3D else humanoid
-			socket_position = Vector3(-0.03, -0.58, -0.06) if socket_parent != humanoid else Vector3(-0.34, 0.9, -0.18)
-		else:
-			socket_position = {
-				"head": Vector3(0, 1.72, 0),
-				"chest": Vector3(0, 1.05, -0.02),
-				"legs": Vector3(0, 0.48, 0),
-				"boots": Vector3(0, 0.12, 0),
-				"accessory": Vector3(0, 1.32, -0.22),
-				"back": Vector3(0, 1.0, 0.22)
-			}.get(slot, Vector3.ZERO)
-		var socket := Node3D.new()
-		socket.name = socket_name
-		socket.position = socket_position
-		socket_parent.add_child(socket)
+		var socket := humanoid.find_child(socket_name, true, false) as Node3D
+		if socket == null:
+			var socket_parent: Node3D = humanoid
+			var socket_position := Vector3.ZERO
+			if slot == "weapon":
+				var right_arm := humanoid.get_node_or_null("ArmPivotRight") as Node3D
+				if right_arm != null:
+					socket_parent = right_arm
+					socket_position = Vector3(0.03, -0.58, -0.06)
+				else:
+					socket_position = Vector3(0.34, 0.9, -0.18)
+			elif slot == "offhand":
+				var left_arm := humanoid.get_node_or_null("ArmPivotLeft") as Node3D
+				if left_arm != null:
+					socket_parent = left_arm
+					socket_position = Vector3(-0.03, -0.58, -0.06)
+				else:
+					socket_position = Vector3(-0.34, 0.9, -0.18)
+			else:
+				socket_position = {
+					"head": Vector3(0, 1.72, 0),
+					"chest": Vector3(0, 1.05, -0.02),
+					"legs": Vector3(0, 0.48, 0),
+					"boots": Vector3(0, 0.12, 0),
+					"accessory": Vector3(0, 1.32, -0.22),
+					"back": Vector3(0, 1.0, 0.22)
+				}.get(slot, Vector3.ZERO)
+			socket = Node3D.new()
+			socket.name = socket_name
+			socket.position = socket_position
+			socket_parent.add_child(socket)
 		var visual := Node3D.new()
 		visual.name = "EquipmentVisual"
 		socket.add_child(visual)
