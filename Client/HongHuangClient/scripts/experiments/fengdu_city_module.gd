@@ -164,9 +164,9 @@ func _build_office_wings(width: float, depth: float, height: float, material_key
 
 func _build_market_street() -> void:
 	_add_box("MarketStreet", Vector3(30.0, 0.4, 300.0), Vector3(0.0, 0.25, 110.0), "stone", false)
+	var shop_x_positions := [-132.0, -72.0, 72.0, 132.0]
 	for row in range(3):
 		for column in range(4):
-			var shop_x_positions := [-132.0, -72.0, 72.0, 132.0]
 			var x := float(shop_x_positions[column])
 			var z := 18.0 + float(row) * 78.0
 			var size := Vector3(42.0, 17.0 + float((row + column) % 2) * 5.0, 48.0)
