@@ -185,6 +185,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 			"POST /api/v1/servers/drops/pickup", "POST /api/v1/servers/heartbeat",
 			"POST /api/v1/servers/characters/rewards", "GET /api/v1/economy/currencies", "GET /api/v1/economy/wallet", "POST /api/v1/worlds/enter",
 			"POST /api/v1/factions", "GET /api/v1/factions/mine", "POST /api/v1/factions/{factionID}/applications", "GET /api/v1/factions/{factionID}/applications", "GET /api/v1/factions/{factionID}/members", "POST /api/v1/factions/{factionID}/applications/{applicationID}/review",
+			"POST /api/v1/factions/{factionID}/treasury/contributions", "POST /api/v1/factions/{factionID}/bounties", "GET /api/v1/bounties", "POST /api/v1/bounties/{taskID}/join", "POST /api/v1/bounties/{taskID}/complete",
 			"POST /api/v1/servers/tickets/redeem", "POST /api/v1/servers/sessions/snapshot",
 			"POST /api/v1/servers/sessions/close",
 		} { mux.HandleFunc(route, unavailable) }
