@@ -186,32 +186,57 @@ type adminOnlinePlayer struct {
 
 func (h *gamePlayerAdminHandlers) online(w http.ResponseWriter, r *http.Request) {
 	if !h.authorize(w, r) { return }
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	worldID := strings.TrimSpace(r.URL.Query().Get("world_id"))
+	nodeKey := strings.TrimSpace(r.URL.Query().Get("node_key"))
+	if len(q) > 96 || len(worldID) > 64 || len(nodeKey) > 96 {
+		http.Error(w, "online player filter is too long", http.StatusBadRequest)
+		return
+	}
+	limit := 50
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 || value > 100 { http.Error(w, "limit must be between 1 and 100", http.StatusBadRequest); return }
+		limit = value
+	}
+	offset := 0
+	if raw := r.URL.Query().Get("offset"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 0 || value > 1000000 { http.Error(w, "invalid offset", http.StatusBadRequest); return }
+		offset = value
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	rows, err := h.db.QueryContext(ctx, `
-		SELECT COUNT(*) OVER(), soul.account_id::text, c.id::text, c.name, c.level, c.world_id,
-		       wd.name, ws.id::text, ws.connected_at, sr.node_key, sr.host,
-		       sr.udp_port, sr.region, CASE WHEN sr.admin_state = 'disabled' THEN 'offline' WHEN sr.admin_state = 'draining' THEN 'draining' WHEN sr.last_heartbeat_at IS NULL OR sr.last_heartbeat_at < now() - interval '30 seconds' THEN 'offline' ELSE sr.status END, sr.last_heartbeat_at, sr.capacity, sr.current_players
-		FROM world_sessions ws
+	const from = `FROM world_sessions ws
 		JOIN characters c ON c.id = ws.character_id
 		JOIN souls soul ON soul.id = c.soul_id
 		JOIN world_definitions wd ON wd.id = c.world_id
 		JOIN server_registry sr ON sr.id = ws.server_id
 		WHERE ws.session_state = 'active'
-		ORDER BY ws.connected_at DESC
-		LIMIT 500
-	`)
+		  AND ($1 = '' OR c.name ILIKE '%' || $1 || '%' OR wd.name ILIKE '%' || $1 || '%' OR soul.account_id::text ILIKE '%' || $1 || '%')
+		  AND ($2 = '' OR c.world_id = $2)
+		  AND ($3 = '' OR sr.node_key = $3)`
+	args := []any{q, worldID, nodeKey}
+	var total int64
+	if err := h.db.QueryRowContext(ctx, "SELECT COUNT(*) "+from, args...).Scan(&total); err != nil {
+		h.logger.Error("game admin online player count failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	rows, err := h.db.QueryContext(ctx, `SELECT soul.account_id::text, c.id::text, c.name, c.level, c.world_id,
+		       wd.name, ws.id::text, ws.connected_at, sr.node_key, sr.host,
+		       sr.udp_port, sr.region, CASE WHEN sr.admin_state = 'disabled' THEN 'offline' WHEN sr.admin_state = 'draining' THEN 'draining' WHEN sr.last_heartbeat_at IS NULL OR sr.last_heartbeat_at < now() - interval '30 seconds' THEN 'offline' ELSE sr.status END, sr.last_heartbeat_at, sr.capacity, sr.current_players `+from+`
+		ORDER BY ws.connected_at DESC, ws.id DESC LIMIT $4 OFFSET $5`, q, worldID, nodeKey, limit, offset)
 	if err != nil {
 		h.logger.Error("game admin online players query failed", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
-	items := make([]adminOnlinePlayer, 0)
-	var total int64
+	items := make([]adminOnlinePlayer, 0, limit)
 	for rows.Next() {
 		var item adminOnlinePlayer
-		if err := rows.Scan(&total, &item.AccountID, &item.CharacterID, &item.CharacterName, &item.Level, &item.WorldID, &item.WorldName, &item.SessionID, &item.ConnectedAt, &item.NodeKey, &item.Host, &item.UDPPort, &item.Region, &item.NodeStatus, &item.HeartbeatAt, &item.Capacity, &item.CurrentPlayers); err != nil {
+		if err := rows.Scan(&item.AccountID, &item.CharacterID, &item.CharacterName, &item.Level, &item.WorldID, &item.WorldName, &item.SessionID, &item.ConnectedAt, &item.NodeKey, &item.Host, &item.UDPPort, &item.Region, &item.NodeStatus, &item.HeartbeatAt, &item.Capacity, &item.CurrentPlayers); err != nil {
 			h.logger.Error("scan game admin online player failed", "error", err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
@@ -223,7 +248,7 @@ func (h *gamePlayerAdminHandlers) online(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": total, "returned": len(items), "limit": 500})
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": total, "returned": len(items), "limit": limit, "offset": offset})
 }
 func (h *gamePlayerAdminHandlers) listServerNodes(w http.ResponseWriter, r *http.Request) {
 	if !h.authorize(w, r) { return }
