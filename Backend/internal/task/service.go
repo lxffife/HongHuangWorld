@@ -21,7 +21,7 @@ var (
  ErrAlreadyJoined = errors.New("account already joined this task")
  ErrIdempotencyConflict = errors.New("idempotency key conflict")
  ErrTaskFull = errors.New("bounty task is full")
- ErrTaskNotReady = errors.New("bounty task is not ready for settlement")
+ ErrTaskNotReady = errors.New("bounty task is not ready for this operation")
 )
 
 type Service struct { db *sql.DB; factions *faction.Service }
@@ -258,7 +258,7 @@ func (s *Service) Settle(ctx context.Context,accountID,taskID,eventKey string)(S
  }
  if !errors.Is(err,sql.ErrNoRows){return Settlement{},fmt.Errorf("read bounty settlement receipt: %w",err)}
  var eventKeyUsed bool
- if err=tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM bounty_task_settlements WHERE event_key=$1)`,eventKey).Scan(&eventKeyUsed);err!=nil{return Settlement{},fmt.Errorf("check bounty settlement idempotency key: %w",err)}
+ if err=tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM bounty_task_settlements WHERE event_key=$1 UNION ALL SELECT 1 FROM bounty_task_refunds WHERE event_key=$1)`,eventKey).Scan(&eventKeyUsed);err!=nil{return Settlement{},fmt.Errorf("check bounty settlement idempotency key: %w",err)}
  if eventKeyUsed{return Settlement{},ErrIdempotencyConflict}
  if status!="full"&&status!="in_progress"{return Settlement{},ErrTaskNotReady}
  if escrowStatus!="locked"{return Settlement{},ErrTaskNotReady}
