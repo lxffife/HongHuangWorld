@@ -1550,12 +1550,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			input_debug_panel.visible = hud_visible and input_debug_visible
 		if is_instance_valid(notification_panel) and not hud_visible:
 			notification_panel.visible = false
-		if is_instance_valid(target_info_panel):
-			target_info_panel.visible = hud_visible and not selected_monster_id.is_empty()
-		if is_instance_valid(input_debug_panel):
-			input_debug_panel.visible = hud_visible and input_debug_visible
-		if is_instance_valid(notification_panel) and not hud_visible:
-			notification_panel.visible = false
 		get_viewport().set_input_as_handled()
 		return
 	if not (event is InputEventKey) or not event.pressed or event.echo:
