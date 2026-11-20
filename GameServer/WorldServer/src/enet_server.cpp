@@ -920,6 +920,7 @@ struct EnetServer::Impl {
     std::deque<ConsumableJob> pending_consumable_jobs;
     std::deque<ConsumableJobResult> completed_consumable_jobs;
     std::unordered_set<std::string> pending_consumable_sessions;
+    std::unordered_map<std::string, PlayerState> pending_consumable_closes;
     bool consumable_stop_requested{false};
     std::thread consumable_thread;
     std::mutex chat_outbox_mutex;
@@ -1452,6 +1453,25 @@ struct EnetServer::Impl {
         persistence_cv.notify_one();
     }
 
+    void close_player_session_or_defer(ENetPeer* peer) {
+        const auto player = players.find(peer);
+        if (player == players.end()) return;
+        bool consumable_pending = false;
+        {
+            std::lock_guard lock(consumable_mutex);
+            consumable_pending = pending_consumable_sessions.contains(player->second.session_id);
+        }
+        if (consumable_pending) {
+            pending_consumable_closes[player->second.session_id] = player->second;
+        } else {
+            std::string close_error;
+            if (!save_and_close_session(config, player->second, close_error)) {
+                std::cerr << "Could not persist disconnected player session: " << close_error << '\n';
+            }
+        }
+        players.erase(player);
+    }
+
     void disconnect_revoked_sessions() {
         std::unordered_set<std::string> revoked;
         {
@@ -1468,13 +1488,10 @@ struct EnetServer::Impl {
                 // the session before removing the peer.
                 broadcast_player_event(honghuang::protocol::MessageType::PlayerLeft,
                                        it->second, it->first);
-                std::string close_error;
-                if (!save_and_close_session(config, it->second, close_error)) {
-                    std::cerr << "Could not persist revoked player session: "
-                              << close_error << '\n';
-                }
-                enet_peer_disconnect_later(it->first, 7);
-                it = players.erase(it);
+                const auto peer = it->first;
+                close_player_session_or_defer(peer);
+                enet_peer_disconnect_later(peer, 7);
+                it = players.begin();
             } else {
                 ++it;
             }
@@ -1831,12 +1848,19 @@ struct EnetServer::Impl {
     }
 
     bool enqueue_consumable_job(ConsumableJob job) {
-        std::lock_guard lock(consumable_mutex);
-        if (consumable_stop_requested || !consumable_thread.joinable() ||
-            pending_consumable_jobs.size() >= 128 ||
-            pending_consumable_sessions.contains(job.session_id)) return false;
-        pending_consumable_sessions.insert(job.session_id);
-        pending_consumable_jobs.push_back(std::move(job));
+        const auto session_id = job.session_id;
+        {
+            std::lock_guard lock(consumable_mutex);
+            if (consumable_stop_requested || !consumable_thread.joinable() ||
+                pending_consumable_jobs.size() >= 128 ||
+                pending_consumable_sessions.contains(session_id)) return false;
+            pending_consumable_sessions.insert(session_id);
+            pending_consumable_jobs.push_back(std::move(job));
+        }
+        {
+            std::lock_guard lock(persistence_mutex);
+            pending_snapshots.erase(session_id);
+        }
         consumable_cv.notify_one();
         return true;
     }
@@ -1919,6 +1943,22 @@ struct EnetServer::Impl {
             {
                 std::lock_guard lock(consumable_mutex);
                 pending_consumable_sessions.erase(result.session_id);
+            }
+            auto closing = pending_consumable_closes.find(result.session_id);
+            if (closing != pending_consumable_closes.end()) {
+                if (result.success) {
+                    closing->second.health = result.result.at("health").get<std::int64_t>();
+                    closing->second.max_health = result.result.at("max_health").get<std::int64_t>();
+                    closing->second.mana = result.result.at("mana").get<std::int64_t>();
+                    closing->second.max_mana = result.result.at("max_mana").get<std::int64_t>();
+                }
+                std::string close_error;
+                if (!save_and_close_session(config, closing->second, close_error)) {
+                    std::cerr << "Could not close disconnected player after consumable settlement: "
+                              << close_error << '\n';
+                }
+                pending_consumable_closes.erase(closing);
+                continue;
             }
             const auto player = std::find_if(players.begin(), players.end(), [&](const auto& entry) {
                 return entry.second.session_id == result.session_id && entry.second.character_id == result.character_id;
@@ -3196,12 +3236,7 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
             if (player != impl_->players.end()) {
                 impl_->broadcast_player_event(
                     honghuang::protocol::MessageType::PlayerLeft, player->second, event.peer);
-                std::string snapshot_error;
-                if (!save_and_close_session(impl_->config, player->second, snapshot_error)) {
-                    std::cerr << "Could not persist disconnected player session: "
-                              << snapshot_error << '\n';
-                }
-                impl_->players.erase(player);
+                impl_->close_player_session_or_defer(event.peer);
             }
             std::cout << "ENet client disconnected\n";
             break;
