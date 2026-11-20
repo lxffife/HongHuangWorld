@@ -59,5 +59,15 @@ int main() {
     PeriodicDamageEffect final_tick;
     assert(apply_periodic_damage(final_tick, 100, 1000, 1000, 7));
     assert(consume_periodic_damage_tick(final_tick, 1200) == 7); // A delayed final tick is not lost.
+
+    // Poison shares the bounded periodic-damage engine but refreshes independently.
+    PeriodicDamageEffect poison;
+    assert(apply_periodic_damage(poison, 1000, 4000, 1000, 3));
+    assert(consume_periodic_damage_tick(poison, 2000) == 3);
+    assert(apply_periodic_damage(poison, 2500, 4000, 1000, 5));
+    assert(poison.damage_per_tick == 5);
+    assert(poison.ticks_remaining >= 3);
+    assert(consume_periodic_damage_tick(poison, 3000) == 5);
+    assert(consume_periodic_damage_tick(poison, 4000) == 5);
     return 0;
 }
