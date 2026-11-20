@@ -19,6 +19,9 @@ var _pending_load: Array[Vector2i] = []
 var _pending_unload: Array[Vector2i] = []
 var _refresh_accumulator := 0.0
 
+signal tile_loaded(tile_x: int, tile_z: int)
+signal tile_unloaded(tile_x: int, tile_z: int)
+
 
 func _ready() -> void:
 	_source = get_node_or_null(source_path) as Node3D
@@ -28,6 +31,15 @@ func _ready() -> void:
 		set_process(false)
 		return
 	_refresh_pending_tiles()
+
+
+func set_focus_world_position(world_position: Vector3) -> void:
+	if is_instance_valid(_focus):
+		_focus.global_position = world_position
+
+
+func get_loaded_tile_count() -> int:
+	return _active_tiles.size()
 
 
 func _process(delta: float) -> void:
@@ -85,6 +97,7 @@ func _load_tile(tile_key: Vector2i) -> void:
 	add_child(tile)
 	_active_tiles[tile_key] = tile
 	set_meta("loaded_tile_count", _active_tiles.size())
+	tile_loaded.emit(tile_key.x, tile_key.y)
 
 
 func _unload_tile(tile_key: Vector2i) -> void:
@@ -95,6 +108,7 @@ func _unload_tile(tile_key: Vector2i) -> void:
 	if is_instance_valid(tile):
 		tile.queue_free()
 	set_meta("loaded_tile_count", _active_tiles.size())
+	tile_unloaded.emit(tile_key.x, tile_key.y)
 
 
 func _world_to_tile(world_position: Vector3) -> Vector2i:
