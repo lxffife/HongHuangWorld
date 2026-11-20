@@ -3,6 +3,7 @@ package task
 import (
  "context"
  "math"
+ "strings"
  "testing"
 )
 
@@ -29,4 +30,16 @@ func TestJoinRejectsMissingIdentityBeforeDatabaseAccess(t *testing.T) {
 func TestListOpenRequiresWorld(t *testing.T) {
  service:=NewService(nil,nil)
  if _,err:=service.ListOpen(t.Context()," ");err!=ErrInvalid{t.Fatalf("expected ErrInvalid, got %v",err)}
+}
+
+
+func TestSettleRejectsInvalidIdentityBeforeDatabaseAccess(t *testing.T) {
+ service:=NewService(nil,nil)
+ tests:=[]struct{name,accountID,taskID,eventKey string}{
+  {"missing account","","task","event"},
+  {"missing task","account","","event"},
+  {"missing event key","account","task",""},
+  {"oversized event key","account","task",strings.Repeat("x",129)},
+ }
+ for _,test:=range tests{t.Run(test.name,func(t *testing.T){if _,err:=service.Settle(context.Background(),test.accountID,test.taskID,test.eventKey);err!=ErrInvalid{t.Fatalf("expected ErrInvalid, got %v",err)}})}
 }
