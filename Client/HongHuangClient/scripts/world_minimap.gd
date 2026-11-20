@@ -34,7 +34,7 @@ func _gui_input(event: InputEvent) -> void:
 			continue
 		var point: Dictionary = exploration_item
 		var point_pos := _map_point(float(point.get("position_x", 0.0)), float(point.get("position_z", 0.0)), center, radius)
-		if not Rect2(center - Vector2(radius, radius), Vector2(radius * 2.0, radius * 2.0)).has_point(point_pos):
+		if not _is_inside_radar(point_pos, center, radius):
 			continue
 		var exploration_distance := point_pos.distance_to(mouse_event.position)
 		if exploration_distance < best_distance:
@@ -47,7 +47,7 @@ func _gui_input(event: InputEvent) -> void:
 			continue
 		var npc: Dictionary = npc_item
 		var npc_pos := _map_point(float(npc.get("position_x", 0.0)), float(npc.get("position_z", 0.0)), center, radius)
-		if not Rect2(center - Vector2(radius, radius), Vector2(radius * 2.0, radius * 2.0)).has_point(npc_pos):
+		if not _is_inside_radar(npc_pos, center, radius):
 			continue
 		var npc_distance := npc_pos.distance_to(mouse_event.position)
 		if npc_distance < best_distance:
@@ -60,7 +60,7 @@ func _gui_input(event: InputEvent) -> void:
 			continue
 		var monster: Dictionary = monster_item
 		var monster_pos := _map_point(float(monster.get("x", 0.0)), float(monster.get("z", 0.0)), center, radius)
-		if not Rect2(center - Vector2(radius, radius), Vector2(radius * 2.0, radius * 2.0)).has_point(monster_pos):
+		if not _is_inside_radar(monster_pos, center, radius):
 			continue
 		var monster_distance := monster_pos.distance_to(mouse_event.position)
 		if monster_distance < best_distance:
@@ -82,6 +82,9 @@ func _map_point(world_x: float, world_z: float, center: Vector2, radius: float) 
 	var scale := radius / maxf(world_radius, 1.0)
 	return center + Vector2(world_x - player_position.x, world_z - player_position.z) * scale * Vector2(1.0, -1.0)
 
+func _is_inside_radar(point: Vector2, center: Vector2, radius: float) -> bool:
+	return point.distance_squared_to(center) <= radius * radius
+
 func _draw() -> void:
 	var bounds := Rect2(Vector2.ZERO, size)
 	draw_rect(bounds, Color("#0a1420", 0.96), true)
@@ -93,6 +96,7 @@ func _draw() -> void:
 		draw_line(Vector2(center.x + offset, center.y - radius), Vector2(center.x + offset, center.y + radius), Color("#27394a", 0.75), 1.0)
 		draw_line(Vector2(center.x - radius, center.y + offset), Vector2(center.x + radius, center.y + offset), Color("#27394a", 0.75), 1.0)
 	draw_arc(center, radius, 0.0, TAU, 48, Color("#526a7c", 0.9), 1.2, true)
+	draw_string(ThemeDB.fallback_font, Vector2(5.0, size.y - 5.0), "范围 ±%.0fm" % world_radius, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 9, Color("#8fa2b2"))
 	draw_line(Vector2(center.x, center.y - radius), Vector2(center.x, center.y + radius), Color("#354b5c", 0.65), 1.0)
 	draw_line(Vector2(center.x - radius, center.y), Vector2(center.x + radius, center.y), Color("#354b5c", 0.65), 1.0)
 	for exploration_item in exploration_points:
@@ -111,7 +115,7 @@ func _draw() -> void:
 			continue
 		var npc: Dictionary = npc_item
 		var npc_pos := _map_point(float(npc.get("position_x", 0.0)), float(npc.get("position_z", 0.0)), center, radius)
-		if Rect2(center - Vector2(radius, radius), Vector2(radius * 2.0, radius * 2.0)).has_point(npc_pos):
+		if _is_inside_radar(npc_pos, center, radius):
 			draw_circle(npc_pos, 3.5, Color("#63d6c5"))
 			if str(navigation_target.get("id", "")) == str(npc.get("id", "")) and navigation_target.get("kind", "") == "npc":
 				draw_arc(npc_pos, 7.0, 0.0, TAU, 24, Color("#f4d27f"), 1.8)
@@ -120,13 +124,13 @@ func _draw() -> void:
 			continue
 		var monster: Dictionary = monster_item
 		var monster_pos := _map_point(float(monster.get("x", 0.0)), float(monster.get("z", 0.0)), center, radius)
-		if Rect2(center - Vector2(radius, radius), Vector2(radius * 2.0, radius * 2.0)).has_point(monster_pos):
+		if _is_inside_radar(monster_pos, center, radius):
 			draw_circle(monster_pos, 3.0, Color("#e16c6c"))
 			if str(navigation_target.get("id", "")) == str(monster.get("id", "")) and navigation_target.get("kind", "") == "monster":
 				draw_arc(monster_pos, 7.0, 0.0, TAU, 24, Color("#f4d27f"), 1.8)
 	if not navigation_target.is_empty():
 		var target_point := _map_point(float(navigation_target.get("x", 0.0)), float(navigation_target.get("z", 0.0)), center, radius)
-		if Rect2(center - Vector2(radius, radius), Vector2(radius * 2.0, radius * 2.0)).has_point(target_point):
+		if _is_inside_radar(target_point, center, radius):
 			draw_line(center, target_point, Color("#f4d27f", 0.8), 1.4)
 	var player_triangle := PackedVector2Array([
 		center + Vector2(0.0, -8.0).rotated(-player_yaw),
