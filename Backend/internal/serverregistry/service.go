@@ -15,6 +15,7 @@ var (
 	ErrInvalidHeartbeat = errors.New("invalid heartbeat")
 	ErrInvalidNodeState = errors.New("invalid node administrative state")
 	ErrNodeNotFound = errors.New("world server node not found")
+	ErrNodeHasSessions = errors.New("world server node still has active or pending sessions")
 )
 
 type Heartbeat struct {
@@ -101,6 +102,15 @@ func (s *Service) SetAdminState(ctx context.Context, nodeKey, state string) (int
 		if errors.Is(err, sql.ErrNoRows) { return 0, ErrNodeNotFound }
 		return 0, fmt.Errorf("load world server node: %w", err)
 	}
+	// Disabling is only safe after the node has drained naturally. Never
+	// rewrite live sessions to "saving": that is not a confirmed disconnect.
+	if state == "disabled" {
+		var remaining int64
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM world_sessions WHERE server_id = $1::uuid AND session_state IN ('connecting','active','saving')`, serverID).Scan(&remaining); err != nil {
+			return 0, fmt.Errorf("count node sessions before disable: %w", err)
+		}
+		if remaining > 0 { return remaining, ErrNodeHasSessions }
+	}
 	if _, err := tx.ExecContext(ctx, `UPDATE server_registry SET admin_state = $2, updated_at = now() WHERE id = $1::uuid`, serverID, state); err != nil { return 0, fmt.Errorf("update world server node state: %w", err) }
 	instanceStatus := "offline"
 	if state == "draining" { instanceStatus = "draining" }
@@ -109,15 +119,8 @@ func (s *Service) SetAdminState(ctx context.Context, nodeKey, state string) (int
 	} else {
 		if _, err := tx.ExecContext(ctx, `UPDATE world_instances SET status = $2, updated_at = now() WHERE server_id = $1::uuid`, serverID, instanceStatus); err != nil { return 0, fmt.Errorf("update world server instances: %w", err) }
 	}
-	var requested int64
-	if state == "disabled" {
-		result, err := tx.ExecContext(ctx, `UPDATE world_sessions SET session_state = 'saving', updated_at = now() WHERE server_id = $1::uuid AND session_state = 'active'`, serverID)
-		if err != nil { return 0, fmt.Errorf("request node player disconnects: %w", err) }
-		requested, err = result.RowsAffected()
-		if err != nil { return 0, fmt.Errorf("count node player disconnects: %w", err) }
-	}
 	if err := tx.Commit(); err != nil { return 0, fmt.Errorf("commit world server node state: %w", err) }
-	return requested, nil
+	return 0, nil
 }
 
 func (s *Service) Heartbeat(ctx context.Context, input Heartbeat) (Result, error) {
