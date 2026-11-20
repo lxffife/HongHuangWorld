@@ -46,8 +46,28 @@ constexpr auto kInputTimeout = std::chrono::milliseconds(500);
 constexpr auto kMinimumInputInterval = std::chrono::milliseconds(10);
 constexpr float kInterestRadius = 80.0F;
 constexpr auto kHeartbeatInterval = std::chrono::seconds(10);
-constexpr auto kAttackCooldown = std::chrono::milliseconds(650);
-constexpr float kAttackRange = 3.5F;
+struct WeaponCombatProfile {
+    float range;
+    std::chrono::milliseconds cooldown;
+    std::int32_t power_basis_points;
+    std::int32_t defense_penetration_basis_points;
+};
+
+// Ranged weapon types intentionally remain close-range until authoritative
+// projectile simulation and replication are implemented. Never grant bow/staff
+// instant long-range hits from a client attack command.
+WeaponCombatProfile weapon_combat_profile(const std::string& weapon_type) {
+    if (weapon_type == "dagger") return {2.6F, std::chrono::milliseconds(480), 9000, 0};
+    if (weapon_type == "spear") return {4.6F, std::chrono::milliseconds(800), 10500, 0};
+    if (weapon_type == "axe") return {3.3F, std::chrono::milliseconds(850), 12500, 0};
+    if (weapon_type == "hammer") return {3.0F, std::chrono::milliseconds(1000), 14000, 1000};
+    if (weapon_type == "sword") return {3.5F, std::chrono::milliseconds(650), 10000, 0};
+    // Bow/staff/focus have presentation styles only for now; their attacks
+    // retain a conservative melee profile until server projectiles exist.
+    if (weapon_type == "bow" || weapon_type == "staff" || weapon_type == "focus")
+        return {3.5F, std::chrono::milliseconds(700), 10000, 0};
+    return {2.5F, std::chrono::milliseconds(700), 8000, 0};
+}
 constexpr auto kHeartbeatRetryInterval = std::chrono::seconds(5);
 
 struct PlayerState {
@@ -1432,34 +1452,41 @@ struct EnetServer::Impl {
         }
     }
 
-    // Derive presentation style from the server-owned equipment snapshot.
-    // This value never changes damage, range, or cooldown rules.
-    std::string player_attack_style(const PlayerState& player) const {
+    std::string player_weapon_type(const PlayerState& player) const {
         for (const auto& item : player.equipment) {
             if (!item.is_object()) continue;
             const auto slot = item.value("slot", item.value("equipment_slot", std::string{}));
             if (slot != "weapon") continue;
             const auto weapon_type = item.value("weapon_type", std::string{});
-            if (weapon_type == "spear") return "spear_thrust";
-            if (weapon_type == "bow") return "ranged_shot";
-            if (weapon_type == "staff" || weapon_type == "focus") return "staff_cast";
-            if (weapon_type == "axe" || weapon_type == "hammer") return "heavy_swing";
-            if (weapon_type == "sword" || weapon_type == "dagger") return "sword_slash";
-            // Compatibility for clients/world-entry snapshots created before migration 000049.
+            if (!weapon_type.empty()) return weapon_type;
+            // Compatibility for snapshots created before migration 000049.
             std::string identity = item.value("name", std::string{}) + " " + item.value("item_id", std::string{});
             std::transform(identity.begin(), identity.end(), identity.begin(),
                            [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
             if (identity.find("spear") != std::string::npos || identity.find("lance") != std::string::npos ||
                 identity.find("长枪") != std::string::npos || identity.find("长矛") != std::string::npos ||
-                identity.find("枪") != std::string::npos) return "spear_thrust";
+                identity.find("枪") != std::string::npos) return "spear";
             if (identity.find("bow") != std::string::npos || identity.find("crossbow") != std::string::npos ||
-                identity.find("弓") != std::string::npos) return "ranged_shot";
+                identity.find("弓") != std::string::npos) return "bow";
             if (identity.find("staff") != std::string::npos || identity.find("wand") != std::string::npos ||
                 identity.find("法杖") != std::string::npos || identity.find("拂尘") != std::string::npos ||
-                identity.find("法器") != std::string::npos) return "staff_cast";
+                identity.find("法器") != std::string::npos) return "staff";
+            if (identity.find("hammer") != std::string::npos || identity.find("锤") != std::string::npos) return "hammer";
+            if (identity.find("axe") != std::string::npos || identity.find("斧") != std::string::npos) return "axe";
+            if (identity.find("dagger") != std::string::npos || identity.find("匕首") != std::string::npos) return "dagger";
             if (identity.find("sword") != std::string::npos || identity.find("blade") != std::string::npos ||
-                identity.find("剑") != std::string::npos || identity.find("刀") != std::string::npos) return "sword_slash";
+                identity.find("剑") != std::string::npos || identity.find("刀") != std::string::npos) return "sword";
         }
+        return {};
+    }
+
+    std::string player_attack_style(const PlayerState& player) const {
+        const auto weapon_type = player_weapon_type(player);
+        if (weapon_type == "spear") return "spear_thrust";
+        if (weapon_type == "bow") return "ranged_shot";
+        if (weapon_type == "staff" || weapon_type == "focus") return "staff_cast";
+        if (weapon_type == "axe" || weapon_type == "hammer") return "heavy_swing";
+        if (weapon_type == "sword" || weapon_type == "dagger") return "sword_slash";
         return "melee";
     }
     void broadcast_player_action_event(const PlayerState& player,
@@ -2012,8 +2039,9 @@ struct EnetServer::Impl {
             return;
         }
         const auto now = Clock::now();
+        const auto combat_profile = weapon_combat_profile(player_weapon_type(player));
         if (player.last_attack_at.time_since_epoch().count() != 0 &&
-            now - player.last_attack_at < kAttackCooldown) {
+            now - player.last_attack_at < combat_profile.cooldown) {
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", false}, {"reason", "攻击间隔中，请稍后再试。"}});
             return;
@@ -2036,7 +2064,7 @@ struct EnetServer::Impl {
         }
         const double dx = static_cast<double>(target->state.x) - player.x;
         const double dz = static_cast<double>(target->state.z) - player.z;
-        if (dx * dx + dz * dz > static_cast<double>(kAttackRange) * kAttackRange) {
+        if (dx * dx + dz * dz > static_cast<double>(combat_profile.range) * combat_profile.range) {
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", false}, {"reason", "距离目标太远。"}});
             return;
@@ -2050,8 +2078,11 @@ struct EnetServer::Impl {
             static_cast<std::int64_t>(target->definition.max_health)
         };
         honghuang::simulation::DamageResult damage{};
-        if (!honghuang::simulation::calculate_damage(
-                attacker, defender, honghuang::simulation::AttackProfile{}, damage)) {
+        const honghuang::simulation::AttackProfile attack_profile{
+            combat_profile.power_basis_points,
+            combat_profile.defense_penetration_basis_points
+        };
+        if (!honghuang::simulation::calculate_damage(attacker, defender, attack_profile, damage)) {
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", false}, {"reason", "伤害计算未通过校验。"}});
             return;
