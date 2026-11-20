@@ -46,6 +46,8 @@ The live world scene now supplies catalog landmarks to the shared minimap as nor
 
 The in-world HUD now includes an entry to open a full-world map overlay. The overlay reads world bounds, display-region rectangles, production-visible landmarks/water bodies, and player position from the shared map catalog and uses the same `WorldMapProjection` helper as the local minimap. Prototype-only blood-sea/river overlays and non-production landmarks are explicitly excluded from the live map until those features are integrated into the playable world; the isolated terrain experiment still reads their prototype definitions.
 
+Exploration-point visibility follows the server-provided `discovered` flag: undiscovered POI markers are neither drawn nor selectable on the full map; discovered POIs remain visible with a muted marker, and high-danger discovered points receive a red warning ring. This is a marker-level discovery mask, not yet a true explored-terrain polygon/fog texture. NPCs and monsters are limited to the live data currently supplied by the world scene. The client does not infer or persist discovery state.
+
 Supported interactions:
 - Mouse wheel zoom.
 - Right or middle mouse drag to pan.
