@@ -1811,6 +1811,34 @@ func _layout_hud() -> void:
 		chat_panel.custom_minimum_size = Vector2(chat_width, chat_height)
 		if is_instance_valid(chat_scroll):
 			chat_scroll.custom_minimum_size = Vector2(chat_width - 54.0, maxf(150.0, chat_height - 190.0))
+	# Inventory is a centered modal rather than competing with the friend/chat drawers.
+	if is_instance_valid(inventory_panel):
+		var inventory_width := minf(620.0, maxf(300.0, viewport_size.x - 32.0))
+		var inventory_height := minf(680.0, maxf(360.0, viewport_size.y - 36.0))
+		inventory_panel.set_anchors_preset(Control.PRESET_CENTER)
+		inventory_panel.offset_left = -inventory_width * 0.5
+		inventory_panel.offset_right = inventory_width * 0.5
+		inventory_panel.offset_top = -inventory_height * 0.5
+		inventory_panel.offset_bottom = inventory_height * 0.5
+		if is_instance_valid(inventory_items):
+			var inventory_scroll := inventory_items.get_parent() as ScrollContainer
+			if inventory_scroll != null:
+				inventory_scroll.custom_minimum_size = Vector2(inventory_width - 44.0, maxf(120.0, inventory_height - 310.0))
+	# NPC dialogue is also centered and sized against the active viewport.
+	if is_instance_valid(npc_panel):
+		var npc_width := minf(600.0, maxf(290.0, viewport_size.x - 28.0))
+		var npc_height := minf(700.0, maxf(360.0, viewport_size.y - 28.0))
+		npc_panel.set_anchors_preset(Control.PRESET_CENTER)
+		npc_panel.offset_left = -npc_width * 0.5
+		npc_panel.offset_right = npc_width * 0.5
+		npc_panel.offset_top = -npc_height * 0.5
+		npc_panel.offset_bottom = npc_height * 0.5
+		if is_instance_valid(npc_dialogue_label):
+			npc_dialogue_label.custom_minimum_size.x = npc_width - 44.0
+		if is_instance_valid(exploration_container):
+			var exploration_scroll := exploration_container.get_parent() as ScrollContainer
+			if exploration_scroll != null:
+				exploration_scroll.custom_minimum_size = Vector2(npc_width - 44.0, minf(150.0, maxf(72.0, npc_height * 0.2)))
 	if is_instance_valid(npc_interact_button):
 		npc_interact_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 		npc_interact_button.offset_left = -minf(280.0, viewport_size.x - 36.0)
@@ -4738,6 +4766,8 @@ func _render_exploration_events(events: Variant) -> void:
 	exploration_event_data.clear()
 	var heading := Label.new()
 	heading.text = "区域奇遇 · 灵魂因果记录"
+	heading.add_theme_color_override("font_color", Color("#d4b47b"))
+	heading.add_theme_font_size_override("font_size", 17)
 	heading.add_theme_font_size_override("font_size", 18)
 	exploration_container.add_child(heading)
 	if events.is_empty():
@@ -4758,6 +4788,7 @@ func _render_exploration_events(events: Variant) -> void:
 		var status := str(event.get("status", "locked"))
 		var state_text := _exploration_event_state_text(event, distance)
 		var event_button := Button.new()
+		_apply_button_theme(event_button, status == "available")
 		event_button.text = str(event.get("point_name", "探索地点")) + " · " + str(event.get("title", "未知奇遇")) + " · " + state_text
 		event_button.tooltip_text = str(event.get("description", ""))
 		event_button.disabled = status != "available" or not in_range or npc_request_busy
@@ -4795,6 +4826,7 @@ func _open_exploration_event(event_id: String) -> void:
 			if choice_id.is_empty():
 				continue
 			var choice_button := Button.new()
+			_apply_button_theme(choice_button, true)
 			choice_button.text = str(choice.get("text", "作出回应"))
 			choice_button.tooltip_text = str(choice.get("description", ""))
 			choice_button.pressed.connect(_confirm_exploration_event.bind(choice_id))
@@ -4803,6 +4835,7 @@ func _open_exploration_event(event_id: String) -> void:
 	if choice_count == 0:
 		npc_status_label.text = "此奇遇尚未配置有效分支，暂时无法回应。"
 	var cancel_button := Button.new()
+	_apply_button_theme(cancel_button)
 	cancel_button.text = "暂不回应"
 	cancel_button.pressed.connect(_cancel_exploration_event)
 	npc_choice_container.add_child(cancel_button)
