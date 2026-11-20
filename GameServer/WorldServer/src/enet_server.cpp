@@ -2019,7 +2019,7 @@ struct EnetServer::Impl {
             return;
         }
         const auto now = Clock::now();
-        const auto combat_profile = weapon_combat_profile(player_weapon_type(player));
+        const auto combat_profile = honghuang::simulation::weapon_combat_profile(player_weapon_type(player));
         if (player.last_attack_at.time_since_epoch().count() != 0 &&
             now - player.last_attack_at < combat_profile.cooldown) {
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
