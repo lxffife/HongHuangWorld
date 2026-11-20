@@ -1176,6 +1176,9 @@ func _upsert_monster(entity: Dictionary) -> void:
 	var monster_node := monsters[monster_id] as Node3D
 	monster_node.set_meta("target_yaw", float(entity.get("yaw", monster_node.rotation.y)))
 	monster_node.set_meta("server_mode", int(entity.get("mode", 0)))
+	var slow_ring := monster_node.get_node_or_null("SlowStatusRing") as MeshInstance3D
+	if slow_ring != null:
+		slow_ring.visible = bool(entity.get("slowed", false))
 	monster_entities[monster_id] = entity.duplicate(true)
 	if monster_id == selected_monster_id:
 		_update_target_info()
@@ -1235,6 +1238,25 @@ func _create_monster(monster_name: String, monster_level: int) -> Node3D:
 		telegraph.position.y = 0.075
 		telegraph.visible = false
 		visual_root.add_child(telegraph)
+	var slow_ring := MeshInstance3D.new()
+	slow_ring.name = "SlowStatusRing"
+	var slow_ring_mesh := TorusMesh.new()
+	slow_ring_mesh.inner_radius = 0.58
+	slow_ring_mesh.outer_radius = 0.66
+	slow_ring_mesh.rings = 24
+	slow_ring_mesh.ring_segments = 6
+	slow_ring.mesh = slow_ring_mesh
+	var slow_ring_material := StandardMaterial3D.new()
+	slow_ring_material.albedo_color = Color("#70dfff", 0.72)
+	slow_ring_material.emission_enabled = true
+	slow_ring_material.emission = Color("#48cfff")
+	slow_ring_material.emission_energy_multiplier = 1.6
+	slow_ring_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	slow_ring_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	slow_ring.material_override = slow_ring_material
+	slow_ring.position.y = 0.09
+	slow_ring.visible = false
+	visual_root.add_child(slow_ring)
 	var label := Label3D.new()
 	label.name = "Nameplate"
 	label.text = monster_name + " · Lv." + str(monster_level)
@@ -1263,12 +1285,17 @@ func _upsert_drop(entity: Dictionary) -> void:
 func _upsert_projectile(entity: Dictionary) -> void:
 	var projectile_id := str(entity.get("entity_id", ""))
 	var projectile_type := str(entity.get("projectile_type", ""))
-	if projectile_id.is_empty() or projectile_type not in ["arrow", "fireball"]:
+	if projectile_id.is_empty() or projectile_type not in ["arrow", "fireball", "ice_bolt"]:
 		return
 	var target := Vector3(float(entity.get("x", 0.0)), float(entity.get("y", 1.15)), float(entity.get("z", 0.0)))
 	var is_new := not projectiles.has(projectile_id)
 	if is_new:
-		projectiles[projectile_id] = _create_fireball_projectile() if projectile_type == "fireball" else _create_arrow_projectile()
+		if projectile_type == "fireball":
+			projectiles[projectile_id] = _create_fireball_projectile()
+		elif projectile_type == "ice_bolt":
+			projectiles[projectile_id] = _create_ice_bolt_projectile()
+		else:
+			projectiles[projectile_id] = _create_arrow_projectile()
 	projectile_targets[projectile_id] = target
 	var direction := Vector3(float(entity.get("velocity_x", 0.0)), 0.0, float(entity.get("velocity_z", -1.0)))
 	var projectile_node := projectiles[projectile_id] as Node3D
@@ -1312,6 +1339,46 @@ func _create_fireball_projectile() -> Node3D:
 	glow_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	glow.material_override = glow_material
 	root.add_child(glow)
+	add_child(root)
+	return root
+
+func _create_ice_bolt_projectile() -> Node3D:
+	var root := Node3D.new()
+	root.name = "AuthoritativeIceBolt"
+	var core := MeshInstance3D.new()
+	var crystal := SphereMesh.new()
+	crystal.radius = 0.19
+	crystal.height = 0.42
+	crystal.radial_segments = 8
+	crystal.rings = 4
+	core.mesh = crystal
+	core.rotation.z = PI * 0.25
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#a7efff")
+	material.emission_enabled = true
+	material.emission = Color("#54cfff")
+	material.emission_energy_multiplier = 2.2
+	material.metallic = 0.18
+	material.roughness = 0.24
+	core.material_override = material
+	root.add_child(core)
+	var halo := MeshInstance3D.new()
+	var halo_mesh := TorusMesh.new()
+	halo_mesh.inner_radius = 0.23
+	halo_mesh.outer_radius = 0.29
+	halo_mesh.rings = 16
+	halo_mesh.ring_segments = 6
+	halo.mesh = halo_mesh
+	halo.rotation.x = PI * 0.5
+	var halo_material := StandardMaterial3D.new()
+	halo_material.albedo_color = Color("#80e4ff", 0.58)
+	halo_material.emission_enabled = true
+	halo_material.emission = Color("#4ccfff")
+	halo_material.emission_energy_multiplier = 1.8
+	halo_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	halo_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	halo.material_override = halo_material
+	root.add_child(halo)
 	add_child(root)
 	return root
 
