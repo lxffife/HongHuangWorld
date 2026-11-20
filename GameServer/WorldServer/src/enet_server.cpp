@@ -65,7 +65,14 @@ struct PendingSpellCast {
     Clock::time_point completes_at{};
 };
 
+struct BountyObjectiveSubscription {
+    std::string task_id;
+    std::string objective_key;
+    std::string event_type;
+};
+
 struct PlayerState {
+    std::vector<BountyObjectiveSubscription> bounty_objectives;
     std::string session_id;
     std::string character_id;
     std::string name;
@@ -552,6 +559,67 @@ bool deliver_character_reward(const ServerConfig& config, const CharacterRewardE
 bool backend_inventory_request(const ServerConfig& config, const std::string& path,
                                const Json* body, long& http_status, Json& response,
                                std::string& error);
+
+bool fetch_bounty_objectives(const ServerConfig& config, const std::string& session_id,
+                             const std::string& character_id,
+                             std::vector<BountyObjectiveSubscription>& objectives,
+                             long& http_status, std::string& error) {
+    CURL* curl = curl_easy_init();
+    if (curl == nullptr) { error = "could not initialize bounty objective HTTP client"; return false; }
+    const std::string url = config.backend_url +
+        "/api/v1/servers/bounties/objectives?session_id=" + session_id +
+        "&character_id=" + character_id;
+    std::string response_text;
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, "Accept: application/json");
+    const std::string auth_header = "X-World-Server-Key: " + config.api_key;
+    const std::string node_header = "X-World-Server-Node: " + config.node_key;
+    headers = curl_slist_append(headers, auth_header.c_str());
+    headers = curl_slist_append(headers, node_header.c_str());
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, collect_response);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_text);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 1500L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 4000L);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+    const auto result = curl_easy_perform(curl);
+    http_status = 0;
+    if (result == CURLE_OK) curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+    if (result != CURLE_OK) {
+        error = std::string("bounty objective request failed: ") + curl_easy_strerror(result);
+        return false;
+    }
+    if (http_status != 200) {
+        error = "bounty objective lookup rejected by backend (HTTP " + std::to_string(http_status) + ")";
+        return false;
+    }
+    try {
+        const auto response = Json::parse(response_text);
+        const auto items = response.at("objectives");
+        if (!items.is_array()) throw std::runtime_error("objectives must be an array");
+        std::vector<BountyObjectiveSubscription> parsed;
+        parsed.reserve(items.size());
+        for (const auto& item : items) {
+            BountyObjectiveSubscription objective{
+                item.at("task_id").get<std::string>(),
+                item.at("objective_key").get<std::string>(),
+                item.at("event_type").get<std::string>()
+            };
+            if (objective.task_id.empty() || objective.objective_key.empty() ||
+                objective.event_type != "monster_killed") continue;
+            parsed.push_back(std::move(objective));
+        }
+        objectives = std::move(parsed);
+        return true;
+    } catch (const std::exception& exception) {
+        error = std::string("invalid bounty objective response: ") + exception.what();
+        return false;
+    }
+}
 
 bool deliver_soul_absorption(const ServerConfig& config, const SoulAbsorptionEvent& event,
                              long& status, std::string& error) {
@@ -1110,6 +1178,10 @@ struct EnetServer::Impl {
                             payload.at("source").get<std::string>()
                         };
                         delivered = deliver_soul_reward(config, reward, status, delivery_error);
+                    } else if (event->event_type == "bounty_objective_event") {
+                        Json response;
+                        delivered = backend_inventory_request(config, "/api/v1/servers/bounties/events",
+                                                              &payload, status, response, delivery_error);
                     } else if (event->event_type == "soul_absorption") {
                         SoulAbsorptionEvent absorption{
                             event->event_id, payload.at("session_id").get<std::string>(),
@@ -1395,6 +1467,27 @@ struct EnetServer::Impl {
         std::string error;
         if (!enqueue_durable_event(event_id, "soul_reward", payload, error))
             std::cerr << "Could not persist soul reward: " << error << '\n';
+    }
+
+    void enqueue_bounty_kill_events(const PlayerState& player, const MonsterRuntime& monster) {
+        for (const auto& objective : player.bounty_objectives) {
+            if (objective.event_type != "monster_killed" ||
+                objective.objective_key != monster.definition.id) continue;
+            const auto event_id = make_event_uuid();
+            const Json payload{
+                {"event_id", event_id},
+                {"task_id", objective.task_id},
+                {"session_id", player.session_id},
+                {"character_id", player.character_id},
+                {"objective_key", objective.objective_key},
+                {"event_type", "monster_killed"}
+            };
+            std::string error;
+            if (!enqueue_durable_event(event_id, "bounty_objective_event", payload, error)) {
+                std::cerr << "Could not persist bounty monster-kill event for task "
+                          << objective.task_id << ": " << error << '\\n';
+            }
+        }
     }
 
     void enqueue_soul_absorption(const PlayerState& player, const MonsterRuntime& monster) {
@@ -2569,6 +2662,7 @@ struct EnetServer::Impl {
         std::int64_t cultivation_reward = 0;
         if (damage.defeated) {
             target->state.mode = honghuang::simulation::MonsterMode::Dead;
+            enqueue_bounty_kill_events(player, *target);
             target->slow_effect = {};
             target->burn_effect = {};
             target->burn_owner_character_id.clear();
@@ -3005,6 +3099,7 @@ struct EnetServer::Impl {
                 std::int64_t cultivation_reward = 0;
                 if (damage.defeated) {
                     target->state.mode = honghuang::simulation::MonsterMode::Dead;
+                    enqueue_bounty_kill_events(owner->second, *target);
                     honghuang::simulation::clear_negative_statuses(target->slow_effect,target->freeze_effect,target->burn_effect);
                     target->burn_owner_character_id.clear();
                     target->state.target_id.clear();
@@ -3098,6 +3193,8 @@ struct EnetServer::Impl {
                 });
                 if (burn_defeated) {
                     monster.state.mode = honghuang::simulation::MonsterMode::Dead;
+                    if (burn_owner != players.end())
+                        enqueue_bounty_kill_events(burn_owner->second, monster);
                     monster.slow_effect = {};
                     monster.burn_effect = {};
                     monster.state.target_id.clear();
@@ -3602,6 +3699,17 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                         player.movement_speed = honghuang::simulation::effective_player_movement_speed(
                             combat_stats.at("movement_speed").get<float>());
                         player.name = snapshot.value("name", std::string{});
+                        long bounty_http_status = 0;
+                        std::string bounty_error;
+                        if (!fetch_bounty_objectives(impl_->config, player.session_id, player.character_id,
+                                                     player.bounty_objectives, bounty_http_status, bounty_error)) {
+                            std::cerr << "Bounty objective subscriptions unavailable for character "
+                                      << player.character_id << ": " << bounty_error << '\\n';
+                        } else {
+                            std::cout << "Loaded " << player.bounty_objectives.size()
+                                      << " bounty objective subscriptions for character "
+                                      << player.character_id << '\\n';
+                        }
                         player.birth_inheritance = snapshot.value("birth_inheritance", Json::object());
                         if (!player.birth_inheritance.is_object()) player.birth_inheritance = Json::object();
                         player.equipment = snapshot.value("equipment", Json::array());
