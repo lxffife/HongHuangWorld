@@ -76,6 +76,7 @@ struct PlayerState {
     std::int32_t constitution{};
     std::int32_t vitality{};
     honghuang::simulation::TimedSlowEffect slow_effect;
+    honghuang::simulation::TimedFreezeEffect freeze_effect;
     honghuang::simulation::PeriodicDamageEffect poison_effect;
     std::string poison_source_entity_id;
     float x{};
@@ -114,6 +115,7 @@ struct MonsterRuntime {
     int retry_spawn_seconds{60};
     int first_spawn_delay_seconds{0};
     honghuang::simulation::TimedSlowEffect slow_effect;
+    honghuang::simulation::TimedFreezeEffect freeze_effect;
     honghuang::simulation::PeriodicDamageEffect burn_effect;
     std::string burn_owner_character_id;
 };
@@ -224,6 +226,7 @@ struct ProjectileRuntime {
     std::string projectile_type{"arrow"};
     std::int32_t slow_duration_ms{};
     float slow_multiplier{1.0F};
+    std::int32_t freeze_duration_ms{};
     std::int32_t burn_duration_ms{};
     std::int32_t burn_interval_ms{};
     std::int32_t burn_damage_basis_points{};
@@ -2490,9 +2493,8 @@ struct EnetServer::Impl {
                     {"x", entity.x}, {"y", entity.y}, {"z", entity.z},
                     {"yaw", entity.yaw},
                     {"last_input_sequence", entity.last_input_sequence},
-                    {"slowed", honghuang::simulation::slow_is_active(
-                        entity.slow_effect, std::chrono::duration_cast<std::chrono::milliseconds>(
-                            Clock::now().time_since_epoch()).count())},
+                    {"slowed", honghuang::simulation::slow_is_active(entity.slow_effect,std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count())},
+                    {"frozen", honghuang::simulation::freeze_is_active(entity.freeze_effect,std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count())},
                     {"poisoned", honghuang::simulation::periodic_damage_is_active(
                         entity.poison_effect, std::chrono::duration_cast<std::chrono::milliseconds>(
                             Clock::now().time_since_epoch()).count())}
@@ -2671,7 +2673,7 @@ struct EnetServer::Impl {
                 player.attack, spell->power_basis_points, spell->defense_penetration_basis_points,
                 now + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<float>(spell->projectile_lifetime_seconds)),
                 spell->element == honghuang::simulation::SpellElement::Ice ? "ice_bolt" : "fireball",
-                spell->slow_duration_ms, spell->slow_multiplier,
+                spell->slow_duration_ms, spell->slow_multiplier, spell->freeze_duration_ms,
                  spell->burn_duration_ms, spell->burn_interval_ms,
                  spell->burn_damage_basis_points
             });
@@ -2728,6 +2730,8 @@ struct EnetServer::Impl {
             };
             if (honghuang::simulation::calculate_damage(attacker, defender, attack_profile, damage)) {
                 bool applied_slow = false;
+                bool applied_freeze = false;
+                std::int32_t applied_freeze_duration_ms = 0;
                 bool applied_burn = false;
                 if (projectile->slow_duration_ms > 0) {
                     const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -2735,6 +2739,14 @@ struct EnetServer::Impl {
                     applied_slow = honghuang::simulation::apply_slow(
                         target->slow_effect, now_ms, projectile->slow_duration_ms,
                         projectile->slow_multiplier);
+                }
+
+                if (!damage.defeated && projectile->freeze_duration_ms > 0) {
+                    applied_freeze_duration_ms = honghuang::simulation::monster_freeze_duration_ms(
+                        projectile->freeze_duration_ms,target->definition.id,target->definition.name,target->rare_spawn);
+                    applied_freeze = honghuang::simulation::apply_freeze(target->freeze_effect,
+                        std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count(),
+                        applied_freeze_duration_ms);
                 }
                 if (!damage.defeated && projectile->burn_duration_ms > 0) {
                     const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -2751,8 +2763,7 @@ struct EnetServer::Impl {
                 std::int64_t cultivation_reward = 0;
                 if (damage.defeated) {
                     target->state.mode = honghuang::simulation::MonsterMode::Dead;
-                    target->slow_effect = {};
-                    target->burn_effect = {};
+                    honghuang::simulation::clear_negative_statuses(target->slow_effect,target->freeze_effect,target->burn_effect);
                     target->burn_owner_character_id.clear();
                     target->state.target_id.clear();
                     target->respawn_at = now + std::chrono::seconds(target->retry_spawn_seconds);
@@ -2778,8 +2789,8 @@ struct EnetServer::Impl {
                                {"remaining_health", damage.remaining_health},
                                {"max_health", target->definition.max_health},
                                {"defeated", damage.defeated},
-                               {"status_effect", applied_poison ? "poison" : (applied_slow ? "slow" : "")},
-                               {"status_duration_ms", applied_slow ? projectile->slow_duration_ms : 0},
+                               {"status_effect", applied_freeze ? "freeze" : (applied_slow ? "slow" : "")},
+                               {"status_duration_ms", applied_freeze ? applied_freeze_duration_ms : (applied_slow ? projectile->slow_duration_ms : 0)},
                                {"burn_applied", applied_burn},
                                {"burn_duration_ms", applied_burn ? projectile->burn_duration_ms : 0},
                                {"experience_reward", experience_reward},
@@ -2790,7 +2801,7 @@ struct EnetServer::Impl {
                     {"target_entity_id", target->runtime_id}, {"target_name", target->definition.name},
                     {"projectile_type", projectile->projectile_type}, {"damage", damage.damage}, {"health", damage.remaining_health},
                     {"max_health", target->definition.max_health}, {"defeated", damage.defeated},
-                    {"status_effect", applied_slow ? "slow" : ""},
+                    {"status_effect", applied_freeze ? "freeze" : (applied_slow ? "slow" : "")},
                     {"status_duration_ms", applied_slow ? projectile->slow_duration_ms : 0},
                     {"burn_applied", applied_burn},
                     {"burn_duration_ms", applied_burn ? projectile->burn_duration_ms : 0}
@@ -2819,8 +2830,7 @@ struct EnetServer::Impl {
                                      monster.definition.max_health};
                     monster.respawn_at = Clock::time_point{};
                     monster.attack_phase = MonsterAttackPhase::Ready;
-                    monster.slow_effect = {};
-                    monster.burn_effect = {};
+                    honghuang::simulation::clear_negative_statuses(monster.slow_effect,monster.freeze_effect,monster.burn_effect);
                     monster.burn_owner_character_id.clear();
                     monster.attack_target_character_id.clear();
                     monster.last_attack_at = Clock::time_point{};
@@ -2949,8 +2959,8 @@ struct EnetServer::Impl {
             }
             const auto effect_now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                 now.time_since_epoch()).count();
-            const float monster_delta = honghuang::simulation::movement_delta_with_effect(
-                delta, monster.slow_effect, effect_now_ms);
+            const bool monster_frozen = honghuang::simulation::freeze_is_active(monster.freeze_effect,effect_now_ms);
+            const float monster_delta = monster_frozen ? 0.0F : honghuang::simulation::movement_delta_with_effect(delta,monster.slow_effect,effect_now_ms);
             if (!honghuang::simulation::tick_monster(
                     monster.definition, monster.state, nearest_target, monster_delta)) {
                 std::cerr << "Skipping invalid monster simulation state: "
@@ -2985,6 +2995,10 @@ struct EnetServer::Impl {
                 }
             };
 
+            if (monster_frozen) {
+                if (monster.attack_phase == MonsterAttackPhase::Windup) { monster.attack_phase = MonsterAttackPhase::Ready; monster.attack_target_character_id.clear(); }
+                continue;
+            }
             if (monster.state.mode != honghuang::simulation::MonsterMode::Chasing ||
                 monster.state.target_id.empty()) {
                 if (monster.attack_phase == MonsterAttackPhase::Windup) {
@@ -3091,8 +3105,7 @@ struct EnetServer::Impl {
                 }
                 player.health = damage.remaining_health;
                 if (damage.defeated) {
-                    player.slow_effect = {};
-                    player.poison_effect = {};
+                    honghuang::simulation::clear_negative_statuses(player.slow_effect,player.freeze_effect,player.poison_effect);
                     player.poison_source_entity_id.clear();
                 }
                 bool applied_slow = false;
