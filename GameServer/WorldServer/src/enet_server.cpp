@@ -6,6 +6,7 @@
 #include "simulation/weapon_combat.hpp"
 #include "simulation/projectile.hpp"
 #include "simulation/spell_combat.hpp"
+#include "simulation/player_resources.hpp"
 #include "simulation/consumable.hpp"
 #include "simulation/status_effect.hpp"
 #include "persistence/durable_outbox.hpp"
@@ -48,6 +49,7 @@ using Json = nlohmann::json;
 using Clock = std::chrono::steady_clock;
 constexpr auto kSnapshotInterval = std::chrono::milliseconds(50);
 constexpr auto kInputTimeout = std::chrono::milliseconds(500);
+constexpr auto kManaRegenerationInterval = std::chrono::milliseconds(3000);
 // The client sends at 20 Hz. Accept modest jitter, but cap command processing at 100 Hz.
 constexpr auto kMinimumInputInterval = std::chrono::milliseconds(10);
 constexpr float kInterestRadius = 80.0F;
@@ -93,6 +95,7 @@ struct PlayerState {
     Clock::time_point last_input_received_at{};
     Clock::time_point last_movement_diagnostic_at{Clock::now()};
     Clock::time_point last_attack_at{};
+    Clock::time_point last_mana_regen_at{Clock::now()};
     std::unordered_map<std::string, Clock::time_point> last_spell_at_by_id;
     std::optional<PendingSpellCast> pending_spell;
     Clock::time_point last_pickup_at{};
@@ -2618,6 +2621,27 @@ struct EnetServer::Impl {
                     player.poison_source_entity_id.clear();
                 }
             }
+
+            // Mana is server-authoritative: restore one point per interval while
+            // alive, but pause the timer while a cast is being channelled.
+            if (player.health <= 0 || player.pending_spell.has_value()) {
+                player.last_mana_regen_at = now;
+            } else if (player.mana >= player.max_mana) {
+                player.last_mana_regen_at = now;
+            } else {
+                const auto regen_elapsed_ms =
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        now - player.last_mana_regen_at).count();
+                const auto restored = honghuang::simulation::mana_regeneration_amount(
+                    regen_elapsed_ms, player.mana, player.max_mana,
+                    static_cast<std::int32_t>(kManaRegenerationInterval.count()));
+                if (restored > 0) {
+                    player.mana += restored;
+                    player.last_mana_regen_at +=
+                        kManaRegenerationInterval * restored;
+                }
+            }
+
             if (player.health <= 0 || now - player.last_input_at > kInputTimeout) {
                 player.move_x = 0.0F;
                 player.move_z = 0.0F;
