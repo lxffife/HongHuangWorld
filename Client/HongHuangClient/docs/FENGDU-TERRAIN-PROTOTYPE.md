@@ -25,6 +25,19 @@ ridges, and a Blood Sea coast/shelf.
 - Markers are visual annotations only. Server region IDs, POIs, spawn rules,
   tide hazards, and access permissions remain server-authoritative.
 
+## Data-driven map metadata
+
+`scripts/world_map_catalog.gd` is the shared client metadata source for:
+- Fengdu and Qingyun display-region rectangles, with explicit priority/order.
+- The isolated Fengdu prototype bounds, heightfield resolution, tile count, and world size.
+- Visual water-body definitions (Forgotten River and Blood Sea) and landmark IDs, labels, coordinates, and colors.
+
+`world_region_catalog.gd` delegates region-name resolution to this catalog. The existing region order and rectangles are preserved, including Qingyun's two pine-forest rectangles, so this refactor is intended to keep current HUD labels unchanged.
+
+The terrain experiment now reads water and landmark placement from the catalog instead of embedding those coordinates in its scene script. Adding a new visual landmark or water body should therefore be a data change, while its rendering remains handled by the prototype.
+
+These definitions are client presentation metadata, not gameplay permissions or authoritative world topology. A future Blood Sea deep-water, island, wreck, or ritual-island region must receive its authoritative region/POI and access rules from the server; adding a catalog entry alone does not make it traversable or discoverable.
+
 ## Why this is not Terrain3D yet
 
 The mesh is deliberately generated with built-in Godot APIs so the shape and
