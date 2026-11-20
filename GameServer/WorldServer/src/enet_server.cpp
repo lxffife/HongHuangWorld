@@ -196,7 +196,7 @@ struct CombatRefreshResult {
     std::string error;
 };
 
-struct ConsumableJob { std::string session_id, character_id, request_id, item_id; int quantity{}; };
+struct ConsumableJob { std::string session_id, character_id, request_id, item_id; int quantity{}; std::int64_t health{}, max_health{}, mana{}, max_mana{}; };
 struct ConsumableJobResult {
     std::string session_id, character_id, request_id, item_id;
     bool success{};
@@ -1941,7 +1941,9 @@ struct EnetServer::Impl {
                 result.request_id = job.request_id;
                 result.item_id = job.item_id;
                 const Json request{{"session_id", job.session_id}, {"character_id", job.character_id},
-                    {"request_id", job.request_id}, {"item_id", job.item_id}, {"quantity", job.quantity}};
+                    {"request_id", job.request_id}, {"item_id", job.item_id}, {"quantity", job.quantity},
+                    {"health", job.health}, {"max_health", job.max_health},
+                    {"mana", job.mana}, {"max_mana", job.max_mana}};
                 long status = 0;
                 Json response;
                 std::string error;
@@ -2423,7 +2425,8 @@ struct EnetServer::Impl {
         if (!honghuang::simulation::valid_consumable_request(request_id, item_id, quantity)) {
             reject("消耗品请求格式无效。"); return;
         }
-        if (!enqueue_consumable_job(ConsumableJob{player.session_id, player.character_id, request_id, item_id, quantity})) {
+        if (!enqueue_consumable_job(ConsumableJob{player.session_id, player.character_id, request_id, item_id, quantity,
+                player.health, player.max_health, player.mana, player.max_mana})) {
             reject("消耗品结算队列繁忙，或当前角色已有一笔请求正在结算。"); return;
         }
         send_json(peer, honghuang::protocol::MessageType::CombatEvent,
