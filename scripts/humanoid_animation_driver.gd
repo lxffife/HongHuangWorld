@@ -22,7 +22,8 @@ static func apply_state(root: Node3D, state: String, fade_seconds: float = 0.16)
 	var selected := _find_clip(animation_player, state)
 	if selected.is_empty():
 		return false
-	if animation_player.current_animation == selected and animation_player.is_playing():
+	if animation_player.current_animation == selected:
+		# Do not restart a short one-shot clip every frame after it naturally ends.
 		return true
 	animation_player.play(selected, maxf(fade_seconds, 0.0))
 	return true
