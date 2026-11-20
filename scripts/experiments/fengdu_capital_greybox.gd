@@ -4,6 +4,7 @@ extends Node3D
 
 const WorldEnvironmentBuilder = preload("res://scripts/world_environment_builder.gd")
 const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
+const CityModuleScene = preload("res://scenes/experiments/FengduCityModule.tscn")
 
 const CITY_SCALE := 2.5
 const WALL_WIDTH := 1900.0
@@ -21,6 +22,7 @@ var _camera: Camera3D
 var _pitch := -0.08
 var _mouse_captured := false
 var _hint_label: Label
+var _nearby_district_data: Dictionary = {}
 
 
 func _ready() -> void:
@@ -36,6 +38,9 @@ func _ready() -> void:
 	_build_gatehouses()
 	_build_roads()
 	_build_districts()
+	_build_wall_defenses()
+	_build_gate_signs()
+	_build_patrol_guards()
 	_build_landmark_silhouette()
 	_build_player()
 	_build_hud()
@@ -157,58 +162,85 @@ func _build_districts() -> void:
 
 
 func _build_district_cluster(district: Dictionary, center: Vector3) -> void:
-	var kind := str(district.get("kind", "admin"))
-	var material_key := "gate_district" if kind == "gate" else kind
-	if not _materials.has(material_key):
-		material_key = "admin"
-	var prefix := str(district.get("id", "District"))
-	var is_palace := kind == "palace"
-	var main_width := 210.0 if is_palace else 92.0
-	var main_depth := 150.0 if is_palace else 68.0
-	var main_height := 68.0 if is_palace else 28.0
-	if kind == "court":
-		main_width = 120.0
-		main_depth = 88.0
-		main_height = 42.0
-	elif kind == "sacred":
-		main_width = 140.0
-		main_depth = 96.0
-		main_height = 48.0
-	_add_box(prefix + "_MainHall", Vector3(main_width, main_height, main_depth), center + Vector3(0.0, main_height * 0.5, 0.0), material_key, true)
-	_add_roof_cap(prefix + "_MainHallRoof", Vector3(main_width + 18.0, 9.0, main_depth + 18.0), center + Vector3(0.0, main_height + 4.5, 0.0), "roof")
-	var wing_offset := 92.0 if is_palace else 66.0
-	var wing_size := Vector3(58.0, 20.0, 48.0) if is_palace else Vector3(42.0, 15.0, 38.0)
-	for side in [-1.0, 1.0]:
-		_add_box(prefix + "_SideHall_" + str(side), wing_size, center + Vector3(side * wing_offset, wing_size.y * 0.5, 82.0), material_key, true)
-		_add_roof_cap(prefix + "_SideRoof_" + str(side), Vector3(wing_size.x + 10.0, 6.0, wing_size.z + 10.0), center + Vector3(side * wing_offset, wing_size.y + 3.0, 82.0), "roof")
-	_add_box(prefix + "_Courtyard", Vector3(170.0, 0.3, 58.0), center + Vector3(0.0, 0.18, main_depth * 0.5 + 48.0), "road_edge", false)
-	_add_box(prefix + "_FrontSteps", Vector3(main_width * 0.72, 3.0, 18.0), center + Vector3(0.0, 1.5, main_depth * 0.5 + 12.0), "stone", true)
-	if kind == "market" or kind == "residential":
-		for row in range(2):
-			for column in range(3):
-				var x := (float(column) - 1.0) * 52.0
-				var z := -90.0 - float(row) * 50.0
-				var stall_size := Vector3(34.0, 13.0 + float((row + column) % 2) * 4.0, 30.0)
-				_add_box(prefix + "_Shop_%d_%d" % [row, column], stall_size, center + Vector3(x, stall_size.y * 0.5, z), material_key, true)
-				_add_roof_cap(prefix + "_ShopRoof_%d_%d" % [row, column], Vector3(38.0, 5.0, 34.0), center + Vector3(x, stall_size.y + 2.5, z), "roof")
-	if kind == "military":
-		for i in range(4):
-			var x := -75.0 + float(i) * 50.0
-			_add_box(prefix + "_Barracks_%d" % i, Vector3(38.0, 18.0, 54.0), center + Vector3(x, 9.0, -92.0), material_key, true)
-	if kind == "transport":
-		_add_box(prefix + "_Stable", Vector3(90.0, 17.0, 48.0), center + Vector3(0.0, 8.5, -92.0), material_key, true)
-		_add_box(prefix + "_Platform", Vector3(150.0, 1.0, 48.0), center + Vector3(0.0, 0.5, 95.0), "stone", true)
+	var module := CityModuleScene.instantiate() as Node3D
+	module.name = "District_" + str(district.get("id", "unknown"))
+	var module_data := district.duplicate(true)
+	module_data["module_kind"] = "district"
+	module.call("configure", module_data)
+	module.connect("player_entered", Callable(self, "_on_district_entered"))
+	module.connect("player_exited", Callable(self, "_on_district_exited"))
+	module.position = center
+	add_child(module)
 
 
-func _add_roof_cap(node_name: String, dimensions: Vector3, position: Vector3, material_key: String) -> void:
-	var roof := MeshInstance3D.new()
-	roof.name = node_name
-	var mesh := BoxMesh.new()
-	mesh.size = dimensions
-	roof.mesh = mesh
-	roof.position = position
-	roof.material_override = _materials[material_key]
-	add_child(roof)
+func _build_wall_defenses() -> void:
+	var half_x := WALL_WIDTH * 0.5
+	var half_z := WALL_DEPTH * 0.5
+	for i in range(17):
+		var x := -half_x + 70.0 + float(i) * 110.0
+		if absf(x) > GATE_OPENING * 0.5 + 30.0:
+			for side in [-1.0, 1.0]:
+				_add_box("WallCrenel_X_%d_%s" % [i, side], Vector3(22.0, 9.0, 22.0), Vector3(x, WALL_HEIGHT + 4.0, side * half_z), "wall_top", false)
+	for i in range(12):
+		var z := -half_z + 70.0 + float(i) * 110.0
+		if absf(z) > GATE_OPENING * 0.5 + 30.0:
+			for side in [-1.0, 1.0]:
+				_add_box("WallCrenel_Z_%d_%s" % [i, side], Vector3(22.0, 9.0, 22.0), Vector3(side * half_x, WALL_HEIGHT + 4.0, z), "wall_top", false)
+
+
+func _build_gate_signs() -> void:
+	_add_world_label("北天门 · 罗酆山方向", Vector3(0.0, 104.0, -WALL_DEPTH * 0.5 - 24.0), 0.0)
+	_add_world_label("南幽门 · 忘川轮回方向", Vector3(0.0, 104.0, WALL_DEPTH * 0.5 + 24.0), 0.0)
+	_add_world_label("西冥门 · 古战场方向", Vector3(-WALL_WIDTH * 0.5 - 24.0, 104.0, 0.0), -PI * 0.5)
+	_add_world_label("东玄门 · 幽冥荒原方向", Vector3(WALL_WIDTH * 0.5 + 24.0, 104.0, 0.0), PI * 0.5)
+
+
+func _add_world_label(value: String, p: Vector3, yaw: float) -> void:
+	var label := Label3D.new()
+	label.text = value
+	label.position = p
+	label.rotation.y = yaw
+	label.font_size = 46
+	label.pixel_size = 0.026
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.modulate = Color("#e7d7b8")
+	add_child(label)
+
+
+func _build_patrol_guards() -> void:
+	var guards := [
+		{"name": "南门守城阴兵", "position": Vector3(-52.0, 0.0, 660.0)},
+		{"name": "南门巡逻阴兵", "position": Vector3(52.0, 0.0, 660.0)},
+		{"name": "北门守城阴兵", "position": Vector3(-52.0, 0.0, -660.0)},
+		{"name": "北门巡逻阴兵", "position": Vector3(52.0, 0.0, -660.0)},
+		{"name": "西门守城阴兵", "position": Vector3(-875.0, 0.0, -52.0)},
+		{"name": "东门守城阴兵", "position": Vector3(875.0, 0.0, 52.0)},
+		{"name": "皇城巡逻阴兵", "position": Vector3(-92.0, 0.0, -260.0)},
+		{"name": "皇城巡逻阴兵", "position": Vector3(92.0, 0.0, -260.0)},
+		{"name": "鬼市巡逻阴兵", "position": Vector3(430.0, 0.0, 420.0)},
+		{"name": "魂坊巡逻阴兵", "position": Vector3(-430.0, 0.0, 420.0)}
+	]
+	for index in range(guards.size()):
+		var guard_data: Dictionary = guards[index]
+		var module := CityModuleScene.instantiate() as Node3D
+		module.name = "PatrolGuard_%02d" % index
+		guard_data["module_kind"] = "guard"
+		module.call("configure", guard_data)
+		module.position = guard_data["position"]
+		add_child(module)
+
+
+func _on_district_entered(data: Dictionary) -> void:
+	_nearby_district_data = data.duplicate(true)
+	var title := str(data.get("name", "城区"))
+	_hint_label.text = "已到达：%s · 按 E 查看城区信息" % title
+
+
+func _on_district_exited(data: Dictionary) -> void:
+	if str(_nearby_district_data.get("id", "")) == str(data.get("id", "")):
+		_nearby_district_data.clear()
+		_hint_label.text = "WASD 移动 · 鼠标观察 · Shift 奔跑 · Space 跳跃 · Esc 释放鼠标"
 
 
 func _build_landmark_silhouette() -> void:
@@ -251,6 +283,7 @@ func _add_box(node_name: String, dimensions: Vector3, position: Vector3, materia
 func _build_player() -> void:
 	_player = CharacterBody3D.new()
 	_player.name = "GreyboxPlayer"
+	_player.add_to_group("fengdu_player")
 	_player.position = Vector3(0.0, 1.1, 600.0)
 	var shape := CapsuleShape3D.new()
 	shape.radius = 0.65
@@ -315,7 +348,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_mouse_captured = true
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	elif event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_ESCAPE:
+		if event.keycode == KEY_E and not _nearby_district_data.is_empty():
+			var data := _nearby_district_data
+			_hint_label.text = "%s\n主管：%s · 开放条件：%s\n%s" % [str(data.get("name", "城区")), str(data.get("authority", "未知")), str(data.get("access", "无")), str(data.get("description", ""))]
+		elif event.keycode == KEY_ESCAPE:
 			_mouse_captured = false
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		elif event.keycode == KEY_SPACE and _player != null and _player.is_on_floor():
