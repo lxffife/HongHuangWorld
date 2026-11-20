@@ -467,6 +467,7 @@ type CombatStats struct {
 	Agility int `json:"agility"`
 	Spirit int `json:"spirit"`
 	Vitality int `json:"vitality"`
+	MovementSpeed float64 `json:"movement_speed"`
 	MaxHealth int `json:"max_health"`
 	MaxMana int `json:"max_mana"`
 }
@@ -476,12 +477,12 @@ type CombatStats struct {
 func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessionID, characterID string) (CombatStats, error) {
 	if strings.TrimSpace(nodeKey)=="" || !validUUID(sessionID) || !validUUID(characterID) { return CombatStats{}, ErrInvalidRequest }
 	var result CombatStats
-	err:=s.db.QueryRowContext(ctx,`SELECT a.health,a.mana,a.attack,a.defense,a.strength,a.constitution,a.agility,a.spirit,a.vitality,a.max_health,a.max_mana
+	err:=s.db.QueryRowContext(ctx,`SELECT a.health,a.mana,a.attack,a.defense,a.strength,a.constitution,a.agility,a.spirit,a.vitality,a.movement_speed,a.max_health,a.max_mana
 		FROM world_sessions ws
 		JOIN server_registry sr ON sr.id=ws.server_id
 		JOIN character_attributes a ON a.character_id=ws.character_id
 		WHERE sr.node_key=$1 AND ws.id=$2::uuid AND ws.character_id=$3::uuid AND ws.session_state='active'`,
-		nodeKey,sessionID,characterID).Scan(&result.Health,&result.Mana,&result.Attack,&result.Defense,&result.Strength,&result.Constitution,&result.Agility,&result.Spirit,&result.Vitality,&result.MaxHealth,&result.MaxMana)
+		nodeKey,sessionID,characterID).Scan(&result.Health,&result.Mana,&result.Attack,&result.Defense,&result.Strength,&result.Constitution,&result.Agility,&result.Spirit,&result.Vitality,&result.MovementSpeed,&result.MaxHealth,&result.MaxMana)
 	if errors.Is(err,sql.ErrNoRows) { return CombatStats{},ErrSessionInvalid }
 	if err!=nil { return CombatStats{},fmt.Errorf("load session combat attributes: %w",err) }
 	rows,err:=s.db.QueryContext(ctx,`SELECT i.base_stats FROM character_equipment e
@@ -504,10 +505,17 @@ func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessio
 		result.Agility+=bonuses["agility"]
 		result.Spirit+=bonuses["spirit"]
 		result.Vitality+=bonuses["vitality"]
+		result.MovementSpeed+=float64(bonuses["movement_speed"])
 		result.MaxHealth+=bonuses["max_health"]
 		result.MaxMana+=bonuses["max_mana"]
 	}
 	if err:=rows.Err(); err!=nil { return CombatStats{},fmt.Errorf("iterate equipped combat bonuses: %w",err) }
+	if math.IsNaN(result.MovementSpeed) || math.IsInf(result.MovementSpeed, 0) || result.MovementSpeed <= 0 {
+		return CombatStats{}, ErrInvalidRequest
+	}
+	// Keep movement bonuses meaningful without allowing extreme equipment or
+	// inherited attributes to bypass server-side movement limits.
+	result.MovementSpeed = math.Max(1.0, math.Min(10.0, result.MovementSpeed))
 	if result.MaxHealth < 1 || result.MaxMana < 0 { return CombatStats{},ErrInvalidRequest }
 	if result.Health > result.MaxHealth { result.Health = result.MaxHealth }
 	if result.Mana > result.MaxMana { result.Mana = result.MaxMana }
