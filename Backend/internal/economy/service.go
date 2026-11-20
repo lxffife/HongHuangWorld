@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -104,24 +105,30 @@ func (s *Service) ApplyDelta(ctx context.Context, accountID, currencyID, eventKe
 	if err != nil { return LedgerResult{}, fmt.Errorf("begin economy ledger transaction: %w", err) }
 	defer tx.Rollback()
 
+	if err := tx.QueryRowContext(ctx, `SELECT id FROM accounts WHERE id = $1 FOR UPDATE`, accountID).Scan(new(string)); err != nil {
+		if errors.Is(err, sql.ErrNoRows) { return LedgerResult{}, ErrInvalidRequest }
+		return LedgerResult{}, fmt.Errorf("lock economy account: %w", err)
+	}
+
 	var existing LedgerResult
-	err = tx.QueryRowContext(ctx, `SELECT currency_id, delta, available_after, frozen_after
+	var existingType string
+	err = tx.QueryRowContext(ctx, `SELECT currency_id, entry_type, delta, available_after, frozen_after
 		FROM economy_ledger_entries WHERE account_id = $1 AND event_key = $2`, accountID, eventKey).
-		Scan(&existing.CurrencyID, &existing.Delta, &existing.AvailableAfter, &existing.FrozenAfter)
+		Scan(&existing.CurrencyID, &existingType, &existing.Delta, &existing.AvailableAfter, &existing.FrozenAfter)
 	if err == nil {
-		if existing.CurrencyID != currencyID || existing.Delta != delta { return LedgerResult{}, ErrIdempotencyConflict }
+		if existing.CurrencyID != currencyID || existing.Delta != delta || existingType != entryType { return LedgerResult{}, ErrIdempotencyConflict }
 		existing.Applied = false
 		if err := tx.Commit(); err != nil { return LedgerResult{}, fmt.Errorf("commit recovered economy event: %w", err) }
 		return existing, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) { return LedgerResult{}, fmt.Errorf("check economy idempotency key: %w", err) }
 
-	var enabled bool
-	if err := tx.QueryRowContext(ctx, `SELECT enabled FROM currency_definitions WHERE id = $1`, currencyID).Scan(&enabled); err != nil {
+	var enabled, cultivationUsable bool
+	if err := tx.QueryRowContext(ctx, `SELECT enabled, cultivation_usable FROM currency_definitions WHERE id = $1`, currencyID).Scan(&enabled, &cultivationUsable); err != nil {
 		if errors.Is(err, sql.ErrNoRows) { return LedgerResult{}, ErrInvalidRequest }
 		return LedgerResult{}, fmt.Errorf("load currency definition: %w", err)
 	}
-	if !enabled { return LedgerResult{}, ErrInvalidRequest }
+	if !enabled || (entryType == "cultivation" && !cultivationUsable) { return LedgerResult{}, ErrInvalidRequest }
 
 	if _, err := tx.ExecContext(ctx, `INSERT INTO currency_balances (account_id, currency_id)
 		VALUES ($1, $2) ON CONFLICT (account_id, currency_id) DO NOTHING`, accountID, currencyID); err != nil {
@@ -133,6 +140,7 @@ func (s *Service) ApplyDelta(ctx context.Context, accountID, currencyID, eventKe
 		return LedgerResult{}, fmt.Errorf("lock currency balance: %w", err)
 	}
 	if delta < 0 && available < -delta { return LedgerResult{}, ErrInsufficientFunds }
+	if delta > 0 && available > math.MaxInt64-delta { return LedgerResult{}, ErrInvalidRequest }
 	available += delta
 	if _, err := tx.ExecContext(ctx, `UPDATE currency_balances SET available_amount = $3, updated_at = now()
 		WHERE account_id = $1 AND currency_id = $2`, accountID, currencyID, available); err != nil {
@@ -151,7 +159,7 @@ func (s *Service) ApplyDelta(ctx context.Context, accountID, currencyID, eventKe
 
 func validDeltaRequest(accountID, currencyID, eventKey, entryType string, delta int64) bool {
 	if strings.TrimSpace(accountID) == "" || len(currencyID) == 0 || len(currencyID) > 64 ||
-		len(eventKey) == 0 || len(eventKey) > 128 || delta == 0 { return false }
+		len(eventKey) == 0 || len(eventKey) > 128 || delta == 0 || delta == math.MinInt64 { return false }
 	switch entryType {
 	case "grant", "spend", "trade", "cultivation", "craft", "exchange_in", "exchange_out", "escrow_lock", "escrow_release", "system_adjustment":
 		return true
