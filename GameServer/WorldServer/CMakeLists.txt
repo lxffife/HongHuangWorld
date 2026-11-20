@@ -60,6 +60,10 @@ if(BUILD_TESTING)
     target_include_directories(combat_test PRIVATE include)
     add_test(NAME combat_test COMMAND combat_test)
 
+    add_executable(weapon_combat_test tests/weapon_combat_test.cpp)
+    target_include_directories(weapon_combat_test PRIVATE include)
+    add_test(NAME weapon_combat_test COMMAND weapon_combat_test)
+
     add_executable(monster_test tests/monster_test.cpp)
     target_include_directories(monster_test PRIVATE include)
     add_test(NAME monster_test COMMAND monster_test)
