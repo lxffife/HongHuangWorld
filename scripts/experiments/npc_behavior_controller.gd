@@ -13,7 +13,7 @@ enum State {
 }
 
 var behavior_profile := "ambient"
-var current_state: State = State.IDLE
+var current_state: int = State.IDLE
 
 
 func configure(profile: String, has_patrol_route: bool) -> void:
@@ -29,7 +29,7 @@ func transition_to(next_state: int, reason: String = "") -> bool:
 	if not _is_transition_allowed(next_state):
 		return false
 	var previous := current_state
-	current_state = next_state as State
+	current_state = next_state
 	state_changed.emit(previous, current_state, reason)
 	return true
 
