@@ -72,6 +72,10 @@ if(BUILD_TESTING)
     target_include_directories(spell_combat_test PRIVATE include)
     add_test(NAME spell_combat_test COMMAND spell_combat_test)
 
+    add_executable(consumable_test tests/consumable_test.cpp)
+    target_include_directories(consumable_test PRIVATE include)
+    add_test(NAME consumable_test COMMAND consumable_test)
+
     add_executable(monster_test tests/monster_test.cpp)
     target_include_directories(monster_test PRIVATE include)
     add_test(NAME monster_test COMMAND monster_test)
