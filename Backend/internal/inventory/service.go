@@ -553,6 +553,17 @@ func (s *Service) UseConsumable(ctx context.Context, accountID string, request I
 		return ItemUseResult{Applied:false,ItemID:request.ItemID,Quantity:request.Quantity},tx.Commit()
 	}
 	if !errors.Is(err,sql.ErrNoRows) { return ItemUseResult{},fmt.Errorf("check consumable idempotency: %w",err) }
+	// WorldServer owns live health/mana while a character is in a world.
+	// Until consumables are routed through its authoritative command path,
+	// never let the account API mutate database resources behind its back.
+	var inWorld bool
+	if err:=tx.QueryRowContext(ctx,`SELECT EXISTS(
+		SELECT 1 FROM world_sessions
+		WHERE character_id=$1::uuid AND session_state IN ('connecting','active','saving')
+	)`,characterID).Scan(&inWorld); err!=nil {
+		return ItemUseResult{},fmt.Errorf("check active character session before consumable use: %w",err)
+	}
+	if inWorld { return ItemUseResult{},ErrCharacterInWorld }
 	var itemType string
 	var raw []byte
 	if err:=tx.QueryRowContext(ctx,`SELECT item_type,use_effect FROM item_definitions WHERE id=$1 AND enabled`,request.ItemID).Scan(&itemType,&raw); err!=nil {
