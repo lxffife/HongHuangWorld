@@ -261,6 +261,12 @@ func _build_market_street() -> void:
 		_add_box("MarketArcade_" + str(side), Vector3(10.0, 20.0, 300.0), Vector3(side * 190.0, 10.0, 110.0), "court", true)
 	_add_box("AuctionSquare", Vector3(180.0, 0.8, 100.0), Vector3(0.0, 0.4, 286.0), "stone", false)
 	_add_box("AuctionDais", Vector3(58.0, 5.0, 34.0), Vector3(0.0, 2.9, 280.0), "sign", true)
+	_build_market_interaction("AuctionInteraction", Vector3(0.0, 0.0, 340.0), {
+		"name": "鬼市拍卖场",
+		"authority": "鬼市拍卖行",
+		"access": "拍卖功能尚未开放",
+		"description": "这里预留公开竞拍与珍稀魂材展示空间。当前仅为灰盒场地，不会扣除货币或产生交易。"
+	})
 	for index in range(8):
 		var angle := TAU * float(index) / 8.0
 		var marker := Vector3(cos(angle) * 72.0, 5.0, 286.0 + sin(angle) * 38.0)
