@@ -32,6 +32,15 @@ int main() {
     assert(!apply_slow(effect, 0, 1000, std::numeric_limits<float>::quiet_NaN()));
     assert(!apply_slow(effect, INT64_MAX - 10, 1000, 0.5F));
     assert(movement_delta_with_effect(-1.0F, effect, 4500) == 0.0F);
+    assert(negative_status_resistance_basis_points(100, 100) == 3000);
+    assert(negative_status_resistance_basis_points(500, 500) == 5000);
+    assert(negative_status_resistance_basis_points(-1, 100) == 0);
+    assert(resist_status_damage(20, 3000) == 14);
+    assert(resist_status_damage(1, 5000) == 1);
+    assert(resist_status_damage(20, 20000) == 1);
+    assert(resist_status_duration(4000, 1000, 3000) == 2800);
+    assert(resist_status_duration(4000, 1000, 10000) == 1000);
+    assert(resist_status_duration(4000, 5000, 3000) == 0);
     PeriodicDamageEffect burn;
     assert(!periodic_damage_is_active(burn, 1000));
     assert(apply_periodic_damage(burn, 1000, 3000, 1000, 5));
