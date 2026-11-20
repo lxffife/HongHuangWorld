@@ -2067,6 +2067,11 @@ struct EnetServer::Impl {
             return;
         }
         if (player_weapon_type(player) == "bow") {
+            if (projectiles.size() >= 128) {
+                send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                          Json{{"accepted", false}, {"reason", "当前箭矢数量过多，请稍后再试。"}});
+                return;
+            }
             const double distance = std::sqrt(dx * dx + dz * dz);
             if (distance < 0.001) {
                 send_json(peer, honghuang::protocol::MessageType::CombatEvent,
@@ -2327,6 +2332,7 @@ struct EnetServer::Impl {
                                {"target_entity_id", target->runtime_id},
                                {"target_name", target->definition.name},
                                {"damage", damage.damage},
+                               {"health", damage.remaining_health},
                                {"remaining_health", damage.remaining_health},
                                {"max_health", target->definition.max_health},
                                {"defeated", damage.defeated},
