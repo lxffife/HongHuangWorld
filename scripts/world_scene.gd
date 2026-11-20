@@ -2512,6 +2512,10 @@ func _process(delta: float) -> void:
 							remote_left_lift = 0.58
 							remote_right_lift = 1.02
 							remote_sweep = -0.08
+						"heavy_swing":
+							remote_left_lift = 0.12
+							remote_right_lift = 1.42
+							remote_sweep = 0.62
 					if is_instance_valid(remote_left_arm):
 						remote_left_arm.rotation.x = remote_stride - action_weight * (remote_left_lift if action_state == "attack" else -0.34)
 					if is_instance_valid(remote_right_arm):
