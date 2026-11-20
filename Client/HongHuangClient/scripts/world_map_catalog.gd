@@ -37,6 +37,14 @@ const FENGDU_PROTOTYPE := {
 }
 
 
+static func get_world_bounds(world_id: String) -> Vector4:
+	if world_id == "underworld_fengdu":
+		return Vector4(-128.0, 128.0, -128.0, 128.0)
+	if world_id == "qingyun_human" or world_id == "myriad_demon":
+		return Vector4(-120.0, 120.0, -120.0, 120.0)
+	return Vector4(-120.0, 120.0, -120.0, 120.0)
+
+
 static func get_regions(world_id: String) -> Array:
 	match world_id:
 		"underworld_fengdu":
