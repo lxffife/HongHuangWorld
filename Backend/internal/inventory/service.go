@@ -353,6 +353,7 @@ type EquippedItem struct {
 	ItemID string `json:"item_id"`
 	Name string `json:"name"`
 	Quality int `json:"quality"`
+	WeaponType string `json:"weapon_type,omitempty"`
 	IconKey string `json:"icon_key"`
 	Description string `json:"description"`
 	BaseStats map[string]int `json:"base_stats"`
@@ -365,7 +366,7 @@ type EquipmentRequest struct { ItemID string; Slot string }
 var validEquipmentSlots = map[string]bool{"weapon":true,"head":true,"chest":true,"legs":true,"boots":true,"accessory":true}
 
 func (s *Service) CurrentEquipment(ctx context.Context, accountID string) ([]EquippedItem, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT e.slot, i.id, i.name, i.quality, i.icon_key, i.description, i.base_stats, COALESCE(es.id, ''), COALESCE(es.name, ''), COALESCE(es.description, ''), COALESCE(es.bonus_tiers, '{}'::jsonb)
+	rows, err := s.db.QueryContext(ctx, `SELECT e.slot, i.id, i.name, i.quality, COALESCE(i.weapon_type, ''), i.icon_key, i.description, i.base_stats, COALESCE(es.id, ''), COALESCE(es.name, ''), COALESCE(es.description, ''), COALESCE(es.bonus_tiers, '{}'::jsonb)
 		FROM souls soul JOIN characters c ON c.id=soul.current_character_id
 		JOIN character_equipment e ON e.character_id=c.id JOIN item_definitions i ON i.id=e.item_id
 		LEFT JOIN equipment_sets es ON es.id=i.equipment_set_id
@@ -375,7 +376,7 @@ func (s *Service) CurrentEquipment(ctx context.Context, accountID string) ([]Equ
 	items:=make([]EquippedItem,0)
 	for rows.Next() {
 		var item EquippedItem; var stats, setTiers []byte
-		if err:=rows.Scan(&item.Slot,&item.ItemID,&item.Name,&item.Quality,&item.IconKey,&item.Description,&stats,&item.SetID,&item.SetName,&item.SetDescription,&setTiers); err!=nil { return nil,fmt.Errorf("scan equipped item: %w",err) }
+		if err:=rows.Scan(&item.Slot,&item.ItemID,&item.Name,&item.Quality,&item.WeaponType,&item.IconKey,&item.Description,&stats,&item.SetID,&item.SetName,&item.SetDescription,&setTiers); err!=nil { return nil,fmt.Errorf("scan equipped item: %w",err) }
 		item.BaseStats=map[string]int{}
 		if len(stats)>0 { if err:=json.Unmarshal(stats,&item.BaseStats); err!=nil { return nil,fmt.Errorf("decode equipment stats: %w",err) } }
 		if len(setTiers)>0 { if err:=json.Unmarshal(setTiers,&item.SetBonusTiers); err!=nil { return nil,fmt.Errorf("decode equipped set tiers: %w",err) } }
