@@ -34,6 +34,10 @@ func transition_to(next_state: int, reason: String = "") -> bool:
 	return true
 
 
+func is_interacting() -> bool:
+	return current_state == State.INTERACT
+
+
 func get_state_label() -> String:
 	match current_state:
 		State.IDLE:
