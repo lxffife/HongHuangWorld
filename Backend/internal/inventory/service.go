@@ -726,8 +726,8 @@ func (s *Service) useConsumableForCharacter(ctx context.Context,tx *sql.Tx,chara
 	if err==nil {
 		if previousItemID!=request.ItemID || previousQuantity!=request.Quantity { return ItemUseResult{},ErrInvalidRequest }
 		// A retry may arrive after the original transaction committed but its HTTP
-		// response was lost. Return current authoritative resources so WorldServer
-		// can reconcile its in-memory snapshot without consuming the item twice.
+		// response was lost. Return the recorded result/effect so WorldServer can
+		// apply it once to its latest live resources without consuming the item twice.
  		var health, maxHealth, mana, maxMana, healthRestored, manaRestored, healthEffect, manaEffect int
 		if live != nil {
 			var saved map[string]int
@@ -752,8 +752,7 @@ func (s *Service) useConsumableForCharacter(ctx context.Context,tx *sql.Tx,chara
 	if !errors.Is(err,sql.ErrNoRows) { return ItemUseResult{},fmt.Errorf("check consumable idempotency: %w",err) }
 	if blockActiveSession {
 		// WorldServer owns live health/mana while a character is in a world.
-		// Until the item request is routed through its authoritative command path,
-		// never let the account API mutate database resources behind its back.
+		// The account API must not mutate persisted resources behind its back.
 		var inWorld bool
 		if err:=tx.QueryRowContext(ctx,`SELECT EXISTS(
 			SELECT 1 FROM world_sessions
