@@ -235,9 +235,9 @@ func _build_ui() -> void:
 	reward_label.text = "悬赏金额"
 	form_row.add_child(reward_label)
 	_reward_input = SpinBox.new()
-	_reward_input.min_value = 50
-	_reward_input.max_value = 1000000
-	_reward_input.step = 10
+	_reward_input.min_value = 5
+	_reward_input.max_value = 100000
+	_reward_input.step = 1
 	_reward_input.value = 200
 	_reward_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	form_row.add_child(_reward_input)
