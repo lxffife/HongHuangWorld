@@ -3,6 +3,7 @@ package task
 import (
  "context"
  "database/sql"
+ "encoding/hex"
  "errors"
  "fmt"
  "math"
@@ -24,6 +25,9 @@ var (
  ErrTaskNotReady = errors.New("bounty task is not ready for this operation")
  ErrCharacterNotEligible = errors.New("current character does not meet bounty requirements")
  ErrNotParticipant = errors.New("account is not an active bounty participant")
+ ErrInvalidWorldEvent = errors.New("invalid world bounty event")
+ ErrWorldEventSession = errors.New("world event session is not valid for this node and task")
+ ErrWorldEventObjective = errors.New("world event does not match a configured bounty objective")
 )
 
 type Service struct { db *sql.DB; factions *faction.Service }
@@ -61,11 +65,64 @@ type PublishRequest struct {
  DifficultyTier int
  RequiredRealmLevel int
  RequiredCharacterLevel int
+ Objectives []ObjectiveRequest
  ExpiresAt *string
+}
+
+
+type ObjectiveRequest struct {
+ Key string `json:"key"`
+ EventType string `json:"event_type"`
+ TargetCount int `json:"target_count"`
+}
+
+type WorldEvent struct {
+ EventID string `json:"event_id"`
+ TaskID string `json:"task_id"`
+ SessionID string `json:"session_id"`
+ CharacterID string `json:"character_id"`
+ ObjectiveKey string `json:"objective_key"`
+ EventType string `json:"event_type"`
+}
+
+type WorldEventResult struct {
+ Applied bool `json:"applied"`
+ TaskID string `json:"task_id"`
+ ObjectiveKey string `json:"objective_key"`
+ Progress int `json:"progress"`
+ Target int `json:"target"`
+ Completed bool `json:"completed"`
+}
+
+func validUUID(value string) bool {
+ if len(value)!=36 || value[8]!='-' || value[13]!='-' || value[18]!='-' || value[23]!='-' { return false }
+ compact:=strings.ReplaceAll(value,"-","")
+ if len(compact)!=32 { return false }
+ _,err:=hex.DecodeString(compact)
+ return err==nil
+}
+
+func validateObjectives(items []ObjectiveRequest) error {
+ if len(items)>10 { return ErrInvalid }
+ seen:=make(map[string]struct{},len(items))
+ for _,item:=range items {
+  if item.Key=="" || len(item.Key)>64 || item.TargetCount<1 || item.TargetCount>100000 { return ErrInvalid }
+  for _,r:=range item.Key {
+   if !(r>='a'&&r<='z') && !(r>='A'&&r<='Z') && !(r>='0'&&r<='9') && r!='_' && r!='-' && r!='.' { return ErrInvalid }
+  }
+  switch item.EventType {
+  case "monster_killed","exploration_discovered","escort_checkpoint","item_collected":
+  default: return ErrInvalid
+  }
+  if _,ok:=seen[item.Key];ok { return ErrInvalid }
+  seen[item.Key]=struct{}{}
+ }
+ return nil
 }
 
 func (s *Service) PublishFaction(ctx context.Context, accountID string, req PublishRequest) (Task,error) {
  req.Title=strings.TrimSpace(req.Title); req.Description=strings.TrimSpace(req.Description)
+ if validateObjectives(req.Objectives)!=nil { return Task{},ErrInvalid }
  if accountID=="" || req.FactionID=="" || req.EventKey=="" || len(req.EventKey)>128 || utf8.RuneCountInString(req.Title)<2 || utf8.RuneCountInString(req.Title)>96 ||
   utf8.RuneCountInString(req.Description)>2000 || len(req.CurrencyID)==0 || len(req.CurrencyID)>64 ||
   req.RewardAmount<=0 || req.MaxAssignees<1 || req.MaxAssignees>20 ||
@@ -121,6 +178,12 @@ func (s *Service) PublishFaction(ctx context.Context, accountID string, req Publ
  result.PublisherName=name
  if _,err=tx.ExecContext(ctx,`INSERT INTO bounty_task_escrows(task_id,treasury_account_id,currency_id,amount)
   VALUES ($1,$2,$3,$4)`,result.ID,treasuryID,req.CurrencyID,total);err!=nil{return Task{},fmt.Errorf("create bounty escrow: %w",err)}
+ for _,objective:=range req.Objectives {
+  if _,err=tx.ExecContext(ctx,`INSERT INTO bounty_task_objectives(task_id,objective_key,event_type,target_count)
+   VALUES($1,$2,$3,$4)`,result.ID,objective.Key,objective.EventType,objective.TargetCount);err!=nil {
+   return Task{},fmt.Errorf("create bounty objective: %w",err)
+  }
+ }
  if err=tx.Commit();err!=nil{return Task{},fmt.Errorf("commit bounty publication: %w",err)}
  return result,nil
 }
@@ -478,6 +541,110 @@ func (s *Service) refund(ctx context.Context, accountID, taskID, eventKey string
   VALUES($1,$2,$3,$4,$5)`,taskID,eventKey,refundedBy,amount,nextStatus);err!=nil { return RefundReceipt{},fmt.Errorf("write bounty refund receipt: %w",err) }
  result:=RefundReceipt{TaskID:taskID,EventKey:eventKey,RefundedAmount:amount,CurrencyID:currencyID,Status:nextStatus}
  if err=tx.Commit();err!=nil { return RefundReceipt{},fmt.Errorf("commit bounty refund: %w",err) }
+ return result,nil
+}
+ 
+// ApplyWorldEvent accepts one unit of progress from the authenticated node that
+// currently hosts the character. Account identity and progress increments are
+// derived by the center service; callers cannot submit either value.
+func (s *Service) ApplyWorldEvent(ctx context.Context,nodeKey string,event WorldEvent)(WorldEventResult,error) {
+ if strings.TrimSpace(nodeKey)=="" || len(nodeKey)>96 || !validUUID(event.EventID) ||
+  !validUUID(event.TaskID) || !validUUID(event.SessionID) || !validUUID(event.CharacterID) ||
+  event.ObjectiveKey=="" || len(event.ObjectiveKey)>64 {
+  return WorldEventResult{},ErrInvalidWorldEvent
+ }
+ tx,err:=s.db.BeginTx(ctx,nil)
+ if err!=nil { return WorldEventResult{},fmt.Errorf("begin verified bounty event: %w",err) }
+ defer tx.Rollback()
+ var lock any
+ if err=tx.QueryRowContext(ctx,`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`,event.EventID).Scan(&lock);err!=nil {
+  return WorldEventResult{},fmt.Errorf("lock bounty event idempotency key: %w",err)
+ }
+ var oldTask,oldAccount,oldCharacter,oldSession,oldNode,oldObjective,oldType string
+ err=tx.QueryRowContext(ctx,`SELECT task_id::text,account_id::text,character_id::text,session_id::text,node_key,objective_key,event_type
+  FROM bounty_task_events WHERE event_id=$1::uuid`,event.EventID).
+  Scan(&oldTask,&oldAccount,&oldCharacter,&oldSession,&oldNode,&oldObjective,&oldType)
+ if err==nil {
+  if oldTask!=event.TaskID || oldCharacter!=event.CharacterID || oldSession!=event.SessionID ||
+   oldNode!=nodeKey || oldObjective!=event.ObjectiveKey || oldType!=event.EventType {
+   return WorldEventResult{},ErrIdempotencyConflict
+  }
+  var result WorldEventResult
+  result.TaskID=event.TaskID
+  result.ObjectiveKey=event.ObjectiveKey
+  err=tx.QueryRowContext(ctx,`SELECT p.progress_count,o.target_count,(p.completed_at IS NOT NULL)
+   FROM bounty_task_objective_progress p JOIN bounty_task_objectives o
+    ON o.task_id=p.task_id AND o.objective_key=p.objective_key
+   WHERE p.task_id=$1::uuid AND p.account_id=$2::uuid AND p.objective_key=$3`,
+   event.TaskID,oldAccount,event.ObjectiveKey).Scan(&result.Progress,&result.Target,&result.Completed)
+  if err!=nil { return WorldEventResult{},fmt.Errorf("read idempotent bounty progress: %w",err) }
+  if err=tx.Commit();err!=nil { return WorldEventResult{},fmt.Errorf("commit duplicate bounty event: %w",err) }
+  result.Applied=false
+  return result,nil
+ }
+ if !errors.Is(err,sql.ErrNoRows) { return WorldEventResult{},fmt.Errorf("check bounty event idempotency: %w",err) }
+
+ var worldID,status string
+ var expired bool
+ err=tx.QueryRowContext(ctx,`SELECT world_id,status,(expires_at IS NOT NULL AND expires_at<=now())
+  FROM bounty_tasks WHERE id=$1::uuid FOR SHARE`,event.TaskID).Scan(&worldID,&status,&expired)
+ if errors.Is(err,sql.ErrNoRows) { return WorldEventResult{},ErrNotFound }
+ if err!=nil { return WorldEventResult{},fmt.Errorf("verify bounty task state: %w",err) }
+ if expired || (status!="in_progress" && status!="full") { return WorldEventResult{},ErrTaskNotReady }
+
+ var accountID string
+ err=tx.QueryRowContext(ctx,`SELECT soul.account_id::text
+  FROM world_sessions ws
+  JOIN server_registry node ON node.id=ws.server_id
+  JOIN world_instances instance ON instance.id=ws.instance_id
+  JOIN characters character ON character.id=ws.character_id
+  JOIN souls soul ON soul.id=character.soul_id
+  WHERE ws.id=$1::uuid AND ws.character_id=$2::uuid AND node.node_key=$3
+   AND ws.session_state='active' AND character.status='alive'
+   AND character.world_id=$4 AND instance.world_id=$4
+  FOR SHARE OF ws,character,soul`,event.SessionID,event.CharacterID,nodeKey,worldID).Scan(&accountID)
+ if errors.Is(err,sql.ErrNoRows) { return WorldEventResult{},ErrWorldEventSession }
+ if err!=nil { return WorldEventResult{},fmt.Errorf("verify bounty world session: %w",err) }
+
+ var participantStatus string
+ err=tx.QueryRowContext(ctx,`SELECT status FROM bounty_task_participants
+  WHERE task_id=$1::uuid AND account_id=$2::uuid FOR SHARE`,event.TaskID,accountID).Scan(&participantStatus)
+ if errors.Is(err,sql.ErrNoRows) || participantStatus!="accepted" { return WorldEventResult{},ErrNotParticipant }
+ if err!=nil { return WorldEventResult{},fmt.Errorf("verify bounty participant: %w",err) }
+
+ var configuredType string
+ var target int
+ err=tx.QueryRowContext(ctx,`SELECT event_type,target_count FROM bounty_task_objectives
+  WHERE task_id=$1::uuid AND objective_key=$2 FOR SHARE`,event.TaskID,event.ObjectiveKey).Scan(&configuredType,&target)
+ if errors.Is(err,sql.ErrNoRows) { return WorldEventResult{},ErrWorldEventObjective }
+ if err!=nil { return WorldEventResult{},fmt.Errorf("load bounty objective: %w",err) }
+ if configuredType!=event.EventType { return WorldEventResult{},ErrWorldEventObjective }
+
+ if _,err=tx.ExecContext(ctx,`INSERT INTO bounty_task_events
+  (event_id,task_id,account_id,character_id,session_id,node_key,objective_key,event_type)
+  VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6,$7,$8)`,
+  event.EventID,event.TaskID,accountID,event.CharacterID,event.SessionID,nodeKey,event.ObjectiveKey,event.EventType);err!=nil {
+  return WorldEventResult{},fmt.Errorf("record immutable bounty event: %w",err)
+ }
+ if _,err=tx.ExecContext(ctx,`INSERT INTO bounty_task_objective_progress
+  (task_id,account_id,objective_key,progress_count,completed_at)
+  VALUES($1::uuid,$2::uuid,$3,1,CASE WHEN $4=1 THEN now() ELSE NULL END)
+  ON CONFLICT(task_id,account_id,objective_key) DO UPDATE SET
+   progress_count=LEAST(bounty_task_objective_progress.progress_count+1,EXCLUDED.progress_count+$4-1),
+   completed_at=CASE WHEN bounty_task_objective_progress.progress_count+1 >= $4
+    THEN COALESCE(bounty_task_objective_progress.completed_at,now())
+    ELSE bounty_task_objective_progress.completed_at END,
+   updated_at=now()`,event.TaskID,accountID,event.ObjectiveKey,target);err!=nil {
+  return WorldEventResult{},fmt.Errorf("advance bounty objective progress: %w",err)
+ }
+ result:=WorldEventResult{Applied:true,TaskID:event.TaskID,ObjectiveKey:event.ObjectiveKey}
+ err=tx.QueryRowContext(ctx,`SELECT p.progress_count,o.target_count,(p.completed_at IS NOT NULL)
+  FROM bounty_task_objective_progress p JOIN bounty_task_objectives o
+   ON o.task_id=p.task_id AND o.objective_key=p.objective_key
+  WHERE p.task_id=$1::uuid AND p.account_id=$2::uuid AND p.objective_key=$3`,
+  event.TaskID,accountID,event.ObjectiveKey).Scan(&result.Progress,&result.Target,&result.Completed)
+ if err!=nil { return WorldEventResult{},fmt.Errorf("read updated bounty progress: %w",err) }
+ if err=tx.Commit();err!=nil { return WorldEventResult{},fmt.Errorf("commit verified bounty event: %w",err) }
  return result,nil
 }
 
