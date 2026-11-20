@@ -192,7 +192,7 @@ func (s *Service) ReviewApplication(ctx context.Context, reviewerID, factionID, 
 func (s *Service) ListApplications(ctx context.Context, reviewerID, factionID string) ([]Application, error) {
 	if reviewerID == "" || factionID == "" { return nil, ErrInvalid }
 	var role string
-	if err := s.db.QueryRowContext(ctx, `SELECT role FROM faction_members WHERE faction_id=$1 AND account_id=$2`, factionID, reviewerID).Scan(&role); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT m.role FROM faction_members m JOIN factions f ON f.id=m.faction_id AND f.status='active' WHERE m.faction_id=$1 AND m.account_id=$2`, factionID, reviewerID).Scan(&role); err != nil {
 		if errors.Is(err, sql.ErrNoRows) { return nil, ErrForbidden }
 		return nil, fmt.Errorf("authorize application listing: %w", err)
 	}
@@ -225,4 +225,32 @@ func (s *Service) AuthorizeTaskPublisher(ctx context.Context, accountID, faction
 	if err != nil { return fmt.Errorf("authorize faction task publisher: %w", err) }
 	if role != "leader" && role != "officer" { return ErrForbidden }
 	return nil
+}
+
+
+func (s *Service) ListMembers(ctx context.Context, requesterID, factionID string) ([]Member, error) {
+	if requesterID == "" || factionID == "" { return nil, ErrInvalid }
+	var member bool
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(
+		SELECT 1 FROM faction_members m JOIN factions f ON f.id=m.faction_id AND f.status='active'
+		WHERE m.faction_id=$1 AND m.account_id=$2
+	)`, factionID, requesterID).Scan(&member); err != nil {
+		return nil, fmt.Errorf("authorize faction member listing: %w", err)
+	}
+	if !member { return nil, ErrForbidden }
+	rows, err := s.db.QueryContext(ctx, `SELECT account_id::text, role, contribution_points, joined_at::text
+		FROM faction_members WHERE faction_id=$1
+		ORDER BY CASE role WHEN 'leader' THEN 0 WHEN 'officer' THEN 1 ELSE 2 END, joined_at`, factionID)
+	if err != nil { return nil, fmt.Errorf("list faction members: %w", err) }
+	defer rows.Close()
+	result := make([]Member, 0)
+	for rows.Next() {
+		var item Member
+		if err := rows.Scan(&item.AccountID, &item.Role, &item.ContributionPoints, &item.JoinedAt); err != nil {
+			return nil, fmt.Errorf("scan faction member: %w", err)
+		}
+		result = append(result, item)
+	}
+	if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate faction members: %w", err) }
+	return result, nil
 }
