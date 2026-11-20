@@ -172,7 +172,13 @@ func _add_quest_card(quest: Dictionary) -> void:
 		var objective: Dictionary = objectives[index]
 		var objective_label := Label.new()
 		var prefix := "✓" if index < progress else ("▶" if index == progress and str(quest.get("status", "")) == "active" else "○")
-		objective_label.text = "%s  %s" % [prefix, str(objective.get("label", "待办事项"))]
+		var objective_text := str(objective.get("label", "待办事项"))
+		if index == progress and str(quest.get("status", "")) == "active":
+			var required := maxi(1, int(objective.get("required_count", 1)))
+			var current := int(quest.get("objective_progress", 0))
+			if required > 1:
+				objective_text += "  (%d/%d)" % [current, required]
+		objective_label.text = "%s  %s" % [prefix, objective_text]
 		objective_label.add_theme_font_size_override("font_size", 12)
 		objective_label.add_theme_color_override("font_color", Color("#a9c6a7") if index < progress else Color("#d2c9bb"))
 		column.add_child(objective_label)
@@ -234,6 +240,8 @@ func _status_color(status: String) -> Color:
 			return Color("#d6b46e")
 		"completed":
 			return Color("#9fc49d")
+		"failed":
+			return Color("#d98d83")
 	return Color("#b5a58e")
 
 
