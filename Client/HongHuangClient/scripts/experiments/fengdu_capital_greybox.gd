@@ -273,7 +273,8 @@ func _build_citizens() -> void:
 	for index in range(citizens.size()):
 		var citizen_data: Dictionary = citizens[index]
 		citizen_data["module_kind"] = "citizen"
-		_spawn_city_module(citizen_data, citizen_data["position"]).name = "Citizen_%02d" % index
+		var citizen_module := _spawn_city_module(citizen_data, citizen_data["position"])
+		citizen_module.name = "Citizen_%02d" % index
 
 
 func _build_street_furniture() -> void:
