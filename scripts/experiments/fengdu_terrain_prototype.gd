@@ -39,11 +39,11 @@ func _build_heightfield() -> void:
 			var x1 := x0 + GRID_STEP
 			var z1 := z0 + GRID_STEP
 			_add_terrain_vertex(surface, Vector3(x0, _height_at(x0, z0), z0))
-			_add_terrain_vertex(surface, Vector3(x1, _height_at(x1, z0), z0))
 			_add_terrain_vertex(surface, Vector3(x0, _height_at(x0, z1), z1))
 			_add_terrain_vertex(surface, Vector3(x1, _height_at(x1, z0), z0))
+			_add_terrain_vertex(surface, Vector3(x1, _height_at(x1, z0), z0))
+			_add_terrain_vertex(surface, Vector3(x0, _height_at(x0, z1), z1))
 			_add_terrain_vertex(surface, Vector3(x1, _height_at(x1, z1), z1))
-			_add_terrain_vertex(surface, Vector3(x0, _height_at(x0, z1), z1))
 	surface.generate_normals()
 	var terrain_mesh := surface.commit()
 	var terrain_material := StandardMaterial3D.new()
@@ -107,7 +107,7 @@ func _terrain_color(vertex: Vector3) -> Color:
 
 func _build_water() -> void:
 	_add_water_plane("RiverOfForgetfulnessSurface", Vector2(8.0, 150.0), Vector3(22.0, -0.62, 8.0), RIVER_COLOR, 0.76)
-	_add_water_plane("BloodSeaSurface", Vector2(78.0, 236.0), Vector3(111.0, -1.25, 0.0), BLOOD_COLOR, 0.84)
+	_add_water_plane("BloodSeaSurface", Vector2(56.0, 236.0), Vector3(100.0, -1.25, 0.0), BLOOD_COLOR, 0.84)
 
 
 func _add_water_plane(node_name: String, size: Vector2, world_position: Vector3, color: Color, alpha: float) -> void:
@@ -132,7 +132,7 @@ func _add_water_plane(node_name: String, size: Vector2, world_position: Vector3,
 func _build_landmark_markers() -> void:
 	_add_marker("NaiheBridgeDistrict", "奈何桥 / 忘川河谷", Vector3(22.0, 2.0, 2.0), Color("#9ebce8"))
 	_add_marker("ReincarnationTerrace", "轮回殿台地", Vector3(-34.0, 8.0, -55.0), Color("#c7b6dc"))
-	_add_marker("BloodSeaCoast", "血海岸线（样板）", Vector3(78.0, 3.0, 18.0), Color("#e58b9e"))
+	_add_marker("BloodSeaCoast", "血海岸线（样板）", Vector3(78.0, -6.0, 18.0), Color("#e58b9e"))
 	_add_marker("FengduOuterRidge", "酆都北部山脊", Vector3(-42.0, 12.0, -112.0), Color("#b6a8a0"))
 
 
