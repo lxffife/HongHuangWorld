@@ -4,6 +4,7 @@ const UnderworldVisualFactory = preload("res://scripts/underworld_visual_factory
 const VisualModelLibrary = preload("res://scripts/visual_model_library.gd")
 const EquipmentVisualFactory = preload("res://scripts/equipment_visual_factory.gd")
 const HumanoidAnimationDriver = preload("res://scripts/humanoid_animation_driver.gd")
+const MonsterAnimationDriver = preload("res://scripts/monster_animation_driver.gd")
 const QingyunVisualFactory = preload("res://scripts/qingyun_visual_factory.gd")
 const FriendPanelScript = preload("res://scripts/friend_panel.gd")
 
@@ -2530,28 +2531,34 @@ func _animate_monster_visuals(delta: float) -> void:
 		monster.set_meta("hit_reaction_time", hit_time)
 		monster.set_meta("death_reaction_time", death_time)
 		var animation_state := "death" if death_time > 0.0 else ("hit" if hit_time > 0.0 else ("attack" if attack_phase != "" else ("move" if moving else "idle")))
+		var defeated := bool(monster.get_meta("defeated_visual", false)) or bool(monster.get_meta("pending_corpse_cleanup", false))
+		if defeated:
+			animation_state = "death"
 		monster.set_meta("animation_state", animation_state)
-		match archetype:
-			"wolf":
-				_animate_wolf_monster(monster, stride, moving, phase)
-			"iron_beast":
-				_animate_iron_beast(monster, stride, moving, phase)
-			"warrior":
-				_animate_warrior_monster(monster, stride, moving, phase, animation_state)
-			"life_soul", "wind_soul", "fire_soul", "frost_soul", "wraith":
-				_animate_soul_monster(monster, delta, phase, moving, archetype)
-		if attack_phase != "" and death_time <= 0.0:
-			var attack_progress := 1.0 - attack_phase_time / attack_phase_duration
-			_animate_monster_attack(monster, archetype, attack_phase, clampf(attack_progress, 0.0, 1.0))
-		var body := monster.get_node_or_null("Torso") as Node3D
-		if not is_instance_valid(body):
-			body = monster.get_node_or_null("IronCore") as Node3D
-		if is_instance_valid(body):
-			if hit_time > 0.0:
-				var hit_weight := sin((0.24 - hit_time) / 0.24 * PI)
-				body.position.x = hit_weight * 0.10
-			else:
-				body.position.x = move_toward(body.position.x, 0.0, delta * 0.8)
+		var native_animation := MonsterAnimationDriver.apply_state(monster, animation_state)
+		monster.set_meta("native_animation_active", native_animation)
+		if not native_animation:
+			match archetype:
+				"wolf":
+					_animate_wolf_monster(monster, stride, moving, phase)
+				"iron_beast":
+					_animate_iron_beast(monster, stride, moving, phase)
+				"warrior":
+					_animate_warrior_monster(monster, stride, moving, phase, animation_state)
+				"life_soul", "wind_soul", "fire_soul", "frost_soul", "wraith":
+					_animate_soul_monster(monster, delta, phase, moving, archetype)
+			if attack_phase != "" and death_time <= 0.0:
+				var attack_progress := 1.0 - attack_phase_time / attack_phase_duration
+				_animate_monster_attack(monster, archetype, attack_phase, clampf(attack_progress, 0.0, 1.0))
+			var body := monster.get_node_or_null("Torso") as Node3D
+			if not is_instance_valid(body):
+				body = monster.get_node_or_null("IronCore") as Node3D
+			if is_instance_valid(body):
+				if hit_time > 0.0:
+					var hit_weight := sin((0.24 - hit_time) / 0.24 * PI)
+					body.position.x = hit_weight * 0.10
+				else:
+					body.position.x = move_toward(body.position.x, 0.0, delta * 0.8)
 		var base_scale: Vector3 = monster.get_meta("base_visual_scale", Vector3.ONE)
 		var is_soul_monster := archetype in ["life_soul", "wind_soul", "fire_soul", "frost_soul", "wraith"]
 		if death_time > 0.0:
