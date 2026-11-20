@@ -22,6 +22,19 @@ var (
 	ErrNodeHasSessions = errors.New("server node still has active or pending sessions")
 )
 
+type NodeSessionsConflictError struct {
+	PreviousState string
+	RemainingSessions int64
+}
+
+func (e *NodeSessionsConflictError) Error() string {
+	return fmt.Sprintf("%v: %d session(s) remain; drain the node and retry", ErrNodeHasSessions, e.RemainingSessions)
+}
+
+func (e *NodeSessionsConflictError) Is(target error) bool {
+	return target == ErrNodeHasSessions
+}
+
 type Client struct {
 	baseURL string
 	apiKey string
@@ -173,8 +186,14 @@ func (c *Client) SetServerNodeState(ctx context.Context, nodeKey, state string) 
 	if resp.StatusCode == http.StatusNotFound { return nil, fmt.Errorf("world server node not found") }
 	if resp.StatusCode == http.StatusBadRequest { return nil, fmt.Errorf("invalid world server node state") }
 	if resp.StatusCode == http.StatusConflict {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("%w: %s", ErrNodeHasSessions, strings.TrimSpace(string(body)))
+		var conflict struct {
+			PreviousState string `json:"previous_state"`
+			RemainingSessions int64 `json:"remaining_sessions"`
+		}
+		if err := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&conflict); err != nil {
+			return nil, fmt.Errorf("%w: invalid conflict response", ErrNodeHasSessions)
+		}
+		return nil, &NodeSessionsConflictError{PreviousState:conflict.PreviousState, RemainingSessions:conflict.RemainingSessions}
 	}
 	if resp.StatusCode != http.StatusOK { return nil, fmt.Errorf("%w: game returned %d", ErrUnavailable, resp.StatusCode) }
 	var result json.RawMessage
