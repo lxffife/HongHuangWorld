@@ -18,6 +18,96 @@ const QINGYUN_REGIONS := [
 	{"id": "qingyun_pine_forest", "name": "青云松林", "priority": 30, "bounds": [[-30.0, -8.0, -48.0, 8.0], [8.0, 30.0, -48.0, 8.0]]}
 ]
 
+
+## Schematic atlas coordinates are deliberately separate from gameplay X/Z meters.
+## They communicate relative geography only; they are never navigation coordinates.
+const UNDERWORLD_ATLAS := {
+	"coordinate_space": "schematic",
+	"title": "冥界总览",
+	"subtitle": "后土掌幽冥轮回 · 酆都治阴司 · 冥河统血海",
+	"nodes": [
+		{
+			"id": "fengdu_capital", "name": "酆都天城", "kind": "capital",
+			"position": [-72.0, 4.0], "size": [76.0, 48.0],
+			"authority": "酆都大帝 · 阴司",
+			"sovereignty": "后土娘娘幽冥法统之下",
+			"distance": "冥界中枢", "danger_level": 2,
+			"recommended_realm": "初入冥界至高阶修士",
+			"access": "主城区域",
+			"description": "冥界最大城池，设皇城、十王府、判官司、鬼籍司、鬼市与阴兵营。"
+		},
+		{
+			"id": "wangchuan_basin", "name": "忘川流域", "kind": "river",
+			"position": [-8.0, -45.0], "size": [66.0, 30.0],
+			"authority": "阴司渡魂体系",
+			"sovereignty": "阴司辖理",
+			"distance": "酆都近域", "danger_level": 4,
+			"recommended_realm": "筑基至化神（建议）",
+			"access": "经黄泉道抵达",
+			"description": "忘川河、奈何桥、孟婆亭、望乡台与渡魂驿站所在的亡魂通行区域。"
+		},
+		{
+			"id": "luofeng_mountains", "name": "罗酆古神山", "kind": "sacred",
+			"position": [-12.0, -112.0], "size": [62.0, 34.0],
+			"authority": "古幽冥神系",
+			"sovereignty": "古神禁域",
+			"distance": "冥界北境", "danger_level": 8,
+			"recommended_realm": "合体至大乘（建议）",
+			"access": "神谕、古遗迹与高阶探索",
+			"description": "罗酆山与六天宫传说的游戏化遗址，保留古老幽冥神权的历史。"
+		},
+		{
+			"id": "hou_tu_domain", "name": "后土神域", "kind": "divine",
+			"position": [-8.0, -172.0], "size": [58.0, 30.0],
+			"authority": "后土娘娘",
+			"sovereignty": "幽冥本源",
+			"distance": "神域", "danger_level": 10,
+			"recommended_realm": "非普通境界可抵达",
+			"access": "神谕与主线剧情",
+			"description": "后土娘娘显化神域的原创设定，象征幽冥本源与六道轮回法则，不代表可自由进入的普通地图。"
+		},
+		{
+			"id": "eighteen_hells", "name": "十八层地狱", "kind": "hell",
+			"position": [-72.0, 94.0], "size": [68.0, 40.0],
+			"authority": "十殿阎罗 · 地狱守将",
+			"sovereignty": "阴司刑狱体系",
+			"distance": "酆都地下辖域", "danger_level": 9,
+			"recommended_realm": "依层数递增",
+			"access": "审判、任务与封印入口",
+			"description": "独立的多层地下空间，兼具罪魂刑罚、危险存在镇压与远古封印剧情；阿鼻无间为最深层核心禁区。"
+		},
+		{
+			"id": "ghost_wilderness", "name": "幽冥荒原", "kind": "wilderness",
+			"position": [32.0, 76.0], "size": [58.0, 36.0],
+			"authority": "无统一常设统治",
+			"sovereignty": "边境争夺地带",
+			"distance": "酆都外域", "danger_level": 6,
+			"recommended_realm": "金丹至渡劫（建议）",
+			"access": "陆路探索",
+			"description": "连接阴司核心与远方险域的广阔荒野，分布废弃驿站、古战场、鬼寨与失序亡魂。"
+		},
+		{
+			"id": "blood_sea", "name": "幽冥血海", "kind": "blood_sea",
+			"position": [126.0, -6.0], "size": [86.0, 58.0],
+			"authority": "冥河老祖 · 阿修罗诸王",
+			"sovereignty": "血海自治疆域",
+			"distance": "极遥远的冥界远域",
+			"danger_level": 10,
+			"recommended_realm": "大乘及以上（外围建议）",
+			"access": "跨越荒原山脉、古战场与封锁关隘",
+			"description": "远离酆都的独立血海大陆级险域，设血海荒原、海岸、浅海、深海、沉船禁区、漩涡与修罗魔宫。"
+		}
+	],
+	"links": [
+		{"from": "fengdu_capital", "to": "wangchuan_basin", "label": "黄泉古道"},
+		{"from": "fengdu_capital", "to": "eighteen_hells", "label": "阴司地脉入口"},
+		{"from": "fengdu_capital", "to": "luofeng_mountains", "label": "古道 / 神山道"},
+		{"from": "fengdu_capital", "to": "ghost_wilderness", "label": "幽冥官道"},
+		{"from": "ghost_wilderness", "to": "blood_sea", "label": "远征路线 · 多重险境"},
+		{"from": "luofeng_mountains", "to": "hou_tu_domain", "label": "神域朝圣之路"}
+	]
+}
+
 const FENGDU_PROTOTYPE := {
 	"world_id": "underworld_fengdu",
 	"bounds": [-128.0, 128.0, -128.0, 128.0],
@@ -35,6 +125,17 @@ const FENGDU_PROTOTYPE := {
 		{"id": "fengdu_outer_ridge", "name": "酆都北部山脊", "position": [-42.0, 12.0, -112.0], "color": "#b6a8a0", "kind": "visual", "map_visible": false}
 	]
 }
+
+
+static func get_underworld_atlas() -> Dictionary:
+	return UNDERWORLD_ATLAS.duplicate(true)
+
+
+static func get_underworld_atlas_node(node_id: String) -> Dictionary:
+	for node_variant in UNDERWORLD_ATLAS["nodes"]:
+		if str(node_variant.get("id", "")) == node_id:
+			return node_variant.duplicate(true)
+	return {}
 
 
 static func get_world_bounds(world_id: String) -> Vector4:
