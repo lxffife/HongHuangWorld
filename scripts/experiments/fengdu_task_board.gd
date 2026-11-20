@@ -73,7 +73,8 @@ func refresh() -> void:
 			var player_delta := int(entry.get("player_delta", 0))
 			var treasury_delta := int(entry.get("treasury_delta", 0))
 			var sign_text := "+" if player_delta > 0 else ""
-			history_lines.append("%s  玩家 %s%s  府库 %+d  %s" % [_transaction_category_text(str(entry.get("category", ""))), sign_text, _format_amount(player_delta), treasury_delta, str(entry.get("note", ""))])
+			var treasury_sign := "+" if treasury_delta > 0 else ""
+			history_lines.append("%s  玩家 %s%s  府库 %s%s  %s" % [_transaction_category_text(str(entry.get("category", ""))), sign_text, _format_amount(player_delta), treasury_sign, _format_amount(treasury_delta), str(entry.get("note", ""))])
 		_history_label.text = "\n".join(history_lines) if not history_lines.is_empty() else "暂无交易流水。"
 		_history_label.tooltip_text = "最近 8 笔经济流水（本地原型）"
 
