@@ -26,7 +26,11 @@ var _hint_label: Label
 func _ready() -> void:
 	_city_plan = WorldMapCatalog.get_fengdu_city_plan()
 	_create_materials()
-	add_child(WorldEnvironmentBuilder.build("underworld_fengdu"))
+	var environment_rig := WorldEnvironmentBuilder.build("underworld_fengdu")
+	var world_environment := environment_rig.get_node_or_null("WorldEnvironment") as WorldEnvironment
+	if world_environment != null and world_environment.environment != null:
+		world_environment.environment.fog_density = 0.0015
+	add_child(environment_rig)
 	_build_ground_and_moat()
 	_build_city_walls()
 	_build_gatehouses()
@@ -128,7 +132,7 @@ func _build_gatehouse(gate_name: String, center: Vector3, horizontal: bool) -> v
 
 
 func _build_roads() -> void:
-	_add_box("NorthSouthImperialAvenue", Vector3(52.0, 0.6, WALL_DEPTH - 80.0), Vector3(0.0, 0.25, 0.0), "road", false)
+	_add_box("NorthSouthImperialAvenue", Vector3(52.0, 0.6, 1050.0), Vector3(0.0, 0.25, 175.0), "road", false)
 	_add_box("EastWestImperialAvenue", Vector3(WALL_WIDTH - 80.0, 0.6, 52.0), Vector3(0.0, 0.27, 0.0), "road", false)
 	_add_box("NorthernPalaceApproach", Vector3(38.0, 0.5, 260.0), Vector3(0.0, 0.3, -500.0), "road_edge", false)
 	_add_box("SouthernSoulAvenue", Vector3(38.0, 0.5, 270.0), Vector3(0.0, 0.3, 500.0), "road_edge", false)
@@ -176,7 +180,7 @@ func _build_district_cluster(district: Dictionary, center: Vector3) -> void:
 	for side in [-1.0, 1.0]:
 		_add_box(prefix + "_SideHall_" + str(side), wing_size, center + Vector3(side * wing_offset, wing_size.y * 0.5, 82.0), material_key, true)
 		_add_roof_cap(prefix + "_SideRoof_" + str(side), Vector3(wing_size.x + 10.0, 6.0, wing_size.z + 10.0), center + Vector3(side * wing_offset, wing_size.y + 3.0, 82.0), "roof")
-	_add_box(prefix + "_Courtyard", Vector3(230.0, 0.3, 205.0), center + Vector3(0.0, 0.18, 0.0), "road_edge", false)
+	_add_box(prefix + "_Courtyard", Vector3(170.0, 0.3, 58.0), center + Vector3(0.0, 0.18, main_depth * 0.5 + 48.0), "road_edge", false)
 	_add_box(prefix + "_FrontSteps", Vector3(main_width * 0.72, 3.0, 18.0), center + Vector3(0.0, 1.5, main_depth * 0.5 + 12.0), "stone", true)
 	if kind == "market" or kind == "residential":
 		for row in range(2):
