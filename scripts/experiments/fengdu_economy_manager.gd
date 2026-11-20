@@ -37,7 +37,7 @@ func _seed_city_notices() -> void:
 			continue
 		_treasury -= reward
 		_escrow_total += reward
-		_record_transaction("system_escrow", str(notice["publisher_id"]), -reward, 0, reward, "城主府拨付示范悬赏：" + str(notice["title"]))
+		_record_transaction("system_escrow", "city_treasury", 0, -reward, reward, "城主府拨付示范悬赏：" + str(notice["title"]))
 		_tasks[str(notice["id"])] = {
 			"id": str(notice["id"]),
 			"title": str(notice["title"]),
