@@ -2611,6 +2611,9 @@ func _on_combat_event(event: Dictionary) -> void:
 				hit_message += " · 中毒"
 			elif str(event.get("attack_style", "")) == "poison_tick":
 				hit_message = "毒素持续侵蚀 -" + str(incoming_damage) + " 生命"
+			var resistance_bp := int(event.get("status_resistance_bp", 0))
+			if resistance_bp > 0:
+				hit_message += " · 体质抗性 " + str(int(round(float(resistance_bp) / 100.0))) + "%"
 			_show_notification(hit_message)
 		return
 	var monster_name := str(event.get("target_name", "目标"))
