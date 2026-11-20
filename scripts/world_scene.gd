@@ -1497,6 +1497,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		_request_fireball()
 		get_viewport().set_input_as_handled()
 		return
+	if event.keycode == KEY_R:
+		_request_ice_bolt()
+		get_viewport().set_input_as_handled()
+		return
 	if event.keycode == KEY_C:
 		_set_chat_expanded(not chat_expanded)
 		if chat_expanded and is_instance_valid(chat_input):
@@ -2257,6 +2261,26 @@ func _request_fireball() -> void:
 	var error: Error = network.send_spell_cast("fireball", target_id)
 	if error != OK:
 		_show_notification("火球术请求发送失败：" + str(error))
+
+func _request_ice_bolt() -> void:
+	var network := HHSession.world_network
+	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
+		return
+	var target_id := selected_monster_id if monsters.has(selected_monster_id) else ""
+	var nearest_distance := 18.0
+	if target_id.is_empty():
+		for monster_id in monster_targets:
+			var target: Vector3 = monster_targets[monster_id]
+			var distance := Vector2(local_player.global_position.x, local_player.global_position.z).distance_to(Vector2(target.x, target.z))
+			if distance <= nearest_distance:
+				nearest_distance = distance
+				target_id = str(monster_id)
+	if target_id.is_empty():
+		_show_notification("18 米内没有可施法的目标。")
+		return
+	var error: Error = network.send_spell_cast("ice_bolt", target_id)
+	if error != OK:
+		_show_notification("冰锥术请求发送失败：" + str(error))
 
 func _on_monster_action_event(event: Dictionary) -> void:
 	var attacker_id := str(event.get("source_entity_id", ""))
