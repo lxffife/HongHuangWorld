@@ -138,30 +138,42 @@ func (s *Service) ListMine(ctx context.Context, accountID string) ([]Faction, er
 func (s *Service) Apply(ctx context.Context, accountID, factionID, message string) (Application, error) {
 	message = strings.TrimSpace(message)
 	if accountID == "" || factionID == "" || utf8.RuneCountInString(message) > 240 { return Application{}, ErrInvalid }
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil { return Application{}, fmt.Errorf("begin faction application: %w", err) }
+	defer tx.Rollback()
+	var factionStatus string
+	err = tx.QueryRowContext(ctx, `SELECT status FROM factions WHERE id=$1 FOR UPDATE`, factionID).Scan(&factionStatus)
+	if errors.Is(err, sql.ErrNoRows) { return Application{}, ErrNotFound }
+	if err != nil { return Application{}, fmt.Errorf("lock faction for application: %w", err) }
+	if factionStatus != "active" { return Application{}, ErrNotFound }
 	var member bool
-	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM faction_members WHERE faction_id=$1 AND account_id=$2)`, factionID, accountID).Scan(&member); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM faction_members WHERE faction_id=$1 AND account_id=$2)`, factionID, accountID).Scan(&member); err != nil {
 		return Application{}, fmt.Errorf("check faction membership: %w", err)
 	}
 	if member { return Application{}, ErrAlreadyMember }
 	var result Application
-	err := s.db.QueryRowContext(ctx, `INSERT INTO faction_membership_applications(faction_id, account_id, message)
-		SELECT id, $2, $3 FROM factions WHERE id=$1 AND status='active'
+	err = tx.QueryRowContext(ctx, `INSERT INTO faction_membership_applications(faction_id, account_id, message)
+		VALUES ($1, $2, $3)
 		RETURNING id::text, faction_id::text, account_id::text, message, status, created_at::text`,
 		factionID, accountID, message).Scan(&result.ID, &result.FactionID, &result.AccountID,
 		&result.Message, &result.Status, &result.CreatedAt)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) { return Application{}, ErrNotFound }
 		if strings.Contains(strings.ToLower(err.Error()), "uq_faction_pending_application") { return Application{}, ErrPendingApplication }
 		return Application{}, fmt.Errorf("create faction application: %w", err)
 	}
+	if err := tx.Commit(); err != nil { return Application{}, fmt.Errorf("commit faction application: %w", err) }
 	return result, nil
 }
-
 func (s *Service) ReviewApplication(ctx context.Context, reviewerID, factionID, applicationID, decision string) error {
 	if reviewerID == "" || factionID == "" || applicationID == "" || (decision != "approve" && decision != "reject") { return ErrInvalid }
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil { return fmt.Errorf("begin faction application review: %w", err) }
 	defer tx.Rollback()
+	var factionStatus string
+	err = tx.QueryRowContext(ctx, `SELECT status FROM factions WHERE id=$1 FOR UPDATE`, factionID).Scan(&factionStatus)
+	if errors.Is(err, sql.ErrNoRows) { return ErrNotFound }
+	if err != nil { return fmt.Errorf("lock faction for application review: %w", err) }
+	if factionStatus != "active" { return ErrNotFound }
 	var role, applicantID, status string
 	err = tx.QueryRowContext(ctx, `SELECT m.role, a.account_id::text, a.status
 		FROM faction_members m
