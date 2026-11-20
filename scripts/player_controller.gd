@@ -520,6 +520,8 @@ func _apply_soul_affinity_visuals(affinities: Dictionary) -> void:
 
 
 func play_hit_reaction(damage: int, attack_style: String = "") -> void:
+	# A confirmed hit interrupts an in-progress attack instead of letting it resume afterward.
+	attack_animation_time = 0.0
 	hit_animation_time = maxf(hit_animation_time, 0.32)
 	hit_reaction_time = maxf(hit_reaction_time, 0.32)
 	var style_strength := 0.115 if attack_style == "heavy_slam" else 0.055
@@ -527,7 +529,7 @@ func play_hit_reaction(damage: int, attack_style: String = "") -> void:
 	hit_reaction_strength = maxf(hit_reaction_strength, style_strength + damage_strength)
 
 func play_attack_animation() -> void:
-	if soul_form_enabled or not is_instance_valid(player_humanoid):
+	if hit_animation_time > 0.0 or soul_form_enabled or not is_instance_valid(player_humanoid):
 		return
 	attack_animation_time = 0.34
 
