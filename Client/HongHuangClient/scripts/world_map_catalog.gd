@@ -37,7 +37,7 @@ const FENGDU_PROTOTYPE := {
 }
 
 
-static func get_regions(world_id: String) -> Array[Dictionary]:
+static func get_regions(world_id: String) -> Array:
 	match world_id:
 		"underworld_fengdu":
 			return FENGDU_REGIONS.duplicate(true)
@@ -47,13 +47,13 @@ static func get_regions(world_id: String) -> Array[Dictionary]:
 			return []
 
 
-static func get_landmarks(world_id: String) -> Array[Dictionary]:
+static func get_landmarks(world_id: String) -> Array:
 	if world_id != "underworld_fengdu":
 		return []
 	return FENGDU_PROTOTYPE["landmarks"].duplicate(true)
 
 
-static func get_water_bodies(world_id: String) -> Array[Dictionary]:
+static func get_water_bodies(world_id: String) -> Array:
 	if world_id != "underworld_fengdu":
 		return []
 	return FENGDU_PROTOTYPE["water_bodies"].duplicate(true)
