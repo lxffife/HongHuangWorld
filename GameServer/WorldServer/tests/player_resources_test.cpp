@@ -9,11 +9,17 @@ int main() {
     using honghuang::simulation::mana_regeneration_amount;
     using honghuang::simulation::mana_regeneration_interval_ms;
 
-    // Combat halves the regeneration rate without changing normal recovery.
-    assert(mana_regeneration_interval_ms(false, 3000, 6000) == 3000);
-    assert(mana_regeneration_interval_ms(true, 3000, 6000) == 6000);
-    assert(mana_regeneration_interval_ms(false, 0, 6000) == 0);
-    assert(mana_regeneration_interval_ms(true, 3000, 0) == 0);
+    // Spirit improves recovery by 0.2% per point, capped at 30%.
+    assert(mana_regeneration_interval_ms(false, 0, 3000, 6000) == 3000);
+    assert(mana_regeneration_interval_ms(false, 5, 3000, 6000) == 2970);
+    assert(mana_regeneration_interval_ms(false, 50, 3000, 6000) == 2700);
+    assert(mana_regeneration_interval_ms(false, 150, 3000, 6000) == 2100);
+    assert(mana_regeneration_interval_ms(false, 100000, 3000, 6000) == 2100);
+    assert(mana_regeneration_interval_ms(true, 0, 3000, 6000) == 6000);
+    assert(mana_regeneration_interval_ms(true, 150, 3000, 6000) == 4200);
+    assert(mana_regeneration_interval_ms(false, -1, 3000, 6000) == 0);
+    assert(mana_regeneration_interval_ms(false, 0, 0, 6000) == 0);
+    assert(mana_regeneration_interval_ms(true, 0, 3000, 0) == 0);
 
     // One point every three seconds; partial intervals do not round up.
     assert(mana_regeneration_amount(0, 20, 100, 3000) == 0);
