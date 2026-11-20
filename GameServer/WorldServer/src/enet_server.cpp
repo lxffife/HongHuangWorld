@@ -2968,7 +2968,7 @@ struct EnetServer::Impl {
                     {"phase", phase},
                     {"attack_style", attack_profile.style},
                     {"attack_radius", attack_profile.splash_radius > 0.0F
-                        ? attack_profile.splash_radius : monster.definition.attack_range},
+                        ? attack_profile.splash_radius : attack_profile.range},
                     {"target_character_id", monster.attack_target_character_id},
                     {"windup_ms", windup_duration.count()},
                     {"recovery_ms", recovery_duration.count()}
