@@ -19,6 +19,7 @@ import (
 	"github.com/liflife/HongHuangWorld/Backend/internal/inventory"
 	"github.com/liflife/HongHuangWorld/Backend/internal/npc"
 	"github.com/liflife/HongHuangWorld/Backend/internal/soul"
+ "github.com/liflife/HongHuangWorld/Backend/internal/task"
 	"github.com/liflife/HongHuangWorld/Backend/internal/serverregistry"
 	"github.com/liflife/HongHuangWorld/Backend/internal/world"
 	"github.com/liflife/HongHuangWorld/Backend/internal/worldentry"
@@ -102,13 +103,18 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/characters/current/bloodlines/awaken", characters.awakenBloodline)
 		mux.HandleFunc("POST /api/v1/characters/current/techniques/train", characters.trainTechnique)
 		mux.HandleFunc("POST /api/v1/characters/current/attributes/allocate", characters.allocateAttributePoints)
-		factionAPI := &factionHandlers{authService: authService, service: faction.NewService(db), logger: logger}
+		factionService := faction.NewService(db)
+		factionAPI := &factionHandlers{authService: authService, service: factionService, logger: logger}
 		mux.HandleFunc("POST /api/v1/factions", factionAPI.createSect)
 		mux.HandleFunc("GET /api/v1/factions/mine", factionAPI.mine)
 		mux.HandleFunc("POST /api/v1/factions/{factionID}/applications", factionAPI.apply)
 		mux.HandleFunc("GET /api/v1/factions/{factionID}/applications", factionAPI.applications)
 		mux.HandleFunc("GET /api/v1/factions/{factionID}/members", factionAPI.members)
-		mux.HandleFunc("POST /api/v1/factions/{factionID}/applications/{applicationID}/review", factionAPI.review)
+		mux.HandleFunc("POST /api/v1/factions/{factionID}/applications/{applicationID}/review", "POST /api/v1/factions/{factionID}/bounties", "GET /api/v1/bounties", "POST /api/v1/bounties/{taskID}/join", factionAPI.review)
+		bountyAPI := &bountyHandlers{authService: authService, service: task.NewService(db, factionService), logger: logger}
+		mux.HandleFunc("POST /api/v1/factions/{factionID}/bounties", bountyAPI.publishFaction)
+		mux.HandleFunc("GET /api/v1/bounties", bountyAPI.list)
+		mux.HandleFunc("POST /api/v1/bounties/{taskID}/join", bountyAPI.join)
 		economyAPI := &economyHandlers{authService: authService, service: economy.NewService(db), logger: logger}
 		mux.HandleFunc("GET /api/v1/economy/currencies", economyAPI.catalog)
 		mux.HandleFunc("GET /api/v1/economy/wallet", economyAPI.wallet)
