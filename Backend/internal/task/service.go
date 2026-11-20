@@ -252,6 +252,9 @@ func (s *Service) Settle(ctx context.Context,accountID,taskID,eventKey string)(S
   return prior,nil
  }
  if !errors.Is(err,sql.ErrNoRows){return Settlement{},fmt.Errorf("read bounty settlement receipt: %w",err)}
+ var eventKeyUsed bool
+ if err=tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM bounty_task_settlements WHERE event_key=$1)`,eventKey).Scan(&eventKeyUsed);err!=nil{return Settlement{},fmt.Errorf("check bounty settlement idempotency key: %w",err)}
+ if eventKeyUsed{return Settlement{},ErrIdempotencyConflict}
  if status!="full"&&status!="in_progress"{return Settlement{},ErrTaskNotReady}
  if escrowStatus!="locked"{return Settlement{},ErrTaskNotReady}
  rows,err:=tx.QueryContext(ctx,`SELECT account_id::text FROM bounty_task_participants
