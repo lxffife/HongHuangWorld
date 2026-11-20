@@ -1182,6 +1182,7 @@ func _upsert_monster(entity: Dictionary) -> void:
 	var slow_ring := monster_node.get_node_or_null("SlowStatusRing") as MeshInstance3D
 	if slow_ring != null:
 		slow_ring.visible = bool(entity.get("slowed", false))
+	_set_monster_freeze_visual(monster_node, bool(entity.get("frozen", false)))
 	monster_entities[monster_id] = entity.duplicate(true)
 	if monster_id == selected_monster_id:
 		_update_target_info()
@@ -2507,6 +2508,33 @@ func _set_monster_burn_visual(monster: Node3D, enabled: bool) -> void:
 		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		ring.material_override = material
 		ring.position.y = 0.07
+		monster.add_child(ring)
+	if ring != null:
+		ring.visible = enabled
+
+
+func _set_monster_freeze_visual(monster: Node3D, enabled: bool) -> void:
+	if not is_instance_valid(monster):
+		return
+	var ring := monster.get_node_or_null("MonsterFreezeStatusRing") as MeshInstance3D
+	if enabled and ring == null:
+		ring = MeshInstance3D.new()
+		ring.name = "MonsterFreezeStatusRing"
+		var ring_mesh := TorusMesh.new()
+		ring_mesh.inner_radius = 0.58
+		ring_mesh.outer_radius = 0.70
+		ring_mesh.rings = 24
+		ring_mesh.ring_segments = 6
+		ring.mesh = ring_mesh
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color("#9cecff", 0.88)
+		material.emission_enabled = true
+		material.emission = Color("#55cfff")
+		material.emission_energy_multiplier = 2.2
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		ring.material_override = material
+		ring.position.y = 0.10
 		monster.add_child(ring)
 	if ring != null:
 		ring.visible = enabled
