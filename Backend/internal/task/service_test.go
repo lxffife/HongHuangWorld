@@ -23,13 +23,13 @@ func TestPublishFactionRejectsInvalidRequestsBeforeDatabaseAccess(t *testing.T) 
 
 func TestJoinRejectsMissingIdentityBeforeDatabaseAccess(t *testing.T) {
  service:=NewService(nil,nil)
- if err:=service.Join(t.Context(),"","task");err!=ErrInvalid{t.Fatalf("expected ErrInvalid, got %v",err)}
+ if err:=service.Join(context.Background(),"","task");err!=ErrInvalid{t.Fatalf("expected ErrInvalid, got %v",err)}
  if err:=service.Join(t.Context(),"account","");err!=ErrInvalid{t.Fatalf("expected ErrInvalid, got %v",err)}
 }
 
 func TestListOpenRequiresWorld(t *testing.T) {
  service:=NewService(nil,nil)
- if _,err:=service.ListOpen(t.Context()," ");err!=ErrInvalid{t.Fatalf("expected ErrInvalid, got %v",err)}
+ if _,err:=service.ListOpen(context.Background()," ");err!=ErrInvalid{t.Fatalf("expected ErrInvalid, got %v",err)}
 }
 
 
