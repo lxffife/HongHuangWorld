@@ -74,6 +74,8 @@ struct PlayerState {
     std::int64_t mana{};
     std::int64_t max_mana{};
     honghuang::simulation::TimedSlowEffect slow_effect;
+    honghuang::simulation::PeriodicDamageEffect poison_effect;
+    std::string poison_source_entity_id;
     float x{};
     float y{};
     float z{};
@@ -2562,7 +2564,40 @@ struct EnetServer::Impl {
         if (elapsed < kSnapshotInterval) return;
         const float delta = std::clamp(std::chrono::duration<float>(elapsed).count(), 0.0F, 0.1F);
         for (auto& [peer, player] : players) {
-            (void)peer;
+            const auto effect_now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now.time_since_epoch()).count();
+            if (player.health <= 0) {
+                player.poison_effect = {};
+                player.poison_source_entity_id.clear();
+                player.slow_effect = {};
+            } else {
+                const auto poison_damage = honghuang::simulation::consume_periodic_damage_tick(
+                    player.poison_effect, effect_now_ms);
+                if (poison_damage > 0) {
+                    const auto applied_damage = std::min(player.health, poison_damage);
+                    player.health -= applied_damage;
+                    const bool poison_defeated = player.health <= 0;
+                    const auto remaining_poison_ms = player.poison_effect.ticks_remaining <= 0 ? 0 :
+                        std::max<std::int64_t>(0, player.poison_effect.next_tick_at_ms - effect_now_ms) +
+                        static_cast<std::int64_t>(player.poison_effect.ticks_remaining - 1) *
+                            player.poison_effect.interval_ms;
+                    send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                        Json{{"accepted", true}, {"source", "monster"},
+                             {"source_entity_id", player.poison_source_entity_id},
+                             {"attack_style", "poison_tick"}, {"status_effect", "poison"},
+                             {"status_duration_ms", remaining_poison_ms},
+                             {"damage", applied_damage}, {"health", player.health},
+                             {"max_health", player.max_health}, {"defeated", poison_defeated}});
+                    if (poison_defeated) {
+                        player.poison_effect = {};
+                        player.poison_source_entity_id.clear();
+                        player.slow_effect = {};
+                    }
+                } else if (!honghuang::simulation::periodic_damage_is_active(
+                               player.poison_effect, effect_now_ms)) {
+                    player.poison_source_entity_id.clear();
+                }
+            }
             if (player.health <= 0 || now - player.last_input_at > kInputTimeout) {
                 player.move_x = 0.0F;
                 player.move_z = 0.0F;
@@ -2740,7 +2775,7 @@ struct EnetServer::Impl {
                                {"remaining_health", damage.remaining_health},
                                {"max_health", target->definition.max_health},
                                {"defeated", damage.defeated},
-                               {"status_effect", applied_slow ? "slow" : ""},
+                               {"status_effect", applied_poison ? "poison" : (applied_slow ? "slow" : "")},
                                {"status_duration_ms", applied_slow ? projectile->slow_duration_ms : 0},
                                {"burn_applied", applied_burn},
                                {"burn_duration_ms", applied_burn ? projectile->burn_duration_ms : 0},
@@ -3024,7 +3059,11 @@ struct EnetServer::Impl {
                         continue;
                     }
                     target_player.health = damage.remaining_health;
-                    if (damage.defeated) target_player.slow_effect = {};
+                    if (damage.defeated) {
+                        target_player.slow_effect = {};
+                        target_player.poison_effect = {};
+                        target_player.poison_source_entity_id.clear();
+                    }
                     broadcast_player_action_event(target_player, "hit", monster.runtime_id, "heavy_slam", target_peer);
                     send_json(target_peer, honghuang::protocol::MessageType::CombatEvent,
                               Json{{"accepted", true}, {"source", "monster"},
@@ -3048,13 +3087,27 @@ struct EnetServer::Impl {
                     continue;
                 }
                 player.health = damage.remaining_health;
-                if (damage.defeated) player.slow_effect = {};
+                if (damage.defeated) {
+                    player.slow_effect = {};
+                    player.poison_effect = {};
+                    player.poison_source_entity_id.clear();
+                }
                 bool applied_slow = false;
+                bool applied_poison = false;
                 if (!damage.defeated && std::string(attack_profile.style) == "frost_bolt") {
                     const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                         now.time_since_epoch()).count();
                     applied_slow = honghuang::simulation::apply_slow(
                         player.slow_effect, now_ms, 2200, 0.70F);
+                }
+                if (!damage.defeated && std::string(attack_profile.style) == "poison_bolt") {
+                    const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        now.time_since_epoch()).count();
+                    const auto poison_damage = std::max<std::int64_t>(
+                        1, static_cast<std::int64_t>(std::lround(monster.definition.attack * 0.15F)));
+                    applied_poison = honghuang::simulation::apply_periodic_damage(
+                        player.poison_effect, now_ms, 4000, 1000, poison_damage);
+                    if (applied_poison) player.poison_source_entity_id = monster.runtime_id;
                 }
                 broadcast_player_action_event(player, "hit", monster.runtime_id, attack_profile.style, victim->first);
                 send_json(victim->first, honghuang::protocol::MessageType::CombatEvent,
@@ -3064,7 +3117,12 @@ struct EnetServer::Impl {
                                {"damage", damage.damage}, {"health", player.health},
                                {"max_health", player.max_health}, {"defeated", damage.defeated},
                                {"status_effect", applied_slow ? "slow" : ""},
-                               {"status_duration_ms", applied_slow ? 2200 : 0}});
+                               {"status_duration_ms", applied_poison
+                                    ? std::max<std::int64_t>(0, player.poison_effect.next_tick_at_ms -
+                                        std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count()) +
+                                      static_cast<std::int64_t>(std::max(0, player.poison_effect.ticks_remaining - 1)) *
+                                        player.poison_effect.interval_ms
+                                    : (applied_slow ? 2200 : 0)}});
             }
             monster.last_attack_at = now;
             monster.attack_phase = MonsterAttackPhase::Recovery;
