@@ -120,7 +120,8 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/bounties/{taskID}/leave", bountyAPI.leave)
 		mux.HandleFunc("POST /api/v1/bounties/{taskID}/complete", bountyAPI.settle)
 		mux.HandleFunc("POST /api/v1/bounties/{taskID}/cancel", bountyAPI.cancel)
-		mux.HandleFunc("POST /api/v1/servers/bounties/expire", bountyAPI.expireDue)
+		mux.HandleFunc("POST /api/v1/servers/bounties/expire", "POST /api/v1/servers/bounties/events", bountyAPI.expireDue)
+		mux.HandleFunc("POST /api/v1/servers/bounties/events", bountyAPI.reportWorldEvent)
 		economyAPI := &economyHandlers{authService: authService, service: economy.NewService(db), logger: logger}
 		mux.HandleFunc("GET /api/v1/economy/currencies", economyAPI.catalog)
 		mux.HandleFunc("GET /api/v1/economy/wallet", economyAPI.wallet)
