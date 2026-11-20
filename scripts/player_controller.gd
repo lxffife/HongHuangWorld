@@ -578,6 +578,10 @@ func _process(delta: float) -> void:
 					left_attack_lift = 0.58
 					right_attack_lift = 1.02
 					attack_sweep = -0.08
+				"heavy_swing":
+					left_attack_lift = 0.12
+					right_attack_lift = 1.42
+					attack_sweep = 0.62
 			if is_instance_valid(left_arm):
 				left_arm.rotation.x = (swing if moving else sin(humanoid_animation_time * 1.1) * 0.018) - attack_weight * left_attack_lift
 			if is_instance_valid(right_arm):
@@ -672,6 +676,19 @@ func _resolve_attack_style(items: Array) -> String:
 		var slot := str(item.get("slot", item.get("equipment_slot", "")))
 		if slot != "weapon":
 			continue
+		var weapon_type := str(item.get("weapon_type", ""))
+		match weapon_type:
+			"spear":
+				return "spear_thrust"
+			"bow":
+				return "ranged_shot"
+			"staff", "focus":
+				return "staff_cast"
+			"axe", "hammer":
+				return "heavy_swing"
+			"sword", "dagger":
+				return "sword_slash"
+		# Backward-compatible fallback for old equipment payloads.
 		var identity := (str(item.get("name", "")) + " " + str(item.get("item_id", ""))).to_lower()
 		if identity.contains("spear") or identity.contains("lance") or identity.contains("长枪") or identity.contains("长矛") or identity.contains("枪"):
 			return "spear_thrust"
