@@ -67,7 +67,7 @@ func (s *Service) CreateSect(ctx context.Context, accountID, worldID, name, desc
 	if err != nil { return Faction{}, fmt.Errorf("begin sect creation: %w", err) }
 	defer tx.Rollback()
 	var exists bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM worlds WHERE id = $1 AND enabled)`, worldID).Scan(&exists); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM world_definitions WHERE id = $1 AND enabled)`, worldID).Scan(&exists); err != nil {
 		return Faction{}, fmt.Errorf("validate sect world: %w", err)
 	}
 	if !exists { return Faction{}, ErrInvalid }
