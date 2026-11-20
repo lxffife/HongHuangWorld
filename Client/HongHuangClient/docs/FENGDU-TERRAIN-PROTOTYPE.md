@@ -21,7 +21,7 @@ ridges, and a Blood Sea coast/shelf.
 - Tile nodes carry integer tile coordinates and world-space bounds in metadata.
 - The Forgotten River remains centered near X=22m to align with the existing
   Fengdu prototype landmark.
-- The Blood Sea is an eastern coastal study, not an unlocked gameplay region.
+- The Blood Sea coast/shelf in this isolated prototype is legacy terrain test geometry only. It does not define the canonical world location, adjacency, travel distance, or playable bounds of the Blood Sea. In the world setting, the Blood Sea is a remote, independent underworld territory far from Fengdu.
 - Markers are visual annotations only. Server region IDs, POIs, spawn rules,
   tide hazards, and access permissions remain server-authoritative.
 
@@ -36,7 +36,7 @@ ridges, and a Blood Sea coast/shelf.
 
 The terrain experiment now reads water and landmark placement from the catalog instead of embedding those coordinates in its scene script. Adding a new visual landmark or water body should therefore be a data change, while its rendering remains handled by the prototype.
 
-These definitions are client presentation metadata, not gameplay permissions or authoritative world topology. A future Blood Sea deep-water, island, wreck, or ritual-island region must receive its authoritative region/POI and access rules from the server; adding a catalog entry alone does not make it traversable or discoverable.
+These definitions are client presentation metadata, not gameplay permissions or authoritative world topology. The canonical world atlas places the Blood Sea as a remote, independent territory under Minghe Patriarch and the Asura powers. A future Blood Sea deep-water, island, wreck, or ritual-island region must receive its authoritative region/POI and access rules from the server; adding a catalog entry alone does not make it traversable or discoverable.
 
 ## Minimap integration
 
