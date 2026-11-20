@@ -139,18 +139,19 @@ func _draw_underworld_atlas() -> void:
 		draw_string(ThemeDB.fallback_font, Vector2(node_rect.position.x + 7.0, title_y), str(node.get("name", "区域")), HORIZONTAL_ALIGNMENT_LEFT, maxf(30.0, node_rect.size.x - 12.0), title_size, Color("#f1e7d6"))
 		if node_rect.size.y >= 34.0:
 			draw_string(ThemeDB.fallback_font, Vector2(node_rect.position.x + 7.0, title_y + 15.0), str(node.get("distance", "")), HORIZONTAL_ALIGNMENT_LEFT, maxf(30.0, node_rect.size.x - 12.0), 9, Color("#c1cbd4"))
-	draw_string(ThemeDB.fallback_font, Vector2(14.0, size.y - 10.0), "点击区域查看设定 · 滚轮缩放与拖动仅用于查看 · 示意连线不代表可直接通行", HORIZONTAL_ALIGNMENT_LEFT, -1.0, 10, Color("#91a5b6"))
+	draw_string(ThemeDB.fallback_font, Vector2(14.0, size.y - 10.0), "点击区域查看设定 · 滚轮缩放 · 右键/中键拖动 · 示意连线不代表可直接通行", HORIZONTAL_ALIGNMENT_LEFT, -1.0, 10, Color("#91a5b6"))
+	draw_string(ThemeDB.fallback_font, Vector2(size.x - 14.0, 20.0), "比例 %.2fx" % _zoom, HORIZONTAL_ALIGNMENT_RIGHT, -1.0, 11, Color("#91a5b6"))
 
 
 func _atlas_scale(map_rect: Rect2) -> float:
-	return minf(map_rect.size.x / 420.0, map_rect.size.y / 345.0)
+	return minf(map_rect.size.x / 420.0, map_rect.size.y / 390.0) * _zoom
 
 
 func _atlas_to_canvas(position_data: Array, map_rect: Rect2) -> Vector2:
 	if position_data.size() < 2:
 		return map_rect.get_center()
 	var scale := _atlas_scale(map_rect)
-	return map_rect.get_center() + Vector2(float(position_data[0]), float(position_data[1])) * Vector2(scale, -scale)
+	return map_rect.get_center() + _pan + Vector2(float(position_data[0]), float(position_data[1])) * Vector2(scale, -scale)
 
 
 func _atlas_node_rect(node: Dictionary, map_rect: Rect2) -> Rect2:
