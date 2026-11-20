@@ -10,7 +10,7 @@ current scene (F6). The scene generates a deterministic 128 x 128 heightfield
 at runtime, split into 4 x 4 independently bounded terrain tiles. Each 64m x
 64m tile owns its visual mesh and trimesh collision body. The layout includes a
 Forgotten River valley, raised Reincarnation Hall terrace, broken perimeter
-ridges, and a Blood Sea coast/shelf.
+ridges, and a temporary Blood Sea coast/shelf shape used only to exercise terrain generation.
 
 ## Coordinate contract
 
