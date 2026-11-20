@@ -1033,6 +1033,113 @@ func _upsert_remote_player(entity: Dictionary) -> void:
 	remote_yaws[character_id] = float(entity.get("yaw", 0.0))
 	var birth_data: Variant = entity.get("birth_inheritance", {})
 	_apply_remote_birth_visuals(remote_players[character_id], birth_data if birth_data is Dictionary else {})
+	var equipment_data: Variant = entity.get("equipment", [])
+	_apply_remote_equipment_visuals(remote_players[character_id], equipment_data if equipment_data is Array else [])
+
+func _apply_remote_equipment_visuals(remote: Node3D, items: Array) -> void:
+	if not is_instance_valid(remote) or bool(remote.get_meta("is_underworld", false)):
+		return
+	var humanoid := remote.get_node_or_null("RemoteHumanoid") as Node3D
+	if humanoid == null:
+		return
+	var signature := JSON.stringify(items)
+	if str(remote.get_meta("remote_equipment_signature", "")) == signature:
+		return
+	remote.set_meta("remote_equipment_signature", signature)
+	for socket_name in ["EquipmentWeaponSocket", "EquipmentOffhandSocket", "EquipmentHeadSocket", "EquipmentChestSocket", "EquipmentLegsSocket", "EquipmentBootsSocket", "EquipmentAccessorySocket"]:
+		var old_socket := humanoid.get_node_or_null(socket_name)
+		if old_socket != null:
+			old_socket.queue_free()
+	for item_value in items:
+		if not (item_value is Dictionary):
+			continue
+		var item: Dictionary = item_value
+		var slot := str(item.get("slot", ""))
+		var quality := int(item.get("quality", 1))
+		var tint := Color("#c5a66d")
+		if quality >= 5:
+			tint = Color("#e9a7ff")
+		elif quality == 4:
+			tint = Color("#8fc8ff")
+		elif quality == 3:
+			tint = Color("#8ee0b0")
+		var socket_name := "Equipment" + slot.capitalize() + "Socket"
+		var socket_parent: Node3D = humanoid
+		var socket_position := Vector3.ZERO
+		if slot == "weapon":
+			socket_parent = humanoid.get_node_or_null("ArmPivotRight") as Node3D if humanoid.get_node_or_null("ArmPivotRight") is Node3D else humanoid
+			socket_position = Vector3(0.03, -0.58, -0.06) if socket_parent != humanoid else Vector3(0.34, 0.9, -0.18)
+		elif slot == "offhand":
+			socket_parent = humanoid.get_node_or_null("ArmPivotLeft") as Node3D if humanoid.get_node_or_null("ArmPivotLeft") is Node3D else humanoid
+			socket_position = Vector3(-0.03, -0.58, -0.06) if socket_parent != humanoid else Vector3(-0.34, 0.9, -0.18)
+		else:
+			socket_position = {
+				"head": Vector3(0, 1.72, 0),
+				"chest": Vector3(0, 1.05, -0.02),
+				"legs": Vector3(0, 0.48, 0),
+				"boots": Vector3(0, 0.12, 0),
+				"accessory": Vector3(0, 1.32, -0.22),
+				"back": Vector3(0, 1.0, 0.22)
+			}.get(slot, Vector3.ZERO)
+		var socket := Node3D.new()
+		socket.name = socket_name
+		socket.position = socket_position
+		socket_parent.add_child(socket)
+		var visual := Node3D.new()
+		visual.name = "EquipmentVisual"
+		socket.add_child(visual)
+		var material := StandardMaterial3D.new()
+		material.albedo_color = tint
+		material.metallic = 0.38
+		material.roughness = 0.36
+		match slot:
+			"weapon", "offhand":
+				var blade := MeshInstance3D.new()
+				var blade_mesh := BoxMesh.new()
+				blade_mesh.size = Vector3(0.075, 0.78, 0.035)
+				blade.mesh = blade_mesh
+				blade.material_override = material
+				blade.position = Vector3(0, 0.42, -0.06)
+				blade.rotation.z = -0.12 if slot == "weapon" else 0.12
+				visual.add_child(blade)
+				var grip := MeshInstance3D.new()
+				var grip_mesh := BoxMesh.new()
+				grip_mesh.size = Vector3(0.11, 0.20, 0.09)
+				grip.mesh = grip_mesh
+				grip.position.y = -0.02
+				visual.add_child(grip)
+			"head":
+				var mesh := SphereMesh.new()
+				mesh.radius = 0.27
+				mesh.height = 0.30
+				_add_remote_equipment_mesh(visual, mesh, material)
+			"chest":
+				var mesh := BoxMesh.new()
+				mesh.size = Vector3(0.82, 0.62, 0.34)
+				_add_remote_equipment_mesh(visual, mesh, material)
+			"legs":
+				var mesh := BoxMesh.new()
+				mesh.size = Vector3(0.58, 0.48, 0.30)
+				_add_remote_equipment_mesh(visual, mesh, material)
+			"boots":
+				var mesh := BoxMesh.new()
+				mesh.size = Vector3(0.62, 0.20, 0.38)
+				_add_remote_equipment_mesh(visual, mesh, material)
+			"accessory":
+				var mesh := TorusMesh.new()
+				mesh.inner_radius = 0.16
+				mesh.outer_radius = 0.21
+				_add_remote_equipment_mesh(visual, mesh, material)
+			"back":
+				var mesh := BoxMesh.new()
+				mesh.size = Vector3(0.55, 0.85, 0.12)
+				_add_remote_equipment_mesh(visual, mesh, material)
+
+func _add_remote_equipment_mesh(parent: Node3D, mesh: Mesh, material: Material) -> void:
+	var instance := MeshInstance3D.new()
+	instance.mesh = mesh
+	instance.material_override = material
+	parent.add_child(instance)
 
 func _apply_remote_birth_visuals(remote: Node3D, birth: Dictionary) -> void:
 	if not is_instance_valid(remote) or bool(remote.get_meta("is_underworld", false)):
