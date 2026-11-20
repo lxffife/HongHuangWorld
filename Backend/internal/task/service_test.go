@@ -80,3 +80,29 @@ func TestPublishFactionRequiresPositiveCharacterLevel(t *testing.T) {
  request.RequiredCharacterLevel=10001
  if _,err:=service.PublishFaction(context.Background(),"account",request);err!=ErrInvalid { t.Fatalf("expected ErrInvalid for oversized character level requirement, got %v",err) }
 }
+
+
+func TestValidateJoinParticipationErrorOrder(t *testing.T) {
+ tests:=[]struct{
+  name string
+  exists bool
+  status string
+  joined,max int
+  want error
+ }{
+  {"accepted member gets already joined even when full",true,"accepted",4,4,ErrAlreadyJoined},
+  {"withdrawn member may reclaim a slot",true,"withdrawn",2,4,nil},
+  {"new member may join available slot",false,"",2,4,nil},
+  {"new member receives full when capacity exhausted",false,"",4,4,ErrTaskFull},
+  {"completed participant cannot rejoin",true,"completed",1,4,ErrTaskNotReady},
+  {"cancelled participant cannot rejoin",true,"cancelled",1,4,ErrTaskNotReady},
+  {"invalid capacity rejected",false,"",0,0,ErrInvalid},
+ }
+ for _,tt:=range tests {
+  t.Run(tt.name,func(t *testing.T) {
+   got:=validateJoinParticipation(tt.exists,tt.status,tt.joined,tt.max)
+   if got!=tt.want { t.Fatalf("got %v, want %v",got,tt.want) }
+  })
+ }
+}
+
