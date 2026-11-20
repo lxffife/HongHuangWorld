@@ -49,6 +49,7 @@ var chat_unread_badge: Label
 var friend_panel: Variant
 var selected_friend_character_id := ""
 var selected_friend_character_name := ""
+var chat_channel_buttons: Array[Button] = []
 var chat_unread_count := 0
 var chat_expanded := false
 var chat_restore_mouse_captured := false
@@ -1549,81 +1550,141 @@ func _build_chat_hud() -> void:
 		return
 	chat_panel = PanelContainer.new()
 	chat_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	chat_panel.offset_left = -408.0
-	chat_panel.offset_top = -66.0
-	chat_panel.offset_right = -18.0
-	chat_panel.offset_bottom = -18.0
-	chat_panel.custom_minimum_size = Vector2(390.0, 48.0)
-	var chat_style := StyleBoxFlat.new()
-	chat_style.bg_color = Color(0.035, 0.055, 0.085, 0.90)
-	chat_style.border_color = Color("#526783")
-	chat_style.set_border_width_all(1)
-	chat_style.set_corner_radius_all(9)
-	chat_panel.add_theme_stylebox_override("panel", chat_style)
+	chat_panel.offset_left = -438.0
+	chat_panel.offset_top = -74.0
+	chat_panel.offset_right = -20.0
+	chat_panel.offset_bottom = -20.0
+	chat_panel.custom_minimum_size = Vector2(418.0, 54.0)
+	var shell := StyleBoxFlat.new()
+	shell.bg_color = Color("#101923")
+	shell.border_color = Color("#35495c")
+	shell.set_border_width_all(1)
+	shell.set_corner_radius_all(12)
+	shell.content_margin_left = 14
+	shell.content_margin_right = 14
+	shell.content_margin_top = 10
+	shell.content_margin_bottom = 10
+	chat_panel.add_theme_stylebox_override("panel", shell)
 	hud.add_child(chat_panel)
+
 	var layout := VBoxContainer.new()
-	layout.add_theme_constant_override("separation", 5)
+	layout.add_theme_constant_override("separation", 9)
 	chat_panel.add_child(layout)
 	var heading := HBoxContainer.new()
+	heading.add_theme_constant_override("separation", 8)
 	layout.add_child(heading)
+	var brand := Label.new()
+	brand.text = "✦"
+	brand.add_theme_color_override("font_color", Color("#d9b879"))
+	brand.add_theme_font_size_override("font_size", 20)
+	heading.add_child(brand)
 	chat_title_label = Label.new()
-	chat_title_label.text = "万界传音 · 附近"
+	chat_title_label.text = "万界传音"
+	chat_title_label.add_theme_color_override("font_color", Color("#f0e4cc"))
+	chat_title_label.add_theme_font_size_override("font_size", 15)
 	chat_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	heading.add_child(chat_title_label)
+	chat_unread_badge = Label.new()
+	chat_unread_badge.text = "0"
+	chat_unread_badge.add_theme_color_override("font_color", Color("#ffffff"))
+	chat_unread_badge.add_theme_font_size_override("font_size", 11)
+	chat_unread_badge.visible = false
+	heading.add_child(chat_unread_badge)
 	var friends_button := Button.new()
 	friends_button.text = "好友"
 	friends_button.pressed.connect(func():
 		if is_instance_valid(friend_panel):
 			friend_panel.open_panel()
 	)
+	_style_chat_button(friends_button, false)
 	heading.add_child(friends_button)
 	chat_toggle_button = Button.new()
 	chat_toggle_button.text = "展开"
 	chat_toggle_button.pressed.connect(func(): _set_chat_expanded(not chat_expanded))
+	_style_chat_button(chat_toggle_button, true)
 	heading.add_child(chat_toggle_button)
-	chat_unread_badge = Label.new()
-	chat_unread_badge.text = "●"
-	chat_unread_badge.add_theme_color_override("font_color", Color("#ff4d5e"))
-	chat_unread_badge.add_theme_font_size_override("font_size", 17)
-	chat_unread_badge.visible = false
-	heading.add_child(chat_unread_badge)
+
 	var channels := HBoxContainer.new()
+	channels.add_theme_constant_override("separation", 6)
 	layout.add_child(channels)
+	chat_channel_buttons.clear()
 	for channel_data in [["nearby", "附近"], ["world", "世界"], ["cross_world", "跨界"]]:
 		var channel_button := Button.new()
-		channel_button.text = channel_data[1]
+		channel_button.text = str(channel_data[1])
+		channel_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		channel_button.pressed.connect(_select_chat_channel.bind(str(channel_data[0])))
+		_style_chat_button(channel_button, str(channel_data[0]) == selected_chat_channel)
 		channels.add_child(channel_button)
+		chat_channel_buttons.append(channel_button)
+
 	chat_scroll = ScrollContainer.new()
-	chat_scroll.custom_minimum_size = Vector2(360.0, 132.0)
+	chat_scroll.custom_minimum_size = Vector2(386.0, 230.0)
 	chat_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	chat_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	layout.add_child(chat_scroll)
 	chat_log = VBoxContainer.new()
 	chat_log.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	chat_log.add_theme_constant_override("separation", 7)
 	chat_scroll.add_child(chat_log)
+
+	var input_shell := PanelContainer.new()
+	var input_style := StyleBoxFlat.new()
+	input_style.bg_color = Color("#182633")
+	input_style.border_color = Color("#40566a")
+	input_style.set_border_width_all(1)
+	input_style.set_corner_radius_all(8)
+	input_style.content_margin_left = 8
+	input_style.content_margin_right = 8
+	input_style.content_margin_top = 3
+	input_style.content_margin_bottom = 3
+	input_shell.add_theme_stylebox_override("panel", input_style)
+	layout.add_child(input_shell)
 	var input_row := HBoxContainer.new()
-	layout.add_child(input_row)
+	input_row.add_theme_constant_override("separation", 6)
+	input_shell.add_child(input_row)
 	chat_input = LineEdit.new()
-	chat_input.placeholder_text = "输入附近消息（最多 200 字）"
+	chat_input.placeholder_text = "说点什么……（Enter 发送）"
 	chat_input.max_length = 200
-	chat_input.keep_editing_on_text_submit = true
+	chat_input.flat = true
+	chat_input.add_theme_color_override("font_color", Color("#edf2f6"))
+	chat_input.add_theme_color_override("font_placeholder_color", Color("#8092a2"))
 	chat_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	chat_input.text_submitted.connect(_on_chat_input_submitted)
 	chat_input.gui_input.connect(_on_chat_input_gui_input)
 	input_row.add_child(chat_input)
 	var send_button := Button.new()
 	send_button.text = "发送"
+	send_button.custom_minimum_size = Vector2(58, 34)
 	send_button.pressed.connect(func(): _on_chat_input_submitted(chat_input.text))
+	_style_chat_button(send_button, true)
 	input_row.add_child(send_button)
 	chat_status = Label.new()
-	chat_status.text = "附近频道 · 仅同一实例、80 米范围内可见"
-	chat_status.modulate = Color(0.72, 0.78, 0.84)
+	chat_status.text = "附近频道 · 同一实例范围内可见"
+	chat_status.add_theme_color_override("font_color", Color("#8295a6"))
+	chat_status.add_theme_font_size_override("font_size", 10)
 	layout.add_child(chat_status)
 	friend_panel = FriendPanelScript.new()
 	friend_panel.open_private_chat.connect(_open_friend_conversation)
 	hud.add_child(friend_panel)
 	_set_chat_expanded(false)
+
+func _style_chat_button(button: Button, active: bool) -> void:
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color("#34485a") if active else Color("#1a2834")
+	normal.border_color = Color("#b79a68") if active else Color("#34495b")
+	normal.set_border_width_all(1)
+	normal.set_corner_radius_all(7)
+	normal.content_margin_left = 10
+	normal.content_margin_right = 10
+	normal.content_margin_top = 5
+	normal.content_margin_bottom = 5
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = Color("#40566a")
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", hover)
+	button.add_theme_color_override("font_color", Color("#f1e5cf") if active else Color("#b8c6d1"))
+	button.add_theme_font_size_override("font_size", 11)
 
 func is_gameplay_input_blocked() -> bool:
 	# Keep movement disabled for the entire time the chat drawer is open,
@@ -1687,11 +1748,11 @@ func _layout_hud() -> void:
 		friend_panel.offset_top = 72.0
 		friend_panel.offset_right = -18.0
 		friend_panel.offset_bottom = 548.0
-	var chat_height := 48.0
+	var chat_height := 54.0
 	if chat_expanded:
-		chat_height = minf(330.0, maxf(210.0, viewport_size.y - 48.0))
+		chat_height = minf(430.0, maxf(300.0, viewport_size.y - 48.0))
 	if is_instance_valid(chat_panel):
-		var chat_width := minf(390.0, maxf(260.0, viewport_size.x - 36.0))
+		var chat_width := minf(430.0, maxf(290.0, viewport_size.x - 36.0))
 		chat_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 		chat_panel.offset_left = -chat_width - 18.0
 		chat_panel.offset_right = -18.0
@@ -1699,7 +1760,7 @@ func _layout_hud() -> void:
 		chat_panel.offset_bottom = -18.0
 		chat_panel.custom_minimum_size = Vector2(chat_width, chat_height)
 		if is_instance_valid(chat_scroll):
-			chat_scroll.custom_minimum_size = Vector2(chat_width - 30.0, maxf(96.0, chat_height - 176.0))
+			chat_scroll.custom_minimum_size = Vector2(chat_width - 54.0, maxf(150.0, chat_height - 190.0))
 	if is_instance_valid(npc_interact_button):
 		npc_interact_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 		npc_interact_button.offset_left = -minf(280.0, viewport_size.x - 36.0)
@@ -1758,7 +1819,7 @@ func _open_friend_conversation(character_id: String, character_name: String) -> 
 	selected_chat_channel = "whisper"
 	selected_friend_character_id = character_id
 	selected_friend_character_name = character_name
-	chat_title_label.text = "好友私聊 · " + character_name
+	chat_title_label.text = "私聊 · " + character_name
 	chat_input.placeholder_text = "发送给 " + character_name + "（最多 200 字）"
 	_set_chat_expanded(true)
 	_render_chat_lines()
@@ -1790,6 +1851,8 @@ func _select_chat_channel(channel: String) -> void:
 	selected_friend_character_name = ""
 	var names := {"nearby": "附近", "world": "世界", "cross_world": "跨界"}
 	chat_title_label.text = "万界传音 · " + str(names[channel])
+	for index in range(chat_channel_buttons.size()):
+		_style_chat_button(chat_channel_buttons[index], index == ["nearby", "world", "cross_world"].find(channel))
 	chat_input.placeholder_text = "输入" + str(names[channel]) + "消息（最多 200 字）"
 	_render_chat_lines()
 	if chat_expanded:
@@ -1867,7 +1930,7 @@ func _update_chat_unread_badge() -> void:
 	if not is_instance_valid(chat_unread_badge):
 		return
 	chat_unread_badge.visible = chat_unread_count > 0 and not chat_expanded
-	chat_unread_badge.text = "● " + str(chat_unread_count) if chat_unread_count > 0 else ""
+	chat_unread_badge.text = str(chat_unread_count) if chat_unread_count > 0 else ""
 
 func _on_chat_event(event: Dictionary) -> void:
 	if not bool(event.get("accepted", false)):
@@ -1941,15 +2004,70 @@ func _render_chat_lines() -> void:
 	for child in chat_log.get_children():
 		child.queue_free()
 	for entry in visible_lines:
+		var raw_line := str(entry.get("text", ""))
+		var split_at := raw_line.find("] ")
+		var sender := "旅人"
+		var body := raw_line
+		if raw_line.begins_with("[") and split_at > 1:
+			sender = raw_line.substr(1, split_at - 1)
+			body = raw_line.substr(split_at + 2)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		chat_log.add_child(row)
+		var avatar := PanelContainer.new()
+		avatar.custom_minimum_size = Vector2(30, 30)
+		var avatar_style := StyleBoxFlat.new()
+		avatar_style.bg_color = Color("#30465a")
+		avatar_style.set_corner_radius_all(15)
+		avatar.add_theme_stylebox_override("panel", avatar_style)
+		row.add_child(avatar)
+		var avatar_text := Label.new()
+		avatar_text.text = sender.substr(0, 1)
+		avatar_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		avatar_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		avatar_text.add_theme_color_override("font_color", Color("#e6c98e"))
+		avatar_text.add_theme_font_size_override("font_size", 13)
+		avatar.add_child(avatar_text)
+		var message_column := VBoxContainer.new()
+		message_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		message_column.add_theme_constant_override("separation", 2)
+		row.add_child(message_column)
+		var meta := HBoxContainer.new()
+		message_column.add_child(meta)
+		var sender_label := Label.new()
+		sender_label.text = sender
+		sender_label.add_theme_color_override("font_color", Color("#d9bc85"))
+		sender_label.add_theme_font_size_override("font_size", 11)
+		sender_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		meta.add_child(sender_label)
+		var timestamp := str(entry.get("created_at", ""))
+		var time_label := Label.new()
+		time_label.text = timestamp.substr(11, 5) if timestamp.length() >= 16 else ""
+		time_label.add_theme_color_override("font_color", Color("#718596"))
+		time_label.add_theme_font_size_override("font_size", 9)
+		meta.add_child(time_label)
+		var bubble := PanelContainer.new()
+		var bubble_style := StyleBoxFlat.new()
+		bubble_style.bg_color = Color("#1b2a37")
+		bubble_style.set_corner_radius_all(7)
+		bubble_style.content_margin_left = 9
+		bubble_style.content_margin_right = 9
+		bubble_style.content_margin_top = 5
+		bubble_style.content_margin_bottom = 5
+		bubble.add_theme_stylebox_override("panel", bubble_style)
+		message_column.add_child(bubble)
 		var message_text := RichTextLabel.new()
-		message_text.text = str(entry.get("text", ""))
+		message_text.text = body
 		message_text.fit_content = true
 		message_text.scroll_active = false
 		message_text.selection_enabled = true
 		message_text.context_menu_enabled = true
 		message_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		message_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		chat_log.add_child(message_text)
+		message_text.add_theme_color_override("default_color", Color("#e0e8ee"))
+		message_text.add_theme_font_size_override("normal_font_size", 12)
+		bubble.add_child(message_text)
 
 func _on_pickup_event(event: Dictionary) -> void:
 	if bool(event.get("pending", false)):
