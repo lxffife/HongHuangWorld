@@ -27,9 +27,9 @@ func (h *bountyHandlers) contribute(w http.ResponseWriter,r *http.Request){
 }
 func (h *bountyHandlers) publishFaction(w http.ResponseWriter,r *http.Request){
  account,ok:=h.accountID(w,r);if !ok{return}
- var body struct{EventKey string `json:"event_key"`;Title string `json:"title"`;Description string `json:"description"`;CurrencyID string `json:"currency_id"`;RewardAmount int64 `json:"reward_amount"`;MaxAssignees int `json:"max_assignees"`;DifficultyTier int `json:"difficulty_tier"`;RequiredRealmLevel int `json:"required_realm_level"`;ExpiresAt *string `json:"expires_at"`}
+ var body struct{EventKey string `json:"event_key"`;Title string `json:"title"`;Description string `json:"description"`;CurrencyID string `json:"currency_id"`;RewardAmount int64 `json:"reward_amount"`;MaxAssignees int `json:"max_assignees"`;DifficultyTier int `json:"difficulty_tier"`;RequiredRealmLevel int `json:"required_realm_level"`;RequiredCharacterLevel int `json:"required_character_level"`;ExpiresAt *string `json:"expires_at"`}
  if err:=decodeJSON(w,r,&body);err!=nil{http.Error(w,"invalid request body",http.StatusBadRequest);return}
- result,err:=h.service.PublishFaction(r.Context(),account,task.PublishRequest{EventKey:body.EventKey,FactionID:r.PathValue("factionID"),Title:body.Title,Description:body.Description,CurrencyID:body.CurrencyID,RewardAmount:body.RewardAmount,MaxAssignees:body.MaxAssignees,DifficultyTier:body.DifficultyTier,RequiredRealmLevel:body.RequiredRealmLevel,ExpiresAt:body.ExpiresAt})
+ result,err:=h.service.PublishFaction(r.Context(),account,task.PublishRequest{EventKey:body.EventKey,FactionID:r.PathValue("factionID"),Title:body.Title,Description:body.Description,CurrencyID:body.CurrencyID,RewardAmount:body.RewardAmount,MaxAssignees:body.MaxAssignees,DifficultyTier:body.DifficultyTier,RequiredRealmLevel:body.RequiredRealmLevel,RequiredCharacterLevel:body.RequiredCharacterLevel,ExpiresAt:body.ExpiresAt})
  if err!=nil{h.writeError(w,err);return};writeJSON(w,http.StatusCreated,result)
 }
 func (h *bountyHandlers) list(w http.ResponseWriter,r *http.Request){
@@ -54,6 +54,8 @@ func (h *bountyHandlers) writeError(w http.ResponseWriter,err error){
  case errors.Is(err,task.ErrForbidden):http.Error(w,"bounty task permission denied",http.StatusForbidden)
  case errors.Is(err,task.ErrIdempotencyConflict):http.Error(w,"idempotency key conflict",http.StatusConflict)
  case errors.Is(err,task.ErrTaskNotReady):http.Error(w,"bounty task is not ready for this operation",http.StatusConflict)
+ case errors.Is(err,task.ErrCharacterNotEligible):http.Error(w,"current character does not meet bounty requirements",http.StatusConflict)
+ case errors.Is(err,task.ErrNotParticipant):http.Error(w,"account is not an active bounty participant",http.StatusConflict)
  case errors.Is(err,task.ErrInsufficientTreasury),errors.Is(err,task.ErrAlreadyJoined),errors.Is(err,task.ErrTaskFull):http.Error(w,err.Error(),http.StatusConflict)
  default:h.logger.Error("bounty task request failed","error",err);http.Error(w,"internal server error",http.StatusInternalServerError)
  }
@@ -87,4 +89,12 @@ func (h *bountyHandlers) expireDue(w http.ResponseWriter,r *http.Request) {
  count,err:=h.service.ExpireDue(r.Context(),body.Limit)
  if err!=nil { h.writeError(w,err);return }
  writeJSON(w,http.StatusOK,map[string]any{"refunded_tasks":count})
+}
+
+
+// leave releases the participant's slot before the task is completed or expires.
+func (h *bountyHandlers) leave(w http.ResponseWriter,r *http.Request) {
+ account,ok:=h.accountID(w,r);if !ok{return}
+ if err:=h.service.Leave(r.Context(),account,r.PathValue("taskID"));err!=nil{h.writeError(w,err);return}
+ writeJSON(w,http.StatusOK,map[string]any{"ok":true,"status":"withdrawn"})
 }
