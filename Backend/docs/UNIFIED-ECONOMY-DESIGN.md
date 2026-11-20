@@ -164,11 +164,11 @@
 
 ## 14. 宗门悬赏任务（000054，第一阶段）
 
-- 新增 `bounty_tasks`、`bounty_task_escrows`、`bounty_task_participants`。
-- 宗门发布接口：`POST /api/v1/factions/{factionID}/bounties`。发布者身份由 Bearer 账号和数据库成员角色决定，客户端不能提交组织类型、组织名称或财政账户 ID。
+- 新增 `bounty_tasks`、`bounty_task_escrows`、`bounty_task_participants`；财政流水新增 `bounty_lock`、`bounty_refund`、`contribution` 类型。
+- 宗门成员捐献接口：`POST /api/v1/factions/{factionID}/treasury/contributions`。请求必须携带客户端生成并在重试时复用的 `event_key`；个人钱包扣款、宗门财政入账及双方不可变流水在同一事务中提交。非成员不能捐献，货币必须属于宗门所在世界。\n- 宗门发布接口：`POST /api/v1/factions/{factionID}/bounties`。发布者身份由 Bearer 账号和数据库成员角色决定，客户端不能提交组织类型、组织名称或财政账户 ID。
 - 发布事务锁定宗门及发布者成员记录，复核宗门处于 active 且发布者为 leader/officer；货币必须在该宗门所属世界启用。
 - 托管预算按 `reward_amount × max_assignees` 计算；在同一事务内从宗门财政对应币种的 available 转入 frozen，并写不可变财政流水及任务托管记录。余额不足则整个事务回滚。
 - 查询接口：`GET /api/v1/bounties?world_id=underworld_fengdu`；接取接口：`POST /api/v1/bounties/{taskID}/join`。
-- 接取时锁定任务行后统计有效参与人数并插入参与者，防止并发超员；唯一主键阻止同一账号重复加入。
+- 接取时锁定任务行后统计有效参与人数并插入参与者，防止并发超员；唯一主键阻止同一账号重复加入。当前接取资格尚未关联角色境界/职业校验，`required_realm_level` 与难度先作为任务配置字段，不能视为已执行的门槛。
 - 当前只完成宗门发布、财政预算冻结、任务查询和多人接取。任务验收、贡献度计算、奖励支付、退款、贡献点发放及官方城主府/官署任务仍未开放。托管资金不会因玩家接取任务而自动支付。
-- 宗门财政需要先通过可信后台/世界服务注资；普通玩家接口没有财政任意增发入口。任务奖励结算必须后续实现为同一事务内的托管释放、玩家钱包入账、财政流水和幂等事件，不能调用单边 `ApplyDelta` 拼接。
+- 宗门财政可由成员通过上述捐献接口注资；不存在客户端任意增发入口。任务奖励结算必须后续实现为同一事务内的托管释放、玩家钱包入账、财政流水和幂等事件，不能调用单边 `ApplyDelta` 拼接。
