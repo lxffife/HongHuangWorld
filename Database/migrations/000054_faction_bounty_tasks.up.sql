@@ -4,7 +4,7 @@ ALTER TABLE economy_treasury_ledger_entries
     DROP CONSTRAINT IF EXISTS economy_treasury_ledger_entries_entry_type_check;
 ALTER TABLE economy_treasury_ledger_entries
     ADD CONSTRAINT economy_treasury_ledger_entries_entry_type_check
-    CHECK (entry_type IN ('tax','listing_fee','exchange_fee','issuance','subsidy','system_adjustment','bounty_lock','bounty_refund'));
+    CHECK (entry_type IN ('tax','listing_fee','exchange_fee','issuance','subsidy','system_adjustment','bounty_lock','bounty_refund','contribution'));
 
 CREATE TABLE bounty_tasks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
