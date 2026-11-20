@@ -14,6 +14,7 @@ import (
 
 	"github.com/liflife/HongHuangWorld/Backend/internal/chat"
 	"github.com/liflife/HongHuangWorld/Backend/internal/character"
+	"github.com/liflife/HongHuangWorld/Backend/internal/economy"
 	"github.com/liflife/HongHuangWorld/Backend/internal/inventory"
 	"github.com/liflife/HongHuangWorld/Backend/internal/npc"
 	"github.com/liflife/HongHuangWorld/Backend/internal/soul"
@@ -100,6 +101,9 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/characters/current/bloodlines/awaken", characters.awakenBloodline)
 		mux.HandleFunc("POST /api/v1/characters/current/techniques/train", characters.trainTechnique)
 		mux.HandleFunc("POST /api/v1/characters/current/attributes/allocate", characters.allocateAttributePoints)
+		economyAPI := &economyHandlers{authService: authService, service: economy.NewService(db), logger: logger}
+		mux.HandleFunc("GET /api/v1/economy/currencies", economyAPI.catalog)
+		mux.HandleFunc("GET /api/v1/economy/wallet", economyAPI.wallet)
 		items := &inventoryHandlers{authService: authService, service: inventory.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
 		mux.HandleFunc("GET /api/v1/items", items.catalog)
 		mux.HandleFunc("GET /api/v1/characters/current/inventory", items.current)
@@ -163,7 +167,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 			"GET /api/v1/characters/current/inventory", "GET /api/v1/characters/current/equipment",
 			"POST /api/v1/characters/current/equipment/equip", "POST /api/v1/characters/current/equipment/unequip", "POST /api/v1/characters/current/inventory/use", "POST /api/v1/servers/inventory/use", "POST /api/v1/servers/sessions/combat-stats", "GET /api/v1/servers/loot-table", "GET /api/v1/servers/monster-spawn-config", "GET /api/v1/servers/drops", "POST /api/v1/servers/drops",
 			"POST /api/v1/servers/drops/pickup", "POST /api/v1/servers/heartbeat",
-			"POST /api/v1/servers/characters/rewards", "POST /api/v1/worlds/enter",
+			"POST /api/v1/servers/characters/rewards", "GET /api/v1/economy/currencies", "GET /api/v1/economy/wallet", "POST /api/v1/worlds/enter",
 			"POST /api/v1/servers/tickets/redeem", "POST /api/v1/servers/sessions/snapshot",
 			"POST /api/v1/servers/sessions/close",
 		} { mux.HandleFunc(route, unavailable) }
