@@ -21,6 +21,7 @@ var (
  ErrAlreadyJoined = errors.New("account already joined this task")
  ErrIdempotencyConflict = errors.New("contribution idempotency key conflict")
  ErrTaskFull = errors.New("bounty task is full")
+ ErrTaskNotReady = errors.New("bounty task is not ready for settlement")
 )
 
 type Service struct { db *sql.DB; factions *faction.Service }
@@ -210,4 +211,97 @@ func (s *Service) Join(ctx context.Context,accountID,taskID string)error{
  if _,err=tx.ExecContext(ctx,`UPDATE bounty_tasks SET status=$2,updated_at=now() WHERE id=$1`,taskID,next);err!=nil{return fmt.Errorf("update bounty task capacity: %w",err)}
  if err=tx.Commit();err!=nil{return fmt.Errorf("commit bounty join: %w",err)}
  return nil
+}
+
+
+type Settlement struct {
+ TaskID string `json:"task_id"`
+ EventKey string `json:"event_key"`
+ ParticipantCount int `json:"participant_count"`
+ PaidAmount int64 `json:"paid_amount"`
+ RefundedAmount int64 `json:"refunded_amount"`
+ CurrencyID string `json:"currency_id"`
+}
+
+// Settle approves all currently accepted participants for the fixed per-person
+// reward. Treasury release, participant credits, immutable ledgers and terminal
+// task state are committed together.
+func (s *Service) Settle(ctx context.Context,accountID,taskID,eventKey string)(Settlement,error){
+ if accountID==""||taskID==""||eventKey==""||len(eventKey)>128{return Settlement{},ErrInvalid}
+ tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return Settlement{},fmt.Errorf("begin bounty settlement: %w",err)};defer tx.Rollback()
+ var publisherID,treasuryID,currencyID,status,escrowStatus string
+ var reward,escrowAmount int64
+ err=tx.QueryRowContext(ctx,`SELECT t.publisher_id::text,e.treasury_account_id::text,t.currency_id,t.status,
+  t.reward_amount,e.amount,e.status
+  FROM bounty_tasks t JOIN bounty_task_escrows e ON e.task_id=t.id
+  WHERE t.id=$1 FOR UPDATE OF t,e`,taskID).Scan(&publisherID,&treasuryID,&currencyID,&status,&reward,&escrowAmount,&escrowStatus)
+ if errors.Is(err,sql.ErrNoRows){return Settlement{},ErrNotFound};if err!=nil{return Settlement{},fmt.Errorf("lock bounty and escrow: %w",err)}
+ var role string
+ err=tx.QueryRowContext(ctx,`SELECT m.role FROM factions f JOIN faction_members m ON m.faction_id=f.id
+  WHERE f.id=$1 AND f.status='active' AND m.account_id=$2 FOR UPDATE OF f,m`,publisherID,accountID).Scan(&role)
+ if errors.Is(err,sql.ErrNoRows){return Settlement{},ErrForbidden};if err!=nil{return Settlement{},fmt.Errorf("authorize bounty settlement: %w",err)}
+ if role!="leader"&&role!="officer"{return Settlement{},ErrForbidden}
+ var prior Settlement
+ var priorEvent string
+ err=tx.QueryRowContext(ctx,`SELECT event_key,participant_count,paid_amount,refunded_amount
+  FROM bounty_task_settlements WHERE task_id=$1`,taskID).Scan(&priorEvent,&prior.ParticipantCount,&prior.PaidAmount,&prior.RefundedAmount)
+ if err==nil{
+  if priorEvent!=eventKey{return Settlement{},ErrIdempotencyConflict}
+  prior.TaskID=taskID;prior.EventKey=priorEvent;prior.CurrencyID=currencyID
+  if err=tx.Commit();err!=nil{return Settlement{},fmt.Errorf("commit idempotent bounty settlement: %w",err)}
+  return prior,nil
+ }
+ if !errors.Is(err,sql.ErrNoRows){return Settlement{},fmt.Errorf("read bounty settlement receipt: %w",err)}
+ if status!="full"&&status!="in_progress"{return Settlement{},ErrTaskNotReady}
+ if escrowStatus!="locked"{return Settlement{},ErrTaskNotReady}
+ rows,err:=tx.QueryContext(ctx,`SELECT account_id::text FROM bounty_task_participants
+  WHERE task_id=$1 AND status='accepted' ORDER BY account_id FOR UPDATE`,taskID)
+ if err!=nil{return Settlement{},fmt.Errorf("lock bounty participants: %w",err)}
+ participantIDs:=make([]string,0,20)
+ for rows.Next(){var id string;if err=rows.Scan(&id);err!=nil{rows.Close();return Settlement{},fmt.Errorf("scan bounty participant: %w",err)};participantIDs=append(participantIDs,id)}
+ if err=rows.Err();err!=nil{rows.Close();return Settlement{},fmt.Errorf("iterate bounty participants: %w",err)}
+ if err=rows.Close();err!=nil{return Settlement{},fmt.Errorf("close bounty participant rows: %w",err)}
+ if len(participantIDs)==0{return Settlement{},ErrTaskNotReady}
+ if int64(len(participantIDs))>math.MaxInt64/reward{return Settlement{},ErrInvalid}
+ paid:=reward*int64(len(participantIDs))
+ if paid>escrowAmount{return Settlement{},fmt.Errorf("bounty escrow invariant violated: payout exceeds escrow")}
+ refunded:=escrowAmount-paid
+ var treasuryAvailable,treasuryFrozen int64
+ err=tx.QueryRowContext(ctx,`SELECT available_amount,frozen_amount FROM economy_treasury_balances
+  WHERE treasury_account_id=$1 AND currency_id=$2 FOR UPDATE`,treasuryID,currencyID).Scan(&treasuryAvailable,&treasuryFrozen)
+ if err!=nil{return Settlement{},fmt.Errorf("lock bounty treasury balance: %w",err)}
+ if treasuryFrozen<escrowAmount{return Settlement{},fmt.Errorf("bounty treasury frozen balance invariant violated")}
+ if refunded>math.MaxInt64-treasuryAvailable{return Settlement{},fmt.Errorf("bounty treasury available balance overflow")}
+ for _,participantID:=range participantIDs{
+  if _,err=tx.ExecContext(ctx,`INSERT INTO currency_balances(account_id,currency_id)
+   VALUES($1,$2) ON CONFLICT(account_id,currency_id) DO NOTHING`,participantID,currencyID);err!=nil{return Settlement{},fmt.Errorf("initialize bounty recipient wallet: %w",err)}
+  var available,frozen int64
+  if err=tx.QueryRowContext(ctx,`SELECT available_amount,frozen_amount FROM currency_balances
+   WHERE account_id=$1 AND currency_id=$2 FOR UPDATE`,participantID,currencyID).Scan(&available,&frozen);err!=nil{return Settlement{},fmt.Errorf("lock bounty recipient wallet: %w",err)}
+  if available>math.MaxInt64-reward{return Settlement{},fmt.Errorf("bounty recipient wallet overflow")}
+  if _,err=tx.ExecContext(ctx,`UPDATE currency_balances SET available_amount=available_amount+$3,updated_at=now()
+   WHERE account_id=$1 AND currency_id=$2`,participantID,currencyID,reward);err!=nil{return Settlement{},fmt.Errorf("credit bounty recipient: %w",err)}
+  ledgerKey:="bounty-settle:"+taskID+":"+participantID
+  if _,err=tx.ExecContext(ctx,`INSERT INTO economy_ledger_entries
+   (account_id,currency_id,event_key,entry_type,delta,available_after,frozen_delta,frozen_after,source_type,source_id,note)
+   VALUES($1,$2,$3,'escrow_release',$4,$5,0,$6,'bounty_task',$7,'宗门悬赏完成奖励')`,
+   participantID,currencyID,ledgerKey,reward,available+reward,frozen,taskID);err!=nil{return Settlement{},fmt.Errorf("record bounty recipient ledger: %w",err)}
+ }
+ if _,err=tx.ExecContext(ctx,`UPDATE economy_treasury_balances SET available_amount=available_amount+$3,
+  frozen_amount=frozen_amount-$4,updated_at=now() WHERE treasury_account_id=$1 AND currency_id=$2`,
+  treasuryID,currencyID,refunded,escrowAmount);err!=nil{return Settlement{},fmt.Errorf("release bounty treasury escrow: %w",err)}
+ if _,err=tx.ExecContext(ctx,`INSERT INTO economy_treasury_ledger_entries
+  (treasury_account_id,currency_id,event_key,entry_type,delta,balance_after,frozen_delta,frozen_after,source_type,source_id,note)
+  VALUES($1,$2,$3,'bounty_payout',$4,$5,$6,$7,'bounty_task',$8,'宗门悬赏结算：支付奖励并退回未使用预算')`,
+  treasuryID,currencyID,"bounty-settle:"+taskID,refunded,treasuryAvailable+refunded,-escrowAmount,treasuryFrozen-escrowAmount,taskID);err!=nil{return Settlement{},fmt.Errorf("record bounty treasury settlement: %w",err)}
+ if _,err=tx.ExecContext(ctx,`UPDATE bounty_task_participants SET status='completed'
+  WHERE task_id=$1 AND status='accepted'`,taskID);err!=nil{return Settlement{},fmt.Errorf("complete bounty participants: %w",err)}
+ if _,err=tx.ExecContext(ctx,`UPDATE bounty_task_escrows SET status='paid',updated_at=now()
+  WHERE task_id=$1 AND status='locked'`,taskID);err!=nil{return Settlement{},fmt.Errorf("mark bounty escrow paid: %w",err)}
+ if _,err=tx.ExecContext(ctx,`UPDATE bounty_tasks SET status='completed',updated_at=now() WHERE id=$1`,taskID);err!=nil{return Settlement{},fmt.Errorf("complete bounty task: %w",err)}
+ result:=Settlement{TaskID:taskID,EventKey:eventKey,ParticipantCount:len(participantIDs),PaidAmount:paid,RefundedAmount:refunded,CurrencyID:currencyID}
+ if _,err=tx.ExecContext(ctx,`INSERT INTO bounty_task_settlements(task_id,event_key,settled_by,participant_count,paid_amount,refunded_amount)
+  VALUES($1,$2,$3,$4,$5,$6)`,taskID,eventKey,accountID,len(participantIDs),paid,refunded);err!=nil{return Settlement{},fmt.Errorf("write bounty settlement receipt: %w",err)}
+ if err=tx.Commit();err!=nil{return Settlement{},fmt.Errorf("commit bounty settlement: %w",err)}
+ return result,nil
 }
