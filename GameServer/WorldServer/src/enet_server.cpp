@@ -73,6 +73,8 @@ struct PlayerState {
     std::int64_t max_health{100};
     std::int64_t mana{};
     std::int64_t max_mana{};
+    std::int32_t constitution{};
+    std::int32_t vitality{};
     honghuang::simulation::TimedSlowEffect slow_effect;
     honghuang::simulation::PeriodicDamageEffect poison_effect;
     std::string poison_source_entity_id;
@@ -3095,19 +3097,28 @@ struct EnetServer::Impl {
                 }
                 bool applied_slow = false;
                 bool applied_poison = false;
+                const auto status_resistance_bp =
+                    honghuang::simulation::negative_status_resistance_basis_points(
+                        player.constitution, player.vitality);
                 if (!damage.defeated && std::string(attack_profile.style) == "frost_bolt") {
                     const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                         now.time_since_epoch()).count();
+                    const auto slow_duration_ms = honghuang::simulation::resist_status_duration(
+                        2200, 500, status_resistance_bp);
                     applied_slow = honghuang::simulation::apply_slow(
-                        player.slow_effect, now_ms, 2200, 0.70F);
+                        player.slow_effect, now_ms, slow_duration_ms, 0.70F);
                 }
                 if (!damage.defeated && std::string(attack_profile.style) == "poison_bolt") {
                     const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                         now.time_since_epoch()).count();
-                    const auto poison_damage = std::max<std::int64_t>(
+                    const auto base_poison_damage = std::max<std::int64_t>(
                         1, static_cast<std::int64_t>(std::lround(monster.definition.attack * 0.15F)));
+                    const auto poison_damage = honghuang::simulation::resist_status_damage(
+                        base_poison_damage, status_resistance_bp);
+                    const auto poison_duration_ms = honghuang::simulation::resist_status_duration(
+                        4000, 1000, status_resistance_bp);
                     applied_poison = honghuang::simulation::apply_periodic_damage(
-                        player.poison_effect, now_ms, 4000, 1000, poison_damage);
+                        player.poison_effect, now_ms, poison_duration_ms, 1000, poison_damage);
                     if (applied_poison) player.poison_source_entity_id = monster.runtime_id;
                 }
                 broadcast_player_action_event(player, "hit", monster.runtime_id, attack_profile.style, victim->first);
@@ -3117,7 +3128,8 @@ struct EnetServer::Impl {
                                {"attack_style", attack_profile.style},
                                {"damage", damage.damage}, {"health", player.health},
                                {"max_health", player.max_health}, {"defeated", damage.defeated},
-                               {"status_effect", applied_poison ? "poison" : (applied_slow ? "slow" : "")},
+                               {"status_resistance_bp", (applied_poison || applied_slow) ? status_resistance_bp : 0},
+                                {"status_effect", applied_poison ? "poison" : (applied_slow ? "slow" : "")},
                                {"status_duration_ms", applied_poison
                                     ? std::max<std::int64_t>(0, player.poison_effect.next_tick_at_ms -
                                         std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count()) +
@@ -3277,7 +3289,10 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                                                        &stats_request, stats_http_status, combat_stats, stats_error) ||
                             !combat_stats.is_object() || !combat_stats.contains("attack") ||
                             !combat_stats.contains("defense") || !combat_stats.contains("health") ||
-                            !combat_stats.contains("max_health") || !combat_stats.contains("mana") || !combat_stats.contains("max_mana") || !combat_stats["attack"].is_number_integer() ||
+                            !combat_stats.contains("max_health") || !combat_stats.contains("mana") || !combat_stats.contains("max_mana") ||
+                             !combat_stats.contains("constitution") || !combat_stats.contains("vitality") ||
+                             !combat_stats["constitution"].is_number_integer() || !combat_stats["vitality"].is_number_integer() ||
+                             !combat_stats["attack"].is_number_integer() ||
                             !combat_stats["defense"].is_number_integer() || !combat_stats["health"].is_number_integer() ||
                             !combat_stats["max_health"].is_number_integer() || !combat_stats["mana"].is_number_integer() || !combat_stats["max_mana"].is_number_integer() ||
                             combat_stats["mana"].get<std::int64_t>() < 0 ||
@@ -3310,6 +3325,10 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                         player.max_health = combat_stats.at("max_health").get<std::int64_t>();
                         player.mana = combat_stats.at("mana").get<std::int64_t>();
                         player.max_mana = combat_stats.at("max_mana").get<std::int64_t>();
+                        player.constitution = static_cast<std::int32_t>(std::clamp<std::int64_t>(
+                            combat_stats.at("constitution").get<std::int64_t>(), 0, 100000));
+                        player.vitality = static_cast<std::int32_t>(std::clamp<std::int64_t>(
+                            combat_stats.at("vitality").get<std::int64_t>(), 0, 100000));
                         player.name = snapshot.value("name", std::string{});
                         player.birth_inheritance = snapshot.value("birth_inheritance", Json::object());
                         if (!player.birth_inheritance.is_object()) player.birth_inheritance = Json::object();
