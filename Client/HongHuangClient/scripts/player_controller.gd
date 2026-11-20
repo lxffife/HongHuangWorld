@@ -20,6 +20,7 @@ var visual: MeshInstance3D
 var player_humanoid: Node3D
 var humanoid_animation_time := 0.0
 var attack_animation_time := 0.0
+var attack_animation_style := "melee"
 var hit_animation_time := 0.0
 var collision_shape: CollisionShape3D
 var base_visual_mesh: Mesh
@@ -553,7 +554,7 @@ func _process(delta: float) -> void:
 			attack_weight = sin((1.0 - attack_animation_time / 0.34) * PI)
 		var animation_state := "hit" if hit_animation_time > 0.0 else ("attack" if attack_animation_time > 0.0 else ("walk" if moving else "idle"))
 		var hit_weight := sin(clampf(1.0 - hit_animation_time / 0.32, 0.0, 1.0) * PI) if hit_animation_time > 0.0 else 0.0
-		var native_animation := HumanoidAnimationDriver.apply_state(player_humanoid, animation_state)
+		var native_animation := HumanoidAnimationDriver.apply_state(player_humanoid, animation_state, 0.16, attack_animation_style)
 		if not native_animation:
 			var left_arm := player_humanoid.get_node_or_null("ArmPivotLeft") as Node3D
 			var right_arm := player_humanoid.get_node_or_null("ArmPivotRight") as Node3D
@@ -614,6 +615,7 @@ func _process(delta: float) -> void:
 
 # Equipment visuals are presentation-only. Server inventory/equipment remains authoritative.
 func set_equipment_visuals(items: Array) -> void:
+	attack_animation_style = _resolve_attack_style(items)
 	if not is_instance_valid(player_humanoid):
 		return
 	var slots := ["weapon", "offhand", "head", "chest", "legs", "boots", "accessory", "back"]
@@ -642,6 +644,26 @@ func set_equipment_visuals(items: Array) -> void:
 		if equipment_visual != null:
 			socket.add_child(equipment_visual)
 
+
+
+func _resolve_attack_style(items: Array) -> String:
+	for item_value in items:
+		if not (item_value is Dictionary):
+			continue
+		var item: Dictionary = item_value
+		var slot := str(item.get("slot", item.get("equipment_slot", "")))
+		if slot != "weapon":
+			continue
+		var identity := (str(item.get("name", "")) + " " + str(item.get("item_id", ""))).to_lower()
+		if identity.contains("spear") or identity.contains("lance") or identity.contains("长枪") or identity.contains("长矛") or identity.contains("枪"):
+			return "spear_thrust"
+		if identity.contains("bow") or identity.contains("crossbow") or identity.contains("弓"):
+			return "ranged_shot"
+		if identity.contains("staff") or identity.contains("wand") or identity.contains("法杖") or identity.contains("拂尘") or identity.contains("法器"):
+			return "staff_cast"
+		if identity.contains("sword") or identity.contains("blade") or identity.contains("剑") or identity.contains("刀"):
+			return "sword_slash"
+	return "melee"
 
 func _get_or_create_equipment_socket(slot: String) -> Node3D:
 	if not is_instance_valid(player_humanoid):
