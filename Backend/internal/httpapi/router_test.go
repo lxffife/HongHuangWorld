@@ -253,6 +253,7 @@ func TestFactionEndpointsUnavailableWithoutDatabase(t *testing.T) {
 		{http.MethodGet, "/api/v1/factions/mine"},
 		{http.MethodPost, "/api/v1/factions/00000000-0000-4000-8000-000000000001/applications"},
 		{http.MethodGet, "/api/v1/factions/00000000-0000-4000-8000-000000000001/applications"},
+		{http.MethodGet, "/api/v1/factions/00000000-0000-4000-8000-000000000001/members"},
 		{http.MethodPost, "/api/v1/factions/00000000-0000-4000-8000-000000000001/applications/00000000-0000-4000-8000-000000000002/review"},
 	} {
 		t.Run(route.method+" "+route.path, func(t *testing.T) {
