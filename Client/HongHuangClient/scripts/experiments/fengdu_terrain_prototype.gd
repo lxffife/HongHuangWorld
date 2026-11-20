@@ -42,6 +42,7 @@ func _build_heightfield() -> void:
 	streaming_manager.set("source_path", NodePath(".."))
 	streaming_manager.set("focus_path", NodePath("../StreamingFocus"))
 	streaming_manager.set("tile_count", TILE_COUNT)
+	streaming_manager.set("cells_per_tile", GRID_CELLS / TILE_COUNT)
 	streaming_manager.set("world_size", WORLD_SIZE)
 	streaming_manager.set("load_radius", 2)
 	streaming_manager.set("unload_radius", 3)
