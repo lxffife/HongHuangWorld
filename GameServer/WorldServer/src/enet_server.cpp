@@ -2107,7 +2107,7 @@ struct EnetServer::Impl {
                 pending_combat_refresh_sessions.erase(result.session_id);
             }
             if (!result.success || !result.stats.is_object()) {
-                if (!result.error.empty()) std::cerr << "Equipment combat refresh failed: " << result.error << '\\n';
+                if (!result.error.empty()) std::cerr << "Equipment combat refresh failed: " << result.error << '\n';
                 continue;
             }
             const auto found = std::find_if(players.begin(), players.end(), [&](const auto& entry) {
@@ -2124,7 +2124,7 @@ struct EnetServer::Impl {
                 !integer_field("spirit") || !integer_field("vitality") ||
                 !stats.contains("movement_speed") || !stats["movement_speed"].is_number() ||
                 !stats.contains("equipment") || !stats["equipment"].is_array()) {
-                std::cerr << "Equipment combat refresh returned an incomplete payload for " << result.character_id << '\\n';
+                std::cerr << "Equipment combat refresh returned an incomplete payload for " << result.character_id << '\n';
                 continue;
             }
             const auto attack = stats["attack"].get<std::int64_t>();
@@ -2135,7 +2135,7 @@ struct EnetServer::Impl {
             if (attack < 1 || attack > 100000 || defense < 0 || defense > 100000 ||
                 max_health < 1 || max_health > 10000000 || max_mana < 0 || max_mana > 10000000 ||
                 !std::isfinite(speed) || speed <= 0.0 || speed > 10.0) {
-                std::cerr << "Equipment combat refresh returned out-of-range stats for " << result.character_id << '\\n';
+                std::cerr << "Equipment combat refresh returned out-of-range stats for " << result.character_id << '\n';
                 continue;
             }
             auto& player = found->second;
