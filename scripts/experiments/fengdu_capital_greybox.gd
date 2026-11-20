@@ -10,6 +10,8 @@ const FengduQuestManager = preload("res://scripts/experiments/fengdu_quest_manag
 const FengduQuestJournal = preload("res://scripts/experiments/fengdu_quest_journal.gd")
 const FengduQuestTracker = preload("res://scripts/experiments/fengdu_quest_tracker.gd")
 const FengduStoryState = preload("res://scripts/experiments/fengdu_story_state.gd")
+const FengduEconomyManager = preload("res://scripts/experiments/fengdu_economy_manager.gd")
+const FengduTaskBoard = preload("res://scripts/experiments/fengdu_task_board.gd")
 
 const CITY_SCALE := 2.5
 const WALL_WIDTH := 1900.0
@@ -33,6 +35,8 @@ var _quest_manager: Node
 var _quest_journal: CanvasLayer
 var _quest_tracker: CanvasLayer
 var _story_state: Node
+var _economy_manager: Node
+var _task_board: CanvasLayer
 
 
 func _ready() -> void:
@@ -48,6 +52,7 @@ func _ready() -> void:
 	_build_gatehouses()
 	_build_roads()
 	_build_districts()
+	_build_task_hall()
 	_build_wall_defenses()
 	_build_gate_signs()
 	_build_patrol_guards()
@@ -188,6 +193,22 @@ func _build_districts() -> void:
 			"reincarnation_bureau":
 				center.x += 380.0
 		_build_district_cluster(district, center)
+
+
+func _build_task_hall() -> void:
+	var data := {
+		"id": "task_hall",
+		"name": "酆都公共任务大厅",
+		"kind": "admin",
+		"authority": "城主府 · 公共事务司",
+		"access": "全城公开委托、悬赏托管、履约登记与税费公示",
+		"description": "任何有身份的城中居民都可在此发布委托。悬赏须预先托管，城主府按规收取发布费与结算税。按 E 打开公共任务大厅。"
+	}
+	data["module_kind"] = "district"
+	var module := _spawn_city_module(data, Vector3(-720.0, 0.0, 0.0))
+	module.name = "District_task_hall"
+	module.connect("player_entered", Callable(self, "_on_district_entered"))
+	module.connect("player_exited", Callable(self, "_on_district_exited"))
 
 
 func _build_district_cluster(district: Dictionary, center: Vector3) -> void:
@@ -448,6 +469,23 @@ func _on_quest_action_requested(action: String, quest_id: String) -> void:
 			_quest_journal.call("toggle")
 
 
+func _on_task_board_closed() -> void:
+	if not _nearby_district_data.is_empty() and str(_nearby_district_data.get("id", "")) == "task_hall":
+		_hint_label.text = "已接近：酆都公共任务大厅 · 按 E 打开"
+
+
+func _toggle_task_board() -> void:
+	if _task_board == null:
+		return
+	if _dialogue_panel != null and _dialogue_panel.call("is_open"):
+		_dialogue_panel.call("close_dialogue")
+	if _quest_journal != null and _quest_journal.call("is_open"):
+		_quest_journal.call("close_journal")
+	_mouse_captured = false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_task_board.call("toggle")
+
+
 func _toggle_quest_journal() -> void:
 	if _quest_journal == null:
 		return
@@ -563,10 +601,15 @@ func _build_hud() -> void:
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(note)
 	var journal_button := Button.new()
-	journal_button.text = "打开阴司差事簿  [J]"
+	journal_button.text = "阴司差事簿  [J]"
 	journal_button.custom_minimum_size = Vector2(220.0, 34.0)
 	journal_button.pressed.connect(_toggle_quest_journal)
 	column.add_child(journal_button)
+	var board_button := Button.new()
+	board_button.text = "公共任务大厅  [T]"
+	board_button.custom_minimum_size = Vector2(220.0, 34.0)
+	board_button.pressed.connect(_toggle_task_board)
+	column.add_child(board_button)
 	add_child(layer)
 
 	_story_state = FengduStoryState.new()
@@ -591,6 +634,14 @@ func _build_hud() -> void:
 	_dialogue_panel.connect("quest_action_requested", Callable(self, "_on_quest_action_requested"))
 	_dialogue_panel.connect("story_choice_requested", Callable(self, "_on_story_choice_requested"))
 	_quest_manager.connect("quest_updated", Callable(self, "_on_quest_updated"))
+	_economy_manager = FengduEconomyManager.new()
+	_economy_manager.name = "FengduEconomyManager"
+	add_child(_economy_manager)
+	_task_board = FengduTaskBoard.new()
+	_task_board.name = "FengduPublicTaskBoard"
+	_task_board.connect("closed", Callable(self, "_on_task_board_closed"))
+	_task_board.call("configure", _economy_manager)
+	add_child(_task_board)
 	add_child(_dialogue_panel)
 
 
@@ -610,6 +661,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.keycode == KEY_J:
 			_toggle_quest_journal()
 			get_viewport().set_input_as_handled()
+		elif event.keycode == KEY_T:
+			_toggle_task_board()
+			get_viewport().set_input_as_handled()
+		elif event.keycode == KEY_E and _task_board != null and _task_board.call("is_open"):
+			_task_board.call("close_board")
+			get_viewport().set_input_as_handled()
 		elif event.keycode == KEY_E and _quest_journal != null and _quest_journal.call("is_open"):
 			_quest_journal.call("close_journal")
 			get_viewport().set_input_as_handled()
@@ -617,7 +674,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_dialogue_panel.call("close_dialogue")
 			get_viewport().set_input_as_handled()
 		elif event.keycode == KEY_E and not _nearby_district_data.is_empty():
-			_open_interaction_dialogue(_nearby_district_data)
+			if str(_nearby_district_data.get("id", "")) == "task_hall":
+				_toggle_task_board()
+			else:
+				_open_interaction_dialogue(_nearby_district_data)
 			get_viewport().set_input_as_handled()
 		elif event.keycode == KEY_ESCAPE:
 			if _dialogue_panel != null and _dialogue_panel.call("is_open"):
@@ -625,6 +685,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 			if _quest_journal != null and _quest_journal.call("is_open"):
 				_quest_journal.call("close_journal")
+			if _task_board != null and _task_board.call("is_open"):
+				_task_board.call("close_board")
 				get_viewport().set_input_as_handled()
 			_mouse_captured = false
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -639,7 +701,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(delta: float) -> void:
 	if _player == null:
 		return
-	if (_dialogue_panel != null and _dialogue_panel.call("is_open")) or (_quest_journal != null and _quest_journal.call("is_open")):
+	if (_dialogue_panel != null and _dialogue_panel.call("is_open")) or (_quest_journal != null and _quest_journal.call("is_open")) or (_task_board != null and _task_board.call("is_open")):
 		_player.velocity.x = 0.0
 		_player.velocity.z = 0.0
 		if not _player.is_on_floor():
