@@ -32,6 +32,7 @@ type closeWorldSessionRequest struct {
 	PositionZ   float64 `json:"position_z"`
 	RotationY   float64 `json:"rotation_y"`
 	Health      *int    `json:"health,omitempty"`
+	Mana        *int    `json:"mana,omitempty"`
 }
 
 func (h *worldEntryHandlers) issue(w http.ResponseWriter, r *http.Request) {
@@ -99,7 +100,7 @@ func (h *worldEntryHandlers) saveSnapshot(w http.ResponseWriter, r *http.Request
 	err := h.entryService.SavePosition(r.Context(), worldentry.SessionSnapshot{
 		NodeKey: request.NodeKey, SessionID: request.SessionID, CharacterID: request.CharacterID,
 		PositionX: request.PositionX, PositionY: request.PositionY, PositionZ: request.PositionZ,
-		RotationY: request.RotationY, Health: request.Health,
+		RotationY: request.RotationY, Health: request.Health, Mana: request.Mana,
 	})
 	if err != nil {
 		if errors.Is(err, worldentry.ErrInvalidSessionSnapshot) {
@@ -129,7 +130,7 @@ func (h *worldEntryHandlers) closeSession(w http.ResponseWriter, r *http.Request
 	err := h.entryService.SaveAndClose(r.Context(), worldentry.SessionSnapshot{
 		NodeKey: request.NodeKey, SessionID: request.SessionID, CharacterID: request.CharacterID,
 		PositionX: request.PositionX, PositionY: request.PositionY, PositionZ: request.PositionZ,
-		RotationY: request.RotationY, Health: request.Health,
+		RotationY: request.RotationY, Health: request.Health, Mana: request.Mana,
 	})
 	if err != nil {
 		if errors.Is(err, worldentry.ErrInvalidSessionSnapshot) {
