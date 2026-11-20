@@ -2339,6 +2339,18 @@ struct EnetServer::Impl {
                                {"experience_reward", experience_reward},
                                {"cultivation_reward", cultivation_reward},
                                {"soul_experience_reward", damage.defeated && config.world_id == "underworld_fengdu" ? 5 : 0}});
+                const Json visual_event{
+                    {"accepted", true}, {"visual_only", true}, {"source", "projectile"},
+                    {"target_entity_id", target->runtime_id}, {"target_name", target->definition.name},
+                    {"damage", damage.damage}, {"health", damage.remaining_health},
+                    {"max_health", target->definition.max_health}, {"defeated", damage.defeated}
+                };
+                for (const auto& [recipient_peer, recipient] : players) {
+                    if (recipient_peer == owner->first ||
+                        !honghuang::simulation::within_interest_radius(
+                            target->state.x, target->state.z, recipient.x, recipient.z, kInterestRadius)) continue;
+                    send_json(recipient_peer, honghuang::protocol::MessageType::CombatEvent, visual_event);
+                }
             }
             projectile = projectiles.erase(projectile);
         }
