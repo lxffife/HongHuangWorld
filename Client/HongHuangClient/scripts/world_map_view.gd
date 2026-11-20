@@ -6,8 +6,12 @@ const WorldMapProjection = preload("res://scripts/world_map_projection.gd")
 
 signal marker_selected(kind: String, marker_id: String, marker_name: String)
 signal world_position_selected(world_position: Vector3)
+signal atlas_region_selected(region_id: String, region_name: String, description: String)
 
 var world_id := ""
+var map_mode := "local"
+var atlas_data: Dictionary = {}
+var _selected_atlas_id := ""
 var world_bounds := Vector4(-120.0, 120.0, -120.0, 120.0)
 var region_data: Array = []
 var water_data: Array = []
@@ -66,6 +70,9 @@ func _gui_input(event: InputEvent) -> void:
 
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), Color("#0b1420"), true)
+	if map_mode == "underworld_atlas":
+		_draw_underworld_atlas()
+		return
 	var map_rect := _map_rect()
 	if map_rect.size.x <= 0.0 or map_rect.size.y <= 0.0:
 		return
@@ -87,6 +94,115 @@ func _draw() -> void:
 	draw_string(ThemeDB.fallback_font, Vector2(14.0, 20.0), _world_title(), HORIZONTAL_ALIGNMENT_LEFT, -1.0, 13, Color("#e0c58f"))
 	draw_string(ThemeDB.fallback_font, Vector2(14.0, size.y - 10.0), "滚轮缩放 · 右键/中键拖动 · 点击地图设定导航", HORIZONTAL_ALIGNMENT_LEFT, -1.0, 11, Color("#91a5b6"))
 	draw_string(ThemeDB.fallback_font, Vector2(size.x - 14.0, 20.0), "比例 %.2fx" % _zoom, HORIZONTAL_ALIGNMENT_RIGHT, -1.0, 11, Color("#91a5b6"))
+
+
+func _draw_underworld_atlas() -> void:
+	var map_rect := _map_rect()
+	draw_rect(map_rect, Color("#101a26"), true)
+	draw_rect(map_rect, Color("#62788b"), false, 1.4)
+	draw_string(ThemeDB.fallback_font, Vector2(14.0, 20.0), "冥界总览 · 示意地理关系（非实际坐标比例）", HORIZONTAL_ALIGNMENT_LEFT, -1.0, 13, Color("#e0c58f"))
+	var nodes: Array = atlas_data.get("nodes", [])
+	var links: Array = atlas_data.get("links", [])
+	for link_variant in links:
+		if not link_variant is Dictionary:
+			continue
+		var link: Dictionary = link_variant
+		var from_node := _find_atlas_node(nodes, str(link.get("from", "")))
+		var to_node := _find_atlas_node(nodes, str(link.get("to", "")))
+		if from_node.is_empty() or to_node.is_empty():
+			continue
+		var from_point := _atlas_to_canvas(from_node.get("position", []), map_rect)
+		var to_point := _atlas_to_canvas(to_node.get("position", []), map_rect)
+		draw_line(from_point, to_point, Color("#718294", 0.58), 2.0)
+		var mid := (from_point + to_point) * 0.5
+		draw_string(ThemeDB.fallback_font, mid + Vector2(4.0, -4.0), str(link.get("label", "")), HORIZONTAL_ALIGNMENT_LEFT, 130.0, 9, Color("#91a5b6"))
+	for node_variant in nodes:
+		if not node_variant is Dictionary:
+			continue
+		var node: Dictionary = node_variant
+		var position_data: Array = node.get("position", [])
+		var size_data: Array = node.get("size", [])
+		if position_data.size() < 2 or size_data.size() < 2:
+			continue
+		var center := _atlas_to_canvas(position_data, map_rect)
+		var scale := _atlas_scale(map_rect)
+		var rect_size := Vector2(float(size_data[0]), float(size_data[1])) * scale
+		var node_rect := Rect2(center - rect_size * 0.5, rect_size)
+		if node_rect.size.x < 4.0 or node_rect.size.y < 4.0:
+			continue
+		var kind := str(node.get("kind", "region"))
+		var fill := _atlas_kind_color(kind)
+		draw_rect(node_rect, fill, true)
+		draw_rect(node_rect, Color("#f0d7a0") if str(node.get("id", "")) == _selected_atlas_id else fill.lightened(0.55), false, 2.2 if str(node.get("id", "")) == _selected_atlas_id else 1.2)
+		var title_size := 12 if node_rect.size.x >= 100.0 else 10
+		var title_y := node_rect.position.y + minf(19.0, node_rect.size.y * 0.42)
+		draw_string(ThemeDB.fallback_font, Vector2(node_rect.position.x + 7.0, title_y), str(node.get("name", "区域")), HORIZONTAL_ALIGNMENT_LEFT, maxf(30.0, node_rect.size.x - 12.0), title_size, Color("#f1e7d6"))
+		if node_rect.size.y >= 34.0:
+			draw_string(ThemeDB.fallback_font, Vector2(node_rect.position.x + 7.0, title_y + 15.0), str(node.get("distance", "")), HORIZONTAL_ALIGNMENT_LEFT, maxf(30.0, node_rect.size.x - 12.0), 9, Color("#c1cbd4"))
+	draw_string(ThemeDB.fallback_font, Vector2(14.0, size.y - 10.0), "点击区域查看设定 · 滚轮缩放与拖动仅用于查看 · 示意连线不代表可直接通行", HORIZONTAL_ALIGNMENT_LEFT, -1.0, 10, Color("#91a5b6"))
+
+
+func _atlas_scale(map_rect: Rect2) -> float:
+	return minf(map_rect.size.x / 420.0, map_rect.size.y / 345.0)
+
+
+func _atlas_to_canvas(position_data: Array, map_rect: Rect2) -> Vector2:
+	if position_data.size() < 2:
+		return map_rect.get_center()
+	var scale := _atlas_scale(map_rect)
+	return map_rect.get_center() + Vector2(float(position_data[0]), float(position_data[1])) * Vector2(scale, -scale)
+
+
+func _atlas_node_rect(node: Dictionary, map_rect: Rect2) -> Rect2:
+	var position_data: Array = node.get("position", [])
+	var size_data: Array = node.get("size", [])
+	if position_data.size() < 2 or size_data.size() < 2:
+		return Rect2()
+	var center := _atlas_to_canvas(position_data, map_rect)
+	var extent := Vector2(float(size_data[0]), float(size_data[1])) * _atlas_scale(map_rect)
+	return Rect2(center - extent * 0.5, extent)
+
+
+func _find_atlas_node(nodes: Array, node_id: String) -> Dictionary:
+	for node_variant in nodes:
+		if node_variant is Dictionary and str(node_variant.get("id", "")) == node_id:
+			return node_variant
+	return {}
+
+
+func _atlas_kind_color(kind: String) -> Color:
+	match kind:
+		"capital":
+			return Color("#6f5540", 0.96)
+		"river":
+			return Color("#355d78", 0.94)
+		"sacred", "divine":
+			return Color("#67558b", 0.96)
+		"hell":
+			return Color("#873e3c", 0.96)
+		"blood_sea":
+			return Color("#842c43", 0.97)
+		"wilderness":
+			return Color("#53634d", 0.94)
+		_:
+			return Color("#46596b", 0.94)
+
+
+func _select_underworld_atlas_at(mouse_position: Vector2) -> void:
+	var map_rect := _map_rect()
+	for node_variant in atlas_data.get("nodes", []):
+		if not node_variant is Dictionary:
+			continue
+		var node: Dictionary = node_variant
+		if _atlas_node_rect(node, map_rect).has_point(mouse_position):
+			_selected_atlas_id = str(node.get("id", ""))
+			atlas_region_selected.emit(
+				_selected_atlas_id,
+				str(node.get("name", "区域")),
+				str(node.get("description", ""))
+			)
+			queue_redraw()
+			return
 
 
 func _map_rect() -> Rect2:
@@ -238,6 +354,9 @@ func _select_at(mouse_position: Vector2) -> void:
 	var map_rect := _map_rect()
 	if not map_rect.has_point(mouse_position):
 		return
+	if map_mode == "underworld_atlas":
+		_select_underworld_atlas_at(mouse_position)
+		return
 	var scale := _pixels_per_meter(map_rect)
 	var map_center := map_rect.get_center() + _pan
 	var best_distance := 14.0
@@ -303,6 +422,8 @@ func _select_at(mouse_position: Vector2) -> void:
 
 
 func _world_title() -> String:
+	if map_mode == "underworld_atlas":
+		return "冥界总览"
 	match world_id:
 		"underworld_fengdu":
 			return "冥界 · 酆都"
