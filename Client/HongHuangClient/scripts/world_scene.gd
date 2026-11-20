@@ -8,6 +8,7 @@ const MonsterAnimationDriver = preload("res://scripts/monster_animation_driver.g
 const QingyunVisualFactory = preload("res://scripts/qingyun_visual_factory.gd")
 const FriendPanelScript = preload("res://scripts/friend_panel.gd")
 const WorldMiniMapScript = preload("res://scripts/world_minimap.gd")
+const WorldRegionCatalog = preload("res://scripts/world_region_catalog.gd")
 
 @onready var hud_label: Label = $HUD/Panel/Margin/Content/Status
 @onready var progression_label: Label = $HUD/Panel/Margin/Content/Progression
@@ -1029,32 +1030,7 @@ func _world_display_name(world_id: String) -> String:
 			return "未知世界（" + world_id + "）"
 
 func _region_for_position(world_id: String, position: Vector3) -> String:
-	var x := position.x
-	var z := position.z
-	if world_id == "underworld_fengdu":
-		# Match named landmarks before broad terrain regions.
-		if x >= 15.0 and x <= 29.0 and z >= -0.5 and z <= 5.5:
-			return "奈何桥"
-		if x >= -35.0 and x <= -8.0 and z >= -69.0 and z <= -42.0:
-			return "轮回殿前"
-		if x >= -12.0 and x <= 12.0 and z >= -28.0 and z <= -9.0:
-			return "酆都鬼门关"
-		if x >= 17.0 and x <= 27.0 and z >= -68.0 and z <= 82.0:
-			return "忘川河畔"
-		if x >= -32.0 and x <= 32.0 and z >= -40.0 and z <= -26.0:
-			return "引魂石道"
-		if x <= -36.0 and z >= 10.0 and z <= 46.0:
-			return "古战场遗址"
-		return "酆都荒原"
-	if world_id == "qingyun_human":
-		if x >= -9.0 and x <= 9.0 and z >= -28.0 and z <= -16.0:
-			return "青云山门"
-		if x >= -7.0 and x <= 7.0 and z >= -42.0 and z <= -3.0:
-			return "青云石径"
-		if absf(x) >= 8.0 and absf(x) <= 30.0 and z >= -48.0 and z <= 8.0:
-			return "青云松林"
-		return "青云郊野"
-	return "未知区域"
+	return WorldRegionCatalog.resolve(world_id, position)
 
 func _refresh_current_region(show_entry_notice: bool) -> void:
 	if not is_instance_valid(local_player):
