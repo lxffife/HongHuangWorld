@@ -1489,9 +1489,9 @@ struct EnetServer::Impl {
                 broadcast_player_event(honghuang::protocol::MessageType::PlayerLeft,
                                        it->second, it->first);
                 const auto peer = it->first;
+                ++it;
                 close_player_session_or_defer(peer);
                 enet_peer_disconnect_later(peer, 7);
-                it = players.begin();
             } else {
                 ++it;
             }
