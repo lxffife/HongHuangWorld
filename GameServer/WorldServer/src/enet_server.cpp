@@ -2375,6 +2375,9 @@ struct EnetServer::Impl {
         std::int64_t cultivation_reward = 0;
         if (damage.defeated) {
             target->state.mode = honghuang::simulation::MonsterMode::Dead;
+            target->slow_effect = {};
+            target->burn_effect = {};
+            target->burn_owner_character_id.clear();
             target->state.target_id.clear();
             // Respawn timing is owned by the world's spawn-point configuration.
             // This keeps live operations changes effective without hard-coded monster IDs.
