@@ -22,9 +22,11 @@ CREATE TABLE bounty_tasks (
     status VARCHAR(16) NOT NULL DEFAULT 'open' CHECK (status IN ('open','full','in_progress','completed','cancelled','expired')),
     expires_at TIMESTAMPTZ,
     created_by UUID NOT NULL,
+    request_key VARCHAR(128) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CHECK (escrow_amount = reward_amount * max_assignees)
+    CHECK (escrow_amount = reward_amount * max_assignees),
+    UNIQUE (created_by,request_key)
 );
 CREATE INDEX idx_bounty_tasks_world_status ON bounty_tasks(world_id,status,created_at DESC);
 CREATE INDEX idx_bounty_tasks_publisher ON bounty_tasks(publisher_id,created_at DESC);
