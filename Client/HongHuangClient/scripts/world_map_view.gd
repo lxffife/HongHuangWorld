@@ -246,8 +246,8 @@ func _select_at(mouse_position: Vector2) -> void:
 		if not point_variant is Dictionary:
 			continue
 		var point_data: Dictionary = point_variant
-		var point := _world_to_canvas(Vector2(float(point_data.get("position_x", 0.0)), float(point_data.get("position_z", 0.0))), map_center, scale)
-		var distance := point.distance_to(mouse_position)
+		var exploration_canvas_point := _world_to_canvas(Vector2(float(point_data.get("position_x", 0.0)), float(point_data.get("position_z", 0.0))), map_center, scale)
+		var distance := exploration_canvas_point.distance_to(mouse_position)
 		if distance < best_distance:
 			best_distance = distance
 			best_kind = "exploration"
@@ -283,8 +283,8 @@ func _select_at(mouse_position: Vector2) -> void:
 		var pos_data: Array = landmark.get("position", [])
 		if pos_data.size() < 3:
 			continue
-		var point := _world_to_canvas(Vector2(float(pos_data[0]), float(pos_data[2])), map_center, scale)
-		var distance := point.distance_to(mouse_position)
+		var landmark_canvas_point := _world_to_canvas(Vector2(float(pos_data[0]), float(pos_data[2])), map_center, scale)
+		var distance := landmark_canvas_point.distance_to(mouse_position)
 		if distance < best_distance:
 			best_distance = distance
 			best_kind = "landmark"
