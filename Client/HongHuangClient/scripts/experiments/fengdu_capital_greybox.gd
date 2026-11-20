@@ -407,6 +407,12 @@ func _open_interaction_dialogue(data: Dictionary) -> void:
 	if quest_progressed:
 		_hint_label.text = "差事目标已更新 · 按 J 查看阴司差事簿"
 	var quest_id := str(data.get("quest_id", ""))
+	if target_id == "white_impermanence" and _story_state != null:
+		match str(_story_state.call("get_choice", "new_soul_registration")):
+			"register_by_the_book":
+				quest_id = "yin_official_audit"
+			"comfort_the_soul":
+				quest_id = "new_soul_wish"
 	var quest_data: Dictionary = _quest_manager.call("get_quest", quest_id) if _quest_manager != null and not quest_id.is_empty() else {}
 	var npc_id := str(data.get("id", ""))
 	var dialogue_data := data.duplicate(true)
@@ -569,6 +575,7 @@ func _build_hud() -> void:
 	_quest_manager = FengduQuestManager.new()
 	_quest_manager.name = "FengduQuestManager"
 	add_child(_quest_manager)
+	_quest_manager.call("configure_story_state", _story_state)
 	_quest_journal = FengduQuestJournal.new()
 	_quest_journal.name = "FengduQuestJournal"
 	add_child(_quest_journal)
