@@ -266,7 +266,7 @@ func (s *Service) Analytics(ctx context.Context, from, to time.Time) (Analytics,
    SELECT created_at::date day, count(*) amount FROM characters WHERE created_at >= $1 AND created_at < $2 GROUP BY 1
   ), active AS (
    SELECT connected_at::date day, count(DISTINCT character_id) amount FROM world_sessions
-   WHERE connected_at >= $1 AND connected_at < $2 AND session_state IN ('active','saving') GROUP BY 1
+   WHERE connected_at >= $1 AND connected_at < $2 GROUP BY 1
   )
   SELECT days.day::text, COALESCE(registrations.amount,0), COALESCE(characters.amount,0), COALESCE(active.amount,0)
   FROM days LEFT JOIN registrations USING(day) LEFT JOIN characters USING(day) LEFT JOIN active USING(day)
