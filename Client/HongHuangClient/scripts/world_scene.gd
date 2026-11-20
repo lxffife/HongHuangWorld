@@ -2567,6 +2567,20 @@ func _set_monster_freeze_visual(monster: Node3D, enabled: bool) -> void:
 
 
 func _on_combat_event(event: Dictionary) -> void:
+	if str(event.get("action", "")) == "equipment_refresh":
+		if not bool(event.get("accepted", false)):
+			return
+		HHSession.world_snapshot["health"] = int(event.get("health", HHSession.world_snapshot.get("health", 0)))
+		HHSession.world_snapshot["max_health"] = int(event.get("max_health", HHSession.world_snapshot.get("max_health", 0)))
+		HHSession.world_snapshot["mana"] = int(event.get("mana", HHSession.world_snapshot.get("mana", 0)))
+		HHSession.world_snapshot["max_mana"] = int(event.get("max_mana", HHSession.world_snapshot.get("max_mana", 0)))
+		_update_vitals(int(HHSession.world_snapshot["health"]), int(HHSession.world_snapshot["max_health"]))
+		if is_instance_valid(mana_label):
+			mana_label.text = "灵力  " + str(int(HHSession.world_snapshot["mana"])) + " / " + str(int(HHSession.world_snapshot["max_mana"]))
+		_update_compact_hud()
+		_refresh_inventory()
+		_show_notification("装备属性已同步。")
+		return
 	if str(event.get("action", "")) == "consumable_use":
 		if bool(event.get("pending", false)):
 			inventory_status.text = str(event.get("reason", "正在结算消耗品……"))
