@@ -1485,7 +1485,7 @@ struct EnetServer::Impl {
             std::string error;
             if (!enqueue_durable_event(event_id, "bounty_objective_event", payload, error)) {
                 std::cerr << "Could not persist bounty monster-kill event for task "
-                          << objective.task_id << ": " << error << '\\n';
+                          << objective.task_id << ": " << error << '\n';
             }
         }
     }
@@ -3704,11 +3704,11 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                         if (!fetch_bounty_objectives(impl_->config, player.session_id, player.character_id,
                                                      player.bounty_objectives, bounty_http_status, bounty_error)) {
                             std::cerr << "Bounty objective subscriptions unavailable for character "
-                                      << player.character_id << ": " << bounty_error << '\\n';
+                                      << player.character_id << ": " << bounty_error << '\n';
                         } else {
                             std::cout << "Loaded " << player.bounty_objectives.size()
                                       << " bounty objective subscriptions for character "
-                                      << player.character_id << '\\n';
+                                      << player.character_id << '\n';
                         }
                         player.birth_inheritance = snapshot.value("birth_inheritance", Json::object());
                         if (!player.birth_inheritance.is_object()) player.birth_inheritance = Json::object();
