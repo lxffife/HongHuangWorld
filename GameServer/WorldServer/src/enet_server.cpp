@@ -2630,7 +2630,9 @@ struct EnetServer::Impl {
                 player.attack, spell->power_basis_points, spell->defense_penetration_basis_points,
                 now + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<float>(spell->projectile_lifetime_seconds)),
                 spell->element == honghuang::simulation::SpellElement::Ice ? "ice_bolt" : "fireball",
-                spell->slow_duration_ms, spell->slow_multiplier
+                spell->slow_duration_ms, spell->slow_multiplier,
+                 spell->burn_duration_ms, spell->burn_interval_ms,
+                 spell->burn_damage_basis_points
             });
             broadcast_player_action_event(player, "cast", target->runtime_id,
                 spell->element == honghuang::simulation::SpellElement::Ice ? "spell_ice_bolt" : "spell_fireball", peer);
@@ -2737,6 +2739,8 @@ struct EnetServer::Impl {
                                {"defeated", damage.defeated},
                                {"status_effect", applied_slow ? "slow" : ""},
                                {"status_duration_ms", applied_slow ? projectile->slow_duration_ms : 0},
+                               {"burn_applied", applied_burn},
+                               {"burn_duration_ms", applied_burn ? projectile->burn_duration_ms : 0},
                                {"experience_reward", experience_reward},
                                {"cultivation_reward", cultivation_reward},
                                {"soul_experience_reward", damage.defeated && config.world_id == "underworld_fengdu" ? 5 : 0}});
@@ -2746,7 +2750,9 @@ struct EnetServer::Impl {
                     {"projectile_type", projectile->projectile_type}, {"damage", damage.damage}, {"health", damage.remaining_health},
                     {"max_health", target->definition.max_health}, {"defeated", damage.defeated},
                     {"status_effect", applied_slow ? "slow" : ""},
-                    {"status_duration_ms", applied_slow ? projectile->slow_duration_ms : 0}
+                    {"status_duration_ms", applied_slow ? projectile->slow_duration_ms : 0},
+                    {"burn_applied", applied_burn},
+                    {"burn_duration_ms", applied_burn ? projectile->burn_duration_ms : 0}
                 };
                 for (const auto& [recipient_peer, recipient] : players) {
                     if (recipient_peer == owner->first ||
@@ -2773,6 +2779,8 @@ struct EnetServer::Impl {
                     monster.respawn_at = Clock::time_point{};
                     monster.attack_phase = MonsterAttackPhase::Ready;
                     monster.slow_effect = {};
+                    monster.burn_effect = {};
+                    monster.burn_owner_character_id.clear();
                     monster.attack_target_character_id.clear();
                     monster.last_attack_at = Clock::time_point{};
                 }
