@@ -229,6 +229,9 @@ type Settlement struct {
 func (s *Service) Settle(ctx context.Context,accountID,taskID,eventKey string)(Settlement,error){
  if accountID==""||taskID==""||eventKey==""||len(eventKey)>128{return Settlement{},ErrInvalid}
  tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return Settlement{},fmt.Errorf("begin bounty settlement: %w",err)};defer tx.Rollback()
+ // Serialize reuse of the same caller key across different tasks before checking
+ // the global unique receipt constraint.
+ if _,err=tx.ExecContext(ctx,`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`,eventKey);err!=nil{return Settlement{},fmt.Errorf("lock bounty settlement idempotency key: %w",err)}
  var publisherID,treasuryID,currencyID,status,escrowStatus string
  var reward,escrowAmount int64
  err=tx.QueryRowContext(ctx,`SELECT t.publisher_id::text,e.treasury_account_id::text,t.currency_id,t.status,
