@@ -6,6 +6,7 @@
 #include <cassert>
 
 int main() {
+    using honghuang::simulation::clamp_current_resource_to_maximum;
     using honghuang::simulation::mana_regeneration_amount;
     using honghuang::simulation::mana_regeneration_interval_ms;
 
@@ -20,6 +21,14 @@ int main() {
     assert(mana_regeneration_interval_ms(false, -1, 3000, 6000) == 0);
     assert(mana_regeneration_interval_ms(false, 0, 0, 6000) == 0);
     assert(mana_regeneration_interval_ms(true, 0, 3000, 0) == 0);
+
+    // Equipment increases never refill current resources; decreases clamp safely.
+    assert(clamp_current_resource_to_maximum(60, 120) == 60);
+    assert(clamp_current_resource_to_maximum(60, 40) == 40);
+    assert(clamp_current_resource_to_maximum(0, 40) == 0);
+    assert(clamp_current_resource_to_maximum(-5, 40) == 0);
+    assert(clamp_current_resource_to_maximum(10, 0) == 0);
+    assert(clamp_current_resource_to_maximum(10, -1) == 0);
 
     // One point every three seconds; partial intervals do not round up.
     assert(mana_regeneration_amount(0, 20, 100, 3000) == 0);
