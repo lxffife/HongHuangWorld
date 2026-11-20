@@ -108,6 +108,44 @@ const UNDERWORLD_ATLAS := {
 	]
 }
 
+
+## Fengdu city plan uses a separate schematic coordinate space (not world meters).
+const FENGDU_CITY_PLAN := {
+	"coordinate_space": "schematic_city",
+	"title": "酆都天城",
+	"subtitle": "皇城居中 · 十王分治 · 四门通幽",
+	"wall_size": [760.0, 590.0],
+	"moat_size": [820.0, 650.0],
+	"nodes": [
+		{"id": "imperial_palace", "name": "酆都皇城", "kind": "palace", "position": [0.0, 178.0], "size": [154.0, 88.0], "authority": "酆都大帝", "danger_level": 2, "access": "主线剧情与高阶政务", "description": "冥界最高行政中枢，设帝阙、议政殿与幽冥法印中枢。"},
+		{"id": "ten_kings_manors", "name": "十王府", "kind": "court", "position": [-190.0, 94.0], "size": [132.0, 76.0], "authority": "十殿阎罗", "danger_level": 3, "access": "审判委托与功过任务", "description": "十殿阎罗在酆都的府署群，负责分殿审判与刑狱协调。"},
+		{"id": "judge_court", "name": "判官司", "kind": "court", "position": [190.0, 94.0], "size": [132.0, 76.0], "authority": "判官首座", "danger_level": 2, "access": "鬼籍查询与审判任务", "description": "汇总生死簿案卷、复核功过、签发审判文书。"},
+		{"id": "ghost_registry", "name": "鬼籍司", "kind": "admin", "position": [-190.0, -8.0], "size": [132.0, 70.0], "authority": "鬼籍主簿", "danger_level": 1, "access": "新魂登记与身份服务", "description": "亡魂登记、身份核验、来历追溯与居留凭籍。"},
+		{"id": "merit_bureau", "name": "功过司", "kind": "admin", "position": [190.0, -8.0], "size": [132.0, 70.0], "authority": "功过判官", "danger_level": 2, "access": "功德记录与因果委托", "description": "记录善恶功过、因果债契与轮回资格建议。"},
+		{"id": "reincarnation_bureau", "name": "轮回司", "kind": "sacred", "position": [0.0, -142.0], "size": [150.0, 78.0], "authority": "轮回司主", "danger_level": 5, "access": "完成审判与轮回资格流程", "description": "管理轮回流程、转生文牒与通往忘川流域的官方通道；六道根本法则仍归后土。"},
+		{"id": "ghost_market", "name": "万魂鬼市", "kind": "market", "position": [190.0, -166.0], "size": [142.0, 76.0], "authority": "鬼市行会", "danger_level": 4, "access": "交易、拍卖与玩家社交", "description": "冥界最大交易区，经营灵材、法器、情报、委托与跨阵营贸易。"},
+		{"id": "residential_quarter", "name": "万家魂坊", "kind": "residential", "position": [-190.0, -166.0], "size": [142.0, 76.0], "authority": "坊正与巡城司", "danger_level": 1, "access": "居住、生活技能与社区活动", "description": "亡魂居民、商户、工匠与玩家居所聚集的生活城区。"},
+		{"id": "yin_army_camp", "name": "阴兵大营", "kind": "military", "position": [-305.0, 20.0], "size": [88.0, 70.0], "authority": "阴兵统领", "danger_level": 3, "access": "巡城、军需与阵营任务", "description": "阴兵驻防、装备整备、城防演练与出征集结之地。"},
+		{"id": "soul_waystation", "name": "引魂驿站", "kind": "transport", "position": [305.0, 20.0], "size": [88.0, 70.0], "authority": "引魂使", "danger_level": 2, "access": "新魂接引与远途交通", "description": "接引新魂、分流旅客、管理黄泉古道与远域驿传。"},
+		{"id": "north_gate", "name": "北天门", "kind": "gate", "position": [0.0, 278.0], "size": [84.0, 34.0], "authority": "北门守将", "danger_level": 3, "access": "通往罗酆山古道", "description": "连接北境古道与罗酆山方向的主城门。"},
+		{"id": "south_gate", "name": "南幽门", "kind": "gate", "position": [0.0, -278.0], "size": [84.0, 34.0], "authority": "南门守将", "danger_level": 3, "access": "通往忘川与轮回渡口", "description": "亡魂进入忘川流域与轮回渡口的主要门户。"},
+		{"id": "east_gate", "name": "东玄门", "kind": "gate", "position": [370.0, 0.0], "size": [34.0, 84.0], "authority": "东门守将", "danger_level": 4, "access": "通往幽冥荒原与远域官道", "description": "通往幽冥荒原、边境关隘和远方血海方向的出城门户。"},
+		{"id": "west_gate", "name": "西冥门", "kind": "gate", "position": [-370.0, 0.0], "size": [34.0, 84.0], "authority": "西门守将", "danger_level": 3, "access": "通往阴司军屯与古战场方向", "description": "连接军屯、古战场巡防线与西部边境的城门。"}
+	],
+	"roads": [
+		{"from": "imperial_palace", "to": "ten_kings_manors"},
+		{"from": "imperial_palace", "to": "judge_court"},
+		{"from": "ten_kings_manors", "to": "ghost_registry"},
+		{"from": "judge_court", "to": "merit_bureau"},
+		{"from": "ghost_registry", "to": "residential_quarter"},
+		{"from": "merit_bureau", "to": "ghost_market"},
+		{"from": "reincarnation_bureau", "to": "south_gate"},
+		{"from": "yin_army_camp", "to": "west_gate"},
+		{"from": "soul_waystation", "to": "east_gate"},
+		{"from": "imperial_palace", "to": "north_gate"}
+	]
+}
+
 const FENGDU_PROTOTYPE := {
 	"world_id": "underworld_fengdu",
 	"bounds": [-128.0, 128.0, -128.0, 128.0],
@@ -125,6 +163,11 @@ const FENGDU_PROTOTYPE := {
 		{"id": "fengdu_outer_ridge", "name": "酆都北部山脊", "position": [-42.0, 12.0, -112.0], "color": "#b6a8a0", "kind": "visual", "map_visible": false}
 	]
 }
+
+
+
+static func get_fengdu_city_plan() -> Dictionary:
+	return FENGDU_CITY_PLAN.duplicate(true)
 
 
 static func get_underworld_atlas() -> Dictionary:
