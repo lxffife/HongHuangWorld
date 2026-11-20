@@ -26,9 +26,9 @@ func (h *bountyHandlers) contribute(w http.ResponseWriter,r *http.Request){
 }
 func (h *bountyHandlers) publishFaction(w http.ResponseWriter,r *http.Request){
  account,ok:=h.accountID(w,r);if !ok{return}
- var body struct{Title string `json:"title"`;Description string `json:"description"`;CurrencyID string `json:"currency_id"`;RewardAmount int64 `json:"reward_amount"`;MaxAssignees int `json:"max_assignees"`;DifficultyTier int `json:"difficulty_tier"`;RequiredRealmLevel int `json:"required_realm_level"`;ExpiresAt *string `json:"expires_at"`}
+ var body struct{EventKey string `json:"event_key"`;Title string `json:"title"`;Description string `json:"description"`;CurrencyID string `json:"currency_id"`;RewardAmount int64 `json:"reward_amount"`;MaxAssignees int `json:"max_assignees"`;DifficultyTier int `json:"difficulty_tier"`;RequiredRealmLevel int `json:"required_realm_level"`;ExpiresAt *string `json:"expires_at"`}
  if err:=decodeJSON(w,r,&body);err!=nil{http.Error(w,"invalid request body",http.StatusBadRequest);return}
- result,err:=h.service.PublishFaction(r.Context(),account,task.PublishRequest{FactionID:r.PathValue("factionID"),Title:body.Title,Description:body.Description,CurrencyID:body.CurrencyID,RewardAmount:body.RewardAmount,MaxAssignees:body.MaxAssignees,DifficultyTier:body.DifficultyTier,RequiredRealmLevel:body.RequiredRealmLevel,ExpiresAt:body.ExpiresAt})
+ result,err:=h.service.PublishFaction(r.Context(),account,task.PublishRequest{EventKey:body.EventKey,FactionID:r.PathValue("factionID"),Title:body.Title,Description:body.Description,CurrencyID:body.CurrencyID,RewardAmount:body.RewardAmount,MaxAssignees:body.MaxAssignees,DifficultyTier:body.DifficultyTier,RequiredRealmLevel:body.RequiredRealmLevel,ExpiresAt:body.ExpiresAt})
  if err!=nil{h.writeError(w,err);return};writeJSON(w,http.StatusCreated,result)
 }
 func (h *bountyHandlers) list(w http.ResponseWriter,r *http.Request){
