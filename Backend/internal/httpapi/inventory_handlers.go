@@ -208,6 +208,7 @@ func (h *inventoryHandlers) useConsumable(w http.ResponseWriter,r *http.Request)
 	switch {
 	case err==nil: writeJSON(w,http.StatusOK,result)
 	case errors.Is(err,inventory.ErrInvalidRequest): http.Error(w,"invalid consumable request, item is not owned, or quantity is insufficient",http.StatusBadRequest)
+	case errors.Is(err,inventory.ErrCharacterInWorld): http.Error(w,"leave the world before using consumables; live resource synchronization is not enabled yet",http.StatusConflict)
 	default: h.logger.Error("use consumable failed","error",err); http.Error(w,"internal server error",http.StatusInternalServerError)
 	}
 }
