@@ -596,8 +596,11 @@ func (s *Service) ListActiveObjectives(ctx context.Context, nodeKey, sessionID, 
  }
  sessionID=strings.ToLower(sessionID)
  characterID=strings.ToLower(characterID)
+ tx,err:=s.db.BeginTx(ctx,&sql.TxOptions{ReadOnly:true})
+ if err!=nil { return nil,fmt.Errorf("begin active bounty objective lookup: %w",err) }
+ defer tx.Rollback()
  var accountID, worldID string
- err:=s.db.QueryRowContext(ctx,`SELECT soul.account_id::text,c.world_id
+ err=tx.QueryRowContext(ctx,`SELECT soul.account_id::text,c.world_id
   FROM world_sessions ws
   JOIN server_registry node ON node.id=ws.server_id
   JOIN world_instances instance ON instance.id=ws.instance_id
@@ -610,7 +613,7 @@ func (s *Service) ListActiveObjectives(ctx context.Context, nodeKey, sessionID, 
   FOR SHARE OF ws,c,soul`,sessionID,characterID,nodeKey).Scan(&accountID,&worldID)
  if errors.Is(err,sql.ErrNoRows) { return nil,ErrWorldEventSession }
  if err!=nil { return nil,fmt.Errorf("resolve active bounty objective session: %w",err) }
- rows,err:=s.db.QueryContext(ctx,`SELECT t.id::text,o.objective_key,o.event_type
+ rows,err:=tx.QueryContext(ctx,`SELECT t.id::text,o.objective_key,o.event_type
   FROM bounty_tasks t
   JOIN bounty_task_participants p ON p.task_id=t.id
   JOIN bounty_task_objectives o ON o.task_id=t.id
@@ -627,6 +630,7 @@ func (s *Service) ListActiveObjectives(ctx context.Context, nodeKey, sessionID, 
   result=append(result,item)
  }
  if err:=rows.Err();err!=nil { return nil,fmt.Errorf("iterate active bounty objectives: %w",err) }
+ if err:=tx.Commit();err!=nil { return nil,fmt.Errorf("commit active bounty objective lookup: %w",err) }
  return result,nil
 }
 
