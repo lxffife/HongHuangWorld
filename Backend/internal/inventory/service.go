@@ -485,21 +485,37 @@ func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessio
 		nodeKey,sessionID,characterID).Scan(&result.Health,&result.Mana,&result.Attack,&result.Defense,&result.Strength,&result.Constitution,&result.Agility,&result.Spirit,&result.Vitality,&result.MovementSpeed,&result.MaxHealth,&result.MaxMana)
 	if errors.Is(err,sql.ErrNoRows) { return CombatStats{},ErrSessionInvalid }
 	if err!=nil { return CombatStats{},fmt.Errorf("load session combat attributes: %w",err) }
-	rows,err:=s.db.QueryContext(ctx,`SELECT i.base_stats FROM character_equipment e
+	rows,err:=s.db.QueryContext(ctx,`SELECT i.base_stats, COALESCE(i.equipment_set_id, ''), COALESCE(es.bonus_tiers, '{}'::jsonb)
+		FROM character_equipment e
 		JOIN item_definitions i ON i.id=e.item_id
+		LEFT JOIN equipment_sets es ON es.id=i.equipment_set_id AND es.enabled
 		WHERE e.character_id=$1::uuid AND i.enabled`,characterID)
 	if err!=nil { return CombatStats{},fmt.Errorf("load equipped combat bonuses: %w",err) }
 	defer rows.Close()
+	setCounts:=map[string]int{}
+	setTiers:=map[string]map[int]map[string]int{}
 	for rows.Next() {
-		var raw []byte
-		if err:=rows.Scan(&raw); err!=nil { return CombatStats{},fmt.Errorf("scan equipped combat bonuses: %w",err) }
+		var raw, tierRaw []byte
+		var setID string
+		if err:=rows.Scan(&raw,&setID,&tierRaw); err!=nil { return CombatStats{},fmt.Errorf("scan equipped combat bonuses: %w",err) }
 		bonuses:=map[string]int{}
 		if len(raw)>0 { if err:=json.Unmarshal(raw,&bonuses); err!=nil { return CombatStats{},fmt.Errorf("decode equipped combat bonuses: %w",err) } }
-		if err := applyEquipmentStatBonuses(&result, bonuses); err != nil {
-			return CombatStats{}, err
+		if err := applyEquipmentStatBonuses(&result, bonuses); err != nil { return CombatStats{}, err }
+		if setID!="" {
+			setCounts[setID]++
+			if _,exists:=setTiers[setID]; !exists {
+				tiers:=map[int]map[string]int{}
+				if len(tierRaw)>0 { if err:=json.Unmarshal(tierRaw,&tiers); err!=nil { return CombatStats{},fmt.Errorf("decode equipment set tiers: %w",err) } }
+				setTiers[setID]=tiers
+			}
 		}
 	}
 	if err:=rows.Err(); err!=nil { return CombatStats{},fmt.Errorf("iterate equipped combat bonuses: %w",err) }
+	for setID,count:=range setCounts {
+		bonuses,ok:=equipmentSetBonusForCount(setTiers[setID],count)
+		if !ok { continue }
+		if err:=applyEquipmentStatBonuses(&result,bonuses); err!=nil { return CombatStats{},err }
+	}
 	if math.IsNaN(result.MovementSpeed) || math.IsInf(result.MovementSpeed, 0) || result.MovementSpeed <= 0 {
 		return CombatStats{}, ErrInvalidRequest
 	}
@@ -514,6 +530,20 @@ func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessio
 		return CombatStats{},ErrInvalidRequest
 	}
 	return result,nil
+}
+
+// equipmentSetBonusForCount selects only the highest unlocked tier; tiers are
+// cumulative thresholds, not additive rewards.
+func equipmentSetBonusForCount(tiers map[int]map[string]int, count int) (map[string]int, bool) {
+	if count < 1 { return nil, false }
+	best := 0
+	var bonuses map[string]int
+	for required, candidate := range tiers {
+		if required > 0 && required <= count && required > best {
+			best, bonuses = required, candidate
+		}
+	}
+	return bonuses, best > 0
 }
 
 // applyEquipmentStatBonuses keeps equipment primary attributes consistent with
