@@ -285,7 +285,7 @@ func (h *gamePlayerAdminHandlers) setServerNodeState(w http.ResponseWriter, r *h
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"node_key": r.PathValue("nodeKey"), "admin_state": request.AdminState, "requested_disconnects": requested})
+	writeJSON(w, http.StatusOK, map[string]any{"node_key": r.PathValue("nodeKey"), "admin_state": request.AdminState, "disconnected_sessions": 0})
 }
 type adminWorld struct {
 	ID string `json:"id"`
