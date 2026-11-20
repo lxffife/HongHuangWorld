@@ -57,7 +57,9 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	if module_kind == "guard" or module_kind == "special_character" or (module_kind == "citizen" and not _route_points.is_empty()):
-		_advance_route(delta)
+		var is_interacting := _behavior_controller != null and bool(_behavior_controller.call("is_interacting"))
+		if not is_interacting:
+			_advance_route(delta)
 	if module_kind == "citizen" and _citizen_body != null:
 		_citizen_time += delta
 		_citizen_body.position.y = 1.0 + sin(_citizen_time * 1.6) * 0.035
