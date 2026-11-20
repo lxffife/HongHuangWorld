@@ -80,5 +80,20 @@ int main() {
     assert(poison.ticks_remaining >= 3);
     assert(consume_periodic_damage_tick(poison, 3000) == 5);
     assert(consume_periodic_damage_tick(poison, 4000) == 5);
+
+    TimedFreezeEffect freeze;
+    assert(!freeze_is_active(freeze,1000)); assert(apply_freeze(freeze,1000,700));
+    assert(freeze_is_active(freeze,1699)); assert(!freeze_is_active(freeze,1700));
+    assert(apply_freeze(freeze,2000,700)); assert(apply_freeze(freeze,2200,300));
+    assert(freeze.expires_at_ms==2700); assert(!apply_freeze(freeze,0,0));
+    assert(!apply_freeze(freeze,0,5001)); assert(!apply_freeze(freeze,INT64_MAX-10,1000));
+    assert(monster_freeze_duration_ms(700,"wolf","荒原狼",false)==700);
+    assert(monster_freeze_duration_ms(700,"elite_wolf","精英荒原狼",false)==245);
+    assert(monster_freeze_duration_ms(700,"wolf","荒原狼",true)==245);
+    assert(monster_freeze_duration_ms(700,"boss_dragon","龙首领",false)==245);
+    TimedSlowEffect cs; TimedFreezeEffect cf; PeriodicDamageEffect cd;
+    assert(apply_slow(cs,100,1000,0.5F)); assert(apply_freeze(cf,100,500));
+    assert(apply_periodic_damage(cd,100,2000,1000,2)); clear_negative_statuses(cs,cf,cd);
+    assert(!slow_is_active(cs,101)); assert(!freeze_is_active(cf,101)); assert(!periodic_damage_is_active(cd,101));
     return 0;
 }
