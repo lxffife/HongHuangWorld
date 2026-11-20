@@ -93,7 +93,7 @@ struct PlayerState {
     Clock::time_point last_input_received_at{};
     Clock::time_point last_movement_diagnostic_at{Clock::now()};
     Clock::time_point last_attack_at{};
-    Clock::time_point last_spell_at{};
+    std::unordered_map<std::string, Clock::time_point> last_spell_at_by_id;
     std::optional<PendingSpellCast> pending_spell;
     Clock::time_point last_pickup_at{};
     Clock::time_point last_chat_at{};
@@ -2436,8 +2436,14 @@ struct EnetServer::Impl {
         }
         if (player.pending_spell.has_value()) { reject("正在施法，请稍候。"); return; }
         const auto now = Clock::now();
-        if (player.last_spell_at.time_since_epoch().count() != 0 &&
-            now - player.last_spell_at < std::chrono::milliseconds(spell->cooldown_ms)) {
+        const auto last_spell = player.last_spell_at_by_id.find(std::string(spell->id));
+        if (last_spell != player.last_spell_at_by_id.end() &&
+            honghuang::simulation::spell_cooldown_remaining_ms(
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    last_spell->second.time_since_epoch()).count(),
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    now.time_since_epoch()).count(),
+                spell->cooldown_ms) > 0) {
             reject("法术尚在冷却中。"); return;
         }
         if (!honghuang::simulation::can_pay_spell_cost(player.mana, spell->mana_cost)) {
@@ -2458,7 +2464,7 @@ struct EnetServer::Impl {
         }
         if (projectiles.size() >= 128) { reject("当前投射物数量过多，请稍后再试。"); return; }
         player.mana -= spell->mana_cost;
-        player.last_spell_at = now;
+        player.last_spell_at_by_id[std::string(spell->id)] = now;
         player.pending_spell = PendingSpellCast{std::string(spell->id), target_id,
             now + std::chrono::milliseconds(spell->cast_time_ms)};
         send_json(peer, honghuang::protocol::MessageType::CombatEvent,
