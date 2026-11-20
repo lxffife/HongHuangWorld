@@ -2269,6 +2269,73 @@ struct EnetServer::Impl {
                 player.last_movement_diagnostic_at = now;
             }
         }
+        for (auto projectile = projectiles.begin(); projectile != projectiles.end();) {
+            const auto owner = std::find_if(players.begin(), players.end(), [&](const auto& entry) {
+                return entry.second.character_id == projectile->owner_character_id;
+            });
+            auto target = std::find_if(monsters.begin(), monsters.end(), [&](const MonsterRuntime& monster) {
+                return monster.runtime_id == projectile->target_entity_id;
+            });
+            if (projectile->expires_at <= now || owner == players.end() || target == monsters.end() ||
+                target->state.mode == honghuang::simulation::MonsterMode::Dead) {
+                projectile = projectiles.erase(projectile);
+                continue;
+            }
+            const bool hit = honghuang::simulation::advance_projectile(
+                projectile->x, projectile->z, projectile->velocity_x, projectile->velocity_z,
+                delta, target->state.x, target->state.z, 0.85F);
+            if (!hit) {
+                ++projectile;
+                continue;
+            }
+            const honghuang::simulation::CombatantStats attacker{
+                projectile->attack, 0, 100, 100
+            };
+            const honghuang::simulation::CombatantStats defender{
+                static_cast<std::int64_t>(target->definition.attack),
+                static_cast<std::int64_t>(target->definition.defense),
+                static_cast<std::int64_t>(target->state.health),
+                static_cast<std::int64_t>(target->definition.max_health)
+            };
+            honghuang::simulation::DamageResult damage{};
+            const honghuang::simulation::AttackProfile attack_profile{
+                projectile->power_basis_points,
+                projectile->defense_penetration_basis_points
+            };
+            if (honghuang::simulation::calculate_damage(attacker, defender, attack_profile, damage)) {
+                target->state.health = static_cast<float>(damage.remaining_health);
+                std::int64_t experience_reward = 0;
+                std::int64_t cultivation_reward = 0;
+                if (damage.defeated) {
+                    target->state.mode = honghuang::simulation::MonsterMode::Dead;
+                    target->state.target_id.clear();
+                    target->respawn_at = now + std::chrono::seconds(target->retry_spawn_seconds);
+                    experience_reward = 20 + static_cast<std::int64_t>(target->definition.level) * 10;
+                    cultivation_reward = 10 + static_cast<std::int64_t>(target->definition.level) * 5;
+                    enqueue_character_reward(CharacterRewardEvent{
+                        make_event_uuid(), owner->second.session_id, owner->second.character_id,
+                        experience_reward, cultivation_reward, 0
+                    });
+                    if (config.world_id == "underworld_fengdu")
+                        enqueue_soul_reward(owner->second, 5, "underworld_trial:monster_hunt");
+                    enqueue_soul_absorption(owner->second, *target);
+                    enqueue_monster_drops(*target, owner->second);
+                }
+                send_json(owner->first, honghuang::protocol::MessageType::CombatEvent,
+                          Json{{"accepted", true}, {"source", "projectile"},
+                               {"source_entity_id", projectile->id},
+                               {"target_entity_id", target->runtime_id},
+                               {"target_name", target->definition.name},
+                               {"damage", damage.damage},
+                               {"remaining_health", damage.remaining_health},
+                               {"max_health", target->definition.max_health},
+                               {"defeated", damage.defeated},
+                               {"experience_reward", experience_reward},
+                               {"cultivation_reward", cultivation_reward},
+                               {"soul_experience_reward", damage.defeated && config.world_id == "underworld_fengdu" ? 5 : 0}});
+            }
+            projectile = projectiles.erase(projectile);
+        }
         for (auto& monster : monsters) {
             if (monster.state.mode == honghuang::simulation::MonsterMode::Dead) {
                 if (monster.respawn_at.time_since_epoch().count() != 0 && now >= monster.respawn_at) {
