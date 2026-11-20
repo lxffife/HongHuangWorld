@@ -2509,8 +2509,9 @@ func _on_combat_event(event: Dictionary) -> void:
 				visual_target.set_meta("burn_visual_remaining", maxf(float(event.get("burn_duration_ms", 0)) / 1000.0, 0.0))
 				_set_monster_burn_visual(visual_target, true)
 			if str(event.get("status_effect", "")) == "burn":
-				visual_target.set_meta("burn_visual_remaining", 0.8)
-				_set_monster_burn_visual(visual_target, true)
+				var visual_burn_remaining := maxf(float(event.get("status_duration_ms", 0)) / 1000.0, 0.0)
+				visual_target.set_meta("burn_visual_remaining", visual_burn_remaining)
+				_set_monster_burn_visual(visual_target, visual_burn_remaining > 0.0)
 			visual_target.set_meta("hit_reaction_time", 0.24)
 			_spawn_monster_hit_visual(visual_target, false)
 			if bool(event.get("defeated", false)):
@@ -2555,8 +2556,9 @@ func _on_combat_event(event: Dictionary) -> void:
 			hit_monster.set_meta("burn_visual_remaining", maxf(float(event.get("burn_duration_ms", 0)) / 1000.0, 0.0))
 			_set_monster_burn_visual(hit_monster, true)
 		if str(event.get("status_effect", "")) == "burn":
-			hit_monster.set_meta("burn_visual_remaining", 0.8)
-			_set_monster_burn_visual(hit_monster, true)
+			var hit_burn_remaining := maxf(float(event.get("status_duration_ms", 0)) / 1000.0, 0.0)
+			hit_monster.set_meta("burn_visual_remaining", hit_burn_remaining)
+			_set_monster_burn_visual(hit_monster, hit_burn_remaining > 0.0)
 		if bool(event.get("defeated", false)):
 			hit_monster.set_meta("burn_visual_remaining", 0.0)
 			_set_monster_burn_visual(hit_monster, false)
