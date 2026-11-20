@@ -14,7 +14,7 @@ struct WeaponCombatProfile {
 };
 
 // Server-side balance profile selected only from the authenticated equipment snapshot.
-// Bow and focus weapons intentionally remain close-range until projectile simulation exists.
+// Staff and focus remain close-range until their server-authoritative spell projectiles exist.
 inline WeaponCombatProfile weapon_combat_profile(std::string_view weapon_type) {
     if (weapon_type == "dagger") return {2.6F, std::chrono::milliseconds(480), 9000, 0};
     if (weapon_type == "spear") return {4.6F, std::chrono::milliseconds(800), 10500, 0};
