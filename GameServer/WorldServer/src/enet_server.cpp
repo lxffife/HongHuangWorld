@@ -2054,7 +2054,8 @@ struct EnetServer::Impl {
                 event["max_mana"] = state.max_mana;
                 event["health_restored"] = state.health - previous_health;
                 event["mana_restored"] = state.mana - previous_mana;
-                event["applied"] = result.result.value("applied", true);
+                event["applied"] = true; // This response is now being applied to live PlayerState, including idempotent replays.
+                event["duplicate_request"] = !result.result.value("applied", true);
             } else {
                 event["reason"] = result.error;
             }
