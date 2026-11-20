@@ -33,7 +33,7 @@ inline bool apply_periodic_damage(PeriodicDamageEffect& effect, std::int64_t now
 }
 
 inline bool periodic_damage_is_active(const PeriodicDamageEffect& effect, std::int64_t now_ms) {
-    return effect.expires_at_ms > now_ms && effect.damage_per_tick > 0 &&
+    return effect.expires_at_ms >= now_ms && effect.damage_per_tick > 0 &&
            effect.interval_ms > 0 && effect.next_tick_at_ms > 0;
 }
 
@@ -41,7 +41,7 @@ inline bool periodic_damage_is_active(const PeriodicDamageEffect& effect, std::i
 inline std::int64_t consume_periodic_damage_tick(PeriodicDamageEffect& effect,
                                                   std::int64_t now_ms) {
     if (!periodic_damage_is_active(effect, now_ms) || now_ms < effect.next_tick_at_ms) {
-        if (effect.expires_at_ms <= now_ms) effect = {};
+        if (effect.expires_at_ms < now_ms) effect = {};
         return 0;
     }
     const auto damage = effect.damage_per_tick;
