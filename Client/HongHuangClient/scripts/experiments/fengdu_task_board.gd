@@ -12,6 +12,8 @@ var _history_label: Label
 var _title_input: LineEdit
 var _description_input: LineEdit
 var _reward_input: SpinBox
+var _currency_option: OptionButton
+var _active_currency_id := "nether_stone"
 var _is_open := false
 
 
@@ -52,16 +54,21 @@ func close_board() -> void:
 func refresh() -> void:
 	if _economy == null or _wallet_label == null:
 		return
-	var wallet: Dictionary = _economy.call("get_wallet_snapshot", "local_player")
-	_wallet_label.text = "个人余额：%s 冥币    城主府库：%s    托管悬赏：%s" % [_format_amount(int(wallet.get("balance", 0))), _format_amount(int(wallet.get("treasury", 0))), _format_amount(int(wallet.get("escrow", 0)))]
+	var wallet: Dictionary = _economy.call("get_wallet_snapshot", "local_player", _active_currency_id)
+	var currency_name := str(wallet.get("currency", "冥石"))
+	_wallet_label.text = "%s账户：%s    城主府：%s    托管悬赏：%s" % [currency_name, _format_amount(int(wallet.get("balance", 0))), _format_amount(int(wallet.get("treasury", 0))), _format_amount(int(wallet.get("escrow", 0)))]
 	if _task_list == null:
 		return
 	for child in _task_list.get_children():
 		child.queue_free()
-	var tasks: Array = _economy.call("get_board_tasks")
+	var all_tasks: Array = _economy.call("get_board_tasks")
+	var tasks: Array = []
+	for task in all_tasks:
+		if str(task.get("currency_id", "ghost_cash")) == _active_currency_id:
+			tasks.append(task)
 	if tasks.is_empty():
 		var empty := Label.new()
-		empty.text = "暂无公开委托。你可以发布第一份悬赏，或稍后查看城中新的委托。"
+		empty.text = "当前市场暂无委托。可以发布一份悬赏，或稍后再来查看。"
 		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_task_list.add_child(empty)
 	for item in tasks:
@@ -83,7 +90,7 @@ func _publish_pressed() -> void:
 	if _economy == null:
 		return
 	var reward := int(_reward_input.value)
-	var result: Dictionary = _economy.call("publish_task", "local_player", _title_input.text, _description_input.text, reward)
+	var result: Dictionary = _economy.call("publish_task", "local_player", _title_input.text, _description_input.text, reward, _active_currency_id)
 	_feedback.text = str(result.get("reason", "委托已发布。"))
 	if bool(result.get("ok", false)):
 		_title_input.clear()
@@ -100,7 +107,7 @@ func _accept_pressed(task_id: String) -> void:
 func _complete_pressed(task_id: String) -> void:
 	var result: Dictionary = _economy.call("complete_task", task_id, "local_player")
 	if bool(result.get("ok", false)):
-		_feedback.text = "验收完成：到账 %s 冥币，城主府税收 %s 冥币。" % [_format_amount(int(result.get("payout", 0))), _format_amount(int(result.get("tax", 0)))]
+		_feedback.text = "验收完成：到账 %s，城主府税收 %s。" % [_format_amount(int(result.get("payout", 0))), _format_amount(int(result.get("tax", 0)))]
 	else:
 		_feedback.text = str(result.get("reason", "结算失败。"))
 	refresh()
@@ -180,7 +187,7 @@ func _build_ui() -> void:
 	var header := HBoxContainer.new()
 	column.add_child(header)
 	var title := Label.new()
-	title.text = "酆都公共任务大厅"
+	title.text = "酆都悬赏任务大厅"
 	title.add_theme_font_size_override("font_size", 22)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
@@ -190,8 +197,24 @@ func _build_ui() -> void:
 	header.add_child(close)
 	_wallet_label = Label.new()
 	column.add_child(_wallet_label)
+	var market_row := HBoxContainer.new()
+	column.add_child(market_row)
+	var market_label := Label.new()
+	market_label.text = "任务市场："
+	market_row.add_child(market_label)
+	_currency_option = OptionButton.new()
+	_currency_option.add_item("修炼悬赏 · 冥石", 0)
+	_currency_option.add_item("凡俗事务 · 冥币", 1)
+	_currency_option.select(0)
+	_currency_option.item_selected.connect(_on_market_selected)
+	market_row.add_child(_currency_option)
+	var audience_hint := Label.new()
+	audience_hint.text = "修炼者优先：寻魂、除祟、护送灵材、探索险地。凡俗事务独立使用冥币结算。"
+	audience_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	audience_hint.add_theme_font_size_override("font_size", 11)
+	column.add_child(audience_hint)
 	var policy := Label.new()
-	policy.text = "规则：发布时冻结全额悬赏；发布费 = 10 + 悬赏的 3%；完成结算时城主府收取 5% 税。发布费不退，未接取任务可取消并退回悬赏。"
+	policy.text = "规则：不同市场独立记账；发布时冻结全额悬赏；发布费 = 10 + 悬赏的 3%；完成结算时城主府收取 5% 税。发布费不退，未接取任务可取消并退回悬赏。冥石可交易及用于修炼，冥币仅用于凡俗交易。"
 	policy.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	policy.add_theme_font_size_override("font_size", 11)
 	column.add_child(policy)
@@ -208,7 +231,7 @@ func _build_ui() -> void:
 	var form_row := HBoxContainer.new()
 	column.add_child(form_row)
 	var reward_label := Label.new()
-	reward_label.text = "悬赏冥币"
+	reward_label.text = "悬赏金额"
 	form_row.add_child(reward_label)
 	_reward_input = SpinBox.new()
 	_reward_input.min_value = 50
@@ -241,6 +264,12 @@ func _build_ui() -> void:
 	_history_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_history_label.add_theme_font_size_override("font_size", 10)
 	column.add_child(_history_label)
+	refresh()
+
+
+func _on_market_selected(index: int) -> void:
+	_active_currency_id = "ghost_cash" if index == 1 else "nether_stone"
+	_feedback.text = "已切换至凡俗事务市场。" if index == 1 else "已切换至修炼悬赏市场。"
 	refresh()
 
 
