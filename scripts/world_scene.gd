@@ -1605,7 +1605,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if is_instance_valid(target_info_panel):
 			target_info_panel.visible = hud_visible and not selected_monster_id.is_empty()
 		if is_instance_valid(minimap_panel):
-			minimap_panel.visible = hud_visible and get_viewport().get_visible_rect().size.x >= 520.0
+			minimap_panel.visible = hud_visible and get_viewport().get_visible_rect().size.x >= 520.0 and not (is_instance_valid(friend_panel) and friend_panel.visible)
 		if is_instance_valid(input_debug_panel):
 			input_debug_panel.visible = hud_visible and input_debug_visible
 		if is_instance_valid(notification_panel) and not hud_visible:
@@ -1929,13 +1929,13 @@ func _layout_hud() -> void:
 		npc_interact_button.offset_top = -chat_height - 72.0
 		npc_interact_button.offset_bottom = -chat_height - 26.0
 	if is_instance_valid(minimap_panel):
-		var map_visible := viewport_size.x >= 520.0 and hud_visible
+		var map_visible := viewport_size.x >= 520.0 and hud_visible and not (is_instance_valid(friend_panel) and friend_panel.visible)
 		minimap_panel.visible = map_visible
 		minimap_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 		minimap_panel.offset_left = -202.0
 		minimap_panel.offset_right = -18.0
 		minimap_panel.offset_top = 18.0
-		minimap_panel.offset_bottom = 218.0
+		minimap_panel.offset_bottom = 244.0
 	if is_instance_valid(target_info_panel):
 		var target_width := minf(380.0, maxf(250.0, viewport_size.x - 32.0))
 		target_info_panel.position = Vector2(-target_width * 0.5, 18.0)
