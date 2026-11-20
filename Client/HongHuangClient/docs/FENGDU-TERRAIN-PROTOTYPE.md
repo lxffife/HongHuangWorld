@@ -49,6 +49,7 @@ The in-world HUD now includes an entry to open a full-world map overlay. The ove
 Supported interactions:
 - Mouse wheel zoom.
 - Right or middle mouse drag to pan.
+- The overlay blocks gameplay movement while open, closes with Escape or the close button, and restores the previous mouse-capture state.
 - Select a catalog landmark to reuse the existing landmark navigation flow.
 - Select an empty point inside the map bounds to set a coordinate navigation target.
 - The map draws the player-to-target guide line when both positions are visible.
