@@ -140,7 +140,8 @@ func _build_district() -> void:
 		_build_office_wings(main_width, main_depth, main_height, material_key)
 
 	_add_box("DistrictForecourt", Vector3(main_width + 92.0, 0.5, 58.0), Vector3(0.0, 0.3, main_depth * 0.5 + 52.0), "stone", false)
-	_add_box("FrontSteps", Vector3(main_width * 0.72, 3.0, 20.0), Vector3(0.0, 1.5, main_depth * 0.5 + 12.0), "stone", true)
+	for step in range(3):
+		_add_box("FrontStep_%d" % step, Vector3(main_width * 0.72, 1.0, 10.0), Vector3(0.0, 0.5 + float(step), main_depth * 0.5 + 5.0 + float(step) * 9.0), "stone", true)
 	_add_nameplate(title, Vector3(0.0, main_height + 50.0, -main_depth * 0.5 - 12.0))
 	_build_interaction_zone(Vector3(0.0, 0.0, main_depth * 0.5 + 62.0))
 
@@ -156,7 +157,7 @@ func _build_palace_courtyard(width: float, depth: float, height: float, material
 	for i in range(5):
 		var offset := (float(i) - 2.0) * 74.0
 		_add_box("PalacePillar_%d" % i, Vector3(12.0, 32.0, 12.0), Vector3(offset, 16.0, depth * 0.5 + 42.0), "sign", true)
-	_add_box("ImperialAudiencePlatform", Vector3(width + 140.0, 5.0, 62.0), Vector3(0.0, 2.5, depth * 0.5 + 90.0), "sign", true)
+	_add_box("ImperialAudiencePlatform", Vector3(width + 140.0, 5.0, 62.0), Vector3(0.0, 2.5, depth * 0.5 + 90.0), "sign", false)
 
 
 func _build_office_wings(width: float, depth: float, height: float, material_key: String) -> void:
