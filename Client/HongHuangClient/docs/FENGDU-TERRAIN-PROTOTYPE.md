@@ -44,7 +44,7 @@ The live world scene now supplies catalog landmarks to the shared minimap as nor
 
 ## Full-world map UI
 
-The in-world HUD now includes an entry to open a full-world map overlay. The overlay reads world bounds, display-region rectangles, visual water bodies, landmarks, and player position from the shared map catalog and uses the same `WorldMapProjection` helper as the local minimap.
+The in-world HUD now includes an entry to open a full-world map overlay. The overlay reads world bounds, display-region rectangles, production-visible landmarks/water bodies, and player position from the shared map catalog and uses the same `WorldMapProjection` helper as the local minimap. Prototype-only blood-sea/river overlays and non-production landmarks are explicitly excluded from the live map until those features are integrated into the playable world; the isolated terrain experiment still reads their prototype definitions.
 
 Supported interactions:
 - Mouse wheel zoom.
