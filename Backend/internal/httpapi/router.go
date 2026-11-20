@@ -117,7 +117,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/factions/{factionID}/bounties", bountyAPI.publishFaction)
 		mux.HandleFunc("GET /api/v1/bounties", bountyAPI.list)
 		mux.HandleFunc("POST /api/v1/bounties/{taskID}/join", bountyAPI.join)
-		mux.HandleFunc("POST /api/v1/bounties/{taskID}/complete", "POST /api/v1/bounties/{taskID}/cancel", "POST /api/v1/servers/bounties/expire", bountyAPI.settle)
+		mux.HandleFunc("POST /api/v1/bounties/{taskID}/complete", bountyAPI.settle)
 		mux.HandleFunc("POST /api/v1/bounties/{taskID}/cancel", bountyAPI.cancel)
 		mux.HandleFunc("POST /api/v1/servers/bounties/expire", bountyAPI.expireDue)
 		economyAPI := &economyHandlers{authService: authService, service: economy.NewService(db), logger: logger}
@@ -188,7 +188,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 			"POST /api/v1/servers/drops/pickup", "POST /api/v1/servers/heartbeat",
 			"POST /api/v1/servers/characters/rewards", "GET /api/v1/economy/currencies", "GET /api/v1/economy/wallet", "POST /api/v1/worlds/enter",
 			"POST /api/v1/factions", "GET /api/v1/factions/mine", "POST /api/v1/factions/{factionID}/applications", "GET /api/v1/factions/{factionID}/applications", "GET /api/v1/factions/{factionID}/members", "POST /api/v1/factions/{factionID}/applications/{applicationID}/review",
-			"POST /api/v1/factions/{factionID}/treasury/contributions", "POST /api/v1/factions/{factionID}/bounties", "GET /api/v1/bounties", "POST /api/v1/bounties/{taskID}/join", "POST /api/v1/bounties/{taskID}/complete",
+			"POST /api/v1/factions/{factionID}/treasury/contributions", "POST /api/v1/factions/{factionID}/bounties", "GET /api/v1/bounties", "POST /api/v1/bounties/{taskID}/join", "POST /api/v1/bounties/{taskID}/complete", "POST /api/v1/bounties/{taskID}/cancel", "POST /api/v1/servers/bounties/expire",
 			"POST /api/v1/servers/tickets/redeem", "POST /api/v1/servers/sessions/snapshot",
 			"POST /api/v1/servers/sessions/close",
 		} { mux.HandleFunc(route, unavailable) }
