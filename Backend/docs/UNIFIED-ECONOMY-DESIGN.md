@@ -158,5 +158,5 @@
 - 宗门成员角色为 `leader / officer / member`。每个宗门只能有一名宗主；只有宗主和长老可以审批入宗申请、查看待审批申请，并被授权代表宗门发布任务；普通成员不能代替组织发布悬赏。
 - 入宗采用申请与审批两阶段；待审批申请在同一宗门内唯一，审批和成员写入处于同一数据库事务。
 - 城主府与官署属于系统组织，只能由受信任的管理/世界服务创建与授予权限，玩家端 API 不提供创建这些组织的入口。
-- 已提供接口：`POST /api/v1/factions` 创建宗门、`GET /api/v1/factions/mine` 查询我的宗门、`POST /api/v1/factions/{factionID}/applications` 申请加入、`GET /api/v1/factions/{factionID}/applications` 查看待审批申请、`POST /api/v1/factions/{factionID}/applications/{applicationID}/review` 审批。
+- 已提供接口：`POST /api/v1/factions` 创建宗门、`GET /api/v1/factions/mine` 查询我的宗门、`POST /api/v1/factions/{factionID}/applications` 申请加入、`GET /api/v1/factions/{factionID}/applications` 查看待审批申请、`GET /api/v1/factions/{factionID}/members` 查询本宗门成员、`POST /api/v1/factions/{factionID}/applications/{applicationID}/review` 审批。
 - 后续任务服务必须调用后端 `AuthorizeTaskPublisher` 验证活跃成员身份与 leader/officer 角色，不能信任客户端传入的 `publisher_type`、组织名称或财政账户 ID。
