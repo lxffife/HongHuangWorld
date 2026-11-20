@@ -1959,7 +1959,15 @@ struct EnetServer::Impl {
                     response.contains("health") && response["health"].is_number_integer() &&
                     response.contains("max_health") && response["max_health"].is_number_integer() &&
                     response.contains("mana") && response["mana"].is_number_integer() &&
-                    response.contains("max_mana") && response["max_mana"].is_number_integer()) {
+                    response.contains("max_mana") && response["max_mana"].is_number_integer() &&
+                    (!response.contains("health_effect") || response["health_effect"].is_number_integer()) &&
+                    (!response.contains("mana_effect") || response["mana_effect"].is_number_integer()) &&
+                    (!response.contains("health_restored") || response["health_restored"].is_number_integer()) &&
+                    (!response.contains("mana_restored") || response["mana_restored"].is_number_integer()) &&
+                    response.value("health_effect", response.value("health_restored", 0)) >= 0 &&
+                    response.value("health_effect", response.value("health_restored", 0)) <= 200000 &&
+                    response.value("mana_effect", response.value("mana_restored", 0)) >= 0 &&
+                    response.value("mana_effect", response.value("mana_restored", 0)) <= 200000) {
                     const honghuang::simulation::ConsumableResources resources{
                         response["health"].get<std::int64_t>(),
                         response["max_health"].get<std::int64_t>(),
