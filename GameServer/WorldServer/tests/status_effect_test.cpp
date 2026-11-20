@@ -45,7 +45,8 @@ int main() {
     // A delayed world frame emits one tick, never a catch-up burst.
     assert(consume_periodic_damage_tick(burn, 5100) == 5);
     assert(consume_periodic_damage_tick(burn, 5500) == 0);
-    assert(!periodic_damage_is_active(burn, 5500));
+    assert(periodic_damage_is_active(burn, 5500));
+    assert(!periodic_damage_is_active(burn, 5501));
     assert(apply_periodic_damage(burn, 6000, 2000, 500, 2));
     assert(burn.damage_per_tick == 2 && burn.next_tick_at_ms == 6500);
     assert(!apply_periodic_damage(burn, 0, 0, 1000, 1));
