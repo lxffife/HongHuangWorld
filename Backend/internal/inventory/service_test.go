@@ -81,6 +81,27 @@ func TestWeaponTypeSerializesForInventoryAndEquipment(t *testing.T) {
 	if equippedDecoded["weapon_type"] != "sword" { t.Fatalf("equipped weapon_type = %v, want sword", equippedDecoded["weapon_type"]) }
 }
 
+func TestConsumableReplayReturnsCurrentResourcesWithoutApplyingAgain(t *testing.T) {
+	request := ItemUseRequest{
+		RequestID: "00000000-0000-4000-8000-000000000001",
+		ItemID: "small_mana_pill",
+		Quantity: 2,
+	}
+	result := consumableReplayResult(request, 75, 100, 42, 60)
+	if result.Applied {
+		t.Fatal("idempotent replay must not report a second application")
+	}
+	if result.ItemID != request.ItemID || result.Quantity != request.Quantity {
+		t.Fatalf("replay identity = (%q, %d), want (%q, %d)", result.ItemID, result.Quantity, request.ItemID, request.Quantity)
+	}
+	if result.Health != 75 || result.MaxHealth != 100 || result.Mana != 42 || result.MaxMana != 60 {
+		t.Fatalf("replay resources = hp %d/%d mp %d/%d", result.Health, result.MaxHealth, result.Mana, result.MaxMana)
+	}
+	if result.HealthRestored != 0 || result.ManaRestored != 0 {
+		t.Fatalf("replay must not report restored values: hp=%d mp=%d", result.HealthRestored, result.ManaRestored)
+	}
+}
+
 func TestItemUseResultSerializesAuthoritativeResources(t *testing.T) {
 	result := ItemUseResult{
 		Applied: true, ItemID: "small_mana_pill", Quantity: 1,
