@@ -544,6 +544,44 @@ func (s *Service) refund(ctx context.Context, accountID, taskID, eventKey string
  return result,nil
 }
  
+type ObjectiveProgress struct {
+ Key string `json:"key"`
+ EventType string `json:"event_type"`
+ Progress int `json:"progress"`
+ Target int `json:"target"`
+ Completed bool `json:"completed"`
+}
+
+type ParticipantProgress struct {
+ TaskID string `json:"task_id"`
+ Objectives []ObjectiveProgress `json:"objectives"`
+}
+
+// GetProgress returns objective counters only for the requesting participant.
+func (s *Service) GetProgress(ctx context.Context,accountID,taskID string)(ParticipantProgress,error) {
+ if accountID=="" || !validUUID(taskID) { return ParticipantProgress{},ErrInvalid }
+ taskID=strings.ToLower(taskID)
+ var exists bool
+ if err:=s.db.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM bounty_task_participants WHERE task_id=$1::uuid AND account_id=$2::uuid)`,taskID,accountID).Scan(&exists);err!=nil {
+  return ParticipantProgress{},fmt.Errorf("verify bounty progress participant: %w",err)
+ }
+ if !exists { return ParticipantProgress{},ErrNotParticipant }
+ rows,err:=s.db.QueryContext(ctx,`SELECT o.objective_key,o.event_type,COALESCE(p.progress_count,0),o.target_count,(p.completed_at IS NOT NULL)
+  FROM bounty_task_objectives o LEFT JOIN bounty_task_objective_progress p
+   ON p.task_id=o.task_id AND p.objective_key=o.objective_key AND p.account_id=$2::uuid
+  WHERE o.task_id=$1::uuid ORDER BY o.objective_key`,taskID,accountID)
+ if err!=nil { return ParticipantProgress{},fmt.Errorf("list bounty objective progress: %w",err) }
+ defer rows.Close()
+ result:=ParticipantProgress{TaskID:taskID,Objectives:make([]ObjectiveProgress,0)}
+ for rows.Next() {
+  var item ObjectiveProgress
+  if err:=rows.Scan(&item.Key,&item.EventType,&item.Progress,&item.Target,&item.Completed);err!=nil { return ParticipantProgress{},fmt.Errorf("scan bounty objective progress: %w",err) }
+  result.Objectives=append(result.Objectives,item)
+ }
+ if err:=rows.Err();err!=nil { return ParticipantProgress{},fmt.Errorf("iterate bounty objective progress: %w",err) }
+ return result,nil
+}
+
 // ApplyWorldEvent accepts one unit of progress from the authenticated node that
 // currently hosts the character. Account identity and progress increments are
 // derived by the center service; callers cannot submit either value.
