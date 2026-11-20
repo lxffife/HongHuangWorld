@@ -123,7 +123,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/bounties/{taskID}/cancel", bountyAPI.cancel)
 		mux.HandleFunc("POST /api/v1/servers/bounties/expire", bountyAPI.expireDue)
 		mux.HandleFunc("GET /api/v1/servers/bounties/objectives", bountyAPI.activeObjectives)
-		mux.HandleFunc("GET /api/v1/servers/bounties/objectives", "POST /api/v1/servers/bounties/events", bountyAPI.reportWorldEvent)
+		mux.HandleFunc("POST /api/v1/servers/bounties/events", bountyAPI.reportWorldEvent)
 		economyAPI := &economyHandlers{authService: authService, service: economy.NewService(db), logger: logger}
 		mux.HandleFunc("GET /api/v1/economy/currencies", economyAPI.catalog)
 		mux.HandleFunc("GET /api/v1/economy/wallet", economyAPI.wallet)
@@ -193,6 +193,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 			"POST /api/v1/servers/characters/rewards", "GET /api/v1/economy/currencies", "GET /api/v1/economy/wallet", "POST /api/v1/worlds/enter",
 			"POST /api/v1/factions", "GET /api/v1/factions/mine", "POST /api/v1/factions/{factionID}/applications", "GET /api/v1/factions/{factionID}/applications", "GET /api/v1/factions/{factionID}/members", "POST /api/v1/factions/{factionID}/applications/{applicationID}/review",
 			"POST /api/v1/factions/{factionID}/treasury/contributions", "POST /api/v1/factions/{factionID}/bounties", "GET /api/v1/bounties", "POST /api/v1/bounties/{taskID}/join", "GET /api/v1/bounties/{taskID}/progress", "POST /api/v1/bounties/{taskID}/leave", "POST /api/v1/bounties/{taskID}/complete", "POST /api/v1/bounties/{taskID}/cancel", "POST /api/v1/servers/bounties/expire",
+			"GET /api/v1/servers/bounties/objectives",
 			"POST /api/v1/servers/bounties/events",
 			"POST /api/v1/servers/tickets/redeem", "POST /api/v1/servers/sessions/snapshot",
 			"POST /api/v1/servers/sessions/close",
