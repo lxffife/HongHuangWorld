@@ -52,6 +52,7 @@ type SessionSnapshot struct {
 	PositionZ   float64
 	RotationY   float64
 	Health      *int
+	Mana        *int
 }
 
 type Service struct {
@@ -224,7 +225,8 @@ func (s *Service) SavePosition(ctx context.Context, input SessionSnapshot) error
 		input.PositionX < -100 || input.PositionX > 100 ||
 		input.PositionZ < -100 || input.PositionZ > 100 ||
 		input.PositionY < 0 || input.PositionY > 100 ||
-		(input.Health != nil && (*input.Health < 0 || *input.Health > 100000)) {
+		(input.Health != nil && (*input.Health < 0 || *input.Health > 100000)) ||
+		(input.Mana != nil && (*input.Mana < 0 || *input.Mana > 100000)) {
 		return ErrInvalidSessionSnapshot
 	}
 
@@ -288,6 +290,15 @@ func (s *Service) SavePosition(ctx context.Context, input SessionSnapshot) error
 		)
 		if err != nil { return fmt.Errorf("save periodic character health: %w", err) }
 		if rows, rowsErr := result.RowsAffected(); rowsErr != nil { return fmt.Errorf("check periodic health rows: %w", rowsErr) } else if rows != 1 { return ErrInvalidSessionSnapshot }
+	}
+	if input.Mana != nil {
+		result, err := tx.ExecContext(ctx,
+			`UPDATE character_attributes SET mana = LEAST($2, max_mana), updated_at = now()
+			 WHERE character_id = $1 AND max_mana >= 0`,
+			input.CharacterID, *input.Mana,
+		)
+		if err != nil { return fmt.Errorf("save periodic character mana: %w", err) }
+		if rows, rowsErr := result.RowsAffected(); rowsErr != nil { return fmt.Errorf("check periodic mana rows: %w", rowsErr) } else if rows != 1 { return ErrInvalidSessionSnapshot }
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE world_sessions SET updated_at = now() WHERE id = $1`, input.SessionID); err != nil {
 		return fmt.Errorf("touch periodic world session: %w", err)
@@ -378,6 +389,15 @@ func (s *Service) SaveAndClose(ctx context.Context, input SessionSnapshot) error
 		)
 		if err != nil { return fmt.Errorf("save final character health: %w", err) }
 		if rows, rowsErr := result.RowsAffected(); rowsErr != nil { return fmt.Errorf("check final health rows: %w", rowsErr) } else if rows != 1 { return ErrInvalidSessionSnapshot }
+	}
+	if input.Mana != nil {
+		result, err := tx.ExecContext(ctx,
+			`UPDATE character_attributes SET mana = LEAST($2, max_mana), updated_at = now()
+			 WHERE character_id = $1 AND max_mana >= 0`,
+			input.CharacterID, *input.Mana,
+		)
+		if err != nil { return fmt.Errorf("save final character mana: %w", err) }
+		if rows, rowsErr := result.RowsAffected(); rowsErr != nil { return fmt.Errorf("check final mana rows: %w", rowsErr) } else if rows != 1 { return ErrInvalidSessionSnapshot }
 	}
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE world_sessions
