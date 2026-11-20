@@ -573,7 +573,7 @@ func _build_minimap_hud() -> void:
 	minimap_view.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	layout.add_child(minimap_view)
 	var legend := Label.new()
-	legend.text = "金 探索点   青 NPC   红 妖兽   白 你"
+	legend.text = "金 探索点   青 NPC   红 妖兽   紫 地标   白 你"
 	legend.add_theme_color_override("font_color", Color("#9eafbd"))
 	legend.add_theme_font_size_override("font_size", 10)
 	layout.add_child(legend)
