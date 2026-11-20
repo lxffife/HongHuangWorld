@@ -8,6 +8,7 @@ var _panel: PanelContainer
 var _task_list: VBoxContainer
 var _wallet_label: Label
 var _feedback: Label
+var _history_label: Label
 var _title_input: LineEdit
 var _description_input: LineEdit
 var _reward_input: SpinBox
@@ -65,6 +66,16 @@ func refresh() -> void:
 		_task_list.add_child(empty)
 	for item in tasks:
 		_add_task_card(item)
+	if _history_label != null:
+		var history: Array = _economy.call("get_transaction_history", 8)
+		var history_lines: PackedStringArray = []
+		for entry in history:
+			var player_delta := int(entry.get("player_delta", 0))
+			var treasury_delta := int(entry.get("treasury_delta", 0))
+			var sign_text := "+" if player_delta > 0 else ""
+			history_lines.append("%s  玩家 %s%s  府库 %+d  %s" % [_transaction_category_text(str(entry.get("category", ""))), sign_text, _format_amount(player_delta), treasury_delta, str(entry.get("note", ""))])
+		_history_label.text = "\n".join(history_lines) if not history_lines.is_empty() else "暂无交易流水。"
+		_history_label.tooltip_text = "最近 8 笔经济流水（本地原型）"
 
 
 func _publish_pressed() -> void:
@@ -222,11 +233,35 @@ func _build_ui() -> void:
 	_task_list = VBoxContainer.new()
 	_task_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(_task_list)
+	var history_title := Label.new()
+	history_title.text = "最近交易流水"
+	column.add_child(history_title)
+	_history_label = Label.new()
+	_history_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_history_label.add_theme_font_size_override("font_size", 10)
+	column.add_child(_history_label)
 	refresh()
 
 
 func _format_amount(value: int) -> String:
 	return String.num_int64(value)
+
+
+func _transaction_category_text(category: String) -> String:
+	match category:
+		"quest_reward":
+			return "差事奖励"
+		"task_listing_fee":
+			return "任务发布费"
+		"task_escrow_lock":
+			return "悬赏托管"
+		"task_payout":
+			return "悬赏结算"
+		"task_escrow_refund":
+			return "悬赏退款"
+		"system_escrow":
+			return "城主府拨款"
+	return "其他流水"
 
 
 func _status_text(status: String) -> String:
