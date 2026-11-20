@@ -38,6 +38,8 @@ int main() {
     assert(resist_status_damage(20, 3000) == 14);
     assert(resist_status_damage(1, 5000) == 1);
     assert(resist_status_damage(20, 20000) == 1);
+    assert(resist_status_damage(std::numeric_limits<std::int64_t>::max(), 5000) ==
+           std::numeric_limits<std::int64_t>::max() / 2);
     assert(resist_status_duration(4000, 1000, 3000) == 2800);
     assert(resist_status_duration(4000, 1000, 10000) == 1000);
     assert(resist_status_duration(4000, 5000, 3000) == 0);
