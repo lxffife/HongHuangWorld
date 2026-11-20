@@ -55,6 +55,17 @@ inline MonsterAttackProfile monster_attack_profile(const MonsterDefinition& defi
         profile.recovery_ms = 560;
         profile.cooldown_ms = 1650;
         profile.style = "blade_slash";
+    } else if (key.find("venom") != std::string::npos || key.find("poison") != std::string::npos ||
+               key.find("毒魂") != std::string::npos || key.find("毒系游魂") != std::string::npos ||
+               key.find("毒雾") != std::string::npos) {
+        profile.windup_ms = 720;
+        profile.recovery_ms = 650;
+        profile.cooldown_ms = 2300;
+        if (definition.leash_radius > 6.1F) {
+            profile.range = std::min(std::max(definition.attack_range, 6.0F),
+                                     definition.leash_radius - 0.1F);
+        }
+        profile.style = "poison_bolt";
     } else if (key.find("frost") != std::string::npos || key.find("ice_soul") != std::string::npos ||
                key.find("冰魂") != std::string::npos || key.find("冰系游魂") != std::string::npos) {
         profile.windup_ms = 820;
@@ -192,7 +203,8 @@ inline bool tick_monster(const MonsterDefinition& definition, MonsterState& stat
             movement_attack_range = std::max(0.1, movement_attack_range - slot_radius);
         }
         if (std::string(profile.style) == "soul_bolt" ||
-            std::string(profile.style) == "frost_bolt") {
+            std::string(profile.style) == "frost_bolt" ||
+            std::string(profile.style) == "poison_bolt") {
             // Ranged souls kite at roughly 72% of their attack range. They still
             // remain inside attack range, so a windup can complete if the player
             // does not keep closing the gap.
