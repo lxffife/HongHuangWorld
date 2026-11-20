@@ -15,7 +15,6 @@ var _reward_input: SpinBox
 var _currency_option: OptionButton
 var _difficulty_option: OptionButton
 var _realm_option: OptionButton
-var _publisher_option: OptionButton
 var _active_currency_id := "nether_stone"
 var _is_open := false
 
@@ -96,7 +95,7 @@ func _publish_pressed() -> void:
 	var tier_ids := ["entry", "low", "mid", "high", "danger", "sect", "official"]
 	var selected_tier := tier_ids[_difficulty_option.selected]
 	var required_realm := _realm_option.get_item_id(_realm_option.selected)
-	var result: Dictionary = _economy.call("publish_task", "local_player", _title_input.text, _description_input.text, reward, _active_currency_id, selected_tier, required_realm, ["player", "sect", "city_government", "official_agency"][_publisher_option.selected])
+	var result: Dictionary = _economy.call("publish_task", "local_player", _title_input.text, _description_input.text, reward, _active_currency_id, selected_tier, required_realm, "player")
 	_feedback.text = str(result.get("reason", "委托已发布。"))
 	if bool(result.get("ok", false)):
 		_title_input.clear()
@@ -269,11 +268,6 @@ func _build_ui() -> void:
 	_realm_option.select(1)
 	_realm_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	qualification_row.add_child(_realm_option)
-	_publisher_option = OptionButton.new()
-	for publisher_name in ["个人", "宗门", "城主府", "官署"]:
-		_publisher_option.add_item(publisher_name)
-	_publisher_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	qualification_row.add_child(_publisher_option)
 	_feedback = Label.new()
 	_feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(_feedback)
