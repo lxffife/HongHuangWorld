@@ -2999,7 +2999,11 @@ struct EnetServer::Impl {
             };
 
             if (monster_frozen) {
-                if (monster.attack_phase == MonsterAttackPhase::Windup) { monster.attack_phase = MonsterAttackPhase::Ready; monster.attack_target_character_id.clear(); }
+                if (monster.attack_phase == MonsterAttackPhase::Windup) {
+                    monster.attack_phase = MonsterAttackPhase::Ready;
+                    broadcast_attack_phase("cancelled");
+                    monster.attack_target_character_id.clear();
+                }
                 continue;
             }
             if (monster.state.mode != honghuang::simulation::MonsterMode::Chasing ||
