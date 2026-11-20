@@ -163,7 +163,7 @@ func _build_ui() -> void:
 	_list.add_theme_constant_override("separation", 10)
 	scroll.add_child(_list)
 	var footer := Label.new()
-	footer.text = "当前为本地演示：任务进度仅保存在本次场景运行期间，奖励不会发放。"
+	footer.text = "当前为本地演示：任务进度仅保存在本次场景运行期间；差事奖励使用冥石，正式版本由服务端结算。"
 	footer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	footer.add_theme_font_size_override("font_size", 11)
 	footer.add_theme_color_override("font_color", Color("#a99c89"))
@@ -227,7 +227,8 @@ func _add_quest_card(quest: Dictionary) -> void:
 
 	var reward := Label.new()
 	var reward_amount := int(quest.get("reward_amount", 0))
-	var reward_text := "完成奖励：%d 冥币" % reward_amount if reward_amount > 0 else "完成奖励：待设定"
+	var reward_currency_name := "冥石" if str(quest.get("reward_currency_id", "nether_stone")) == "nether_stone" else "冥币"
+	var reward_text := "完成奖励：%d %s" % [reward_amount, reward_currency_name] if reward_amount > 0 else "完成奖励：待设定"
 	if str(quest.get("status", "")) == "completed" and int(quest.get("last_reward_paid", 0)) > 0:
 		reward_text += " · 已到账"
 	reward.text = reward_text + "    记录：" + str(quest.get("reward_preview", "无"))
