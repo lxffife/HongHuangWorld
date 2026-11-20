@@ -78,6 +78,7 @@ struct PlayerState {
     std::int64_t mana{};
     std::int64_t max_mana{};
     std::int32_t constitution{};
+    std::int32_t spirit{};
     std::int32_t vitality{};
     honghuang::simulation::TimedSlowEffect slow_effect;
     honghuang::simulation::TimedFreezeEffect freeze_effect;
@@ -2638,7 +2639,8 @@ struct EnetServer::Impl {
                 const bool in_combat = player.last_combat_at.time_since_epoch().count() != 0 &&
                     now - player.last_combat_at < kCombatInactivityWindow;
                 const auto regen_interval_ms = honghuang::simulation::mana_regeneration_interval_ms(
-                    in_combat, static_cast<std::int32_t>(kManaRegenerationInterval.count()),
+                    in_combat, player.spirit,
+                    static_cast<std::int32_t>(kManaRegenerationInterval.count()),
                     static_cast<std::int32_t>(kCombatManaRegenerationInterval.count()));
                 if (in_combat != player.mana_regen_was_in_combat) {
                     player.mana_regen_was_in_combat = in_combat;
@@ -3362,8 +3364,8 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                             !combat_stats.is_object() || !combat_stats.contains("attack") ||
                             !combat_stats.contains("defense") || !combat_stats.contains("health") ||
                             !combat_stats.contains("max_health") || !combat_stats.contains("mana") || !combat_stats.contains("max_mana") ||
-                             !combat_stats.contains("constitution") || !combat_stats.contains("vitality") ||
-                             !combat_stats["constitution"].is_number_integer() || !combat_stats["vitality"].is_number_integer() ||
+                             !combat_stats.contains("constitution") || !combat_stats.contains("spirit") || !combat_stats.contains("vitality") ||
+                              !combat_stats["constitution"].is_number_integer() || !combat_stats["spirit"].is_number_integer() || !combat_stats["vitality"].is_number_integer() ||
                              !combat_stats["attack"].is_number_integer() ||
                             !combat_stats["defense"].is_number_integer() || !combat_stats["health"].is_number_integer() ||
                             !combat_stats["max_health"].is_number_integer() || !combat_stats["mana"].is_number_integer() || !combat_stats["max_mana"].is_number_integer() ||
@@ -3399,6 +3401,8 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                         player.max_mana = combat_stats.at("max_mana").get<std::int64_t>();
                         player.constitution = static_cast<std::int32_t>(std::clamp<std::int64_t>(
                             combat_stats.at("constitution").get<std::int64_t>(), 0, 100000));
+                        player.spirit = static_cast<std::int32_t>(std::clamp<std::int64_t>(
+                            combat_stats.at("spirit").get<std::int64_t>(), 0, 100000));
                         player.vitality = static_cast<std::int32_t>(std::clamp<std::int64_t>(
                             combat_stats.at("vitality").get<std::int64_t>(), 0, 100000));
                         player.name = snapshot.value("name", std::string{});
