@@ -10,6 +10,7 @@ const FriendPanelScript = preload("res://scripts/friend_panel.gd")
 const WorldMiniMapScript = preload("res://scripts/world_minimap.gd")
 const WorldRegionCatalog = preload("res://scripts/world_region_catalog.gd")
 const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
+const WorldMapViewScript = preload("res://scripts/world_map_view.gd")
 const WorldTerrainBuilder = preload("res://scripts/world_terrain_builder.gd")
 const WorldEnvironmentBuilder = preload("res://scripts/world_environment_builder.gd")
 
@@ -101,6 +102,9 @@ var target_info_panel: PanelContainer
 var target_info_label: Label
 var target_health_bar: ProgressBar
 var minimap_panel: PanelContainer
+var world_map_panel: PanelContainer
+var world_map_canvas: Control
+var world_map_open_button: Button
 var minimap_view: Control
 var minimap_region_label: Label
 var minimap_exploration_label: Label
@@ -189,6 +193,7 @@ func _ready() -> void:
 		HHChatNetwork.connect_chat(HHSession.get_chat_api_base(), HHSession.access_token)
 	_build_combat_hud()
 	_build_minimap_hud()
+	_build_world_map_hud()
 	_build_input_debug_hud()
 	if HHSession.world_network != null:
 		HHSession.world_network.entities_updated.connect(_on_entities_updated)
@@ -555,6 +560,12 @@ func _build_minimap_hud() -> void:
 	header.add_theme_color_override("font_color", Color("#d4b47b"))
 	header.add_theme_font_size_override("font_size", 13)
 	layout.add_child(header)
+	world_map_open_button = Button.new()
+	world_map_open_button.text = "打开世界地图"
+	world_map_open_button.custom_minimum_size.y = 28.0
+	_apply_button_theme(world_map_open_button)
+	world_map_open_button.pressed.connect(_toggle_world_map)
+	layout.add_child(world_map_open_button)
 	minimap_region_label = Label.new()
 	minimap_region_label.text = current_region_name if not current_region_name.is_empty() else "正在定位区域…"
 	minimap_region_label.add_theme_color_override("font_color", Color("#a9bac7"))
@@ -591,6 +602,60 @@ func _build_minimap_hud() -> void:
 	layout.add_child(minimap_clear_navigation_button)
 	_update_minimap_data()
 
+
+func _build_world_map_hud() -> void:
+	var hud := get_node_or_null("HUD") as CanvasLayer
+	if hud == null:
+		return
+	world_map_panel = PanelContainer.new()
+	world_map_panel.name = "FullWorldMapPanel"
+	world_map_panel.visible = false
+	world_map_panel.z_index = 80
+	_apply_panel_theme(world_map_panel)
+	hud.add_child(world_map_panel)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 8)
+	world_map_panel.add_child(layout)
+	var header := HBoxContainer.new()
+	layout.add_child(header)
+	var title := Label.new()
+	title.text = "世界地图"
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.add_theme_color_override("font_color", Color("#e0c58f"))
+	title.add_theme_font_size_override("font_size", 18)
+	header.add_child(title)
+	var close_button := Button.new()
+	close_button.text = "关闭"
+	_apply_button_theme(close_button)
+	close_button.pressed.connect(_toggle_world_map)
+	header.add_child(close_button)
+	world_map_canvas = Control.new()
+	world_map_canvas.name = "WorldMapCanvas"
+	world_map_canvas.set_script(WorldMapViewScript)
+	world_map_canvas.custom_minimum_size = Vector2(620.0, 430.0)
+	world_map_canvas.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	world_map_canvas.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	world_map_canvas.connect("marker_selected", Callable(self, "_on_world_map_marker_selected"))
+	world_map_canvas.connect("world_position_selected", Callable(self, "_on_world_map_position_selected"))
+	layout.add_child(world_map_canvas)
+	var hint := Label.new()
+	hint.text = "紫色菱形：地标 · 点击空白区域设置坐标导航"
+	hint.add_theme_color_override("font_color", Color("#a9bac7"))
+	hint.add_theme_font_size_override("font_size", 11)
+	layout.add_child(hint)
+	_layout_hud()
+	_update_minimap_data()
+
+
+func _toggle_world_map() -> void:
+	if not is_instance_valid(world_map_panel):
+		return
+	world_map_panel.visible = not world_map_panel.visible
+	if world_map_panel.visible:
+		_update_minimap_data()
+		world_map_canvas.grab_focus()
+
+
 func _update_minimap_data() -> void:
 	if not is_instance_valid(minimap_view):
 		return
@@ -604,6 +669,15 @@ func _update_minimap_data() -> void:
 	minimap_view.set("npc_points", npc_definitions)
 	var current_world_id := str(HHSession.world_snapshot.get("world_id", ""))
 	minimap_view.set("landmark_points", WorldMapCatalog.get_minimap_landmarks(current_world_id))
+	if is_instance_valid(world_map_canvas):
+		world_map_canvas.set("world_id", current_world_id)
+		world_map_canvas.set("world_bounds", WorldMapCatalog.get_world_bounds(current_world_id))
+		world_map_canvas.set("region_data", WorldMapCatalog.get_regions(current_world_id))
+		world_map_canvas.set("water_data", WorldMapCatalog.get_water_bodies(current_world_id))
+		world_map_canvas.set("landmark_data", WorldMapCatalog.get_landmarks(current_world_id))
+		world_map_canvas.set("player_position", local_player.global_position if is_instance_valid(local_player) else Vector3.ZERO)
+		world_map_canvas.set("navigation_target", minimap_navigation_target)
+		world_map_canvas.queue_redraw()
 	var nearby_monsters: Array = []
 	for monster_id in monster_targets.keys():
 		var target: Vector3 = monster_targets[monster_id]
@@ -693,6 +767,26 @@ func _on_minimap_marker_selected(kind: String, marker_id: String, marker_name: S
 		if kind != "monster":
 			_show_notification("导航目标：" + marker_name)
 	_update_minimap_data()
+
+
+func _on_world_map_marker_selected(kind: String, marker_id: String, marker_name: String) -> void:
+	_on_minimap_marker_selected(kind, marker_id, marker_name)
+	if is_instance_valid(world_map_canvas):
+		world_map_canvas.set("navigation_target", minimap_navigation_target)
+		world_map_canvas.queue_redraw()
+
+
+func _on_world_map_position_selected(world_position: Vector3) -> void:
+	minimap_navigation_target = {
+		"kind": "map_position",
+		"id": "map_%d_%d" % [roundi(world_position.x), roundi(world_position.z)],
+		"name": "地图坐标（%.0f，%.0f）" % [world_position.x, world_position.z],
+		"x": world_position.x,
+		"z": world_position.z
+	}
+	_show_notification("已设置地图坐标导航目标")
+	_update_minimap_data()
+
 
 func _clear_minimap_navigation() -> void:
 	minimap_navigation_target.clear()
@@ -1838,6 +1932,17 @@ func _layout_hud() -> void:
 		npc_interact_button.offset_right = -18.0
 		npc_interact_button.offset_top = -chat_height - 72.0
 		npc_interact_button.offset_bottom = -chat_height - 26.0
+	if is_instance_valid(world_map_panel):
+		var map_width := minf(1040.0, maxf(320.0, viewport_size.x - 36.0))
+		var map_height := minf(720.0, maxf(300.0, viewport_size.y - 36.0))
+		world_map_panel.set_anchors_preset(Control.PRESET_CENTER)
+		world_map_panel.offset_left = -map_width * 0.5
+		world_map_panel.offset_right = map_width * 0.5
+		world_map_panel.offset_top = -map_height * 0.5
+		world_map_panel.offset_bottom = map_height * 0.5
+		world_map_panel.custom_minimum_size = Vector2(map_width, map_height)
+		if is_instance_valid(world_map_canvas):
+			world_map_canvas.custom_minimum_size = Vector2(map_width - 48.0, map_height - 112.0)
 	if is_instance_valid(minimap_panel):
 		var map_visible := viewport_size.x >= 520.0 and hud_visible and not (is_instance_valid(friend_panel) and friend_panel.visible)
 		minimap_panel.visible = map_visible
