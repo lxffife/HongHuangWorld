@@ -2090,6 +2090,7 @@ struct EnetServer::Impl {
         {
             std::lock_guard lock(combat_refresh_mutex);
             combat_refresh_stop_requested = true;
+            pending_combat_refresh_jobs.clear();
         }
         combat_refresh_cv.notify_all();
         if (combat_refresh_thread.joinable()) combat_refresh_thread.join();
@@ -2132,6 +2133,10 @@ struct EnetServer::Impl {
             const auto max_health = stats["max_health"].get<std::int64_t>();
             const auto max_mana = stats["max_mana"].get<std::int64_t>();
             const auto speed = stats["movement_speed"].get<double>();
+            const auto constitution = std::clamp<std::int64_t>(stats["constitution"].get<std::int64_t>(), 0, 100000);
+            const auto agility = std::clamp<std::int64_t>(stats["agility"].get<std::int64_t>(), 0, 100000);
+            const auto spirit = std::clamp<std::int64_t>(stats["spirit"].get<std::int64_t>(), 0, 100000);
+            const auto vitality = std::clamp<std::int64_t>(stats["vitality"].get<std::int64_t>(), 0, 100000);
             if (attack < 1 || attack > 100000 || defense < 0 || defense > 100000 ||
                 max_health < 1 || max_health > 10000000 || max_mana < 0 || max_mana > 10000000 ||
                 !std::isfinite(speed) || speed <= 0.0 || speed > 10.0) {
@@ -2143,10 +2148,8 @@ struct EnetServer::Impl {
             const bool equipment_changed = player.equipment != stats["equipment"];
             const bool combat_stats_changed = player.attack != attack || player.defense != defense ||
                 player.max_health != max_health || player.max_mana != max_mana ||
-                player.constitution != stats["constitution"].get<std::int64_t>() ||
-                player.agility != stats["agility"].get<std::int64_t>() ||
-                player.spirit != stats["spirit"].get<std::int64_t>() ||
-                player.vitality != stats["vitality"].get<std::int64_t>() ||
+                player.constitution != constitution || player.agility != agility ||
+                player.spirit != spirit || player.vitality != vitality ||
                 std::abs(static_cast<double>(player.movement_speed) - speed) > 0.0001;
             // Preserve the live resources: increasing an equipment cap must not heal or
             // restore mana. Removing a cap clamps current resources to the new maximum.
@@ -2156,10 +2159,10 @@ struct EnetServer::Impl {
             player.max_mana = max_mana;
             player.attack = attack;
             player.defense = defense;
-            player.constitution = static_cast<std::int32_t>(std::clamp<std::int64_t>(stats["constitution"].get<std::int64_t>(), 0, 100000));
-            player.agility = static_cast<std::int32_t>(std::clamp<std::int64_t>(stats["agility"].get<std::int64_t>(), 0, 100000));
-            player.spirit = static_cast<std::int32_t>(std::clamp<std::int64_t>(stats["spirit"].get<std::int64_t>(), 0, 100000));
-            player.vitality = static_cast<std::int32_t>(std::clamp<std::int64_t>(stats["vitality"].get<std::int64_t>(), 0, 100000));
+            player.constitution = static_cast<std::int32_t>(constitution);
+            player.agility = static_cast<std::int32_t>(agility);
+            player.spirit = static_cast<std::int32_t>(spirit);
+            player.vitality = static_cast<std::int32_t>(vitality);
             player.movement_speed = honghuang::simulation::effective_player_movement_speed(static_cast<float>(speed));
             player.equipment = stats["equipment"];
             if (player.equipment != previous_equipment) {
