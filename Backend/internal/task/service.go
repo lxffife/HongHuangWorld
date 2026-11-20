@@ -19,6 +19,7 @@ var (
  ErrForbidden = errors.New("bounty task permission denied")
  ErrInsufficientTreasury = errors.New("faction treasury has insufficient funds")
  ErrAlreadyJoined = errors.New("account already joined this task")
+ ErrIdempotencyConflict = errors.New("contribution idempotency key conflict")
  ErrTaskFull = errors.New("bounty task is full")
 )
 
@@ -113,8 +114,8 @@ func (s *Service) PublishFaction(ctx context.Context, accountID string, req Publ
 }
 
 
-func (s *Service) Contribute(ctx context.Context,accountID,factionID,currencyID string,amount int64) error {
- if accountID==""||factionID==""||currencyID==""||len(currencyID)>64||amount<=0{return ErrInvalid}
+func (s *Service) Contribute(ctx context.Context,accountID,factionID,currencyID,eventKey string,amount int64) error {
+ if accountID==""||factionID==""||currencyID==""||len(currencyID)>64||eventKey==""||len(eventKey)>128||amount<=0{return ErrInvalid}
  tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return fmt.Errorf("begin faction contribution: %w",err)};defer tx.Rollback()
  var worldID,treasuryID string
  err=tx.QueryRowContext(ctx,`SELECT f.world_id,f.treasury_account_id::text FROM factions f
@@ -125,6 +126,11 @@ func (s *Service) Contribute(ctx context.Context,accountID,factionID,currencyID 
  if err=tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM currency_definitions c JOIN currency_world_rules w ON w.currency_id=c.id
   WHERE c.id=$1 AND c.enabled AND w.world_id=$2)`,currencyID,worldID).Scan(&valid);err!=nil{return fmt.Errorf("validate contribution currency: %w",err)}
  if !valid{return ErrInvalid}
+ var oldCurrency,oldSource string
+ var oldDelta int64
+ err=tx.QueryRowContext(ctx,`SELECT currency_id,delta,source_id FROM economy_ledger_entries WHERE account_id=$1 AND event_key=$2`,accountID,eventKey).Scan(&oldCurrency,&oldDelta,&oldSource)
+ if err==nil { if oldCurrency!=currencyID||oldDelta!=-amount||oldSource!=factionID{return ErrIdempotencyConflict}; if err=tx.Commit();err!=nil{return fmt.Errorf("commit recovered faction contribution: %w",err)};return nil }
+ if !errors.Is(err,sql.ErrNoRows){return fmt.Errorf("check faction contribution idempotency: %w",err)}
  if _,err=tx.ExecContext(ctx,`INSERT INTO currency_balances(account_id,currency_id) VALUES($1,$2)
   ON CONFLICT(account_id,currency_id) DO NOTHING`,accountID,currencyID);err!=nil{return fmt.Errorf("initialize contributor wallet: %w",err)}
  var available,frozen int64
@@ -141,8 +147,6 @@ func (s *Service) Contribute(ctx context.Context,accountID,factionID,currencyID 
   WHERE account_id=$1 AND currency_id=$2`,accountID,currencyID,amount);err!=nil{return fmt.Errorf("debit contributor wallet: %w",err)}
  if _,err=tx.ExecContext(ctx,`UPDATE economy_treasury_balances SET available_amount=available_amount+$3,updated_at=now()
   WHERE treasury_account_id=$1 AND currency_id=$2`,treasuryID,currencyID,amount);err!=nil{return fmt.Errorf("credit faction treasury: %w",err)}
- var eventKey string
- if err=tx.QueryRowContext(ctx,`SELECT concat('faction-contribution:',gen_random_uuid()::text)`).Scan(&eventKey);err!=nil{return fmt.Errorf("create contribution event key: %w",err)}
  if _,err=tx.ExecContext(ctx,`INSERT INTO economy_ledger_entries
   (account_id,currency_id,event_key,entry_type,delta,available_after,frozen_delta,frozen_after,source_type,source_id,note)
   VALUES($1,$2,$3,'spend',$4,$5,0,$6,'faction_contribution',$7,'宗门成员捐献')`,
