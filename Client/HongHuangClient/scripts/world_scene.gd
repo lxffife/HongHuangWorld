@@ -719,7 +719,7 @@ func _build_minimap_hud() -> void:
 		return
 	minimap_panel = PanelContainer.new()
 	minimap_panel.name = "WorldMiniMapPanel"
-	minimap_panel.custom_minimum_size = Vector2(184.0, 200.0)
+	minimap_panel.custom_minimum_size = Vector2(184.0, 226.0)
 	_apply_panel_theme(minimap_panel)
 	hud.add_child(minimap_panel)
 	var layout := VBoxContainer.new()
@@ -751,6 +751,9 @@ func _build_minimap_hud() -> void:
 func _update_minimap_data() -> void:
 	if not is_instance_valid(minimap_view):
 		return
+	if is_instance_valid(minimap_panel):
+		var viewport_width := get_viewport().get_visible_rect().size.x
+		minimap_panel.visible = hud_visible and viewport_width >= 520.0 and not (is_instance_valid(friend_panel) and friend_panel.visible)
 	if is_instance_valid(local_player):
 		minimap_view.set("player_position", local_player.global_position)
 		minimap_view.set("player_yaw", local_player.global_rotation.y)
