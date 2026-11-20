@@ -34,7 +34,7 @@ func _seed_quests() -> void:
 			"id": "black_soul_document", "giver_id": "black_impermanence",
 			"giver_name": "黑无常 · 范无救", "title": "拘魂文牒核验",
 			"summary": "协助核对一份新到亡魂的拘魂文牒，确认魂籍与功过记录。",
-			"reward_preview": "阴司差役资历记录", "reward_amount": 120, "completion_count": 0, "status": "available",
+			"reward_preview": "阴司差役资历记录", "reward_currency_id": "nether_stone", "reward_amount": 12, "completion_count": 0, "status": "available",
 			"prerequisites": [], "repeatable": false,
 			"objectives": [
 				{"type": "interact", "target_id": "ghost_registry", "label": "前往鬼籍司核对亡魂身份", "required_count": 1},
@@ -45,7 +45,7 @@ func _seed_quests() -> void:
 			"id": "white_soul_registration", "giver_id": "white_impermanence",
 			"giver_name": "白无常 · 谢必安", "title": "新魂引登记",
 			"summary": "陪同一名初入酆都的新魂完成登记，并确认后续引导去向。",
-			"reward_preview": "引魂使信任记录", "reward_amount": 150, "completion_count": 0, "status": "available",
+			"reward_preview": "引魂使信任记录", "reward_currency_id": "nether_stone", "reward_amount": 15, "completion_count": 0, "status": "available",
 			"prerequisites": [], "repeatable": false,
 			"objectives": [
 				{"type": "interact", "target_id": "soul_waystation", "label": "前往引魂驿站登记来历", "required_count": 1},
@@ -56,7 +56,7 @@ func _seed_quests() -> void:
 			"id": "yin_official_audit", "giver_id": "white_impermanence",
 			"giver_name": "白无常 · 谢必安", "title": "官署魂籍复核",
 			"summary": "你选择按章登记后，谢必安请你协助核对一份存疑魂籍，并将复核结论递交功过司。",
-			"reward_preview": "阴司官署协办记录", "reward_amount": 180, "completion_count": 0, "status": "available",
+			"reward_preview": "阴司官署协办记录", "reward_currency_id": "nether_stone", "reward_amount": 18, "completion_count": 0, "status": "available",
 			"prerequisites": [], "story_prerequisites": ["supported_yin_official_order"], "repeatable": false,
 			"objectives": [
 				{"type": "investigate", "target_id": "ghost_registry", "label": "在鬼籍司复核存疑魂籍", "required_count": 1},
@@ -78,7 +78,7 @@ func _seed_quests() -> void:
 			"id": "ox_gate_records", "giver_id": "ox_head",
 			"giver_name": "牛头将军", "title": "南幽门巡检记录",
 			"summary": "协助整理南门来魂核验记录，排查异常魂籍与治安隐患。",
-			"reward_preview": "南门守备认可", "reward_amount": 160, "completion_count": 0, "status": "available",
+			"reward_preview": "南门守备认可", "reward_currency_id": "nether_stone", "reward_amount": 16, "completion_count": 0, "status": "available",
 			"prerequisites": [], "repeatable": false,
 			"objectives": [
 				{"type": "interact", "target_id": "ghost_registry", "label": "向鬼籍司核对入城魂籍样本", "required_count": 1},
@@ -89,7 +89,7 @@ func _seed_quests() -> void:
 			"id": "horse_patrol_report", "giver_id": "horse_face",
 			"giver_name": "马面将军", "title": "南门巡防回报",
 			"summary": "巡查城内治安联络点，确认南门周边巡防情报。",
-			"reward_preview": "巡防贡献记录", "reward_amount": 100, "completion_count": 0, "status": "available",
+			"reward_preview": "巡防贡献记录", "reward_currency_id": "nether_stone", "reward_amount": 10, "completion_count": 0, "status": "available",
 			"prerequisites": [], "repeatable": true,
 			"objectives": [
 				{"type": "interact", "target_id": "patrol_office", "label": "前往巡城司领取巡防简报", "required_count": 1},
@@ -187,7 +187,8 @@ func report_objective_event(event_type: String, target_id: String, amount: int =
 				var reward_amount := int(quest.get("reward_amount", 0))
 				if _economy != null and reward_amount > 0:
 					var reward_key := "%s:%d" % [quest_id, completion_count]
-					var reward_result: Dictionary = _economy.call("grant_quest_reward", "local_player", quest_id, reward_key, reward_amount)
+					var reward_currency_id := str(quest.get("reward_currency_id", "nether_stone"))
+					var reward_result: Dictionary = _economy.call("grant_quest_reward", "local_player", quest_id, reward_key, reward_amount, reward_currency_id)
 					if bool(reward_result.get("ok", false)):
 						quest["last_reward_paid"] = reward_amount
 						quest["reward_balance_after"] = int(reward_result.get("balance", 0))
