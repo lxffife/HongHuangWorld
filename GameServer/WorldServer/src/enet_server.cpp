@@ -78,6 +78,7 @@ struct PlayerState {
     std::int64_t mana{};
     std::int64_t max_mana{};
     std::int32_t constitution{};
+    std::int32_t agility{};
     std::int32_t spirit{};
     std::int32_t vitality{};
     honghuang::simulation::TimedSlowEffect slow_effect;
@@ -2309,8 +2310,10 @@ struct EnetServer::Impl {
         }
         const auto now = Clock::now();
         const auto combat_profile = honghuang::simulation::weapon_combat_profile(player_weapon_type(player));
+        const auto attack_cooldown = honghuang::simulation::agility_adjusted_attack_cooldown(
+            combat_profile.cooldown, player.agility);
         if (player.last_attack_at.time_since_epoch().count() != 0 &&
-            now - player.last_attack_at < combat_profile.cooldown) {
+            now - player.last_attack_at < attack_cooldown) {
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", false}, {"reason", "攻击间隔中，请稍后再试。"}});
             return;
@@ -3364,8 +3367,8 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                             !combat_stats.is_object() || !combat_stats.contains("attack") ||
                             !combat_stats.contains("defense") || !combat_stats.contains("health") ||
                             !combat_stats.contains("max_health") || !combat_stats.contains("mana") || !combat_stats.contains("max_mana") ||
-                             !combat_stats.contains("constitution") || !combat_stats.contains("spirit") || !combat_stats.contains("vitality") ||
-                              !combat_stats["constitution"].is_number_integer() || !combat_stats["spirit"].is_number_integer() || !combat_stats["vitality"].is_number_integer() ||
+                             !combat_stats.contains("constitution") || !combat_stats.contains("agility") || !combat_stats.contains("spirit") || !combat_stats.contains("vitality") ||
+                              !combat_stats["constitution"].is_number_integer() || !combat_stats["agility"].is_number_integer() || !combat_stats["spirit"].is_number_integer() || !combat_stats["vitality"].is_number_integer() ||
                              !combat_stats["attack"].is_number_integer() ||
                             !combat_stats["defense"].is_number_integer() || !combat_stats["health"].is_number_integer() ||
                             !combat_stats["max_health"].is_number_integer() || !combat_stats["mana"].is_number_integer() || !combat_stats["max_mana"].is_number_integer() ||
@@ -3401,6 +3404,8 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                         player.max_mana = combat_stats.at("max_mana").get<std::int64_t>();
                         player.constitution = static_cast<std::int32_t>(std::clamp<std::int64_t>(
                             combat_stats.at("constitution").get<std::int64_t>(), 0, 100000));
+                        player.agility = static_cast<std::int32_t>(std::clamp<std::int64_t>(
+                            combat_stats.at("agility").get<std::int64_t>(), 0, 100000));
                         player.spirit = static_cast<std::int32_t>(std::clamp<std::int64_t>(
                             combat_stats.at("spirit").get<std::int64_t>(), 0, 100000));
                         player.vitality = static_cast<std::int32_t>(std::clamp<std::int64_t>(
