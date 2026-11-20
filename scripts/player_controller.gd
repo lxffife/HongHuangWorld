@@ -20,6 +20,7 @@ var visual: MeshInstance3D
 var player_humanoid: Node3D
 var humanoid_animation_time := 0.0
 var attack_animation_time := 0.0
+var hit_animation_time := 0.0
 var collision_shape: CollisionShape3D
 var base_visual_mesh: Mesh
 var base_visual_material: Material
@@ -518,6 +519,7 @@ func _apply_soul_affinity_visuals(affinities: Dictionary) -> void:
 
 
 func play_hit_reaction(damage: int, attack_style: String = "") -> void:
+	hit_animation_time = maxf(hit_animation_time, 0.32)
 	hit_reaction_time = maxf(hit_reaction_time, 0.32)
 	var style_strength := 0.115 if attack_style == "heavy_slam" else 0.055
 	var damage_strength := clampf(float(maxi(damage, 0)) / 240.0, 0.0, 0.045)
@@ -539,6 +541,7 @@ func _process(delta: float) -> void:
 		camera_pivot.position = camera_pivot_base_position + Vector3(shake, vertical, 0.0)
 	if hit_reaction_time <= 0.0:
 		hit_reaction_strength = 0.0
+	hit_animation_time = maxf(hit_animation_time - delta, 0.0)
 	if not soul_form_enabled and is_instance_valid(player_humanoid):
 		humanoid_animation_time += delta
 		var moving := current_move_input.length() > 0.08
@@ -548,7 +551,8 @@ func _process(delta: float) -> void:
 		var attack_weight := 0.0
 		if attack_animation_time > 0.0:
 			attack_weight = sin((1.0 - attack_animation_time / 0.34) * PI)
-		var animation_state := "attack" if attack_animation_time > 0.0 else ("walk" if moving else "idle")
+		var animation_state := "hit" if hit_animation_time > 0.0 else ("attack" if attack_animation_time > 0.0 else ("walk" if moving else "idle"))
+		var hit_weight := sin(clampf(1.0 - hit_animation_time / 0.32, 0.0, 1.0) * PI) if hit_animation_time > 0.0 else 0.0
 		var native_animation := HumanoidAnimationDriver.apply_state(player_humanoid, animation_state)
 		if not native_animation:
 			var left_arm := player_humanoid.get_node_or_null("ArmPivotLeft") as Node3D
@@ -558,8 +562,8 @@ func _process(delta: float) -> void:
 			if is_instance_valid(left_arm):
 				left_arm.rotation.x = (swing if moving else sin(humanoid_animation_time * 1.1) * 0.018) - attack_weight * 0.20
 			if is_instance_valid(right_arm):
-				right_arm.rotation.x = (-swing if moving else sin(humanoid_animation_time * 1.1 + 0.5) * 0.018) - attack_weight * 1.18
-				right_arm.rotation.z = -attack_weight * 0.28
+				right_arm.rotation.x = (-swing if moving else sin(humanoid_animation_time * 1.1 + 0.5) * 0.018) - attack_weight * 1.18 + hit_weight * 0.48
+				right_arm.rotation.z = -attack_weight * 0.28 + hit_weight * 0.16
 			if is_instance_valid(left_leg):
 				left_leg.rotation.x = -swing * 0.82
 			if is_instance_valid(right_leg):
