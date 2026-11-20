@@ -181,6 +181,9 @@ func _draw_navigation(map_center: Vector2, scale: float, clip_rect: Rect2) -> vo
 	if navigation_target.is_empty():
 		return
 	var target := _world_to_canvas(Vector2(float(navigation_target.get("x", 0.0)), float(navigation_target.get("z", 0.0))), map_center, scale)
+	var player := _world_to_canvas(Vector2(player_position.x, player_position.z), map_center, scale)
+	if clip_rect.has_point(player) and clip_rect.has_point(target):
+		draw_line(player, target, Color("#f4d27f", 0.72), 2.0)
 	if clip_rect.has_point(target):
 		draw_circle(target, 8.0, Color("#f4d27f", 0.18))
 		draw_arc(target, 9.0, 0.0, TAU, 28, Color("#f4d27f"), 2.0)
