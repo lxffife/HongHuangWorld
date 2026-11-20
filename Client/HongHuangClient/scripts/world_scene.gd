@@ -2603,6 +2603,8 @@ func _on_combat_event(event: Dictionary) -> void:
 				var visual_burn_remaining := maxf(float(event.get("status_duration_ms", 0)) / 1000.0, 0.0)
 				visual_target.set_meta("burn_visual_remaining", visual_burn_remaining)
 				_set_monster_burn_visual(visual_target, visual_burn_remaining > 0.0)
+			if str(event.get("status_effect", "")) == "freeze":
+				_set_monster_freeze_visual(visual_target, true)
 			visual_target.set_meta("hit_reaction_time", 0.24)
 			_spawn_monster_hit_visual(visual_target, false)
 			if bool(event.get("defeated", false)):
@@ -2662,9 +2664,12 @@ func _on_combat_event(event: Dictionary) -> void:
 			var hit_burn_remaining := maxf(float(event.get("status_duration_ms", 0)) / 1000.0, 0.0)
 			hit_monster.set_meta("burn_visual_remaining", hit_burn_remaining)
 			_set_monster_burn_visual(hit_monster, hit_burn_remaining > 0.0)
+		if str(event.get("status_effect", "")) == "freeze":
+			_set_monster_freeze_visual(hit_monster, true)
 		if bool(event.get("defeated", false)):
 			hit_monster.set_meta("burn_visual_remaining", 0.0)
 			_set_monster_burn_visual(hit_monster, false)
+			_set_monster_freeze_visual(hit_monster, false)
 		hit_monster.set_meta("hit_reaction_time", 0.24)
 		_spawn_monster_hit_visual(hit_monster, bool(event.get("critical", false)))
 		if bool(event.get("defeated", false)):
@@ -2694,7 +2699,10 @@ func _on_combat_event(event: Dictionary) -> void:
 		_show_notification(defeat_message, 4.5)
 		_refresh_reward_status_later()
 	else:
-		_show_notification(("火球命中 " if str(event.get("projectile_type", "")) == "fireball" else "命中 ") + monster_name + " · 造成 " + str(damage) + " 点伤害")
+		var projectile_type := str(event.get("projectile_type", ""))
+		var hit_prefix := "火球命中 " if projectile_type == "fireball" else ("冰锥命中 " if projectile_type == "ice_bolt" else "命中 ")
+		var hit_suffix := " · 目标被冻结" if str(event.get("status_effect", "")) == "freeze" else (" · 目标减速" if str(event.get("status_effect", "")) == "slow" else "")
+		_show_notification(hit_prefix + monster_name + " · 造成 " + str(damage) + " 点伤害" + hit_suffix)
 
 
 func _spawn_monster_hit_visual(monster: Node3D, critical: bool) -> void:
