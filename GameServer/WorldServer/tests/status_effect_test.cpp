@@ -53,5 +53,8 @@ int main() {
     assert(!apply_periodic_damage(burn, 0, 1000, 0, 1));
     assert(!apply_periodic_damage(burn, 0, 1000, 1000, 0));
     assert(!apply_periodic_damage(burn, INT64_MAX - 10, 1000, 500, 1));
+    PeriodicDamageEffect final_tick;
+    assert(apply_periodic_damage(final_tick, 100, 1000, 1000, 7));
+    assert(consume_periodic_damage_tick(final_tick, 1100) == 7); // Expiry boundary is inclusive.
     return 0;
 }
