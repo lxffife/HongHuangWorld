@@ -19,7 +19,16 @@ int main() {
     assert(fireball->projectile_speed == 16.0F);
     assert(fireball->projectile_lifetime_seconds == 1.8F);
     assert(fireball->power_basis_points == 12500);
+    assert(fireball->slow_duration_ms == 0 && fireball->slow_multiplier == 1.0F);
     assert(valid_spell_definition(*fireball));
+
+    const auto* ice_bolt = find_spell_definition("ice_bolt");
+    assert(ice_bolt != nullptr && ice_bolt->element == SpellElement::Ice);
+    assert(ice_bolt->mana_cost == 16 && ice_bolt->cast_time_ms == 300);
+    assert(ice_bolt->range == 18.0F && ice_bolt->power_basis_points == 8500);
+    assert(ice_bolt->slow_duration_ms == 3000);
+    assert(ice_bolt->slow_multiplier == 0.55F);
+    assert(valid_spell_definition(*ice_bolt));
 
     // Unknown client-provided spell IDs are never resolved by the server catalog.
     assert(find_spell_definition("client_damage_999") == nullptr);
@@ -46,6 +55,16 @@ int main() {
 
     invalid = *fireball;
     invalid.defense_penetration_basis_points = 10001;
+    assert(!valid_spell_definition(invalid));
+
+    invalid = *ice_bolt;
+    invalid.slow_duration_ms = 30001;
+    assert(!valid_spell_definition(invalid));
+    invalid = *ice_bolt;
+    invalid.slow_multiplier = 1.2F;
+    assert(!valid_spell_definition(invalid));
+    invalid = *fireball;
+    invalid.slow_duration_ms = 1000; // A timed effect must actually slow.
     assert(!valid_spell_definition(invalid));
 
     return 0;
