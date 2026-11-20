@@ -785,11 +785,15 @@ func _update_minimap_data() -> void:
 		var nav_kind := str(minimap_navigation_target.get("kind", ""))
 		var nav_id := str(minimap_navigation_target.get("id", ""))
 		var nav_position := Vector3(float(minimap_navigation_target.get("x", 0.0)), 0.0, float(minimap_navigation_target.get("z", 0.0)))
-		if nav_kind == "monster" and monster_targets.has(nav_id):
-			nav_position = monster_targets[nav_id]
-			minimap_navigation_target["x"] = nav_position.x
-			minimap_navigation_target["z"] = nav_position.z
-		var distance_text := "距离 %.0f 米" % local_player.global_position.distance_to(nav_position) if is_instance_valid(local_player) else "距离计算中"
+		if nav_kind == "monster":
+			if monster_targets.has(nav_id):
+				nav_position = monster_targets[nav_id]
+				minimap_navigation_target["x"] = nav_position.x
+				minimap_navigation_target["z"] = nav_position.z
+			else:
+				minimap_navigation_target.clear()
+		var horizontal_distance := Vector2(local_player.global_position.x, local_player.global_position.z).distance_to(Vector2(nav_position.x, nav_position.z)) if is_instance_valid(local_player) else -1.0
+		var distance_text := ("距离 %.0f 米" % horizontal_distance) if horizontal_distance >= 0.0 else "距离计算中"
 		if is_instance_valid(minimap_navigation_label):
 			minimap_navigation_label.text = "导航：%s · %s" % [str(minimap_navigation_target.get("name", "目标")), distance_text]
 		if is_instance_valid(minimap_clear_navigation_button):
@@ -817,8 +821,11 @@ func _on_minimap_marker_selected(kind: String, marker_id: String, marker_name: S
 		"npc":
 			var found_npc := false
 			for npc_variant in npc_definitions:
-				if npc_variant is Dictionary and str(npc_variant.get("id", "")) == marker_id:
-					target_position = Vector3(float(npc_variant.get("position_x", 0.0)), float(npc_variant.get("position_y", 0.0)), float(npc_variant.get("position_z", 0.0)))
+				if not npc_variant is Dictionary:
+					continue
+				var npc_data: Dictionary = npc_variant
+				if str(npc_data.get("id", "")) == marker_id:
+					target_position = Vector3(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_y", 0.0)), float(npc_data.get("position_z", 0.0)))
 					found_npc = true
 					break
 			if not found_npc:
