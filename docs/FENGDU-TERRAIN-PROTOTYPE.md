@@ -40,4 +40,4 @@ import/tiling test. The live map remains unchanged until that test passes.
 - No LOD, navigation baking, vegetation scatter, or runtime region transitions.
 - Water surfaces are visual placeholders; tides, currents, damage, and
   traversal are not implemented.
-- The sample uses one collision mesh and is not a production open-world setup.
+- Each tile currently uses one trimesh collision surface; the prototype is not a production open-world setup.
