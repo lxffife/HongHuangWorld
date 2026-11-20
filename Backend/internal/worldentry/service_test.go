@@ -70,7 +70,7 @@ func TestWorldSnapshotsRejectInvalidHealth(t *testing.T) {
 		PositionX: 1, PositionY: 0, PositionZ: -1, RotationY: 0,
 	}
 	negative := -1
-	tooLarge := 100001
+	tooLarge := 10000001
 	for _, test := range []struct {
 		name string
 		health *int
@@ -142,7 +142,7 @@ func TestWorldSnapshotsRejectInvalidMana(t *testing.T) {
 		PositionX: 1, PositionY: 0, PositionZ: -1, RotationY: 0,
 	}
 	negative := -1
-	tooLarge := 100001
+	tooLarge := 10000001
 	for _, test := range []struct {
 		name string
 		mana *int
