@@ -397,8 +397,11 @@ func _open_interaction_dialogue(data: Dictionary) -> void:
 	_mouse_captured = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	var target_id := str(data.get("id", ""))
+	var quest_progressed := false
 	if _quest_manager != null:
-		_quest_manager.call("notify_interaction", target_id)
+		quest_progressed = bool(_quest_manager.call("notify_interaction", target_id))
+	if quest_progressed:
+		_hint_label.text = "差事目标已更新 · 按 J 查看阴司差事簿"
 	var quest_id := str(data.get("quest_id", ""))
 	var quest_data: Dictionary = _quest_manager.call("get_quest", quest_id) if _quest_manager != null and not quest_id.is_empty() else {}
 	_dialogue_panel.call("present", data, quest_data)
@@ -584,6 +587,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.keycode == KEY_ESCAPE:
 			if _dialogue_panel != null and _dialogue_panel.call("is_open"):
 				_dialogue_panel.call("close_dialogue")
+				get_viewport().set_input_as_handled()
+			if _quest_journal != null and _quest_journal.call("is_open"):
+				_quest_journal.call("close_journal")
 				get_viewport().set_input_as_handled()
 			_mouse_captured = false
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
