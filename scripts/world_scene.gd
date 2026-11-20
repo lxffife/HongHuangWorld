@@ -94,6 +94,7 @@ var monster_animation_time := 0.0
 var selected_monster_id := ""
 var target_info_panel: PanelContainer
 var target_info_label: Label
+var target_health_bar: ProgressBar
 var target_selection_ring: MeshInstance3D
 var floating_combat_labels: Dictionary = {}
 var floating_combat_lifetimes: Dictionary = {}
@@ -786,13 +787,16 @@ func _build_combat_hud() -> void:
 	_update_spell_cooldown_hud()
 	notification_panel = PanelContainer.new()
 	notification_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	notification_panel.position = Vector2(-220.0, 112.0)
+	notification_panel.position = Vector2(-220.0, 96.0)
 	notification_panel.custom_minimum_size = Vector2(440.0, 48.0)
 	notification_panel.visible = false
+	_apply_panel_theme(notification_panel)
 	hud.add_child(notification_panel)
 	notification_label = Label.new()
 	notification_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	notification_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	notification_label.add_theme_color_override("font_color", Color("#f2e8d6"))
+	notification_label.add_theme_font_size_override("font_size", 14)
 	notification_panel.add_child(notification_label)
 	notification_timer = Timer.new()
 	notification_timer.one_shot = true
@@ -802,14 +806,35 @@ func _build_combat_hud() -> void:
 
 	target_info_panel = PanelContainer.new()
 	target_info_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	target_info_panel.position = Vector2(-150.0, 18.0)
-	target_info_panel.custom_minimum_size = Vector2(300.0, 66.0)
+	target_info_panel.position = Vector2(-180.0, 18.0)
+	target_info_panel.custom_minimum_size = Vector2(360.0, 82.0)
 	target_info_panel.visible = false
+	_apply_panel_theme(target_info_panel)
 	hud.add_child(target_info_panel)
+	var target_layout := VBoxContainer.new()
+	target_layout.add_theme_constant_override("separation", 5)
+	target_info_panel.add_child(target_layout)
 	target_info_label = Label.new()
 	target_info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	target_info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	target_info_panel.add_child(target_info_label)
+	target_info_label.add_theme_color_override("font_color", Color("#f2e8d6"))
+	target_info_label.add_theme_font_size_override("font_size", 14)
+	target_layout.add_child(target_info_label)
+	target_health_bar = ProgressBar.new()
+	target_health_bar.custom_minimum_size = Vector2(320.0, 10.0)
+	target_health_bar.min_value = 0.0
+	target_health_bar.max_value = 1.0
+	target_health_bar.value = 1.0
+	target_health_bar.show_percentage = false
+	var target_track := StyleBoxFlat.new()
+	target_track.bg_color = Color("#202f40")
+	target_track.set_corner_radius_all(5)
+	var target_fill := StyleBoxFlat.new()
+	target_fill.bg_color = Color("#c65d5d")
+	target_fill.set_corner_radius_all(5)
+	target_health_bar.add_theme_stylebox_override("background", target_track)
+	target_health_bar.add_theme_stylebox_override("fill", target_fill)
+	target_layout.add_child(target_health_bar)
 
 func _show_notification(message: String, duration: float = 3.2) -> void:
 	if not is_instance_valid(notification_panel) or not is_instance_valid(notification_label):
@@ -1519,7 +1544,17 @@ func _unhandled_input(event: InputEvent) -> void:
 			details_toggle_button.visible = hud_visible
 		if is_instance_valid(soul_choice_button):
 			soul_choice_button.visible = hud_visible and soul_essence_profile.get("pending_rare_choices", []).size() > 0
-		if is_instance_valid(vitals_panel):
+		if is_instance_valid(target_info_panel):
+		var target_width := minf(380.0, maxf(250.0, viewport_size.x - 32.0))
+		target_info_panel.position = Vector2(-target_width * 0.5, 18.0)
+		target_info_panel.custom_minimum_size.x = target_width
+		if is_instance_valid(target_health_bar):
+			target_health_bar.custom_minimum_size.x = target_width - 40.0
+	if is_instance_valid(notification_panel):
+		var notice_width := minf(520.0, maxf(250.0, viewport_size.x - 32.0))
+		notification_panel.position = Vector2(-notice_width * 0.5, 112.0)
+		notification_panel.custom_minimum_size.x = notice_width
+	if is_instance_valid(vitals_panel):
 			vitals_panel.visible = hud_visible
 		if is_instance_valid(target_info_panel):
 			target_info_panel.visible = hud_visible and not selected_monster_id.is_empty()
@@ -3057,7 +3092,7 @@ func _spawn_combat_number(amount: int, incoming: bool, critical: bool) -> void:
 			origin = local_player.global_position + Vector3(0.0, 1.8, 0.0)
 	var label := Label3D.new()
 	label.name = "CombatDamageNumber"
-	label.text = ("-" if incoming else "") + str(amount)
+	label.text = ("受击 -" if incoming else ("暴击 +" if critical else "+")) + str(amount)
 	label.font_size = 42 if critical else 32
 	label.outline_size = 8
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
