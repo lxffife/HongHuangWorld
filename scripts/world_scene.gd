@@ -2,6 +2,7 @@ extends Node3D
 
 const UnderworldVisualFactory = preload("res://scripts/underworld_visual_factory.gd")
 const VisualModelLibrary = preload("res://scripts/visual_model_library.gd")
+const EquipmentVisualFactory = preload("res://scripts/equipment_visual_factory.gd")
 const QingyunVisualFactory = preload("res://scripts/qingyun_visual_factory.gd")
 const FriendPanelScript = preload("res://scripts/friend_panel.gd")
 
@@ -1067,38 +1068,9 @@ func _apply_remote_equipment_visuals(remote: Node3D, items: Array) -> void:
 			tint = Color("#8fc8ff")
 		elif quality == 3:
 			tint = Color("#8ee0b0")
-		var socket_name := "Equipment" + slot.capitalize() + "Socket"
-		var socket := humanoid.find_child(socket_name, true, false) as Node3D
-		if socket == null:
-			var socket_parent: Node3D = humanoid
-			var socket_position := Vector3.ZERO
-			if slot == "weapon":
-				var right_arm := humanoid.get_node_or_null("ArmPivotRight") as Node3D
-				if right_arm != null:
-					socket_parent = right_arm
-					socket_position = Vector3(0.03, -0.58, -0.06)
-				else:
-					socket_position = Vector3(0.34, 0.9, -0.18)
-			elif slot == "offhand":
-				var left_arm := humanoid.get_node_or_null("ArmPivotLeft") as Node3D
-				if left_arm != null:
-					socket_parent = left_arm
-					socket_position = Vector3(-0.03, -0.58, -0.06)
-				else:
-					socket_position = Vector3(-0.34, 0.9, -0.18)
-			else:
-				socket_position = {
-					"head": Vector3(0, 1.72, 0),
-					"chest": Vector3(0, 1.05, -0.02),
-					"legs": Vector3(0, 0.48, 0),
-					"boots": Vector3(0, 0.12, 0),
-					"accessory": Vector3(0, 1.32, -0.22),
-					"back": Vector3(0, 1.0, 0.22)
-				}.get(slot, Vector3.ZERO)
-			socket = Node3D.new()
-			socket.name = socket_name
-			socket.position = socket_position
-			socket_parent.add_child(socket)
+		var socket := EquipmentVisualFactory.get_or_create_socket(humanoid, slot)
+		if not is_instance_valid(socket):
+			continue
 		var visual := Node3D.new()
 		visual.name = "EquipmentVisual"
 		socket.add_child(visual)
