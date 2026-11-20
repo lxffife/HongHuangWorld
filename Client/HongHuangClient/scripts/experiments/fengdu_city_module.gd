@@ -78,6 +78,7 @@ func _create_materials() -> void:
 		"military": _material("#754750"),
 		"transport": _material("#4d7477"),
 		"gate": _material("#55404b"),
+		"wall": _material("#625a60"),
 		"stone": _material("#777078"),
 		"roof": _material("#493743"),
 		"sign": _material("#b89b70"),
