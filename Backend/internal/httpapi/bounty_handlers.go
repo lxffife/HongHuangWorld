@@ -37,12 +37,22 @@ func (h *bountyHandlers) list(w http.ResponseWriter,r *http.Request){
 func (h *bountyHandlers) join(w http.ResponseWriter,r *http.Request){
  account,ok:=h.accountID(w,r);if !ok{return};if err:=h.service.Join(r.Context(),account,r.PathValue("taskID"));err!=nil{h.writeError(w,err);return};writeJSON(w,http.StatusOK,map[string]any{"ok":true})
 }
+
+func (h *bountyHandlers) settle(w http.ResponseWriter,r *http.Request){
+ account,ok:=h.accountID(w,r);if !ok{return}
+ var body struct{EventKey string `json:"event_key"`}
+ if err:=decodeJSON(w,r,&body);err!=nil{http.Error(w,"invalid request body",http.StatusBadRequest);return}
+ result,err:=h.service.Settle(r.Context(),account,r.PathValue("taskID"),body.EventKey)
+ if err!=nil{h.writeError(w,err);return}
+ writeJSON(w,http.StatusOK,result)
+}
 func (h *bountyHandlers) writeError(w http.ResponseWriter,err error){
  switch{
  case errors.Is(err,task.ErrInvalid):http.Error(w,"invalid bounty task request",http.StatusBadRequest)
  case errors.Is(err,task.ErrNotFound):http.Error(w,"bounty task not found",http.StatusNotFound)
  case errors.Is(err,task.ErrForbidden):http.Error(w,"bounty task permission denied",http.StatusForbidden)
  case errors.Is(err,task.ErrIdempotencyConflict):http.Error(w,"idempotency key conflict",http.StatusConflict)
+ case errors.Is(err,task.ErrTaskNotReady):http.Error(w,"bounty task is not ready for settlement",http.StatusConflict)
  case errors.Is(err,task.ErrInsufficientTreasury),errors.Is(err,task.ErrAlreadyJoined),errors.Is(err,task.ErrTaskFull):http.Error(w,err.Error(),http.StatusConflict)
  default:h.logger.Error("bounty task request failed","error",err);http.Error(w,"internal server error",http.StatusInternalServerError)
  }
