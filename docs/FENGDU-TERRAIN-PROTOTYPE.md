@@ -42,6 +42,19 @@ These definitions are client presentation metadata, not gameplay permissions or 
 
 The live world scene now supplies catalog landmarks to the shared minimap as normalized X/Z marker records. Catalog landmarks are rendered as purple diamond markers and can be clicked to set a navigation target, using the same world-to-radar projection as exploration points, NPCs, and monsters. The minimap remains a local radar centered on the player; this does not create a full-world map UI or reveal undiscovered server content.
 
+## Full-world map UI
+
+The in-world HUD now includes an entry to open a full-world map overlay. The overlay reads world bounds, display-region rectangles, visual water bodies, landmarks, and player position from the shared map catalog and uses the same `WorldMapProjection` helper as the local minimap.
+
+Supported interactions:
+- Mouse wheel zoom.
+- Right or middle mouse drag to pan.
+- Select a catalog landmark to reuse the existing landmark navigation flow.
+- Select an empty point inside the map bounds to set a coordinate navigation target.
+- The map draws the player-to-target guide line when both positions are visible.
+
+This is a map display and target-selection layer, not a pathfinding implementation. Coordinate selection currently sets a navigation target and visual guide only; terrain-aware route finding, obstacle avoidance, server validation, fog-of-war, and authoritative discovery remain future work. The displayed rectangles and water shapes are presentation metadata, not server-authoritative movement boundaries. Qingyun and Fengdu have configured display bounds; worlds without detailed catalog content currently receive a generic fallback map extent.
+
 ## Why this is not Terrain3D yet
 
 The mesh is deliberately generated with built-in Godot APIs so the shape and
