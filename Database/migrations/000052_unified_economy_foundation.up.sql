@@ -73,6 +73,19 @@ CREATE TABLE economy_ledger_entries (
 CREATE INDEX idx_economy_ledger_account_time ON economy_ledger_entries(account_id, created_at DESC);
 CREATE INDEX idx_economy_ledger_source ON economy_ledger_entries(source_type, source_id);
 
+CREATE OR REPLACE FUNCTION prevent_economy_ledger_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $
+BEGIN
+    RAISE EXCEPTION 'economy ledger records are immutable';
+END;
+$;
+
+CREATE TRIGGER trg_economy_ledger_immutable
+BEFORE UPDATE OR DELETE ON economy_ledger_entries
+FOR EACH ROW EXECUTE FUNCTION prevent_economy_ledger_mutation();
+
 CREATE TABLE economy_treasury_accounts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     world_id VARCHAR(64) NOT NULL,
@@ -111,6 +124,10 @@ CREATE TABLE economy_treasury_ledger_entries (
 );
 CREATE INDEX idx_economy_treasury_ledger_time
     ON economy_treasury_ledger_entries(treasury_account_id, created_at DESC);
+
+CREATE TRIGGER trg_economy_treasury_ledger_immutable
+BEFORE UPDATE OR DELETE ON economy_treasury_ledger_entries
+FOR EACH ROW EXECUTE FUNCTION prevent_economy_ledger_mutation();
 
 
 
