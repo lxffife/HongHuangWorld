@@ -140,6 +140,8 @@ Terrain3D 的 LOD/clipmap 不是完整 MMO 地图流式系统。项目需另建 
 
 当前小地图已经改为调用该投影工具。未来全屏大地图应复用同一工具，并通过不同的 origin / scale 参数实现缩放和平移；地图 UI 不直接读取 Terrain3D 节点或 heightmap。这样替换地形渲染器不会改变地图标记、导航和 POI 坐标。
 
+区域显示规则已从 `world_scene.gd` 抽取到 `scripts/world_region_catalog.gd`，避免世界场景脚本继续承担区域目录职责。当前目录仅保留原型阶段已有的坐标显示规则，不代表服务端权威 Region 边界。Terrain3D 版本核对与安装门禁见 `docs/TERRAIN3D-INTEGRATION.md`。
+
 后续扩展时，投影层还应由独立的 MapView 状态提供缩放、平移和视口裁剪参数；交互命中必须使用同一套正反变换，不能另写一套近似坐标公式。
 
 ## 10. 冥界新增区域：血海（规划纳入酆都世界）
