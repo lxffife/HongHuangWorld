@@ -55,10 +55,16 @@ func _update_quest_action(quest_data: Dictionary) -> void:
 			_quest_button.text = "查看任务簿"
 			_quest_hint_label.text = "差事进行中 · " + str(quest_data.get("title", "阴司差事"))
 		"completed":
-			_current_quest_action = "journal"
-			_quest_button.text = "查看任务簿"
-			_quest_button.disabled = false
-			_quest_hint_label.text = "差事已完成 · 奖励需由正式服务端结算"
+			if bool(quest_data.get("repeatable", false)):
+				_current_quest_action = "accept"
+				_quest_button.text = "再次领取差事"
+				_quest_button.disabled = not bool(quest_data.get("can_accept", true))
+				_quest_hint_label.text = "可重复巡防差事 · " + str(quest_data.get("title", "阴司差事"))
+			else:
+				_current_quest_action = "journal"
+				_quest_button.text = "查看任务簿"
+				_quest_button.disabled = false
+				_quest_hint_label.text = "差事已完成 · 奖励需由正式服务端结算"
 		"failed":
 			_quest_button.text = "差事已失败"
 			_quest_button.disabled = true
