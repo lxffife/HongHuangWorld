@@ -4,12 +4,10 @@ extends Node3D
 ## and does not define server-authoritative region boundaries.
 
 const WorldEnvironmentBuilder = preload("res://scripts/world_environment_builder.gd")
+const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
 const WorldTerrainStreamingManager = preload("res://scripts/experiments/fengdu_terrain_streaming_manager.gd")
 
-const WORLD_SIZE := 256.0
-const HALF_SIZE := WORLD_SIZE * 0.5
-const GRID_CELLS := 128
-const TILE_COUNT := 4
+var _map_definition: Dictionary = {}
 
 const GROUND_LOW := Color("#292632")
 const GROUND_MID := Color("#45404c")
@@ -19,6 +17,7 @@ const RIVER_COLOR := Color("#344b69")
 const BLOOD_COLOR := Color("#681d32")
 
 func _ready() -> void:
+	_map_definition = WorldMapCatalog.get_prototype_definition("underworld_fengdu")
 	_build_environment()
 	_build_heightfield()
 	_build_water()
@@ -41,9 +40,11 @@ func _build_heightfield() -> void:
 	streaming_manager.set_script(WorldTerrainStreamingManager)
 	streaming_manager.set("source_path", NodePath(".."))
 	streaming_manager.set("focus_path", NodePath("../StreamingFocus"))
-	streaming_manager.set("tile_count", TILE_COUNT)
-	streaming_manager.set("cells_per_tile", int(GRID_CELLS / TILE_COUNT))
-	streaming_manager.set("world_size", WORLD_SIZE)
+	var tile_count := int(_map_definition["tile_count"])
+	var grid_cells := int(_map_definition["heightfield_cells"])
+	streaming_manager.set("tile_count", tile_count)
+	streaming_manager.set("cells_per_tile", int(grid_cells / tile_count))
+	streaming_manager.set("world_size", float(_map_definition["world_size"]))
 	streaming_manager.set("load_radius", 2)
 	streaming_manager.set("unload_radius", 3)
 	streaming_manager.set("max_operations_per_frame", 2)
@@ -51,9 +52,12 @@ func _build_heightfield() -> void:
 
 
 func _build_terrain_tile(tile_x: int, tile_z: int, cells_per_tile: int) -> Node3D:
-	var tile_size := WORLD_SIZE / float(TILE_COUNT)
-	var tile_min_x := -HALF_SIZE + float(tile_x) * tile_size
-	var tile_min_z := -HALF_SIZE + float(tile_z) * tile_size
+	var world_size := float(_map_definition["world_size"])
+	var tile_count := int(_map_definition["tile_count"])
+	var half_size := world_size * 0.5
+	var tile_size := world_size / float(tile_count)
+	var tile_min_x := -half_size + float(tile_x) * tile_size
+	var tile_min_z := -half_size + float(tile_z) * tile_size
 	var tile_max_x := tile_min_x + tile_size
 	var tile_max_z := tile_min_z + tile_size
 	var tile_step := tile_size / float(cells_per_tile)
@@ -145,8 +149,12 @@ func _terrain_color(vertex: Vector3) -> Color:
 
 
 func _build_water() -> void:
-	_add_water_plane("RiverOfForgetfulnessSurface", Vector2(8.0, 150.0), Vector3(22.0, -0.62, 8.0), RIVER_COLOR, 0.76)
-	_add_water_plane("BloodSeaSurface", Vector2(56.0, 236.0), Vector3(100.0, -1.25, 0.0), BLOOD_COLOR, 0.84)
+	for water_data in WorldMapCatalog.get_water_bodies("underworld_fengdu"):
+		var size_data: Array = water_data["size"]
+		var center_data: Array = water_data["center"]
+		var size := Vector2(float(size_data[0]), float(size_data[1]))
+		var position := Vector3(float(center_data[0]), float(water_data["height"]), float(center_data[1]))
+		_add_water_plane("%sSurface" % str(water_data["id"]).capitalize(), size, position, Color(str(water_data["color"])), float(water_data["alpha"]))
 
 
 func _add_water_plane(node_name: String, size: Vector2, world_position: Vector3, color: Color, alpha: float) -> void:
@@ -169,10 +177,10 @@ func _add_water_plane(node_name: String, size: Vector2, world_position: Vector3,
 
 
 func _build_landmark_markers() -> void:
-	_add_marker("NaiheBridgeDistrict", "奈何桥 / 忘川河谷", Vector3(22.0, 2.0, 2.0), Color("#9ebce8"))
-	_add_marker("ReincarnationTerrace", "轮回殿台地", Vector3(-34.0, 8.0, -55.0), Color("#c7b6dc"))
-	_add_marker("BloodSeaCoast", "血海岸线（样板）", Vector3(78.0, -6.0, 18.0), Color("#e58b9e"))
-	_add_marker("FengduOuterRidge", "酆都北部山脊", Vector3(-42.0, 12.0, -112.0), Color("#b6a8a0"))
+	for landmark in WorldMapCatalog.get_landmarks("underworld_fengdu"):
+		var position_data: Array = landmark["position"]
+		var world_position := Vector3(float(position_data[0]), float(position_data[1]), float(position_data[2]))
+		_add_marker(str(landmark["id"]).to_pascal_case(), str(landmark["name"]), world_position, Color(str(landmark["color"])))
 
 
 func _add_marker(node_name: String, title: String, world_position: Vector3, color: Color) -> void:
