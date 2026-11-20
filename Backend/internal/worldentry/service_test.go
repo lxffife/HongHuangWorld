@@ -106,7 +106,7 @@ func TestPlayerSnapshotSerializesBirthInheritance(t *testing.T) {
 			"source_growth_stage": float64(3),
 		},
 		Equipment: []map[string]any{
-			{"slot": "weapon", "item_id": "iron_sword", "name": "铁剑", "quality": float64(2)},
+			{"slot": "weapon", "item_id": "iron_sword", "name": "铁剑", "quality": float64(2), "weapon_type": "sword"},
 		},
 	}
 	encoded, err := json.Marshal(snapshot)
@@ -129,7 +129,7 @@ func TestPlayerSnapshotSerializesBirthInheritance(t *testing.T) {
 		t.Fatalf("equipment = %v, want one equipped item", decoded["equipment"])
 	}
 	weapon, ok := equipment[0].(map[string]any)
-	if !ok || weapon["slot"] != "weapon" || weapon["item_id"] != "iron_sword" {
+	if !ok || weapon["slot"] != "weapon" || weapon["item_id"] != "iron_sword" || weapon["weapon_type"] != "sword" {
 		t.Fatalf("weapon appearance = %v, want iron_sword in weapon slot", equipment[0])
 	}
 }
