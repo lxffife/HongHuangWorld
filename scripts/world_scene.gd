@@ -2479,7 +2479,7 @@ func _process(delta: float) -> void:
 			var remote_humanoid := remote.get_node_or_null("RemoteHumanoid") as Node3D
 			if is_instance_valid(remote_humanoid):
 				remote_humanoid.position.y = bob
-				var native_animation := HumanoidAnimationDriver.apply_state(remote_humanoid, remote_animation_state)
+				var native_animation := HumanoidAnimationDriver.apply_state(remote_humanoid, remote_animation_state, 0.16, str(remote.get_meta("remote_action_style", "")))
 				if not native_animation:
 					var remote_stride := sin(remote_time * (9.0 if remote_moving else 1.8)) * (0.38 if remote_moving else 0.012)
 					var remote_left_arm := remote_humanoid.get_node_or_null("ArmPivotLeft") as Node3D
