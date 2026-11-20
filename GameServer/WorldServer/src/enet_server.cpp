@@ -54,6 +54,7 @@ struct PlayerState {
     std::string character_id;
     std::string name;
     Json birth_inheritance{Json::object()};
+    Json equipment{Json::array()};
     std::int64_t attack{20};
     std::int64_t defense{};
     std::int64_t health{100};
@@ -1419,6 +1420,7 @@ struct EnetServer::Impl {
             {"character_id", player.character_id},
             {"name", player.name},
             {"birth_inheritance", player.birth_inheritance},
+            {"equipment", player.equipment},
             {"x", player.x}, {"y", player.y}, {"z", player.z},
             {"yaw", player.yaw}
         };
@@ -2057,6 +2059,7 @@ struct EnetServer::Impl {
                     {"character_id", entity.character_id},
                     {"name", entity.name},
                     {"birth_inheritance", entity.birth_inheritance},
+                    {"equipment", entity.equipment},
                     {"x", entity.x}, {"y", entity.y}, {"z", entity.z},
                     {"yaw", entity.yaw},
                     {"last_input_sequence", entity.last_input_sequence}
@@ -2541,6 +2544,8 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                         player.name = snapshot.value("name", std::string{});
                         player.birth_inheritance = snapshot.value("birth_inheritance", Json::object());
                         if (!player.birth_inheritance.is_object()) player.birth_inheritance = Json::object();
+                        player.equipment = snapshot.value("equipment", Json::array());
+                        if (!player.equipment.is_array()) player.equipment = Json::array();
                         player.x = snapshot.value("position_x", 0.0F);
                         player.y = snapshot.value("position_y", 0.0F);
                         player.z = snapshot.value("position_z", 0.0F);
