@@ -259,14 +259,37 @@ func (h *adminHandlers) setServerNodeState(w http.ResponseWriter, r *http.Reques
 	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 	defer cancel()
 
-	// Capture the previous administrative state so the immutable audit event
-	// records the exact transition, not just the requested destination.
+	// Fail closed if the previous state cannot be read: the audit event must
+	// contain a real before/after transition rather than an empty guess.
+	raw, lookupErr := h.game.ServerNodes(ctx)
+	if lookupErr != nil {
+		h.logger.Error("admin server node preflight failed", "error", lookupErr)
+		http.Error(w, "game service unavailable; node state was not changed", http.StatusServiceUnavailable)
+		return
+	}
+	var snapshot struct {
+		Items []struct {
+			NodeKey string `json:"node_key"`
+			AdminState string `json:"admin_state"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(raw, &snapshot); err != nil {
+		h.logger.Error("decode server node preflight failed", "error", err)
+		http.Error(w, "invalid Game service response; node state was not changed", http.StatusBadGateway)
+		return
+	}
 	var previousState string
-	if raw, err := h.game.ServerNodes(ctx); err == nil {
-		var snapshot struct { Items []struct { NodeKey string `json:"node_key"`; AdminState string `json:"admin_state"` } `json:"items"` }
-		if json.Unmarshal(raw, &snapshot) == nil {
-			for _, node := range snapshot.Items { if node.NodeKey == nodeKey { previousState = node.AdminState; break } }
+	found := false
+	for _, node := range snapshot.Items {
+		if node.NodeKey == nodeKey {
+			previousState = node.AdminState
+			found = true
+			break
 		}
+	}
+	if !found {
+		http.Error(w, "world server node not found", http.StatusNotFound)
+		return
 	}
 	result, err := h.game.SetServerNodeState(ctx, nodeKey, request.AdminState)
 	if err != nil {
