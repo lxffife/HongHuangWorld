@@ -8,6 +8,8 @@ const WorldEnvironmentBuilder = preload("res://scripts/world_environment_builder
 const WORLD_SIZE := 256.0
 const HALF_SIZE := WORLD_SIZE * 0.5
 const GRID_CELLS := 128
+const TILE_COUNT := 4
+const TILE_SIZE := WORLD_SIZE / float(TILE_COUNT)
 const GRID_STEP := WORLD_SIZE / float(GRID_CELLS)
 
 const GROUND_LOW := Color("#292632")
@@ -30,20 +32,35 @@ func _build_environment() -> void:
 
 
 func _build_heightfield() -> void:
+	var cells_per_tile := GRID_CELLS / TILE_COUNT
+	for tile_z in range(TILE_COUNT):
+		for tile_x in range(TILE_COUNT):
+			_build_terrain_tile(tile_x, tile_z, cells_per_tile)
+
+
+func _build_terrain_tile(tile_x: int, tile_z: int, cells_per_tile: int) -> void:
+	var tile_size := WORLD_SIZE / float(TILE_COUNT)
+	var tile_min_x := -HALF_SIZE + float(tile_x) * tile_size
+	var tile_min_z := -HALF_SIZE + float(tile_z) * tile_size
+	var tile_max_x := tile_min_x + tile_size
+	var tile_max_z := tile_min_z + tile_size
+	var tile_step := tile_size / float(cells_per_tile)
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for z_index in range(GRID_CELLS):
-		for x_index in range(GRID_CELLS):
-			var x0 := -HALF_SIZE + float(x_index) * GRID_STEP
-			var z0 := -HALF_SIZE + float(z_index) * GRID_STEP
-			var x1 := x0 + GRID_STEP
-			var z1 := z0 + GRID_STEP
+
+	for z_index in range(cells_per_tile):
+		for x_index in range(cells_per_tile):
+			var x0 := tile_min_x + float(x_index) * tile_step
+			var z0 := tile_min_z + float(z_index) * tile_step
+			var x1 := x0 + tile_step
+			var z1 := z0 + tile_step
 			_add_terrain_vertex(surface, Vector3(x0, _height_at(x0, z0), z0))
 			_add_terrain_vertex(surface, Vector3(x0, _height_at(x0, z1), z1))
 			_add_terrain_vertex(surface, Vector3(x1, _height_at(x1, z0), z0))
 			_add_terrain_vertex(surface, Vector3(x1, _height_at(x1, z0), z0))
 			_add_terrain_vertex(surface, Vector3(x0, _height_at(x0, z1), z1))
 			_add_terrain_vertex(surface, Vector3(x1, _height_at(x1, z1), z1))
+
 	surface.generate_normals()
 	var terrain_mesh := surface.commit()
 	var terrain_material := StandardMaterial3D.new()
@@ -51,17 +68,27 @@ func _build_heightfield() -> void:
 	terrain_material.roughness = 1.0
 	terrain_mesh.surface_set_material(0, terrain_material)
 
+	var tile := Node3D.new()
+	tile.name = "TerrainTile_%02d_%02d" % [tile_x, tile_z]
+	tile.set_meta("tile_x", tile_x)
+	tile.set_meta("tile_z", tile_z)
+	tile.set_meta("world_min_x", tile_min_x)
+	tile.set_meta("world_max_x", tile_max_x)
+	tile.set_meta("world_min_z", tile_min_z)
+	tile.set_meta("world_max_z", tile_max_z)
+
 	var visual := MeshInstance3D.new()
-	visual.name = "FengduHeightfieldVisual"
+	visual.name = "TerrainVisual"
 	visual.mesh = terrain_mesh
-	add_child(visual)
+	tile.add_child(visual)
 
 	var body := StaticBody3D.new()
-	body.name = "FengduHeightfieldCollision"
+	body.name = "TerrainCollision"
 	var collision := CollisionShape3D.new()
 	collision.shape = terrain_mesh.create_trimesh_shape()
 	body.add_child(collision)
-	add_child(body)
+	tile.add_child(body)
+	add_child(tile)
 
 
 func _add_terrain_vertex(surface: SurfaceTool, vertex: Vector3) -> void:
