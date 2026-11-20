@@ -193,22 +193,24 @@ func (s *Service) ListOpen(ctx context.Context,worldID string)([]Task,error){
  return result,nil
 }
 
-// Join locks the task row before checking capacity, so concurrent joiners cannot
-// overfill a party. Settlement is deliberately a separate, not-yet-exposed phase.
-// Join locks the task row before checking capacity, so concurrent joiners cannot overfill a party.
+// Join validates the server-owned current character and locks its progression rows.
 func (s *Service) Join(ctx context.Context,accountID,taskID string)error{
  if accountID==""||taskID==""{return ErrInvalid}
  tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return fmt.Errorf("begin bounty join: %w",err)};defer tx.Rollback()
- var max int;var status string;var expires sql.NullTime
- err=tx.QueryRowContext(ctx,`SELECT max_assignees,status,expires_at FROM bounty_tasks WHERE id=$1 FOR UPDATE`,taskID).Scan(&max,&status,&expires)
+ var max,requiredRealm,requiredLevel int
+ var status,worldID string
+ var expires sql.NullTime
+ err=tx.QueryRowContext(ctx,`SELECT max_assignees,status,expires_at,world_id,required_realm_level,required_character_level FROM bounty_tasks WHERE id=$1 FOR UPDATE`,taskID).Scan(&max,&status,&expires,&worldID,&requiredRealm,&requiredLevel)
  if errors.Is(err,sql.ErrNoRows){return ErrNotFound};if err!=nil{return fmt.Errorf("lock bounty task: %w",err)}
- if status=="full"{return ErrTaskFull};if status!="open"&&status!="in_progress"{return ErrNotFound}
- if expires.Valid && !expires.Time.After(time.Now()){return ErrNotFound}
+ if status=="full"{return ErrTaskFull};if status!="open"&&status!="in_progress"{return ErrTaskNotReady}
+ if expires.Valid&&!expires.Time.After(time.Now()){return ErrTaskNotReady}
+ var characterID string
+ err=tx.QueryRowContext(ctx,`SELECT c.id::text FROM souls s JOIN characters c ON c.id=s.current_character_id AND c.soul_id=s.id JOIN character_progression p ON p.character_id=c.id JOIN cultivation_realms realm ON realm.id=p.realm_id AND realm.system_id=p.system_id WHERE s.account_id=$1 AND c.status='alive' AND c.world_id=$2 AND c.level >= $3 AND realm.realm_order >= $4 FOR SHARE OF s,c,p`,accountID,worldID,requiredLevel,requiredRealm).Scan(&characterID)
+ if errors.Is(err,sql.ErrNoRows){return ErrCharacterNotEligible};if err!=nil{return fmt.Errorf("validate current character bounty eligibility: %w",err)}
  var joined int
  if err=tx.QueryRowContext(ctx,`SELECT count(*) FROM bounty_task_participants WHERE task_id=$1 AND status='accepted'`,taskID).Scan(&joined);err!=nil{return fmt.Errorf("count bounty participants: %w",err)}
  if joined>=max{return ErrTaskFull}
- insertResult,insertErr:=tx.ExecContext(ctx,`INSERT INTO bounty_task_participants(task_id,account_id) VALUES($1,$2)
-  ON CONFLICT(task_id,account_id) DO NOTHING`,taskID,accountID)
+ insertResult,insertErr:=tx.ExecContext(ctx,`INSERT INTO bounty_task_participants(task_id,account_id) VALUES($1,$2) ON CONFLICT(task_id,account_id) DO UPDATE SET status='accepted',joined_at=now() WHERE bounty_task_participants.status='withdrawn'`,taskID,accountID)
  if insertErr!=nil{return fmt.Errorf("join bounty task: %w",insertErr)}
  inserted,rowsErr:=insertResult.RowsAffected();if rowsErr!=nil{return fmt.Errorf("read bounty participant insert result: %w",rowsErr)}
  if inserted==0{return ErrAlreadyJoined}
@@ -218,6 +220,26 @@ func (s *Service) Join(ctx context.Context,accountID,taskID string)error{
  return nil
 }
 
+// Leave atomically withdraws an accepted participant and releases their slot.
+func (s *Service) Leave(ctx context.Context,accountID,taskID string)error{
+ if accountID==""||taskID==""{return ErrInvalid}
+ tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return fmt.Errorf("begin bounty leave: %w",err)};defer tx.Rollback()
+ var status string;var expires sql.NullTime
+ err=tx.QueryRowContext(ctx,`SELECT status,expires_at FROM bounty_tasks WHERE id=$1 FOR UPDATE`,taskID).Scan(&status,&expires)
+ if errors.Is(err,sql.ErrNoRows){return ErrNotFound};if err!=nil{return fmt.Errorf("lock bounty task for leave: %w",err)}
+ if status!="open"&&status!="in_progress"&&status!="full"{return ErrTaskNotReady}
+ if expires.Valid&&!expires.Time.After(time.Now()){return ErrTaskNotReady}
+ result,err:=tx.ExecContext(ctx,`UPDATE bounty_task_participants SET status='withdrawn' WHERE task_id=$1 AND account_id=$2 AND status='accepted'`,taskID,accountID)
+ if err!=nil{return fmt.Errorf("withdraw bounty participant: %w",err)}
+ changed,err:=result.RowsAffected();if err!=nil{return fmt.Errorf("read bounty withdrawal result: %w",err)}
+ if changed==0{return ErrNotParticipant}
+ var remaining int
+ if err=tx.QueryRowContext(ctx,`SELECT count(*) FROM bounty_task_participants WHERE task_id=$1 AND status='accepted'`,taskID).Scan(&remaining);err!=nil{return fmt.Errorf("count remaining bounty participants: %w",err)}
+ next:="open";if remaining>0{next="in_progress"}
+ if _,err=tx.ExecContext(ctx,`UPDATE bounty_tasks SET status=$2,updated_at=now() WHERE id=$1`,taskID,next);err!=nil{return fmt.Errorf("release bounty task capacity: %w",err)}
+ if err=tx.Commit();err!=nil{return fmt.Errorf("commit bounty leave: %w",err)}
+ return nil
+}
 
 type Settlement struct {
  TaskID string `json:"task_id"`
