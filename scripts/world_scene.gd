@@ -2141,12 +2141,44 @@ func _on_pickup_event(event: Dictionary) -> void:
 	else:
 		_show_notification(str(event.get("reason", "拾取失败。")))
 
+func _apply_panel_theme(panel: PanelContainer) -> void:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("#111c28")
+	style.border_color = Color("#425466")
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(12)
+	style.content_margin_left = 14.0
+	style.content_margin_right = 14.0
+	style.content_margin_top = 12.0
+	style.content_margin_bottom = 12.0
+	panel.add_theme_stylebox_override("panel", style)
+
+func _apply_button_theme(button: Button, primary: bool = false) -> void:
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color("#8d7047") if primary else Color("#172635")
+	normal.border_color = Color("#d4b47b") if primary else Color("#354b5c")
+	normal.set_border_width_all(1)
+	normal.set_corner_radius_all(7)
+	normal.content_margin_left = 10.0
+	normal.content_margin_right = 10.0
+	normal.content_margin_top = 6.0
+	normal.content_margin_bottom = 6.0
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = Color("#a08050") if primary else Color("#22394d")
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", hover)
+	button.add_theme_color_override("font_color", Color("#f2e8d6"))
+	button.add_theme_color_override("font_hover_color", Color("#ffffff"))
+	button.add_theme_font_size_override("font_size", 14)
+
 func _build_inventory_ui() -> void:
 	var hud := get_node_or_null("HUD") as CanvasLayer
 	if hud == null:
 		return
 	inventory_button = Button.new()
 	inventory_button.text = "背包"
+	_apply_button_theme(inventory_button, true)
 	inventory_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	inventory_button.offset_left = -118.0
 	inventory_button.offset_top = 18.0
@@ -2162,6 +2194,7 @@ func _build_inventory_ui() -> void:
 	inventory_panel.offset_right = -18.0
 	inventory_panel.offset_bottom = 470.0
 	inventory_panel.visible = false
+	_apply_panel_theme(inventory_panel)
 	hud.add_child(inventory_panel)
 	var layout := VBoxContainer.new()
 	inventory_panel.add_child(layout)
@@ -2169,10 +2202,13 @@ func _build_inventory_ui() -> void:
 	layout.add_child(heading)
 	var title := Label.new()
 	title.text = "角色背包"
+	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_color_override("font_color", Color("#f2e8d6"))
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	heading.add_child(title)
 	var close_button := Button.new()
 	close_button.text = "关闭"
+	_apply_button_theme(close_button)
 	close_button.pressed.connect(func():
 		inventory_panel.visible = false
 		inventory_visible = false
@@ -2191,6 +2227,7 @@ func _build_inventory_ui() -> void:
 	for filter_data in [["all","全部"],["equipment","装备"],["consumable","消耗品"],["material","材料"],["quest","任务"]] :
 		var filter_button := Button.new()
 		filter_button.text = filter_data[1]
+		_apply_button_theme(filter_button)
 		filter_button.pressed.connect(_on_inventory_filter_pressed.bind(filter_data[0]))
 		filter_row.add_child(filter_button)
 	inventory_sort_option = OptionButton.new()
@@ -2300,27 +2337,33 @@ func _render_inventory_items() -> void:
 		return
 	for item in items:
 		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
 		inventory_items.add_child(row)
 		var line := Label.new()
 		var quality := int(item.get("quality", 1))
 		var quality_names := ["普通", "优秀", "精良", "稀有", "传说"]
 		var quality_name: String = quality_names[clampi(quality - 1, 0, quality_names.size() - 1)]
 		line.text = str(item.get("name", item.get("item_id", "未知物品"))) + " · " + quality_name + " · ×" + str(item.get("quantity", 0))
+		line.add_theme_color_override("font_color", Color("#e7dfd2"))
+		line.add_theme_font_size_override("font_size", 14)
 		line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		row.add_child(line)
 		var detail_button := Button.new()
 		detail_button.text = "详情"
+		_apply_button_theme(detail_button)
 		detail_button.pressed.connect(_show_item_details.bind(item))
 		row.add_child(detail_button)
 		if str(item.get("item_type", "")) == "equipment":
 			var equip_button := Button.new()
 			equip_button.text = "穿戴"
+			_apply_button_theme(equip_button, true)
 			equip_button.pressed.connect(_on_equip_item_pressed.bind(str(item.get("item_id", "")), str(item.get("equipment_slot", ""))))
 			row.add_child(equip_button)
 		elif str(item.get("item_type", "")) == "consumable":
 			var use_button := Button.new()
 			use_button.text = "使用"
+			_apply_button_theme(use_button, true)
 			use_button.disabled = consumable_busy
 			use_button.text = "结算中…" if consumable_busy else "使用"
 			use_button.pressed.connect(_on_use_consumable_pressed.bind(str(item.get("item_id", ""))))
@@ -2442,9 +2485,10 @@ func _update_spell_cooldown_hud() -> void:
 		var label := spell_cooldown_labels[spell_id] as Label
 		if not is_instance_valid(label):
 			continue
+		var spell_key := "Q" if spell_id == "fireball" else "R"
 		var spell_name := "火球术" if spell_id == "fireball" else "冰锥术"
 		var remaining := float(spell_cooldown_remaining.get(spell_id, 0.0))
-		label.text = spell_name + "：冷却 " + ("%.1f" % remaining) + " 秒" if remaining > 0.0 else spell_name + "：就绪"
+		label.text = spell_key + " · " + spell_name + "：冷却 " + ("%.1f" % remaining) + " 秒" if remaining > 0.0 else spell_key + " · " + spell_name + "：就绪"
 
 
 func _request_fireball() -> void:
@@ -3958,21 +4002,25 @@ func _build_npc_ui() -> void:
 	npc_panel.offset_right = 230.0
 	npc_panel.offset_bottom = 170.0
 	npc_panel.visible = false
+	_apply_panel_theme(npc_panel)
 	hud.add_child(npc_panel)
 	var layout := VBoxContainer.new()
 	layout.add_theme_constant_override("separation", 10)
 	npc_panel.add_child(layout)
 	npc_title_label = Label.new()
 	npc_title_label.add_theme_font_size_override("font_size", 22)
+	npc_title_label.add_theme_color_override("font_color", Color("#d4b47b"))
 	npc_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	layout.add_child(npc_title_label)
 	npc_dialogue_label = Label.new()
 	npc_dialogue_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	npc_dialogue_label.add_theme_color_override("font_color", Color("#e7dfd2"))
 	npc_dialogue_label.custom_minimum_size = Vector2(420.0, 120.0)
 	npc_dialogue_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	layout.add_child(npc_dialogue_label)
 	npc_status_label = Label.new()
 	npc_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	npc_status_label.add_theme_color_override("font_color", Color("#a9bac7"))
 	layout.add_child(npc_status_label)
 	npc_choice_container = VBoxContainer.new()
 	npc_choice_container.add_theme_constant_override("separation", 6)
@@ -3987,38 +4035,46 @@ func _build_npc_ui() -> void:
 	exploration_scroll.add_child(exploration_container)
 	npc_trial_button = Button.new()
 	npc_trial_button.text = "查看冥界试炼"
+	_apply_button_theme(npc_trial_button, true)
 	npc_trial_button.pressed.connect(_request_soul_trials)
 	layout.add_child(npc_trial_button)
 	npc_eligibility_button = Button.new()
 	npc_eligibility_button.text = "查看投胎资格"
+	_apply_button_theme(npc_eligibility_button)
 	npc_eligibility_button.pressed.connect(_request_reincarnation_eligibility)
 	layout.add_child(npc_eligibility_button)
 	npc_fate_encounter_button = Button.new()
 	npc_fate_encounter_button.text = "探查命格奇遇"
+	_apply_button_theme(npc_fate_encounter_button, true)
 	npc_fate_encounter_button.visible = false
 	npc_fate_encounter_button.pressed.connect(_discover_npc_fate_encounter)
 	layout.add_child(npc_fate_encounter_button)
 	npc_soul_button = Button.new()
 	npc_soul_button.text = "查看灵魂境界"
+	_apply_button_theme(npc_soul_button)
 	npc_soul_button.pressed.connect(_request_soul_progression)
 	layout.add_child(npc_soul_button)
 	npc_fusion_button = Button.new()
 	npc_fusion_button.text = "查看魂质融合"
+	_apply_button_theme(npc_fusion_button)
 	npc_fusion_button.visible = false
 	npc_fusion_button.pressed.connect(_request_soul_fusions)
 	layout.add_child(npc_fusion_button)
 	npc_soul_breakthrough_button = Button.new()
 	npc_soul_breakthrough_button.text = "主动突破灵魂境界"
+	_apply_button_theme(npc_soul_breakthrough_button, true)
 	npc_soul_breakthrough_button.visible = false
 	npc_soul_breakthrough_button.pressed.connect(_request_soul_breakthrough)
 	layout.add_child(npc_soul_breakthrough_button)
 	npc_reincarnation_leave_button = Button.new()
 	npc_reincarnation_leave_button.text = "返回角色界面办理轮回"
+	_apply_button_theme(npc_reincarnation_leave_button)
 	npc_reincarnation_leave_button.visible = false
 	npc_reincarnation_leave_button.pressed.connect(_leave_world_for_reincarnation)
 	layout.add_child(npc_reincarnation_leave_button)
 	var close_button := Button.new()
 	close_button.text = "关闭"
+	_apply_button_theme(close_button)
 	close_button.pressed.connect(func(): npc_panel.visible = false)
 	layout.add_child(close_button)
 
