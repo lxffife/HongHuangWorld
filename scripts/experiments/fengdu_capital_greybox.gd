@@ -487,11 +487,11 @@ func _build_hud() -> void:
 	title.add_theme_font_size_override("font_size", 18)
 	column.add_child(title)
 	_hint_label = Label.new()
-	_hint_label.text = "WASD 移动 · 鼠标观察 · Shift 奔跑 · Space 跳跃 · E 查看城区 · Esc 释放鼠标"
+	_hint_label.text = "WASD 移动 · 鼠标观察 · Shift 奔跑 · Space 跳跃 · E 交谈 / 查看 · Esc 释放鼠标"
 	_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(_hint_label)
 	var note := Label.new()
-	note.text = "南门入城：牛头马面镇守城门，黑白无常接引新魂。当前为比例灰盒，角色服务尚未接入。"
+	note.text = "南门入城：牛头马面镇守城门，黑白无常接引新魂。当前为比例灰盒，NPC 对话与行为状态为本地原型。"
 	note.add_theme_font_size_override("font_size", 11)
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(note)
