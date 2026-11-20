@@ -1007,6 +1007,12 @@ func _on_entities_updated(entities: Array) -> void:
 		var target := Vector3(float(entity.get("x", 0.0)), float(entity.get("y", 0.0)), float(entity.get("z", 0.0)))
 		if character_id == own_id:
 			local_target_position = target
+			if entity.has("mana"):
+				HHSession.world_snapshot["mana"] = int(entity.get("mana", 0))
+			if entity.has("max_mana"):
+				HHSession.world_snapshot["max_mana"] = int(entity.get("max_mana", 0))
+			if is_instance_valid(mana_label):
+				mana_label.text = "灵力  " + str(int(HHSession.world_snapshot.get("mana", 0))) + " / " + str(int(HHSession.world_snapshot.get("max_mana", 0)))
 			continue
 		seen[character_id] = true
 		_upsert_remote_player(entity)
@@ -2388,7 +2394,7 @@ func _on_combat_event(event: Dictionary) -> void:
 		_show_notification(defeat_message, 4.5)
 		_refresh_reward_status_later()
 	else:
-		_show_notification("命中 " + monster_name + " · 造成 " + str(damage) + " 点伤害")
+		_show_notification(("火球命中 " if str(event.get("projectile_type", "")) == "fireball" else "命中 ") + monster_name + " · 造成 " + str(damage) + " 点伤害")
 
 
 func _spawn_monster_hit_visual(monster: Node3D, critical: bool) -> void:
