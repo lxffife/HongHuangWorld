@@ -352,6 +352,53 @@ bool DurableOutbox::admit_monster_damage(
     }
 }
 
+bool DurableOutbox::apply_monster_health_transition(
+    const std::string& runtime_id, const std::string& monster_instance_id,
+    double expected_health, double resulting_health, std::string& error) {
+    error.clear();
+    if (runtime_id.empty() || monster_instance_id.empty() ||
+        !std::isfinite(expected_health) || !std::isfinite(resulting_health) ||
+        expected_health <= 0.0 || resulting_health <= 0.0 || resulting_health >= expected_health) {
+        error = "invalid health-only monster transition";
+        return false;
+    }
+    std::unique_lock<std::mutex> lock(mutex_, std::defer_lock);
+    if (!lock.try_lock()) {
+        error = "SQLite writer is busy; defer environmental damage";
+        return false;
+    }
+    sqlite3_busy_timeout(db_, 50);
+    struct TimeoutReset { sqlite3* db; ~TimeoutReset(){ sqlite3_busy_timeout(db, 5000); } } reset{db_};
+    bool transaction_open = false;
+    try {
+        if (!execute("BEGIN IMMEDIATE", error)) return false;
+        transaction_open = true;
+        Stmt update(db_,
+            "UPDATE monster_life_states SET health=?,updated_at_ms=? "
+            "WHERE runtime_id=? AND monster_instance_id=? AND ABS(health-?)<=0.001 "
+            "AND NOT EXISTS(SELECT 1 FROM pending_monster_deaths WHERE monster_instance_id=?) "
+            "AND NOT EXISTS(SELECT 1 FROM monster_damage_contribution_finalized WHERE monster_instance_id=?)");
+        sqlite3_bind_double(update.get(), 1, resulting_health);
+        const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        sqlite3_bind_int64(update.get(), 2, now);
+        bind_text(update.get(), 3, runtime_id);
+        bind_text(update.get(), 4, monster_instance_id);
+        sqlite3_bind_double(update.get(), 5, expected_health);
+        bind_text(update.get(), 6, monster_instance_id);
+        bind_text(update.get(), 7, monster_instance_id);
+        if (sqlite3_step(update.get()) != SQLITE_DONE || sqlite3_changes(db_) != 1)
+            throw std::runtime_error("health-only monster transition compare-and-swap failed");
+        if (!execute("COMMIT", error)) throw std::runtime_error(error);
+        transaction_open = false;
+        return true;
+    } catch (const std::exception& exception) {
+        if (transaction_open) { std::string ignored; execute("ROLLBACK", ignored); }
+        error = exception.what();
+        return false;
+    }
+}
+
 bool DurableOutbox::respawn_monster_life(
     const std::string& old_instance_id, const MonsterLifeStateRecord& next_life,
     std::string& error) {
