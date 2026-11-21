@@ -4188,7 +4188,7 @@ struct EnetServer::Impl {
             }
             if (burn_damage > 0) {
                 const double previous_health_exact = static_cast<double>(monster.state.health);
-                const auto previous_health = static_cast<std::int64_t>(previous_health_exact);
+                const auto previous_health = static_cast<std::int64_t>(std::ceil(previous_health_exact));
                 const auto applied_burn_damage = std::min(burn_damage, previous_health);
                 auto burn_owner = std::find_if(players.begin(), players.end(), [&](const auto& entry) {
                     return entry.second.character_id == monster.burn_owner_character_id;
@@ -4208,7 +4208,7 @@ struct EnetServer::Impl {
                             monster_contribution_writer->submit_damage_before_mutation(
                                 contribution, monster.runtime_id,
                                 previous_health_exact,
-                                static_cast<double>(std::max<std::int64_t>(0, previous_health - applied_burn_damage)),
+                                std::max(0.0, previous_health_exact - static_cast<double>(applied_burn_damage)),
                                 [&monster, previous_health, applied_burn_damage]() noexcept {
                                     monster.state.health = static_cast<float>(
                                         std::max<std::int64_t>(0, previous_health - applied_burn_damage));
@@ -4246,12 +4246,13 @@ struct EnetServer::Impl {
                         monster.contribution_closing = true;
                         monster.state.health = 0.0F;
                     } else {
-                        const auto next_health = std::max<std::int64_t>(0, previous_health - applied_burn_damage);
+                        const double next_health = std::max(
+                            0.0, previous_health_exact - static_cast<double>(applied_burn_damage));
                         std::string health_error;
                         if (!durable_outbox ||
                             !durable_outbox->apply_monster_health_transition(
                                 monster.runtime_id, monster.contribution_instance_id,
-                                previous_health_exact, static_cast<double>(next_health), health_error)) {
+                                previous_health_exact, next_health, health_error)) {
                             monster.burn_effect = burn_effect_before_tick;
                             std::cerr << "[MonsterLifeState] unattributed burn tick deferred; runtime="
                                       << monster.runtime_id << " reason=" << health_error << std::endl;
