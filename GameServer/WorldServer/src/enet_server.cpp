@@ -150,6 +150,9 @@ struct MonsterRuntime {
     honghuang::simulation::TimedFreezeEffect freeze_effect;
     honghuang::simulation::PeriodicDamageEffect burn_effect;
     std::string burn_owner_character_id;
+    // Preserve authenticated attribution at effect application for delayed ticks after disconnect.
+    std::string burn_owner_session_id;
+    std::vector<BountyObjectiveSubscription> burn_owner_bounty_objectives;
     std::unordered_map<std::string, MonsterDamageContribution> damage_contributions;
     // runtime_id identifies the stable spawn point; this ID identifies one life of that spawn.
     std::string contribution_instance_id;
@@ -1527,21 +1530,23 @@ struct EnetServer::Impl {
     }
 
     honghuang::persistence::MonsterContributionRecord make_monster_contribution_record(
-        const MonsterRuntime& monster, const PlayerState& player,
+        const MonsterRuntime& monster, const std::string& session_id,
+        const std::string& character_id,
+        const std::vector<BountyObjectiveSubscription>& subscriptions,
         std::int64_t effective_damage) const {
         honghuang::persistence::MonsterContributionRecord record;
         record.write_id = make_event_uuid();
         record.monster_instance_id = monster.contribution_instance_id;
         record.monster_definition_id = monster.definition.id;
-        record.session_id = player.session_id;
-        record.character_id = player.character_id;
+        record.session_id = session_id;
+        record.character_id = character_id;
         record.total_damage = effective_damage;
         record.hit_count = 1;
         record.first_hit_at_ms = wall_clock_ms();
         record.last_hit_at_ms = record.first_hit_at_ms;
 
         Json objectives = Json::array();
-        for (const auto& objective : player.bounty_objectives) {
+        for (const auto& objective : subscriptions) {
             if (objective.event_type != "monster_killed" ||
                 objective.objective_key != monster.definition.id) continue;
             const auto duplicate = std::any_of(objectives.begin(), objectives.end(),
@@ -1562,11 +1567,20 @@ struct EnetServer::Impl {
         return record;
     }
 
-    void record_monster_damage(MonsterRuntime& monster, const PlayerState& player,
+    honghuang::persistence::MonsterContributionRecord make_monster_contribution_record(
+        const MonsterRuntime& monster, const PlayerState& player,
+        std::int64_t effective_damage) const {
+        return make_monster_contribution_record(
+            monster, player.session_id, player.character_id, player.bounty_objectives, effective_damage);
+    }
+
+    void record_monster_damage(MonsterRuntime& monster, const std::string& session_id,
+                               const std::string& character_id,
+                               const std::vector<BountyObjectiveSubscription>& subscriptions,
                                std::int64_t effective_damage) {
-        if (effective_damage <= 0 || player.session_id.empty() || player.character_id.empty()) return;
-        // Keep the ledger bounded even if a spawn is attacked by a large crowd.
-        const std::string contributor_key = player.session_id + ":" + player.character_id;
+        if (effective_damage <= 0 || session_id.empty() || character_id.empty()) return;
+        // Keep the legacy in-memory compatibility view bounded even if a spawn is attacked by a crowd.
+        const std::string contributor_key = session_id + ":" + character_id;
         auto found = monster.damage_contributions.find(contributor_key);
         if (found == monster.damage_contributions.end()) {
             constexpr std::size_t kMaximumContributorsPerSpawn = 256;
@@ -1590,14 +1604,14 @@ struct EnetServer::Impl {
                 monster.damage_contributions.erase(weakest);
             }
             MonsterDamageContribution contribution;
-            contribution.session_id = player.session_id;
-            contribution.character_id = player.character_id;
+            contribution.session_id = session_id;
+            contribution.character_id = character_id;
             contribution.first_hit_at = Clock::now();
             contribution.last_hit_at = contribution.first_hit_at;
             found = monster.damage_contributions.emplace(contributor_key, std::move(contribution)).first;
         }
         auto& contribution = found->second;
-        for (const auto& objective : player.bounty_objectives) {
+        for (const auto& objective : subscriptions) {
             if (objective.event_type != "monster_killed" ||
                 objective.objective_key != monster.definition.id) continue;
             const auto already_tracked = std::any_of(
@@ -1616,6 +1630,12 @@ struct EnetServer::Impl {
         if (contribution.hit_count < std::numeric_limits<std::int64_t>::max())
             ++contribution.hit_count;
         contribution.last_hit_at = Clock::now();
+    }
+
+    void record_monster_damage(MonsterRuntime& monster, const PlayerState& player,
+                               std::int64_t effective_damage) {
+        record_monster_damage(monster, player.session_id, player.character_id,
+                              player.bounty_objectives, effective_damage);
     }
 
     Json monster_contribution_snapshot(const MonsterRuntime& monster) const {
@@ -3009,6 +3029,8 @@ struct EnetServer::Impl {
             target->slow_effect = {};
             target->burn_effect = {};
             target->burn_owner_character_id.clear();
+            target->burn_owner_session_id.clear();
+            target->burn_owner_bounty_objectives.clear();
             target->state.target_id.clear();
             // Respawn timing is owned by the world's spawn-point configuration.
             // This keeps live operations changes effective without hard-coded monster IDs.
@@ -3459,7 +3481,11 @@ struct EnetServer::Impl {
                     applied_burn = honghuang::simulation::apply_periodic_damage(
                         target->burn_effect, now_ms, projectile->burn_duration_ms,
                         projectile->burn_interval_ms, burn_damage);
-                    if (applied_burn) target->burn_owner_character_id = projectile->owner_character_id;
+                    if (applied_burn) {
+                        target->burn_owner_character_id = projectile->owner_character_id;
+                        target->burn_owner_session_id = owner->second.session_id;
+                        target->burn_owner_bounty_objectives = owner->second.bounty_objectives;
+                    }
                 }
                 record_monster_damage(*target, owner->second, damage.damage);
                 std::int64_t experience_reward = 0;
@@ -3470,6 +3496,8 @@ struct EnetServer::Impl {
                     enqueue_bounty_kill_events(&owner->second, *target);
                     honghuang::simulation::clear_negative_statuses(target->slow_effect,target->freeze_effect,target->burn_effect);
                     target->burn_owner_character_id.clear();
+            target->burn_owner_session_id.clear();
+            target->burn_owner_bounty_objectives.clear();
                     target->state.target_id.clear();
                     target->respawn_at = now + std::chrono::seconds(target->retry_spawn_seconds);
                     experience_reward = 20 + static_cast<std::int64_t>(target->definition.level) * 10;
@@ -3539,6 +3567,8 @@ struct EnetServer::Impl {
                     monster.attack_phase = MonsterAttackPhase::Ready;
                     honghuang::simulation::clear_negative_statuses(monster.slow_effect,monster.freeze_effect,monster.burn_effect);
                     monster.burn_owner_character_id.clear();
+                    monster.burn_owner_session_id.clear();
+                    monster.burn_owner_bounty_objectives.clear();
                     monster.attack_target_character_id.clear();
                     monster.last_attack_at = Clock::time_point{};
                 }
@@ -3552,6 +3582,8 @@ struct EnetServer::Impl {
             if (burn_damage <= 0 &&
                 !honghuang::simulation::periodic_damage_is_active(monster.burn_effect, effect_now_ms)) {
                 monster.burn_owner_character_id.clear();
+                    monster.burn_owner_session_id.clear();
+                    monster.burn_owner_bounty_objectives.clear();
             }
             if (burn_damage > 0) {
                 const auto previous_health = static_cast<std::int64_t>(monster.state.health);
@@ -3559,10 +3591,12 @@ struct EnetServer::Impl {
                 auto burn_owner = std::find_if(players.begin(), players.end(), [&](const auto& entry) {
                     return entry.second.character_id == monster.burn_owner_character_id;
                 });
-                if (burn_owner != players.end()) {
+                if (!monster.burn_owner_session_id.empty() &&
+                    !monster.burn_owner_character_id.empty()) {
                     std::string contribution_error;
                     const auto contribution = make_monster_contribution_record(
-                        monster, burn_owner->second, applied_burn_damage);
+                        monster, monster.burn_owner_session_id, monster.burn_owner_character_id,
+                        monster.burn_owner_bounty_objectives, applied_burn_damage);
                     const bool admitted = monster_contribution_writer != nullptr &&
                         monster_contribution_writer->submit_before_damage(
                             contribution,
@@ -3572,25 +3606,28 @@ struct EnetServer::Impl {
                             },
                             contribution_error);
                     if (!admitted) {
-                        // Do not lose a scheduled tick when backpressure rejects its write.
+                        // Keep the exact tick pending; do not apply damage without durable admission.
                         monster.burn_effect = burn_effect_before_tick;
                         std::cerr << "[MonsterContribution] burn tick deferred; monster="
                                   << monster.definition.id << " instance="
                                   << monster.contribution_instance_id << " reason="
                                   << (contribution_error.empty() ? "writer unavailable" : contribution_error)
                                   << std::endl;
-                        send_json(burn_owner->first, honghuang::protocol::MessageType::CombatEvent,
-                                  Json{{"accepted", false}, {"source", "status_effect"},
-                                       {"status_effect", "burn"},
-                                       {"reason", "战斗记录繁忙，燃烧伤害将稍后重试。"}});
+                        if (burn_owner != players.end()) {
+                            send_json(burn_owner->first, honghuang::protocol::MessageType::CombatEvent,
+                                      Json{{"accepted", false}, {"source", "status_effect"},
+                                           {"status_effect", "burn"},
+                                           {"reason", "战斗记录繁忙，燃烧伤害将稍后重试。"}});
+                        }
                         continue;
                     }
-                    record_monster_damage(monster, burn_owner->second, applied_burn_damage);
+                    record_monster_damage(monster, monster.burn_owner_session_id,
+                        monster.burn_owner_character_id, monster.burn_owner_bounty_objectives,
+                        applied_burn_damage);
                 } else {
-                    // Preserve existing offline-owner behavior; no authenticated live session
-                    // is available to create a new per-tick contribution record.
+                    // Defensive fallback for a legacy effect without a captured authenticated source.
                     monster.state.health = static_cast<float>(
-                        std::max<std::int64_t>(0, previous_health - burn_damage));
+                        std::max<std::int64_t>(0, previous_health - applied_burn_damage));
                 }
                 const bool burn_defeated = monster.state.health <= 0.0F;
                 std::int64_t experience_reward = 0;
@@ -3613,6 +3650,8 @@ struct EnetServer::Impl {
                         });
                     }
                     monster.burn_owner_character_id.clear();
+                    monster.burn_owner_session_id.clear();
+                    monster.burn_owner_bounty_objectives.clear();
                 }
                 const Json burn_event{
                     {"accepted", true}, {"source", "status_effect"}, {"status_effect", "burn"},
