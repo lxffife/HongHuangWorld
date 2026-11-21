@@ -1526,6 +1526,58 @@ struct EnetServer::Impl {
             std::cerr << "Could not persist soul reward: " << error << '\n';
     }
 
+    honghuang::persistence::MonsterContributionRecord make_monster_contribution_record(
+        const MonsterRuntime& monster, const PlayerState& player,
+        std::int64_t effective_damage) const {
+        honghuang::persistence::MonsterContributionRecord record;
+        record.write_id = make_event_uuid();
+        record.monster_instance_id = monster.contribution_instance_id;
+        record.monster_definition_id = monster.definition.id;
+        record.session_id = player.session_id;
+        record.character_id = player.character_id;
+        record.total_damage = effective_damage;
+        record.hit_count = 1;
+        record.first_hit_at_ms = wall_clock_ms();
+        record.last_hit_at_ms = record.first_hit_at_ms;
+
+        Json objectives = Json::array();
+        for (const auto& objective : player.bounty_objectives) {
+            if (objective.event_type != "monster_killed" ||
+                objective.objective_key != monster.definition.id) continue;
+            const auto duplicate = std::any_of(objectives.begin(), objectives.end(),
+                [&objective](const Json& existing) {
+                    return existing.value("task_id", std::string{}) == objective.task_id &&
+                           existing.value("objective_key", std::string{}) == objective.objective_key &&
+                           existing.value("event_type", std::string{}) == objective.event_type;
+                });
+            if (!duplicate) {
+                objectives.push_back({
+                    {"task_id", objective.task_id},
+                    {"objective_key", objective.objective_key},
+                    {"event_type", objective.event_type}
+                });
+            }
+        }
+        record.bounty_objectives_json = objectives.dump();
+        return record;
+    }
+
+    bool enqueue_monster_damage_contribution(const MonsterRuntime& monster,
+                                              const PlayerState& player,
+                                              std::int64_t effective_damage,
+                                              std::string& error) {
+        if (effective_damage <= 0 || player.session_id.empty() || player.character_id.empty()) {
+            error = "monster contribution identity or damage is invalid";
+            return false;
+        }
+        if (!monster_contribution_writer) {
+            error = "monster contribution writer is unavailable";
+            return false;
+        }
+        return monster_contribution_writer->submit(
+            make_monster_contribution_record(monster, player, effective_damage), error);
+    }
+
     void record_monster_damage(MonsterRuntime& monster, const PlayerState& player,
                                std::int64_t effective_damage) {
         if (effective_damage <= 0 || player.session_id.empty() || player.character_id.empty()) return;
@@ -2948,7 +3000,21 @@ struct EnetServer::Impl {
                       Json{{"accepted", false}, {"reason", "伤害计算未通过校验。"}});
             return;
         }
-        target->state.health = static_cast<float>(damage.remaining_health);
+        std::string contribution_error;
+        const auto contribution_record = make_monster_contribution_record(*target, player, damage.damage);
+        if (!impl_->monster_contribution_writer ||
+            !impl_->monster_contribution_writer->submit_before_damage(
+                contribution_record,
+                [&target, &damage]() noexcept {
+                    target->state.health = static_cast<float>(damage.remaining_health);
+                },
+                contribution_error)) {
+            std::cerr << "Rejected melee hit because monster contribution was not admitted: "
+                      << contribution_error << '\\n';
+            send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                      Json{{"accepted", false}, {"reason", "战斗记录繁忙，请稍后再试。"}});
+            return;
+        }
         record_monster_damage(*target, player, damage.damage);
         std::int64_t experience_reward = 0;
         std::int64_t cultivation_reward = 0;
