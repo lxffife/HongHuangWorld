@@ -147,6 +147,8 @@ A separate `MonsterContributionWriter` now provides the first worker-thread boun
 - The queue is process-local and is **not durable until SQLite confirms the write**. A process crash or immediate shutdown can lose records still waiting in memory. Callers must stop accepting damage before draining a dying monster, and must not finalize on a drain timeout.
 - `stop()` is immediate; it does not claim that queued records were flushed. The owner must drain relevant instances before stopping if it needs those records.
 
+The WorldServer now owns one writer alongside its `DurableOutbox`: it is constructed only after the SQLite owner is initialized, and is explicitly stopped during shutdown before the outbox delivery workers. Member declaration order also ensures the writer is destroyed before the SQLite owner. This establishes safe resource lifetime, but does not yet submit combat records.
+
 This is an isolated writer component and test target only. The combat hit paths are not yet connected, the 256-entry in-memory map is still active, and no claim is made that arbitrary contributor counts are captured yet. The next integration must reserve queue capacity before applying damage, track closing life-instance IDs, drain before finalization, and solve the center API's 256-contributor-per-event limit with complete chunk/snapshot semantics before removing the cap.
 
 
