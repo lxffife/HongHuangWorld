@@ -42,6 +42,9 @@ public:
     bool wait_until_drained(const std::string& monster_instance_id,
                             std::chrono::milliseconds timeout);
     std::size_t pending_count() const;
+    // Non-blocking per-life count for world-loop state machines. Includes the
+    // record currently being committed by the worker, not just queued records.
+    std::size_t pending_count_for_monster(const std::string& monster_instance_id) const;
     std::string last_error() const;
     // Stop accepting writes, wait up to timeout for queued SQLite commits, then join.
     // Returns false when the queue could not be fully committed before the deadline.
