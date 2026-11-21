@@ -244,6 +244,9 @@ int main() {
         hit.last_hit_at_ms = 120;
         hit.bounty_objectives_json = R"([{"task_id":"task-a"},{"task_id":"task-b"}])";
         assert(box.record_monster_contribution(hit, error));
+        auto conflicting_write = hit;
+        conflicting_write.total_damage = 36;
+        assert(!box.record_monster_contribution(conflicting_write, error));
         auto loaded = box.load_monster_contributions("monster-runtime-1", error);
         assert(loaded.size() == 1);
         assert(loaded.front().total_damage == 60 && loaded.front().hit_count == 2);
