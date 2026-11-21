@@ -264,5 +264,26 @@ int main() {
     }
     remove_database(ledger_path);
 
+
+    const std::string ledger_capacity_path = "world_outbox_monster_ledger_capacity_test.sqlite";
+    remove_database(ledger_capacity_path);
+    {
+        honghuang::persistence::DurableOutbox box(ledger_capacity_path, 1);
+        std::string error;
+        honghuang::persistence::MonsterContributionRecord hit{
+            "monster-runtime-cap", "wolf", "session-cap", "character-cap", 10, 1, 300, 300, "[]"
+        };
+        assert(box.record_monster_contribution(hit, error));
+        const std::vector<honghuang::persistence::OutboxEvent> too_large{
+            {"monster-kill-cap", "bounty_objective_event", R"({"event_id":"monster-kill-cap"})", 0, 400, 400, {}},
+            {"monster-contrib-cap", "bounty_monster_contributions", R"({"event_id":"monster-contrib-cap"})", 0, 400, 400, {}}
+        };
+        assert(!box.finalize_monster_contributions("monster-runtime-cap", too_large, error));
+        auto retained = box.load_monster_contributions("monster-runtime-cap", error);
+        assert(retained.size() == 1 && retained.front().total_damage == 10);
+        assert(box.pending_count(error) == 0);
+    }
+    remove_database(ledger_capacity_path);
+
     return 0;
 }
