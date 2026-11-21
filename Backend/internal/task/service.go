@@ -3,10 +3,10 @@ package task
 import (
  "context"
  "database/sql"
- "encoding/hex"
+ "encoding/hex"\n "encoding/json"
  "errors"
  "fmt"
- "math"
+ "math"\n "sort"
  "strings"
  "time"
  "unicode/utf8"
@@ -742,3 +742,121 @@ func (s *Service) ApplyWorldEvent(ctx context.Context,nodeKey string,event World
  return result,nil
 }
 
+
+
+// MonsterContribution is server-measured effective damage from one authenticated
+// character session. It is audit data only; it does not change objective progress
+// or settlement until the team-contribution rules are explicitly defined.
+type MonsterContribution struct {
+ SessionID string `json:"session_id"`
+ CharacterID string `json:"character_id"`
+ Damage int64 `json:"damage"`
+ HitCount int64 `json:"hit_count"`
+}
+
+type MonsterContributionEvent struct {
+ EventID string `json:"event_id"`
+ TaskID string `json:"task_id"`
+ MonsterInstanceID string `json:"monster_instance_id"`
+ MonsterDefinitionID string `json:"monster_definition_id"`
+ Contributors []MonsterContribution `json:"contributors"`
+}
+
+// RecordMonsterContributions stores an immutable, idempotent contribution
+// snapshot. Historical sessions are accepted so a contributor need not remain
+// online when the death event is delivered from the durable WorldServer outbox.
+func (s *Service) RecordMonsterContributions(ctx context.Context, nodeKey string, event MonsterContributionEvent) error {
+ if strings.TrimSpace(nodeKey)=="" || len(nodeKey)>96 || !validUUID(event.EventID) ||
+  !validUUID(event.TaskID) || event.MonsterInstanceID=="" || len(event.MonsterInstanceID)>96 ||
+  event.MonsterDefinitionID=="" || len(event.MonsterDefinitionID)>64 ||
+  len(event.Contributors)<1 || len(event.Contributors)>64 {
+  return ErrInvalidWorldEvent
+ }
+ event.EventID=strings.ToLower(event.EventID)
+ event.TaskID=strings.ToLower(event.TaskID)
+ seen:=make(map[string]struct{},len(event.Contributors))
+ var totalDamage int64
+ for i:=range event.Contributors {
+  item:=&event.Contributors[i]
+  if !validUUID(item.SessionID) || !validUUID(item.CharacterID) || item.Damage<=0 || item.HitCount<=0 ||
+   totalDamage>math.MaxInt64-item.Damage { return ErrInvalidWorldEvent }
+  item.SessionID=strings.ToLower(item.SessionID)
+  item.CharacterID=strings.ToLower(item.CharacterID)
+  key:=item.SessionID+":"+item.CharacterID
+  if _,ok:=seen[key];ok { return ErrInvalidWorldEvent }
+  seen[key]=struct{}{}
+  totalDamage+=item.Damage
+ }
+ sort.Slice(event.Contributors,func(i,j int)bool {
+  if event.Contributors[i].SessionID!=event.Contributors[j].SessionID { return event.Contributors[i].SessionID<event.Contributors[j].SessionID }
+  return event.Contributors[i].CharacterID<event.Contributors[j].CharacterID
+ })
+ payload,err:=json.Marshal(event)
+ if err!=nil { return fmt.Errorf("encode monster contribution snapshot: %w",err) }
+ tx,err:=s.db.BeginTx(ctx,nil)
+ if err!=nil { return fmt.Errorf("begin monster contribution event: %w",err) }
+ defer tx.Rollback()
+ var lock any
+ if err=tx.QueryRowContext(ctx,`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`,event.EventID).Scan(&lock);err!=nil {
+  return fmt.Errorf("lock monster contribution event id: %w",err)
+ }
+ var oldPayload string
+ err=tx.QueryRowContext(ctx,`SELECT payload::text FROM bounty_monster_contribution_events WHERE event_id=$1::uuid`,event.EventID).Scan(&oldPayload)
+ if err==nil {
+  var same bool
+  if err=tx.QueryRowContext(ctx,`SELECT payload=$2::jsonb FROM bounty_monster_contribution_events WHERE event_id=$1::uuid`,event.EventID,string(payload)).Scan(&same);err!=nil {
+   return fmt.Errorf("compare duplicate monster contribution event: %w",err)
+  }
+  if !same { return ErrIdempotencyConflict }
+  return tx.Commit()
+ }
+ if !errors.Is(err,sql.ErrNoRows) { return fmt.Errorf("check monster contribution event: %w",err) }
+
+ var worldID,status string
+ var expired bool
+ err=tx.QueryRowContext(ctx,`SELECT world_id,status,(expires_at IS NOT NULL AND expires_at<=now())
+  FROM bounty_tasks WHERE id=$1::uuid FOR SHARE`,event.TaskID).Scan(&worldID,&status,&expired)
+ if errors.Is(err,sql.ErrNoRows) { return ErrNotFound }
+ if err!=nil { return fmt.Errorf("verify contribution bounty task: %w",err) }
+ if expired || (status!="in_progress" && status!="full") { return ErrTaskNotReady }
+ var objectiveType string
+ err=tx.QueryRowContext(ctx,`SELECT event_type FROM bounty_task_objectives
+  WHERE task_id=$1::uuid AND objective_key=$2 FOR SHARE`,event.TaskID,event.MonsterDefinitionID).Scan(&objectiveType)
+ if errors.Is(err,sql.ErrNoRows) || (err==nil && objectiveType!="monster_killed") { return ErrWorldEventObjective }
+ if err!=nil { return fmt.Errorf("verify monster contribution objective: %w",err) }
+
+ if _,err=tx.ExecContext(ctx,`INSERT INTO bounty_monster_contribution_events
+  (event_id,task_id,node_key,monster_instance_id,monster_definition_id,payload)
+  VALUES($1::uuid,$2::uuid,$3,$4,$5,$6::jsonb)`,
+  event.EventID,event.TaskID,nodeKey,event.MonsterInstanceID,event.MonsterDefinitionID,string(payload));err!=nil {
+  return fmt.Errorf("insert monster contribution event: %w",err)
+ }
+ for _,item:=range event.Contributors {
+  var accountID string
+  err=tx.QueryRowContext(ctx,`SELECT soul.account_id::text
+   FROM world_sessions ws
+   JOIN server_registry node ON node.id=ws.server_id
+   JOIN world_instances instance ON instance.id=ws.instance_id
+   JOIN characters c ON c.id=ws.character_id
+   JOIN souls soul ON soul.id=c.soul_id
+   WHERE ws.id=$1::uuid AND ws.character_id=$2::uuid AND node.node_key=$3
+    AND node.admin_state='normal' AND ws.session_state IN ('active','saving','closed')
+    AND c.world_id=$4 AND instance.world_id=$4
+   FOR SHARE OF ws,c,soul`,item.SessionID,item.CharacterID,nodeKey,worldID).Scan(&accountID)
+  if errors.Is(err,sql.ErrNoRows) { return ErrWorldEventSession }
+  if err!=nil { return fmt.Errorf("verify historical monster contributor session: %w",err) }
+  var participantStatus string
+  err=tx.QueryRowContext(ctx,`SELECT status FROM bounty_task_participants
+   WHERE task_id=$1::uuid AND account_id=$2::uuid FOR SHARE`,event.TaskID,accountID).Scan(&participantStatus)
+  if errors.Is(err,sql.ErrNoRows) || (err==nil && participantStatus!="accepted") { return ErrNotParticipant }
+  if err!=nil { return fmt.Errorf("verify monster contributor participation: %w",err) }
+  if _,err=tx.ExecContext(ctx,`INSERT INTO bounty_monster_contributors
+   (event_id,session_id,character_id,account_id,damage,hit_count)
+   VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5,$6)`,
+   event.EventID,item.SessionID,item.CharacterID,accountID,item.Damage,item.HitCount);err!=nil {
+   return fmt.Errorf("persist monster contributor: %w",err)
+  }
+ }
+ if err=tx.Commit();err!=nil { return fmt.Errorf("commit monster contribution snapshot: %w",err) }
+ return nil
+}
