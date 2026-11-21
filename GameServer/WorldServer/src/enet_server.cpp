@@ -4303,10 +4303,16 @@ void EnetServer::stop() {
         impl_->drain_consumable_results();
         impl_->stop_combat_refresh_worker();
         impl_->drain_combat_refresh_results();
-        // Stop contribution writes while the SQLite outbox is still alive.
-        // Combat admission is wired in a later step; today this is an idle worker.
+        // Stop combat admission before this point, then give queued contribution
+        // records a bounded opportunity to commit while SQLite is still alive.
         if (impl_->monster_contribution_writer) {
-            impl_->monster_contribution_writer->stop();
+            constexpr auto kContributionShutdownDrainTimeout = std::chrono::seconds(5);
+            if (!impl_->monster_contribution_writer->stop_after_drain(kContributionShutdownDrainTimeout)) {
+                std::cerr << "[MonsterContribution] shutdown drain timed out; pending_records="
+                          << impl_->monster_contribution_writer->pending_count()
+                          << " last_error=" << impl_->monster_contribution_writer->last_error()
+                          << ". Remaining in-memory records were not committed.\n";
+            }
         }
         impl_->stop_chat_outbox_worker();
         impl_->stop_outbox_worker();
