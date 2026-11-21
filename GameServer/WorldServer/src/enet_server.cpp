@@ -1895,7 +1895,6 @@ struct EnetServer::Impl {
     void begin_monster_death(MonsterRuntime& monster, const PlayerState* killer) {
         if (!monster.contribution_closing) return;
         capture_monster_death_context(monster, killer);
-        monster.state.mode = honghuang::simulation::MonsterMode::Dead;
         monster.state.target_id.clear();
         honghuang::simulation::clear_negative_statuses(
             monster.slow_effect, monster.freeze_effect, monster.burn_effect);
@@ -1926,6 +1925,7 @@ struct EnetServer::Impl {
                     drop.x, drop.z, now + std::chrono::milliseconds(remaining_ms), false
                 });
             }
+            monster->state.mode = honghuang::simulation::MonsterMode::Dead;
             monster->respawn_at = now + std::chrono::seconds(monster->retry_spawn_seconds);
             const auto killer_character_id = monster->death_killer_character_id;
             monster->death_finalizer_submitted = false;
@@ -3339,7 +3339,7 @@ struct EnetServer::Impl {
             {"defeated", damage.defeated},
             {"experience_reward", experience_reward},
             {"cultivation_reward", cultivation_reward},
-            {"soul_experience_reward", damage.defeated && config.world_id == "underworld_fengdu" ? 5 : 0}
+            {"soul_experience_reward", 0}, {"settlement_pending", damage.defeated}
         };
         send_json(peer, honghuang::protocol::MessageType::CombatEvent, event);
     }
@@ -3453,6 +3453,8 @@ struct EnetServer::Impl {
                     {"health", monster.state.health},
                     {"max_health", monster.definition.max_health},
                     {"mode", static_cast<int>(monster.state.mode)},
+                    {"death_pending", monster.contribution_closing &&
+                        monster.state.mode != honghuang::simulation::MonsterMode::Dead},
                     {"x", monster.state.x}, {"y", 0.0F}, {"z", monster.state.z},
                     {"yaw", monster.state.yaw},
                     {"slowed", honghuang::simulation::slow_is_active(
@@ -3796,7 +3798,7 @@ struct EnetServer::Impl {
                                {"burn_duration_ms", applied_burn ? projectile->burn_duration_ms : 0},
                                {"experience_reward", experience_reward},
                                {"cultivation_reward", cultivation_reward},
-                               {"soul_experience_reward", damage.defeated && config.world_id == "underworld_fengdu" ? 5 : 0}});
+                               {"soul_experience_reward", 0}, {"settlement_pending", damage.defeated}});
                 const Json visual_event{
                     {"accepted", true}, {"visual_only", true}, {"source", "projectile"},
                     {"target_entity_id", target->runtime_id}, {"target_name", target->definition.name},
@@ -3817,6 +3819,8 @@ struct EnetServer::Impl {
             projectile = projectiles.erase(projectile);
         }
         for (auto& monster : monsters) {
+            if (monster.contribution_closing && !monster.death_finalizer_submitted)
+                submit_monster_death_finalization(monster);
             if (monster.state.mode == honghuang::simulation::MonsterMode::Dead) {
                 if (monster.contribution_closing &&
                     monster.respawn_at.time_since_epoch().count() == 0) {
@@ -3933,7 +3937,8 @@ struct EnetServer::Impl {
                         std::max<std::int64_t>(0, monster.burn_effect.next_tick_at_ms - effect_now_ms) +
                         static_cast<std::int64_t>(monster.burn_effect.ticks_remaining - 1) *
                             monster.burn_effect.interval_ms},
-                    {"experience_reward", experience_reward}, {"cultivation_reward", cultivation_reward}
+                    {"experience_reward", experience_reward}, {"cultivation_reward", cultivation_reward},
+                    {"settlement_pending", burn_defeated}
                 };
                 if (burn_owner != players.end()) send_json(burn_owner->first,
                     honghuang::protocol::MessageType::CombatEvent, burn_event);
