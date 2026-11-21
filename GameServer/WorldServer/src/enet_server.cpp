@@ -4246,8 +4246,18 @@ struct EnetServer::Impl {
                         monster.contribution_closing = true;
                         monster.state.health = 0.0F;
                     } else {
-                        monster.state.health = static_cast<float>(
-                            std::max<std::int64_t>(0, previous_health - applied_burn_damage));
+                        const auto next_health = std::max<std::int64_t>(0, previous_health - applied_burn_damage);
+                        std::string health_error;
+                        if (!durable_outbox ||
+                            !durable_outbox->apply_monster_health_transition(
+                                monster.runtime_id, monster.contribution_instance_id,
+                                previous_health_exact, static_cast<double>(next_health), health_error)) {
+                            monster.burn_effect = burn_effect_before_tick;
+                            std::cerr << "[MonsterLifeState] unattributed burn tick deferred; runtime="
+                                      << monster.runtime_id << " reason=" << health_error << std::endl;
+                            continue;
+                        }
+                        monster.state.health = static_cast<float>(next_health);
                     }
                 }
                 const bool burn_defeated = monster.state.health <= 0.0F;
