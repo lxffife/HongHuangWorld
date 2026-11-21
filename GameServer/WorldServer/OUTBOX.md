@@ -156,9 +156,9 @@ The direct melee hit path is now the first live integration:
 - If the writer is unavailable, stopping, or full, the hit is rejected and monster health is unchanged. The rejection is logged and the client receives a retry-later combat response.
 - After admission, the existing in-memory 256-entry contribution map is still updated for the current death snapshot and bounty event compatibility.
 
-**Important partial-integration boundary:** direct melee, player-owned projectile impact, and periodic burn ticks use the bounded writer admission path. A burn effect now snapshots its source's authenticated session, character, and bounty-objective subscriptions when applied, so delayed ticks continue to create durable contribution records after that player disconnects. Death settlement still reads the in-memory map; the SQLite ledger is not yet drained, loaded, finalized, or cleared on death. Consequently the current implementation does not yet provide a complete death snapshot, all-contributor ranking, or crash-safe reward settlement. The in-memory 256-entry cap remains in place for the existing death/bounty path.
+**Historical partial-integration note:** this paragraph described the state before the live death-finalization integration below. The current lethal paths now drain and snapshot the SQLite ledger. The 256-entry in-memory compatibility map remains only for legacy diagnostics; SQLite is the contributor source for finalization.
 
-The writer is connected to melee, projectile, and online/offline periodic burn admission, but not yet to the complete death lifecycle. Remaining work is to track closing life-instance IDs, drain before finalization, and solve the center API's 256-contributor-per-event limit with complete chunk/snapshot semantics before removing the in-memory cap.
+The writer's lethal-path integration is now complete for melee, projectile, and online/offline burn. The current finalizer emits multiple immutable contribution events in chunks of at most 256 contributors; the remaining issue is durable recovery of pending death intent after an abrupt process crash.
 
 ### Projectile impact admission
 
@@ -180,7 +180,7 @@ When a burn tick is due and its owner is still online, WorldServer snapshots the
 
 After successful admission, the legacy in-memory contribution map is updated using the captured session/character/objective attribution, even when the burn source has disconnected. If queue admission fails, the exact pre-tick effect state is restored and the tick is retried later; an online source is notified, while an offline source simply retains the pending tick. A defensive legacy fallback still applies damage without a durable write only if an effect somehow lacks its captured authenticated source.
 
-This integration removes the online-owner burn tick's lost-tick failure mode under queue backpressure. It does not close the asynchronous process-crash window and does not make SQLite the death-settlement source; the death path still needs to stop new hits for the life instance, drain the writer, load the SQLite ledger, and atomically finalize its outbox events.
+This integration removes the online-owner burn tick's lost-tick failure mode under queue backpressure. The live death-finalization integration below now stops new hits, drains the writer, loads the SQLite ledger, and atomically finalizes its event batch. The process-crash window for an unpersisted pending-death intent remains open.
 
 ### Bounded graceful shutdown for contribution writes
 
@@ -191,14 +191,14 @@ This reduces normal-shutdown loss but does not close the abrupt-process-crash wi
 
 ### Empty-objective monster finalization
 
-A monster life may have durable damage contributors but no matching bounty objective subscriptions. Its contribution ledger must still be closed and cleared so it cannot leak indefinitely or accept late writes. `finalize_monster_contributions` therefore accepts an empty outbox event batch: it atomically writes the per-life finalization tombstone and removes the contribution/write journal rows without creating a synthetic event for an unsupported backend endpoint. The operation remains idempotent, and late writes for that life are rejected. Empty batches now timestamp their tombstone with the current wall clock rather than reading the first event in an empty vector. The regression test also reopens the SQLite database and verifies that the empty-batch tombstone remains effective after restart. This is a persistence primitive; the live combat death path still needs to call it after the writer drains and before rewards/respawn are committed.
+A monster life may have durable damage contributors but no matching bounty objective subscriptions. `finalize_monster_contributions` accepts an empty event batch and atomically writes the per-life tombstone while clearing contribution rows. The live death finalizer now invokes this path when no bounty or reward events are required, so empty ledgers are still closed and late writes are rejected.
 
 
 ### Monster life lethal-closing latch
 
 Each `MonsterRuntime` now has a per-life `contribution_closing` latch. The lethal melee and projectile admission callbacks set it in the same synchronous callback that applies the lethal health value; a lethal burn tick sets it in its admitted damage callback (and the defensive legacy fallback also sets it). New melee/spell target selection, projectile impact, and subsequent burn ticks reject/skip a closing life. The latch is cleared only when a new contribution instance is assigned during respawn or explicit spawn reactivation.
 
-This closes the same-tick duplicate-hit window before the ordinary `Dead` mode transition and provides the gate needed by a deferred death-finalization state machine. It is **not** yet the SQLite death-finalization integration: current lethal handlers still use the legacy in-memory snapshot and continue their existing reward/respawn behavior. No claim is made that drain/load/finalize is active, and the 256-entry in-memory limitation remains.
+This closes the same-tick duplicate-hit window. The live integration below now defers the ordinary `Dead` transition and respawn until SQLite finalization commits; the legacy 256-entry map is no longer used to build the authoritative death snapshot.
 
 ### Required deferred monster-death finalization state machine
 
@@ -213,12 +213,12 @@ The next live integration must not call `wait_until_drained` with a long timeout
 7. **Committed:** only after atomic finalization succeeds may the server transition the monster to Dead and dispatch death rewards, drops, soul effects, and respawn timing. Those side effects need their own stable idempotency keys or must be included in the same durable transaction; a one-time in-memory boolean alone does not protect against process crashes between commit and dispatch.
 8. **Respawn:** assign a fresh contribution instance ID and clear all per-life pending state. Never reuse a finalized ID.
 
-The three lethal sources (melee, projectile, delayed burn) must enter this same state machine. Burn deaths may have no online killer; in that case preserve contributor snapshots but do not fabricate kill-progress or player rewards. Config reload must not discard a closing/finalizing life. The current implementation has **not** completed these steps: lethal handlers still run the legacy in-memory bounty/reward/respawn path. This section is the acceptance contract for the integration, not a claim that it is live.
+The three lethal sources (melee, projectile, delayed burn) must enter this same state machine. Burn deaths may have no online killer; in that case preserve contributor snapshots but do not fabricate kill-progress or player rewards. Config reload must not discard a closing/finalizing life. The live integration below implements the above sequence for all three lethal sources. The remaining process-crash recovery boundary is documented separately.
 
 
 ### Preserve closing monster lives across spawn-config refresh
 
-A spawn-config refresh must not replace the runtime definition or per-life contribution identity of a monster whose lethal transition has already been latched. The config merge now carries an existing `contribution_closing` runtime forward unchanged for that refresh instead of applying rare-spawn activation/deactivation or health changes to it. This protects the closing life from being revived or having its contribution identity rotated while its death lifecycle is pending. This is a defensive config-reload guard; deferred SQLite death finalization is still not implemented. Closing monsters are retained even when their spawn point is removed from the refreshed configuration; ordinary non-closing removed spawn points continue to follow the existing merge policy.
+A spawn-config refresh must not replace the runtime definition or per-life contribution identity of a monster whose lethal transition has already been latched. The config merge now carries an existing `contribution_closing` runtime forward unchanged for that refresh instead of applying rare-spawn activation/deactivation or health changes to it. This protects the closing life from being revived or having its contribution identity rotated while its death lifecycle is pending. This config-reload guard preserves closing/finalizing lives while the live SQLite death finalizer completes. Closing monsters are retained even when their spawn point is removed from the refreshed configuration; ordinary non-closing removed spawn points continue to follow the existing merge policy.
 
 
 ### Non-blocking per-life writer pending count
@@ -238,7 +238,7 @@ WorldServer now owns a dedicated `MonsterDeathFinalizer` worker next to the cont
 
 Duplicate submissions for the same life are rejected while a task is active. The worker is initialized after its SQLite dependencies and is stopped before the contribution writer/outbox during orderly shutdown. A focused test target exercises writer drain, authoritative ledger loading, event batch creation, finalization, and result delivery.
 
-**Integration boundary:** this worker is currently infrastructure only. Melee, projectile, and burn lethal handlers have not yet submitted pending-death tasks or consumed completion results. Their legacy reward/respawn path therefore remains active until the next integration step. Do not treat the presence of this worker as proof that SQLite is already the live death-settlement authority. Its task state and prepared event batch are process-local; abrupt process termination can still leave a zero-health closing monster and unfinalized ledger requiring recovery policy.
+**Historical integration boundary:** when this worker was first added, lethal handlers had not yet submitted tasks. The live integration below now submits all three death sources and consumes completion results. The task state and prepared batch remain process-local, so abrupt process termination can still leave a closing monster and unfinalized ledger requiring recovery policy.
 
 
 ### Live SQLite-backed monster death settlement integration
