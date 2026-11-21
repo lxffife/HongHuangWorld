@@ -1166,6 +1166,18 @@ struct EnetServer::Impl {
         return stored;
     }
 
+    bool enqueue_durable_events(const std::vector<honghuang::persistence::OutboxEvent>& events,
+                                std::string& error) {
+        if (!durable_outbox) { error = "durable outbox is not initialized"; return false; }
+        if (events.empty()) return true;
+        const bool stored = durable_outbox->enqueue_batch(events, error);
+        if (stored) {
+            outbox_cv.notify_one();
+            chat_outbox_cv.notify_one();
+        }
+        return stored;
+    }
+
     void start_outbox_worker() {
         outbox_stop_requested = false;
         outbox_thread = std::thread([this] {
@@ -1564,11 +1576,15 @@ struct EnetServer::Impl {
     }
 
     void enqueue_bounty_kill_events(const PlayerState& player, const MonsterRuntime& monster) {
+        std::vector<honghuang::persistence::OutboxEvent> batch;
+        const auto now = wall_clock_ms();
+        const auto contributors = monster_contribution_snapshot(monster);
         for (const auto& objective : player.bounty_objectives) {
             if (objective.event_type != "monster_killed" ||
                 objective.objective_key != monster.definition.id) continue;
+
             const auto event_id = make_event_uuid();
-            const Json payload{
+            const Json kill_payload{
                 {"event_id", event_id},
                 {"task_id", objective.task_id},
                 {"session_id", player.session_id},
@@ -1576,13 +1592,10 @@ struct EnetServer::Impl {
                 {"objective_key", objective.objective_key},
                 {"event_type", "monster_killed"}
             };
-            std::string error;
-            if (!enqueue_durable_event(event_id, "bounty_objective_event", payload, error)) {
-                std::cerr << "Could not persist bounty monster-kill event for task "
-                          << objective.task_id << ": " << error << '\n';
-            }
+            batch.push_back(honghuang::persistence::OutboxEvent{
+                event_id, "bounty_objective_event", kill_payload.dump(), 0, now, now, {}
+            });
 
-            const auto contributors = monster_contribution_snapshot(monster);
             if (!contributors.empty()) {
                 const auto contribution_event_id = make_event_uuid();
                 const Json contribution_payload{
@@ -1592,13 +1605,17 @@ struct EnetServer::Impl {
                     {"monster_definition_id", objective.objective_key},
                     {"contributors", contributors}
                 };
-                std::string contribution_error;
-                if (!enqueue_durable_event(contribution_event_id, "bounty_monster_contributions",
-                                            contribution_payload, contribution_error)) {
-                    std::cerr << "Could not persist bounty monster contribution snapshot for task "
-                              << objective.task_id << ": " << contribution_error << '\n';
-                }
+                batch.push_back(honghuang::persistence::OutboxEvent{
+                    contribution_event_id, "bounty_monster_contributions",
+                    contribution_payload.dump(), 0, now, now, {}
+                });
             }
+        }
+        if (batch.empty()) return;
+        std::string error;
+        if (!enqueue_durable_events(batch, error)) {
+            std::cerr << "Could not atomically persist bounty kill and contribution events for monster "
+                      << monster.runtime_id << ": " << error << '\n';
         }
     }
 
