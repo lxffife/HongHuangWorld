@@ -45,7 +45,7 @@ public:
  std::vector<PendingMonsterDeathRecord> load_pending_monster_deaths(std::string& error) const;
  bool acknowledge_monster_death_respawn(const std::string& monster_instance_id, std::string& error);
  std::vector<MonsterContributionRecord> load_monster_contributions(const std::string& monster_instance_id, std::string& error) const;
- // Atomically enqueue the death snapshot and remove its live ledger rows.
+ // Atomically enqueue the death snapshot, clear live ledger rows, and mark the death committed.
  bool finalize_monster_contributions(const std::string& monster_instance_id,
                                      const std::vector<OutboxEvent>& events, std::string& error);
  std::optional<OutboxEvent> find(const std::string& event_id, std::string& error) const;
