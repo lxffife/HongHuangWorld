@@ -21,6 +21,12 @@ struct MonsterContributionRecord {
  // Complete, deduplicated objective-subscription JSON supplied by the caller.
  std::string bounty_objectives_json{"[]"};
 };
+struct PendingMonsterDeathRecord {
+ std::string monster_instance_id;
+ std::string runtime_id;
+ std::string payload;
+ std::int64_t created_at_ms{};
+};
 struct OutboxEvent { std::string event_id; std::string event_type; std::string payload; std::uint32_t attempts{}; std::int64_t next_retry_at_ms{}; std::int64_t created_at_ms{}; std::string last_error; };
 class DurableOutbox {
 public:
@@ -30,6 +36,9 @@ public:
  bool enqueue(const OutboxEvent& event, std::string& error);
  bool enqueue_batch(const std::vector<OutboxEvent>& events, std::string& error);
  bool record_monster_contribution(const MonsterContributionRecord& contribution, std::string& error);
+ // Persist immutable death context before any finalization task is admitted.
+ bool save_pending_monster_death(const PendingMonsterDeathRecord& death, std::string& error);
+ std::vector<PendingMonsterDeathRecord> load_pending_monster_deaths(std::string& error) const;
  std::vector<MonsterContributionRecord> load_monster_contributions(const std::string& monster_instance_id, std::string& error) const;
  // Atomically enqueue the death snapshot and remove its live ledger rows.
  bool finalize_monster_contributions(const std::string& monster_instance_id,
