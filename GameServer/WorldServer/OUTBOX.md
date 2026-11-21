@@ -164,7 +164,7 @@ The writer is now connected to direct melee and projectile admission, but not ye
 
 A player-owned projectile that hits a live monster now creates the same immutable per-life contribution record as a melee hit and calls `submit_before_damage` before changing health. Only an accepted queue submission applies the calculated health value. Slow, freeze, and burn-on-hit effects are applied only after admission succeeds, so a full/stopping writer cannot leave status effects without the corresponding damage. If admission fails, the server logs the rejection, sends the projectile owner a retry-later combat response, and removes the projectile so it cannot hit repeatedly on later ticks. After admission, the legacy in-memory contribution map is still updated for existing death/bounty compatibility.
 
-This does not yet make projectiles crash-safe before SQLite confirms the asynchronous write, and it does not change the current in-memory death-snapshot/finalization boundary. Periodic burn ticks remain the next damage source to migrate.
+This does not yet make projectiles crash-safe before SQLite confirms the asynchronous write, and it does not change the current in-memory death-snapshot/finalization boundary. Online-owner periodic burn ticks now use the same admission contract; offline-owner attribution remains a known gap.
 
 
 ### Pre-damage admission contract
