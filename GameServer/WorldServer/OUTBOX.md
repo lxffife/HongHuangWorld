@@ -283,3 +283,14 @@ Tests now exercise durable admission idempotency/conflict rejection, database cl
 The center service receives each 1–256 contributor chunk as an immutable event with its own event ID. Ingestion now serializes writes by `(task_id, monster_instance_id)` and rejects chunks that disagree on the monster definition for the same life. Publisher audit and player history queries group the chunk events by task and monster instance, then sum each character's damage and hit count across every chunk. Publisher `monster_count` counts distinct monster lives rather than event chunks. Audit pagination uses the stable `(first_created_at, monster_instance_id)` group key, so later-arriving chunks do not move the monster between pages. `MonsterContributionSnapshot.event_id` is only a representative chunk ID; `monster_instance_id` is the stable snapshot identity.
 
 Migration `000060_bounty_monster_contribution_instance_index` adds the composite index used by these grouped audit/history queries.
+
+
+### Durable monster life health and atomic damage admission
+
+WorldServer now keeps the current life identity and health in SQLite `monster_life_states`, keyed by the stable spawn `runtime_id`. Startup restores the persisted `monster_instance_id` and health before the ENet poll loop accepts player commands. A normal melee, projectile, or attributed burn hit commits its contribution inbox row and a compare-and-swap health update in one `BEGIN IMMEDIATE` transaction. The in-memory health callback runs only after that transaction commits. If the process stops after commit but before the callback, startup loads the already-updated health; it does not replay the damage against a second in-memory copy.
+
+Lethal hits use the same transaction boundary as the pending death intent: the contribution, immutable death context, and zero-health life-state transition are committed together. Legacy ownerless burn death also persists the zero-health transition with its pending death intent. Respawn rotates the life instance ID, restores max health, and removes the committed death intent in one transaction, so a crash cannot leave a new in-memory life paired with the old durable life ID.
+
+The table is created automatically for existing SQLite files. Existing pending death records are consulted while initializing life state, preserving their old instance ID and zero-health status. A definition-ID mismatch is rejected at damage admission rather than mixing contribution rows from two monster definitions.
+
+This closes the prior crash interval between durable contribution admission and the in-memory health mutation for the covered combat paths. It does not make the entire world simulation (movement, AI, aggro, status timers, and position) durable; those remain runtime state and are reconstructed from world configuration.
