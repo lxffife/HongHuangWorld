@@ -510,12 +510,14 @@ int main() {
         honghuang::persistence::MonsterLifeStateRecord legacy_initial{
             "spawn-legacy-death", "life-legacy-death", "wraith", 55.0};
         assert(reopened.ensure_monster_life_state(legacy_initial, persisted, error));
+        assert(reopened.apply_monster_health_transition(
+            "spawn-legacy-death", "life-legacy-death", 55.0, 45.0, error));
         honghuang::persistence::PendingMonsterDeathRecord legacy_death;
         legacy_death.monster_instance_id = "life-legacy-death";
         legacy_death.runtime_id = "spawn-legacy-death";
         legacy_death.payload = R"({"version":1,"reward_eligible":false})";
         legacy_death.created_at_ms = 1000;
-        legacy_death.expected_health = 55.0;
+        legacy_death.expected_health = 45.0;
         legacy_death.resulting_health = 0.0;
         assert(reopened.save_pending_monster_death(legacy_death, error));
         const auto legacy_states = reopened.load_monster_life_states(error);
