@@ -229,7 +229,7 @@ func TestBountyAuditCursorRoundTrip(t *testing.T) {
  encoded:=encodeBountyAuditCursor(original)
  decoded,err:=decodeBountyAuditCursor(encoded)
  if err!=nil { t.Fatalf("decode cursor: %v",err) }
- if !decoded.CreatedAt.Equal(original.CreatedAt) || decoded.EventID!=original.EventID {
+ if !decoded.CreatedAt.Equal(original.CreatedAt) || decoded.MonsterInstanceID!=original.MonsterInstanceID {
   t.Fatalf("cursor round trip mismatch: got %#v want %#v",decoded,original)
  }
 }
