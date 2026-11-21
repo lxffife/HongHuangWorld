@@ -317,6 +317,19 @@ int main() {
         assert(!box.record_monster_contribution(late_hit, error));
         assert(box.finalize_monster_contributions("monster-no-objective", no_events, error));
     }
+    // The empty-batch tombstone must survive restart and continue rejecting late writes.
+    {
+        honghuang::persistence::DurableOutbox reopened(no_objective_path, 4, false);
+        std::string error;
+        const std::vector<honghuang::persistence::OutboxEvent> no_events;
+        assert(reopened.finalize_monster_contributions("monster-no-objective", no_events, error));
+        honghuang::persistence::MonsterContributionRecord late_hit{
+            "late-no-objective-after-restart", "monster-no-objective", "wolf",
+            "session-x", "character-x", 1, 1, 600, 600, "[]"
+        };
+        assert(!reopened.record_monster_contribution(late_hit, error));
+        assert(reopened.load_monster_contributions("monster-no-objective", error).empty());
+    }
     remove_database(no_objective_path);
 
     return 0;
