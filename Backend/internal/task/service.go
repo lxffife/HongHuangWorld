@@ -890,6 +890,7 @@ type MonsterContributionDetail struct {
 }
 
 type MonsterContributionSnapshot struct {
+ // EventID is a representative chunk event; MonsterInstanceID is the stable snapshot identity.
  EventID string `json:"event_id"`
  MonsterInstanceID string `json:"monster_instance_id"`
  MonsterDefinitionID string `json:"monster_definition_id"`
