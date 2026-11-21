@@ -788,7 +788,7 @@ std::vector<MonsterContributionRecord> DurableOutbox::load_monster_contributions
         int step = SQLITE_ROW;
         while ((step = sqlite3_step(query.get())) == SQLITE_ROW) {
             result.push_back(MonsterContributionRecord{
-                column_text(query.get(), 0), column_text(query.get(), 1),
+                {}, column_text(query.get(), 0), column_text(query.get(), 1),
                 column_text(query.get(), 2), column_text(query.get(), 3),
                 sqlite3_column_int64(query.get(), 4), sqlite3_column_int64(query.get(), 5),
                 sqlite3_column_int64(query.get(), 6), sqlite3_column_int64(query.get(), 7),
