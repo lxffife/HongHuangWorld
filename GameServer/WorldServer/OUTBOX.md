@@ -114,5 +114,5 @@ Duplicate contribution-event IDs are also bound to the original reporting node: 
 - Requires a player bearer token and an active membership in the task's actual publishing faction.
 - Only `leader` and `officer` roles may read task-wide audit data. A task published by another faction, an inactive faction, a member without an officer role, or a non-faction publisher is denied.
 - Authorization locks the task, faction, and membership rows in one read transaction before reading the ledger, preventing membership revocation from racing the audit request.
-- Response aggregates each character's total damage, hit count, distinct monster count, and percentage of accepted-participant damage. It also returns up to the latest 200 monster snapshots with character-level damage and hit counts.
+- Response aggregates each character's total damage, hit count, distinct monster count, and percentage of accepted-participant damage. Snapshot events use stable keyset pagination: `limit` defaults to 50 and is capped at 100; pass the returned opaque `next_cursor` as `cursor` to fetch the next page. Aggregates always cover the full task history, independent of the event page.
 - The response does not expose account IDs or world session IDs. It is read-only and does not change objective progress, participant eligibility, or settlement.
