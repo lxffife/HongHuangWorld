@@ -1591,7 +1591,7 @@ struct EnetServer::Impl {
                   << monster.runtime_id << " contributors=" << snapshot.dump() << '\n';
     }
 
-    void enqueue_bounty_kill_events(const PlayerState& player, const MonsterRuntime& monster) {
+    void enqueue_bounty_kill_events(const PlayerState* killer, const MonsterRuntime& monster) {
         std::vector<honghuang::persistence::OutboxEvent> batch;
         const auto now = wall_clock_ms();
         const auto contributors = monster_contribution_snapshot(monster);
@@ -1617,8 +1617,13 @@ struct EnetServer::Impl {
             if (objective.event_type != "monster_killed" ||
                 objective.objective_key != monster.definition.id) continue;
 
-            const auto killer_has_objective = std::any_of(
-                player.bounty_objectives.begin(), player.bounty_objectives.end(),
+            // Objective progress remains attributed only to an authenticated
+            // online killer with the matching subscription. A delayed burn tick
+            // may defeat the monster after its owner has disconnected; in that
+            // case we still persist prior contributors below, without inventing
+            // a killer identity or granting kill progress.
+            const auto killer_has_objective = killer != nullptr && std::any_of(
+                killer->bounty_objectives.begin(), killer->bounty_objectives.end(),
                 [&objective](const auto& killer_objective) {
                     return killer_objective.task_id == objective.task_id &&
                            killer_objective.objective_key == objective.objective_key &&
@@ -1629,8 +1634,8 @@ struct EnetServer::Impl {
                 const Json kill_payload{
                     {"event_id", event_id},
                     {"task_id", objective.task_id},
-                    {"session_id", player.session_id},
-                    {"character_id", player.character_id},
+                    {"session_id", killer->session_id},
+                    {"character_id", killer->character_id},
                     {"objective_key", objective.objective_key},
                     {"event_type", "monster_killed"}
                 };
@@ -2927,7 +2932,7 @@ struct EnetServer::Impl {
         if (damage.defeated) {
             target->state.mode = honghuang::simulation::MonsterMode::Dead;
             log_monster_contribution_snapshot(*target);
-            enqueue_bounty_kill_events(player, *target);
+            enqueue_bounty_kill_events(&player, *target);
             target->slow_effect = {};
             target->burn_effect = {};
             target->burn_owner_character_id.clear();
@@ -3366,7 +3371,7 @@ struct EnetServer::Impl {
                 if (damage.defeated) {
                     target->state.mode = honghuang::simulation::MonsterMode::Dead;
                     log_monster_contribution_snapshot(*target);
-                    enqueue_bounty_kill_events(owner->second, *target);
+                    enqueue_bounty_kill_events(&owner->second, *target);
                     honghuang::simulation::clear_negative_statuses(target->slow_effect,target->freeze_effect,target->burn_effect);
                     target->burn_owner_character_id.clear();
                     target->state.target_id.clear();
@@ -3465,8 +3470,8 @@ struct EnetServer::Impl {
                 if (burn_defeated) {
                     monster.state.mode = honghuang::simulation::MonsterMode::Dead;
                     log_monster_contribution_snapshot(monster);
-                    if (burn_owner != players.end())
-                        enqueue_bounty_kill_events(burn_owner->second, monster);
+                    enqueue_bounty_kill_events(
+                        burn_owner != players.end() ? &burn_owner->second : nullptr, monster);
                     monster.slow_effect = {};
                     monster.burn_effect = {};
                     monster.state.target_id.clear();
