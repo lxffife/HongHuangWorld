@@ -2636,19 +2636,13 @@ struct EnetServer::Impl {
             current.retry_spawn_seconds=next.retry_spawn_seconds;
             current.first_spawn_delay_seconds=next.first_spawn_delay_seconds;
             if(rare_changed){
+                // A rarity toggle must not silently discard an active life or its
+                // contribution ledger. Existing lives finish normally; the new
+                // rarity policy is applied at the next scheduled spawn.
                 current.rare_spawn=next.rare_spawn;
-                if(current.rare_spawn){
-                    current.state.health=0.0F;
-                    current.state.mode=honghuang::simulation::MonsterMode::Dead;
-                    current.state.target_id.clear();
+                if (current.state.mode == honghuang::simulation::MonsterMode::Dead &&
+                    current.respawn_at.time_since_epoch().count() == 0)
                     current.respawn_at=next.respawn_at;
-                }else{
-                    current.state={current.definition.spawn_x,current.definition.spawn_z,current.definition.max_health};
-                    current.contribution_instance_id=make_event_uuid();
-                    current.contribution_closing=false;
-                    current.damage_contributions.clear();
-                    current.respawn_at=Clock::time_point{};
-                }
             }else{
                 current.rare_spawn=next.rare_spawn;
                 current.state.health=std::min(current.state.health,current.definition.max_health);
