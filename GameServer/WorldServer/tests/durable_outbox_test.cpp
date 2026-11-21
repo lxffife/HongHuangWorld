@@ -266,10 +266,14 @@ int main() {
             {"monster-kill-final", "bounty_objective_event", R"({"event_id":"monster-kill-final"})", 0, 200, 200, {}},
             {"monster-contrib-final", "bounty_monster_contributions", R"({"event_id":"monster-contrib-final"})", 0, 200, 200, {}}
         };
+        error = "stale error before finalization retry";
         assert(box.finalize_monster_contributions("monster-runtime-1", final_events, error));
+        assert(error.empty()); // Successful finalization clears a reused error buffer.
         assert(box.load_monster_contributions("monster-runtime-1", error).empty());
         assert(box.pending_count(error) == 2);
+        error = "stale error before idempotent finalization";
         assert(box.finalize_monster_contributions("monster-runtime-1", final_events, error));
+        assert(error.empty());
         assert(box.pending_count(error) == 2);
         auto late_hit = hit;
         late_hit.write_id = "late-hit-after-death";
