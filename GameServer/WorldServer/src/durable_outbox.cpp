@@ -78,7 +78,7 @@ DurableOutbox::DurableOutbox(const std::string& path, std::size_t capacity, bool
         "ON monster_damage_contribution_writes(monster_instance_id);"
         "CREATE TABLE IF NOT EXISTS pending_monster_deaths("
         "monster_instance_id TEXT PRIMARY KEY NOT NULL,runtime_id TEXT NOT NULL,"
-        "payload TEXT NOT NULL,created_at_ms INTEGER NOT NULL);"
+        "payload TEXT NOT NULL,prepared_events_json TEXT NOT NULL DEFAULT '',created_at_ms INTEGER NOT NULL);"
         "CREATE INDEX IF NOT EXISTS idx_pending_monster_deaths_runtime "
         "ON pending_monster_deaths(runtime_id);";
     char* message = nullptr;
@@ -88,6 +88,27 @@ DurableOutbox::DurableOutbox(const std::string& path, std::size_t capacity, bool
         sqlite3_close(db_);
         db_ = nullptr;
         throw std::runtime_error(error);
+    }
+    // Upgrade databases created before prepared death batches were persisted.
+    {
+        Stmt columns(db_, "PRAGMA table_info(pending_monster_deaths)");
+        bool has_prepared_events = false;
+        while (sqlite3_step(columns.get()) == SQLITE_ROW) {
+            if (column_text(columns.get(), 1) == "prepared_events_json") {
+                has_prepared_events = true;
+                break;
+            }
+        }
+        if (!has_prepared_events &&
+            sqlite3_exec(db_,
+                "ALTER TABLE pending_monster_deaths ADD COLUMN prepared_events_json TEXT NOT NULL DEFAULT '';",
+                nullptr, nullptr, &message) != SQLITE_OK) {
+            const std::string error = message ? message : sqlite3_errmsg(db_);
+            sqlite3_free(message);
+            sqlite3_close(db_);
+            db_ = nullptr;
+            throw std::runtime_error(error);
+        }
     }
     if (recover_inflight) {
         if (sqlite3_exec(db_, "UPDATE world_event_outbox SET status='pending' WHERE status='inflight';", nullptr, nullptr, &message) != SQLITE_OK) {
@@ -334,6 +355,34 @@ bool DurableOutbox::save_pending_monster_death(
     }
 }
 
+bool DurableOutbox::save_pending_monster_death_batch(
+    const std::string& monster_instance_id, const std::string& events_json,
+    std::string& error) {
+    error.clear();
+    if (monster_instance_id.empty() || events_json.empty() || events_json.size() > 4 * 1024 * 1024) {
+        error = "pending monster death batch requires a bounded instance ID and JSON payload";
+        return false;
+    }
+    std::lock_guard lock(mutex_);
+    try {
+        Stmt update(db_,
+            "UPDATE pending_monster_deaths SET prepared_events_json=? "
+            "WHERE monster_instance_id=? AND (prepared_events_json='' OR prepared_events_json=?)");
+        bind_text(update.get(), 1, events_json);
+        bind_text(update.get(), 2, monster_instance_id);
+        bind_text(update.get(), 3, events_json);
+        if (sqlite3_step(update.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+        if (sqlite3_changes(db_) != 1) {
+            error = "pending death missing or prepared event batch conflicts with persisted batch";
+            return false;
+        }
+        return true;
+    } catch (const std::exception& exception) {
+        error = exception.what();
+        return false;
+    }
+}
+
 std::vector<PendingMonsterDeathRecord> DurableOutbox::load_pending_monster_deaths(
     std::string& error) const {
     error.clear();
@@ -341,7 +390,7 @@ std::vector<PendingMonsterDeathRecord> DurableOutbox::load_pending_monster_death
     std::lock_guard lock(mutex_);
     try {
         Stmt query(db_,
-            "SELECT monster_instance_id,runtime_id,payload,created_at_ms "
+            "SELECT monster_instance_id,runtime_id,payload,prepared_events_json,created_at_ms "
             "FROM pending_monster_deaths ORDER BY created_at_ms,monster_instance_id");
         while (true) {
             const int result = sqlite3_step(query.get());
@@ -351,7 +400,8 @@ std::vector<PendingMonsterDeathRecord> DurableOutbox::load_pending_monster_death
             record.monster_instance_id = column_text(query.get(), 0);
             record.runtime_id = column_text(query.get(), 1);
             record.payload = column_text(query.get(), 2);
-            record.created_at_ms = sqlite3_column_int64(query.get(), 3);
+            record.prepared_events_json = column_text(query.get(), 3);
+            record.created_at_ms = sqlite3_column_int64(query.get(), 4);
             records.push_back(std::move(record));
         }
     } catch (const std::exception& exception) {
