@@ -28,8 +28,25 @@ public:
     MonsterContributionWriter& operator=(const MonsterContributionWriter&) = delete;
 
     bool submit(const MonsterContributionRecord& contribution, std::string& error);
+    bool submit_damage(const MonsterContributionRecord& contribution,
+                       const std::string& runtime_id, double expected_health,
+                       double resulting_health, std::string& error);
 
-    // Admit the contribution before mutating health. The mutation must be noexcept.
+    // Commit health and the contribution inbox atomically before mutating memory.
+    template <typename ApplyDamage>
+    bool submit_damage_before_mutation(const MonsterContributionRecord& contribution,
+                                       const std::string& runtime_id, double expected_health,
+                                       double resulting_health, ApplyDamage&& apply_damage,
+                                       std::string& error) {
+        static_assert(noexcept(std::declval<ApplyDamage&>()()),
+                      "damage mutation callback must be noexcept");
+        if (!submit_damage(contribution, runtime_id, expected_health, resulting_health, error))
+            return false;
+        std::forward<ApplyDamage>(apply_damage)();
+        return true;
+    }
+
+    // Legacy admission helper; new combat paths should use submit_damage_before_mutation.
     template <typename ApplyDamage>
     bool submit_before_damage(const MonsterContributionRecord& contribution,
                               ApplyDamage&& apply_damage, std::string& error) {
