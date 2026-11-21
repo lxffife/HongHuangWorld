@@ -264,7 +264,7 @@ bool DurableOutbox::admit_monster_damage(
     error.clear();
     if (runtime_id.empty() || runtime_id.size() > 96 ||
         !std::isfinite(expected_health) || !std::isfinite(resulting_health) ||
-        expected_health <= 0.0 || resulting_health < 0.0 || resulting_health >= expected_health) {
+        expected_health <= 0.0 || resulting_health <= 0.0 || resulting_health >= expected_health) {
         error = "invalid monster damage command";
         return false;
     }
