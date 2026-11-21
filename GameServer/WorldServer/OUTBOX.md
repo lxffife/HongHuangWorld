@@ -148,3 +148,8 @@ A separate `MonsterContributionWriter` now provides the first worker-thread boun
 - `stop()` is immediate; it does not claim that queued records were flushed. The owner must drain relevant instances before stopping if it needs those records.
 
 This is an isolated writer component and test target only. The combat hit paths are not yet connected, the 256-entry in-memory map is still active, and no claim is made that arbitrary contributor counts are captured yet. The next integration must reserve queue capacity before applying damage, track closing life-instance IDs, drain before finalization, and solve the center API's 256-contributor-per-event limit with complete chunk/snapshot semantics before removing the cap.
+
+
+### Pre-damage admission contract
+
+The writer exposes `submit_before_damage(record, callback, error)` as the required ordering primitive for combat integration. It first reserves a slot by successfully submitting the immutable contribution record, then invokes a `noexcept` health-mutation callback. If the bounded queue is full or stopping, the callback is not invoked, so that hit must be rejected without changing monster health. The callback is constrained to be non-throwing to avoid queueing contribution evidence for a mutation that then aborts. This is an ordering primitive only: it does not remove the asynchronous crash window, and all live combat call sites still need to adopt it before the contract is active in gameplay.
