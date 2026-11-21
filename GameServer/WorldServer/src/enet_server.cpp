@@ -4187,7 +4187,8 @@ struct EnetServer::Impl {
                     monster.burn_owner_bounty_objectives.clear();
             }
             if (burn_damage > 0) {
-                const auto previous_health = static_cast<std::int64_t>(monster.state.health);
+                const double previous_health_exact = static_cast<double>(monster.state.health);
+                const auto previous_health = static_cast<std::int64_t>(previous_health_exact);
                 const auto applied_burn_damage = std::min(burn_damage, previous_health);
                 auto burn_owner = std::find_if(players.begin(), players.end(), [&](const auto& entry) {
                     return entry.second.character_id == monster.burn_owner_character_id;
@@ -4206,7 +4207,7 @@ struct EnetServer::Impl {
                         : (monster_contribution_writer != nullptr &&
                             monster_contribution_writer->submit_damage_before_mutation(
                                 contribution, monster.runtime_id,
-                                static_cast<double>(previous_health),
+                                previous_health_exact,
                                 static_cast<double>(std::max<std::int64_t>(0, previous_health - applied_burn_damage)),
                                 [&monster, previous_health, applied_burn_damage]() noexcept {
                                     monster.state.health = static_cast<float>(
