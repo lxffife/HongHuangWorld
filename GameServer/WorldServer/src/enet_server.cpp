@@ -3496,8 +3496,8 @@ struct EnetServer::Impl {
                     enqueue_bounty_kill_events(&owner->second, *target);
                     honghuang::simulation::clear_negative_statuses(target->slow_effect,target->freeze_effect,target->burn_effect);
                     target->burn_owner_character_id.clear();
-            target->burn_owner_session_id.clear();
-            target->burn_owner_bounty_objectives.clear();
+                    target->burn_owner_session_id.clear();
+                    target->burn_owner_bounty_objectives.clear();
                     target->state.target_id.clear();
                     target->respawn_at = now + std::chrono::seconds(target->retry_spawn_seconds);
                     experience_reward = 20 + static_cast<std::int64_t>(target->definition.level) * 10;
@@ -3567,8 +3567,8 @@ struct EnetServer::Impl {
                     monster.attack_phase = MonsterAttackPhase::Ready;
                     honghuang::simulation::clear_negative_statuses(monster.slow_effect,monster.freeze_effect,monster.burn_effect);
                     monster.burn_owner_character_id.clear();
-                    monster.burn_owner_session_id.clear();
-                    monster.burn_owner_bounty_objectives.clear();
+                monster.burn_owner_session_id.clear();
+                monster.burn_owner_bounty_objectives.clear();
                     monster.attack_target_character_id.clear();
                     monster.last_attack_at = Clock::time_point{};
                 }
