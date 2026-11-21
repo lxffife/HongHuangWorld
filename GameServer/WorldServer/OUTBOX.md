@@ -101,3 +101,9 @@ Participants can inspect the most recent 200 monster contribution snapshots for 
 `GET /api/v1/bounties/{taskID}/contributions`
 
 The endpoint verifies that the authenticated account participated in the task. It returns monster instance/definition, timestamp, character ID, effective damage, and hit count. Internal session IDs and account IDs are not exposed. This is a read-only audit view; it does not change objective progress or settlement.
+
+### Contributor-owned bounty objective attribution
+
+A monster damage contribution now carries the matching `monster_killed` objective subscriptions observed on that authenticated character when effective damage is applied. At death, WorldServer unions and deduplicates those task/objective subscriptions across the damage ledger. This means a non-participant final hitter no longer suppresses a contribution snapshot for a task joined by another contributor. The kill-progress event is still emitted only when the final hitter has the matching subscription; contribution snapshots are emitted for each task represented by a contributor. The center service remains authoritative and filters contributors to accepted participants.
+
+Duplicate contribution-event IDs are also bound to the original reporting node: an exact retry from another node is rejected as an idempotency conflict, even if its JSON payload is identical.
