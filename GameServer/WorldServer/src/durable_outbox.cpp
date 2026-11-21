@@ -78,7 +78,8 @@ DurableOutbox::DurableOutbox(const std::string& path, std::size_t capacity, bool
         "ON monster_damage_contribution_writes(monster_instance_id);"
         "CREATE TABLE IF NOT EXISTS pending_monster_deaths("
         "monster_instance_id TEXT PRIMARY KEY NOT NULL,runtime_id TEXT NOT NULL,"
-        "payload TEXT NOT NULL,prepared_events_json TEXT NOT NULL DEFAULT '',created_at_ms INTEGER NOT NULL);"
+        "payload TEXT NOT NULL,prepared_events_json TEXT NOT NULL DEFAULT '',created_at_ms INTEGER NOT NULL,"
+        "committed_at_ms INTEGER NOT NULL DEFAULT 0);"
         "CREATE INDEX IF NOT EXISTS idx_pending_monster_deaths_runtime "
         "ON pending_monster_deaths(runtime_id);";
     char* message = nullptr;
@@ -102,6 +103,26 @@ DurableOutbox::DurableOutbox(const std::string& path, std::size_t capacity, bool
         if (!has_prepared_events &&
             sqlite3_exec(db_,
                 "ALTER TABLE pending_monster_deaths ADD COLUMN prepared_events_json TEXT NOT NULL DEFAULT '';",
+                nullptr, nullptr, &message) != SQLITE_OK) {
+            const std::string error = message ? message : sqlite3_errmsg(db_);
+            sqlite3_free(message);
+            sqlite3_close(db_);
+            db_ = nullptr;
+            throw std::runtime_error(error);
+        }
+    }
+    {
+        Stmt columns(db_, "PRAGMA table_info(pending_monster_deaths)");
+        bool has_committed_at = false;
+        while (sqlite3_step(columns.get()) == SQLITE_ROW) {
+            if (column_text(columns.get(), 1) == "committed_at_ms") {
+                has_committed_at = true;
+                break;
+            }
+        }
+        if (!has_committed_at &&
+            sqlite3_exec(db_,
+                "ALTER TABLE pending_monster_deaths ADD COLUMN committed_at_ms INTEGER NOT NULL DEFAULT 0;",
                 nullptr, nullptr, &message) != SQLITE_OK) {
             const std::string error = message ? message : sqlite3_errmsg(db_);
             sqlite3_free(message);
@@ -383,6 +404,30 @@ bool DurableOutbox::save_pending_monster_death_batch(
     }
 }
 
+bool DurableOutbox::acknowledge_monster_death_respawn(
+    const std::string& monster_instance_id, std::string& error) {
+    error.clear();
+    if (monster_instance_id.empty()) {
+        error = "monster instance ID is required to acknowledge respawn";
+        return false;
+    }
+    std::lock_guard lock(mutex_);
+    try {
+        Stmt remove(db_,
+            "DELETE FROM pending_monster_deaths WHERE monster_instance_id=? AND committed_at_ms>0");
+        bind_text(remove.get(), 1, monster_instance_id);
+        if (sqlite3_step(remove.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+        if (sqlite3_changes(db_) != 1) {
+            error = "committed monster death intent was not found for respawn acknowledgement";
+            return false;
+        }
+        return true;
+    } catch (const std::exception& exception) {
+        error = exception.what();
+        return false;
+    }
+}
+
 std::vector<PendingMonsterDeathRecord> DurableOutbox::load_pending_monster_deaths(
     std::string& error) const {
     error.clear();
@@ -390,7 +435,7 @@ std::vector<PendingMonsterDeathRecord> DurableOutbox::load_pending_monster_death
     std::lock_guard lock(mutex_);
     try {
         Stmt query(db_,
-            "SELECT monster_instance_id,runtime_id,payload,prepared_events_json,created_at_ms "
+            "SELECT monster_instance_id,runtime_id,payload,prepared_events_json,created_at_ms,committed_at_ms "
             "FROM pending_monster_deaths ORDER BY created_at_ms,monster_instance_id");
         while (true) {
             const int result = sqlite3_step(query.get());
@@ -402,6 +447,7 @@ std::vector<PendingMonsterDeathRecord> DurableOutbox::load_pending_monster_death
             record.payload = column_text(query.get(), 2);
             record.prepared_events_json = column_text(query.get(), 3);
             record.created_at_ms = sqlite3_column_int64(query.get(), 4);
+            record.committed_at_ms = sqlite3_column_int64(query.get(), 5);
             records.push_back(std::move(record));
         }
     } catch (const std::exception& exception) {
@@ -641,9 +687,16 @@ bool DurableOutbox::finalize_monster_contributions(
         Stmt remove_writes(db_, "DELETE FROM monster_damage_contribution_writes WHERE monster_instance_id=?");
         bind_text(remove_writes.get(), 1, monster_instance_id);
         if (sqlite3_step(remove_writes.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
-        Stmt remove_pending(db_, "DELETE FROM pending_monster_deaths WHERE monster_instance_id=?");
-        bind_text(remove_pending.get(), 1, monster_instance_id);
-        if (sqlite3_step(remove_pending.get()) != SQLITE_DONE)
+        const auto committed_at_ms = events.empty()
+            ? std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count()
+            : events.front().created_at_ms;
+        Stmt mark_death_committed(db_,
+            "UPDATE pending_monster_deaths SET committed_at_ms=? "
+            "WHERE monster_instance_id=? AND committed_at_ms=0");
+        sqlite3_bind_int64(mark_death_committed.get(), 1, committed_at_ms);
+        bind_text(mark_death_committed.get(), 2, monster_instance_id);
+        if (sqlite3_step(mark_death_committed.get()) != SQLITE_DONE)
             throw std::runtime_error(sqlite3_errmsg(db_));
         Stmt remove(db_, "DELETE FROM monster_damage_contributions WHERE monster_instance_id=?");
         bind_text(remove.get(), 1, monster_instance_id);
