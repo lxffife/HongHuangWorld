@@ -86,6 +86,13 @@ int main() {
         assert(rows.front().last_hit_at_ms == 130);
         assert(writer.last_error().empty());
 
+        // Re-admitting an already-applied exact write ID is replay-safe and does not double-count.
+        assert(writer.submit(first, error));
+        assert(writer.wait_until_drained("life-a", 3s));
+        rows = outbox.load_monster_contributions("life-a", error);
+        assert(error.empty() && rows.size() == 1 && rows.front().total_damage == 40);
+        assert(rows.front().hit_count == 3);
+
         auto final_write = first;
         final_write.write_id = "writer-hit-final";
         final_write.total_damage = 5;
