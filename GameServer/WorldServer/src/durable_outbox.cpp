@@ -308,8 +308,10 @@ bool DurableOutbox::record_monster_contribution(
         transaction_open = true;
         Stmt finalized(db_, "SELECT 1 FROM monster_damage_contribution_finalized WHERE monster_instance_id=?");
         bind_text(finalized.get(), 1, item.monster_instance_id);
-        if (sqlite3_step(finalized.get()) == SQLITE_ROW)
+        const int finalized_result = sqlite3_step(finalized.get());
+        if (finalized_result == SQLITE_ROW)
             throw std::runtime_error("monster contribution ledger is already finalized");
+        if (finalized_result != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
         Stmt existing(db_,
             "SELECT monster_instance_id,session_id,character_id,monster_definition_id,damage,hit_count,"
             "first_hit_at_ms,last_hit_at_ms,bounty_objectives_json "
