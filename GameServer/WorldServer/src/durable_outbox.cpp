@@ -216,8 +216,10 @@ bool DurableOutbox::admit_monster_contribution(
             "UNION ALL SELECT 1 FROM pending_monster_deaths WHERE monster_instance_id=? LIMIT 1");
         bind_text(closed.get(), 1, item.monster_instance_id);
         bind_text(closed.get(), 2, item.monster_instance_id);
-        if (sqlite3_step(closed.get()) == SQLITE_ROW)
+        const int closed_result = sqlite3_step(closed.get());
+        if (closed_result == SQLITE_ROW)
             throw std::runtime_error("monster life is closing or finalized; contribution admission rejected");
+        if (closed_result != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
         if (verify_existing(
                 "SELECT monster_instance_id,monster_definition_id,session_id,character_id,"
                 "damage,hit_count,first_hit_at_ms,last_hit_at_ms,bounty_objectives_json "
