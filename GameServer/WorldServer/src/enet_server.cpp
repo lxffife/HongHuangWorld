@@ -2994,7 +2994,7 @@ struct EnetServer::Impl {
                 },
                 contribution_error)) {
             std::cerr << "Rejected melee hit because monster contribution was not admitted: "
-                      << contribution_error << '\\n';
+                      << contribution_error << '\n';
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", false}, {"reason", "战斗记录繁忙，请稍后再试。"}});
             return;
