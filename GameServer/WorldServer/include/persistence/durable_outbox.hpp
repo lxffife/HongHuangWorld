@@ -38,6 +38,9 @@ public:
  bool enqueue(const OutboxEvent& event, std::string& error);
  bool enqueue_batch(const std::vector<OutboxEvent>& events, std::string& error);
  bool record_monster_contribution(const MonsterContributionRecord& contribution, std::string& error);
+ bool record_monster_contribution_and_pending_death(
+     const MonsterContributionRecord& contribution,
+     const PendingMonsterDeathRecord& death, std::string& error);
  // Persist immutable death context before any finalization task is admitted.
  bool save_pending_monster_death(const PendingMonsterDeathRecord& death, std::string& error);
  bool save_pending_monster_death_batch(const std::string& monster_instance_id,
@@ -62,6 +65,9 @@ public:
 private:
  sqlite3* db_{}; std::size_t capacity_{}; mutable std::mutex mutex_;
  std::optional<OutboxEvent> claim_due_filtered(std::int64_t now_ms, const std::string& event_type, bool exclude, std::string& error);
+ bool record_monster_contribution_internal(const MonsterContributionRecord& contribution,
+                                           const PendingMonsterDeathRecord* death,
+                                           std::string& error);
  bool execute(const char* sql, std::string& error) const;
 };
 }
