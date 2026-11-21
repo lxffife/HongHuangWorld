@@ -1,5 +1,6 @@
 #include "persistence/monster_death_finalizer.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <filesystem>
@@ -73,6 +74,46 @@ int main() {
         assert(!pending_deaths.front().prepared_events_json.empty());
         assert(outbox.acknowledge_monster_death_respawn("life-death-1", error));
         assert(outbox.load_pending_monster_deaths(error).empty());
+        honghuang::persistence::MonsterContributionRecord recovered_contribution = contribution;
+        recovered_contribution.write_id = "write-death-2";
+        recovered_contribution.monster_instance_id = "life-death-2";
+        assert(writer.submit(recovered_contribution, error));
+        honghuang::persistence::PendingMonsterDeathRecord recovered_intent;
+        recovered_intent.monster_instance_id = "life-death-2";
+        recovered_intent.runtime_id = "spawn-death-2";
+        recovered_intent.payload = R"({"version":1,"killer_objectives":[],"drops":[]})";
+        recovered_intent.created_at_ms = 2;
+        assert(outbox.save_pending_monster_death(recovered_intent, error));
+        const std::string persisted_batch =
+            R"([{"event_id":"recovered-event-1","event_type":"test_death_event","payload":"{\"event_id\":\"recovered-event-1\"}","attempts":0,"next_retry_at_ms":0,"created_at_ms":2,"last_error":""}])";
+        assert(outbox.save_pending_monster_death_batch("life-death-2", persisted_batch, error));
+        bool recovered_builder_called = false;
+        assert(finalizer.submit("life-death-2",
+            [&recovered_builder_called](const auto&, auto&, std::string&) {
+                recovered_builder_called = true;
+                return false;
+            }, error));
+        bool recovered_completed = false;
+        const auto recovered_deadline = std::chrono::steady_clock::now() + 3s;
+        while (std::chrono::steady_clock::now() < recovered_deadline && !recovered_completed) {
+            for (const auto& result : finalizer.take_results()) {
+                assert(result.success);
+                assert(result.monster_instance_id == "life-death-2");
+                recovered_completed = true;
+            }
+            if (!recovered_completed) std::this_thread::sleep_for(10ms);
+        }
+        assert(recovered_completed);
+        assert(!recovered_builder_called);
+        const auto recovered_event = outbox.find("recovered-event-1", error);
+        assert(error.empty() && recovered_event.has_value());
+        const auto committed_records = outbox.load_pending_monster_deaths(error);
+        const auto committed_intent = std::find_if(
+            committed_records.begin(), committed_records.end(),
+            [](const auto& item) { return item.monster_instance_id == "life-death-2"; });
+        assert(error.empty() && committed_intent != committed_records.end());
+        assert(committed_intent->committed_at_ms > 0);
+        assert(outbox.acknowledge_monster_death_respawn("life-death-2", error));
         assert(finalizer.stop_after_drain(1s));
         assert(writer.stop_after_drain(1s));
     }
