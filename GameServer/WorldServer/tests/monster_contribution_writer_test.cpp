@@ -40,10 +40,13 @@ int main() {
         assert(!writer.submit_before_damage(first, [&]() noexcept { health -= first.total_damage; }, error));
         assert(health == 100); // A full queue must reject before health changes.
         assert(!writer.wait_until_drained("life-a", 20ms)); // In-flight write is still pending.
+        assert(writer.pending_count_for_monster("life-a") == 2);
+        assert(writer.pending_count_for_monster("life-not-present") == 0);
         assert(sqlite3_exec(blocker, "COMMIT", nullptr, nullptr, nullptr) == SQLITE_OK);
         sqlite3_close(blocker);
         assert(writer.wait_until_drained("life-a", 3s));
         assert(writer.pending_count() == 0);
+        assert(writer.pending_count_for_monster("life-a") == 0);
         auto rows = outbox.load_monster_contributions("life-a", error);
         assert(rows.size() == 1);
         assert(rows.front().total_damage == 30);
