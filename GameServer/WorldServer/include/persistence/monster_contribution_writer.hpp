@@ -43,6 +43,9 @@ public:
                             std::chrono::milliseconds timeout);
     std::size_t pending_count() const;
     std::string last_error() const;
+    // Stop accepting writes, wait up to timeout for queued SQLite commits, then join.
+    // Returns false when the queue could not be fully committed before the deadline.
+    bool stop_after_drain(std::chrono::milliseconds timeout);
     void stop();
 
 private:
