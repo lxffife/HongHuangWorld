@@ -500,7 +500,10 @@ bool DurableOutbox::finalize_monster_contributions(
                 "VALUES(?,?,?)");
             bind_text(mark_finalized.get(), 1, monster_instance_id);
             bind_text(mark_finalized.get(), 2, event_ids);
-            sqlite3_bind_int64(mark_finalized.get(), 3, events.front().created_at_ms);
+            const auto finalized_at_ms = events.empty()
+                ? static_cast<std::int64_t>(0)
+                : events.front().created_at_ms;
+            sqlite3_bind_int64(mark_finalized.get(), 3, finalized_at_ms);
             if (sqlite3_step(mark_finalized.get()) != SQLITE_DONE)
                 throw std::runtime_error(sqlite3_errmsg(db_));
         } else {
