@@ -89,9 +89,9 @@ int main() {
         assert(rows.front().last_hit_at_ms == 130);
         assert(writer.last_error().empty());
 
-        // Re-admitting an already-applied exact write ID is replay-safe and does not double-count.
-        assert(writer.submit(first, error));
-        assert(writer.wait_until_drained("life-a", 3s));
+        // A completed write ID cannot be reused to apply a second health mutation.
+        assert(!writer.submit(first, error));
+        assert(writer.pending_count_for_monster("life-a") == 0);
         rows = outbox.load_monster_contributions("life-a", error);
         assert(error.empty() && rows.size() == 1 && rows.front().total_damage == 40);
         assert(rows.front().hit_count == 3);
