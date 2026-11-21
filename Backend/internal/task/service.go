@@ -772,7 +772,7 @@ func (s *Service) RecordMonsterContributions(ctx context.Context, nodeKey string
  if strings.TrimSpace(nodeKey)=="" || len(nodeKey)>96 || !validUUID(event.EventID) ||
   !validUUID(event.TaskID) || event.MonsterInstanceID=="" || len(event.MonsterInstanceID)>96 ||
   event.MonsterDefinitionID=="" || len(event.MonsterDefinitionID)>64 ||
-  len(event.Contributors)<1 || len(event.Contributors)>64 {
+  len(event.Contributors)<1 || len(event.Contributors)>256 {
   return ErrInvalidWorldEvent
  }
  event.EventID=strings.ToLower(event.EventID)
