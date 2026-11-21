@@ -226,5 +226,43 @@ int main() {
         assert(worker_box.mark_delivered("chat-live", error));
     }
     remove_database(admin_path);
+
+    const std::string ledger_path = "world_outbox_monster_ledger_test.sqlite";
+    remove_database(ledger_path);
+    {
+        honghuang::persistence::DurableOutbox box(ledger_path, 8);
+        std::string error;
+        honghuang::persistence::MonsterContributionRecord hit{
+            "monster-runtime-1", "wolf", "session-a", "character-a", 25, 1, 100, 100, R"([{"task_id":"task-a"}])"
+        };
+        assert(box.record_monster_contribution(hit, error));
+        hit.total_damage = 35;
+        hit.hit_count = 1;
+        hit.first_hit_at_ms = 90;
+        hit.last_hit_at_ms = 120;
+        hit.bounty_objectives_json = R"([{"task_id":"task-a"},{"task_id":"task-b"}])";
+        assert(box.record_monster_contribution(hit, error));
+        auto loaded = box.load_monster_contributions("monster-runtime-1", error);
+        assert(loaded.size() == 1);
+        assert(loaded.front().total_damage == 60 && loaded.front().hit_count == 2);
+        assert(loaded.front().first_hit_at_ms == 90 && loaded.front().last_hit_at_ms == 120);
+        assert(loaded.front().bounty_objectives_json.find("task-b") != std::string::npos);
+        {
+            honghuang::persistence::DurableOutbox reopened(ledger_path, 8, false);
+            auto recovered = reopened.load_monster_contributions("monster-runtime-1", error);
+            assert(recovered.size() == 1 && recovered.front().total_damage == 60);
+        }
+        const std::vector<honghuang::persistence::OutboxEvent> final_events{
+            {"monster-kill-final", "bounty_objective_event", R"({"event_id":"monster-kill-final"})", 0, 200, 200, {}},
+            {"monster-contrib-final", "bounty_monster_contributions", R"({"event_id":"monster-contrib-final"})", 0, 200, 200, {}}
+        };
+        assert(box.finalize_monster_contributions("monster-runtime-1", final_events, error));
+        assert(box.load_monster_contributions("monster-runtime-1", error).empty());
+        assert(box.pending_count(error) == 2);
+        assert(box.finalize_monster_contributions("monster-runtime-1", final_events, error));
+        assert(box.pending_count(error) == 2);
+    }
+    remove_database(ledger_path);
+
     return 0;
 }
