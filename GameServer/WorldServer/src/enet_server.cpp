@@ -1211,6 +1211,10 @@ struct EnetServer::Impl {
                     } else if (event->event_type == "bounty_objective_event") {
                         Json response;
                         delivered = backend_inventory_request(config, "/api/v1/servers/bounties/events",
+                                                              &payload, status, response, delivery_error); 
+                    } else if (event->event_type == "bounty_monster_contributions") {
+                        Json response;
+                        delivered = backend_inventory_request(config, "/api/v1/servers/bounties/contributions",
                                                               &payload, status, response, delivery_error);
                     } else if (event->event_type == "soul_absorption") {
                         SoulAbsorptionEvent absorption{
@@ -1576,6 +1580,24 @@ struct EnetServer::Impl {
             if (!enqueue_durable_event(event_id, "bounty_objective_event", payload, error)) {
                 std::cerr << "Could not persist bounty monster-kill event for task "
                           << objective.task_id << ": " << error << '\n';
+            }
+
+            const auto contributors = monster_contribution_snapshot(monster);
+            if (!contributors.empty()) {
+                const auto contribution_event_id = make_event_uuid();
+                const Json contribution_payload{
+                    {"event_id", contribution_event_id},
+                    {"task_id", objective.task_id},
+                    {"monster_instance_id", monster.runtime_id},
+                    {"monster_definition_id", objective.objective_key},
+                    {"contributors", contributors}
+                };
+                std::string contribution_error;
+                if (!enqueue_durable_event(contribution_event_id, "bounty_monster_contributions",
+                                            contribution_payload, contribution_error)) {
+                    std::cerr << "Could not persist bounty monster contribution snapshot for task "
+                              << objective.task_id << ": " << contribution_error << '\\n';
+                }
             }
         }
     }
