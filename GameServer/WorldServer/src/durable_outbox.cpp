@@ -747,6 +747,18 @@ bool DurableOutbox::save_pending_monster_death(
         bind_text(insert.get(), 3, death.payload);
         sqlite3_bind_int64(insert.get(), 4, death.created_at_ms);
         if (sqlite3_step(insert.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+        if (death.expected_health > 0.0) {
+            Stmt close_life(db_,
+                "UPDATE monster_life_states SET health=?,updated_at_ms=? "
+                "WHERE runtime_id=? AND monster_instance_id=? AND ABS(health-?)<=0.001");
+            sqlite3_bind_double(close_life.get(), 1, death.resulting_health);
+            sqlite3_bind_int64(close_life.get(), 2, death.created_at_ms);
+            bind_text(close_life.get(), 3, death.runtime_id);
+            bind_text(close_life.get(), 4, death.monster_instance_id);
+            sqlite3_bind_double(close_life.get(), 5, death.expected_health);
+            if (sqlite3_step(close_life.get()) != SQLITE_DONE || sqlite3_changes(db_) != 1)
+                throw std::runtime_error("monster death health compare-and-swap failed");
+        }
         return true;
     } catch (const std::exception& exception) {
         error = exception.what();
@@ -908,6 +920,18 @@ bool DurableOutbox::record_monster_contribution_internal(
             sqlite3_bind_int64(insert_death.get(), 4, death->created_at_ms);
             if (sqlite3_step(insert_death.get()) != SQLITE_DONE)
                 throw std::runtime_error(sqlite3_errmsg(db_));
+            if (death->expected_health > 0.0) {
+                Stmt close_life(db_,
+                    "UPDATE monster_life_states SET health=?,updated_at_ms=? "
+                    "WHERE runtime_id=? AND monster_instance_id=? AND ABS(health-?)<=0.001");
+                sqlite3_bind_double(close_life.get(), 1, death->resulting_health);
+                sqlite3_bind_int64(close_life.get(), 2, death->created_at_ms);
+                bind_text(close_life.get(), 3, death->runtime_id);
+                bind_text(close_life.get(), 4, death->monster_instance_id);
+                sqlite3_bind_double(close_life.get(), 5, death->expected_health);
+                if (sqlite3_step(close_life.get()) != SQLITE_DONE || sqlite3_changes(db_) != 1)
+                    throw std::runtime_error("monster lethal health compare-and-swap failed");
+            }
         };
         Stmt finalized(db_, "SELECT 1 FROM monster_damage_contribution_finalized WHERE monster_instance_id=?");
         bind_text(finalized.get(), 1, item.monster_instance_id);
