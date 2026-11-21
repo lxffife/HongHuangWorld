@@ -105,14 +105,20 @@ void MonsterDeathFinalizer::run() {
                 task.last_error = std::move(error);
             } else {
                 std::vector<OutboxEvent> batch;
-                if (task.builder(contributions, batch, error)) {
-                    task.batch = std::move(batch);
-                    task.batch_prepared = true;
-                    task.last_error.clear();
-                } else {
-                    task.last_error = error.empty()
-                        ? "monster death event builder rejected the ledger snapshot"
-                        : std::move(error);
+                try {
+                    if (task.builder(contributions, batch, error)) {
+                        task.batch = std::move(batch);
+                        task.batch_prepared = true;
+                        task.last_error.clear();
+                    } else {
+                        task.last_error = error.empty()
+                            ? "monster death event builder rejected the ledger snapshot"
+                            : std::move(error);
+                    }
+                } catch (const std::exception& exception) {
+                    task.last_error = std::string("monster death event builder threw: ") + exception.what();
+                } catch (...) {
+                    task.last_error = "monster death event builder threw an unknown exception";
                 }
             }
         }
