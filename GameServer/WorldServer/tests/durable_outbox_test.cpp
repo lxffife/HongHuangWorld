@@ -161,6 +161,14 @@ int main() {
         assert(!box.enqueue_batch(conflicting, error)); // Conflict rejects the batch.
         assert(box.pending_count(error) == 2);
 
+        const std::vector<honghuang::persistence::OutboxEvent> late_conflict{
+            {"new-before-conflict", "bounty_objective_event", R"({"event_id":"new-before-conflict"})", 0, 100, 100, {}},
+            {"kill-1", "bounty_objective_event", R"({"event_id":"kill-1","different":true})", 0, 100, 100, {}}
+        };
+        assert(!box.enqueue_batch(late_conflict, error));
+        assert(box.pending_count(error) == 2);
+        assert(!box.find("new-before-conflict", error)); // No earlier row leaked from the rejected batch.
+
         assert(box.mark_delivered("kill-1", error));
         assert(box.mark_delivered("contrib-1", error));
     }
