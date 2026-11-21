@@ -425,5 +425,74 @@ int main() {
         assert(error.empty() && rolled_back.empty());
     }
 
+    const std::string life_state_path = "world_outbox_monster_life_state_test.sqlite";
+    remove_database(life_state_path);
+    {
+        honghuang::persistence::DurableOutbox box(life_state_path, 16);
+        std::string error;
+        honghuang::persistence::MonsterLifeStateRecord initial{
+            "spawn-state-1", "life-state-1", "wolf", 100.0};
+        honghuang::persistence::MonsterLifeStateRecord persisted;
+        assert(box.ensure_monster_life_state(initial, persisted, error));
+        assert(persisted.monster_instance_id == "life-state-1" && persisted.health == 100.0);
+
+        honghuang::persistence::MonsterContributionRecord hit;
+        hit.write_id = "life-state-hit-1";
+        hit.monster_instance_id = "life-state-1";
+        hit.monster_definition_id = "wolf";
+        hit.session_id = "session-state";
+        hit.character_id = "character-state";
+        hit.total_damage = 25;
+        hit.hit_count = 1;
+        hit.first_hit_at_ms = 800;
+        hit.last_hit_at_ms = 800;
+        hit.bounty_objectives_json = "[]";
+        assert(box.admit_monster_damage(hit, "spawn-state-1", 100.0, 75.0, error));
+        auto states = box.load_monster_life_states(error);
+        assert(error.empty() && states.size() == 1 && states.front().health == 75.0);
+        assert(!box.admit_monster_damage(
+            hit, "spawn-state-1", 100.0, 75.0, error)); // stale expected health cannot overwrite.
+        assert(box.record_monster_contribution(hit, error));
+        assert(box.acknowledge_monster_contribution_write(hit.write_id, error));
+
+        honghuang::persistence::MonsterContributionRecord lethal = hit;
+        lethal.write_id = "life-state-lethal";
+        lethal.total_damage = 75;
+        lethal.first_hit_at_ms = 900;
+        lethal.last_hit_at_ms = 900;
+        honghuang::persistence::PendingMonsterDeathRecord death;
+        death.monster_instance_id = "life-state-1";
+        death.runtime_id = "spawn-state-1";
+        death.payload = R"({"version":1})";
+        death.created_at_ms = 900;
+        death.expected_health = 75.0;
+        death.resulting_health = 0.0;
+        assert(box.record_monster_contribution_and_pending_death(lethal, death, error));
+        states = box.load_monster_life_states(error);
+        assert(error.empty() && states.size() == 1 && states.front().health == 0.0);
+
+        const std::vector<honghuang::persistence::OutboxEvent> events{
+            {"life-state-final", "bounty_objective_event", R"({"event_id":"life-state-final"})", 0, 0, 950, {}}
+        };
+        assert(box.finalize_monster_contributions("life-state-1", events, error));
+        assert(box.respawn_monster_life("life-state-1",
+            honghuang::persistence::MonsterLifeStateRecord{
+                "spawn-state-1", "life-state-2", "wolf", 100.0}, error));
+        states = box.load_monster_life_states(error);
+        assert(error.empty() && states.size() == 1);
+        assert(states.front().monster_instance_id == "life-state-2" && states.front().health == 100.0);
+        assert(box.load_pending_monster_deaths(error).empty());
+    }
+    {
+        honghuang::persistence::DurableOutbox reopened(life_state_path, 16);
+        std::string error;
+        honghuang::persistence::MonsterLifeStateRecord initial{
+            "spawn-state-1", "random-startup-id", "wolf", 100.0};
+        honghuang::persistence::MonsterLifeStateRecord persisted;
+        assert(reopened.ensure_monster_life_state(initial, persisted, error));
+        assert(persisted.monster_instance_id == "life-state-2" && persisted.health == 100.0);
+    }
+    remove_database(life_state_path);
+
     return 0;
 }
