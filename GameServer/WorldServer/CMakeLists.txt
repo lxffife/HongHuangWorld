@@ -117,6 +117,16 @@ if(BUILD_TESTING)
     target_include_directories(monster_contribution_writer_test PRIVATE include)
     target_link_libraries(monster_contribution_writer_test PRIVATE SQLite::SQLite3 Threads::Threads)
     add_test(NAME monster_contribution_writer_test COMMAND monster_contribution_writer_test)
+
+    add_executable(monster_death_finalizer_test
+        tests/monster_death_finalizer_test.cpp
+        src/monster_death_finalizer.cpp
+        src/monster_contribution_writer.cpp
+        src/durable_outbox.cpp
+    )
+    target_include_directories(monster_death_finalizer_test PRIVATE include)
+    target_link_libraries(monster_death_finalizer_test PRIVATE SQLite::SQLite3 Threads::Threads)
+    add_test(NAME monster_death_finalizer_test COMMAND monster_death_finalizer_test)
 endif()
 
 if(MSVC)
