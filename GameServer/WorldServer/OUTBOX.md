@@ -158,7 +158,7 @@ The direct melee hit path is now the first live integration:
 
 **Important partial-integration boundary:** only direct melee damage uses this admission path. Projectile impact and periodic burn damage still use the legacy ordering and must be migrated before the writer can be treated as the universal combat ledger. Death settlement still reads the in-memory map; the SQLite ledger is not yet drained, loaded, finalized, or cleared on death. Consequently this step does not yet provide a complete death snapshot, all-contributor ranking, or crash-safe reward settlement. The in-memory 256-entry cap remains in place for the existing death/bounty path.
 
-This is an isolated writer component and test target only. The combat hit paths are not yet connected, the 256-entry in-memory map is still active, and no claim is made that arbitrary contributor counts are captured yet. The next integration must reserve queue capacity before applying damage, track closing life-instance IDs, drain before finalization, and solve the center API's 256-contributor-per-event limit with complete chunk/snapshot semantics before removing the cap.
+The writer is now connected to direct melee admission, but not yet to the complete combat/death lifecycle. Remaining work is to migrate projectile and burn hits, track closing life-instance IDs, drain before finalization, and solve the center API's 256-contributor-per-event limit with complete chunk/snapshot semantics before removing the in-memory cap.
 
 
 ### Pre-damage admission contract
