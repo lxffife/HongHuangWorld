@@ -86,3 +86,18 @@ On each authoritative monster death, WorldServer now creates a separate `bounty_
 The outbox worker posts the snapshot to `POST /api/v1/servers/bounties/contributions`. The center service verifies each historical session against the reporting node and world, then stores only contributors who are accepted participants in that bounty. Other attackers are ignored rather than invalidating valid participant contributions.
 
 The kill-progress event and contribution-snapshot event are now inserted together through a single SQLite transaction. If capacity, validation, or storage fails, neither event is accepted into the outbox, and the resolved combat result is not rolled back. The outbox test suite now covers whole-batch retry idempotency, payload conflicts, and all-or-nothing capacity failure.
+
+
+## Atomic bounty kill outbox batches
+
+The kill-progress event and its damage-contribution snapshot are now assembled as one batch and inserted by `DurableOutbox::enqueue_batch` under one SQLite `BEGIN IMMEDIATE` transaction. The batch validates every event ID and payload before inserting any row, treats an exact whole-batch retry as idempotent, rejects event-ID payload conflicts, and checks total capacity before insertion. A capacity or storage failure rolls back the entire batch, so the kill-progress event cannot be durably queued without its matching contribution snapshot (or vice versa).
+
+The C++ outbox tests cover exact batch retries, conflicting retries, and capacity failure with zero partial rows.
+
+## Player contribution history API
+
+Participants can inspect the most recent 200 monster contribution snapshots for a bounty through:
+
+`GET /api/v1/bounties/{taskID}/contributions`
+
+The endpoint verifies that the authenticated account participated in the task. It returns monster instance/definition, timestamp, character ID, effective damage, and hit count. Internal session IDs and account IDs are not exposed. This is a read-only audit view; it does not change objective progress or settlement.
