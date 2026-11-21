@@ -377,7 +377,7 @@ bool DurableOutbox::respawn_monster_life(
             throw std::runtime_error(sqlite3_errmsg(db_));
         Stmt update(db_,
             "UPDATE monster_life_states SET monster_instance_id=?,monster_definition_id=?,health=?,updated_at_ms=? "
-            "WHERE runtime_id=? AND monster_instance_id=? AND health<=0");
+            "WHERE runtime_id=? AND monster_instance_id=?");
         bind_text(update.get(), 1, next_life.monster_instance_id);
         bind_text(update.get(), 2, next_life.monster_definition_id);
         sqlite3_bind_double(update.get(), 3, next_life.health);
