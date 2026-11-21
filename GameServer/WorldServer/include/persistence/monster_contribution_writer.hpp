@@ -15,10 +15,9 @@
 
 namespace honghuang::persistence {
 
-// Bounded asynchronous bridge between combat and SQLite. A successful submit
-// first commits an immutable write to the durable SQLite inbox, then queues it
-// for aggregation. The inbox is replayed on restart; callers must apply
-// backpressure before damage when durable admission returns false.
+// Bounded asynchronous bridge between combat and SQLite. Damage submissions
+// atomically commit the monster's new health and an immutable contribution inbox
+// row before changing runtime memory. The inbox is replayed on restart.
 class MonsterContributionWriter {
 public:
     explicit MonsterContributionWriter(DurableOutbox& outbox, std::size_t capacity = 32768);
