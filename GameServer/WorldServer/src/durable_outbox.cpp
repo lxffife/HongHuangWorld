@@ -341,6 +341,14 @@ bool DurableOutbox::respawn_monster_life(
     try {
         if (!execute("BEGIN IMMEDIATE", error)) return false;
         transaction_open = true;
+        Stmt pending(db_,
+            "SELECT committed_at_ms FROM pending_monster_deaths WHERE monster_instance_id=?");
+        bind_text(pending.get(), 1, old_instance_id);
+        const int pending_result = sqlite3_step(pending.get());
+        if (pending_result == SQLITE_ROW && sqlite3_column_int64(pending.get(), 0) <= 0)
+            throw std::runtime_error("monster death finalization is not committed; respawn rejected");
+        if (pending_result != SQLITE_ROW && pending_result != SQLITE_DONE)
+            throw std::runtime_error(sqlite3_errmsg(db_));
         Stmt update(db_,
             "UPDATE monster_life_states SET monster_instance_id=?,monster_definition_id=?,health=?,updated_at_ms=? "
             "WHERE runtime_id=? AND monster_instance_id=? AND health<=0");
@@ -354,11 +362,13 @@ bool DurableOutbox::respawn_monster_life(
         bind_text(update.get(), 6, old_instance_id);
         if (sqlite3_step(update.get()) != SQLITE_DONE || sqlite3_changes(db_) != 1)
             throw std::runtime_error("durable monster life is not ready to respawn");
-        Stmt remove(db_,
-            "DELETE FROM pending_monster_deaths WHERE monster_instance_id=? AND committed_at_ms>0");
-        bind_text(remove.get(), 1, old_instance_id);
-        if (sqlite3_step(remove.get()) != SQLITE_DONE || sqlite3_changes(db_) != 1)
-            throw std::runtime_error("committed monster death intent is missing during respawn");
+        if (pending_result == SQLITE_ROW) {
+            Stmt remove(db_,
+                "DELETE FROM pending_monster_deaths WHERE monster_instance_id=? AND committed_at_ms>0");
+            bind_text(remove.get(), 1, old_instance_id);
+            if (sqlite3_step(remove.get()) != SQLITE_DONE || sqlite3_changes(db_) != 1)
+                throw std::runtime_error("committed monster death intent disappeared during respawn");
+        }
         if (!execute("COMMIT", error)) throw std::runtime_error(error);
         transaction_open = false;
         return true;
