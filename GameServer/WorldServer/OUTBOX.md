@@ -276,3 +276,10 @@ The asynchronous writer reconstructs its pending queue from the durable inbox du
 Tests now exercise durable admission idempotency/conflict rejection, database close/reopen before worker startup, recovered queue processing, queue backpressure before health mutation, and crash replay without double-counting.
 
 **Remaining boundary:** the simulation's authoritative monster health and the SQLite contribution inbox are not one transaction. A process crash after durable admission but before the in-memory damage callback can leave an admitted contribution for damage that was not reflected in the lost in-memory world state. Eliminating that ambiguity requires durable world-state/damage sequencing or replaying authoritative combat commands, which is a larger simulation recovery design. This change guarantees contribution write durability and idempotent ledger aggregation, but does not claim full world-state crash consistency.
+
+
+### Backend aggregation of contribution chunks
+
+The center service receives each 1–256 contributor chunk as an immutable event with its own event ID. Ingestion now serializes writes by `(task_id, monster_instance_id)` and rejects chunks that disagree on the monster definition for the same life. Publisher audit and player history queries group the chunk events by task and monster instance, then sum each character's damage and hit count across every chunk. Publisher `monster_count` counts distinct monster lives rather than event chunks. Audit pagination uses the stable `(first_created_at, monster_instance_id)` group key, so later-arriving chunks do not move the monster between pages. `MonsterContributionSnapshot.event_id` is only a representative chunk ID; `monster_instance_id` is the stable snapshot identity.
+
+Migration `000060_bounty_monster_contribution_instance_index` adds the composite index used by these grouped audit/history queries.
