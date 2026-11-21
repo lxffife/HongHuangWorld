@@ -1810,6 +1810,24 @@ struct EnetServer::Impl {
                     submit_monster_death_finalization(*runtime);
                 continue;
             }
+            if (record.committed_at_ms > 0) {
+                runtime->contribution_instance_id = record.monster_instance_id;
+                runtime->contribution_closing = false;
+                runtime->death_context_captured = false;
+                runtime->death_intent_persisted = true;
+                runtime->death_finalizer_submitted = true;
+                runtime->state.health = 0.0F;
+                runtime->state.mode = honghuang::simulation::MonsterMode::Dead;
+                runtime->state.target_id.clear();
+                const auto respawn_at_ms = record.committed_at_ms +
+                    static_cast<std::int64_t>(runtime->retry_spawn_seconds) * 1000;
+                const auto remaining_ms = std::max<std::int64_t>(0, respawn_at_ms - wall_clock_ms());
+                runtime->respawn_at = Clock::now() + std::chrono::milliseconds(remaining_ms);
+                std::cout << "[MonsterDeathIntent] restored committed death runtime="
+                          << runtime->runtime_id << " instance=" << record.monster_instance_id
+                          << " respawn_in_ms=" << remaining_ms << std::endl;
+                continue;
+            }
             try {
                 const auto payload = Json::parse(record.payload);
                 if (!payload.is_object() || payload.value("version", 0) != 1 ||
@@ -2516,7 +2534,9 @@ struct EnetServer::Impl {
             // A closing life owns an immutable death context. Do not let a config
             // refresh replace its definition, revive it, or rotate its contribution
             // instance before its death lifecycle has completed.
-            if (current.contribution_closing) {
+            if (current.contribution_closing ||
+                (current.death_intent_persisted &&
+                 current.state.mode == honghuang::simulation::MonsterMode::Dead)) {
                 merged.push_back(std::move(current));
                 continue;
             }
@@ -2554,7 +2574,9 @@ struct EnetServer::Impl {
         // Even if an operator removes a spawn point while its monster is closing,
         // retain that exact runtime until its current life can finish safely.
         for (const auto& current : monsters) {
-            if (!current.contribution_closing) continue;
+            if (!current.contribution_closing &&
+                !(current.death_intent_persisted &&
+                  current.state.mode == honghuang::simulation::MonsterMode::Dead)) continue;
             const bool already_merged = std::any_of(
                 merged.begin(), merged.end(), [&current](const MonsterRuntime& candidate) {
                     return candidate.runtime_id == current.runtime_id;
@@ -2562,6 +2584,7 @@ struct EnetServer::Impl {
             if (!already_merged) merged.push_back(current);
         }
         monsters=std::move(merged);
+        restore_pending_monster_deaths();
         std::cout<<"Applied monster spawn configuration; active spawn points="<<monsters.size()<<'\n';
     }
 
@@ -3985,6 +4008,8 @@ struct EnetServer::Impl {
         for (auto& monster : monsters) {
             if (monster.contribution_closing && !monster.death_finalizer_submitted)
                 submit_monster_death_finalization(monster);
+            if (monster.contribution_closing &&
+                monster.state.mode != honghuang::simulation::MonsterMode::Dead) continue;
             if (monster.state.mode == honghuang::simulation::MonsterMode::Dead) {
                 if (monster.contribution_closing &&
                     monster.respawn_at.time_since_epoch().count() == 0) {
@@ -4001,13 +4026,29 @@ struct EnetServer::Impl {
                             continue;
                         }
                     }
+                    if (monster.death_intent_persisted) {
+                        std::string acknowledge_error;
+                        if (!durable_outbox ||
+                            !durable_outbox->acknowledge_monster_death_respawn(
+                                monster.contribution_instance_id, acknowledge_error)) {
+                            std::cerr << "[MonsterDeathIntent] respawn acknowledgement deferred; runtime="
+                                      << monster.runtime_id << " reason=" << acknowledge_error << std::endl;
+                            continue;
+                        }
+                    }
                     monster.state = {monster.definition.spawn_x, monster.definition.spawn_z,
                                      monster.definition.max_health};
                     monster.contribution_instance_id = make_event_uuid();
                     monster.contribution_closing = false;
                     monster.damage_contributions.clear();
                     monster.death_context_captured = false;
+                    monster.death_intent_persisted = false;
                     monster.death_finalizer_submitted = false;
+                    monster.death_world_id.clear();
+                    monster.death_definition_id.clear();
+                    monster.death_level = 0;
+                    monster.death_position_x = 0.0F;
+                    monster.death_position_z = 0.0F;
                     monster.death_killer_session_id.clear();
                     monster.death_killer_character_id.clear();
                     monster.death_killer_bounty_objectives.clear();
@@ -4465,6 +4506,7 @@ bool EnetServer::start() {
     }else{
         std::cerr<<"Database monster config unavailable; retaining built-in startup fallback and retrying: "<<monster_config_error<<'\n';
     }
+    impl_->restore_pending_monster_deaths();
     impl_->start_monster_config_refresh_worker();
     if (!load_loot_table(impl_->config, impl_->loot_table, loot_error)) {
         std::cerr << "Monster loot table unavailable; periodic refresh will retry: " << loot_error << '\n';
