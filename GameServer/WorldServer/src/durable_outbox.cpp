@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <limits>
 #include <stdexcept>
 #include <utility>
 
@@ -264,7 +265,11 @@ std::vector<MonsterContributionRecord> DurableOutbox::load_pending_monster_contr
             "SELECT write_id,monster_instance_id,monster_definition_id,session_id,character_id,"
             "damage,hit_count,first_hit_at_ms,last_hit_at_ms,bounty_objectives_json "
             "FROM monster_damage_contribution_inbox ORDER BY admitted_at_ms,write_id LIMIT ?");
-        sqlite3_bind_int64(query.get(), 1, static_cast<sqlite3_int64>(limit));
+        const auto sqlite_limit = limit > static_cast<std::size_t>(
+            std::numeric_limits<sqlite3_int64>::max())
+            ? std::numeric_limits<sqlite3_int64>::max()
+            : static_cast<sqlite3_int64>(limit);
+        sqlite3_bind_int64(query.get(), 1, sqlite_limit);
         int step = SQLITE_ROW;
         while ((step = sqlite3_step(query.get())) == SQLITE_ROW) {
             result.push_back(MonsterContributionRecord{
