@@ -179,6 +179,101 @@ bool DurableOutbox::enqueue(const OutboxEvent& event, std::string& error) {
     }
 }
 
+
+bool DurableOutbox::enqueue_batch(const std::vector<OutboxEvent>& events, std::string& error) {
+    if (events.empty()) { error = "outbox batch must not be empty"; return false; }
+    for (const auto& event : events) {
+        if (event.event_id.empty() || event.event_type.empty() || event.payload.empty()) {
+            error = "event id/type/payload required";
+            return false;
+        }
+    }
+
+    std::lock_guard lock(mutex_);
+    bool transaction_open = false;
+    try {
+        if (!execute("BEGIN IMMEDIATE", error)) return false;
+        transaction_open = true;
+
+        std::vector<std::string> batch_ids;
+        batch_ids.reserve(events.size());
+        std::size_t new_count = 0;
+        for (const auto& event : events) {
+            if (std::find(batch_ids.begin(), batch_ids.end(), event.event_id) != batch_ids.end()) {
+                throw std::runtime_error("duplicate event id inside outbox batch");
+            }
+            batch_ids.push_back(event.event_id);
+
+            Stmt existing(db_, "SELECT event_type,payload,status FROM world_event_outbox WHERE event_id=?");
+            bind_text(existing.get(), 1, event.event_id);
+            const int result = sqlite3_step(existing.get());
+            if (result == SQLITE_ROW) {
+                const auto status = column_text(existing.get(), 2);
+                const bool same = column_text(existing.get(), 0) == event.event_type &&
+                                  column_text(existing.get(), 1) == event.payload &&
+                                  status != "dead_letter";
+                if (!same) throw std::runtime_error("event id already exists with a different payload or is dead-lettered");
+            } else if (result == SQLITE_DONE) {
+                ++new_count;
+            } else {
+                throw std::runtime_error(sqlite3_errmsg(db_));
+            }
+        }
+
+        Stmt count(db_, "SELECT COUNT(*) FROM world_event_outbox WHERE status IN('pending','inflight')");
+        if (sqlite3_step(count.get()) != SQLITE_ROW) throw std::runtime_error(sqlite3_errmsg(db_));
+        const auto active_count = static_cast<std::size_t>(sqlite3_column_int64(count.get(), 0));
+        if (new_count > capacity_ || active_count > capacity_ - new_count) {
+            throw std::runtime_error("durable outbox capacity reached");
+        }
+
+        const auto chat_capacity = std::min<std::size_t>(std::max<std::size_t>(1, capacity_ / 2), 2000);
+        std::size_t new_chat_count = 0;
+        for (const auto& event : events) if (event.event_type == "nearby_chat") ++new_chat_count;
+        if (new_chat_count > 0) {
+            Stmt chat_count(db_, "SELECT COUNT(*) FROM world_event_outbox WHERE event_type='nearby_chat' AND status IN('pending','inflight')");
+            if (sqlite3_step(chat_count.get()) != SQLITE_ROW) throw std::runtime_error(sqlite3_errmsg(db_));
+            const auto active_chat_count = static_cast<std::size_t>(sqlite3_column_int64(chat_count.get(), 0));
+            if (new_chat_count > chat_capacity || active_chat_count > chat_capacity - new_chat_count) {
+                throw std::runtime_error("nearby chat outbox capacity reached");
+            }
+        }
+
+        for (const auto& event : events) {
+            Stmt existing(db_, "SELECT 1 FROM world_event_outbox WHERE event_id=?");
+            bind_text(existing.get(), 1, event.event_id);
+            if (sqlite3_step(existing.get()) == SQLITE_ROW) continue;
+            Stmt insert(db_,
+                "INSERT INTO world_event_outbox(event_id,event_type,payload,status,attempts,"
+                "next_retry_at_ms,created_at_ms,updated_at_ms) VALUES(?,?,?,'pending',?,?,?,?)");
+            bind_text(insert.get(), 1, event.event_id);
+            bind_text(insert.get(), 2, event.event_type);
+            bind_text(insert.get(), 3, event.payload);
+            sqlite3_bind_int64(insert.get(), 4, event.attempts);
+            sqlite3_bind_int64(insert.get(), 5, event.next_retry_at_ms);
+            sqlite3_bind_int64(insert.get(), 6, event.created_at_ms);
+            sqlite3_bind_int64(insert.get(), 7, event.created_at_ms);
+            if (sqlite3_step(insert.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+        }
+
+        if (!execute("COMMIT", error)) {
+            std::string ignored;
+            execute("ROLLBACK", ignored);
+            transaction_open = false;
+            return false;
+        }
+        transaction_open = false;
+        return true;
+    } catch (const std::exception& exception) {
+        if (transaction_open) {
+            std::string ignored;
+            execute("ROLLBACK", ignored);
+        }
+        error = exception.what();
+        return false;
+    }
+}
+
 std::optional<OutboxEvent> DurableOutbox::find(const std::string& event_id, std::string& error) const {
     if (event_id.empty()) { error = "event id is required"; return std::nullopt; }
     std::lock_guard lock(mutex_);
