@@ -165,6 +165,12 @@ func TestRecordMonsterContributionsRejectsInvalidPayloadBeforeDatabaseAccess(t *
   })
  }
 }
+ oversized:=valid
+ oversized.Contributors=make([]MonsterContribution,257)
+ if err:=service.RecordMonsterContributions(context.Background(),"node",oversized);err!=ErrInvalidWorldEvent {
+  t.Fatalf("expected oversized contributor batch to be rejected before database access, got %v",err)
+ }
+}
 
 func TestListContributionsRejectsInvalidIdentityBeforeDatabaseAccess(t *testing.T) {
  service:=NewService(nil,nil)
