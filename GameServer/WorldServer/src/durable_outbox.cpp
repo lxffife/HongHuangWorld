@@ -733,10 +733,8 @@ bool DurableOutbox::finalize_monster_contributions(
                 "VALUES(?,?,?)");
             bind_text(mark_finalized.get(), 1, monster_instance_id);
             bind_text(mark_finalized.get(), 2, event_ids);
-            const auto finalized_at_ms = events.empty()
-                ? std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::system_clock::now().time_since_epoch()).count()
-                : events.front().created_at_ms;
+            const auto finalized_at_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
             sqlite3_bind_int64(mark_finalized.get(), 3, finalized_at_ms);
             if (sqlite3_step(mark_finalized.get()) != SQLITE_DONE)
                 throw std::runtime_error(sqlite3_errmsg(db_));
@@ -746,10 +744,8 @@ bool DurableOutbox::finalize_monster_contributions(
         Stmt remove_writes(db_, "DELETE FROM monster_damage_contribution_writes WHERE monster_instance_id=?");
         bind_text(remove_writes.get(), 1, monster_instance_id);
         if (sqlite3_step(remove_writes.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
-        const auto committed_at_ms = events.empty()
-            ? std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::system_clock::now().time_since_epoch()).count()
-            : events.front().created_at_ms;
+        const auto committed_at_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
         Stmt mark_death_committed(db_,
             "UPDATE pending_monster_deaths SET committed_at_ms=? "
             "WHERE monster_instance_id=? AND committed_at_ms=0");
