@@ -169,9 +169,10 @@ bool DurableOutbox::admit_monster_contribution(
     error.clear();
     if (item.write_id.empty() || item.write_id.size() > 128 ||
         item.monster_instance_id.empty() || item.monster_instance_id.size() > 96 ||
-        item.monster_definition_id.empty() || item.session_id.empty() ||
-        item.character_id.empty() || item.total_damage <= 0 || item.hit_count <= 0 ||
-        item.first_hit_at_ms < 0 || item.last_hit_at_ms < item.first_hit_at_ms ||
+        item.monster_definition_id.empty() || item.monster_definition_id.size() > 64 ||
+        item.session_id.empty() || item.character_id.empty() ||
+        item.total_damage <= 0 || item.hit_count <= 0 ||
+        item.first_hit_at_ms <= 0 || item.last_hit_at_ms < item.first_hit_at_ms ||
         item.bounty_objectives_json.empty() || item.bounty_objectives_json.size() > 64 * 1024) {
         error = "invalid durable monster contribution admission";
         return false;
@@ -649,7 +650,7 @@ bool DurableOutbox::record_monster_contribution_internal(
         item.session_id.empty() || item.character_id.empty() ||
         item.total_damage <= 0 || item.hit_count <= 0 ||
         item.first_hit_at_ms <= 0 || item.last_hit_at_ms < item.first_hit_at_ms ||
-        item.bounty_objectives_json.empty()) {
+        item.bounty_objectives_json.empty() || item.bounty_objectives_json.size() > 64 * 1024) {
         error = "invalid monster contribution record";
         return false;
     }
