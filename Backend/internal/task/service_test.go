@@ -175,3 +175,21 @@ func TestListContributionsRejectsInvalidIdentityBeforeDatabaseAccess(t *testing.
  }
 }
 
+func TestListPublisherContributionAuditRejectsInvalidIdentityBeforeDatabaseAccess(t *testing.T) {
+ service:=NewService(nil,nil)
+ validFaction:="00000000-0000-4000-8000-000000000001"
+ validTask:="00000000-0000-4000-8000-000000000002"
+ tests:=[]struct{name,accountID,factionID,taskID string}{
+  {"missing account","",""+validFaction,validTask},
+  {"malformed faction","account","not-a-uuid",validTask},
+  {"malformed task","account",validFaction,"not-a-uuid"},
+ }
+ for _,tt:=range tests {
+  t.Run(tt.name,func(t *testing.T) {
+   if _,err:=service.ListPublisherContributionAudit(context.Background(),tt.accountID,tt.factionID,tt.taskID);err!=ErrInvalid {
+    t.Fatalf("expected ErrInvalid before database access, got %v",err)
+   }
+  })
+ }
+}
+
