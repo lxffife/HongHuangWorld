@@ -2105,6 +2105,16 @@ struct EnetServer::Impl {
             }
             merged.push_back(std::move(current));
         }
+        // Even if an operator removes a spawn point while its monster is closing,
+        // retain that exact runtime until its current life can finish safely.
+        for (const auto& current : monsters) {
+            if (!current.contribution_closing) continue;
+            const bool already_merged = std::any_of(
+                merged.begin(), merged.end(), [&current](const MonsterRuntime& candidate) {
+                    return candidate.runtime_id == current.runtime_id;
+                });
+            if (!already_merged) merged.push_back(current);
+        }
         monsters=std::move(merged);
         std::cout<<"Applied monster spawn configuration; active spawn points="<<monsters.size()<<'\n';
     }
