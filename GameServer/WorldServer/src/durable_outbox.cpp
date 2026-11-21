@@ -198,6 +198,7 @@ bool DurableOutbox::enqueue_batch(const std::vector<OutboxEvent>& events, std::s
         std::vector<std::string> batch_ids;
         batch_ids.reserve(events.size());
         std::size_t new_count = 0;
+        std::size_t new_chat_count = 0;
         for (const auto& event : events) {
             if (std::find(batch_ids.begin(), batch_ids.end(), event.event_id) != batch_ids.end()) {
                 throw std::runtime_error("duplicate event id inside outbox batch");
@@ -215,6 +216,7 @@ bool DurableOutbox::enqueue_batch(const std::vector<OutboxEvent>& events, std::s
                 if (!same) throw std::runtime_error("event id already exists with a different payload or is dead-lettered");
             } else if (result == SQLITE_DONE) {
                 ++new_count;
+                if (event.event_type == "nearby_chat") ++new_chat_count;
             } else {
                 throw std::runtime_error(sqlite3_errmsg(db_));
             }
@@ -228,8 +230,6 @@ bool DurableOutbox::enqueue_batch(const std::vector<OutboxEvent>& events, std::s
         }
 
         const auto chat_capacity = std::min<std::size_t>(std::max<std::size_t>(1, capacity_ / 2), 2000);
-        std::size_t new_chat_count = 0;
-        for (const auto& event : events) if (event.event_type == "nearby_chat") ++new_chat_count;
         if (new_chat_count > 0) {
             Stmt chat_count(db_, "SELECT COUNT(*) FROM world_event_outbox WHERE event_type='nearby_chat' AND status IN('pending','inflight')");
             if (sqlite3_step(chat_count.get()) != SQLITE_ROW) throw std::runtime_error(sqlite3_errmsg(db_));
