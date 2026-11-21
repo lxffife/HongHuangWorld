@@ -134,6 +134,29 @@ struct MonsterDamageContribution {
     std::vector<BountyObjectiveSubscription> bounty_objectives;
 };
 
+struct GroundDropRuntime {
+    std::string id;
+    std::string session_id;
+    std::string owner_character_id;
+    std::string item_id;
+    int quantity{};
+    float x{};
+    float z{};
+    Clock::time_point expires_at{};
+    bool pickup_pending{};
+};
+
+struct PendingMonsterDeathDrop {
+    std::string id;
+    std::string session_id;
+    std::string owner_character_id;
+    std::string item_id;
+    int quantity{};
+    float x{};
+    float z{};
+    std::int64_t expires_at_unix_ms{};
+};
+
 struct MonsterRuntime {
     honghuang::simulation::MonsterDefinition definition;
     honghuang::simulation::MonsterState state;
@@ -159,6 +182,13 @@ struct MonsterRuntime {
     std::string contribution_instance_id;
     // Latch the lethal transition before later hits can enqueue against this life.
     bool contribution_closing{false};
+    bool death_context_captured{false};
+    bool death_finalizer_submitted{false};
+    std::string death_killer_session_id;
+    std::string death_killer_character_id;
+    std::vector<BountyObjectiveSubscription> death_killer_bounty_objectives;
+    bool death_reward_eligible{false};
+    std::vector<PendingMonsterDeathDrop> pending_death_drops;
 };
 
 
@@ -172,18 +202,6 @@ struct LootEntry {
     int max_quantity{};
     int max_stack{};
     std::string icon_key;
-};
-
-struct GroundDropRuntime {
-    std::string id;
-    std::string session_id;
-    std::string owner_character_id;
-    std::string item_id;
-    int quantity{};
-    float x{};
-    float z{};
-    Clock::time_point expires_at{};
-    bool pickup_pending{};
 };
 
 struct DropJob {
@@ -1670,6 +1688,267 @@ struct EnetServer::Impl {
         if (snapshot.empty()) return;
         std::cout << "Monster defeated; authoritative damage contributors: monster="
                   << monster.runtime_id << " contributors=" << snapshot.dump() << '\n';
+    }
+
+    void capture_monster_death_context(MonsterRuntime& monster, const PlayerState* killer) {
+        if (monster.death_context_captured) return;
+        monster.death_context_captured = true;
+        if (killer == nullptr) return;
+
+        monster.death_killer_session_id = killer->session_id;
+        monster.death_killer_character_id = killer->character_id;
+        monster.death_killer_bounty_objectives = killer->bounty_objectives;
+        monster.death_reward_eligible = true;
+
+        std::vector<LootEntry> current_loot;
+        {
+            std::lock_guard lock(loot_table_mutex);
+            current_loot = loot_table;
+        }
+        static thread_local std::mt19937 generator(std::random_device{}());
+        std::uniform_int_distribution<int> chance(1, 10000);
+        for (const auto& entry : current_loot) {
+            if (entry.monster_id != monster.definition.id || chance(generator) > entry.drop_chance_bp) continue;
+            std::uniform_int_distribution<int> quantity(entry.min_quantity, entry.max_quantity);
+            const auto drop_id = make_event_uuid();
+            const auto expires_at = wall_clock_ms() + 15LL * 60LL * 1000LL;
+            monster.pending_death_drops.push_back(PendingMonsterDeathDrop{
+                drop_id, killer->session_id, killer->character_id, entry.item_id,
+                quantity(generator), monster.state.x, monster.state.z, expires_at
+            });
+        }
+    }
+
+    bool submit_monster_death_finalization(MonsterRuntime& monster) {
+        if (!monster.contribution_closing || !monster.death_context_captured ||
+            monster.death_finalizer_submitted) return monster.death_finalizer_submitted;
+        if (!monster_death_finalizer) return false;
+
+        const auto instance_id = monster.contribution_instance_id;
+        const auto definition_id = monster.definition.id;
+        const auto runtime_id = monster.runtime_id;
+        const auto world_id = config.world_id;
+        const auto killer_session_id = monster.death_killer_session_id;
+        const auto killer_character_id = monster.death_killer_character_id;
+        const auto killer_objectives = monster.death_killer_bounty_objectives;
+        const auto reward_eligible = monster.death_reward_eligible;
+        const auto level = monster.definition.level;
+        const auto death_drops = monster.pending_death_drops;
+
+        auto builder = [instance_id, definition_id, runtime_id, world_id,
+                        killer_session_id, killer_character_id, killer_objectives,
+                        reward_eligible, level, death_drops](
+            const std::vector<honghuang::persistence::MonsterContributionRecord>& records,
+            std::vector<honghuang::persistence::OutboxEvent>& events,
+            std::string& error) -> bool {
+            using honghuang::persistence::OutboxEvent;
+            const auto now = wall_clock_ms();
+            std::vector<Json> objectives;
+            Json contributors = Json::array();
+
+            for (const auto& record : records) {
+                auto parsed = Json::parse(record.bounty_objectives_json, nullptr, false);
+                if (parsed.is_discarded() || !parsed.is_array()) {
+                    error = "monster contribution contains invalid bounty objective JSON";
+                    return false;
+                }
+                for (const auto& objective : parsed) {
+                    if (!objective.is_object()) {
+                        error = "monster contribution bounty objective is not an object";
+                        return false;
+                    }
+                    const auto task_id = objective.value("task_id", std::string{});
+                    const auto objective_key = objective.value("objective_key", std::string{});
+                    const auto event_type = objective.value("event_type", std::string{});
+                    if (task_id.empty() || objective_key != definition_id ||
+                        event_type != "monster_killed") continue;
+                    const auto duplicate = std::any_of(objectives.begin(), objectives.end(),
+                        [&](const Json& existing) {
+                            return existing.value("task_id", std::string{}) == task_id &&
+                                   existing.value("objective_key", std::string{}) == objective_key &&
+                                   existing.value("event_type", std::string{}) == event_type;
+                        });
+                    if (!duplicate) objectives.push_back(objective);
+                }
+                if (record.total_damage > 0 && record.hit_count > 0) {
+                    contributors.push_back({
+                        {"session_id", record.session_id},
+                        {"character_id", record.character_id},
+                        {"damage", record.total_damage},
+                        {"hit_count", record.hit_count}
+                    });
+                }
+            }
+
+            const auto killer_has_objective = [&](const Json& objective) {
+                return reward_eligible && !killer_session_id.empty() &&
+                    !killer_character_id.empty() &&
+                    std::any_of(killer_objectives.begin(), killer_objectives.end(),
+                        [&](const BountyObjectiveSubscription& candidate) {
+                            return candidate.task_id == objective.value("task_id", std::string{}) &&
+                                   candidate.objective_key == objective.value("objective_key", std::string{}) &&
+                                   candidate.event_type == objective.value("event_type", std::string{});
+                        });
+            };
+            const auto append_event = [&](const std::string& type, const Json& payload) {
+                const auto event_id = payload.value("event_id", std::string{});
+                events.push_back(OutboxEvent{event_id, type, payload.dump(), 0, now, now, {}});
+            };
+
+            for (const auto& objective : objectives) {
+                if (killer_has_objective(objective)) {
+                    const auto event_id = make_event_uuid();
+                    append_event("bounty_objective_event", Json{
+                        {"event_id", event_id},
+                        {"task_id", objective.value("task_id", std::string{})},
+                        {"session_id", killer_session_id},
+                        {"character_id", killer_character_id},
+                        {"objective_key", definition_id},
+                        {"event_type", "monster_killed"}
+                    });
+                }
+                if (!contributors.empty()) {
+                    constexpr std::size_t kContributionChunkSize = 256;
+                    const auto chunk_count = (contributors.size() + kContributionChunkSize - 1) /
+                                             kContributionChunkSize;
+                    for (std::size_t chunk = 0; chunk < chunk_count; ++chunk) {
+                        const auto begin = chunk * kContributionChunkSize;
+                        const auto end = std::min(begin + kContributionChunkSize, contributors.size());
+                        Json chunk_contributors = Json::array();
+                        for (std::size_t index = begin; index < end; ++index)
+                            chunk_contributors.push_back(contributors[index]);
+                        const auto event_id = make_event_uuid();
+                        append_event("bounty_monster_contributions", Json{
+                            {"event_id", event_id},
+                            {"task_id", objective.value("task_id", std::string{})},
+                            {"monster_instance_id", instance_id},
+                            {"monster_definition_id", definition_id},
+                            {"contributors", std::move(chunk_contributors)}
+                        });
+                    }
+                }
+            }
+
+            if (reward_eligible && !killer_session_id.empty() && !killer_character_id.empty()) {
+                const auto reward_id = make_event_uuid();
+                append_event("character_reward", Json{
+                    {"event_id", reward_id},
+                    {"session_id", killer_session_id},
+                    {"character_id", killer_character_id},
+                    {"experience", 20 + static_cast<std::int64_t>(level) * 10},
+                    {"cultivation", 10 + static_cast<std::int64_t>(level) * 5}
+                });
+                if (world_id == "underworld_fengdu") {
+                    const auto soul_reward_id = make_event_uuid();
+                    append_event("soul_reward", Json{
+                        {"event_id", soul_reward_id},
+                        {"session_id", killer_session_id},
+                        {"character_id", killer_character_id},
+                        {"experience", 5},
+                        {"source", "underworld_trial:monster_hunt"}
+                    });
+                    static const std::unordered_set<std::string> soul_kinds{
+                        "wandering_wraith", "blazing_war_soul", "blazing_war_soul_elite",
+                        "blazing_war_soul_ancient", "blazing_war_soul_mythic",
+                        "ancient_battlefield_god_soul", "ironbone_beast_soul", "gale_wraith",
+                        "spirit_scholar_wisp", "wangchuan_echo_wisp", "life_ancient_soul",
+                        "faceless_essence"
+                    };
+                    if (soul_kinds.contains(definition_id)) {
+                        const auto absorption_id = make_event_uuid();
+                        append_event("soul_absorption", Json{
+                            {"event_id", absorption_id},
+                            {"session_id", killer_session_id},
+                            {"character_id", killer_character_id},
+                            {"source_entity_id", runtime_id},
+                            {"source_entity_kind", definition_id}
+                        });
+                    }
+                }
+                for (const auto& drop : death_drops) {
+                    append_event("ground_drop_create", Json{
+                        {"event_id", drop.id},
+                        {"drop_id", drop.id},
+                        {"session_id", drop.session_id},
+                        {"character_id", drop.owner_character_id},
+                        {"item_id", drop.item_id},
+                        {"quantity", drop.quantity},
+                        {"position_x", drop.x},
+                        {"position_z", drop.z},
+                        {"expires_at_unix_ms", drop.expires_at_unix_ms}
+                    });
+                }
+            }
+            return true;
+        };
+
+        std::string error;
+        if (!monster_death_finalizer->submit(instance_id, std::move(builder), error)) {
+            std::cerr << "[MonsterDeathFinalizer] submit deferred; monster=" << runtime_id
+                      << " instance=" << instance_id << " reason=" << error << std::endl;
+            return false;
+        }
+        monster.death_finalizer_submitted = true;
+        return true;
+    }
+
+    void begin_monster_death(MonsterRuntime& monster, const PlayerState* killer) {
+        if (!monster.contribution_closing) return;
+        capture_monster_death_context(monster, killer);
+        monster.state.mode = honghuang::simulation::MonsterMode::Dead;
+        monster.state.target_id.clear();
+        honghuang::simulation::clear_negative_statuses(
+            monster.slow_effect, monster.freeze_effect, monster.burn_effect);
+        monster.burn_owner_character_id.clear();
+        monster.burn_owner_session_id.clear();
+        monster.burn_owner_bounty_objectives.clear();
+        submit_monster_death_finalization(monster);
+    }
+
+    void drain_monster_death_results() {
+        if (!monster_death_finalizer) return;
+        for (const auto& result : monster_death_finalizer->take_results()) {
+            auto monster = std::find_if(monsters.begin(), monsters.end(),
+                [&](const MonsterRuntime& candidate) {
+                    return candidate.contribution_instance_id == result.monster_instance_id;
+                });
+            if (monster == monsters.end()) {
+                std::cerr << "[MonsterDeathFinalizer] committed life no longer exists in runtime: "
+                          << result.monster_instance_id << std::endl;
+                continue;
+            }
+            const auto now = Clock::now();
+            for (const auto& drop : monster->pending_death_drops) {
+                const auto remaining_ms = std::max<std::int64_t>(0, drop.expires_at_unix_ms - wall_clock_ms());
+                if (remaining_ms <= 0) continue;
+                ground_drops.push_back(GroundDropRuntime{
+                    drop.id, drop.session_id, drop.owner_character_id, drop.item_id, drop.quantity,
+                    drop.x, drop.z, now + std::chrono::milliseconds(remaining_ms), false
+                });
+            }
+            monster->respawn_at = now + std::chrono::seconds(monster->retry_spawn_seconds);
+            monster->death_finalizer_submitted = false;
+            monster->death_context_captured = false;
+            monster->death_killer_session_id.clear();
+            monster->death_killer_character_id.clear();
+            monster->death_killer_bounty_objectives.clear();
+            monster->death_reward_eligible = false;
+            monster->pending_death_drops.clear();
+            if (!monster->death_killer_character_id.empty()) {
+                for (const auto& [peer, player] : players) {
+                    if (player.character_id != monster->death_killer_character_id) continue;
+                    send_json(peer, honghuang::protocol::MessageType::CombatEvent, Json{
+                        {"accepted", true}, {"action", "monster_death_settlement"},
+                        {"target_entity_id", monster->runtime_id}, {"committed", true},
+                        {"experience_reward", 20 + static_cast<std::int64_t>(monster->definition.level) * 10},
+                        {"cultivation_reward", 10 + static_cast<std::int64_t>(monster->definition.level) * 5}
+                    });
+                    break;
+                }
+            }
+            outbox_cv.notify_one();
+            chat_outbox_cv.notify_one();
+        }
     }
 
     void enqueue_bounty_kill_events(const PlayerState* killer, const MonsterRuntime& monster) {
