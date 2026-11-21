@@ -9,6 +9,7 @@ struct sqlite3;
 namespace honghuang::persistence {
 struct OutboxStats { std::size_t pending{}; std::size_t inflight{}; std::size_t delivered{}; std::size_t dead_letter{}; std::int64_t oldest_pending_age_ms{}; std::int64_t oldest_dead_letter_age_ms{}; };
 struct MonsterContributionRecord {
+ std::string write_id;
  std::string monster_instance_id;
  std::string monster_definition_id;
  std::string session_id;
