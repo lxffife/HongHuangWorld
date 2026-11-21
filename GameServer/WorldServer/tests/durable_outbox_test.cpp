@@ -1,5 +1,7 @@
 #include "persistence/durable_outbox.hpp"
 
+#include <algorithm>
+
 #include <cassert>
 #include <cstdio>
 #include <string>
