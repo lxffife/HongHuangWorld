@@ -868,3 +868,73 @@ func (s *Service) RecordMonsterContributions(ctx context.Context, nodeKey string
  if err=tx.Commit();err!=nil { return fmt.Errorf("commit monster contribution snapshot: %w",err) }
  return nil
 }
+
+type MonsterContributionDetail struct {
+ CharacterID string `json:"character_id"`
+ Damage int64 `json:"damage"`
+ HitCount int64 `json:"hit_count"`
+}
+
+type MonsterContributionSnapshot struct {
+ EventID string `json:"event_id"`
+ MonsterInstanceID string `json:"monster_instance_id"`
+ MonsterDefinitionID string `json:"monster_definition_id"`
+ CreatedAt time.Time `json:"created_at"`
+ Contributors []MonsterContributionDetail `json:"contributors"`
+}
+
+type BountyContributionHistory struct {
+ TaskID string `json:"task_id"`
+ Events []MonsterContributionSnapshot `json:"events"`
+}
+
+// ListContributions returns recent immutable damage snapshots to any account
+// that participated in the bounty. Internal session IDs and account IDs are
+// intentionally not exposed in the player-facing response.
+func (s *Service) ListContributions(ctx context.Context, accountID, taskID string) (BountyContributionHistory, error) {
+ if accountID=="" || !validUUID(taskID) { return BountyContributionHistory{},ErrInvalid }
+ taskID=strings.ToLower(taskID)
+ var exists bool
+ if err:=s.db.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM bounty_task_participants WHERE task_id=$1::uuid AND account_id=$2::uuid)`,taskID,accountID).Scan(&exists);err!=nil {
+  return BountyContributionHistory{},fmt.Errorf("verify bounty contribution viewer: %w",err)
+ }
+ if !exists { return BountyContributionHistory{},ErrNotParticipant }
+ rows,err:=s.db.QueryContext(ctx,`WITH visible_events AS (
+  SELECT event_id,monster_instance_id,monster_definition_id,created_at
+  FROM bounty_monster_contribution_events
+  WHERE task_id=$1::uuid
+  ORDER BY created_at DESC,event_id DESC
+  LIMIT 200
+ )
+ SELECT e.event_id::text,e.monster_instance_id,e.monster_definition_id,e.created_at,
+  c.character_id::text,c.damage,c.hit_count
+ FROM visible_events e
+ JOIN bounty_monster_contributors c ON c.event_id=e.event_id
+ ORDER BY e.created_at DESC,e.event_id DESC,c.damage DESC,c.character_id`,taskID)
+ if err!=nil { return BountyContributionHistory{},fmt.Errorf("list bounty contribution snapshots: %w",err) }
+ defer rows.Close()
+ result:=BountyContributionHistory{TaskID:taskID,Events:make([]MonsterContributionSnapshot,0)}
+ indexByEvent:=make(map[string]int)
+ for rows.Next() {
+  var eventID,instanceID,definitionID,characterID string
+  var createdAt time.Time
+  var damage,hitCount int64
+  if err:=rows.Scan(&eventID,&instanceID,&definitionID,&createdAt,&characterID,&damage,&hitCount);err!=nil {
+   return BountyContributionHistory{},fmt.Errorf("scan bounty contribution snapshot: %w",err)
+  }
+  idx,ok:=indexByEvent[eventID]
+  if !ok {
+   idx=len(result.Events)
+   indexByEvent[eventID]=idx
+   result.Events=append(result.Events,MonsterContributionSnapshot{
+    EventID:eventID,MonsterInstanceID:instanceID,MonsterDefinitionID:definitionID,
+    CreatedAt:createdAt,Contributors:make([]MonsterContributionDetail,0),
+   })
+  }
+  result.Events[idx].Contributors=append(result.Events[idx].Contributors,MonsterContributionDetail{
+   CharacterID:characterID,Damage:damage,HitCount:hitCount,
+  })
+ }
+ if err:=rows.Err();err!=nil { return BountyContributionHistory{},fmt.Errorf("iterate bounty contribution snapshots: %w",err) }
+ return result,nil
+}
