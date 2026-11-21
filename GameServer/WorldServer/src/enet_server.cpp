@@ -4144,16 +4144,19 @@ struct EnetServer::Impl {
                     const auto contribution = make_monster_contribution_record(
                         monster, monster.burn_owner_session_id, monster.burn_owner_character_id,
                         monster.burn_owner_bounty_objectives, applied_burn_damage);
-                    const bool admitted = monster_contribution_writer != nullptr &&
-                        monster_contribution_writer->submit_before_damage(
-                            contribution,
-                            [&monster, previous_health, applied_burn_damage]() noexcept {
-                                monster.state.health = static_cast<float>(
-                                    std::max<std::int64_t>(0, previous_health - applied_burn_damage));
-                                if (applied_burn_damage >= previous_health)
-                                    monster.contribution_closing = true;
-                            },
-                            contribution_error);
+                    const bool lethal_tick = applied_burn_damage >= previous_health;
+                    const bool admitted = lethal_tick
+                        ? apply_lethal_monster_damage(
+                            monster, burn_owner != players.end() ? &burn_owner->second : nullptr,
+                            contribution, 0.0F, contribution_error)
+                        : (monster_contribution_writer != nullptr &&
+                            monster_contribution_writer->submit_before_damage(
+                                contribution,
+                                [&monster, previous_health, applied_burn_damage]() noexcept {
+                                    monster.state.health = static_cast<float>(
+                                        std::max<std::int64_t>(0, previous_health - applied_burn_damage));
+                                },
+                                contribution_error));
                     if (!admitted) {
                         // Keep the exact tick pending; do not apply damage without durable admission.
                         monster.burn_effect = burn_effect_before_tick;
@@ -4175,10 +4178,20 @@ struct EnetServer::Impl {
                         applied_burn_damage);
                 } else {
                     // Defensive fallback for a legacy effect without a captured authenticated source.
-                    monster.state.health = static_cast<float>(
-                        std::max<std::int64_t>(0, previous_health - applied_burn_damage));
-                    if (applied_burn_damage >= previous_health)
+                    if (applied_burn_damage >= previous_health) {
+                        capture_monster_death_context(monster, nullptr);
+                        if (!persist_monster_death_intent(monster)) {
+                            monster.burn_effect = burn_effect_before_tick;
+                            std::cerr << "[MonsterDeathIntent] legacy burn lethal tick deferred; runtime="
+                                      << monster.runtime_id << std::endl;
+                            continue;
+                        }
                         monster.contribution_closing = true;
+                        monster.state.health = 0.0F;
+                    } else {
+                        monster.state.health = static_cast<float>(
+                            std::max<std::int64_t>(0, previous_health - applied_burn_damage));
+                    }
                 }
                 const bool burn_defeated = monster.state.health <= 0.0F;
                 std::int64_t experience_reward = 0;
