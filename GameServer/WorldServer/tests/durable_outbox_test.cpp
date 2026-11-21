@@ -141,6 +141,45 @@ int main() {
     }
     remove_database(quota_path);
 
+
+    const std::string batch_path = "world_outbox_batch_test.sqlite";
+    remove_database(batch_path);
+    {
+        honghuang::persistence::DurableOutbox box(batch_path, 2);
+        std::string error;
+        const std::vector<honghuang::persistence::OutboxEvent> kill_and_contribution{
+            {"kill-1", "bounty_objective_event", R"({"event_id":"kill-1"})", 0, 100, 100, {}},
+            {"contrib-1", "bounty_monster_contributions", R"({"event_id":"contrib-1"})", 0, 100, 100, {}}
+        };
+        assert(box.enqueue_batch(kill_and_contribution, error));
+        assert(box.pending_count(error) == 2);
+        assert(box.enqueue_batch(kill_and_contribution, error)); // Entire batch retry is idempotent.
+        assert(box.pending_count(error) == 2);
+
+        auto conflicting = kill_and_contribution;
+        conflicting[1].payload = R"({"event_id":"contrib-1","damage":99})";
+        assert(!box.enqueue_batch(conflicting, error)); // Conflict rejects the batch.
+        assert(box.pending_count(error) == 2);
+
+        assert(box.mark_delivered("kill-1", error));
+        assert(box.mark_delivered("contrib-1", error));
+    }
+    remove_database(batch_path);
+
+    const std::string batch_capacity_path = "world_outbox_batch_capacity_test.sqlite";
+    remove_database(batch_capacity_path);
+    {
+        honghuang::persistence::DurableOutbox box(batch_capacity_path, 1);
+        std::string error;
+        const std::vector<honghuang::persistence::OutboxEvent> too_large{
+            {"kill-cap", "bounty_objective_event", R"({"event_id":"kill-cap"})", 0, 100, 100, {}},
+            {"contrib-cap", "bounty_monster_contributions", R"({"event_id":"contrib-cap"})", 0, 100, 100, {}}
+        };
+        assert(!box.enqueue_batch(too_large, error));
+        assert(box.pending_count(error) == 0); // Capacity failure leaves no partial batch.
+    }
+    remove_database(batch_capacity_path);
+
     const std::string admin_path = "world_outbox_admin_test.sqlite";
     remove_database(admin_path);
     {
