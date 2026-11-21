@@ -4899,7 +4899,7 @@ void EnetServer::stop() {
                 std::cerr << "[MonsterContribution] shutdown drain timed out; pending_records="
                           << impl_->monster_contribution_writer->pending_count()
                           << " last_error=" << impl_->monster_contribution_writer->last_error()
-                          << ". Remaining in-memory records were not committed.\n";
+                          << ". Unfinished writes remain durable in SQLite and will replay on next startup.\n";
             }
         }
         if (impl_->monster_death_finalizer) {
