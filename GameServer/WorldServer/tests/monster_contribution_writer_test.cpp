@@ -48,6 +48,7 @@ int main() {
         sqlite3* blocker = nullptr;
         assert(sqlite3_open(path.c_str(), &blocker) == SQLITE_OK);
         assert(sqlite3_exec(blocker, "BEGIN IMMEDIATE", nullptr, nullptr, nullptr) == SQLITE_OK);
+        std::string error;
         auto busy_hit = first;
         busy_hit.write_id = "writer-hit-busy";
         assert(!outbox.admit_monster_contribution(busy_hit, error));
@@ -56,7 +57,6 @@ int main() {
         honghuang::persistence::MonsterContributionWriter writer(outbox, 2);
         assert(writer.pending_count() == 2);
         assert(writer.pending_count_for_monster("life-a") == 2);
-        std::string error;
         std::int64_t health = 100;
         auto third = first;
         third.write_id = "writer-hit-3";
