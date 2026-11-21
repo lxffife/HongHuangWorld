@@ -149,6 +149,15 @@ A separate `MonsterContributionWriter` now provides the first worker-thread boun
 
 The WorldServer now owns one writer alongside its `DurableOutbox`: it is constructed only after the SQLite owner is initialized, and is explicitly stopped during shutdown before the outbox delivery workers. Member declaration order also ensures the writer is destroyed before the SQLite owner. This establishes safe resource lifetime, but does not yet submit combat records.
 
+The direct melee hit path is now the first live integration:
+
+- It builds one immutable SQLite contribution record using the monster's per-life `contribution_instance_id`, authenticated session/character IDs, effective damage, one hit, wall-clock timestamps, and a deduplicated JSON array of matching cached monster-kill objective subscriptions.
+- It calls `submit_before_damage`; only after the bounded writer accepts the record does the callback mutate monster health.
+- If the writer is unavailable, stopping, or full, the hit is rejected and monster health is unchanged. The rejection is logged and the client receives a retry-later combat response.
+- After admission, the existing in-memory 256-entry contribution map is still updated for the current death snapshot and bounty event compatibility.
+
+**Important partial-integration boundary:** only direct melee damage uses this admission path. Projectile impact and periodic burn damage still use the legacy ordering and must be migrated before the writer can be treated as the universal combat ledger. Death settlement still reads the in-memory map; the SQLite ledger is not yet drained, loaded, finalized, or cleared on death. Consequently this step does not yet provide a complete death snapshot, all-contributor ranking, or crash-safe reward settlement. The in-memory 256-entry cap remains in place for the existing death/bounty path.
+
 This is an isolated writer component and test target only. The combat hit paths are not yet connected, the 256-entry in-memory map is still active, and no claim is made that arbitrary contributor counts are captured yet. The next integration must reserve queue capacity before applying damage, track closing life-instance IDs, drain before finalization, and solve the center API's 256-contributor-per-event limit with complete chunk/snapshot semantics before removing the cap.
 
 
