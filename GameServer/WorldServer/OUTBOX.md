@@ -62,3 +62,18 @@ When authoritative combat resolves a monster death, WorldServer matches the mons
 The following lethal paths are connected: direct melee, arrow/spell projectile impact, and periodic burn damage. A single death transition is handled once because the monster is marked dead before another damage tick can be resolved. Existing character reward, soul reward/absorption, and drop events remain separate.
 
 **Current boundaries:** subscriptions are loaded at login only; a bounty accepted while the character remains online is picked up after reconnect (periodic refresh is a follow-up). Only monster-kill objectives are delivered; exploration, escort, and item objectives are not connected yet. If local SQLite enqueue fails (disk/capacity/permission), the kill still resolves and an error is logged; no durable acceptance is claimed.
+
+
+## Bounty monster contribution ledger (migration 000059)
+
+The center service now accepts immutable death-time contribution snapshots at:
+
+`POST /api/v1/servers/bounties/contributions`
+
+The request uses the same `X-World-Server-Key` and `X-World-Server-Node` authentication as bounty objective events. It contains a stable event UUID, task ID, runtime monster instance ID, monster definition ID, and 1–64 contributors (session ID, character ID, effective damage, hit count).
+
+The center service verifies the task is active and unexpired, the configured objective is a matching `monster_killed` objective, each historical session belongs to the reporting node and task world, and every derived account is an accepted participant. Historical `active`, `saving`, and `closed` sessions are eligible; a contributor does not have to remain online when the outbox event is delivered. Account IDs are resolved from server-owned character/soul records and are never accepted from the payload.
+
+Event UUID reuse with a different normalized payload is rejected. The event envelope and contributor rows are stored in the same PostgreSQL transaction and protected by immutable-record triggers.
+
+**Important boundary:** this endpoint is an audit/persistence foundation only. It does not advance objective progress, award bounty credit, or change escrow settlement. The existing kill event still attributes objective progress to the last hitter, and settlement remains equal-share until the cooperative-counting and contribution-weighting rules are explicitly decided. WorldServer has not yet been wired to enqueue these snapshots; that is the next integration step.
