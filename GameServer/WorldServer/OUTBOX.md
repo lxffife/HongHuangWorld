@@ -214,3 +214,8 @@ The next live integration must not call `wait_until_drained` with a long timeout
 8. **Respawn:** assign a fresh contribution instance ID and clear all per-life pending state. Never reuse a finalized ID.
 
 The three lethal sources (melee, projectile, delayed burn) must enter this same state machine. Burn deaths may have no online killer; in that case preserve contributor snapshots but do not fabricate kill-progress or player rewards. Config reload must not discard a closing/finalizing life. The current implementation has **not** completed these steps: lethal handlers still run the legacy in-memory bounty/reward/respawn path. This section is the acceptance contract for the integration, not a claim that it is live.
+
+
+### Preserve closing monster lives across spawn-config refresh
+
+A spawn-config refresh must not replace the runtime definition or per-life contribution identity of a monster whose lethal transition has already been latched. The config merge now carries an existing `contribution_closing` runtime forward unchanged for that refresh instead of applying rare-spawn activation/deactivation or health changes to it. This protects the closing life from being revived or having its contribution identity rotated while its death lifecycle is pending. This is a defensive config-reload guard; deferred SQLite death finalization is still not implemented, and removed spawn points that are not in the refreshed config remain governed by the existing merge policy unless they are already closing.
