@@ -60,7 +60,15 @@ DurableOutbox::DurableOutbox(const std::string& path, std::size_t capacity, bool
         "attempts INTEGER NOT NULL DEFAULT 0,next_retry_at_ms INTEGER NOT NULL,"
         "created_at_ms INTEGER NOT NULL,updated_at_ms INTEGER NOT NULL,last_error TEXT NOT NULL DEFAULT '');"
         "CREATE INDEX IF NOT EXISTS idx_world_event_outbox_due "
-        "ON world_event_outbox(status,next_retry_at_ms,created_at_ms);";
+        "ON world_event_outbox(status,next_retry_at_ms,created_at_ms);"
+        "CREATE TABLE IF NOT EXISTS monster_damage_contributions("
+        "monster_instance_id TEXT NOT NULL,monster_definition_id TEXT NOT NULL,"
+        "session_id TEXT NOT NULL,character_id TEXT NOT NULL,total_damage INTEGER NOT NULL,"
+        "hit_count INTEGER NOT NULL,first_hit_at_ms INTEGER NOT NULL,last_hit_at_ms INTEGER NOT NULL,"
+        "bounty_objectives_json TEXT NOT NULL DEFAULT '[]',"
+        "PRIMARY KEY(monster_instance_id,session_id,character_id));"
+        "CREATE INDEX IF NOT EXISTS idx_monster_damage_contributions_instance "
+        "ON monster_damage_contributions(monster_instance_id);";
     char* message = nullptr;
     if (sqlite3_exec(db_, schema, nullptr, nullptr, &message) != SQLITE_OK) {
         const std::string error = message ? message : sqlite3_errmsg(db_);
@@ -256,6 +264,161 @@ bool DurableOutbox::enqueue_batch(const std::vector<OutboxEvent>& events, std::s
             if (sqlite3_step(insert.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
         }
 
+        if (!execute("COMMIT", error)) {
+            std::string ignored;
+            execute("ROLLBACK", ignored);
+            transaction_open = false;
+            return false;
+        }
+        transaction_open = false;
+        return true;
+    } catch (const std::exception& exception) {
+        if (transaction_open) {
+            std::string ignored;
+            execute("ROLLBACK", ignored);
+        }
+        error = exception.what();
+        return false;
+    }
+}
+
+
+bool DurableOutbox::record_monster_contribution(
+    const MonsterContributionRecord& item, std::string& error) {
+    if (item.monster_instance_id.empty() || item.monster_instance_id.size() > 96 ||
+        item.monster_definition_id.empty() || item.monster_definition_id.size() > 64 ||
+        item.session_id.empty() || item.character_id.empty() ||
+        item.total_damage <= 0 || item.hit_count <= 0 ||
+        item.first_hit_at_ms <= 0 || item.last_hit_at_ms < item.first_hit_at_ms ||
+        item.bounty_objectives_json.empty()) {
+        error = "invalid monster contribution record";
+        return false;
+    }
+    std::lock_guard lock(mutex_);
+    try {
+        Stmt upsert(db_,
+            "INSERT INTO monster_damage_contributions(monster_instance_id,monster_definition_id,"
+            "session_id,character_id,total_damage,hit_count,first_hit_at_ms,last_hit_at_ms,bounty_objectives_json) "
+            "VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(monster_instance_id,session_id,character_id) DO UPDATE SET "
+            "total_damage=CASE WHEN total_damage>9223372036854775807-excluded.total_damage "
+            "THEN 9223372036854775807 ELSE total_damage+excluded.total_damage END,"
+            "hit_count=CASE WHEN hit_count>9223372036854775807-excluded.hit_count "
+            "THEN 9223372036854775807 ELSE hit_count+excluded.hit_count END,"
+            "first_hit_at_ms=MIN(first_hit_at_ms,excluded.first_hit_at_ms),"
+            "last_hit_at_ms=MAX(last_hit_at_ms,excluded.last_hit_at_ms),"
+            "bounty_objectives_json=excluded.bounty_objectives_json");
+        bind_text(upsert.get(), 1, item.monster_instance_id);
+        bind_text(upsert.get(), 2, item.monster_definition_id);
+        bind_text(upsert.get(), 3, item.session_id);
+        bind_text(upsert.get(), 4, item.character_id);
+        sqlite3_bind_int64(upsert.get(), 5, item.total_damage);
+        sqlite3_bind_int64(upsert.get(), 6, item.hit_count);
+        sqlite3_bind_int64(upsert.get(), 7, item.first_hit_at_ms);
+        sqlite3_bind_int64(upsert.get(), 8, item.last_hit_at_ms);
+        bind_text(upsert.get(), 9, item.bounty_objectives_json);
+        if (sqlite3_step(upsert.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+        return true;
+    } catch (const std::exception& exception) {
+        error = exception.what();
+        return false;
+    }
+}
+
+std::vector<MonsterContributionRecord> DurableOutbox::load_monster_contributions(
+    const std::string& monster_instance_id, std::string& error) const {
+    std::vector<MonsterContributionRecord> result;
+    if (monster_instance_id.empty() || monster_instance_id.size() > 96) {
+        error = "invalid monster instance id";
+        return result;
+    }
+    std::lock_guard lock(mutex_);
+    try {
+        Stmt query(db_,
+            "SELECT monster_instance_id,monster_definition_id,session_id,character_id,total_damage,"
+            "hit_count,first_hit_at_ms,last_hit_at_ms,bounty_objectives_json "
+            "FROM monster_damage_contributions WHERE monster_instance_id=? "
+            "ORDER BY total_damage DESC,character_id");
+        bind_text(query.get(), 1, monster_instance_id);
+        int step = SQLITE_ROW;
+        while ((step = sqlite3_step(query.get())) == SQLITE_ROW) {
+            result.push_back(MonsterContributionRecord{
+                column_text(query.get(), 0), column_text(query.get(), 1),
+                column_text(query.get(), 2), column_text(query.get(), 3),
+                sqlite3_column_int64(query.get(), 4), sqlite3_column_int64(query.get(), 5),
+                sqlite3_column_int64(query.get(), 6), sqlite3_column_int64(query.get(), 7),
+                column_text(query.get(), 8)
+            });
+        }
+        if (step != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+        return result;
+    } catch (const std::exception& exception) {
+        error = exception.what();
+        return {};
+    }
+}
+
+bool DurableOutbox::finalize_monster_contributions(
+    const std::string& monster_instance_id, const std::vector<OutboxEvent>& events,
+    std::string& error) {
+    if (monster_instance_id.empty() || monster_instance_id.size() > 96 || events.empty()) {
+        error = "monster instance id and finalization events are required";
+        return false;
+    }
+    for (const auto& event : events) {
+        if (event.event_id.empty() || event.event_type.empty() || event.payload.empty()) {
+            error = "event id/type/payload required";
+            return false;
+        }
+    }
+    std::lock_guard lock(mutex_);
+    bool transaction_open = false;
+    try {
+        if (!execute("BEGIN IMMEDIATE", error)) return false;
+        transaction_open = true;
+        std::vector<std::string> ids;
+        std::size_t new_count = 0;
+        for (const auto& event : events) {
+            if (std::find(ids.begin(), ids.end(), event.event_id) != ids.end())
+                throw std::runtime_error("duplicate event id inside monster finalization batch");
+            ids.push_back(event.event_id);
+            Stmt existing(db_, "SELECT event_type,payload,status FROM world_event_outbox WHERE event_id=?");
+            bind_text(existing.get(), 1, event.event_id);
+            const int result = sqlite3_step(existing.get());
+            if (result == SQLITE_ROW) {
+                if (column_text(existing.get(), 0) != event.event_type ||
+                    column_text(existing.get(), 1) != event.payload ||
+                    column_text(existing.get(), 2) == "dead_letter")
+                    throw std::runtime_error("monster finalization event conflicts with existing outbox row");
+            } else if (result == SQLITE_DONE) {
+                ++new_count;
+            } else {
+                throw std::runtime_error(sqlite3_errmsg(db_));
+            }
+        }
+        Stmt count(db_, "SELECT COUNT(*) FROM world_event_outbox WHERE status IN('pending','inflight')");
+        if (sqlite3_step(count.get()) != SQLITE_ROW) throw std::runtime_error(sqlite3_errmsg(db_));
+        const auto active_count = static_cast<std::size_t>(sqlite3_column_int64(count.get(), 0));
+        if (new_count > capacity_ || active_count > capacity_ - new_count)
+            throw std::runtime_error("durable outbox capacity reached");
+        for (const auto& event : events) {
+            Stmt existing(db_, "SELECT 1 FROM world_event_outbox WHERE event_id=?");
+            bind_text(existing.get(), 1, event.event_id);
+            if (sqlite3_step(existing.get()) == SQLITE_ROW) continue;
+            Stmt insert(db_,
+                "INSERT INTO world_event_outbox(event_id,event_type,payload,status,attempts,"
+                "next_retry_at_ms,created_at_ms,updated_at_ms) VALUES(?,?,?,'pending',?,?,?,?)");
+            bind_text(insert.get(), 1, event.event_id);
+            bind_text(insert.get(), 2, event.event_type);
+            bind_text(insert.get(), 3, event.payload);
+            sqlite3_bind_int64(insert.get(), 4, event.attempts);
+            sqlite3_bind_int64(insert.get(), 5, event.next_retry_at_ms);
+            sqlite3_bind_int64(insert.get(), 6, event.created_at_ms);
+            sqlite3_bind_int64(insert.get(), 7, event.created_at_ms);
+            if (sqlite3_step(insert.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+        }
+        Stmt remove(db_, "DELETE FROM monster_damage_contributions WHERE monster_instance_id=?");
+        bind_text(remove.get(), 1, monster_instance_id);
+        if (sqlite3_step(remove.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
         if (!execute("COMMIT", error)) {
             std::string ignored;
             execute("ROLLBACK", ignored);
