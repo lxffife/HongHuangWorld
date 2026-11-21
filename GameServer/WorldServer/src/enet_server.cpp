@@ -875,6 +875,7 @@ bool load_monster_spawn_config(const ServerConfig& config,std::vector<MonsterRun
             runtime.first_spawn_delay_seconds=first_delay;
             runtime.state={x,z,runtime.definition.max_health};
             if(rare||first_delay>0){
+                runtime.state.health=0.0F;
                 runtime.state.mode=honghuang::simulation::MonsterMode::Dead;
                 runtime.respawn_at=Clock::now()+std::chrono::seconds(std::max(first_delay,1));
             }
@@ -1165,6 +1166,7 @@ struct EnetServer::Impl {
                 found->rare_spawn = true;
                 found->spawn_chance_percent = std::clamp(chance_percent, 1, 100);
                 found->retry_spawn_seconds = std::max(retry_seconds, 1);
+                found->state.health = 0.0F;
                 found->state.mode = honghuang::simulation::MonsterMode::Dead;
                 found->respawn_at = Clock::now() + std::chrono::seconds(std::max(first_delay_seconds, 1));
             };
