@@ -39,6 +39,7 @@ int main() {
         std::int64_t health = 100;
         assert(!writer.submit_before_damage(first, [&]() noexcept { health -= first.total_damage; }, error));
         assert(health == 100); // A full queue must reject before health changes.
+        assert(!writer.wait_until_drained("life-a", 20ms)); // In-flight write is still pending.
         assert(sqlite3_exec(blocker, "COMMIT", nullptr, nullptr, nullptr) == SQLITE_OK);
         sqlite3_close(blocker);
         assert(writer.wait_until_drained("life-a", 3s));
