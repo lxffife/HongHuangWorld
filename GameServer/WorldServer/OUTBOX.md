@@ -107,3 +107,12 @@ The endpoint verifies that the authenticated account participated in the task. I
 A monster damage contribution now carries the matching `monster_killed` objective subscriptions observed on that authenticated character when effective damage is applied. At death, WorldServer unions and deduplicates those task/objective subscriptions across the damage ledger. This means a non-participant final hitter no longer suppresses a contribution snapshot for a task joined by another contributor. The kill-progress event is still emitted only when the final hitter has the matching subscription; contribution snapshots are emitted for each task represented by a contributor. The center service remains authoritative and filters contributors to accepted participants.
 
 Duplicate contribution-event IDs are also bound to the original reporting node: an exact retry from another node is rejected as an idempotency conflict, even if its JSON payload is identical.
+
+### Publisher faction contribution audit API
+
+- `GET /api/v1/factions/{factionID}/bounties/{taskID}/contributions`
+- Requires a player bearer token and an active membership in the task's actual publishing faction.
+- Only `leader` and `officer` roles may read task-wide audit data. A task published by another faction, an inactive faction, a member without an officer role, or a non-faction publisher is denied.
+- Authorization locks the task, faction, and membership rows in one read transaction before reading the ledger, preventing membership revocation from racing the audit request.
+- Response aggregates each character's total damage, hit count, distinct monster count, and percentage of accepted-participant damage. It also returns up to the latest 200 monster snapshots with character-level damage and hit counts.
+- The response does not expose account IDs or world session IDs. It is read-only and does not change objective progress, participant eligibility, or settlement.
