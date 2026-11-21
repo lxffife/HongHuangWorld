@@ -71,7 +71,8 @@ DurableOutbox::DurableOutbox(const std::string& path, std::size_t capacity, bool
         "ON monster_damage_contributions(monster_instance_id);"
         "CREATE TABLE IF NOT EXISTS monster_damage_contribution_writes("
         "write_id TEXT PRIMARY KEY NOT NULL,monster_instance_id TEXT NOT NULL,session_id TEXT NOT NULL,"
-        "character_id TEXT NOT NULL,damage INTEGER NOT NULL,hit_count INTEGER NOT NULL);"
+        "character_id TEXT NOT NULL,monster_definition_id TEXT NOT NULL,damage INTEGER NOT NULL,hit_count INTEGER NOT NULL,"
+        "first_hit_at_ms INTEGER NOT NULL,last_hit_at_ms INTEGER NOT NULL,bounty_objectives_json TEXT NOT NULL);"
         "CREATE INDEX IF NOT EXISTS idx_monster_contribution_writes_instance "
         "ON monster_damage_contribution_writes(monster_instance_id);";
     char* message = nullptr;
@@ -306,7 +307,8 @@ bool DurableOutbox::record_monster_contribution(
         if (!execute("BEGIN IMMEDIATE", error)) return false;
         transaction_open = true;
         Stmt existing(db_,
-            "SELECT monster_instance_id,session_id,character_id,damage,hit_count "
+            "SELECT monster_instance_id,session_id,character_id,monster_definition_id,damage,hit_count,"
+            "first_hit_at_ms,last_hit_at_ms,bounty_objectives_json "
             "FROM monster_damage_contribution_writes WHERE write_id=?");
         bind_text(existing.get(), 1, item.write_id);
         const int existing_result = sqlite3_step(existing.get());
@@ -314,8 +316,12 @@ bool DurableOutbox::record_monster_contribution(
             const bool same = column_text(existing.get(), 0) == item.monster_instance_id &&
                 column_text(existing.get(), 1) == item.session_id &&
                 column_text(existing.get(), 2) == item.character_id &&
-                sqlite3_column_int64(existing.get(), 3) == item.total_damage &&
-                sqlite3_column_int64(existing.get(), 4) == item.hit_count;
+                column_text(existing.get(), 3) == item.monster_definition_id &&
+                sqlite3_column_int64(existing.get(), 4) == item.total_damage &&
+                sqlite3_column_int64(existing.get(), 5) == item.hit_count &&
+                sqlite3_column_int64(existing.get(), 6) == item.first_hit_at_ms &&
+                sqlite3_column_int64(existing.get(), 7) == item.last_hit_at_ms &&
+                column_text(existing.get(), 8) == item.bounty_objectives_json;
             if (!same) throw std::runtime_error("monster contribution write id reused with different data");
             if (!execute("COMMIT", error)) throw std::runtime_error(error);
             transaction_open = false;
@@ -324,13 +330,18 @@ bool DurableOutbox::record_monster_contribution(
         if (existing_result != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
         Stmt write(db_,
             "INSERT INTO monster_damage_contribution_writes(write_id,monster_instance_id,session_id,"
-            "character_id,damage,hit_count) VALUES(?,?,?,?,?,?)");
+            "character_id,monster_definition_id,damage,hit_count,first_hit_at_ms,last_hit_at_ms,bounty_objectives_json) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?)");
         bind_text(write.get(), 1, item.write_id);
         bind_text(write.get(), 2, item.monster_instance_id);
         bind_text(write.get(), 3, item.session_id);
         bind_text(write.get(), 4, item.character_id);
-        sqlite3_bind_int64(write.get(), 5, item.total_damage);
-        sqlite3_bind_int64(write.get(), 6, item.hit_count);
+        bind_text(write.get(), 5, item.monster_definition_id);
+        sqlite3_bind_int64(write.get(), 6, item.total_damage);
+        sqlite3_bind_int64(write.get(), 7, item.hit_count);
+        sqlite3_bind_int64(write.get(), 8, item.first_hit_at_ms);
+        sqlite3_bind_int64(write.get(), 9, item.last_hit_at_ms);
+        bind_text(write.get(), 10, item.bounty_objectives_json);
         if (sqlite3_step(write.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
         Stmt upsert(db_,
             "INSERT INTO monster_damage_contributions(monster_instance_id,monster_definition_id,"
