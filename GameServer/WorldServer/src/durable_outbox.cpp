@@ -414,14 +414,17 @@ bool DurableOutbox::respawn_monster_life(
     try {
         if (!execute("BEGIN IMMEDIATE", error)) return false;
         transaction_open = true;
-        Stmt pending(db_,
-            "SELECT committed_at_ms FROM pending_monster_deaths WHERE monster_instance_id=?");
-        bind_text(pending.get(), 1, old_instance_id);
-        const int pending_result = sqlite3_step(pending.get());
-        if (pending_result == SQLITE_ROW && sqlite3_column_int64(pending.get(), 0) <= 0)
-            throw std::runtime_error("monster death finalization is not committed; respawn rejected");
-        if (pending_result != SQLITE_ROW && pending_result != SQLITE_DONE)
-            throw std::runtime_error(sqlite3_errmsg(db_));
+        int pending_result = SQLITE_DONE;
+        {
+            Stmt pending(db_,
+                "SELECT committed_at_ms FROM pending_monster_deaths WHERE monster_instance_id=?");
+            bind_text(pending.get(), 1, old_instance_id);
+            pending_result = sqlite3_step(pending.get());
+            if (pending_result == SQLITE_ROW && sqlite3_column_int64(pending.get(), 0) <= 0)
+                throw std::runtime_error("monster death finalization is not committed; respawn rejected");
+            if (pending_result != SQLITE_ROW && pending_result != SQLITE_DONE)
+                throw std::runtime_error(sqlite3_errmsg(db_));
+        }
         Stmt update(db_,
             "UPDATE monster_life_states SET monster_instance_id=?,monster_definition_id=?,health=?,updated_at_ms=? "
             "WHERE runtime_id=? AND monster_instance_id=?");
