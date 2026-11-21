@@ -233,9 +233,11 @@ int main() {
         honghuang::persistence::DurableOutbox box(ledger_path, 8);
         std::string error;
         honghuang::persistence::MonsterContributionRecord hit{
-            "monster-runtime-1", "wolf", "session-a", "character-a", 25, 1, 100, 100, R"([{"task_id":"task-a"}])"
+            "hit-write-1", "monster-runtime-1", "wolf", "session-a", "character-a", 25, 1, 100, 100, R"([{"task_id":"task-a"}])"
         };
         assert(box.record_monster_contribution(hit, error));
+        assert(box.record_monster_contribution(hit, error)); // Retrying the same write ID never double-counts.
+        hit.write_id = "hit-write-2";
         hit.total_damage = 35;
         hit.hit_count = 1;
         hit.first_hit_at_ms = 90;
@@ -271,7 +273,7 @@ int main() {
         honghuang::persistence::DurableOutbox box(ledger_capacity_path, 1);
         std::string error;
         honghuang::persistence::MonsterContributionRecord hit{
-            "monster-runtime-cap", "wolf", "session-cap", "character-cap", 10, 1, 300, 300, "[]"
+            "hit-write-cap", "monster-runtime-cap", "wolf", "session-cap", "character-cap", 10, 1, 300, 300, "[]"
         };
         assert(box.record_monster_contribution(hit, error));
         const std::vector<honghuang::persistence::OutboxEvent> too_large{
