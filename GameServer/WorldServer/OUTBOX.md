@@ -153,3 +153,6 @@ This is an isolated writer component and test target only. The combat hit paths 
 ### Pre-damage admission contract
 
 The writer exposes `submit_before_damage(record, callback, error)` as the required ordering primitive for combat integration. It first reserves a slot by successfully submitting the immutable contribution record, then invokes a `noexcept` health-mutation callback. If the bounded queue is full or stopping, the callback is not invoked, so that hit must be rejected without changing monster health. The callback is constrained to be non-throwing to avoid queueing contribution evidence for a mutation that then aborts. This is an ordering primitive only: it does not remove the asynchronous crash window, and all live combat call sites still need to adopt it before the contract is active in gameplay.
+
+
+The async writer test now holds a SQLite `BEGIN IMMEDIATE` lock while the worker attempts to persist a queued hit. It asserts that the bounded queue still counts the in-flight record and that `wait_until_drained(instance)` times out rather than reporting a false drain. After releasing the database lock, the same test waits for the record to persist and verifies the aggregated damage/hit count. This exercises the important distinction between “not waiting in the queue” and “confirmed committed to SQLite.”
