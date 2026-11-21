@@ -3408,6 +3408,30 @@ struct EnetServer::Impl {
                 projectile->defense_penetration_basis_points
             };
             if (honghuang::simulation::calculate_damage(attacker, defender, attack_profile, damage)) {
+                std::string contribution_error;
+                const auto contribution = make_monster_contribution_record(
+                    *target, owner->second, damage.damage);
+                const bool admitted = monster_contribution_writer != nullptr &&
+                    monster_contribution_writer->submit_before_damage(
+                        contribution,
+                        [target, remaining_health = damage.remaining_health]() noexcept {
+                            target->state.health = static_cast<float>(remaining_health);
+                        },
+                        contribution_error);
+                if (!admitted) {
+                    std::cerr << "[MonsterContribution] projectile hit rejected; monster="
+                              << target->definition.id << " instance="
+                              << target->contribution_instance_id << " reason="
+                              << (contribution_error.empty() ? "writer unavailable" : contribution_error)
+                              << std::endl;
+                    send_json(owner->first, honghuang::protocol::MessageType::CombatEvent,
+                              Json{{"accepted", false}, {"source", "projectile"},
+                                   {"source_entity_id", projectile->id},
+                                   {"target_entity_id", target->runtime_id},
+                                   {"reason", "战斗记录繁忙，本次攻击未生效，请稍后重试。"}});
+                    projectile = projectiles.erase(projectile);
+                    continue;
+                }
                 bool applied_slow = false;
                 bool applied_freeze = false;
                 std::int32_t applied_freeze_duration_ms = 0;
@@ -3437,7 +3461,6 @@ struct EnetServer::Impl {
                         projectile->burn_interval_ms, burn_damage);
                     if (applied_burn) target->burn_owner_character_id = projectile->owner_character_id;
                 }
-                target->state.health = static_cast<float>(damage.remaining_health);
                 record_monster_damage(*target, owner->second, damage.damage);
                 std::int64_t experience_reward = 0;
                 std::int64_t cultivation_reward = 0;
