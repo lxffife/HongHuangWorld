@@ -36,6 +36,8 @@ int main() {
                 assert(records.front().total_damage == 25);
                 const std::string payload = R"({"event_id":"death-event-1"})";
                 events.push_back({"death-event-1", "test_death_event", payload, 0, 0, 1, {}});
+                events.push_back({"death-event-2", "test_death_event",
+                    R"({"event_id":"death-event-2"})", 0, 0, 1, {}});
                 return true;
             }, error));
 
@@ -55,6 +57,10 @@ int main() {
         const auto remaining = outbox.load_monster_contributions("life-death-1", error);
         assert(error.empty());
         assert(remaining.empty());
+        const auto first_event = outbox.find("death-event-1", error);
+        assert(error.empty() && first_event.has_value());
+        const auto second_event = outbox.find("death-event-2", error);
+        assert(error.empty() && second_event.has_value());
         assert(finalizer.stop_after_drain(1s));
         assert(writer.stop_after_drain(1s));
     }
