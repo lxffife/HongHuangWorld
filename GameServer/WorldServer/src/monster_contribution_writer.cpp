@@ -3,12 +3,21 @@
 #include <algorithm>
 #include <stdexcept>
 #include <utility>
+#include <limits>
 
 namespace honghuang::persistence {
 
 MonsterContributionWriter::MonsterContributionWriter(DurableOutbox& outbox, std::size_t capacity)
     : outbox_(outbox), capacity_(capacity) {
     if (capacity_ == 0) throw std::invalid_argument("monster contribution queue capacity must be positive");
+    std::string error;
+    const auto recovered = outbox_.load_pending_monster_contribution_writes(
+        std::numeric_limits<std::size_t>::max(), error);
+    if (!error.empty()) throw std::runtime_error("failed to recover durable monster contributions: " + error);
+    for (const auto& item : recovered) {
+        pending_.push_back(item);
+        ++pending_by_monster_[item.monster_instance_id];
+    }
     worker_ = std::thread(&MonsterContributionWriter::run, this);
 }
 
@@ -31,6 +40,7 @@ bool MonsterContributionWriter::submit(const MonsterContributionRecord& contribu
             error = "monster contribution queue is full";
             return false;
         }
+        if (!outbox_.admit_monster_contribution(contribution, error)) return false;
         pending_.push_back(contribution);
         ++pending_by_monster_[contribution.monster_instance_id];
     }
@@ -106,13 +116,14 @@ void MonsterContributionWriter::run() {
         }
 
         std::string error;
-        if (!outbox_.record_monster_contribution(item, error)) {
+        if (!outbox_.record_monster_contribution(item, error) ||
+            !outbox_.acknowledge_monster_contribution_write(item.write_id, error)) {
             std::unique_lock lock(mutex_);
             last_error_ = error;
             cv_.wait_for(lock, retry_delay, [&] { return stop_requested_; });
             if (stop_requested_) return;
             retry_delay = std::min(retry_delay * 2, std::chrono::milliseconds{2000});
-            continue; // Keep the exact write ID and payload at the queue head.
+            continue; // Durable inbox row remains available for retry/restart.
         }
 
         {
