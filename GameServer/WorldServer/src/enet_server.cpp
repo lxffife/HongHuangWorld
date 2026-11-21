@@ -183,7 +183,13 @@ struct MonsterRuntime {
     // Latch the lethal transition before later hits can enqueue against this life.
     bool contribution_closing{false};
     bool death_context_captured{false};
+    bool death_intent_persisted{false};
     bool death_finalizer_submitted{false};
+    std::string death_world_id;
+    std::string death_definition_id;
+    int death_level{};
+    float death_position_x{};
+    float death_position_z{};
     std::string death_killer_session_id;
     std::string death_killer_character_id;
     std::vector<BountyObjectiveSubscription> death_killer_bounty_objectives;
@@ -1693,6 +1699,11 @@ struct EnetServer::Impl {
     void capture_monster_death_context(MonsterRuntime& monster, const PlayerState* killer) {
         if (monster.death_context_captured) return;
         monster.death_context_captured = true;
+        monster.death_world_id = config.world_id;
+        monster.death_definition_id = monster.definition.id;
+        monster.death_level = monster.definition.level;
+        monster.death_position_x = monster.state.x;
+        monster.death_position_z = monster.state.z;
         if (killer == nullptr) return;
 
         monster.death_killer_session_id = killer->session_id;
@@ -1719,20 +1730,163 @@ struct EnetServer::Impl {
         }
     }
 
+    bool persist_monster_death_intent(MonsterRuntime& monster) {
+        if (monster.death_intent_persisted) return true;
+        if (!durable_outbox || !monster.death_context_captured ||
+            monster.contribution_instance_id.empty() || monster.runtime_id.empty()) return false;
+
+        Json objectives = Json::array();
+        for (const auto& objective : monster.death_killer_bounty_objectives) {
+            objectives.push_back({
+                {"task_id", objective.task_id},
+                {"objective_key", objective.objective_key},
+                {"event_type", objective.event_type}
+            });
+        }
+        Json drops = Json::array();
+        for (const auto& drop : monster.pending_death_drops) {
+            drops.push_back({
+                {"id", drop.id},
+                {"session_id", drop.session_id},
+                {"owner_character_id", drop.owner_character_id},
+                {"item_id", drop.item_id},
+                {"quantity", drop.quantity},
+                {"x", drop.x},
+                {"z", drop.z},
+                {"expires_at_unix_ms", drop.expires_at_unix_ms}
+            });
+        }
+        const Json payload{
+            {"version", 1},
+            {"world_id", monster.death_world_id},
+            {"definition_id", monster.death_definition_id},
+            {"level", monster.death_level},
+            {"position_x", monster.death_position_x},
+            {"position_z", monster.death_position_z},
+            {"killer_session_id", monster.death_killer_session_id},
+            {"killer_character_id", monster.death_killer_character_id},
+            {"killer_objectives", std::move(objectives)},
+            {"reward_eligible", monster.death_reward_eligible},
+            {"drops", std::move(drops)}
+        };
+        honghuang::persistence::PendingMonsterDeathRecord record;
+        record.monster_instance_id = monster.contribution_instance_id;
+        record.runtime_id = monster.runtime_id;
+        record.payload = payload.dump();
+        record.created_at_ms = wall_clock_ms();
+        std::string error;
+        if (!durable_outbox->save_pending_monster_death(record, error)) {
+            std::cerr << "[MonsterDeathIntent] persist deferred; monster=" << monster.runtime_id
+                      << " instance=" << monster.contribution_instance_id
+                      << " reason=" << error << std::endl;
+            return false;
+        }
+        monster.death_intent_persisted = true;
+        return true;
+    }
+
+    void restore_pending_monster_deaths() {
+        if (!durable_outbox || !monster_death_finalizer) return;
+        std::string error;
+        const auto pending = durable_outbox->load_pending_monster_deaths(error);
+        if (!error.empty()) {
+            std::cerr << "[MonsterDeathIntent] recovery scan failed: " << error << std::endl;
+            return;
+        }
+        for (const auto& record : pending) {
+            auto runtime = std::find_if(monsters.begin(), monsters.end(),
+                [&](const MonsterRuntime& candidate) {
+                    return candidate.runtime_id == record.runtime_id;
+                });
+            if (runtime == monsters.end()) {
+                std::cerr << "[MonsterDeathIntent] waiting for spawn config; runtime="
+                          << record.runtime_id << " instance=" << record.monster_instance_id << std::endl;
+                continue;
+            }
+            if (runtime->contribution_closing &&
+                runtime->contribution_instance_id == record.monster_instance_id &&
+                runtime->death_context_captured) {
+                if (!runtime->death_finalizer_submitted)
+                    submit_monster_death_finalization(*runtime);
+                continue;
+            }
+            try {
+                const auto payload = Json::parse(record.payload);
+                if (!payload.is_object() || payload.value("version", 0) != 1 ||
+                    !payload.contains("killer_objectives") || !payload["killer_objectives"].is_array() ||
+                    !payload.contains("drops") || !payload["drops"].is_array()) {
+                    throw std::runtime_error("unsupported or malformed pending death payload");
+                }
+                runtime->contribution_instance_id = record.monster_instance_id;
+                runtime->contribution_closing = true;
+                runtime->death_context_captured = true;
+                runtime->death_intent_persisted = true;
+                runtime->death_finalizer_submitted = false;
+                runtime->death_world_id = payload.value("world_id", std::string{});
+                runtime->death_definition_id = payload.value("definition_id", runtime->definition.id);
+                runtime->death_level = payload.value("level", runtime->definition.level);
+                runtime->death_position_x = payload.value("position_x", runtime->state.x);
+                runtime->death_position_z = payload.value("position_z", runtime->state.z);
+                runtime->death_killer_session_id = payload.value("killer_session_id", std::string{});
+                runtime->death_killer_character_id = payload.value("killer_character_id", std::string{});
+                runtime->death_reward_eligible = payload.value("reward_eligible", false);
+                runtime->death_killer_bounty_objectives.clear();
+                for (const auto& objective : payload["killer_objectives"]) {
+                    if (!objective.is_object()) throw std::runtime_error("invalid killer objective entry");
+                    runtime->death_killer_bounty_objectives.push_back({
+                        objective.value("task_id", std::string{}),
+                        objective.value("objective_key", std::string{}),
+                        objective.value("event_type", std::string{})
+                    });
+                }
+                runtime->pending_death_drops.clear();
+                for (const auto& value : payload["drops"]) {
+                    if (!value.is_object()) throw std::runtime_error("invalid pending drop entry");
+                    runtime->pending_death_drops.push_back({
+                        value.at("id").get<std::string>(),
+                        value.at("session_id").get<std::string>(),
+                        value.at("owner_character_id").get<std::string>(),
+                        value.at("item_id").get<std::string>(),
+                        value.at("quantity").get<int>(),
+                        value.at("x").get<float>(),
+                        value.at("z").get<float>(),
+                        value.at("expires_at_unix_ms").get<std::int64_t>()
+                    });
+                }
+                runtime->state.health = 0.0F;
+                runtime->state.target_id.clear();
+                runtime->state.mode = honghuang::simulation::MonsterMode::Alive;
+                runtime->respawn_at = Clock::time_point{};
+                honghuang::simulation::clear_negative_statuses(
+                    runtime->slow_effect, runtime->freeze_effect, runtime->burn_effect);
+                runtime->burn_owner_character_id.clear();
+                runtime->burn_owner_session_id.clear();
+                runtime->burn_owner_bounty_objectives.clear();
+                std::cout << "[MonsterDeathIntent] recovered pending life runtime="
+                          << runtime->runtime_id << " instance=" << record.monster_instance_id << std::endl;
+                submit_monster_death_finalization(*runtime);
+            } catch (const std::exception& exception) {
+                std::cerr << "[MonsterDeathIntent] recovery payload rejected; instance="
+                          << record.monster_instance_id << " reason=" << exception.what() << std::endl;
+            }
+        }
+    }
+
     bool submit_monster_death_finalization(MonsterRuntime& monster) {
         if (!monster.contribution_closing || !monster.death_context_captured ||
             monster.death_finalizer_submitted) return monster.death_finalizer_submitted;
+        if (!persist_monster_death_intent(monster)) return false;
         if (!monster_death_finalizer) return false;
 
         const auto instance_id = monster.contribution_instance_id;
-        const auto definition_id = monster.definition.id;
+        const auto definition_id = monster.death_definition_id;
         const auto runtime_id = monster.runtime_id;
-        const auto world_id = config.world_id;
+        const auto world_id = monster.death_world_id;
         const auto killer_session_id = monster.death_killer_session_id;
         const auto killer_character_id = monster.death_killer_character_id;
         const auto killer_objectives = monster.death_killer_bounty_objectives;
         const auto reward_eligible = monster.death_reward_eligible;
-        const auto level = monster.definition.level;
+        const auto level = monster.death_level;
         const auto death_drops = monster.pending_death_drops;
 
         auto builder = [instance_id, definition_id, runtime_id, world_id,
