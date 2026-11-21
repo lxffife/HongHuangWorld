@@ -23,8 +23,8 @@ bool MonsterContributionWriter::submit(const MonsterContributionRecord& contribu
     }
     {
         std::lock_guard lock(mutex_);
-        if (stop_requested_) {
-            error = "monster contribution writer is stopping";
+        if (!accepting_ || stop_requested_) {
+            error = "monster contribution writer is stopping or draining";
             return false;
         }
         if (pending_.size() >= capacity_) {
@@ -62,6 +62,7 @@ bool MonsterContributionWriter::stop_after_drain(std::chrono::milliseconds timeo
     bool drained = false;
     {
         std::unique_lock lock(mutex_);
+        accepting_ = false;
         drained = drained_cv_.wait_for(lock, timeout, [&] {
             return pending_.empty() || stop_requested_;
         }) && pending_.empty();
@@ -77,6 +78,7 @@ void MonsterContributionWriter::stop() {
     {
         std::lock_guard lock(mutex_);
         if (stop_requested_) return;
+        accepting_ = false;
         stop_requested_ = true;
     }
     cv_.notify_all();
