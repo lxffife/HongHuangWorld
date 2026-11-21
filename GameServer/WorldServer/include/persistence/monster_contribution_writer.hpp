@@ -8,6 +8,8 @@
 #include <deque>
 #include <mutex>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <thread>
 #include <unordered_map>
 
@@ -25,6 +27,18 @@ public:
     MonsterContributionWriter& operator=(const MonsterContributionWriter&) = delete;
 
     bool submit(const MonsterContributionRecord& contribution, std::string& error);
+
+    // Admit the contribution before mutating health. The mutation must be noexcept.
+    template <typename ApplyDamage>
+    bool submit_before_damage(const MonsterContributionRecord& contribution,
+                              ApplyDamage&& apply_damage, std::string& error) {
+        static_assert(noexcept(std::declval<ApplyDamage&>()()),
+                      "damage mutation callback must be noexcept");
+        if (!submit(contribution, error)) return false;
+        std::forward<ApplyDamage>(apply_damage)();
+        return true;
+    }
+
     bool wait_until_drained(const std::string& monster_instance_id,
                             std::chrono::milliseconds timeout);
     std::size_t pending_count() const;
