@@ -156,6 +156,8 @@ struct MonsterRuntime {
     std::unordered_map<std::string, MonsterDamageContribution> damage_contributions;
     // runtime_id identifies the stable spawn point; this ID identifies one life of that spawn.
     std::string contribution_instance_id;
+    // Latch the lethal transition before later hits can enqueue against this life.
+    bool contribution_closing{false};
 };
 
 
@@ -2081,6 +2083,7 @@ struct EnetServer::Impl {
                 }else{
                     current.state={current.definition.spawn_x,current.definition.spawn_z,current.definition.max_health};
                     current.contribution_instance_id=make_event_uuid();
+                    current.contribution_closing=false;
                     current.damage_contributions.clear();
                     current.respawn_at=Clock::time_point{};
                 }
@@ -2944,7 +2947,8 @@ struct EnetServer::Impl {
         auto target = std::find_if(monsters.begin(), monsters.end(), [&](const MonsterRuntime& monster) {
             return monster.runtime_id == target_id;
         });
-        if (target == monsters.end() || target->state.mode == honghuang::simulation::MonsterMode::Dead) {
+        if (target == monsters.end() || target->state.mode == honghuang::simulation::MonsterMode::Dead ||
+            target->contribution_closing) {
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", false}, {"reason", "目标已消失或已被击败。"}});
             return;
@@ -3011,6 +3015,7 @@ struct EnetServer::Impl {
                 contribution_record,
                 [&target, &damage]() noexcept {
                     target->state.health = static_cast<float>(damage.remaining_health);
+                    if (damage.defeated) target->contribution_closing = true;
                 },
                 contribution_error)) {
             std::cerr << "Rejected melee hit because monster contribution was not admitted: "
@@ -3104,7 +3109,8 @@ struct EnetServer::Impl {
         const auto target = std::find_if(monsters.begin(), monsters.end(), [&](const MonsterRuntime& monster) {
             return monster.runtime_id == target_id;
         });
-        if (target == monsters.end() || target->state.mode == honghuang::simulation::MonsterMode::Dead) {
+        if (target == monsters.end() || target->state.mode == honghuang::simulation::MonsterMode::Dead ||
+            target->contribution_closing) {
             reject("目标已消失或已被击败。"); return;
         }
         const double dx = static_cast<double>(target->state.x) - player.x;
@@ -3344,7 +3350,8 @@ struct EnetServer::Impl {
                 return monster.runtime_id == pending.target_entity_id;
             });
             if (player.health <= 0 || spell == nullptr || target == monsters.end() ||
-                target->state.mode == honghuang::simulation::MonsterMode::Dead) {
+                target->state.mode == honghuang::simulation::MonsterMode::Dead ||
+                target->contribution_closing) {
                 if (spell != nullptr) player.mana = std::min(player.max_mana, player.mana + spell->mana_cost);
                 send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                           Json{{"accepted", false}, {"action", "spell_cast"},
@@ -3402,7 +3409,8 @@ struct EnetServer::Impl {
                 projectile = projectiles.erase(projectile);
                 continue;
             }
-            if (target == monsters.end() || target->state.mode == honghuang::simulation::MonsterMode::Dead) {
+            if (target == monsters.end() || target->state.mode == honghuang::simulation::MonsterMode::Dead ||
+            target->contribution_closing) {
                 send_json(owner->first, honghuang::protocol::MessageType::CombatEvent,
                           Json{{"accepted", false}, {"reason", projectile->projectile_type == "fireball" ? "目标已消失，火球术失效。" : (projectile->projectile_type == "ice_bolt" ? "目标已消失，冰锥术失效。" : "目标已消失，箭矢失效。")}});
                 projectile = projectiles.erase(projectile);
@@ -3436,8 +3444,9 @@ struct EnetServer::Impl {
                 const bool admitted = monster_contribution_writer != nullptr &&
                     monster_contribution_writer->submit_before_damage(
                         contribution,
-                        [target, remaining_health = damage.remaining_health]() noexcept {
+                        [target, remaining_health = damage.remaining_health, defeated = damage.defeated]() noexcept {
                             target->state.health = static_cast<float>(remaining_health);
+                            if (defeated) target->contribution_closing = true;
                         },
                         contribution_error);
                 if (!admitted) {
@@ -3562,6 +3571,7 @@ struct EnetServer::Impl {
                     monster.state = {monster.definition.spawn_x, monster.definition.spawn_z,
                                      monster.definition.max_health};
                     monster.contribution_instance_id = make_event_uuid();
+                    monster.contribution_closing = false;
                     monster.damage_contributions.clear();
                     monster.respawn_at = Clock::time_point{};
                     monster.attack_phase = MonsterAttackPhase::Ready;
@@ -3574,6 +3584,7 @@ struct EnetServer::Impl {
                 }
                 continue;
             }
+            if (monster.contribution_closing) continue;
             const auto effect_now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                 now.time_since_epoch()).count();
             const auto burn_effect_before_tick = monster.burn_effect;
@@ -3603,6 +3614,8 @@ struct EnetServer::Impl {
                             [&monster, previous_health, applied_burn_damage]() noexcept {
                                 monster.state.health = static_cast<float>(
                                     std::max<std::int64_t>(0, previous_health - applied_burn_damage));
+                                if (applied_burn_damage >= previous_health)
+                                    monster.contribution_closing = true;
                             },
                             contribution_error);
                     if (!admitted) {
@@ -3628,6 +3641,8 @@ struct EnetServer::Impl {
                     // Defensive fallback for a legacy effect without a captured authenticated source.
                     monster.state.health = static_cast<float>(
                         std::max<std::int64_t>(0, previous_health - applied_burn_damage));
+                    if (applied_burn_damage >= previous_health)
+                        monster.contribution_closing = true;
                 }
                 const bool burn_defeated = monster.state.health <= 0.0F;
                 std::int64_t experience_reward = 0;
