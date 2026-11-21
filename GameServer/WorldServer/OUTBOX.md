@@ -120,3 +120,12 @@ Duplicate contribution-event IDs are also bound to the original reporting node: 
 - Authorization locks the task, faction, and membership rows in one read transaction before reading the ledger, preventing membership revocation from racing the audit request.
 - Response aggregates each character's total damage, hit count, distinct monster count, and percentage of accepted-participant damage. Snapshot events use stable keyset pagination: `limit` defaults to 50 and is capped at 100; pass the returned opaque `next_cursor` as `cursor` to fetch the next page. Aggregates always cover the full task history, independent of the event page.
 - The response does not expose account IDs or world session IDs. It is read-only and does not change objective progress, participant eligibility, or settlement.
+
+
+## SQLite monster contribution ledger groundwork
+
+The local outbox database now also creates `monster_damage_contributions`, keyed by runtime monster instance, authenticated session, and character. `DurableOutbox::record_monster_contribution` atomically upserts effective damage and hit counts with signed-64-bit saturation, preserves first/last-hit timestamps, and stores the caller's complete deduplicated objective-subscription JSON. `load_monster_contributions` returns a stable damage-ranked view.
+
+`finalize_monster_contributions` inserts all death-time outbox events and deletes that monster's live ledger rows inside one `BEGIN IMMEDIATE` transaction. If validation, event-ID conflict, or outbox capacity fails, the transaction rolls back and the contribution rows remain available for retry. Repeating an identical finalization is idempotent because existing matching outbox rows are accepted.
+
+**Integration boundary:** these SQLite APIs are groundwork and are not yet called from the combat loop. The live gameplay path still uses its existing 256-entry in-memory map until an asynchronous persistence queue and bounded backpressure policy are integrated. Do not call the SQLite write method directly for every hit on the main game loop: WAL with `synchronous=FULL` can block combat processing. This ledger also does not restore active monsters after process restart; monster runtime state and health are not persisted. A later integration step must define stale-row expiry for runtime IDs whose monsters were not restored.
