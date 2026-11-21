@@ -251,7 +251,7 @@ For an eligible online killer, the same atomic batch also contains the character
 
 The combat response marks lethal hits as `settlement_pending`; reward amounts are reported separately after commit. World snapshots expose `death_pending` while the monster is closing but not yet committed.
 
-**Remaining reliability boundary:** durable intent, prepared event batches, and accepted nonlethal contribution writes now survive restart. The remaining ambiguity is cross-domain consistency if the process crashes after a durable inbox commit but before the in-memory monster health callback; world health and SQLite admission are not yet one transaction. The center contribution endpoint stores each 1–256 contributor chunk as a distinct immutable event, while backend audit/history queries now aggregate those chunks into one monster-life snapshot.
+**Historical reliability boundary (closed by the durable life-state integration below):** the earlier implementation could commit a contribution inbox row before the in-memory health callback. The later `monster_life_states` transaction now commits both values together. The center contribution endpoint still stores each 1–256 contributor chunk as a distinct immutable event, while backend audit/history queries aggregate those chunks into one monster-life snapshot.
 
 
 ### Durable pending-death recovery and committed respawn lifecycle
@@ -264,7 +264,7 @@ Committed death rows are intentionally retained after finalization. Startup reco
 
 Schema upgrades add `prepared_events_json` and `committed_at_ms` to existing `pending_monster_deaths` tables when absent. Tests now cover immutable intent idempotency/conflict detection, prepared batch persistence across database reopen, finalizer replay without invoking the builder, committed-state retention, and respawn acknowledgement.
 
-**Remaining crash boundary:** both lethal and nonlethal accepted contributions now have durable SQLite admission before health mutation. The remaining ambiguity is cross-domain consistency: a process crash after the inbox commit but before the in-memory damage callback can preserve a contribution for damage that was not reflected in the lost in-memory world state. Resolving this requires durable world-state/damage sequencing or replayable authoritative combat commands.
+**Historical crash boundary (superseded):** this version had durable contribution admission but not durable monster health. The subsequent `monster_life_states` integration closes this interval by committing the health compare-and-swap and contribution inbox row in one transaction.
 
 
 ### Durable combat contribution admission and restart replay
