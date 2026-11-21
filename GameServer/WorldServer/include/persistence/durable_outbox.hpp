@@ -55,6 +55,11 @@ public:
  bool admit_monster_damage(const MonsterContributionRecord& contribution,
                            const std::string& runtime_id, double expected_health,
                            double resulting_health, std::string& error);
+ // Persist health-only environmental damage when no authenticated contributor exists.
+ bool apply_monster_health_transition(const std::string& runtime_id,
+                                      const std::string& monster_instance_id,
+                                      double expected_health, double resulting_health,
+                                      std::string& error);
  // Atomically rotate to a new life and acknowledge the prior committed death.
  bool respawn_monster_life(const std::string& old_instance_id,
                            const MonsterLifeStateRecord& next_life, std::string& error);
