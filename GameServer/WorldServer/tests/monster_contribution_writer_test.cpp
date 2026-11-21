@@ -64,6 +64,9 @@ int main() {
             third, [&]() noexcept { health -= third.total_damage; }, error));
         assert(health == 100); // Queue backpressure still rejects before health changes.
         assert(!writer.wait_until_drained("life-a", 20ms));
+        auto busy_hit = third;
+        busy_hit.write_id = "writer-hit-busy";
+        assert(!outbox.admit_monster_contribution(busy_hit, error));
 
         assert(sqlite3_exec(blocker, "COMMIT", nullptr, nullptr, nullptr) == SQLITE_OK);
         sqlite3_close(blocker);
