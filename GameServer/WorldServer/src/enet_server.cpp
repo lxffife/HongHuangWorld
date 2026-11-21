@@ -1596,7 +1596,7 @@ struct EnetServer::Impl {
                 if (!enqueue_durable_event(contribution_event_id, "bounty_monster_contributions",
                                             contribution_payload, contribution_error)) {
                     std::cerr << "Could not persist bounty monster contribution snapshot for task "
-                              << objective.task_id << ": " << contribution_error << '\\n';
+                              << objective.task_id << ": " << contribution_error << '\n';
                 }
             }
         }
