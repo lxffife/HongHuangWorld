@@ -1526,7 +1526,7 @@ struct EnetServer::Impl {
         const std::string contributor_key = player.session_id + ":" + player.character_id;
         auto found = monster.damage_contributions.find(contributor_key);
         if (found == monster.damage_contributions.end()) {
-            constexpr std::size_t kMaximumContributorsPerSpawn = 64;
+            constexpr std::size_t kMaximumContributorsPerSpawn = 256;
             if (monster.damage_contributions.size() >= kMaximumContributorsPerSpawn) {
                 // Keep the bounded ledger focused on the strongest observed
                 // contributors instead of permanently favoring the first 64
