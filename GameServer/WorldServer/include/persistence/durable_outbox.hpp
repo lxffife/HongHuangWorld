@@ -27,6 +27,7 @@ struct PendingMonsterDeathRecord {
  std::string payload;
  std::string prepared_events_json;
  std::int64_t created_at_ms{};
+ std::int64_t committed_at_ms{};
 };
 struct OutboxEvent { std::string event_id; std::string event_type; std::string payload; std::uint32_t attempts{}; std::int64_t next_retry_at_ms{}; std::int64_t created_at_ms{}; std::string last_error; };
 class DurableOutbox {
@@ -42,6 +43,7 @@ public:
  bool save_pending_monster_death_batch(const std::string& monster_instance_id,
                                        const std::string& events_json, std::string& error);
  std::vector<PendingMonsterDeathRecord> load_pending_monster_deaths(std::string& error) const;
+ bool acknowledge_monster_death_respawn(const std::string& monster_instance_id, std::string& error);
  std::vector<MonsterContributionRecord> load_monster_contributions(const std::string& monster_instance_id, std::string& error) const;
  // Atomically enqueue the death snapshot and remove its live ledger rows.
  bool finalize_monster_contributions(const std::string& monster_instance_id,
