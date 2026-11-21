@@ -186,10 +186,16 @@ func TestListPublisherContributionAuditRejectsInvalidIdentityBeforeDatabaseAcces
  }
  for _,tt:=range tests {
   t.Run(tt.name,func(t *testing.T) {
-   if _,err:=service.ListPublisherContributionAudit(context.Background(),tt.accountID,tt.factionID,tt.taskID);err!=ErrInvalid {
+   if _,err:=service.ListPublisherContributionAudit(context.Background(),tt.accountID,tt.factionID,tt.taskID,0,"");err!=ErrInvalid {
     t.Fatalf("expected ErrInvalid before database access, got %v",err)
    }
   })
  }
 }
 
+
+func TestDecodeBountyAuditCursorRejectsMalformedValues(t *testing.T) {
+ for _,value:=range []string{"not-base64","e30","eyJjcmVhdGVkX2F0IjoiMjAyNi0wMS0wMVQwMDowMDowMFoiLCJldmVudF9pZCI6Im5vdC11dWlkIn0"} {
+  if _,err:=decodeBountyAuditCursor(value);err!=ErrInvalid { t.Fatalf("expected ErrInvalid for cursor %q, got %v",value,err) }
+ }
+}
