@@ -191,8 +191,8 @@ bool DurableOutbox::enqueue(const OutboxEvent& event, std::string& error) {
 bool DurableOutbox::enqueue_batch(const std::vector<OutboxEvent>& events, std::string& error) {
     if (events.empty()) { error = "outbox batch must not be empty"; return false; }
     for (const auto& event : events) {
-        if (event.event_id.empty() || event.event_type.empty() || event.payload.empty()) {
-            error = "event id/type/payload required";
+        if (event.event_id.empty() || event.event_type.empty() || event.event_type == "nearby_chat" || event.payload.empty()) {
+            error = "monster finalization requires non-chat events with id/type/payload";
             return false;
         }
     }
@@ -306,7 +306,8 @@ bool DurableOutbox::record_monster_contribution(
             "THEN 9223372036854775807 ELSE hit_count+excluded.hit_count END,"
             "first_hit_at_ms=MIN(first_hit_at_ms,excluded.first_hit_at_ms),"
             "last_hit_at_ms=MAX(last_hit_at_ms,excluded.last_hit_at_ms),"
-            "bounty_objectives_json=excluded.bounty_objectives_json");
+            "bounty_objectives_json=excluded.bounty_objectives_json "
+            "WHERE monster_damage_contributions.monster_definition_id=excluded.monster_definition_id");
         bind_text(upsert.get(), 1, item.monster_instance_id);
         bind_text(upsert.get(), 2, item.monster_definition_id);
         bind_text(upsert.get(), 3, item.session_id);
@@ -317,6 +318,10 @@ bool DurableOutbox::record_monster_contribution(
         sqlite3_bind_int64(upsert.get(), 8, item.last_hit_at_ms);
         bind_text(upsert.get(), 9, item.bounty_objectives_json);
         if (sqlite3_step(upsert.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+        if (sqlite3_changes(db_) != 1) {
+            error = "monster instance id is already associated with a different definition";
+            return false;
+        }
         return true;
     } catch (const std::exception& exception) {
         error = exception.what();
