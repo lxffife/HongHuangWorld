@@ -11,6 +11,7 @@
 #include "simulation/status_effect.hpp"
 #include "persistence/durable_outbox.hpp"
 #include "persistence/monster_contribution_writer.hpp"
+#include "persistence/monster_death_finalizer.hpp"
 #include "network/chat_delivery_policy.hpp"
 
 #include <enet/enet.h>
@@ -1022,6 +1023,7 @@ struct EnetServer::Impl {
     std::unique_ptr<honghuang::persistence::DurableOutbox> durable_outbox;
     // Declared after durable_outbox so it is destroyed first and never outlives its SQLite owner.
     std::unique_ptr<honghuang::persistence::MonsterContributionWriter> monster_contribution_writer;
+    std::unique_ptr<honghuang::persistence::MonsterDeathFinalizer> monster_death_finalizer;
     std::mutex outbox_mutex;
     std::condition_variable outbox_cv;
     bool outbox_stop_requested{false};
@@ -4008,6 +4010,9 @@ bool EnetServer::start() {
         impl_->monster_contribution_writer =
             std::make_unique<honghuang::persistence::MonsterContributionWriter>(
                 *impl_->durable_outbox);
+        impl_->monster_death_finalizer =
+            std::make_unique<honghuang::persistence::MonsterDeathFinalizer>(
+                *impl_->durable_outbox, *impl_->monster_contribution_writer);
     } catch (const std::exception& exception) {
         impl_->monster_contribution_writer.reset();
         impl_->durable_outbox.reset();
@@ -4374,6 +4379,13 @@ void EnetServer::stop() {
         impl_->drain_consumable_results();
         impl_->stop_combat_refresh_worker();
         impl_->drain_combat_refresh_results();
+        if (impl_->monster_death_finalizer) {
+            if (!impl_->monster_death_finalizer->stop_after_drain(std::chrono::seconds(5))) {
+                std::cerr << "[MonsterDeathFinalizer] shutdown drain timed out; pending_lives="
+                          << impl_->monster_death_finalizer->pending_count()
+                          << ". Pending deaths remain unfinalized." << std::endl;
+            }
+        }
         // Stop combat admission before this point, then give queued contribution
         // records a bounded opportunity to commit while SQLite is still alive.
         if (impl_->monster_contribution_writer) {
