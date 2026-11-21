@@ -126,6 +126,10 @@ struct MonsterDamageContribution {
     std::int64_t hit_count{};
     Clock::time_point first_hit_at{};
     Clock::time_point last_hit_at{};
+    // Preserve the objective subscriptions that were active when this
+    // authenticated character contributed damage, even if the last hitter
+    // belongs to a different bounty (or no bounty at all).
+    std::vector<BountyObjectiveSubscription> bounty_objectives;
 };
 
 struct MonsterRuntime {
@@ -1536,6 +1540,18 @@ struct EnetServer::Impl {
             found = monster.damage_contributions.emplace(contributor_key, std::move(contribution)).first;
         }
         auto& contribution = found->second;
+        for (const auto& objective : player.bounty_objectives) {
+            if (objective.event_type != "monster_killed" ||
+                objective.objective_key != monster.definition.id) continue;
+            const auto already_tracked = std::any_of(
+                contribution.bounty_objectives.begin(), contribution.bounty_objectives.end(),
+                [&objective](const auto& existing) {
+                    return existing.task_id == objective.task_id &&
+                           existing.objective_key == objective.objective_key &&
+                           existing.event_type == objective.event_type;
+                });
+            if (!already_tracked) contribution.bounty_objectives.push_back(objective);
+        }
         if (contribution.total_damage > std::numeric_limits<std::int64_t>::max() - effective_damage)
             contribution.total_damage = std::numeric_limits<std::int64_t>::max();
         else
@@ -1579,22 +1595,49 @@ struct EnetServer::Impl {
         std::vector<honghuang::persistence::OutboxEvent> batch;
         const auto now = wall_clock_ms();
         const auto contributors = monster_contribution_snapshot(monster);
-        for (const auto& objective : player.bounty_objectives) {
+
+        // A bounty contribution snapshot belongs to every task represented by
+        // at least one accepted contributor's cached objective subscription.
+        // The final hitter is not required to be a participant.
+        std::vector<BountyObjectiveSubscription> objectives;
+        for (const auto& [key, contribution] : monster.damage_contributions) {
+            (void)key;
+            for (const auto& objective : contribution.bounty_objectives) {
+                const auto already_tracked = std::any_of(
+                    objectives.begin(), objectives.end(), [&objective](const auto& existing) {
+                        return existing.task_id == objective.task_id &&
+                               existing.objective_key == objective.objective_key &&
+                               existing.event_type == objective.event_type;
+                    });
+                if (!already_tracked) objectives.push_back(objective);
+            }
+        }
+
+        for (const auto& objective : objectives) {
             if (objective.event_type != "monster_killed" ||
                 objective.objective_key != monster.definition.id) continue;
 
-            const auto event_id = make_event_uuid();
-            const Json kill_payload{
-                {"event_id", event_id},
-                {"task_id", objective.task_id},
-                {"session_id", player.session_id},
-                {"character_id", player.character_id},
-                {"objective_key", objective.objective_key},
-                {"event_type", "monster_killed"}
-            };
-            batch.push_back(honghuang::persistence::OutboxEvent{
-                event_id, "bounty_objective_event", kill_payload.dump(), 0, now, now, {}
-            });
+            const auto killer_has_objective = std::any_of(
+                player.bounty_objectives.begin(), player.bounty_objectives.end(),
+                [&objective](const auto& killer_objective) {
+                    return killer_objective.task_id == objective.task_id &&
+                           killer_objective.objective_key == objective.objective_key &&
+                           killer_objective.event_type == objective.event_type;
+                });
+            if (killer_has_objective) {
+                const auto event_id = make_event_uuid();
+                const Json kill_payload{
+                    {"event_id", event_id},
+                    {"task_id", objective.task_id},
+                    {"session_id", player.session_id},
+                    {"character_id", player.character_id},
+                    {"objective_key", objective.objective_key},
+                    {"event_type", "monster_killed"}
+                };
+                batch.push_back(honghuang::persistence::OutboxEvent{
+                    event_id, "bounty_objective_event", kill_payload.dump(), 0, now, now, {}
+                });
+            }
 
             if (!contributors.empty()) {
                 const auto contribution_event_id = make_event_uuid();
