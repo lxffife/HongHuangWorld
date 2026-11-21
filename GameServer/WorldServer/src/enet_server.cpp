@@ -3326,30 +3326,7 @@ struct EnetServer::Impl {
         std::int64_t experience_reward = 0;
         std::int64_t cultivation_reward = 0;
         if (damage.defeated) {
-            target->state.mode = honghuang::simulation::MonsterMode::Dead;
-            log_monster_contribution_snapshot(*target);
-            enqueue_bounty_kill_events(&player, *target);
-            target->slow_effect = {};
-            target->burn_effect = {};
-            target->burn_owner_character_id.clear();
-            target->burn_owner_session_id.clear();
-            target->burn_owner_bounty_objectives.clear();
-            target->state.target_id.clear();
-            // Respawn timing is owned by the world's spawn-point configuration.
-            // This keeps live operations changes effective without hard-coded monster IDs.
-            target->respawn_at = now + std::chrono::seconds(target->retry_spawn_seconds);
-            experience_reward = 20 + static_cast<std::int64_t>(target->definition.level) * 10;
-            cultivation_reward = 10 + static_cast<std::int64_t>(target->definition.level) * 5;
-            enqueue_character_reward(CharacterRewardEvent{
-                make_event_uuid(), player.session_id, player.character_id, experience_reward, cultivation_reward, 0
-            });
-            // The underworld's spirit trial grants permanent soul experience.
-            const std::int64_t soul_experience_reward =
-                config.world_id == "underworld_fengdu" ? 5 : 0;
-            if (soul_experience_reward > 0)
-                enqueue_soul_reward(player, soul_experience_reward, "underworld_trial:monster_hunt");
-            enqueue_soul_absorption(player, *target);
-            enqueue_monster_drops(*target, player);
+            begin_monster_death(*target, &player);
         }
         const Json event{
             {"attacker_character_id", player.character_id},
@@ -3525,6 +3502,7 @@ struct EnetServer::Impl {
     }
 
     void tick_world() {
+        drain_monster_death_results();
         drain_drop_results();
         drain_combat_refresh_results();
         const auto now = Clock::now();
@@ -3798,25 +3776,7 @@ struct EnetServer::Impl {
                 std::int64_t experience_reward = 0;
                 std::int64_t cultivation_reward = 0;
                 if (damage.defeated) {
-                    target->state.mode = honghuang::simulation::MonsterMode::Dead;
-                    log_monster_contribution_snapshot(*target);
-                    enqueue_bounty_kill_events(&owner->second, *target);
-                    honghuang::simulation::clear_negative_statuses(target->slow_effect,target->freeze_effect,target->burn_effect);
-                    target->burn_owner_character_id.clear();
-                    target->burn_owner_session_id.clear();
-                    target->burn_owner_bounty_objectives.clear();
-                    target->state.target_id.clear();
-                    target->respawn_at = now + std::chrono::seconds(target->retry_spawn_seconds);
-                    experience_reward = 20 + static_cast<std::int64_t>(target->definition.level) * 10;
-                    cultivation_reward = 10 + static_cast<std::int64_t>(target->definition.level) * 5;
-                    enqueue_character_reward(CharacterRewardEvent{
-                        make_event_uuid(), owner->second.session_id, owner->second.character_id,
-                        experience_reward, cultivation_reward, 0
-                    });
-                    if (config.world_id == "underworld_fengdu")
-                        enqueue_soul_reward(owner->second, 5, "underworld_trial:monster_hunt");
-                    enqueue_soul_absorption(owner->second, *target);
-                    enqueue_monster_drops(*target, owner->second);
+                    begin_monster_death(*target, &owner->second);
                 }
                 send_json(owner->first, honghuang::protocol::MessageType::CombatEvent,
                           Json{{"accepted", true}, {"source", "projectile"},
@@ -3857,6 +3817,12 @@ struct EnetServer::Impl {
         }
         for (auto& monster : monsters) {
             if (monster.state.mode == honghuang::simulation::MonsterMode::Dead) {
+                if (monster.contribution_closing &&
+                    monster.respawn_at.time_since_epoch().count() == 0) {
+                    if (!monster.death_finalizer_submitted)
+                        submit_monster_death_finalization(monster);
+                    continue;
+                }
                 if (monster.respawn_at.time_since_epoch().count() != 0 && now >= monster.respawn_at) {
                     if (monster.rare_spawn) {
                         static thread_local std::mt19937 generator(std::random_device{}());
@@ -3871,6 +3837,13 @@ struct EnetServer::Impl {
                     monster.contribution_instance_id = make_event_uuid();
                     monster.contribution_closing = false;
                     monster.damage_contributions.clear();
+                    monster.death_context_captured = false;
+                    monster.death_finalizer_submitted = false;
+                    monster.death_killer_session_id.clear();
+                    monster.death_killer_character_id.clear();
+                    monster.death_killer_bounty_objectives.clear();
+                    monster.death_reward_eligible = false;
+                    monster.pending_death_drops.clear();
                     monster.respawn_at = Clock::time_point{};
                     monster.attack_phase = MonsterAttackPhase::Ready;
                     honghuang::simulation::clear_negative_statuses(monster.slow_effect,monster.freeze_effect,monster.burn_effect);
@@ -3946,25 +3919,8 @@ struct EnetServer::Impl {
                 std::int64_t experience_reward = 0;
                 std::int64_t cultivation_reward = 0;
                 if (burn_defeated) {
-                    monster.state.mode = honghuang::simulation::MonsterMode::Dead;
-                    log_monster_contribution_snapshot(monster);
-                    enqueue_bounty_kill_events(
-                        burn_owner != players.end() ? &burn_owner->second : nullptr, monster);
-                    monster.slow_effect = {};
-                    monster.burn_effect = {};
-                    monster.state.target_id.clear();
-                    monster.respawn_at = now + std::chrono::seconds(monster.retry_spawn_seconds);
-                    if (burn_owner != players.end()) {
-                        experience_reward = 20 + static_cast<std::int64_t>(monster.definition.level) * 10;
-                        cultivation_reward = 10 + static_cast<std::int64_t>(monster.definition.level) * 5;
-                        enqueue_character_reward(CharacterRewardEvent{
-                            make_event_uuid(), burn_owner->second.session_id, burn_owner->second.character_id,
-                            experience_reward, cultivation_reward, 0
-                        });
-                    }
-                    monster.burn_owner_character_id.clear();
-                    monster.burn_owner_session_id.clear();
-                    monster.burn_owner_bounty_objectives.clear();
+                    begin_monster_death(
+                        monster, burn_owner != players.end() ? &burn_owner->second : nullptr);
                 }
                 const Json burn_event{
                     {"accepted", true}, {"source", "status_effect"}, {"status_effect", "burn"},
@@ -3991,15 +3947,7 @@ struct EnetServer::Impl {
                         send_json(observer_peer, honghuang::protocol::MessageType::CombatEvent, visual);
                     }
                 }
-                if (burn_defeated) {
-                    if (burn_owner != players.end()) {
-                        if (config.world_id == "underworld_fengdu")
-                            enqueue_soul_reward(burn_owner->second, 5, "underworld_trial:monster_hunt");
-                        enqueue_soul_absorption(burn_owner->second, monster);
-                        enqueue_monster_drops(monster, burn_owner->second);
-                    }
-                    continue;
-                }
+                if (burn_defeated) continue;
             }
             honghuang::simulation::MonsterTarget target_storage;
             const honghuang::simulation::MonsterTarget* nearest_target = nullptr;
