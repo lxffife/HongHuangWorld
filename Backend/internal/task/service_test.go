@@ -134,3 +134,44 @@ func TestApplyWorldEventRejectsInvalidPayloadBeforeDatabaseAccess(t *testing.T) 
  _,err=service.ApplyWorldEvent(context.Background(),"",WorldEvent{EventID:"00000000-0000-4000-8000-000000000001",TaskID:"00000000-0000-4000-8000-000000000002",SessionID:"00000000-0000-4000-8000-000000000003",CharacterID:"00000000-0000-4000-8000-000000000004",ObjectiveKey:"kill",EventType:"monster_killed"})
  if err!=ErrInvalidWorldEvent { t.Fatalf("expected invalid node identity, got %v",err) }
 }
+
+func TestRecordMonsterContributionsRejectsInvalidPayloadBeforeDatabaseAccess(t *testing.T) {
+ service:=NewService(nil,nil)
+ valid:=MonsterContributionEvent{
+  EventID:"00000000-0000-4000-8000-000000000001",
+  TaskID:"00000000-0000-4000-8000-000000000002",
+  MonsterInstanceID:"spawn-1",
+  MonsterDefinitionID:"wandering_wraith",
+  Contributors:[]MonsterContribution{{
+   SessionID:"00000000-0000-4000-8000-000000000003",
+   CharacterID:"00000000-0000-4000-8000-000000000004",
+   Damage:10,HitCount:1,
+  }},
+ }
+ tests:=[]struct{name,node string;event MonsterContributionEvent}{
+  {"missing node","",valid},
+  {"missing event id","node",MonsterContributionEvent{TaskID:valid.TaskID,MonsterInstanceID:valid.MonsterInstanceID,MonsterDefinitionID:valid.MonsterDefinitionID,Contributors:valid.Contributors}},
+  {"empty contributors","node",MonsterContributionEvent{EventID:valid.EventID,TaskID:valid.TaskID,MonsterInstanceID:valid.MonsterInstanceID,MonsterDefinitionID:valid.MonsterDefinitionID}},
+  {"non-positive damage","node",MonsterContributionEvent{EventID:valid.EventID,TaskID:valid.TaskID,MonsterInstanceID:valid.MonsterInstanceID,MonsterDefinitionID:valid.MonsterDefinitionID,Contributors:[]MonsterContribution{{SessionID:valid.Contributors[0].SessionID,CharacterID:valid.Contributors[0].CharacterID,Damage:0,HitCount:1}}}},
+  {"duplicate contributor","node",MonsterContributionEvent{EventID:valid.EventID,TaskID:valid.TaskID,MonsterInstanceID:valid.MonsterInstanceID,MonsterDefinitionID:valid.MonsterDefinitionID,Contributors:[]MonsterContribution{valid.Contributors[0],valid.Contributors[0]}}},
+  {"aggregate damage overflow","node",MonsterContributionEvent{EventID:valid.EventID,TaskID:valid.TaskID,MonsterInstanceID:valid.MonsterInstanceID,MonsterDefinitionID:valid.MonsterDefinitionID,Contributors:[]MonsterContribution{{SessionID:valid.Contributors[0].SessionID,CharacterID:valid.Contributors[0].CharacterID,Damage:math.MaxInt64,HitCount:1},{SessionID:"00000000-0000-4000-8000-000000000005",CharacterID:"00000000-0000-4000-8000-000000000006",Damage:1,HitCount:1}}}},
+ }
+ for _,tt:=range tests {
+  t.Run(tt.name,func(t *testing.T) {
+   if err:=service.RecordMonsterContributions(context.Background(),tt.node,tt.event);err!=ErrInvalidWorldEvent {
+    t.Fatalf("expected ErrInvalidWorldEvent before database access, got %v",err)
+   }
+  })
+ }
+}
+
+func TestListContributionsRejectsInvalidIdentityBeforeDatabaseAccess(t *testing.T) {
+ service:=NewService(nil,nil)
+ if _,err:=service.ListContributions(context.Background(),"","00000000-0000-4000-8000-000000000001");err!=ErrInvalid {
+  t.Fatalf("expected ErrInvalid for missing account, got %v",err)
+ }
+ if _,err:=service.ListContributions(context.Background(),"account","not-a-uuid");err!=ErrInvalid {
+  t.Fatalf("expected ErrInvalid for malformed task id, got %v",err)
+ }
+}
+
