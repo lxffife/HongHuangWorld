@@ -297,5 +297,27 @@ int main() {
     }
     remove_database(ledger_capacity_path);
 
+    // A monster with no matching bounty subscriptions still needs its ledger
+    // tombstoned and cleared; an empty event batch is a valid finalization.
+    const std::string no_objective_path = "world_outbox_monster_no_objective_test.sqlite";
+    remove_database(no_objective_path);
+    {
+        honghuang::persistence::DurableOutbox box(no_objective_path, 4);
+        std::string error;
+        honghuang::persistence::MonsterContributionRecord hit{
+            "hit-no-objective", "monster-no-objective", "wolf", "session-x", "character-x", 12, 1, 500, 500, "[]"
+        };
+        assert(box.record_monster_contribution(hit, error));
+        const std::vector<honghuang::persistence::OutboxEvent> no_events;
+        assert(box.finalize_monster_contributions("monster-no-objective", no_events, error));
+        assert(box.load_monster_contributions("monster-no-objective", error).empty());
+        assert(box.pending_count(error) == 0);
+        auto late_hit = hit;
+        late_hit.write_id = "late-no-objective";
+        assert(!box.record_monster_contribution(late_hit, error));
+        assert(box.finalize_monster_contributions("monster-no-objective", no_events, error));
+    }
+    remove_database(no_objective_path);
+
     return 0;
 }
