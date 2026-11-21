@@ -3,6 +3,7 @@
 #include <sqlite3.h>
 
 #include <algorithm>
+#include <chrono>
 #include <stdexcept>
 #include <utility>
 
@@ -501,7 +502,8 @@ bool DurableOutbox::finalize_monster_contributions(
             bind_text(mark_finalized.get(), 1, monster_instance_id);
             bind_text(mark_finalized.get(), 2, event_ids);
             const auto finalized_at_ms = events.empty()
-                ? static_cast<std::int64_t>(0)
+                ? std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::system_clock::now().time_since_epoch()).count()
                 : events.front().created_at_ms;
             sqlite3_bind_int64(mark_finalized.get(), 3, finalized_at_ms);
             if (sqlite3_step(mark_finalized.get()) != SQLITE_DONE)
