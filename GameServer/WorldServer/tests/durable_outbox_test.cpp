@@ -266,6 +266,13 @@ int main() {
         assert(box.pending_count(error) == 2);
         assert(box.finalize_monster_contributions("monster-runtime-1", final_events, error));
         assert(box.pending_count(error) == 2);
+        auto late_hit = hit;
+        late_hit.write_id = "late-hit-after-death";
+        assert(!box.record_monster_contribution(late_hit, error));
+        auto conflicting_final_events = final_events;
+        conflicting_final_events[0].event_id = "different-kill-event";
+        assert(!box.finalize_monster_contributions("monster-runtime-1", conflicting_final_events, error));
+        assert(box.pending_count(error) == 2);
     }
     remove_database(ledger_path);
 
