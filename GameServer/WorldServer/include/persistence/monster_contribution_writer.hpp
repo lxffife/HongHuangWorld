@@ -15,9 +15,10 @@
 
 namespace honghuang::persistence {
 
-// Bounded asynchronous bridge between the combat thread and SQLite. A successful
-// submit means accepted into this process-local queue, not yet durable; callers
-// must apply backpressure before applying damage when submit returns false.
+// Bounded asynchronous bridge between combat and SQLite. A successful submit
+// first commits an immutable write to the durable SQLite inbox, then queues it
+// for aggregation. The inbox is replayed on restart; callers must apply
+// backpressure before damage when durable admission returns false.
 class MonsterContributionWriter {
 public:
     explicit MonsterContributionWriter(DurableOutbox& outbox, std::size_t capacity = 32768);
@@ -46,7 +47,7 @@ public:
     // record currently being committed by the worker, not just queued records.
     std::size_t pending_count_for_monster(const std::string& monster_instance_id) const;
     std::string last_error() const;
-    // Stop accepting writes, wait up to timeout for queued SQLite commits, then join.
+    // Stop accepting writes, wait up to timeout for inbox aggregation/acknowledgement, then join.
     // Returns false when the queue could not be fully committed before the deadline.
     bool stop_after_drain(std::chrono::milliseconds timeout);
     void stop();
