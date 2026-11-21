@@ -428,6 +428,19 @@ bool DurableOutbox::respawn_monster_life(
             if (pending_result != SQLITE_ROW && pending_result != SQLITE_DONE)
                 throw std::runtime_error(sqlite3_errmsg(db_));
         }
+        {
+            Stmt unsettled(db_,
+                "SELECT 1 FROM monster_damage_contributions WHERE monster_instance_id=? "
+                "UNION ALL SELECT 1 FROM monster_damage_contribution_writes WHERE monster_instance_id=? "
+                "UNION ALL SELECT 1 FROM monster_damage_contribution_inbox WHERE monster_instance_id=? LIMIT 1");
+            bind_text(unsettled.get(), 1, old_instance_id);
+            bind_text(unsettled.get(), 2, old_instance_id);
+            bind_text(unsettled.get(), 3, old_instance_id);
+            const int unsettled_result = sqlite3_step(unsettled.get());
+            if (unsettled_result == SQLITE_ROW)
+                throw std::runtime_error("monster life still has unsettled contribution records; respawn rejected");
+            if (unsettled_result != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+        }
         Stmt update(db_,
             "UPDATE monster_life_states SET monster_instance_id=?,monster_definition_id=?,health=?,updated_at_ms=? "
             "WHERE runtime_id=? AND monster_instance_id=?");
