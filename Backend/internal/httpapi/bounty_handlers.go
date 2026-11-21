@@ -6,6 +6,7 @@ import (
  "log/slog"
  "net/http"
  "strings"
+ "strconv"
 
  "github.com/liflife/HongHuangWorld/Backend/internal/auth"
  "github.com/liflife/HongHuangWorld/Backend/internal/task"
@@ -51,8 +52,14 @@ func (h *bountyHandlers) settle(w http.ResponseWriter,r *http.Request){
 
 func (h *bountyHandlers) publisherContributions(w http.ResponseWriter,r *http.Request) {
  account,ok:=h.accountID(w,r);if !ok{return}
+ limit:=0
+ if raw:=r.URL.Query().Get("limit");raw!="" {
+  parsed,parseErr:=strconv.Atoi(raw)
+  if parseErr!=nil { http.Error(w,"invalid limit",http.StatusBadRequest);return }
+  limit=parsed
+ }
  result,err:=h.service.ListPublisherContributionAudit(
-  r.Context(),account,r.PathValue("factionID"),r.PathValue("taskID"))
+  r.Context(),account,r.PathValue("factionID"),r.PathValue("taskID"),limit,r.URL.Query().Get("cursor"))
  if err!=nil { h.writeError(w,err);return }
  writeJSON(w,http.StatusOK,result)
 }
