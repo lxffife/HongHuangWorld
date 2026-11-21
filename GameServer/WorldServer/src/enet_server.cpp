@@ -1847,7 +1847,7 @@ struct EnetServer::Impl {
             if (persisted.health <= 0.0) {
                 monster.state.mode = honghuang::simulation::MonsterMode::Dead;
                 monster.respawn_at = Clock::now() + std::chrono::seconds(
-                    std::max(monster.definition.respawn_seconds, 1));
+                    std::max(monster.retry_spawn_seconds, 1));
             }
         }
         return true;
@@ -2595,6 +2595,25 @@ struct EnetServer::Impl {
         for(auto& next:refreshed){
             const auto found=std::find_if(monsters.begin(),monsters.end(),[&](const MonsterRuntime& current){return current.runtime_id==next.runtime_id;});
             if(found==monsters.end()){
+                if (durable_outbox) {
+                    honghuang::persistence::MonsterLifeStateRecord initial{
+                        next.runtime_id, next.contribution_instance_id, next.definition.id,
+                        static_cast<double>(next.state.health)};
+                    honghuang::persistence::MonsterLifeStateRecord persisted;
+                    std::string state_error;
+                    if (!durable_outbox->ensure_monster_life_state(initial, persisted, state_error)) {
+                        std::cerr << "[MonsterLifeState] new spawn admission deferred; runtime="
+                                  << next.runtime_id << " reason=" << state_error << std::endl;
+                        continue;
+                    }
+                    next.contribution_instance_id = persisted.monster_instance_id;
+                    next.state.health = static_cast<float>(persisted.health);
+                    if (persisted.health <= 0.0) {
+                        next.state.mode = honghuang::simulation::MonsterMode::Dead;
+                        next.respawn_at = Clock::now() +
+                            std::chrono::seconds(std::max(next.retry_spawn_seconds, 1));
+                    }
+                }
                 merged.push_back(std::move(next));
                 continue;
             }
@@ -3571,8 +3590,10 @@ struct EnetServer::Impl {
                 static_cast<float>(damage.remaining_health), contribution_error);
         } else {
             admitted = monster_contribution_writer &&
-                monster_contribution_writer->submit_before_damage(
-                    contribution_record,
+                monster_contribution_writer->submit_damage_before_mutation(
+                    contribution_record, target->runtime_id,
+                    static_cast<double>(target->state.health),
+                    static_cast<double>(damage.remaining_health),
                     [&target, &damage]() noexcept {
                         target->state.health = static_cast<float>(damage.remaining_health);
                     },
@@ -3989,8 +4010,10 @@ struct EnetServer::Impl {
                         static_cast<float>(damage.remaining_health), contribution_error);
                 } else {
                     admitted = monster_contribution_writer &&
-                        monster_contribution_writer->submit_before_damage(
-                            contribution,
+                        monster_contribution_writer->submit_damage_before_mutation(
+                            contribution, target->runtime_id,
+                            static_cast<double>(target->state.health),
+                            static_cast<double>(damage.remaining_health),
                             [target, remaining_health = damage.remaining_health]() noexcept {
                                 target->state.health = static_cast<float>(remaining_health);
                             },
@@ -4176,8 +4199,10 @@ struct EnetServer::Impl {
                             monster, burn_owner != players.end() ? &burn_owner->second : nullptr,
                             contribution, 0.0F, contribution_error)
                         : (monster_contribution_writer != nullptr &&
-                            monster_contribution_writer->submit_before_damage(
-                                contribution,
+                            monster_contribution_writer->submit_damage_before_mutation(
+                                contribution, monster.runtime_id,
+                                static_cast<double>(previous_health),
+                                static_cast<double>(std::max<std::int64_t>(0, previous_health - applied_burn_damage)),
                                 [&monster, previous_health, applied_burn_damage]() noexcept {
                                     monster.state.health = static_cast<float>(
                                         std::max<std::int64_t>(0, previous_health - applied_burn_damage));
@@ -4599,6 +4624,10 @@ bool EnetServer::start() {
         std::cout<<"Loaded database monster spawn points="<<impl_->monsters.size()<<'\n';
     }else{
         std::cerr<<"Database monster config unavailable; retaining built-in startup fallback and retrying: "<<monster_config_error<<'\n';
+    }
+    if (!impl_->restore_monster_life_states()) {
+        std::cerr << "WorldServer startup blocked: durable monster life states could not be restored\n";
+        return false;
     }
     impl_->restore_pending_monster_deaths();
     impl_->start_monster_config_refresh_worker();
