@@ -56,6 +56,40 @@ bool MonsterContributionWriter::submit(const MonsterContributionRecord& contribu
     return true;
 }
 
+bool MonsterContributionWriter::submit_damage(
+    const MonsterContributionRecord& contribution, const std::string& runtime_id,
+    double expected_health, double resulting_health, std::string& error) {
+    if (contribution.write_id.empty() || contribution.monster_instance_id.empty()) {
+        error = "monster contribution write and instance IDs are required";
+        return false;
+    }
+    {
+        std::lock_guard lock(mutex_);
+        if (!accepting_ || stop_requested_) {
+            error = "monster contribution writer is stopping or draining";
+            return false;
+        }
+        const auto duplicate = std::find_if(pending_.begin(), pending_.end(),
+            [&contribution](const MonsterContributionRecord& queued) {
+                return queued.write_id == contribution.write_id;
+            });
+        if (duplicate != pending_.end()) {
+            error = "monster contribution write ID is already pending; duplicate hit rejected";
+            return false;
+        }
+        if (pending_.size() >= capacity_) {
+            error = "monster contribution queue is full";
+            return false;
+        }
+        if (!outbox_.admit_monster_damage(
+                contribution, runtime_id, expected_health, resulting_health, error)) return false;
+        pending_.push_back(contribution);
+        ++pending_by_monster_[contribution.monster_instance_id];
+    }
+    cv_.notify_one();
+    return true;
+}
+
 bool MonsterContributionWriter::wait_until_drained(
     const std::string& monster_instance_id, std::chrono::milliseconds timeout) {
     if (monster_instance_id.empty()) return false;
