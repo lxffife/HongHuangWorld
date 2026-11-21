@@ -146,5 +146,30 @@ int main() {
     }
 
     remove_database(path);
+
+    const std::string atomic_path = "world_monster_damage_command_test.sqlite";
+    remove_database(atomic_path);
+    {
+        honghuang::persistence::DurableOutbox outbox(atomic_path, 8);
+        std::string error;
+        honghuang::persistence::MonsterLifeStateRecord initial{
+            "spawn-atomic", "life-atomic", "wolf", 100.0};
+        honghuang::persistence::MonsterLifeStateRecord persisted;
+        assert(outbox.ensure_monster_life_state(initial, persisted, error));
+        honghuang::persistence::MonsterContributionWriter writer(outbox, 4);
+        honghuang::persistence::MonsterContributionRecord hit{
+            "atomic-write-1", "life-atomic", "wolf", "session-atomic", "character-atomic",
+            15, 1, 1000, 1000, "[]"};
+        double memory_health = 100.0;
+        assert(writer.submit_damage_before_mutation(
+            hit, "spawn-atomic", 100.0, 85.0,
+            [&memory_health]() noexcept { memory_health = 85.0; }, error));
+        assert(memory_health == 85.0);
+        assert(writer.wait_until_drained("life-atomic", 3s));
+        const auto states = outbox.load_monster_life_states(error);
+        assert(error.empty() && states.size() == 1 && states.front().health == 85.0);
+        assert(writer.stop_after_drain(3s));
+    }
+    remove_database(atomic_path);
     return 0;
 }
