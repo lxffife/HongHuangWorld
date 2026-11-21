@@ -2629,6 +2629,27 @@ struct EnetServer::Impl {
                 merged.push_back(std::move(current));
                 continue;
             }
+            if (current.definition.id != next.definition.id) {
+                std::cerr << "[MonsterLifeState] spawn definition change deferred until life reset; runtime="
+                          << current.runtime_id << " current=" << current.definition.id
+                          << " requested=" << next.definition.id << std::endl;
+                merged.push_back(std::move(current));
+                continue;
+            }
+            if (current.state.health > next.definition.max_health && current.state.health > 0.0F) {
+                std::string health_error;
+                if (!durable_outbox ||
+                    !durable_outbox->apply_monster_health_transition(
+                        current.runtime_id, current.contribution_instance_id,
+                        static_cast<double>(current.state.health),
+                        static_cast<double>(next.definition.max_health), health_error)) {
+                    std::cerr << "[MonsterLifeState] max-health clamp deferred; runtime="
+                              << current.runtime_id << " reason=" << health_error << std::endl;
+                    merged.push_back(std::move(current));
+                    continue;
+                }
+                current.state.health = next.definition.max_health;
+            }
             const bool rare_changed=current.rare_spawn!=next.rare_spawn;
             const bool first_delay_changed=current.first_spawn_delay_seconds!=next.first_spawn_delay_seconds;
             current.definition=std::move(next.definition);
@@ -2645,7 +2666,6 @@ struct EnetServer::Impl {
                     current.respawn_at=next.respawn_at;
             }else{
                 current.rare_spawn=next.rare_spawn;
-                current.state.health=std::min(current.state.health,current.definition.max_health);
                 // A changed first-spawn delay takes effect immediately for a
                 // dormant spawn point. Living monsters keep their current life.
                 if(first_delay_changed&&current.state.mode==honghuang::simulation::MonsterMode::Dead){
