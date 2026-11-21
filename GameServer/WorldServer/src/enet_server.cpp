@@ -1562,22 +1562,6 @@ struct EnetServer::Impl {
         return record;
     }
 
-    bool enqueue_monster_damage_contribution(const MonsterRuntime& monster,
-                                              const PlayerState& player,
-                                              std::int64_t effective_damage,
-                                              std::string& error) {
-        if (effective_damage <= 0 || player.session_id.empty() || player.character_id.empty()) {
-            error = "monster contribution identity or damage is invalid";
-            return false;
-        }
-        if (!monster_contribution_writer) {
-            error = "monster contribution writer is unavailable";
-            return false;
-        }
-        return monster_contribution_writer->submit(
-            make_monster_contribution_record(monster, player, effective_damage), error);
-    }
-
     void record_monster_damage(MonsterRuntime& monster, const PlayerState& player,
                                std::int64_t effective_damage) {
         if (effective_damage <= 0 || player.session_id.empty() || player.character_id.empty()) return;
