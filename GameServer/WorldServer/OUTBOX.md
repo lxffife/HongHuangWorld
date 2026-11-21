@@ -128,7 +128,7 @@ The local outbox database now also creates `monster_damage_contributions`, keyed
 
 `finalize_monster_contributions` inserts all death-time outbox events and deletes that monster's live ledger rows inside one `BEGIN IMMEDIATE` transaction. If validation, event-ID conflict, or outbox capacity fails, the transaction rolls back and the contribution rows remain available for retry. Repeating an identical finalization is idempotent because existing matching outbox rows are accepted.
 
-**Integration boundary:** these SQLite APIs are groundwork and are not yet called from the combat loop. The live gameplay path still uses its existing 256-entry in-memory map until an asynchronous persistence queue and bounded backpressure policy are integrated. Do not call the SQLite write method directly for every hit on the main game loop: WAL with `synchronous=FULL` can block combat processing. This ledger also does not restore active monsters after process restart; monster runtime state and health are not persisted. A later integration step must define stale-row expiry for runtime IDs whose monsters were not restored.
+**Integration boundary (historical groundwork, updated by the live integrations below):** SQLite writes are performed by the asynchronous contribution writer, never directly on the game thread. Direct melee and player-owned projectile hits now submit immutable records through the bounded writer before health is mutated. Periodic burn ticks and death-time drain/load/finalize are still pending. The existing 256-entry in-memory map remains the current death-snapshot source, so the SQLite ledger is not yet the authoritative settlement source. This ledger also does not restore active monsters after process restart; monster runtime state and health are not persisted. A later integration step must define stale-row expiry for runtime IDs whose monsters were not restored.
 
 
 ### Spawn-point identity versus contribution-instance identity
@@ -156,9 +156,15 @@ The direct melee hit path is now the first live integration:
 - If the writer is unavailable, stopping, or full, the hit is rejected and monster health is unchanged. The rejection is logged and the client receives a retry-later combat response.
 - After admission, the existing in-memory 256-entry contribution map is still updated for the current death snapshot and bounty event compatibility.
 
-**Important partial-integration boundary:** only direct melee damage uses this admission path. Projectile impact and periodic burn damage still use the legacy ordering and must be migrated before the writer can be treated as the universal combat ledger. Death settlement still reads the in-memory map; the SQLite ledger is not yet drained, loaded, finalized, or cleared on death. Consequently this step does not yet provide a complete death snapshot, all-contributor ranking, or crash-safe reward settlement. The in-memory 256-entry cap remains in place for the existing death/bounty path.
+**Important partial-integration boundary:** direct melee and player-owned projectile impact now use this admission path. Periodic burn damage still uses the legacy ordering and must be migrated before the writer can be treated as the universal combat ledger. Death settlement still reads the in-memory map; the SQLite ledger is not yet drained, loaded, finalized, or cleared on death. Consequently the current implementation does not yet provide a complete death snapshot, all-contributor ranking, or crash-safe reward settlement. The in-memory 256-entry cap remains in place for the existing death/bounty path.
 
-The writer is now connected to direct melee admission, but not yet to the complete combat/death lifecycle. Remaining work is to migrate projectile and burn hits, track closing life-instance IDs, drain before finalization, and solve the center API's 256-contributor-per-event limit with complete chunk/snapshot semantics before removing the in-memory cap.
+The writer is now connected to direct melee and projectile admission, but not yet to the complete combat/death lifecycle. Remaining work is to migrate burn ticks, track closing life-instance IDs, drain before finalization, and solve the center API's 256-contributor-per-event limit with complete chunk/snapshot semantics before removing the in-memory cap.
+
+### Projectile impact admission
+
+A player-owned projectile that hits a live monster now creates the same immutable per-life contribution record as a melee hit and calls `submit_before_damage` before changing health. Only an accepted queue submission applies the calculated health value. Slow, freeze, and burn-on-hit effects are applied only after admission succeeds, so a full/stopping writer cannot leave status effects without the corresponding damage. If admission fails, the server logs the rejection, sends the projectile owner a retry-later combat response, and removes the projectile so it cannot hit repeatedly on later ticks. After admission, the legacy in-memory contribution map is still updated for existing death/bounty compatibility.
+
+This does not yet make projectiles crash-safe before SQLite confirms the asynchronous write, and it does not change the current in-memory death-snapshot/finalization boundary. Periodic burn ticks remain the next damage source to migrate.
 
 
 ### Pre-damage admission contract
