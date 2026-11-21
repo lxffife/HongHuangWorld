@@ -59,6 +59,7 @@ private:
     std::deque<MonsterContributionRecord> pending_;
     std::unordered_map<std::string, std::size_t> pending_by_monster_;
     std::thread worker_;
+    bool accepting_{true};
     bool stop_requested_{false};
     std::string last_error_;
 };
