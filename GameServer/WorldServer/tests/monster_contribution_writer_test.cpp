@@ -6,6 +6,7 @@
 #include <string>
 #include <chrono>
 #include <thread>
+#include <sqlite3.h>
 
 namespace {
 void remove_database(const std::string& path) {
@@ -21,6 +22,9 @@ int main() {
     remove_database(path);
     {
         honghuang::persistence::DurableOutbox outbox(path, 8);
+        sqlite3* blocker = nullptr;
+        assert(sqlite3_open(path.c_str(), &blocker) == SQLITE_OK);
+        assert(sqlite3_exec(blocker, "BEGIN IMMEDIATE", nullptr, nullptr, nullptr) == SQLITE_OK);
         honghuang::persistence::MonsterContributionWriter writer(outbox, 2);
         std::string error;
         honghuang::persistence::MonsterContributionRecord first{
@@ -32,7 +36,9 @@ int main() {
         second.last_hit_at_ms = 120;
         assert(writer.submit(first, error));
         assert(writer.submit(second, error));
-        assert(!writer.submit(first, error)); // Bounded queue applies explicit backpressure.
+        assert(!writer.submit(first, error)); // Includes the in-flight head in its bounded capacity.
+        assert(sqlite3_exec(blocker, "COMMIT", nullptr, nullptr, nullptr) == SQLITE_OK);
+        sqlite3_close(blocker);
         assert(writer.wait_until_drained("life-a", 3s));
         assert(writer.pending_count() == 0);
         auto rows = outbox.load_monster_contributions("life-a", error);
