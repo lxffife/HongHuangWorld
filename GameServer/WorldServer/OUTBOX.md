@@ -199,3 +199,18 @@ A monster life may have durable damage contributors but no matching bounty objec
 Each `MonsterRuntime` now has a per-life `contribution_closing` latch. The lethal melee and projectile admission callbacks set it in the same synchronous callback that applies the lethal health value; a lethal burn tick sets it in its admitted damage callback (and the defensive legacy fallback also sets it). New melee/spell target selection, projectile impact, and subsequent burn ticks reject/skip a closing life. The latch is cleared only when a new contribution instance is assigned during respawn or explicit spawn reactivation.
 
 This closes the same-tick duplicate-hit window before the ordinary `Dead` mode transition and provides the gate needed by a deferred death-finalization state machine. It is **not** yet the SQLite death-finalization integration: current lethal handlers still use the legacy in-memory snapshot and continue their existing reward/respawn behavior. No claim is made that drain/load/finalize is active, and the 256-entry in-memory limitation remains.
+
+### Required deferred monster-death finalization state machine
+
+The next live integration must not call `wait_until_drained` with a long timeout from a melee, projectile, or world-update callback. SQLite contention must not stall the authoritative simulation loop. The required lifecycle is:
+
+1. **Alive:** accepted damage is submitted to the bounded writer before health mutation.
+2. **Closing:** the lethal admission callback atomically sets the per-life closing latch and health reaches zero. All later damage/effect ticks for this life are rejected. Capture the authenticated killer identity and the reward/drop intent as immutable data; do not retain a pointer or iterator into the live player map.
+3. **Draining:** a world-update retry checks the per-instance writer count without blocking the simulation thread. While writes remain, the monster stays closing and cannot respawn.
+4. **Snapshot:** after the writer reports drained, load the complete SQLite contribution ledger. A non-empty error is a hard failure; an empty vector with an empty error is a valid no-contributor snapshot.
+5. **Prepared:** construct the complete bounty event batch from the SQLite records, not the legacy 256-entry in-memory compatibility map. Generate event IDs once and retain the exact batch on the pending death state. Every retry must reuse the same IDs and byte-identical payloads.
+6. **Finalizing:** call `finalize_monster_contributions(instance_id, batch, error)`. On failure, retain the ledger, pending batch, closing latch, and zero-health state; retry later with bounded backoff. Never substitute an empty batch after a load or parse failure.
+7. **Committed:** only after atomic finalization succeeds may the server transition the monster to Dead and dispatch death rewards, drops, soul effects, and respawn timing. Those side effects need their own stable idempotency keys or must be included in the same durable transaction; a one-time in-memory boolean alone does not protect against process crashes between commit and dispatch.
+8. **Respawn:** assign a fresh contribution instance ID and clear all per-life pending state. Never reuse a finalized ID.
+
+The three lethal sources (melee, projectile, delayed burn) must enter this same state machine. Burn deaths may have no online killer; in that case preserve contributor snapshots but do not fabricate kill-progress or player rewards. Config reload must not discard a closing/finalizing life. The current implementation has **not** completed these steps: lethal handlers still run the legacy in-memory bounty/reward/respawn path. This section is the acceptance contract for the integration, not a claim that it is live.
