@@ -1773,6 +1773,8 @@ struct EnetServer::Impl {
         record.runtime_id = monster.runtime_id;
         record.payload = payload.dump();
         record.created_at_ms = wall_clock_ms();
+        record.expected_health = static_cast<double>(monster.state.health);
+        record.resulting_health = 0.0;
         return true;
     }
 
@@ -1824,6 +1826,30 @@ struct EnetServer::Impl {
         monster.death_intent_persisted = true;
         monster.contribution_closing = true;
         monster.state.health = remaining_health;
+        return true;
+    }
+
+    bool restore_monster_life_states() {
+        if (!durable_outbox) return false;
+        for (auto& monster : monsters) {
+            honghuang::persistence::MonsterLifeStateRecord initial{
+                monster.runtime_id, monster.contribution_instance_id,
+                monster.definition.id, static_cast<double>(monster.state.health)};
+            honghuang::persistence::MonsterLifeStateRecord persisted;
+            std::string error;
+            if (!durable_outbox->ensure_monster_life_state(initial, persisted, error)) {
+                std::cerr << "[MonsterLifeState] restore failed; runtime=" << monster.runtime_id
+                          << " reason=" << error << std::endl;
+                return false;
+            }
+            monster.contribution_instance_id = persisted.monster_instance_id;
+            monster.state.health = static_cast<float>(persisted.health);
+            if (persisted.health <= 0.0) {
+                monster.state.mode = honghuang::simulation::MonsterMode::Dead;
+                monster.respawn_at = Clock::now() + std::chrono::seconds(
+                    std::max(monster.definition.respawn_seconds, 1));
+            }
+        }
         return true;
     }
 
