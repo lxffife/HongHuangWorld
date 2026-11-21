@@ -803,6 +803,18 @@ func (s *Service) RecordMonsterContributions(ctx context.Context, nodeKey string
  if err=tx.QueryRowContext(ctx,`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`,event.EventID).Scan(&lock);err!=nil {
   return fmt.Errorf("lock monster contribution event id: %w",err)
  }
+ if err=tx.QueryRowContext(ctx,`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`,
+  event.TaskID+":"+event.MonsterInstanceID).Scan(&lock);err!=nil {
+  return fmt.Errorf("lock monster contribution life: %w",err)
+ }
+ var existingDefinition string
+ err=tx.QueryRowContext(ctx,`SELECT monster_definition_id FROM bounty_monster_contribution_events
+  WHERE task_id=$1::uuid AND monster_instance_id=$2 LIMIT 1`,
+  event.TaskID,event.MonsterInstanceID).Scan(&existingDefinition)
+ if err==nil && existingDefinition!=event.MonsterDefinitionID { return ErrIdempotencyConflict }
+ if err!=nil && !errors.Is(err,sql.ErrNoRows) {
+  return fmt.Errorf("verify monster contribution life definition: %w",err)
+ }
  var existingNodeKey string
  err=tx.QueryRowContext(ctx,`SELECT node_key FROM bounty_monster_contribution_events WHERE event_id=$1::uuid`,event.EventID).Scan(&existingNodeKey)
  if err==nil {
