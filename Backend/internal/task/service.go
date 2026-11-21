@@ -1061,22 +1061,35 @@ func (s *Service) ListContributions(ctx context.Context, accountID, taskID strin
   return BountyContributionHistory{},fmt.Errorf("verify bounty contribution viewer: %w",err)
  }
  if !exists { return BountyContributionHistory{},ErrNotParticipant }
- rows,err:=s.db.QueryContext(ctx,`WITH visible_events AS (
-  SELECT event_id,monster_instance_id,monster_definition_id,created_at
+ rows,err:=s.db.QueryContext(ctx,`WITH grouped_monsters AS (
+  SELECT task_id,monster_instance_id,monster_definition_id,
+   MIN(event_id::text) AS event_id,MIN(created_at) AS created_at
   FROM bounty_monster_contribution_events
   WHERE task_id=$1::uuid
-  ORDER BY created_at DESC,event_id DESC
+  GROUP BY task_id,monster_instance_id,monster_definition_id
+ ), visible_monsters AS (
+  SELECT task_id,event_id,monster_instance_id,monster_definition_id,created_at
+  FROM grouped_monsters
+  ORDER BY created_at DESC,monster_instance_id DESC
   LIMIT 200
+ ), aggregated_contributors AS (
+  SELECT e.task_id,e.monster_instance_id,c.character_id,
+   SUM(c.damage) AS damage,SUM(c.hit_count) AS hit_count
+  FROM bounty_monster_contribution_events e
+  JOIN bounty_monster_contributors c ON c.event_id=e.event_id
+  WHERE e.task_id=$1::uuid
+  GROUP BY e.task_id,e.monster_instance_id,c.character_id
  )
- SELECT e.event_id::text,e.monster_instance_id,e.monster_definition_id,e.created_at,
+ SELECT m.event_id,m.monster_instance_id,m.monster_definition_id,m.created_at,
   c.character_id::text,c.damage,c.hit_count
- FROM visible_events e
- JOIN bounty_monster_contributors c ON c.event_id=e.event_id
- ORDER BY e.created_at DESC,e.event_id DESC,c.damage DESC,c.character_id`,taskID)
+ FROM visible_monsters m
+ JOIN aggregated_contributors c
+  ON c.task_id=m.task_id AND c.monster_instance_id=m.monster_instance_id
+ ORDER BY m.created_at DESC,m.monster_instance_id DESC,c.damage DESC,c.character_id`,taskID)
  if err!=nil { return BountyContributionHistory{},fmt.Errorf("list bounty contribution snapshots: %w",err) }
  defer rows.Close()
  result:=BountyContributionHistory{TaskID:taskID,Events:make([]MonsterContributionSnapshot,0)}
- indexByEvent:=make(map[string]int)
+ indexByMonster:=make(map[string]int)
  for rows.Next() {
   var eventID,instanceID,definitionID,characterID string
   var createdAt time.Time
@@ -1084,10 +1097,10 @@ func (s *Service) ListContributions(ctx context.Context, accountID, taskID strin
   if err:=rows.Scan(&eventID,&instanceID,&definitionID,&createdAt,&characterID,&damage,&hitCount);err!=nil {
    return BountyContributionHistory{},fmt.Errorf("scan bounty contribution snapshot: %w",err)
   }
-  idx,ok:=indexByEvent[eventID]
+  idx,ok:=indexByMonster[instanceID]
   if !ok {
    idx=len(result.Events)
-   indexByEvent[eventID]=idx
+   indexByMonster[instanceID]=idx
    result.Events=append(result.Events,MonsterContributionSnapshot{
     EventID:eventID,MonsterInstanceID:instanceID,MonsterDefinitionID:definitionID,
     CreatedAt:createdAt,Contributors:make([]MonsterContributionDetail,0),
