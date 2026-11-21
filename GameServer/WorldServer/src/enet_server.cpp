@@ -4251,9 +4251,9 @@ struct EnetServer::Impl {
                                 contribution, monster.runtime_id,
                                 previous_health_exact,
                                 std::max(0.0, previous_health_exact - static_cast<double>(applied_burn_damage)),
-                                [&monster, previous_health, applied_burn_damage]() noexcept {
-                                    monster.state.health = static_cast<float>(
-                                        std::max<std::int64_t>(0, previous_health - applied_burn_damage));
+                                [&monster, previous_health_exact, applied_burn_damage]() noexcept {
+                                    monster.state.health = static_cast<float>(std::max(
+                                        0.0, previous_health_exact - static_cast<double>(applied_burn_damage)));
                                 },
                                 contribution_error));
                     if (!admitted) {
