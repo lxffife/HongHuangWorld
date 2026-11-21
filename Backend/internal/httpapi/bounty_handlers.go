@@ -137,3 +137,18 @@ func (h *bountyHandlers) leave(w http.ResponseWriter,r *http.Request) {
  if err:=h.service.Leave(r.Context(),account,r.PathValue("taskID"));err!=nil{h.writeError(w,err);return}
  writeJSON(w,http.StatusOK,map[string]any{"ok":true,"status":"withdrawn"})
 }
+
+
+// reportMonsterContributions persists an authoritative death-time damage snapshot.
+func (h *bountyHandlers) reportMonsterContributions(w http.ResponseWriter,r *http.Request) {
+ provided:=r.Header.Get("X-World-Server-Key")
+ if h.apiKey=="" || len(provided)!=len(h.apiKey) || subtle.ConstantTimeCompare([]byte(provided),[]byte(h.apiKey))!=1 {
+  http.Error(w,"unauthorized",http.StatusUnauthorized);return
+ }
+ nodeKey:=strings.TrimSpace(r.Header.Get("X-World-Server-Node"))
+ if nodeKey=="" { http.Error(w,"missing world server node identity",http.StatusBadRequest);return }
+ var event task.MonsterContributionEvent
+ if err:=decodeJSON(w,r,&event);err!=nil { http.Error(w,"invalid request body",http.StatusBadRequest);return }
+ if err:=h.service.RecordMonsterContributions(r.Context(),nodeKey,event);err!=nil { h.writeError(w,err);return }
+ writeJSON(w,http.StatusOK,map[string]any{"ok":true,"stored":true})
+}
