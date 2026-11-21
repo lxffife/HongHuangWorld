@@ -3956,14 +3956,20 @@ struct EnetServer::Impl {
                 std::string contribution_error;
                 const auto contribution = make_monster_contribution_record(
                     *target, owner->second, damage.damage);
-                const bool admitted = monster_contribution_writer != nullptr &&
-                    monster_contribution_writer->submit_before_damage(
-                        contribution,
-                        [target, remaining_health = damage.remaining_health, defeated = damage.defeated]() noexcept {
-                            target->state.health = static_cast<float>(remaining_health);
-                            if (defeated) target->contribution_closing = true;
-                        },
-                        contribution_error);
+                bool admitted = false;
+                if (damage.defeated) {
+                    admitted = apply_lethal_monster_damage(
+                        *target, &owner->second, contribution,
+                        static_cast<float>(damage.remaining_health), contribution_error);
+                } else {
+                    admitted = monster_contribution_writer &&
+                        monster_contribution_writer->submit_before_damage(
+                            contribution,
+                            [target, remaining_health = damage.remaining_health]() noexcept {
+                                target->state.health = static_cast<float>(remaining_health);
+                            },
+                            contribution_error);
+                }
                 if (!admitted) {
                     std::cerr << "[MonsterContribution] projectile hit rejected; monster="
                               << target->definition.id << " instance="
