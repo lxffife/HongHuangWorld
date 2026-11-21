@@ -1928,7 +1928,7 @@ struct EnetServer::Impl {
             monster->state.mode = honghuang::simulation::MonsterMode::Dead;
             monster->respawn_at = now + std::chrono::seconds(monster->retry_spawn_seconds);
             const auto killer_character_id = monster->death_killer_character_id;
-            monster->death_finalizer_submitted = false;
+            monster->death_finalizer_submitted = true;
             monster->death_context_captured = false;
             monster->death_killer_session_id.clear();
             monster->death_killer_character_id.clear();
