@@ -379,5 +379,33 @@ int main() {
         assert(reopened.load_pending_monster_deaths(error).empty());
     }
 
+    {
+        // The lethal hit and its pending death intent commit as one SQLite transaction.
+        honghuang::persistence::DurableOutbox box(path, 100);
+        std::string error;
+        honghuang::persistence::MonsterContributionRecord lethal;
+        lethal.write_id = "write-lethal-atomic";
+        lethal.monster_instance_id = "life-lethal-atomic";
+        lethal.monster_definition_id = "test_monster";
+        lethal.session_id = "session-lethal";
+        lethal.character_id = "character-lethal";
+        lethal.total_damage = 99;
+        lethal.hit_count = 1;
+        lethal.first_hit_at_ms = 700;
+        lethal.last_hit_at_ms = 700;
+        lethal.bounty_objectives_json = "[]";
+        honghuang::persistence::PendingMonsterDeathRecord intent;
+        intent.monster_instance_id = lethal.monster_instance_id;
+        intent.runtime_id = "spawn-lethal-atomic";
+        intent.payload = R"({"version":1,"killer_objectives":[],"drops":[]})";
+        intent.created_at_ms = 700;
+        assert(box.record_monster_contribution_and_pending_death(lethal, intent, error));
+        const auto snapshot = box.load_monster_contributions(lethal.monster_instance_id, error);
+        assert(error.empty() && snapshot.size() == 1);
+        const auto deaths = box.load_pending_monster_deaths(error);
+        assert(error.empty() && deaths.size() == 1);
+        assert(deaths.front().monster_instance_id == lethal.monster_instance_id);
+    }
+
     return 0;
 }
