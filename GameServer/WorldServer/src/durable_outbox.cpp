@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <limits>
 #include <stdexcept>
 #include <utility>
@@ -90,7 +91,12 @@ DurableOutbox::DurableOutbox(const std::string& path, std::size_t capacity, bool
         "payload TEXT NOT NULL,prepared_events_json TEXT NOT NULL DEFAULT '',created_at_ms INTEGER NOT NULL,"
         "committed_at_ms INTEGER NOT NULL DEFAULT 0);"
         "CREATE INDEX IF NOT EXISTS idx_pending_monster_deaths_runtime "
-        "ON pending_monster_deaths(runtime_id);";
+        "ON pending_monster_deaths(runtime_id);"
+        "CREATE TABLE IF NOT EXISTS monster_life_states("
+        "runtime_id TEXT PRIMARY KEY NOT NULL,monster_instance_id TEXT NOT NULL UNIQUE,"
+        "monster_definition_id TEXT NOT NULL,health REAL NOT NULL,updated_at_ms INTEGER NOT NULL);"
+        "CREATE INDEX IF NOT EXISTS idx_monster_life_states_instance "
+        "ON monster_life_states(monster_instance_id);";
     char* message = nullptr;
     if (sqlite3_exec(db_, schema, nullptr, nullptr, &message) != SQLITE_OK) {
         const std::string error = message ? message : sqlite3_errmsg(db_);
@@ -162,6 +168,205 @@ bool DurableOutbox::execute(const char* sql, std::string& error) const {
     error = message ? message : sqlite3_errmsg(db_);
     sqlite3_free(message);
     return false;
+}
+
+bool DurableOutbox::ensure_monster_life_state(
+    const MonsterLifeStateRecord& initial, MonsterLifeStateRecord& persisted, std::string& error) {
+    error.clear();
+    if (initial.runtime_id.empty() || initial.runtime_id.size() > 96 ||
+        initial.monster_instance_id.empty() || initial.monster_instance_id.size() > 96 ||
+        initial.monster_definition_id.empty() || initial.monster_definition_id.size() > 64 ||
+        !std::isfinite(initial.health) || initial.health < 0.0) {
+        error = "invalid initial monster life state";
+        return false;
+    }
+    std::lock_guard lock(mutex_);
+    bool transaction_open = false;
+    try {
+        if (!execute("BEGIN IMMEDIATE", error)) return false;
+        transaction_open = true;
+        Stmt insert(db_,
+            "INSERT OR IGNORE INTO monster_life_states(runtime_id,monster_instance_id,"
+            "monster_definition_id,health,updated_at_ms) VALUES(?,?,?,?,?)");
+        bind_text(insert.get(), 1, initial.runtime_id);
+        bind_text(insert.get(), 2, initial.monster_instance_id);
+        bind_text(insert.get(), 3, initial.monster_definition_id);
+        sqlite3_bind_double(insert.get(), 4, initial.health);
+        const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        sqlite3_bind_int64(insert.get(), 5, now);
+        if (sqlite3_step(insert.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+        Stmt query(db_,
+            "SELECT runtime_id,monster_instance_id,monster_definition_id,health "
+            "FROM monster_life_states WHERE runtime_id=?");
+        bind_text(query.get(), 1, initial.runtime_id);
+        if (sqlite3_step(query.get()) != SQLITE_ROW) throw std::runtime_error(sqlite3_errmsg(db_));
+        persisted = MonsterLifeStateRecord{
+            column_text(query.get(), 0), column_text(query.get(), 1),
+            column_text(query.get(), 2), sqlite3_column_double(query.get(), 3)};
+        if (!execute("COMMIT", error)) throw std::runtime_error(error);
+        transaction_open = false;
+        return true;
+    } catch (const std::exception& exception) {
+        if (transaction_open) { std::string ignored; execute("ROLLBACK", ignored); }
+        error = exception.what();
+        return false;
+    }
+}
+
+std::vector<MonsterLifeStateRecord> DurableOutbox::load_monster_life_states(std::string& error) const {
+    error.clear();
+    std::vector<MonsterLifeStateRecord> result;
+    std::lock_guard lock(mutex_);
+    try {
+        Stmt query(db_,
+            "SELECT runtime_id,monster_instance_id,monster_definition_id,health "
+            "FROM monster_life_states ORDER BY runtime_id");
+        int step = SQLITE_ROW;
+        while ((step = sqlite3_step(query.get())) == SQLITE_ROW) {
+            result.push_back(MonsterLifeStateRecord{
+                column_text(query.get(), 0), column_text(query.get(), 1),
+                column_text(query.get(), 2), sqlite3_column_double(query.get(), 3)});
+        }
+        if (step != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+    } catch (const std::exception& exception) {
+        error = exception.what();
+        result.clear();
+    }
+    return result;
+}
+
+bool DurableOutbox::admit_monster_damage(
+    const MonsterContributionRecord& item, const std::string& runtime_id,
+    double expected_health, double resulting_health, std::string& error) {
+    error.clear();
+    if (runtime_id.empty() || runtime_id.size() > 96 ||
+        !std::isfinite(expected_health) || !std::isfinite(resulting_health) ||
+        expected_health <= 0.0 || resulting_health < 0.0 || resulting_health >= expected_health) {
+        error = "invalid monster damage command";
+        return false;
+    }
+    if (item.write_id.empty() || item.monster_instance_id.empty() ||
+        item.monster_definition_id.empty() || item.session_id.empty() ||
+        item.character_id.empty() || item.total_damage <= 0 || item.hit_count <= 0 ||
+        item.first_hit_at_ms <= 0 || item.last_hit_at_ms < item.first_hit_at_ms ||
+        item.bounty_objectives_json.empty() || item.bounty_objectives_json.size() > 64 * 1024) {
+        error = "invalid monster contribution record";
+        return false;
+    }
+    std::unique_lock<std::mutex> lock(mutex_, std::defer_lock);
+    if (!lock.try_lock()) { error = "SQLite writer is busy; retry hit without applying damage"; return false; }
+    sqlite3_busy_timeout(db_, 50);
+    struct TimeoutReset { sqlite3* db; ~TimeoutReset(){ sqlite3_busy_timeout(db, 5000); } } reset{db_};
+    bool transaction_open = false;
+    try {
+        if (!execute("BEGIN IMMEDIATE", error)) return false;
+        transaction_open = true;
+        Stmt life(db_, "SELECT monster_instance_id,health FROM monster_life_states WHERE runtime_id=?");
+        bind_text(life.get(), 1, runtime_id);
+        if (sqlite3_step(life.get()) != SQLITE_ROW)
+            throw std::runtime_error("durable monster life state is not initialized");
+        if (column_text(life.get(), 0) != item.monster_instance_id)
+            throw std::runtime_error("monster life instance changed; stale damage command rejected");
+        const double stored_health = sqlite3_column_double(life.get(), 1);
+        if (std::abs(stored_health - expected_health) > 0.001)
+            throw std::runtime_error("monster health changed; stale damage command rejected");
+        Stmt closed(db_,
+            "SELECT 1 FROM pending_monster_deaths WHERE monster_instance_id=? "
+            "UNION ALL SELECT 1 FROM monster_damage_contribution_finalized WHERE monster_instance_id=? LIMIT 1");
+        bind_text(closed.get(), 1, item.monster_instance_id);
+        bind_text(closed.get(), 2, item.monster_instance_id);
+        const int closed_result = sqlite3_step(closed.get());
+        if (closed_result == SQLITE_ROW)
+            throw std::runtime_error("monster life is closing or finalized; damage command rejected");
+        if (closed_result != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+        Stmt inbox_existing(db_, "SELECT 1 FROM monster_damage_contribution_inbox WHERE write_id=?");
+        bind_text(inbox_existing.get(), 1, item.write_id);
+        if (sqlite3_step(inbox_existing.get()) == SQLITE_ROW)
+            throw std::runtime_error("monster damage command write ID was already admitted");
+        Stmt applied_existing(db_, "SELECT 1 FROM monster_damage_contribution_writes WHERE write_id=?");
+        bind_text(applied_existing.get(), 1, item.write_id);
+        if (sqlite3_step(applied_existing.get()) == SQLITE_ROW)
+            throw std::runtime_error("monster damage command write ID was already applied");
+        Stmt insert(db_,
+            "INSERT INTO monster_damage_contribution_inbox(write_id,monster_instance_id,monster_definition_id,"
+            "session_id,character_id,damage,hit_count,first_hit_at_ms,last_hit_at_ms,bounty_objectives_json,admitted_at_ms) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?)");
+        bind_text(insert.get(), 1, item.write_id);
+        bind_text(insert.get(), 2, item.monster_instance_id);
+        bind_text(insert.get(), 3, item.monster_definition_id);
+        bind_text(insert.get(), 4, item.session_id);
+        bind_text(insert.get(), 5, item.character_id);
+        sqlite3_bind_int64(insert.get(), 6, item.total_damage);
+        sqlite3_bind_int64(insert.get(), 7, item.hit_count);
+        sqlite3_bind_int64(insert.get(), 8, item.first_hit_at_ms);
+        sqlite3_bind_int64(insert.get(), 9, item.last_hit_at_ms);
+        bind_text(insert.get(), 10, item.bounty_objectives_json);
+        const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        sqlite3_bind_int64(insert.get(), 11, now);
+        if (sqlite3_step(insert.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+        Stmt update(db_,
+            "UPDATE monster_life_states SET health=?,updated_at_ms=? "
+            "WHERE runtime_id=? AND monster_instance_id=? AND ABS(health-?)<=0.001");
+        sqlite3_bind_double(update.get(), 1, resulting_health);
+        sqlite3_bind_int64(update.get(), 2, now);
+        bind_text(update.get(), 3, runtime_id);
+        bind_text(update.get(), 4, item.monster_instance_id);
+        sqlite3_bind_double(update.get(), 5, expected_health);
+        if (sqlite3_step(update.get()) != SQLITE_DONE || sqlite3_changes(db_) != 1)
+            throw std::runtime_error("monster health compare-and-swap failed");
+        if (!execute("COMMIT", error)) throw std::runtime_error(error);
+        transaction_open = false;
+        return true;
+    } catch (const std::exception& exception) {
+        if (transaction_open) { std::string ignored; execute("ROLLBACK", ignored); }
+        error = exception.what();
+        return false;
+    }
+}
+
+bool DurableOutbox::respawn_monster_life(
+    const std::string& old_instance_id, const MonsterLifeStateRecord& next_life,
+    std::string& error) {
+    error.clear();
+    if (old_instance_id.empty() || next_life.runtime_id.empty() ||
+        next_life.monster_instance_id.empty() || next_life.monster_definition_id.empty() ||
+        !std::isfinite(next_life.health) || next_life.health <= 0.0) {
+        error = "invalid monster respawn life state";
+        return false;
+    }
+    std::lock_guard lock(mutex_);
+    bool transaction_open = false;
+    try {
+        if (!execute("BEGIN IMMEDIATE", error)) return false;
+        transaction_open = true;
+        Stmt update(db_,
+            "UPDATE monster_life_states SET monster_instance_id=?,monster_definition_id=?,health=?,updated_at_ms=? "
+            "WHERE runtime_id=? AND monster_instance_id=? AND health<=0");
+        bind_text(update.get(), 1, next_life.monster_instance_id);
+        bind_text(update.get(), 2, next_life.monster_definition_id);
+        sqlite3_bind_double(update.get(), 3, next_life.health);
+        const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        sqlite3_bind_int64(update.get(), 4, now);
+        bind_text(update.get(), 5, next_life.runtime_id);
+        bind_text(update.get(), 6, old_instance_id);
+        if (sqlite3_step(update.get()) != SQLITE_DONE || sqlite3_changes(db_) != 1)
+            throw std::runtime_error("durable monster life is not ready to respawn");
+        Stmt remove(db_,
+            "DELETE FROM pending_monster_deaths WHERE monster_instance_id=? AND committed_at_ms>0");
+        bind_text(remove.get(), 1, old_instance_id);
+        if (sqlite3_step(remove.get()) != SQLITE_DONE || sqlite3_changes(db_) != 1)
+            throw std::runtime_error("committed monster death intent is missing during respawn");
+        if (!execute("COMMIT", error)) throw std::runtime_error(error);
+        transaction_open = false;
+        return true;
+    } catch (const std::exception& exception) {
+        if (transaction_open) { std::string ignored; execute("ROLLBACK", ignored); }
+        error = exception.what();
+        return false;
+    }
 }
 
 bool DurableOutbox::admit_monster_contribution(
