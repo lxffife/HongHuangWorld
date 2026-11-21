@@ -219,3 +219,8 @@ The three lethal sources (melee, projectile, delayed burn) must enter this same 
 ### Preserve closing monster lives across spawn-config refresh
 
 A spawn-config refresh must not replace the runtime definition or per-life contribution identity of a monster whose lethal transition has already been latched. The config merge now carries an existing `contribution_closing` runtime forward unchanged for that refresh instead of applying rare-spawn activation/deactivation or health changes to it. This protects the closing life from being revived or having its contribution identity rotated while its death lifecycle is pending. This is a defensive config-reload guard; deferred SQLite death finalization is still not implemented. Closing monsters are retained even when their spawn point is removed from the refreshed configuration; ordinary non-closing removed spawn points continue to follow the existing merge policy.
+
+
+### Non-blocking per-life writer pending count
+
+The contribution writer now exposes `pending_count_for_monster(instance_id)`, a mutex-protected, non-blocking query for world-loop state machines. It includes both queued records and the record currently inside its SQLite commit because the per-monster counter is decremented only after a successful commit. The deferred death-finalization loop can use this to decide whether a life is ready for ledger loading without waiting on a condition variable or blocking the simulation thread. A zero count is only a writer-queue drain signal; callers must still check `load_monster_contributions` errors before treating the SQLite snapshot as authoritative.
