@@ -422,8 +422,8 @@ std::vector<MonsterContributionRecord> DurableOutbox::load_monster_contributions
 bool DurableOutbox::finalize_monster_contributions(
     const std::string& monster_instance_id, const std::vector<OutboxEvent>& events,
     std::string& error) {
-    if (monster_instance_id.empty() || monster_instance_id.size() > 96 || events.empty()) {
-        error = "monster instance id and finalization events are required";
+    if (monster_instance_id.empty() || monster_instance_id.size() > 96) {
+        error = "valid monster instance id is required";
         return false;
     }
     for (const auto& event : events) {
