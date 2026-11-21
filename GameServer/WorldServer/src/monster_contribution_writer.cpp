@@ -53,6 +53,14 @@ std::size_t MonsterContributionWriter::pending_count() const {
     return pending_.size();
 }
 
+std::size_t MonsterContributionWriter::pending_count_for_monster(
+    const std::string& monster_instance_id) const {
+    if (monster_instance_id.empty()) return 0;
+    std::lock_guard lock(mutex_);
+    const auto found = pending_by_monster_.find(monster_instance_id);
+    return found == pending_by_monster_.end() ? 0 : found->second;
+}
+
 std::string MonsterContributionWriter::last_error() const {
     std::lock_guard lock(mutex_);
     return last_error_;
