@@ -3538,14 +3538,21 @@ struct EnetServer::Impl {
         }
         std::string contribution_error;
         const auto contribution_record = make_monster_contribution_record(*target, player, damage.damage);
-        if (!monster_contribution_writer ||
-            !monster_contribution_writer->submit_before_damage(
-                contribution_record,
-                [&target, &damage]() noexcept {
-                    target->state.health = static_cast<float>(damage.remaining_health);
-                    if (damage.defeated) target->contribution_closing = true;
-                },
-                contribution_error)) {
+        bool admitted = false;
+        if (damage.defeated) {
+            admitted = apply_lethal_monster_damage(
+                *target, &player, contribution_record,
+                static_cast<float>(damage.remaining_health), contribution_error);
+        } else {
+            admitted = monster_contribution_writer &&
+                monster_contribution_writer->submit_before_damage(
+                    contribution_record,
+                    [&target, &damage]() noexcept {
+                        target->state.health = static_cast<float>(damage.remaining_health);
+                    },
+                    contribution_error);
+        }
+        if (!admitted) {
             std::cerr << "Rejected melee hit because monster contribution was not admitted: "
                       << contribution_error << '\n';
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
