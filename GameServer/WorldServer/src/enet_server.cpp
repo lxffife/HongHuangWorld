@@ -1528,9 +1528,23 @@ struct EnetServer::Impl {
         if (found == monster.damage_contributions.end()) {
             constexpr std::size_t kMaximumContributorsPerSpawn = 64;
             if (monster.damage_contributions.size() >= kMaximumContributorsPerSpawn) {
-                std::cerr << "Monster contribution ledger reached its participant limit: "
-                          << monster.runtime_id << '\n';
-                return;
+                // Keep the bounded ledger focused on the strongest observed
+                // contributors instead of permanently favoring the first 64
+                // characters to touch the spawn. The incoming hit is the only
+                // evidence available for an unseen contributor, so admission
+                // is intentionally conservative and deterministic.
+                auto weakest = std::min_element(
+                    monster.damage_contributions.begin(), monster.damage_contributions.end(),
+                    [](const auto& left, const auto& right) {
+                        if (left.second.total_damage != right.second.total_damage)
+                            return left.second.total_damage < right.second.total_damage;
+                        return left.second.character_id > right.second.character_id;
+                    });
+                if (weakest == monster.damage_contributions.end() ||
+                    effective_damage <= weakest->second.total_damage) {
+                    return;
+                }
+                monster.damage_contributions.erase(weakest);
             }
             MonsterDamageContribution contribution;
             contribution.session_id = player.session_id;
