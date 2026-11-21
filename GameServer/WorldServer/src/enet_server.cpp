@@ -1730,11 +1730,11 @@ struct EnetServer::Impl {
         }
     }
 
-    bool persist_monster_death_intent(MonsterRuntime& monster) {
-        if (monster.death_intent_persisted) return true;
-        if (!durable_outbox || !monster.death_context_captured ||
-            monster.contribution_instance_id.empty() || monster.runtime_id.empty()) return false;
-
+    bool make_pending_monster_death_record(
+        const MonsterRuntime& monster,
+        honghuang::persistence::PendingMonsterDeathRecord& record) const {
+        if (!monster.death_context_captured || monster.contribution_instance_id.empty() ||
+            monster.runtime_id.empty()) return false;
         Json objectives = Json::array();
         for (const auto& objective : monster.death_killer_bounty_objectives) {
             objectives.push_back({
@@ -1769,11 +1769,18 @@ struct EnetServer::Impl {
             {"reward_eligible", monster.death_reward_eligible},
             {"drops", std::move(drops)}
         };
-        honghuang::persistence::PendingMonsterDeathRecord record;
         record.monster_instance_id = monster.contribution_instance_id;
         record.runtime_id = monster.runtime_id;
         record.payload = payload.dump();
         record.created_at_ms = wall_clock_ms();
+        return true;
+    }
+
+    bool persist_monster_death_intent(MonsterRuntime& monster) {
+        if (monster.death_intent_persisted) return true;
+        if (!durable_outbox) return false;
+        honghuang::persistence::PendingMonsterDeathRecord record;
+        if (!make_pending_monster_death_record(monster, record)) return false;
         std::string error;
         if (!durable_outbox->save_pending_monster_death(record, error)) {
             std::cerr << "[MonsterDeathIntent] persist deferred; monster=" << monster.runtime_id
@@ -1782,6 +1789,41 @@ struct EnetServer::Impl {
             return false;
         }
         monster.death_intent_persisted = true;
+        return true;
+    }
+
+    bool apply_lethal_monster_damage(
+        MonsterRuntime& monster, const PlayerState* killer,
+        const honghuang::persistence::MonsterContributionRecord& contribution,
+        float remaining_health, std::string& error) {
+        if (!durable_outbox) {
+            error = "durable SQLite outbox is unavailable";
+            return false;
+        }
+        capture_monster_death_context(monster, killer);
+        honghuang::persistence::PendingMonsterDeathRecord death;
+        if (!make_pending_monster_death_record(monster, death)) {
+            error = "could not construct immutable pending monster death intent";
+            return false;
+        }
+        if (!durable_outbox->record_monster_contribution_and_pending_death(
+                contribution, death, error)) {
+            monster.death_context_captured = false;
+            monster.death_world_id.clear();
+            monster.death_definition_id.clear();
+            monster.death_level = 0;
+            monster.death_position_x = 0.0F;
+            monster.death_position_z = 0.0F;
+            monster.death_killer_session_id.clear();
+            monster.death_killer_character_id.clear();
+            monster.death_killer_bounty_objectives.clear();
+            monster.death_reward_eligible = false;
+            monster.pending_death_drops.clear();
+            return false;
+        }
+        monster.death_intent_persisted = true;
+        monster.contribution_closing = true;
+        monster.state.health = remaining_health;
         return true;
     }
 
