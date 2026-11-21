@@ -478,6 +478,9 @@ int main() {
         death.expected_health = 75.0;
         death.resulting_health = 0.0;
         assert(box.record_monster_contribution_and_pending_death(lethal, death, error));
+        assert(!box.respawn_monster_life("life-state-1",
+            honghuang::persistence::MonsterLifeStateRecord{
+                "spawn-state-1", "premature-life", "wolf", 100.0}, error));
         states = box.load_monster_life_states(error);
         assert(error.empty() && states.size() == 1 && states.front().health == 0.0);
 
