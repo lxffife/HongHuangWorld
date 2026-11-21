@@ -200,9 +200,9 @@ Each `MonsterRuntime` now has a per-life `contribution_closing` latch. The letha
 
 This closes the same-tick duplicate-hit window. The live integration below now defers the ordinary `Dead` transition and respawn until SQLite finalization commits; the legacy 256-entry map is no longer used to build the authoritative death snapshot.
 
-### Required deferred monster-death finalization state machine
+### Historical deferred monster-death finalization acceptance contract
 
-The next live integration must not call `wait_until_drained` with a long timeout from a melee, projectile, or world-update callback. SQLite contention must not stall the authoritative simulation loop. The required lifecycle is:
+These were the acceptance criteria before the live integration. They remain useful invariants for future changes; the current implementation uses the asynchronous writer/finalizer and durable intent described below. SQLite contention must not stall the authoritative simulation loop.
 
 1. **Alive:** accepted damage is submitted to the bounded writer before health mutation.
 2. **Closing:** the lethal admission callback atomically sets the per-life closing latch and health reaches zero. All later damage/effect ticks for this life are rejected. Capture the authenticated killer identity and the reward/drop intent as immutable data; do not retain a pointer or iterator into the live player map.
@@ -226,7 +226,7 @@ A spawn-config refresh must not replace the runtime definition or per-life contr
 The contribution writer now exposes `pending_count_for_monster(instance_id)`, a mutex-protected, non-blocking query for world-loop state machines. It includes both queued records and the record currently inside its SQLite commit because the per-monster counter is decremented only after a successful commit. The deferred death-finalization loop can use this to decide whether a life is ready for ledger loading without waiting on a condition variable or blocking the simulation thread. A zero count is only a writer-queue drain signal; callers must still check `load_monster_contributions` errors before treating the SQLite snapshot as authoritative.
 
 
-### Asynchronous monster death finalizer worker (foundation only)
+### Asynchronous monster death finalizer worker
 
 WorldServer now owns a dedicated `MonsterDeathFinalizer` worker next to the contribution writer. Its submission API accepts one per-life instance ID and an immutable event-builder callback. The worker performs the following sequence off the simulation thread:
 
@@ -238,7 +238,7 @@ WorldServer now owns a dedicated `MonsterDeathFinalizer` worker next to the cont
 
 Duplicate submissions for the same life are rejected while a task is active. The worker is initialized after its SQLite dependencies and is stopped before the contribution writer/outbox during orderly shutdown. A focused test target exercises writer drain, authoritative ledger loading, event batch creation, finalization, and result delivery.
 
-**Historical integration boundary:** when this worker was first added, lethal handlers had not yet submitted tasks. The live integration below now submits all three death sources and consumes completion results. The task state and prepared batch remain process-local, so abrupt process termination can still leave a closing monster and unfinalized ledger requiring recovery policy.
+**Historical integration boundary:** when this worker was first added, lethal handlers had not yet submitted tasks. The live integration below now submits all three death sources and consumes completion results. The task queue remains process-local, but the pending intent and prepared event batch are now durable in SQLite; startup recovery reconstructs tasks from those records.
 
 
 ### Live SQLite-backed monster death settlement integration
@@ -251,7 +251,7 @@ For an eligible online killer, the same atomic batch also contains the character
 
 The combat response marks lethal hits as `settlement_pending`; reward amounts are reported separately after commit. World snapshots expose `death_pending` while the monster is closing but not yet committed.
 
-**Remaining reliability boundary:** the pending-death context and the finalizer's prepared batch are still process-local. An abrupt WorldServer crash after lethal damage but before finalization can leave committed contribution rows without a persisted pending-death intent; startup recovery/orphan-ledger reconciliation is not implemented yet. Also, if the local outbox is full or SQLite remains unavailable, the monster intentionally stays closed at zero health and does not respawn; operators need visibility and recovery tooling for such stuck settlements. The center contribution endpoint stores each 1–256 contributor chunk as a distinct immutable event; downstream reporting must aggregate all events by task and monster instance rather than assuming one event per life.
+**Remaining reliability boundary:** durable intent and prepared event batches now survive restart, and committed deaths recover through respawn. A narrow interval remains between the lethal health callback and saving the pending-death row; an abrupt crash in that interval can still leave a contribution without its death intent. In-memory writer queue entries not yet committed to SQLite can also be lost on abrupt termination. The center contribution endpoint stores each 1–256 contributor chunk as a distinct immutable event; downstream reporting must aggregate all events by task and monster instance rather than assuming one event per life.
 
 
 ### Durable pending-death recovery and committed respawn lifecycle
