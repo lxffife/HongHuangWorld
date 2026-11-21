@@ -211,18 +211,28 @@ bool DurableOutbox::admit_monster_contribution(
             if (!same) throw std::runtime_error("monster contribution write ID reused with different data");
             return true;
         };
+        Stmt closed(db_,
+            "SELECT 1 FROM monster_damage_contribution_finalized WHERE monster_instance_id=? "
+            "UNION ALL SELECT 1 FROM pending_monster_deaths WHERE monster_instance_id=? LIMIT 1");
+        bind_text(closed.get(), 1, item.monster_instance_id);
+        bind_text(closed.get(), 2, item.monster_instance_id);
+        if (sqlite3_step(closed.get()) == SQLITE_ROW)
+            throw std::runtime_error("monster life is closing or finalized; contribution admission rejected");
         if (verify_existing(
                 "SELECT monster_instance_id,monster_definition_id,session_id,character_id,"
                 "damage,hit_count,first_hit_at_ms,last_hit_at_ms,bounty_objectives_json "
-                "FROM monster_damage_contribution_inbox WHERE write_id=?") ||
-            verify_existing(
-                "SELECT monster_instance_id,monster_definition_id,session_id,character_id,"
-                "damage,hit_count,first_hit_at_ms,last_hit_at_ms,bounty_objectives_json "
-                "FROM monster_damage_contribution_writes WHERE write_id=?")) {
+                "FROM monster_damage_contribution_inbox WHERE write_id=?")) {
             if (!execute("COMMIT", error)) throw std::runtime_error(error);
             transaction_open = false;
             return true;
         }
+        // If the write already reached the ledger but its inbox row was acknowledged,
+        // recreate the inbox marker. The worker will observe the exact duplicate and
+        // safely acknowledge it without adding damage a second time.
+        verify_existing(
+            "SELECT monster_instance_id,monster_definition_id,session_id,character_id,"
+            "damage,hit_count,first_hit_at_ms,last_hit_at_ms,bounty_objectives_json "
+            "FROM monster_damage_contribution_writes WHERE write_id=?");
         Stmt insert(db_,
             "INSERT INTO monster_damage_contribution_inbox(write_id,monster_instance_id,"
             "monster_definition_id,session_id,character_id,damage,hit_count,first_hit_at_ms,"
