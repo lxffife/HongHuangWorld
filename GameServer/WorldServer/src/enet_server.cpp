@@ -150,6 +150,8 @@ struct MonsterRuntime {
     honghuang::simulation::PeriodicDamageEffect burn_effect;
     std::string burn_owner_character_id;
     std::unordered_map<std::string, MonsterDamageContribution> damage_contributions;
+    // runtime_id identifies the stable spawn point; this ID identifies one life of that spawn.
+    std::string contribution_instance_id;
 };
 
 
@@ -835,6 +837,7 @@ bool load_monster_spawn_config(const ServerConfig& config,std::vector<MonsterRun
             MonsterRuntime runtime;
             runtime.definition=std::move(definition);
             runtime.runtime_id=runtime_id;
+            runtime.contribution_instance_id=make_event_uuid();
             runtime.rare_spawn=rare;
             runtime.spawn_chance_percent=chance;
             runtime.retry_spawn_seconds=retry;
@@ -1088,6 +1091,7 @@ struct EnetServer::Impl {
             if (!honghuang::simulation::valid_monster_definition(definition)) return;
             honghuang::simulation::MonsterState state{x, z, health};
             monsters.push_back({std::move(definition), std::move(state), std::move(runtime_id), Clock::time_point{}});
+            monsters.back().contribution_instance_id = make_event_uuid();
         };
         if (config.world_id == "qingyun_human") {
             add_monster("wolf-001", "wilderness_wolf", "荒原狼", 3, 80.0F, 12.0F, 4.0F,
@@ -1663,7 +1667,7 @@ struct EnetServer::Impl {
                 const Json contribution_payload{
                     {"event_id", contribution_event_id},
                     {"task_id", objective.task_id},
-                    {"monster_instance_id", monster.runtime_id},
+                    {"monster_instance_id", monster.contribution_instance_id},
                     {"monster_definition_id", objective.objective_key},
                     {"contributors", contributors}
                 };
@@ -2017,6 +2021,8 @@ struct EnetServer::Impl {
                     current.respawn_at=next.respawn_at;
                 }else{
                     current.state={current.definition.spawn_x,current.definition.spawn_z,current.definition.max_health};
+                    current.contribution_instance_id=make_event_uuid();
+                    current.damage_contributions.clear();
                     current.respawn_at=Clock::time_point{};
                 }
             }else{
@@ -3451,6 +3457,7 @@ struct EnetServer::Impl {
                     }
                     monster.state = {monster.definition.spawn_x, monster.definition.spawn_z,
                                      monster.definition.max_health};
+                    monster.contribution_instance_id = make_event_uuid();
                     monster.damage_contributions.clear();
                     monster.respawn_at = Clock::time_point{};
                     monster.attack_phase = MonsterAttackPhase::Ready;
