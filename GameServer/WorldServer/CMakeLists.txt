@@ -29,6 +29,7 @@ add_executable(world_server
     src/frame.cpp
     src/durable_outbox.cpp
     src/monster_contribution_writer.cpp
+    src/monster_death_finalizer.cpp
 )
 
 target_include_directories(world_server PRIVATE include)
