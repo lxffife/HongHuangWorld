@@ -119,6 +119,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/bounties/{taskID}/join", bountyAPI.join)
 		mux.HandleFunc("GET /api/v1/bounties/{taskID}/progress", bountyAPI.progress)
 		mux.HandleFunc("GET /api/v1/bounties/{taskID}/contributions", bountyAPI.contributions)
+		mux.HandleFunc("GET /api/v1/factions/{factionID}/bounties/{taskID}/contributions", bountyAPI.publisherContributions)
 		mux.HandleFunc("POST /api/v1/bounties/{taskID}/leave", bountyAPI.leave)
 		mux.HandleFunc("POST /api/v1/bounties/{taskID}/complete", bountyAPI.settle)
 		mux.HandleFunc("POST /api/v1/bounties/{taskID}/cancel", bountyAPI.cancel)
