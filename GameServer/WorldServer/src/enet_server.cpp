@@ -1927,6 +1927,7 @@ struct EnetServer::Impl {
                 });
             }
             monster->respawn_at = now + std::chrono::seconds(monster->retry_spawn_seconds);
+            const auto killer_character_id = monster->death_killer_character_id;
             monster->death_finalizer_submitted = false;
             monster->death_context_captured = false;
             monster->death_killer_session_id.clear();
@@ -1934,9 +1935,9 @@ struct EnetServer::Impl {
             monster->death_killer_bounty_objectives.clear();
             monster->death_reward_eligible = false;
             monster->pending_death_drops.clear();
-            if (!monster->death_killer_character_id.empty()) {
+            if (!killer_character_id.empty()) {
                 for (const auto& [peer, player] : players) {
-                    if (player.character_id != monster->death_killer_character_id) continue;
+                    if (player.character_id != killer_character_id) continue;
                     send_json(peer, honghuang::protocol::MessageType::CombatEvent, Json{
                         {"accepted", true}, {"action", "monster_death_settlement"},
                         {"target_entity_id", monster->runtime_id}, {"committed", true},
