@@ -134,3 +134,17 @@ The local outbox database now also creates `monster_damage_contributions`, keyed
 ### Spawn-point identity versus contribution-instance identity
 
 A monster's network `runtime_id` identifies its stable spawn point and is reused after respawn. It must **not** be used as the durable contribution ledger key: the ledger's finalization tombstone would otherwise reject every later life of that spawn. WorldServer now assigns a fresh `contribution_instance_id` when each monster life is created (including configured spawns and respawns). Contribution snapshots send this per-life ID as `monster_instance_id`; the stable `runtime_id` remains unchanged for targeting and replication.
+
+
+## Bounded asynchronous monster contribution writer groundwork
+
+A separate `MonsterContributionWriter` now provides the first worker-thread boundary for the SQLite contribution ledger:
+
+- Combat-facing callers submit immutable records to a bounded FIFO (default capacity 32,768); submission fails explicitly when full or stopping.
+- A single worker performs SQLite writes away from the game thread. It preserves the exact record and `write_id` across retries, with a 100 ms–2 s capped backoff.
+- Per-monster pending counts allow a death path to wait for one life-instance queue to drain before reading/finalizing its ledger. The wait has a caller-supplied timeout.
+- The queue is intentionally FIFO, so a permanently invalid write blocks later writes rather than silently skipping evidence. Monitor `last_error()`; repair/restart policy is still required for a poison record.
+- The queue is process-local and is **not durable until SQLite confirms the write**. A process crash or immediate shutdown can lose records still waiting in memory. Callers must stop accepting damage before draining a dying monster, and must not finalize on a drain timeout.
+- `stop()` is immediate; it does not claim that queued records were flushed. The owner must drain relevant instances before stopping if it needs those records.
+
+This is an isolated writer component and test target only. The combat hit paths are not yet connected, the 256-entry in-memory map is still active, and no claim is made that arbitrary contributor counts are captured yet. The next integration must reserve queue capacity before applying damage, track closing life-instance IDs, drain before finalization, and solve the center API's 256-contributor-per-event limit with complete chunk/snapshot semantics before removing the cap.
