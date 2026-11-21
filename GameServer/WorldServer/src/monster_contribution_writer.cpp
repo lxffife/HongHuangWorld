@@ -36,6 +36,14 @@ bool MonsterContributionWriter::submit(const MonsterContributionRecord& contribu
             error = "monster contribution writer is stopping or draining";
             return false;
         }
+        const auto duplicate = std::find_if(pending_.begin(), pending_.end(),
+            [&contribution](const MonsterContributionRecord& queued) {
+                return queued.write_id == contribution.write_id;
+            });
+        if (duplicate != pending_.end()) {
+            error = "monster contribution write ID is already pending; duplicate hit rejected";
+            return false;
+        }
         if (pending_.size() >= capacity_) {
             error = "monster contribution queue is full";
             return false;
