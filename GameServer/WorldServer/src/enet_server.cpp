@@ -3002,8 +3002,8 @@ struct EnetServer::Impl {
         }
         std::string contribution_error;
         const auto contribution_record = make_monster_contribution_record(*target, player, damage.damage);
-        if (!impl_->monster_contribution_writer ||
-            !impl_->monster_contribution_writer->submit_before_damage(
+        if (!monster_contribution_writer ||
+            !monster_contribution_writer->submit_before_damage(
                 contribution_record,
                 [&target, &damage]() noexcept {
                     target->state.health = static_cast<float>(damage.remaining_health);
