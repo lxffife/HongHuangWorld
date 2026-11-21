@@ -532,5 +532,30 @@ int main() {
     }
     remove_database(life_state_path);
 
+    const std::string pending_life_recovery_path = "world_outbox_pending_life_recovery_test.sqlite";
+    remove_database(pending_life_recovery_path);
+    {
+        // Upgrade/recovery path: a pre-existing death intent predates the life-state table.
+        honghuang::persistence::DurableOutbox old_database(pending_life_recovery_path, 8);
+        std::string error;
+        honghuang::persistence::PendingMonsterDeathRecord pending;
+        pending.monster_instance_id = "legacy-pending-life";
+        pending.runtime_id = "legacy-spawn";
+        pending.payload = R"({"version":1})";
+        pending.created_at_ms = 1100;
+        assert(old_database.save_pending_monster_death(pending, error));
+    }
+    {
+        honghuang::persistence::DurableOutbox upgraded(pending_life_recovery_path, 8);
+        std::string error;
+        honghuang::persistence::MonsterLifeStateRecord initial{
+            "legacy-spawn", "new-random-id", "old_monster", 120.0};
+        honghuang::persistence::MonsterLifeStateRecord restored;
+        assert(upgraded.ensure_monster_life_state(initial, restored, error));
+        assert(restored.monster_instance_id == "legacy-pending-life");
+        assert(restored.health == 0.0);
+    }
+    remove_database(pending_life_recovery_path);
+
     return 0;
 }
