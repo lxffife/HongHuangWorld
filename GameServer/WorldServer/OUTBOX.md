@@ -143,11 +143,11 @@ A separate `MonsterContributionWriter` now provides the first worker-thread boun
 - Combat-facing callers submit immutable records to a bounded FIFO (default capacity 32,768); submission fails explicitly when full or stopping.
 - A single worker performs SQLite writes away from the game thread. It preserves the exact record and `write_id` across retries, with a 100 ms–2 s capped backoff.
 - Per-monster pending counts allow a death path to wait for one life-instance queue to drain before reading/finalizing its ledger. The wait has a caller-supplied timeout.
-- The queue is intentionally FIFO, so a permanently invalid write blocks later writes rather than silently skipping evidence. Monitor `last_error()`; repair/restart policy is still required for a poison record.
-- The queue is process-local and is **not durable until SQLite confirms the write**. A process crash or immediate shutdown can lose records still waiting in memory. Callers must stop accepting damage before draining a dying monster, and must not finalize on a drain timeout.
-- `stop()` is immediate; it does not claim that queued records were flushed. The owner must drain relevant instances before stopping if it needs those records.
+- The in-memory queue is a bounded scheduling layer; the SQLite inbox is the durable source of truth. A successful submission commits the full write before the damage callback runs.
+- The worker is FIFO and retains the exact write ID/payload while retrying. A poison record blocks later writes rather than silently skipping evidence; monitor `last_error()`.
+- `stop()` is immediate and may leave rows in the durable inbox. They are not lost: the next writer startup reloads and replays them. `stop_after_drain()` is still preferred for orderly shutdown.
 
-The WorldServer now owns one writer alongside its `DurableOutbox`: it is constructed only after the SQLite owner is initialized, and is explicitly stopped during shutdown before the outbox delivery workers. Member declaration order also ensures the writer is destroyed before the SQLite owner. This establishes safe resource lifetime, but does not yet submit combat records.
+The WorldServer owns one writer alongside its `DurableOutbox`. It is constructed after the SQLite owner, reloads pending inbox rows before combat starts, and is stopped before the outbox owner is destroyed. Member declaration order also preserves safe resource lifetime.
 
 The direct melee hit path is now the first live integration:
 
@@ -158,35 +158,35 @@ The direct melee hit path is now the first live integration:
 
 **Historical partial-integration note:** this paragraph described the state before the live death-finalization integration below. The current lethal paths now drain and snapshot the SQLite ledger. The 256-entry in-memory compatibility map remains only for legacy diagnostics; SQLite is the contributor source for finalization.
 
-The writer's lethal-path integration is now complete for melee, projectile, and online/offline burn. The current finalizer emits multiple immutable contribution events in chunks of at most 256 contributors; the remaining issue is durable recovery of pending death intent after an abrupt process crash.
+The writer's lethal-path integration is complete for melee, projectile, and online/offline burn. Lethal contributions are atomically committed with death intent; nonlethal contributions use the durable inbox and replay path. The finalizer emits immutable contribution events in chunks of at most 256 contributors.
 
 ### Projectile impact admission
 
 A player-owned projectile that hits a live monster now creates the same immutable per-life contribution record as a melee hit and calls `submit_before_damage` before changing health. Only an accepted queue submission applies the calculated health value. Slow, freeze, and burn-on-hit effects are applied only after admission succeeds, so a full/stopping writer cannot leave status effects without the corresponding damage. If admission fails, the server logs the rejection, sends the projectile owner a retry-later combat response, and removes the projectile so it cannot hit repeatedly on later ticks. After admission, the legacy in-memory contribution map is still updated for existing death/bounty compatibility.
 
-This does not yet make projectiles crash-safe before SQLite confirms the asynchronous write, and it does not change the current in-memory death-snapshot/finalization boundary. Online and offline burn ticks use the same admission contract because the effect retains the authenticated source snapshot.
+Projectile contribution admission is durable before health changes. The remaining crash-consistency boundary is between the SQLite admission and the in-memory health mutation, not loss of an accepted inbox row.
 
 
 ### Pre-damage admission contract
 
-The writer exposes `submit_before_damage(record, callback, error)` as the required ordering primitive for combat integration. It first reserves a slot by successfully submitting the immutable contribution record, then invokes a `noexcept` health-mutation callback. If the bounded queue is full or stopping, the callback is not invoked, so that hit must be rejected without changing monster health. The callback is constrained to be non-throwing to avoid queueing contribution evidence for a mutation that then aborts. This is an ordering primitive only: it does not remove the asynchronous crash window, and all live combat call sites still need to adopt it before the contract is active in gameplay.
+The writer exposes `submit_before_damage(record, callback, error)` as the required ordering primitive. It first commits the immutable contribution into the SQLite inbox, then invokes a `noexcept` health-mutation callback. If the durable inbox is busy, invalid, or the bounded scheduling queue is full/stopping, the callback is not invoked and the hit is rejected. The callback is constrained to be non-throwing. All live nonlethal melee/projectile/burn paths use this contract; lethal paths use the stronger atomic contribution-plus-death-intent transaction.
 
 
-The async writer test now holds a SQLite `BEGIN IMMEDIATE` lock while the worker attempts to persist a queued hit. It asserts that the bounded queue still counts the in-flight record and that `wait_until_drained(instance)` times out rather than reporting a false drain. After releasing the database lock, the same test waits for the record to persist and verifies the aggregated damage/hit count. This exercises the important distinction between “not waiting in the queue” and “confirmed committed to SQLite.”
+The async writer test now persists two hits, closes/reopens the database before a worker starts, then verifies the new writer reconstructs and drains the queue. It also holds a SQLite write lock to verify backpressure, tests duplicate admission without double-counting, and simulates a crash after inbox admission but before aggregation.
 
 ### Periodic burn tick admission
 
-When a burn tick is due and its owner is still online, WorldServer snapshots the periodic-effect timer before consuming the tick, builds a contribution record for the effective damage, and submits it through `submit_before_damage`. The health mutation occurs only after queue admission. If the writer is unavailable, stopping, or full, the server restores the exact pre-consumption burn timer state, logs the backpressure event, notifies the owner, and skips the rest of that monster's update; the same tick remains eligible for retry on a later world update.
+When a burn tick is due and its owner is still online, WorldServer snapshots the periodic-effect timer before consuming the tick, builds a contribution record for the effective damage, and submits it through `submit_before_damage`. The SQLite inbox commit occurs before health mutation. If admission fails, the server restores the exact pre-consumption burn timer state, logs backpressure, notifies the owner, and retries the same tick on a later update.
 
-After successful admission, the legacy in-memory contribution map is updated using the captured session/character/objective attribution, even when the burn source has disconnected. If queue admission fails, the exact pre-tick effect state is restored and the tick is retried later; an online source is notified, while an offline source simply retains the pending tick. A defensive legacy fallback still applies damage without a durable write only if an effect somehow lacks its captured authenticated source.
+After successful durable admission, the legacy in-memory contribution map is updated using captured session/character/objective attribution, even when the burn source has disconnected. If admission fails, the exact pre-tick effect state is restored and the tick is retried later. A defensive source-less legacy fallback persists a death intent before applying lethal damage.
 
-This integration removes the online-owner burn tick's lost-tick failure mode under queue backpressure. The live death-finalization integration below now stops new hits, drains the writer, loads the SQLite ledger, and atomically finalizes its event batch. The process-crash window for an unpersisted pending-death intent remains open.
+This integration removes the online-owner burn tick's lost-tick failure mode under admission backpressure. Death finalization stops new hits, waits for the durable inbox to drain for that life, loads the SQLite ledger, and atomically finalizes its event batch.
 
 ### Bounded graceful shutdown for contribution writes
 
-WorldServer shutdown now calls `MonsterContributionWriter::stop_after_drain` after the main combat loop has stopped admitting new hits and before the SQLite owner is destroyed. It waits up to five seconds for the process-local FIFO to become empty, then stops and joins the worker. A successful return means every record that was still queued at shutdown reached SQLite before the worker exited. A timeout returns false and logs the remaining queue size plus the last SQLite error; those remaining in-memory records are explicitly **not** considered durable and may be lost on process termination. The timeout bounds the queue-drain wait, while joining may additionally wait for an already-running SQLite call to return.
+WorldServer shutdown calls `MonsterContributionWriter::stop_after_drain` after the combat loop stops admitting new hits and before the SQLite owner is destroyed. It waits up to five seconds for the durable inbox to be aggregated and acknowledged, then stops and joins the worker. A timeout logs the remaining queue size and last SQLite error; unfinished rows remain in SQLite and are replayed on the next startup. Joining may additionally wait for an already-running SQLite call to return.
 
-This reduces normal-shutdown loss but does not close the abrupt-process-crash window, and it does not replace per-monster death-time drain/finalization. Operators should treat a shutdown timeout as a persistence warning requiring investigation.
+This reduces shutdown backlog but does not replace per-monster death-time drain/finalization. A timeout is an operational warning; it no longer implies that admitted contribution rows are lost.
 
 
 ### Empty-objective monster finalization
