@@ -57,7 +57,9 @@ int main() {
         assert(rows.front().first_hit_at_ms == 100);
         assert(rows.front().last_hit_at_ms == 120);
         assert(writer.last_error().empty());
-        writer.stop();
+        assert(writer.stop_after_drain(3s));
+        assert(writer.pending_count() == 0);
+
     }
     remove_database(path);
     return 0;
