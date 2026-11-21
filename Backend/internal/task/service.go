@@ -1002,6 +1002,8 @@ func (s *Service) ListPublisherContributionAudit(ctx context.Context, accountID,
  return result,nil
 }
 
+// ListContributions returns recent immutable damage snapshots to any account that participated in the bounty.
+// Internal session IDs and account IDs are intentionally not exposed in the player-facing response.
 func (s *Service) ListContributions(ctx context.Context, accountID, taskID string) (BountyContributionHistory, error) {
  if accountID=="" || !validUUID(taskID) { return BountyContributionHistory{},ErrInvalid }
  taskID=strings.ToLower(taskID)
