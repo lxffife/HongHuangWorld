@@ -57,8 +57,15 @@ int main() {
         assert(rows.front().first_hit_at_ms == 100);
         assert(rows.front().last_hit_at_ms == 120);
         assert(writer.last_error().empty());
+        auto final_write = first;
+        final_write.write_id = "writer-hit-final";
+        final_write.total_damage = 5;
+        assert(writer.submit(final_write, error));
         assert(writer.stop_after_drain(3s));
         assert(writer.pending_count() == 0);
+        rows = outbox.load_monster_contributions("life-a", error);
+        assert(rows.size() == 1 && rows.front().total_damage == 45);
+        assert(rows.front().hit_count == 4);
 
     }
     remove_database(path);
