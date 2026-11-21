@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <nlohmann/json.hpp>
+#include <stdexcept>
 #include <utility>
 
 namespace honghuang::persistence {
