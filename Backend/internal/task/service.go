@@ -905,11 +905,6 @@ type BountyContributionHistory struct {
  Events []MonsterContributionSnapshot `json:"events"`
 }
 
-// ListContributions returns recent immutable damage snapshots to any account
-// that participated in the bounty. Internal session IDs and account IDs are
-// intentionally not exposed in the player-facing response.
-
-
 // ListPublisherContributionAudit exposes task-wide contribution evidence only
 // to an active publisher faction leader or officer. Authorization and reads
 // share one transaction so membership revocation cannot race the audit query.
