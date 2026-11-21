@@ -66,17 +66,17 @@ The following lethal paths are connected: direct melee, arrow/spell projectile i
 
 ## Bounty monster contribution ledger (migration 000059)
 
-The center service now accepts immutable death-time contribution snapshots at:
+The center service accepts immutable death-time contribution snapshots at:
 
 `POST /api/v1/servers/bounties/contributions`
 
 The request uses the same `X-World-Server-Key` and `X-World-Server-Node` authentication as bounty objective events. It contains a stable event UUID, task ID, runtime monster instance ID, monster definition ID, and 1–64 contributors (session ID, character ID, effective damage, hit count).
 
-The center service verifies the task is active and unexpired, the configured objective is a matching `monster_killed` objective, each historical session belongs to the reporting node and task world, and every derived account is an accepted participant. Historical `active`, `saving`, and `closed` sessions are eligible; a contributor does not have to remain online when the outbox event is delivered. Account IDs are resolved from server-owned character/soul records and are never accepted from the payload.
+The center service verifies the task is active and unexpired, the configured objective is a matching `monster_killed` objective, each historical session belongs to the reporting node and task world, and stores only contributors whose derived account is an accepted participant; unrelated attackers are ignored. Historical `active`, `saving`, and `closed` sessions are eligible; a contributor does not have to remain online when the outbox event is delivered. Account IDs are resolved from server-owned character/soul records and are never accepted from the payload.
 
 Event UUID reuse with a different normalized payload is rejected. The event envelope and contributor rows are stored in the same PostgreSQL transaction and protected by immutable-record triggers.
 
-**Important boundary:** this endpoint is an audit/persistence foundation only. It does not advance objective progress, award bounty credit, or change escrow settlement. The existing kill event still attributes objective progress to the last hitter, and settlement remains equal-share until the cooperative-counting and contribution-weighting rules are explicitly decided. WorldServer has not yet been wired to enqueue these snapshots; that is the next integration step.
+**Important boundary:** this endpoint is an audit/persistence foundation only. It does not advance objective progress, award bounty credit, or change escrow settlement. The existing kill event still attributes objective progress to the last hitter, and settlement remains equal-share until the cooperative-counting and contribution-weighting rules are explicitly decided. WorldServer now writes these snapshots to its durable SQLite outbox and retries delivery.
 
 
 ## Bounty contribution snapshot delivery
@@ -85,4 +85,4 @@ On each authoritative monster death, WorldServer now creates a separate `bounty_
 
 The outbox worker posts the snapshot to `POST /api/v1/servers/bounties/contributions`. The center service verifies each historical session against the reporting node and world, then stores only contributors who are accepted participants in that bounty. Other attackers are ignored rather than invalidating valid participant contributions.
 
-The kill-progress event and contribution-snapshot event are currently separate SQLite enqueue operations, not one atomic batch. A storage/capacity failure can therefore preserve one while failing the other; both failures are logged, and neither changes the resolved combat result. This gap is tracked for a later batch-enqueue improvement.
+The kill-progress event and contribution-snapshot event are now inserted together through a single SQLite transaction. If capacity, validation, or storage fails, neither event is accepted into the outbox, and the resolved combat result is not rolled back. The outbox test suite now covers whole-batch retry idempotency, payload conflicts, and all-or-nothing capacity failure.
