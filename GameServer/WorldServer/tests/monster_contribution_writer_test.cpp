@@ -118,15 +118,29 @@ int main() {
         crash_pending.first_hit_at_ms = 900;
         crash_pending.last_hit_at_ms = 900;
         assert(outbox.admit_monster_contribution(crash_pending, error));
+
+        auto crash_after_aggregate = first;
+        crash_after_aggregate.write_id = "writer-hit-after-aggregate";
+        crash_after_aggregate.monster_instance_id = "life-aggregate-recovered";
+        crash_after_aggregate.total_damage = 33;
+        crash_after_aggregate.first_hit_at_ms = 950;
+        crash_after_aggregate.last_hit_at_ms = 950;
+        assert(outbox.admit_monster_contribution(crash_after_aggregate, error));
+        // Simulate termination after the ledger transaction but before inbox acknowledgement.
+        assert(outbox.record_monster_contribution(crash_after_aggregate, error));
     }
     {
         honghuang::persistence::DurableOutbox reopened(path, 8);
         honghuang::persistence::MonsterContributionWriter recovered_writer(reopened, 8);
         assert(recovered_writer.pending_count_for_monster("life-recovered") == 1);
+        assert(recovered_writer.pending_count_for_monster("life-aggregate-recovered") == 1);
         assert(recovered_writer.wait_until_drained("life-recovered", 3s));
+        assert(recovered_writer.wait_until_drained("life-aggregate-recovered", 3s));
         std::string error;
         const auto rows = reopened.load_monster_contributions("life-recovered", error);
         assert(error.empty() && rows.size() == 1 && rows.front().total_damage == 77);
+        const auto aggregated_rows = reopened.load_monster_contributions("life-aggregate-recovered", error);
+        assert(error.empty() && aggregated_rows.size() == 1 && aggregated_rows.front().total_damage == 33);
         assert(reopened.load_pending_monster_contribution_writes(8, error).empty());
         assert(recovered_writer.stop_after_drain(3s));
     }
