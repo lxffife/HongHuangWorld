@@ -161,10 +161,40 @@ bool DurableOutbox::enqueue(const OutboxEvent& event, std::string& error) {
         return false;
     }
 
+    if (death != nullptr &&
+        (death->monster_instance_id != item.monster_instance_id ||
+         death->runtime_id.empty() || death->runtime_id.size() > 96 ||
+         death->payload.empty() || death->payload.size() > 1024 * 1024)) {
+        error = "lethal contribution and pending death intent must share a valid monster instance";
+        return false;
+    }
     std::lock_guard lock(mutex_);
     bool transaction_open = false;
     try {
         if (!execute("BEGIN IMMEDIATE", error)) return false;
+        const auto persist_death_intent = [&] {
+            if (death == nullptr) return;
+            Stmt existing_death(db_,
+                "SELECT runtime_id,payload FROM pending_monster_deaths WHERE monster_instance_id=?");
+            bind_text(existing_death.get(), 1, death->monster_instance_id);
+            const int existing_death_result = sqlite3_step(existing_death.get());
+            if (existing_death_result == SQLITE_ROW) {
+                if (column_text(existing_death.get(), 0) != death->runtime_id ||
+                    column_text(existing_death.get(), 1) != death->payload)
+                    throw std::runtime_error("pending monster death conflicts with existing immutable intent");
+                return;
+            }
+            if (existing_death_result != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+            Stmt insert_death(db_,
+                "INSERT INTO pending_monster_deaths(monster_instance_id,runtime_id,payload,created_at_ms) "
+                "VALUES(?,?,?,?)");
+            bind_text(insert_death.get(), 1, death->monster_instance_id);
+            bind_text(insert_death.get(), 2, death->runtime_id);
+            bind_text(insert_death.get(), 3, death->payload);
+            sqlite3_bind_int64(insert_death.get(), 4, death->created_at_ms);
+            if (sqlite3_step(insert_death.get()) != SQLITE_DONE)
+                throw std::runtime_error(sqlite3_errmsg(db_));
+        };
         transaction_open = true;
 
         // A repeated event ID is idempotent only when it represents the exact same event.
@@ -459,6 +489,19 @@ std::vector<PendingMonsterDeathRecord> DurableOutbox::load_pending_monster_death
 
 bool DurableOutbox::record_monster_contribution(
     const MonsterContributionRecord& item, std::string& error) {
+    return record_monster_contribution_internal(item, nullptr, error);
+}
+
+bool DurableOutbox::record_monster_contribution_and_pending_death(
+    const MonsterContributionRecord& item, const PendingMonsterDeathRecord& death,
+    std::string& error) {
+    return record_monster_contribution_internal(item, &death, error);
+}
+
+bool DurableOutbox::record_monster_contribution_internal(
+    const MonsterContributionRecord& item, const PendingMonsterDeathRecord* death,
+    std::string& error) {
+    error.clear();
     if (item.write_id.empty() || item.write_id.size() > 128 ||
         item.monster_instance_id.empty() || item.monster_instance_id.size() > 96 ||
         item.monster_definition_id.empty() || item.monster_definition_id.size() > 64 ||
@@ -497,6 +540,7 @@ bool DurableOutbox::record_monster_contribution(
                 sqlite3_column_int64(existing.get(), 7) == item.last_hit_at_ms &&
                 column_text(existing.get(), 8) == item.bounty_objectives_json;
             if (!same) throw std::runtime_error("monster contribution write id reused with different data");
+            persist_death_intent();
             if (!execute("COMMIT", error)) throw std::runtime_error(error);
             transaction_open = false;
             return true;
@@ -541,6 +585,7 @@ bool DurableOutbox::record_monster_contribution(
         if (sqlite3_step(upsert.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
         if (sqlite3_changes(db_) != 1)
             throw std::runtime_error("monster instance id is already associated with a different definition");
+        persist_death_intent();
         if (!execute("COMMIT", error)) throw std::runtime_error(error);
         transaction_open = false;
         return true;
