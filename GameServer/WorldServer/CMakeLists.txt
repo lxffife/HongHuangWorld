@@ -28,6 +28,7 @@ add_executable(world_server
     src/enet_server.cpp
     src/frame.cpp
     src/durable_outbox.cpp
+    src/monster_contribution_writer.cpp
 )
 
 target_include_directories(world_server PRIVATE include)
@@ -107,6 +108,15 @@ if(BUILD_TESTING)
     target_include_directories(durable_outbox_test PRIVATE include)
     target_link_libraries(durable_outbox_test PRIVATE SQLite::SQLite3 Threads::Threads)
     add_test(NAME durable_outbox_test COMMAND durable_outbox_test)
+
+    add_executable(monster_contribution_writer_test
+        tests/monster_contribution_writer_test.cpp
+        src/monster_contribution_writer.cpp
+        src/durable_outbox.cpp
+    )
+    target_include_directories(monster_contribution_writer_test PRIVATE include)
+    target_link_libraries(monster_contribution_writer_test PRIVATE SQLite::SQLite3 Threads::Threads)
+    add_test(NAME monster_contribution_writer_test COMMAND monster_contribution_writer_test)
 endif()
 
 if(MSVC)
