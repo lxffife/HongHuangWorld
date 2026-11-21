@@ -884,6 +884,22 @@ type MonsterContributionSnapshot struct {
  Contributors []MonsterContributionDetail `json:"contributors"`
 }
 
+type BountyContributionAuditCharacter struct {
+ CharacterID string `json:"character_id"`
+ Damage int64 `json:"damage"`
+ HitCount int64 `json:"hit_count"`
+ MonsterCount int64 `json:"monster_count"`
+ DamageSharePercent float64 `json:"damage_share_percent"`
+}
+
+type BountyContributionAudit struct {
+ TaskID string `json:"task_id"`
+ FactionID string `json:"faction_id"`
+ TotalDamage int64 `json:"total_damage"`
+ Characters []BountyContributionAuditCharacter `json:"characters"`
+ Events []MonsterContributionSnapshot `json:"events"`
+}
+
 type BountyContributionHistory struct {
  TaskID string `json:"task_id"`
  Events []MonsterContributionSnapshot `json:"events"`
@@ -892,6 +908,105 @@ type BountyContributionHistory struct {
 // ListContributions returns recent immutable damage snapshots to any account
 // that participated in the bounty. Internal session IDs and account IDs are
 // intentionally not exposed in the player-facing response.
+
+
+// ListPublisherContributionAudit exposes task-wide contribution evidence only
+// to an active publisher faction leader or officer. Authorization and reads
+// share one transaction so membership revocation cannot race the audit query.
+func (s *Service) ListPublisherContributionAudit(ctx context.Context, accountID, factionID, taskID string) (BountyContributionAudit, error) {
+ if accountID=="" || !validUUID(factionID) || !validUUID(taskID) {
+  return BountyContributionAudit{}, ErrInvalid
+ }
+ factionID=strings.ToLower(factionID)
+ taskID=strings.ToLower(taskID)
+ tx,err:=s.db.BeginTx(ctx,nil)
+ if err!=nil { return BountyContributionAudit{},fmt.Errorf("begin bounty contribution audit: %w",err) }
+ defer tx.Rollback()
+
+ var role string
+ err=tx.QueryRowContext(ctx,`SELECT m.role
+  FROM bounty_tasks t
+  JOIN factions f ON f.id=t.publisher_id
+  JOIN faction_members m ON m.faction_id=f.id
+  WHERE t.id=$1::uuid AND t.publisher_type='faction'
+   AND t.publisher_id=$2::uuid AND f.status='active' AND m.account_id=$3::uuid
+  FOR SHARE OF t,f,m`,taskID,factionID,accountID).Scan(&role)
+ if errors.Is(err,sql.ErrNoRows) { return BountyContributionAudit{},ErrForbidden }
+ if err!=nil { return BountyContributionAudit{},fmt.Errorf("authorize bounty contribution audit: %w",err) }
+ if role!="leader" && role!="officer" { return BountyContributionAudit{},ErrForbidden }
+
+ result:=BountyContributionAudit{
+  TaskID:taskID,FactionID:factionID,Characters:make([]BountyContributionAuditCharacter,0),
+  Events:make([]MonsterContributionSnapshot,0),
+ }
+ if err=tx.QueryRowContext(ctx,`SELECT COALESCE(SUM(damage),0)
+  FROM bounty_monster_contributors c
+  JOIN bounty_monster_contribution_events e ON e.event_id=c.event_id
+  WHERE e.task_id=$1::uuid`,taskID).Scan(&result.TotalDamage);err!=nil {
+  return BountyContributionAudit{},fmt.Errorf("sum bounty contribution damage: %w",err)
+ }
+
+ rows,err:=tx.QueryContext(ctx,`SELECT c.character_id::text,SUM(c.damage),SUM(c.hit_count),
+  COUNT(DISTINCT c.event_id)
+  FROM bounty_monster_contributors c
+  JOIN bounty_monster_contribution_events e ON e.event_id=c.event_id
+  WHERE e.task_id=$1::uuid
+  GROUP BY c.character_id
+  ORDER BY SUM(c.damage) DESC,c.character_id`,taskID)
+ if err!=nil { return BountyContributionAudit{},fmt.Errorf("list bounty contribution character totals: %w",err) }
+ for rows.Next() {
+  var item BountyContributionAuditCharacter
+  if err=rows.Scan(&item.CharacterID,&item.Damage,&item.HitCount,&item.MonsterCount);err!=nil {
+   rows.Close()
+   return BountyContributionAudit{},fmt.Errorf("scan bounty contribution character total: %w",err)
+  }
+  if result.TotalDamage>0 { item.DamageSharePercent=float64(item.Damage)*100/float64(result.TotalDamage) }
+  result.Characters=append(result.Characters,item)
+ }
+ if err=rows.Err();err!=nil { rows.Close();return BountyContributionAudit{},fmt.Errorf("iterate bounty contribution character totals: %w",err) }
+ if err=rows.Close();err!=nil { return BountyContributionAudit{},fmt.Errorf("close bounty contribution character totals: %w",err) }
+
+ eventRows,err:=tx.QueryContext(ctx,`WITH visible_events AS (
+  SELECT event_id,monster_instance_id,monster_definition_id,created_at
+  FROM bounty_monster_contribution_events
+  WHERE task_id=$1::uuid
+  ORDER BY created_at DESC,event_id DESC
+  LIMIT 200
+ )
+ SELECT e.event_id::text,e.monster_instance_id,e.monster_definition_id,e.created_at,
+  c.character_id::text,c.damage,c.hit_count
+ FROM visible_events e
+ JOIN bounty_monster_contributors c ON c.event_id=e.event_id
+ ORDER BY e.created_at DESC,e.event_id DESC,c.damage DESC,c.character_id`,taskID)
+ if err!=nil { return BountyContributionAudit{},fmt.Errorf("list bounty contribution audit events: %w",err) }
+ indexByEvent:=make(map[string]int)
+ for eventRows.Next() {
+  var eventID,instanceID,definitionID,characterID string
+  var createdAt time.Time
+  var damage,hitCount int64
+  if err=eventRows.Scan(&eventID,&instanceID,&definitionID,&createdAt,&characterID,&damage,&hitCount);err!=nil {
+   eventRows.Close()
+   return BountyContributionAudit{},fmt.Errorf("scan bounty contribution audit event: %w",err)
+  }
+  idx,ok:=indexByEvent[eventID]
+  if !ok {
+   idx=len(result.Events)
+   indexByEvent[eventID]=idx
+   result.Events=append(result.Events,MonsterContributionSnapshot{
+    EventID:eventID,MonsterInstanceID:instanceID,MonsterDefinitionID:definitionID,
+    CreatedAt:createdAt,Contributors:make([]MonsterContributionDetail,0),
+   })
+  }
+  result.Events[idx].Contributors=append(result.Events[idx].Contributors,MonsterContributionDetail{
+   CharacterID:characterID,Damage:damage,HitCount:hitCount,
+  })
+ }
+ if err=eventRows.Err();err!=nil { eventRows.Close();return BountyContributionAudit{},fmt.Errorf("iterate bounty contribution audit events: %w",err) }
+ if err=eventRows.Close();err!=nil { return BountyContributionAudit{},fmt.Errorf("close bounty contribution audit events: %w",err) }
+ if err=tx.Commit();err!=nil { return BountyContributionAudit{},fmt.Errorf("commit bounty contribution audit: %w",err) }
+ return result,nil
+}
+
 func (s *Service) ListContributions(ctx context.Context, accountID, taskID string) (BountyContributionHistory, error) {
  if accountID=="" || !validUUID(taskID) { return BountyContributionHistory{},ErrInvalid }
  taskID=strings.ToLower(taskID)
