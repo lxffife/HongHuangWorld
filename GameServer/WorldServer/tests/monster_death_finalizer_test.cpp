@@ -26,6 +26,12 @@ int main() {
         contribution.bounty_objectives_json = "[]";
         std::string error;
         assert(writer.submit(contribution, error));
+        honghuang::persistence::PendingMonsterDeathRecord intent;
+        intent.monster_instance_id = "life-death-1";
+        intent.runtime_id = "spawn-death-1";
+        intent.payload = R"({"version":1,"killer_objectives":[],"drops":[]})";
+        intent.created_at_ms = 1;
+        assert(outbox.save_pending_monster_death(intent, error));
 
         honghuang::persistence::MonsterDeathFinalizer finalizer(outbox, writer);
         bool builder_called = false;
@@ -61,6 +67,12 @@ int main() {
         assert(error.empty() && first_event.has_value());
         const auto second_event = outbox.find("death-event-2", error);
         assert(error.empty() && second_event.has_value());
+        const auto pending_deaths = outbox.load_pending_monster_deaths(error);
+        assert(error.empty() && pending_deaths.size() == 1);
+        assert(pending_deaths.front().committed_at_ms > 0);
+        assert(!pending_deaths.front().prepared_events_json.empty());
+        assert(outbox.acknowledge_monster_death_respawn("life-death-1", error));
+        assert(outbox.load_pending_monster_deaths(error).empty());
         assert(finalizer.stop_after_drain(1s));
         assert(writer.stop_after_drain(1s));
     }
