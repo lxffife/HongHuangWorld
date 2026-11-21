@@ -905,7 +905,7 @@ type BountyContributionAudit struct {
 
 type bountyAuditCursor struct {
  CreatedAt time.Time `json:"created_at"`
- EventID string `json:"event_id"`
+ MonsterInstanceID string `json:"monster_instance_id"`
 }
 
 func decodeBountyAuditCursor(value string) (*bountyAuditCursor,error) {
@@ -913,8 +913,8 @@ func decodeBountyAuditCursor(value string) (*bountyAuditCursor,error) {
  raw,err:=base64.RawURLEncoding.DecodeString(value)
  if err!=nil { return nil,ErrInvalid }
  var cursor bountyAuditCursor
- if err=json.Unmarshal(raw,&cursor);err!=nil || cursor.CreatedAt.IsZero() || !validUUID(cursor.EventID) { return nil,ErrInvalid }
- cursor.EventID=strings.ToLower(cursor.EventID)
+ if err=json.Unmarshal(raw,&cursor);err!=nil || cursor.CreatedAt.IsZero() ||
+  strings.TrimSpace(cursor.MonsterInstanceID)=="" || len(cursor.MonsterInstanceID)>96 { return nil,ErrInvalid }
  return &cursor,nil
 }
 
