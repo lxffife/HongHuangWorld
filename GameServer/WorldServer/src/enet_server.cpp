@@ -4130,19 +4130,22 @@ struct EnetServer::Impl {
                             continue;
                         }
                     }
-                    if (monster.death_intent_persisted) {
-                        std::string acknowledge_error;
-                        if (!durable_outbox ||
-                            !durable_outbox->acknowledge_monster_death_respawn(
-                                monster.contribution_instance_id, acknowledge_error)) {
-                            std::cerr << "[MonsterDeathIntent] respawn acknowledgement deferred; runtime="
-                                      << monster.runtime_id << " reason=" << acknowledge_error << std::endl;
-                            continue;
-                        }
+                    const auto next_instance_id = make_event_uuid();
+                    std::string respawn_error;
+                    if (!durable_outbox ||
+                        !durable_outbox->respawn_monster_life(
+                            monster.contribution_instance_id,
+                            honghuang::persistence::MonsterLifeStateRecord{
+                                monster.runtime_id, next_instance_id, monster.definition.id,
+                                static_cast<double>(monster.definition.max_health)},
+                            respawn_error)) {
+                        std::cerr << "[MonsterLifeState] respawn deferred; runtime="
+                                  << monster.runtime_id << " reason=" << respawn_error << std::endl;
+                        continue;
                     }
                     monster.state = {monster.definition.spawn_x, monster.definition.spawn_z,
                                      monster.definition.max_health};
-                    monster.contribution_instance_id = make_event_uuid();
+                    monster.contribution_instance_id = next_instance_id;
                     monster.contribution_closing = false;
                     monster.damage_contributions.clear();
                     monster.death_context_captured = false;
