@@ -37,6 +37,10 @@ public:
  DurableOutbox(const DurableOutbox&) = delete; DurableOutbox& operator=(const DurableOutbox&) = delete;
  bool enqueue(const OutboxEvent& event, std::string& error);
  bool enqueue_batch(const std::vector<OutboxEvent>& events, std::string& error);
+ // Durable admission is the acceptance boundary for ordinary combat hits.
+ bool admit_monster_contribution(const MonsterContributionRecord& contribution, std::string& error);
+ std::vector<MonsterContributionRecord> load_pending_monster_contribution_writes(std::size_t limit, std::string& error) const;
+ bool acknowledge_monster_contribution_write(const std::string& write_id, std::string& error);
  bool record_monster_contribution(const MonsterContributionRecord& contribution, std::string& error);
  bool record_monster_contribution_and_pending_death(
      const MonsterContributionRecord& contribution,
