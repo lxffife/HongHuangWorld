@@ -802,9 +802,10 @@ func (s *Service) RecordMonsterContributions(ctx context.Context, nodeKey string
  if err=tx.QueryRowContext(ctx,`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`,event.EventID).Scan(&lock);err!=nil {
   return fmt.Errorf("lock monster contribution event id: %w",err)
  }
- var oldPayload string
- err=tx.QueryRowContext(ctx,`SELECT payload::text FROM bounty_monster_contribution_events WHERE event_id=$1::uuid`,event.EventID).Scan(&oldPayload)
+ var existingNodeKey string
+ err=tx.QueryRowContext(ctx,`SELECT node_key FROM bounty_monster_contribution_events WHERE event_id=$1::uuid`,event.EventID).Scan(&existingNodeKey)
  if err==nil {
+  if existingNodeKey!=nodeKey { return ErrIdempotencyConflict }
   var same bool
   if err=tx.QueryRowContext(ctx,`SELECT payload=$2::jsonb FROM bounty_monster_contribution_events WHERE event_id=$1::uuid`,event.EventID,string(payload)).Scan(&same);err!=nil {
    return fmt.Errorf("compare duplicate monster contribution event: %w",err)
