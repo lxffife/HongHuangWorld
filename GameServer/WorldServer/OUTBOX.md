@@ -264,7 +264,7 @@ Committed death rows are intentionally retained after finalization. Startup reco
 
 Schema upgrades add `prepared_events_json` and `committed_at_ms` to existing `pending_monster_deaths` tables when absent. Tests now cover immutable intent idempotency/conflict detection, prepared batch persistence across database reopen, finalizer replay without invoking the builder, committed-state retention, and respawn acknowledgement.
 
-**Remaining crash boundary:** the lethal contribution and pending-death intent now commit in one SQLite transaction before lethal health mutation for melee, projectiles, and attributed burn. The source-less legacy burn fallback persists its intent before applying lethal health. Nonlethal contribution records are still admitted to a process-local writer FIFO and may be lost if the process crashes before those records reach SQLite, potentially omitting earlier contributors from a recovered death snapshot. The next reliability improvement is durable writer admission/replay for every accepted hit, not another death-state flag.
+**Remaining crash boundary:** both lethal and nonlethal accepted contributions now have durable SQLite admission before health mutation. The remaining ambiguity is cross-domain consistency: a process crash after the inbox commit but before the in-memory damage callback can preserve a contribution for damage that was not reflected in the lost in-memory world state. Resolving this requires durable world-state/damage sequencing or replayable authoritative combat commands.
 
 
 ### Durable combat contribution admission and restart replay
