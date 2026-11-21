@@ -49,6 +49,13 @@ func (h *bountyHandlers) settle(w http.ResponseWriter,r *http.Request){
  writeJSON(w,http.StatusOK,result)
 }
 
+func (h *bountyHandlers) contributions(w http.ResponseWriter,r *http.Request) {
+ account,ok:=h.accountID(w,r);if !ok{return}
+ result,err:=h.service.ListContributions(r.Context(),account,r.PathValue("taskID"))
+ if err!=nil { h.writeError(w,err);return }
+ writeJSON(w,http.StatusOK,result)
+}
+
 func (h *bountyHandlers) progress(w http.ResponseWriter,r *http.Request) {
  account,ok:=h.accountID(w,r);if !ok{return}
  result,err:=h.service.GetProgress(r.Context(),account,r.PathValue("taskID"))
