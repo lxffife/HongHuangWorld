@@ -247,8 +247,13 @@ int main() {
         auto conflicting_write = hit;
         conflicting_write.total_damage = 36;
         assert(!box.record_monster_contribution(conflicting_write, error));
+        error = "stale error from an earlier database operation";
         auto loaded = box.load_monster_contributions("monster-runtime-1", error);
+        assert(error.empty()); // Successful reads clear a reused error buffer.
         assert(loaded.size() == 1);
+        error = "stale error before empty ledger read";
+        const auto absent = box.load_monster_contributions("monster-with-no-ledger", error);
+        assert(absent.empty() && error.empty()); // Empty is distinct from a failed read.
         assert(loaded.front().total_damage == 60 && loaded.front().hit_count == 2);
         assert(loaded.front().first_hit_at_ms == 90 && loaded.front().last_hit_at_ms == 120);
         assert(loaded.front().bounty_objectives_json.find("task-b") != std::string::npos);
