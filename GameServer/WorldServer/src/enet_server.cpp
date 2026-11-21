@@ -2067,6 +2067,13 @@ struct EnetServer::Impl {
                 continue;
             }
             MonsterRuntime current=*found;
+            // A closing life owns an immutable death context. Do not let a config
+            // refresh replace its definition, revive it, or rotate its contribution
+            // instance before its death lifecycle has completed.
+            if (current.contribution_closing) {
+                merged.push_back(std::move(current));
+                continue;
+            }
             const bool rare_changed=current.rare_spawn!=next.rare_spawn;
             const bool first_delay_changed=current.first_spawn_delay_seconds!=next.first_spawn_delay_seconds;
             current.definition=std::move(next.definition);
