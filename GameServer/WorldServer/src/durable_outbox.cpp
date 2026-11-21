@@ -163,6 +163,152 @@ bool DurableOutbox::execute(const char* sql, std::string& error) const {
     return false;
 }
 
+bool DurableOutbox::admit_monster_contribution(
+    const MonsterContributionRecord& item, std::string& error) {
+    error.clear();
+    if (item.write_id.empty() || item.write_id.size() > 128 ||
+        item.monster_instance_id.empty() || item.monster_instance_id.size() > 96 ||
+        item.monster_definition_id.empty() || item.session_id.empty() ||
+        item.character_id.empty() || item.total_damage <= 0 || item.hit_count <= 0 ||
+        item.first_hit_at_ms < 0 || item.last_hit_at_ms < item.first_hit_at_ms ||
+        item.bounty_objectives_json.empty() || item.bounty_objectives_json.size() > 64 * 1024) {
+        error = "invalid durable monster contribution admission";
+        return false;
+    }
+
+    struct BusyTimeoutReset {
+        sqlite3* db{};
+        ~BusyTimeoutReset() { if (db != nullptr) sqlite3_busy_timeout(db, 5000); }
+    };
+    std::unique_lock<std::mutex> lock(mutex_, std::defer_lock);
+    if (!lock.try_lock()) {
+        error = "SQLite writer is busy; retry hit without applying damage";
+        return false;
+    }
+    sqlite3_busy_timeout(db_, 50);
+    BusyTimeoutReset timeout_reset{db_};
+    bool transaction_open = false;
+    try {
+        if (!execute("BEGIN IMMEDIATE", error)) return false;
+        transaction_open = true;
+        const auto verify_existing = [&](const char* sql) {
+            Stmt existing(db_, sql);
+            bind_text(existing.get(), 1, item.write_id);
+            const int result = sqlite3_step(existing.get());
+            if (result == SQLITE_DONE) return false;
+            if (result != SQLITE_ROW) throw std::runtime_error(sqlite3_errmsg(db_));
+            const bool same =
+                column_text(existing.get(), 0) == item.monster_instance_id &&
+                column_text(existing.get(), 1) == item.monster_definition_id &&
+                column_text(existing.get(), 2) == item.session_id &&
+                column_text(existing.get(), 3) == item.character_id &&
+                sqlite3_column_int64(existing.get(), 4) == item.total_damage &&
+                sqlite3_column_int64(existing.get(), 5) == item.hit_count &&
+                sqlite3_column_int64(existing.get(), 6) == item.first_hit_at_ms &&
+                sqlite3_column_int64(existing.get(), 7) == item.last_hit_at_ms &&
+                column_text(existing.get(), 8) == item.bounty_objectives_json;
+            if (!same) throw std::runtime_error("monster contribution write ID reused with different data");
+            return true;
+        };
+        if (verify_existing(
+                "SELECT monster_instance_id,monster_definition_id,session_id,character_id,"
+                "damage,hit_count,first_hit_at_ms,last_hit_at_ms,bounty_objectives_json "
+                "FROM monster_damage_contribution_inbox WHERE write_id=?") ||
+            verify_existing(
+                "SELECT monster_instance_id,monster_definition_id,session_id,character_id,"
+                "damage,hit_count,first_hit_at_ms,last_hit_at_ms,bounty_objectives_json "
+                "FROM monster_damage_contribution_writes WHERE write_id=?")) {
+            if (!execute("COMMIT", error)) throw std::runtime_error(error);
+            transaction_open = false;
+            return true;
+        }
+        Stmt insert(db_,
+            "INSERT INTO monster_damage_contribution_inbox(write_id,monster_instance_id,"
+            "monster_definition_id,session_id,character_id,damage,hit_count,first_hit_at_ms,"
+            "last_hit_at_ms,bounty_objectives_json,admitted_at_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?)");
+        bind_text(insert.get(), 1, item.write_id);
+        bind_text(insert.get(), 2, item.monster_instance_id);
+        bind_text(insert.get(), 3, item.monster_definition_id);
+        bind_text(insert.get(), 4, item.session_id);
+        bind_text(insert.get(), 5, item.character_id);
+        sqlite3_bind_int64(insert.get(), 6, item.total_damage);
+        sqlite3_bind_int64(insert.get(), 7, item.hit_count);
+        sqlite3_bind_int64(insert.get(), 8, item.first_hit_at_ms);
+        sqlite3_bind_int64(insert.get(), 9, item.last_hit_at_ms);
+        bind_text(insert.get(), 10, item.bounty_objectives_json);
+        const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        sqlite3_bind_int64(insert.get(), 11, now);
+        if (sqlite3_step(insert.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+        if (!execute("COMMIT", error)) throw std::runtime_error(error);
+        transaction_open = false;
+        return true;
+    } catch (const std::exception& exception) {
+        if (transaction_open) {
+            std::string ignored;
+            execute("ROLLBACK", ignored);
+        }
+        error = exception.what();
+        return false;
+    }
+}
+
+std::vector<MonsterContributionRecord> DurableOutbox::load_pending_monster_contribution_writes(
+    std::size_t limit, std::string& error) const {
+    error.clear();
+    std::vector<MonsterContributionRecord> result;
+    if (limit == 0) return result;
+    std::lock_guard lock(mutex_);
+    try {
+        Stmt query(db_,
+            "SELECT write_id,monster_instance_id,monster_definition_id,session_id,character_id,"
+            "damage,hit_count,first_hit_at_ms,last_hit_at_ms,bounty_objectives_json "
+            "FROM monster_damage_contribution_inbox ORDER BY admitted_at_ms,write_id LIMIT ?");
+        sqlite3_bind_int64(query.get(), 1, static_cast<sqlite3_int64>(limit));
+        int step = SQLITE_ROW;
+        while ((step = sqlite3_step(query.get())) == SQLITE_ROW) {
+            result.push_back(MonsterContributionRecord{
+                column_text(query.get(), 0), column_text(query.get(), 1),
+                column_text(query.get(), 2), column_text(query.get(), 3),
+                column_text(query.get(), 4), sqlite3_column_int64(query.get(), 5),
+                sqlite3_column_int64(query.get(), 6), sqlite3_column_int64(query.get(), 7),
+                sqlite3_column_int64(query.get(), 8), column_text(query.get(), 9)
+            });
+        }
+        if (step != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+    } catch (const std::exception& exception) {
+        error = exception.what();
+        result.clear();
+    }
+    return result;
+}
+
+bool DurableOutbox::acknowledge_monster_contribution_write(
+    const std::string& write_id, std::string& error) {
+    error.clear();
+    if (write_id.empty()) {
+        error = "contribution write ID is required";
+        return false;
+    }
+    std::lock_guard lock(mutex_);
+    try {
+        Stmt remove(db_,
+            "DELETE FROM monster_damage_contribution_inbox WHERE write_id=? "
+            "AND EXISTS(SELECT 1 FROM monster_damage_contribution_writes WHERE write_id=?)");
+        bind_text(remove.get(), 1, write_id);
+        bind_text(remove.get(), 2, write_id);
+        if (sqlite3_step(remove.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+        if (sqlite3_changes(db_) != 1) {
+            error = "contribution inbox row is missing or has not been applied to the ledger";
+            return false;
+        }
+        return true;
+    } catch (const std::exception& exception) {
+        error = exception.what();
+        return false;
+    }
+}
+
 bool DurableOutbox::enqueue(const OutboxEvent& event, std::string& error) {
     if (event.event_id.empty() || event.event_type.empty() || event.payload.empty()) {
         error = "event id/type/payload required";
