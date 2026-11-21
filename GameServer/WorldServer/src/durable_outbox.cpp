@@ -306,6 +306,10 @@ bool DurableOutbox::record_monster_contribution(
     try {
         if (!execute("BEGIN IMMEDIATE", error)) return false;
         transaction_open = true;
+        Stmt finalized(db_, "SELECT 1 FROM monster_damage_contribution_finalized WHERE monster_instance_id=?");
+        bind_text(finalized.get(), 1, item.monster_instance_id);
+        if (sqlite3_step(finalized.get()) == SQLITE_ROW)
+            throw std::runtime_error("monster contribution ledger is already finalized");
         Stmt existing(db_,
             "SELECT monster_instance_id,session_id,character_id,monster_definition_id,damage,hit_count,"
             "first_hit_at_ms,last_hit_at_ms,bounty_objectives_json "
@@ -471,6 +475,34 @@ bool DurableOutbox::finalize_monster_contributions(
             sqlite3_bind_int64(insert.get(), 6, event.created_at_ms);
             sqlite3_bind_int64(insert.get(), 7, event.created_at_ms);
             if (sqlite3_step(insert.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+        }
+        std::vector<std::string> finalized_event_ids;
+        finalized_event_ids.reserve(events.size());
+        for (const auto& event : events) finalized_event_ids.push_back(event.event_id);
+        std::sort(finalized_event_ids.begin(), finalized_event_ids.end());
+        std::string event_ids;
+        for (const auto& id : finalized_event_ids) {
+            if (!event_ids.empty()) event_ids.push_back(',');
+            event_ids += id;
+        }
+        Stmt existing_finalization(db_,
+            "SELECT event_ids FROM monster_damage_contribution_finalized WHERE monster_instance_id=?");
+        bind_text(existing_finalization.get(), 1, monster_instance_id);
+        const int finalization_result = sqlite3_step(existing_finalization.get());
+        if (finalization_result == SQLITE_ROW) {
+            if (column_text(existing_finalization.get(), 0) != event_ids)
+                throw std::runtime_error("monster instance was finalized with a different event batch");
+        } else if (finalization_result == SQLITE_DONE) {
+            Stmt mark_finalized(db_,
+                "INSERT INTO monster_damage_contribution_finalized(monster_instance_id,event_ids,finalized_at_ms) "
+                "VALUES(?,?,?)");
+            bind_text(mark_finalized.get(), 1, monster_instance_id);
+            bind_text(mark_finalized.get(), 2, event_ids);
+            sqlite3_bind_int64(mark_finalized.get(), 3, events.front().created_at_ms);
+            if (sqlite3_step(mark_finalized.get()) != SQLITE_DONE)
+                throw std::runtime_error(sqlite3_errmsg(db_));
+        } else {
+            throw std::runtime_error(sqlite3_errmsg(db_));
         }
         Stmt remove_writes(db_, "DELETE FROM monster_damage_contribution_writes WHERE monster_instance_id=?");
         bind_text(remove_writes.get(), 1, monster_instance_id);
