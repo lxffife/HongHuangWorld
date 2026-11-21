@@ -10,6 +10,7 @@
 #include "simulation/consumable.hpp"
 #include "simulation/status_effect.hpp"
 #include "persistence/durable_outbox.hpp"
+#include "persistence/monster_contribution_writer.hpp"
 #include "network/chat_delivery_policy.hpp"
 
 #include <enet/enet.h>
@@ -1014,6 +1015,8 @@ struct EnetServer::Impl {
     std::vector<GroundDropRuntime> ground_drops;
     std::vector<ProjectileRuntime> projectiles;
     std::unique_ptr<honghuang::persistence::DurableOutbox> durable_outbox;
+    // Declared after durable_outbox so it is destroyed first and never outlives its SQLite owner.
+    std::unique_ptr<honghuang::persistence::MonsterContributionWriter> monster_contribution_writer;
     std::mutex outbox_mutex;
     std::condition_variable outbox_cv;
     bool outbox_stop_requested{false};
@@ -3827,8 +3830,13 @@ bool EnetServer::start() {
     try {
         impl_->durable_outbox = std::make_unique<honghuang::persistence::DurableOutbox>(
             outbox_path.string(), 10000);
+        impl_->monster_contribution_writer =
+            std::make_unique<honghuang::persistence::MonsterContributionWriter>(
+                *impl_->durable_outbox);
     } catch (const std::exception& exception) {
-        std::cerr << "Could not initialize durable outbox: " << exception.what() << '\n';
+        impl_->monster_contribution_writer.reset();
+        impl_->durable_outbox.reset();
+        std::cerr << "Could not initialize durable persistence workers: " << exception.what() << '\n';
         return false;
     }
 
@@ -4191,6 +4199,11 @@ void EnetServer::stop() {
         impl_->drain_consumable_results();
         impl_->stop_combat_refresh_worker();
         impl_->drain_combat_refresh_results();
+        // Stop contribution writes while the SQLite outbox is still alive.
+        // Combat admission is wired in a later step; today this is an idle worker.
+        if (impl_->monster_contribution_writer) {
+            impl_->monster_contribution_writer->stop();
+        }
         impl_->stop_chat_outbox_worker();
         impl_->stop_outbox_worker();
         impl_->stop_reward_worker();
