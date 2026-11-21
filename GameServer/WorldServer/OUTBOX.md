@@ -149,10 +149,10 @@ A separate `MonsterContributionWriter` now provides the first worker-thread boun
 
 The WorldServer owns one writer alongside its `DurableOutbox`. It is constructed after the SQLite owner, reloads pending inbox rows before combat starts, and is stopped before the outbox owner is destroyed. Member declaration order also preserves safe resource lifetime.
 
-The direct melee hit path is now the first live integration:
+The direct melee hit path uses the durable life-state admission:
 
 - It builds one immutable SQLite contribution record using the monster's per-life `contribution_instance_id`, authenticated session/character IDs, effective damage, one hit, wall-clock timestamps, and a deduplicated JSON array of matching cached monster-kill objective subscriptions.
-- It calls `submit_before_damage`; only after the bounded writer accepts the record does the callback mutate monster health.
+- It calls `submit_damage_before_mutation`; the SQLite transaction compares the expected health, writes the contribution inbox row, and stores the resulting health before the callback mutates runtime memory.
 - If the writer is unavailable, stopping, or full, the hit is rejected and monster health is unchanged. The rejection is logged and the client receives a retry-later combat response.
 - After admission, the existing in-memory 256-entry contribution map is still updated for the current death snapshot and bounty event compatibility.
 
@@ -162,25 +162,25 @@ The writer's lethal-path integration is complete for melee, projectile, and onli
 
 ### Projectile impact admission
 
-A player-owned projectile that hits a live monster now creates the same immutable per-life contribution record as a melee hit and calls `submit_before_damage` before changing health. Only an accepted queue submission applies the calculated health value. Slow, freeze, and burn-on-hit effects are applied only after admission succeeds, so a full/stopping writer cannot leave status effects without the corresponding damage. If admission fails, the server logs the rejection, sends the projectile owner a retry-later combat response, and removes the projectile so it cannot hit repeatedly on later ticks. After admission, the legacy in-memory contribution map is still updated for existing death/bounty compatibility.
+A player-owned projectile that hits a live monster creates the same immutable per-life contribution record as a melee hit and calls `submit_damage_before_mutation`. The contribution inbox row and calculated health value commit atomically before runtime health changes. Slow, freeze, and burn-on-hit effects are applied only after admission succeeds, so a full/stopping writer cannot leave status effects without the corresponding damage. If admission fails, the server logs the rejection, sends the projectile owner a retry-later combat response, and removes the projectile so it cannot hit repeatedly on later ticks. After admission, the legacy in-memory contribution map is still updated for existing death/bounty compatibility.
 
-Projectile contribution admission is durable before health changes. The remaining crash-consistency boundary is between the SQLite admission and the in-memory health mutation, not loss of an accepted inbox row.
+Projectile contribution admission and health persistence share one SQLite transaction. Startup restores the committed health if the process stops before the in-memory callback.
 
 
 ### Pre-damage admission contract
 
-The writer exposes `submit_before_damage(record, callback, error)` as the required ordering primitive. It first commits the immutable contribution into the SQLite inbox, then invokes a `noexcept` health-mutation callback. If the durable inbox is busy, invalid, or the bounded scheduling queue is full/stopping, the callback is not invoked and the hit is rejected. The callback is constrained to be non-throwing. All live nonlethal melee/projectile/burn paths use this contract; lethal paths use the stronger atomic contribution-plus-death-intent transaction.
+The writer's live combat API is `submit_damage_before_mutation(record, runtime_id, expected_health, resulting_health, callback, error)`. It atomically commits the contribution inbox row and a compare-and-swap update to `monster_life_states`, then invokes the `noexcept` memory callback. If SQLite is busy, the life ID/health is stale, or the bounded scheduling queue is full/stopping, the callback is not invoked. The older `submit_before_damage` helper remains only for compatibility tests; WorldServer melee, projectile, and attributed burn paths use the atomic API. Lethal paths commit the contribution, death intent, and zero-health state together.
 
 
 The async writer test now persists two hits, closes/reopens the database before a worker starts, then verifies the new writer reconstructs and drains the queue. It also holds a SQLite write lock to verify backpressure, tests duplicate admission without double-counting, and simulates a crash after inbox admission but before aggregation.
 
 ### Periodic burn tick admission
 
-When a burn tick is due and its owner is still online, WorldServer snapshots the periodic-effect timer before consuming the tick, builds a contribution record for the effective damage, and submits it through `submit_before_damage`. The SQLite inbox commit occurs before health mutation. If admission fails, the server restores the exact pre-consumption burn timer state, logs backpressure, notifies the owner, and retries the same tick on a later update.
+When a burn tick is due and its owner is still online, WorldServer snapshots the periodic-effect timer before consuming the tick, builds a contribution record for the effective damage, and submits it through `submit_damage_before_mutation`. The SQLite inbox and health compare-and-swap commit together before runtime health mutation. If admission fails, the server restores the exact pre-consumption burn timer state, logs backpressure, notifies the owner, and retries the same tick on a later update.
 
 After successful durable admission, the legacy in-memory contribution map is updated using captured session/character/objective attribution, even when the burn source has disconnected. If admission fails, the exact pre-tick effect state is restored and the tick is retried later. A defensive source-less legacy fallback persists a death intent before applying lethal damage.
 
-This integration removes the online-owner burn tick's lost-tick failure mode under admission backpressure. Death finalization stops new hits, waits for the durable inbox to drain for that life, loads the SQLite ledger, and atomically finalizes its event batch.
+This integration removes the online-owner burn tick's lost-tick failure mode under admission backpressure and restores the exact durable health after a process restart. Death finalization stops new hits, waits for the durable inbox to drain for that life, loads the SQLite ledger, and atomically finalizes its event batch.
 
 ### Bounded graceful shutdown for contribution writes
 
