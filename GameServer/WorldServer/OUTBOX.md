@@ -102,6 +102,10 @@ Participants can inspect the most recent 200 monster contribution snapshots for 
 
 The endpoint verifies that the authenticated account participated in the task. It returns monster instance/definition, timestamp, character ID, effective damage, and hit count. Internal session IDs and account IDs are not exposed. This is a read-only audit view; it does not change objective progress or settlement.
 
+### Offline burn-death contribution durability
+
+When a monster dies from a delayed burn tick after the burn owner has disconnected, WorldServer still queues the contribution snapshots represented by the monster's recorded contributor subscriptions. The killer pointer is optional: without an online authenticated killer, no kill-progress event is fabricated, but valid prior contribution evidence is preserved. Normal direct and projectile kills continue to pass their authenticated online killer and retain the existing killer-subscription gate.
+
 ### Contributor-owned bounty objective attribution
 
 A monster damage contribution now carries the matching `monster_killed` objective subscriptions observed on that authenticated character when effective damage is applied. At death, WorldServer unions and deduplicates those task/objective subscriptions across the damage ledger. This means a non-participant final hitter no longer suppresses a contribution snapshot for a task joined by another contributor. The kill-progress event is still emitted only when the final hitter has the matching subscription; contribution snapshots are emitted for each task represented by a contributor. The center service remains authoritative and filters contributors to accepted participants.
