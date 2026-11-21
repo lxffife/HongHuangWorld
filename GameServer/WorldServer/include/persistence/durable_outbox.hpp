@@ -28,6 +28,14 @@ struct PendingMonsterDeathRecord {
  std::string prepared_events_json;
  std::int64_t created_at_ms{};
  std::int64_t committed_at_ms{};
+ double expected_health{};
+ double resulting_health{};
+};
+struct MonsterLifeStateRecord {
+ std::string runtime_id;
+ std::string monster_instance_id;
+ std::string monster_definition_id;
+ double health{};
 };
 struct OutboxEvent { std::string event_id; std::string event_type; std::string payload; std::uint32_t attempts{}; std::int64_t next_retry_at_ms{}; std::int64_t created_at_ms{}; std::string last_error; };
 class DurableOutbox {
@@ -39,6 +47,18 @@ public:
  bool enqueue_batch(const std::vector<OutboxEvent>& events, std::string& error);
  // Durable admission is the acceptance boundary for ordinary combat hits.
  bool admit_monster_contribution(const MonsterContributionRecord& contribution, std::string& error);
+ // Persist current monster life identity and health; initialization never overwrites recovered state.
+ bool ensure_monster_life_state(const MonsterLifeStateRecord& initial,
+                                MonsterLifeStateRecord& persisted, std::string& error);
+ std::vector<MonsterLifeStateRecord> load_monster_life_states(std::string& error) const;
+ // Atomically commit health and the contribution inbox row before the caller mutates memory.
+ bool admit_monster_damage(const MonsterContributionRecord& contribution,
+                           const std::string& runtime_id, double expected_health,
+                           double resulting_health, std::string& error);
+ // Atomically rotate to a new life and acknowledge the prior committed death.
+ bool respawn_monster_life(const std::string& old_instance_id,
+                           const MonsterLifeStateRecord& next_life, std::string& error);
+
  std::vector<MonsterContributionRecord> load_pending_monster_contribution_writes(std::size_t limit, std::string& error) const;
  bool acknowledge_monster_contribution_write(const std::string& write_id, std::string& error);
  bool record_monster_contribution(const MonsterContributionRecord& contribution, std::string& error);
