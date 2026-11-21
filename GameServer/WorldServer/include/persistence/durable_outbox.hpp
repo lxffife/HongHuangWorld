@@ -8,6 +8,18 @@
 struct sqlite3;
 namespace honghuang::persistence {
 struct OutboxStats { std::size_t pending{}; std::size_t inflight{}; std::size_t delivered{}; std::size_t dead_letter{}; std::int64_t oldest_pending_age_ms{}; std::int64_t oldest_dead_letter_age_ms{}; };
+struct MonsterContributionRecord {
+ std::string monster_instance_id;
+ std::string monster_definition_id;
+ std::string session_id;
+ std::string character_id;
+ std::int64_t total_damage{};
+ std::int64_t hit_count{};
+ std::int64_t first_hit_at_ms{};
+ std::int64_t last_hit_at_ms{};
+ // Complete, deduplicated objective-subscription JSON supplied by the caller.
+ std::string bounty_objectives_json{"[]"};
+};
 struct OutboxEvent { std::string event_id; std::string event_type; std::string payload; std::uint32_t attempts{}; std::int64_t next_retry_at_ms{}; std::int64_t created_at_ms{}; std::string last_error; };
 class DurableOutbox {
 public:
@@ -16,6 +28,11 @@ public:
  DurableOutbox(const DurableOutbox&) = delete; DurableOutbox& operator=(const DurableOutbox&) = delete;
  bool enqueue(const OutboxEvent& event, std::string& error);
  bool enqueue_batch(const std::vector<OutboxEvent>& events, std::string& error);
+ bool record_monster_contribution(const MonsterContributionRecord& contribution, std::string& error);
+ std::vector<MonsterContributionRecord> load_monster_contributions(const std::string& monster_instance_id, std::string& error) const;
+ // Atomically enqueue the death snapshot and remove its live ledger rows.
+ bool finalize_monster_contributions(const std::string& monster_instance_id,
+                                     const std::vector<OutboxEvent>& events, std::string& error);
  std::optional<OutboxEvent> find(const std::string& event_id, std::string& error) const;
  std::optional<OutboxEvent> claim_due(std::int64_t now_ms, std::string& error);
  std::optional<OutboxEvent> claim_due_type(std::int64_t now_ms, const std::string& event_type, std::string& error);
