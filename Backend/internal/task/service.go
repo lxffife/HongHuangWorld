@@ -831,6 +831,7 @@ func (s *Service) RecordMonsterContributions(ctx context.Context, nodeKey string
   event.EventID,event.TaskID,nodeKey,event.MonsterInstanceID,event.MonsterDefinitionID,string(payload));err!=nil {
   return fmt.Errorf("insert monster contribution event: %w",err)
  }
+ acceptedContributors:=0
  for _,item:=range event.Contributors {
   var accountID string
   err=tx.QueryRowContext(ctx,`SELECT soul.account_id::text
@@ -848,15 +849,20 @@ func (s *Service) RecordMonsterContributions(ctx context.Context, nodeKey string
   var participantStatus string
   err=tx.QueryRowContext(ctx,`SELECT status FROM bounty_task_participants
    WHERE task_id=$1::uuid AND account_id=$2::uuid FOR SHARE`,event.TaskID,accountID).Scan(&participantStatus)
-  if errors.Is(err,sql.ErrNoRows) || (err==nil && participantStatus!="accepted") { return ErrNotParticipant }
+  if errors.Is(err,sql.ErrNoRows) { continue }
   if err!=nil { return fmt.Errorf("verify monster contributor participation: %w",err) }
+  // Non-participants may have helped kill the same monster; retain only accepted
+  // bounty members instead of rejecting the entire team's valid contribution.
+  if participantStatus!="accepted" { continue }
   if _,err=tx.ExecContext(ctx,`INSERT INTO bounty_monster_contributors
    (event_id,session_id,character_id,account_id,damage,hit_count)
    VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5,$6)`,
    event.EventID,item.SessionID,item.CharacterID,accountID,item.Damage,item.HitCount);err!=nil {
    return fmt.Errorf("persist monster contributor: %w",err)
   }
+  acceptedContributors++
  }
+ if acceptedContributors==0 { return ErrNotParticipant }
  if err=tx.Commit();err!=nil { return fmt.Errorf("commit monster contribution snapshot: %w",err) }
  return nil
 }
