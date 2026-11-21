@@ -36,7 +36,9 @@ int main() {
         second.last_hit_at_ms = 120;
         assert(writer.submit(first, error));
         assert(writer.submit(second, error));
-        assert(!writer.submit(first, error)); // Includes the in-flight head in its bounded capacity.
+        std::int64_t health = 100;
+        assert(!writer.submit_before_damage(first, [&]() noexcept { health -= first.total_damage; }, error));
+        assert(health == 100); // A full queue must reject before health changes.
         assert(sqlite3_exec(blocker, "COMMIT", nullptr, nullptr, nullptr) == SQLITE_OK);
         sqlite3_close(blocker);
         assert(writer.wait_until_drained("life-a", 3s));
@@ -45,6 +47,12 @@ int main() {
         assert(rows.size() == 1);
         assert(rows.front().total_damage == 30);
         assert(rows.front().hit_count == 2);
+        assert(writer.submit_before_damage(first, [&]() noexcept { health -= first.total_damage; }, error));
+        assert(health == 90);
+        assert(writer.wait_until_drained("life-a", 3s));
+        rows = outbox.load_monster_contributions("life-a", error);
+        assert(rows.size() == 1 && rows.front().total_damage == 40);
+        assert(rows.front().hit_count == 3);
         assert(rows.front().first_hit_at_ms == 100);
         assert(rows.front().last_hit_at_ms == 120);
         assert(writer.last_error().empty());
