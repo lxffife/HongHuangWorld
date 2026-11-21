@@ -180,7 +180,7 @@ func TestListPublisherContributionAuditRejectsInvalidIdentityBeforeDatabaseAcces
  validFaction:="00000000-0000-4000-8000-000000000001"
  validTask:="00000000-0000-4000-8000-000000000002"
  tests:=[]struct{name,accountID,factionID,taskID string}{
-  {"missing account","",""+validFaction,validTask},
+  {"missing account","",validFaction,validTask},
   {"malformed faction","account","not-a-uuid",validTask},
   {"malformed task","account",validFaction,"not-a-uuid"},
  }
