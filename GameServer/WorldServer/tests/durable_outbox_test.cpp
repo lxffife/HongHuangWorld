@@ -405,6 +405,9 @@ int main() {
         const auto deaths = box.load_pending_monster_deaths(error);
         assert(error.empty() && deaths.size() == 1);
         assert(deaths.front().monster_instance_id == lethal.monster_instance_id);
+        auto late_hit = lethal;
+        late_hit.write_id = "write-after-lethal";
+        assert(!box.admit_monster_contribution(late_hit, error));
 
         honghuang::persistence::MonsterContributionRecord rejected = lethal;
         rejected.write_id = "write-lethal-conflict";
