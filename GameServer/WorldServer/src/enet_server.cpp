@@ -3410,7 +3410,7 @@ struct EnetServer::Impl {
                 continue;
             }
             if (target == monsters.end() || target->state.mode == honghuang::simulation::MonsterMode::Dead ||
-            target->contribution_closing) {
+                target->contribution_closing) {
                 send_json(owner->first, honghuang::protocol::MessageType::CombatEvent,
                           Json{{"accepted", false}, {"reason", projectile->projectile_type == "fireball" ? "目标已消失，火球术失效。" : (projectile->projectile_type == "ice_bolt" ? "目标已消失，冰锥术失效。" : "目标已消失，箭矢失效。")}});
                 projectile = projectiles.erase(projectile);
