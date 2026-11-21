@@ -2,6 +2,7 @@ package task
 
 import (
  "context"
+ "encoding/base64"
  "database/sql"
  "encoding/hex"
  "encoding/json"
@@ -898,6 +899,28 @@ type BountyContributionAudit struct {
  TotalDamage int64 `json:"total_damage"`
  Characters []BountyContributionAuditCharacter `json:"characters"`
  Events []MonsterContributionSnapshot `json:"events"`
+
+ NextCursor string `json:"next_cursor,omitempty"`
+}
+
+type bountyAuditCursor struct {
+ CreatedAt time.Time `json:"created_at"`
+ EventID string `json:"event_id"`
+}
+
+func decodeBountyAuditCursor(value string) (*bountyAuditCursor,error) {
+ if value=="" { return nil,nil }
+ raw,err:=base64.RawURLEncoding.DecodeString(value)
+ if err!=nil { return nil,ErrInvalid }
+ var cursor bountyAuditCursor
+ if err=json.Unmarshal(raw,&cursor);err!=nil || cursor.CreatedAt.IsZero() || !validUUID(cursor.EventID) { return nil,ErrInvalid }
+ cursor.EventID=strings.ToLower(cursor.EventID)
+ return &cursor,nil
+}
+
+func encodeBountyAuditCursor(cursor bountyAuditCursor) string {
+ raw,_:=json.Marshal(cursor)
+ return base64.RawURLEncoding.EncodeToString(raw)
 }
 
 type BountyContributionHistory struct {
@@ -908,10 +931,13 @@ type BountyContributionHistory struct {
 // ListPublisherContributionAudit exposes task-wide contribution evidence only
 // to an active publisher faction leader or officer. Authorization and reads
 // share one transaction so membership revocation cannot race the audit query.
-func (s *Service) ListPublisherContributionAudit(ctx context.Context, accountID, factionID, taskID string) (BountyContributionAudit, error) {
- if accountID=="" || !validUUID(factionID) || !validUUID(taskID) {
+func (s *Service) ListPublisherContributionAudit(ctx context.Context, accountID, factionID, taskID string, limit int, cursorValue string) (BountyContributionAudit, error) {
+ if accountID=="" || !validUUID(factionID) || !validUUID(taskID) || limit<0 || limit>100 {
   return BountyContributionAudit{}, ErrInvalid
  }
+ if limit==0 { limit=50 }
+ cursor,err:=decodeBountyAuditCursor(cursorValue)
+ if err!=nil { return BountyContributionAudit{},err }
  factionID=strings.ToLower(factionID)
  taskID=strings.ToLower(taskID)
  tx,err:=s.db.BeginTx(ctx,nil)
@@ -961,20 +987,26 @@ func (s *Service) ListPublisherContributionAudit(ctx context.Context, accountID,
  if err=rows.Err();err!=nil { rows.Close();return BountyContributionAudit{},fmt.Errorf("iterate bounty contribution character totals: %w",err) }
  if err=rows.Close();err!=nil { return BountyContributionAudit{},fmt.Errorf("close bounty contribution character totals: %w",err) }
 
+ var cursorTime any
+ var cursorID any
+ if cursor!=nil { cursorTime=cursor.CreatedAt;cursorID=cursor.EventID }
  eventRows,err:=tx.QueryContext(ctx,`WITH visible_events AS (
   SELECT event_id,monster_instance_id,monster_definition_id,created_at
   FROM bounty_monster_contribution_events
   WHERE task_id=$1::uuid
+   AND ($2::timestamptz IS NULL OR (created_at,event_id)<($2::timestamptz,$3::uuid))
   ORDER BY created_at DESC,event_id DESC
-  LIMIT 200
+  LIMIT $4
  )
  SELECT e.event_id::text,e.monster_instance_id,e.monster_definition_id,e.created_at,
   c.character_id::text,c.damage,c.hit_count
  FROM visible_events e
  JOIN bounty_monster_contributors c ON c.event_id=e.event_id
- ORDER BY e.created_at DESC,e.event_id DESC,c.damage DESC,c.character_id`,taskID)
+ ORDER BY e.created_at DESC,e.event_id DESC,c.damage DESC,c.character_id`,taskID,cursorTime,cursorID,limit+1)
  if err!=nil { return BountyContributionAudit{},fmt.Errorf("list bounty contribution audit events: %w",err) }
  indexByEvent:=make(map[string]int)
+ hasMore:=false
+ var lastIncluded bountyAuditCursor
  for eventRows.Next() {
   var eventID,instanceID,definitionID,characterID string
   var createdAt time.Time
@@ -985,8 +1017,10 @@ func (s *Service) ListPublisherContributionAudit(ctx context.Context, accountID,
   }
   idx,ok:=indexByEvent[eventID]
   if !ok {
+   if len(result.Events)>=limit { hasMore=true;continue }
    idx=len(result.Events)
    indexByEvent[eventID]=idx
+   lastIncluded=bountyAuditCursor{CreatedAt:createdAt,EventID:eventID}
    result.Events=append(result.Events,MonsterContributionSnapshot{
     EventID:eventID,MonsterInstanceID:instanceID,MonsterDefinitionID:definitionID,
     CreatedAt:createdAt,Contributors:make([]MonsterContributionDetail,0),
@@ -998,6 +1032,7 @@ func (s *Service) ListPublisherContributionAudit(ctx context.Context, accountID,
  }
  if err=eventRows.Err();err!=nil { eventRows.Close();return BountyContributionAudit{},fmt.Errorf("iterate bounty contribution audit events: %w",err) }
  if err=eventRows.Close();err!=nil { return BountyContributionAudit{},fmt.Errorf("close bounty contribution audit events: %w",err) }
+ if hasMore && len(result.Events)>0 { result.NextCursor=encodeBountyAuditCursor(lastIncluded) }
  if err=tx.Commit();err!=nil { return BountyContributionAudit{},fmt.Errorf("commit bounty contribution audit: %w",err) }
  return result,nil
 }
