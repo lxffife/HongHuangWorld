@@ -196,6 +196,19 @@ bool DurableOutbox::ensure_monster_life_state(
             std::chrono::system_clock::now().time_since_epoch()).count();
         sqlite3_bind_int64(insert.get(), 5, now);
         if (sqlite3_step(insert.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+        Stmt pending_death(db_,
+            "SELECT 1 FROM pending_monster_deaths WHERE monster_instance_id=? LIMIT 1");
+        bind_text(pending_death.get(), 1, initial.monster_instance_id);
+        if (sqlite3_step(pending_death.get()) == SQLITE_ROW) {
+            Stmt close_life(db_,
+                "UPDATE monster_life_states SET health=0,updated_at_ms=? "
+                "WHERE runtime_id=? AND monster_instance_id=?");
+            sqlite3_bind_int64(close_life.get(), 1, now);
+            bind_text(close_life.get(), 2, initial.runtime_id);
+            bind_text(close_life.get(), 3, initial.monster_instance_id);
+            if (sqlite3_step(close_life.get()) != SQLITE_DONE)
+                throw std::runtime_error(sqlite3_errmsg(db_));
+        }
         Stmt query(db_,
             "SELECT runtime_id,monster_instance_id,monster_definition_id,health "
             "FROM monster_life_states WHERE runtime_id=?");
@@ -735,28 +748,31 @@ bool DurableOutbox::save_pending_monster_death(
         return false;
     }
     std::lock_guard lock(mutex_);
+    bool transaction_open = false;
     try {
+        if (!execute("BEGIN IMMEDIATE", error)) return false;
+        transaction_open = true;
         Stmt existing(db_,
             "SELECT runtime_id,payload FROM pending_monster_deaths WHERE monster_instance_id=?");
         bind_text(existing.get(), 1, death.monster_instance_id);
         const int result = sqlite3_step(existing.get());
         if (result == SQLITE_ROW) {
             if (column_text(existing.get(), 0) != death.runtime_id ||
-                column_text(existing.get(), 1) != death.payload) {
-                error = "pending monster death conflicts with an existing immutable intent";
-                return false;
-            }
-            return true;
+                column_text(existing.get(), 1) != death.payload)
+                throw std::runtime_error("pending monster death conflicts with an existing immutable intent");
+        } else if (result == SQLITE_DONE) {
+            Stmt insert(db_,
+                "INSERT INTO pending_monster_deaths(monster_instance_id,runtime_id,payload,created_at_ms) "
+                "VALUES(?,?,?,?)");
+            bind_text(insert.get(), 1, death.monster_instance_id);
+            bind_text(insert.get(), 2, death.runtime_id);
+            bind_text(insert.get(), 3, death.payload);
+            sqlite3_bind_int64(insert.get(), 4, death.created_at_ms);
+            if (sqlite3_step(insert.get()) != SQLITE_DONE)
+                throw std::runtime_error(sqlite3_errmsg(db_));
+        } else {
+            throw std::runtime_error(sqlite3_errmsg(db_));
         }
-        if (result != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
-        Stmt insert(db_,
-            "INSERT INTO pending_monster_deaths(monster_instance_id,runtime_id,payload,created_at_ms) "
-            "VALUES(?,?,?,?)");
-        bind_text(insert.get(), 1, death.monster_instance_id);
-        bind_text(insert.get(), 2, death.runtime_id);
-        bind_text(insert.get(), 3, death.payload);
-        sqlite3_bind_int64(insert.get(), 4, death.created_at_ms);
-        if (sqlite3_step(insert.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
         if (death.expected_health > 0.0) {
             Stmt close_life(db_,
                 "UPDATE monster_life_states SET health=?,updated_at_ms=? "
@@ -769,8 +785,11 @@ bool DurableOutbox::save_pending_monster_death(
             if (sqlite3_step(close_life.get()) != SQLITE_DONE || sqlite3_changes(db_) != 1)
                 throw std::runtime_error("monster death health compare-and-swap failed");
         }
+        if (!execute("COMMIT", error)) throw std::runtime_error(error);
+        transaction_open = false;
         return true;
     } catch (const std::exception& exception) {
+        if (transaction_open) { std::string ignored; execute("ROLLBACK", ignored); }
         error = exception.what();
         return false;
     }
