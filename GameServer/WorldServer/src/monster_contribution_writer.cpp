@@ -58,6 +58,21 @@ std::string MonsterContributionWriter::last_error() const {
     return last_error_;
 }
 
+bool MonsterContributionWriter::stop_after_drain(std::chrono::milliseconds timeout) {
+    bool drained = false;
+    {
+        std::unique_lock lock(mutex_);
+        drained = drained_cv_.wait_for(lock, timeout, [&] {
+            return pending_.empty() || stop_requested_;
+        }) && pending_.empty();
+        stop_requested_ = true;
+    }
+    cv_.notify_all();
+    drained_cv_.notify_all();
+    if (worker_.joinable()) worker_.join();
+    return drained;
+}
+
 void MonsterContributionWriter::stop() {
     {
         std::lock_guard lock(mutex_);
