@@ -2630,9 +2630,37 @@ struct EnetServer::Impl {
                 continue;
             }
             if (current.definition.id != next.definition.id) {
-                std::cerr << "[MonsterLifeState] spawn definition change deferred until life reset; runtime="
-                          << current.runtime_id << " current=" << current.definition.id
-                          << " requested=" << next.definition.id << std::endl;
+                const bool untouched_life = !current.contribution_closing &&
+                    !current.death_intent_persisted && current.damage_contributions.empty() &&
+                    current.state.mode == honghuang::simulation::MonsterMode::Alive &&
+                    current.state.health >= current.definition.max_health;
+                if (untouched_life && durable_outbox) {
+                    const auto next_instance_id = make_event_uuid();
+                    std::string rebind_error;
+                    if (durable_outbox->respawn_monster_life(
+                            current.contribution_instance_id,
+                            honghuang::persistence::MonsterLifeStateRecord{
+                                current.runtime_id, next_instance_id, next.definition.id,
+                                static_cast<double>(next.definition.max_health)}, rebind_error)) {
+                        current.contribution_instance_id = next_instance_id;
+                        current.definition = std::move(next.definition);
+                        current.state = {current.definition.spawn_x, current.definition.spawn_z,
+                                         current.definition.max_health};
+                        current.rare_spawn = next.rare_spawn;
+                        current.spawn_chance_percent = next.spawn_chance_percent;
+                        current.retry_spawn_seconds = next.retry_spawn_seconds;
+                        current.first_spawn_delay_seconds = next.first_spawn_delay_seconds;
+                        current.respawn_at = Clock::time_point{};
+                        merged.push_back(std::move(current));
+                        continue;
+                    }
+                    std::cerr << "[MonsterLifeState] fresh-life definition rebind deferred; runtime="
+                              << current.runtime_id << " reason=" << rebind_error << std::endl;
+                } else {
+                    std::cerr << "[MonsterLifeState] spawn definition change deferred until life reset; runtime="
+                              << current.runtime_id << " current=" << current.definition.id
+                              << " requested=" << next.definition.id << std::endl;
+                }
                 merged.push_back(std::move(current));
                 continue;
             }
