@@ -389,6 +389,9 @@ bool DurableOutbox::record_monster_contribution(
 
 std::vector<MonsterContributionRecord> DurableOutbox::load_monster_contributions(
     const std::string& monster_instance_id, std::string& error) const {
+    // The caller may reuse an error buffer across operations. Never let a stale
+    // failure turn a successful empty ledger read into an apparent DB error.
+    error.clear();
     std::vector<MonsterContributionRecord> result;
     if (monster_instance_id.empty() || monster_instance_id.size() > 96) {
         error = "invalid monster instance id";
