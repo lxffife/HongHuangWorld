@@ -341,5 +341,43 @@ int main() {
     }
     remove_database(no_objective_path);
 
+    {
+        // Death intent and the prepared event batch survive reopening the SQLite file.
+        honghuang::persistence::DurableOutbox box(path, 100);
+        std::string error;
+        honghuang::persistence::PendingMonsterDeathRecord intent;
+        intent.monster_instance_id = "life-pending-restart";
+        intent.runtime_id = "spawn-pending-restart";
+        intent.payload = R"({"version":1,"killer_objectives":[],"drops":[]})";
+        intent.created_at_ms = 500;
+        assert(box.save_pending_monster_death(intent, error));
+        assert(box.save_pending_monster_death(intent, error));
+        auto conflicting = intent;
+        conflicting.payload = R"({"version":2})";
+        assert(!box.save_pending_monster_death(conflicting, error));
+        const std::string batch =
+            R"([{"event_id":"stable-event","event_type":"test","payload":"{}","attempts":0,"next_retry_at_ms":0,"created_at_ms":500,"last_error":""}])";
+        assert(box.save_pending_monster_death_batch(intent.monster_instance_id, batch, error));
+        assert(box.save_pending_monster_death_batch(intent.monster_instance_id, batch, error));
+    }
+    {
+        honghuang::persistence::DurableOutbox reopened(path, 100);
+        std::string error;
+        const auto records = reopened.load_pending_monster_deaths(error);
+        assert(error.empty() && records.size() == 1);
+        assert(records.front().monster_instance_id == "life-pending-restart");
+        assert(records.front().prepared_events_json.find("stable-event") != std::string::npos);
+        assert(records.front().committed_at_ms == 0);
+        const std::vector<honghuang::persistence::OutboxEvent> events{
+            {"stable-event", "test", "{}", 0, 0, 500, {}}
+        };
+        assert(reopened.finalize_monster_contributions("life-pending-restart", events, error));
+        const auto committed = reopened.load_pending_monster_deaths(error);
+        assert(error.empty() && committed.size() == 1);
+        assert(committed.front().committed_at_ms > 0);
+        assert(reopened.acknowledge_monster_death_respawn("life-pending-restart", error));
+        assert(reopened.load_pending_monster_deaths(error).empty());
+    }
+
     return 0;
 }
