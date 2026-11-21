@@ -199,3 +199,30 @@ func TestDecodeBountyAuditCursorRejectsMalformedValues(t *testing.T) {
   if _,err:=decodeBountyAuditCursor(value);err!=ErrInvalid { t.Fatalf("expected ErrInvalid for cursor %q, got %v",value,err) }
  }
 }
+
+func TestListPublisherContributionAuditRejectsInvalidPaginationBeforeDatabaseAccess(t *testing.T) {
+ service:=NewService(nil,nil)
+ factionID:="00000000-0000-4000-8000-000000000001"
+ taskID:="00000000-0000-4000-8000-000000000002"
+ for _,limit:=range []int{-1,101} {
+  if _,err:=service.ListPublisherContributionAudit(context.Background(),"account",factionID,taskID,limit,"");err!=ErrInvalid {
+   t.Fatalf("expected ErrInvalid for limit %d, got %v",limit,err)
+  }
+ }
+ if _,err:=service.ListPublisherContributionAudit(context.Background(),"account",factionID,taskID,25,"not-a-cursor");err!=ErrInvalid {
+  t.Fatalf("expected ErrInvalid for malformed cursor, got %v",err)
+ }
+}
+
+func TestBountyAuditCursorRoundTrip(t *testing.T) {
+ original:=bountyAuditCursor{
+  CreatedAt:time.Date(2026,11,21,9,30,15,123456789,time.UTC),
+  EventID:"00000000-0000-4000-8000-000000000003",
+ }
+ encoded:=encodeBountyAuditCursor(original)
+ decoded,err:=decodeBountyAuditCursor(encoded)
+ if err!=nil { t.Fatalf("decode cursor: %v",err) }
+ if !decoded.CreatedAt.Equal(original.CreatedAt) || decoded.EventID!=original.EventID {
+  t.Fatalf("cursor round trip mismatch: got %#v want %#v",decoded,original)
+ }
+}
