@@ -129,3 +129,8 @@ The local outbox database now also creates `monster_damage_contributions`, keyed
 `finalize_monster_contributions` inserts all death-time outbox events and deletes that monster's live ledger rows inside one `BEGIN IMMEDIATE` transaction. If validation, event-ID conflict, or outbox capacity fails, the transaction rolls back and the contribution rows remain available for retry. Repeating an identical finalization is idempotent because existing matching outbox rows are accepted.
 
 **Integration boundary:** these SQLite APIs are groundwork and are not yet called from the combat loop. The live gameplay path still uses its existing 256-entry in-memory map until an asynchronous persistence queue and bounded backpressure policy are integrated. Do not call the SQLite write method directly for every hit on the main game loop: WAL with `synchronous=FULL` can block combat processing. This ledger also does not restore active monsters after process restart; monster runtime state and health are not persisted. A later integration step must define stale-row expiry for runtime IDs whose monsters were not restored.
+
+
+### Spawn-point identity versus contribution-instance identity
+
+A monster's network `runtime_id` identifies its stable spawn point and is reused after respawn. It must **not** be used as the durable contribution ledger key: the ledger's finalization tombstone would otherwise reject every later life of that spawn. WorldServer now assigns a fresh `contribution_instance_id` when each monster life is created (including configured spawns and respawns). Contribution snapshots send this per-life ID as `monster_instance_id`; the stable `runtime_id` remains unchanged for targeting and replication.
