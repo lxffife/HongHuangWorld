@@ -224,3 +224,18 @@ A spawn-config refresh must not replace the runtime definition or per-life contr
 ### Non-blocking per-life writer pending count
 
 The contribution writer now exposes `pending_count_for_monster(instance_id)`, a mutex-protected, non-blocking query for world-loop state machines. It includes both queued records and the record currently inside its SQLite commit because the per-monster counter is decremented only after a successful commit. The deferred death-finalization loop can use this to decide whether a life is ready for ledger loading without waiting on a condition variable or blocking the simulation thread. A zero count is only a writer-queue drain signal; callers must still check `load_monster_contributions` errors before treating the SQLite snapshot as authoritative.
+
+
+### Asynchronous monster death finalizer worker (foundation only)
+
+WorldServer now owns a dedicated `MonsterDeathFinalizer` worker next to the contribution writer. Its submission API accepts one per-life instance ID and an immutable event-builder callback. The worker performs the following sequence off the simulation thread:
+
+1. Poll the contribution writer's non-blocking per-life pending count until it reaches zero.
+2. Load the SQLite contribution ledger and treat any non-empty error as a failed snapshot, never as an empty ledger.
+3. Invoke the event builder once and retain the exact resulting event batch in the task.
+4. Retry `finalize_monster_contributions` with that same batch until the atomic outbox/tombstone/ledger transaction succeeds.
+5. Publish a completion result for the game thread to consume; it does not mutate monster runtime state itself.
+
+Duplicate submissions for the same life are rejected while a task is active. The worker is initialized after its SQLite dependencies and is stopped before the contribution writer/outbox during orderly shutdown. A focused test target exercises writer drain, authoritative ledger loading, event batch creation, finalization, and result delivery.
+
+**Integration boundary:** this worker is currently infrastructure only. Melee, projectile, and burn lethal handlers have not yet submitted pending-death tasks or consumed completion results. Their legacy reward/respawn path therefore remains active until the next integration step. Do not treat the presence of this worker as proof that SQLite is already the live death-settlement authority. Its task state and prepared event batch are process-local; abrupt process termination can still leave a zero-health closing monster and unfinalized ledger requiring recovery policy.
