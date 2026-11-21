@@ -224,7 +224,7 @@ func TestListPublisherContributionAuditRejectsInvalidPaginationBeforeDatabaseAcc
 func TestBountyAuditCursorRoundTrip(t *testing.T) {
  original:=bountyAuditCursor{
   CreatedAt:time.Date(2026,11,21,9,30,15,123456789,time.UTC),
-  EventID:"00000000-0000-4000-8000-000000000003",
+  MonsterInstanceID:"life-instance-0003",
  }
  encoded:=encodeBountyAuditCursor(original)
  decoded,err:=decodeBountyAuditCursor(encoded)
