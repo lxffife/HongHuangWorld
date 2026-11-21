@@ -504,6 +504,27 @@ int main() {
         honghuang::persistence::MonsterLifeStateRecord persisted;
         assert(reopened.ensure_monster_life_state(initial, persisted, error));
         assert(persisted.monster_instance_id == "life-state-2" && persisted.health == 100.0);
+
+        honghuang::persistence::MonsterLifeStateRecord legacy_initial{
+            "spawn-legacy-death", "life-legacy-death", "wraith", 55.0};
+        assert(reopened.ensure_monster_life_state(legacy_initial, persisted, error));
+        honghuang::persistence::PendingMonsterDeathRecord legacy_death;
+        legacy_death.monster_instance_id = "life-legacy-death";
+        legacy_death.runtime_id = "spawn-legacy-death";
+        legacy_death.payload = R"({"version":1,"reward_eligible":false})";
+        legacy_death.created_at_ms = 1000;
+        legacy_death.expected_health = 55.0;
+        legacy_death.resulting_health = 0.0;
+        assert(reopened.save_pending_monster_death(legacy_death, error));
+        const auto legacy_states = reopened.load_monster_life_states(error);
+        const auto legacy_state = std::find_if(legacy_states.begin(), legacy_states.end(),
+            [](const auto& value) { return value.runtime_id == "spawn-legacy-death"; });
+        assert(error.empty() && legacy_state != legacy_states.end() && legacy_state->health == 0.0);
+        const std::vector<honghuang::persistence::OutboxEvent> no_reward_events{};
+        assert(reopened.finalize_monster_contributions("life-legacy-death", no_reward_events, error));
+        assert(reopened.respawn_monster_life("life-legacy-death",
+            honghuang::persistence::MonsterLifeStateRecord{
+                "spawn-legacy-death", "life-legacy-respawned", "wraith", 55.0}, error));
     }
     remove_database(life_state_path);
 
