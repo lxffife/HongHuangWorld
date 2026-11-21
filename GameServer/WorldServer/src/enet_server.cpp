@@ -3546,6 +3546,7 @@ struct EnetServer::Impl {
             }
             const auto effect_now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                 now.time_since_epoch()).count();
+            const auto burn_effect_before_tick = monster.burn_effect;
             const auto burn_damage = honghuang::simulation::consume_periodic_damage_tick(
                 monster.burn_effect, effect_now_ms);
             if (burn_damage <= 0 &&
@@ -3558,9 +3559,39 @@ struct EnetServer::Impl {
                 auto burn_owner = std::find_if(players.begin(), players.end(), [&](const auto& entry) {
                     return entry.second.character_id == monster.burn_owner_character_id;
                 });
-                if (burn_owner != players.end())
+                if (burn_owner != players.end()) {
+                    std::string contribution_error;
+                    const auto contribution = make_monster_contribution_record(
+                        monster, burn_owner->second, applied_burn_damage);
+                    const bool admitted = monster_contribution_writer != nullptr &&
+                        monster_contribution_writer->submit_before_damage(
+                            contribution,
+                            [&monster, previous_health, applied_burn_damage]() noexcept {
+                                monster.state.health = static_cast<float>(
+                                    std::max<std::int64_t>(0, previous_health - applied_burn_damage));
+                            },
+                            contribution_error);
+                    if (!admitted) {
+                        // Do not lose a scheduled tick when backpressure rejects its write.
+                        monster.burn_effect = burn_effect_before_tick;
+                        std::cerr << "[MonsterContribution] burn tick deferred; monster="
+                                  << monster.definition.id << " instance="
+                                  << monster.contribution_instance_id << " reason="
+                                  << (contribution_error.empty() ? "writer unavailable" : contribution_error)
+                                  << std::endl;
+                        send_json(burn_owner->first, honghuang::protocol::MessageType::CombatEvent,
+                                  Json{{"accepted", false}, {"source", "status_effect"},
+                                       {"status_effect", "burn"},
+                                       {"reason", "战斗记录繁忙，燃烧伤害将稍后重试。"}});
+                        continue;
+                    }
                     record_monster_damage(monster, burn_owner->second, applied_burn_damage);
-                monster.state.health = static_cast<float>(std::max<std::int64_t>(0, previous_health - burn_damage));
+                } else {
+                    // Preserve existing offline-owner behavior; no authenticated live session
+                    // is available to create a new per-tick contribution record.
+                    monster.state.health = static_cast<float>(
+                        std::max<std::int64_t>(0, previous_health - burn_damage));
+                }
                 const bool burn_defeated = monster.state.health <= 0.0F;
                 std::int64_t experience_reward = 0;
                 std::int64_t cultivation_reward = 0;
