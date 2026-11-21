@@ -1744,7 +1744,7 @@ struct EnetServer::Impl {
             using honghuang::persistence::OutboxEvent;
             const auto now = wall_clock_ms();
             std::vector<Json> objectives;
-            Json contributors = Json::array();
+            std::unordered_map<std::string, Json> contributors_by_task;
 
             for (const auto& record : records) {
                 auto parsed = Json::parse(record.bounty_objectives_json, nullptr, false);
@@ -1752,6 +1752,7 @@ struct EnetServer::Impl {
                     error = "monster contribution contains invalid bounty objective JSON";
                     return false;
                 }
+                std::unordered_set<std::string> record_task_ids;
                 for (const auto& objective : parsed) {
                     if (!objective.is_object()) {
                         error = "monster contribution bounty objective is not an object";
@@ -1769,14 +1770,20 @@ struct EnetServer::Impl {
                                    existing.value("event_type", std::string{}) == event_type;
                         });
                     if (!duplicate) objectives.push_back(objective);
+                    record_task_ids.insert(task_id);
                 }
                 if (record.total_damage > 0 && record.hit_count > 0) {
-                    contributors.push_back({
+                    const Json contributor{
                         {"session_id", record.session_id},
                         {"character_id", record.character_id},
                         {"damage", record.total_damage},
                         {"hit_count", record.hit_count}
-                    });
+                    };
+                    for (const auto& task_id : record_task_ids) {
+                        auto [found, inserted] = contributors_by_task.try_emplace(task_id, Json::array());
+                        (void)inserted;
+                        found->second.push_back(contributor);
+                    }
                 }
             }
 
@@ -1807,8 +1814,11 @@ struct EnetServer::Impl {
                         {"event_type", "monster_killed"}
                     });
                 }
-                if (!contributors.empty()) {
+                const auto task_id = objective.value("task_id", std::string{});
+                const auto task_contributors = contributors_by_task.find(task_id);
+                if (task_contributors != contributors_by_task.end() && !task_contributors->second.empty()) {
                     constexpr std::size_t kContributionChunkSize = 256;
+                    const auto& contributors = task_contributors->second;
                     const auto chunk_count = (contributors.size() + kContributionChunkSize - 1) /
                                              kContributionChunkSize;
                     for (std::size_t chunk = 0; chunk < chunk_count; ++chunk) {
@@ -1820,7 +1830,7 @@ struct EnetServer::Impl {
                         const auto event_id = make_event_uuid();
                         append_event("bounty_monster_contributions", Json{
                             {"event_id", event_id},
-                            {"task_id", objective.value("task_id", std::string{})},
+                            {"task_id", task_id},
                             {"monster_instance_id", instance_id},
                             {"monster_definition_id", definition_id},
                             {"contributors", std::move(chunk_contributors)}
