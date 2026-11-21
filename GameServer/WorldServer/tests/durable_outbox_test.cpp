@@ -405,6 +405,21 @@ int main() {
         const auto deaths = box.load_pending_monster_deaths(error);
         assert(error.empty() && deaths.size() == 1);
         assert(deaths.front().monster_instance_id == lethal.monster_instance_id);
+
+        honghuang::persistence::MonsterContributionRecord rejected = lethal;
+        rejected.write_id = "write-lethal-conflict";
+        rejected.monster_instance_id = "life-lethal-conflict";
+        honghuang::persistence::PendingMonsterDeathRecord conflicting_intent;
+        conflicting_intent.monster_instance_id = rejected.monster_instance_id;
+        conflicting_intent.runtime_id = "spawn-lethal-conflict";
+        conflicting_intent.payload = R"({"version":1})";
+        conflicting_intent.created_at_ms = 701;
+        assert(box.save_pending_monster_death(conflicting_intent, error));
+        conflicting_intent.payload = R"({"version":2})";
+        assert(!box.record_monster_contribution_and_pending_death(
+            rejected, conflicting_intent, error));
+        const auto rolled_back = box.load_monster_contributions(rejected.monster_instance_id, error);
+        assert(error.empty() && rolled_back.empty());
     }
 
     return 0;
