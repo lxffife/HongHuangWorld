@@ -192,3 +192,10 @@ This reduces normal-shutdown loss but does not close the abrupt-process-crash wi
 ### Empty-objective monster finalization
 
 A monster life may have durable damage contributors but no matching bounty objective subscriptions. Its contribution ledger must still be closed and cleared so it cannot leak indefinitely or accept late writes. `finalize_monster_contributions` therefore accepts an empty outbox event batch: it atomically writes the per-life finalization tombstone and removes the contribution/write journal rows without creating a synthetic event for an unsupported backend endpoint. The operation remains idempotent, and late writes for that life are rejected. Empty batches now timestamp their tombstone with the current wall clock rather than reading the first event in an empty vector. The regression test also reopens the SQLite database and verifies that the empty-batch tombstone remains effective after restart. This is a persistence primitive; the live combat death path still needs to call it after the writer drains and before rewards/respawn are committed.
+
+
+### Monster life lethal-closing latch
+
+Each `MonsterRuntime` now has a per-life `contribution_closing` latch. The lethal melee and projectile admission callbacks set it in the same synchronous callback that applies the lethal health value; a lethal burn tick sets it in its admitted damage callback (and the defensive legacy fallback also sets it). New melee/spell target selection, projectile impact, and subsequent burn ticks reject/skip a closing life. The latch is cleared only when a new contribution instance is assigned during respawn or explicit spawn reactivation.
+
+This closes the same-tick duplicate-hit window before the ordinary `Dead` mode transition and provides the gate needed by a deferred death-finalization state machine. It is **not** yet the SQLite death-finalization integration: current lethal handlers still use the legacy in-memory snapshot and continue their existing reward/respawn behavior. No claim is made that drain/load/finalize is active, and the 256-entry in-memory limitation remains.
