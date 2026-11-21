@@ -448,6 +448,16 @@ int main() {
         hit.last_hit_at_ms = 800;
         hit.bounty_objectives_json = "[]";
         assert(box.admit_monster_damage(hit, "spawn-state-1", 100.0, 75.0, error));
+        // Simulate a crash immediately after SQLite commit but before the caller's
+        // in-memory health callback: a fresh process must load the committed 75 HP.
+        {
+            honghuang::persistence::DurableOutbox recovered(life_state_path, 16, false);
+            honghuang::persistence::MonsterLifeStateRecord startup{
+                "spawn-state-1", "random-process-instance", "wolf", 100.0};
+            honghuang::persistence::MonsterLifeStateRecord restored;
+            assert(recovered.ensure_monster_life_state(startup, restored, error));
+            assert(restored.monster_instance_id == "life-state-1" && restored.health == 75.0);
+        }
         auto states = box.load_monster_life_states(error);
         assert(error.empty() && states.size() == 1 && states.front().health == 75.0);
         assert(!box.admit_monster_damage(
