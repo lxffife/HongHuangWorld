@@ -4612,15 +4612,13 @@ void EnetServer::stop() {
         impl_->drain_consumable_results();
         impl_->stop_combat_refresh_worker();
         impl_->drain_combat_refresh_results();
-        if (impl_->monster_death_finalizer) {
-            if (!impl_->monster_death_finalizer->stop_after_drain(std::chrono::seconds(5))) {
-                std::cerr << "[MonsterDeathFinalizer] shutdown drain timed out; pending_lives="
-                          << impl_->monster_death_finalizer->pending_count()
-                          << ". Pending deaths remain unfinalized." << std::endl;
-            }
+        // Retry admission for any lethal life that was closing when the main loop stopped.
+        for (auto& monster : impl_->monsters) {
+            if (monster.contribution_closing && !monster.death_finalizer_submitted)
+                impl_->submit_monster_death_finalization(monster);
         }
-        // Stop combat admission before this point, then give queued contribution
-        // records a bounded opportunity to commit while SQLite is still alive.
+        // Drain contribution writes first. The finalizer worker can then observe a zero
+        // per-life pending count and finish its SQLite snapshot/commit while SQLite lives.
         if (impl_->monster_contribution_writer) {
             constexpr auto kContributionShutdownDrainTimeout = std::chrono::seconds(5);
             if (!impl_->monster_contribution_writer->stop_after_drain(kContributionShutdownDrainTimeout)) {
@@ -4628,6 +4626,13 @@ void EnetServer::stop() {
                           << impl_->monster_contribution_writer->pending_count()
                           << " last_error=" << impl_->monster_contribution_writer->last_error()
                           << ". Remaining in-memory records were not committed.\n";
+            }
+        }
+        if (impl_->monster_death_finalizer) {
+            if (!impl_->monster_death_finalizer->stop_after_drain(std::chrono::seconds(5))) {
+                std::cerr << "[MonsterDeathFinalizer] shutdown drain timed out; pending_lives="
+                          << impl_->monster_death_finalizer->pending_count()
+                          << ". Pending deaths remain unfinalized." << std::endl;
             }
         }
         impl_->stop_chat_outbox_worker();
