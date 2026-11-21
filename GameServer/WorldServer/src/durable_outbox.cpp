@@ -284,17 +284,20 @@ bool DurableOutbox::admit_monster_damage(
     try {
         if (!execute("BEGIN IMMEDIATE", error)) return false;
         transaction_open = true;
-        Stmt life(db_,
-            "SELECT monster_instance_id,monster_definition_id,health "
-            "FROM monster_life_states WHERE runtime_id=?");
-        bind_text(life.get(), 1, runtime_id);
-        if (sqlite3_step(life.get()) != SQLITE_ROW)
-            throw std::runtime_error("durable monster life state is not initialized");
-        if (column_text(life.get(), 0) != item.monster_instance_id)
-            throw std::runtime_error("monster life instance changed; stale damage command rejected");
-        if (column_text(life.get(), 1) != item.monster_definition_id)
-            throw std::runtime_error("monster definition changed; stale damage command rejected");
-        const double stored_health = sqlite3_column_double(life.get(), 2);
+        double stored_health = 0.0;
+        {
+            Stmt life(db_,
+                "SELECT monster_instance_id,monster_definition_id,health "
+                "FROM monster_life_states WHERE runtime_id=?");
+            bind_text(life.get(), 1, runtime_id);
+            if (sqlite3_step(life.get()) != SQLITE_ROW)
+                throw std::runtime_error("durable monster life state is not initialized");
+            if (column_text(life.get(), 0) != item.monster_instance_id)
+                throw std::runtime_error("monster life instance changed; stale damage command rejected");
+            if (column_text(life.get(), 1) != item.monster_definition_id)
+                throw std::runtime_error("monster definition changed; stale damage command rejected");
+            stored_health = sqlite3_column_double(life.get(), 2);
+        }
         if (std::abs(stored_health - expected_health) > 0.001)
             throw std::runtime_error("monster health changed; stale damage command rejected");
         Stmt closed(db_,
