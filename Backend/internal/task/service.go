@@ -968,7 +968,7 @@ func (s *Service) ListPublisherContributionAudit(ctx context.Context, accountID,
  }
 
  rows,err:=tx.QueryContext(ctx,`SELECT c.character_id::text,SUM(c.damage),SUM(c.hit_count),
-  COUNT(DISTINCT c.event_id)
+  COUNT(DISTINCT e.monster_instance_id)
   FROM bounty_monster_contributors c
   JOIN bounty_monster_contribution_events e ON e.event_id=c.event_id
   WHERE e.task_id=$1::uuid
@@ -988,23 +988,37 @@ func (s *Service) ListPublisherContributionAudit(ctx context.Context, accountID,
  if err=rows.Close();err!=nil { return BountyContributionAudit{},fmt.Errorf("close bounty contribution character totals: %w",err) }
 
  var cursorTime any
- var cursorID any
- if cursor!=nil { cursorTime=cursor.CreatedAt;cursorID=cursor.EventID }
- eventRows,err:=tx.QueryContext(ctx,`WITH visible_events AS (
-  SELECT event_id,monster_instance_id,monster_definition_id,created_at
+ var cursorMonsterID any
+ if cursor!=nil { cursorTime=cursor.CreatedAt;cursorMonsterID=cursor.MonsterInstanceID }
+ eventRows,err:=tx.QueryContext(ctx,`WITH grouped_monsters AS (
+  SELECT task_id,monster_instance_id,monster_definition_id,
+   MIN(event_id::text) AS event_id,MIN(created_at) AS created_at
   FROM bounty_monster_contribution_events
   WHERE task_id=$1::uuid
-   AND ($2::timestamptz IS NULL OR (created_at,event_id)<($2::timestamptz,$3::uuid))
-  ORDER BY created_at DESC,event_id DESC
+  GROUP BY task_id,monster_instance_id,monster_definition_id
+ ), visible_monsters AS (
+  SELECT task_id,event_id,monster_instance_id,monster_definition_id,created_at
+  FROM grouped_monsters
+  WHERE ($2::timestamptz IS NULL OR (created_at,monster_instance_id)<($2::timestamptz,$3::varchar))
+  ORDER BY created_at DESC,monster_instance_id DESC
   LIMIT $4
+ ), aggregated_contributors AS (
+  SELECT e.task_id,e.monster_instance_id,c.character_id,
+   SUM(c.damage) AS damage,SUM(c.hit_count) AS hit_count
+  FROM bounty_monster_contribution_events e
+  JOIN bounty_monster_contributors c ON c.event_id=e.event_id
+  WHERE e.task_id=$1::uuid
+  GROUP BY e.task_id,e.monster_instance_id,c.character_id
  )
- SELECT e.event_id::text,e.monster_instance_id,e.monster_definition_id,e.created_at,
+ SELECT m.event_id,m.monster_instance_id,m.monster_definition_id,m.created_at,
   c.character_id::text,c.damage,c.hit_count
- FROM visible_events e
- JOIN bounty_monster_contributors c ON c.event_id=e.event_id
- ORDER BY e.created_at DESC,e.event_id DESC,c.damage DESC,c.character_id`,taskID,cursorTime,cursorID,limit+1)
+ FROM visible_monsters m
+ JOIN aggregated_contributors c
+  ON c.task_id=m.task_id AND c.monster_instance_id=m.monster_instance_id
+ ORDER BY m.created_at DESC,m.monster_instance_id DESC,c.damage DESC,c.character_id`,
+ taskID,cursorTime,cursorMonsterID,limit+1)
  if err!=nil { return BountyContributionAudit{},fmt.Errorf("list bounty contribution audit events: %w",err) }
- indexByEvent:=make(map[string]int)
+ indexByMonster:=make(map[string]int)
  hasMore:=false
  var lastIncluded bountyAuditCursor
  for eventRows.Next() {
@@ -1015,12 +1029,12 @@ func (s *Service) ListPublisherContributionAudit(ctx context.Context, accountID,
    eventRows.Close()
    return BountyContributionAudit{},fmt.Errorf("scan bounty contribution audit event: %w",err)
   }
-  idx,ok:=indexByEvent[eventID]
+  idx,ok:=indexByMonster[instanceID]
   if !ok {
    if len(result.Events)>=limit { hasMore=true;continue }
    idx=len(result.Events)
-   indexByEvent[eventID]=idx
-   lastIncluded=bountyAuditCursor{CreatedAt:createdAt,EventID:eventID}
+   indexByMonster[instanceID]=idx
+   lastIncluded=bountyAuditCursor{CreatedAt:createdAt,MonsterInstanceID:instanceID}
    result.Events=append(result.Events,MonsterContributionSnapshot{
     EventID:eventID,MonsterInstanceID:instanceID,MonsterDefinitionID:definitionID,
     CreatedAt:createdAt,Contributors:make([]MonsterContributionDetail,0),
