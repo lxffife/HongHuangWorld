@@ -185,29 +185,38 @@ bool DurableOutbox::ensure_monster_life_state(
     try {
         if (!execute("BEGIN IMMEDIATE", error)) return false;
         transaction_open = true;
+        std::string desired_instance_id = initial.monster_instance_id;
+        double desired_health = initial.health;
+        Stmt pending_death(db_,
+            "SELECT monster_instance_id FROM pending_monster_deaths WHERE runtime_id=? LIMIT 1");
+        bind_text(pending_death.get(), 1, initial.runtime_id);
+        const int pending_result = sqlite3_step(pending_death.get());
+        if (pending_result == SQLITE_ROW) {
+            desired_instance_id = column_text(pending_death.get(), 0);
+            desired_health = 0.0;
+        } else if (pending_result != SQLITE_DONE) {
+            throw std::runtime_error(sqlite3_errmsg(db_));
+        }
+        const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
         Stmt insert(db_,
             "INSERT OR IGNORE INTO monster_life_states(runtime_id,monster_instance_id,"
             "monster_definition_id,health,updated_at_ms) VALUES(?,?,?,?,?)");
         bind_text(insert.get(), 1, initial.runtime_id);
-        bind_text(insert.get(), 2, initial.monster_instance_id);
+        bind_text(insert.get(), 2, desired_instance_id);
         bind_text(insert.get(), 3, initial.monster_definition_id);
-        sqlite3_bind_double(insert.get(), 4, initial.health);
-        const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count();
+        sqlite3_bind_double(insert.get(), 4, desired_health);
         sqlite3_bind_int64(insert.get(), 5, now);
         if (sqlite3_step(insert.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
-        Stmt pending_death(db_,
-            "SELECT 1 FROM pending_monster_deaths WHERE monster_instance_id=? LIMIT 1");
-        bind_text(pending_death.get(), 1, initial.monster_instance_id);
-        if (sqlite3_step(pending_death.get()) == SQLITE_ROW) {
+        if (pending_result == SQLITE_ROW) {
             Stmt close_life(db_,
-                "UPDATE monster_life_states SET health=0,updated_at_ms=? "
-                "WHERE runtime_id=? AND monster_instance_id=?");
-            sqlite3_bind_int64(close_life.get(), 1, now);
-            bind_text(close_life.get(), 2, initial.runtime_id);
-            bind_text(close_life.get(), 3, initial.monster_instance_id);
-            if (sqlite3_step(close_life.get()) != SQLITE_DONE)
-                throw std::runtime_error(sqlite3_errmsg(db_));
+                "UPDATE monster_life_states SET monster_instance_id=?,health=0,updated_at_ms=? "
+                "WHERE runtime_id=?");
+            bind_text(close_life.get(), 1, desired_instance_id);
+            sqlite3_bind_int64(close_life.get(), 2, now);
+            bind_text(close_life.get(), 3, initial.runtime_id);
+            if (sqlite3_step(close_life.get()) != SQLITE_DONE || sqlite3_changes(db_) != 1)
+                throw std::runtime_error("could not restore pending monster death into life state");
         }
         Stmt query(db_,
             "SELECT runtime_id,monster_instance_id,monster_definition_id,health "
