@@ -1003,11 +1003,11 @@ func (s *Service) ListPublisherContributionAudit(ctx context.Context, accountID,
  var cursorMonsterID any
  if cursor!=nil { cursorTime=cursor.CreatedAt;cursorMonsterID=cursor.MonsterInstanceID }
  eventRows,err:=tx.QueryContext(ctx,`WITH grouped_monsters AS (
-  SELECT task_id,monster_instance_id,monster_definition_id,
+  SELECT task_id,monster_instance_id,MIN(monster_definition_id) AS monster_definition_id,
    MIN(event_id::text) AS event_id,MIN(created_at) AS created_at
   FROM bounty_monster_contribution_events
   WHERE task_id=$1::uuid
-  GROUP BY task_id,monster_instance_id,monster_definition_id
+  GROUP BY task_id,monster_instance_id
  ), visible_monsters AS (
   SELECT task_id,event_id,monster_instance_id,monster_definition_id,created_at
   FROM grouped_monsters
@@ -1074,11 +1074,11 @@ func (s *Service) ListContributions(ctx context.Context, accountID, taskID strin
  }
  if !exists { return BountyContributionHistory{},ErrNotParticipant }
  rows,err:=s.db.QueryContext(ctx,`WITH grouped_monsters AS (
-  SELECT task_id,monster_instance_id,monster_definition_id,
+  SELECT task_id,monster_instance_id,MIN(monster_definition_id) AS monster_definition_id,
    MIN(event_id::text) AS event_id,MIN(created_at) AS created_at
   FROM bounty_monster_contribution_events
   WHERE task_id=$1::uuid
-  GROUP BY task_id,monster_instance_id,monster_definition_id
+  GROUP BY task_id,monster_instance_id
  ), visible_monsters AS (
   SELECT task_id,event_id,monster_instance_id,monster_definition_id,created_at
   FROM grouped_monsters
