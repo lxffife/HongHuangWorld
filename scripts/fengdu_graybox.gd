@@ -276,6 +276,15 @@ func _gate(title: String, center: Vector3, outward: Vector3, destination: String
 		_dougong_band(center + offset + Vector3(0, 15.0, 0), 8.0, 6.0)
 		_roof_tier(center + offset + Vector3(0, 17.5, 0), 10.0, 3.0)
 	_box(title + "GateLintel", center + Vector3(0, 16.5, 0), Vector3(23, 3.5, 7), "gold", true)
+	# Two opened leaves make the gate read as a real fortified passage without blocking traversal.
+	var door_size := Vector3(7.4, 8.5, 0.7) if axis_x else Vector3(0.7, 8.5, 7.4)
+	for side in [-1.0, 1.0]:
+		var door_offset := Vector3(side * 4.2, 4.5, 0) if axis_x else Vector3(0, 4.5, side * 4.2)
+		var leaf := _box(title + "OpenGateLeaf", center + door_offset, door_size, "dark_stone", false)
+		leaf.rotation.y = deg_to_rad(-side * 58.0)
+		for row in range(4):
+			var stud_offset := Vector3(side * (1.8 + float(row) * 0.9), 0, -0.42) if axis_x else Vector3(-0.42, 0, side * (1.8 + float(row) * 0.9))
+			_box(title + "GateDoorStud", center + door_offset + stud_offset, Vector3(0.22, 0.22, 0.22), "gold", false)
 	_box(title + "GateRoad", center + outward * 8.0 + Vector3(0, 0.2, 0), Vector3(17, 0.4, 17), "bridge", true)
 	_label(title, center + Vector3(0, 23, 0), 34, Color("#e6c58d"))
 	_label("通往：" + destination, center + Vector3(0, 20.5, 0), 18, Color("#c4cbd4"))
