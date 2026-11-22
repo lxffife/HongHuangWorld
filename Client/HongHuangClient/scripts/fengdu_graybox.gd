@@ -23,12 +23,14 @@ var mats: Dictionary = {}
 func _ready() -> void:
 	_create_materials()
 	_build_environment()
+	_build_outer_landscape()
 	_build_ground_and_roads()
 	_build_moat_and_bridges()
 	_build_city_walls()
 	_build_gate_complexes()
 	_build_districts()
 	_build_palace_axis()
+	_build_street_furnishings()
 	_build_player()
 	_build_hud()
 
@@ -139,6 +141,10 @@ func _build_environment() -> void:
 	environment.ambient_light_color = Color("#78849a")
 	environment.ambient_light_energy = 0.48
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	environment.fog_enabled = true
+	environment.fog_light_color = Color("#424b59")
+	environment.fog_density = 0.0028
+	environment.fog_sky_affect = 0.7
 	world_env.environment = environment
 	add_child(world_env)
 	var sun := DirectionalLight3D.new()
@@ -155,8 +161,52 @@ func _build_environment() -> void:
 	add_child(moon)
 
 
+func _build_outer_landscape() -> void:
+	# Broad approach plain and distant stepped mountain silhouettes frame the capital.
+	_box("FengduOuterPlain", Vector3(0, -1.15, 0), Vector3(580, 0.8, 580), "ground", true)
+	for i in range(7):
+		var angle := TAU * float(i) / 7.0
+		var radius := 205.0 + float(i % 3) * 18.0
+		var center := Vector3(cos(angle) * radius, 0, sin(angle) * radius)
+		var width := 42.0 + float(i % 2) * 18.0
+		_box("DistantMountainFoot", center + Vector3(0, 7, 0), Vector3(width, 14, width * 0.8), "dark_stone", false)
+		_box("DistantMountainRidge", center + Vector3(0, 19, 0), Vector3(width * 0.68, 12, width * 0.55), "stone", false)
+		_box("DistantMountainPeak", center + Vector3(0, 29, 0), Vector3(width * 0.36, 10, width * 0.3), "dark_stone", false)
+	# Four processional causeways extend beyond the moat toward the outer roads.
+	_box("NorthApproachRoad", Vector3(0, 0.02, 151), Vector3(11, 0.12, 72), "road", false)
+	_box("SouthApproachRoad", Vector3(0, 0.02, -151), Vector3(11, 0.12, 72), "road", false)
+	_box("EastApproachRoad", Vector3(151, 0.02, 0), Vector3(72, 0.12, 11), "road", false)
+	_box("WestApproachRoad", Vector3(-151, 0.02, 0), Vector3(72, 0.12, 11), "road", false)
+
+
+func _build_street_furnishings() -> void:
+	# Lantern posts provide a readable night-time rhythm without expensive real lights.
+	for z in range(-84, 85, 14):
+		_lantern_post(Vector3(-10.5, 0, float(z)))
+		_lantern_post(Vector3(10.5, 0, float(z)))
+	for x in range(-84, 85, 14):
+		if absf(float(x)) > 15.0:
+			_lantern_post(Vector3(float(x), 0, -10.5))
+			_lantern_post(Vector3(float(x), 0, 10.5))
+	# Stone balustrades mark bridge edges and keep the causeway silhouette legible.
+	for sign in [-1.0, 1.0]:
+		for z in [-1.0, 1.0]:
+			_box("NorthSouthBridgeRail", Vector3(sign * 9.0, 1.0, z * (CITY_HALF + 7.5)), Vector3(0.7, 1.8, 17), "stone", true)
+			_box("EastWestBridgeRail", Vector3(z * (CITY_HALF + 7.5), 1.0, sign * 9.0), Vector3(17, 1.8, 0.7), "stone", true)
+	# Small paved squares create breathing space at district entrances.
+	for center in [Vector3(-55, 0, -36), Vector3(55, 0, -36), Vector3(-52, 0, 20), Vector3(52, 0, 20)]:
+		_box("DistrictForecourt", center + Vector3(0, 0.06, 0), Vector3(15, 0.12, 8), "road_edge", false)
+
+
+func _lantern_post(position: Vector3) -> void:
+	_box("LanternStoneBase", position + Vector3(0, 0.45, 0), Vector3(0.8, 0.9, 0.8), "dark_stone", true)
+	_box("LanternPost", position + Vector3(0, 2.0, 0), Vector3(0.28, 2.4, 0.28), "gold", true)
+	_box("LanternHousing", position + Vector3(0, 3.55, 0), Vector3(1.0, 1.0, 1.0), "lantern", false)
+	_box("LanternCap", position + Vector3(0, 4.15, 0), Vector3(1.35, 0.25, 1.35), "roof", false)
+
+
 func _build_ground_and_roads() -> void:
-	_box("CityGround", Vector3(0, -0.55, 0), Vector3(220, 1, 220), "ground", true)
+	_box("CityGround", Vector3(0, -0.55, 0), Vector3(600, 1, 600), "ground", true)
 	_box("NorthSouthMainRoad", Vector3(0, 0.03, 0), Vector3(13, 0.12, 190), "road", false)
 	_box("EastWestMainRoad", Vector3(0, 0.04, 0), Vector3(190, 0.12, 13), "road", false)
 	_box("CentralProcessionalWay", Vector3(0, 0.06, 38), Vector3(20, 0.14, 100), "road_edge", false)
