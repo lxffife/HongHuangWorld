@@ -125,6 +125,8 @@ var drop_targets: Dictionary = {}
 var projectiles: Dictionary = {}
 var projectile_targets: Dictionary = {}
 var inventory_http: HTTPRequest
+var salvage_http: HTTPRequest
+var salvage_busy := false
 var inventory_button: Button
 var inventory_panel: PanelContainer
 var inventory_status: Label
@@ -2502,6 +2504,10 @@ func _build_inventory_ui() -> void:
 	equipment_action_http.timeout = 10.0
 	add_child(equipment_action_http)
 	equipment_action_http.request_completed.connect(_on_equipment_action_completed)
+	salvage_http = HTTPRequest.new()
+	salvage_http.timeout = 15.0
+	add_child(salvage_http)
+	salvage_http.request_completed.connect(_on_salvage_equipment_completed)
 	consumable_http = HTTPRequest.new()
 	consumable_http.timeout = 10.0
 	add_child(consumable_http)
@@ -2611,6 +2617,14 @@ func _render_inventory_items() -> void:
 			_apply_button_theme(equip_button, true)
 			equip_button.pressed.connect(_on_equip_item_pressed.bind(str(item.get("item_id", "")), str(item.get("equipment_slot", "")), str(item.get("instance_id", ""))))
 			row.add_child(equip_button)
+			var instance_id := str(item.get("instance_id", ""))
+			if not instance_id.is_empty():
+				var salvage_button := Button.new()
+				salvage_button.text = "分解"
+				salvage_button.disabled = salvage_busy
+				_apply_button_theme(salvage_button)
+				salvage_button.pressed.connect(_confirm_salvage_equipment.bind(instance_id, str(item.get("name", "装备"))))
+				row.add_child(salvage_button)
 		elif str(item.get("item_type", "")) == "consumable":
 			var use_button := Button.new()
 			use_button.text = "使用"
@@ -4197,6 +4211,48 @@ func _on_equipment_request_completed(result: int, response_code: int, _headers: 
 			button.text = "卸下"
 			button.pressed.connect(_on_unequip_item_pressed.bind(slot))
 			row.add_child(button)
+
+
+func _confirm_salvage_equipment(instance_id: String, item_name: String) -> void:
+	if salvage_busy or instance_id.is_empty():
+		return
+	var dialog := ConfirmationDialog.new()
+	dialog.title = "分解装备"
+	dialog.dialog_text = "确定永久分解「" + item_name + "」？\n将根据装备品质返还锻造材料，此操作不可撤销。"
+	add_child(dialog)
+	dialog.confirmed.connect(func():
+		dialog.queue_free()
+		_submit_equipment_salvage(instance_id)
+	)
+	dialog.canceled.connect(dialog.queue_free)
+	dialog.close_requested.connect(dialog.queue_free)
+	dialog.popup_centered(Vector2i(420, 180))
+
+func _submit_equipment_salvage(instance_id: String) -> void:
+	if salvage_busy or salvage_http == null or HHSession.access_token.is_empty():
+		return
+	salvage_busy = true
+	inventory_status.text = "正在分解装备……"
+	var payload := {"request_id": _make_request_uuid(), "instance_id": instance_id}
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token, "Content-Type: application/json"])
+	var error := salvage_http.request(
+		HHSession.api_base + "/api/v1/characters/current/inventory/salvage",
+		headers, HTTPClient.METHOD_POST, JSON.stringify(payload)
+	)
+	if error != OK:
+		salvage_busy = false
+		inventory_status.text = "分解请求提交失败，错误码：" + str(error)
+
+func _on_salvage_equipment_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	salvage_busy = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		inventory_status.text = "装备分解失败：" + body.get_string_from_utf8()
+		_render_inventory_items()
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if parsed is Dictionary:
+		inventory_status.text = "分解完成：" + str(parsed.get("material_name", "锻造材料")) + " ×" + str(parsed.get("material_quantity", 0))
+	_refresh_inventory()
 
 func _on_equip_item_pressed(item_id: String, slot: String, instance_id: String = "") -> void:
 	var payload := {"item_id": item_id, "slot": slot}
