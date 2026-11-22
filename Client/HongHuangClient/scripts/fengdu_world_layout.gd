@@ -66,7 +66,7 @@ static func get_local_connectors() -> Array[Dictionary]:
 		{"id": "connector_judge_bureau", "center": Vector3(39.0, 0.035, 36.5), "size": Vector3(24.0, 0.1, 4.5), "surface": "road"},
 		{"id": "connector_barracks", "center": Vector3(-55.5, 0.035, -13.5), "size": Vector3(43.0, 0.1, 4.5), "surface": "road"},
 		{"id": "connector_waystation", "center": Vector3(55.5, 0.035, -13.5), "size": Vector3(43.0, 0.1, 4.5), "surface": "road"},
-		{"id": "connector_reincarnation", "center": Vector3(0.0, 0.035, -45.0), "size": Vector3(4.5, 0.1, 26.0), "surface": "road"}
+		{"id": "connector_reincarnation", "center": Vector3(0.0, 0.035, -55.0), "size": Vector3(4.5, 0.1, 46.0), "surface": "road"}
 	]
 
 
@@ -104,7 +104,7 @@ static func get_navigation_network() -> Dictionary:
 			{"id": "district.ten_kings.entry", "position": Vector3(-51, 0, 36.5), "kind": "district_entry"},
 			{"id": "district.judge_bureau.entry", "position": Vector3(51, 0, 36.5), "kind": "district_entry"},
 			{"id": "district.patrol_office.entry", "position": Vector3(0, 0, 2), "kind": "district_entry"},
-			{"id": "district.reincarnation.entry", "position": Vector3(0, 0, -58), "kind": "district_entry"},
+			{"id": "district.reincarnation.entry", "position": Vector3(0, 0, -78), "kind": "district_entry"},
 			{"id": "district.barracks.entry", "position": Vector3(-77, 0, -13.5), "kind": "district_entry"},
 			{"id": "district.waystation.entry", "position": Vector3(77, 0, -13.5), "kind": "district_entry"}
 		],
@@ -469,6 +469,50 @@ static func get_npc_activity_points() -> Array[Dictionary]:
 		queue_point["queue_slot"] = i
 		points.append(queue_point)
 	return points
+
+
+static func get_district_service_entrances() -> Array[Dictionary]:
+	# Entrance points align with the southern gate opening of each district compound.
+	return [
+		{"id": "service.soul_ward.main", "district_id": "soul_ward", "district_name": "万家魂坊", "navigation_node_id": "district.soul_ward.entry", "position": Vector3(-55, 0, -66), "service": "社区与居民服务"},
+		{"id": "service.ghost_market.main", "district_id": "ghost_market", "district_name": "万魂鬼市", "navigation_node_id": "district.ghost_market.entry", "position": Vector3(55, 0, -66), "service": "交易与拍卖"},
+		{"id": "service.soul_registry.main", "district_id": "soul_registry", "district_name": "鬼籍司", "navigation_node_id": "district.soul_registry.entry", "position": Vector3(-52, 0, -8), "service": "新魂登记与身份核验"},
+		{"id": "service.merit_bureau.main", "district_id": "merit_bureau", "district_name": "功过司", "navigation_node_id": "district.merit_bureau.entry", "position": Vector3(52, 0, -8), "service": "功过与因果查询"},
+		{"id": "service.ten_kings.main", "district_id": "ten_kings_court", "district_name": "十王府", "navigation_node_id": "district.ten_kings.entry", "position": Vector3(-51, 0, 36.5), "service": "十殿审判"},
+		{"id": "service.judge_bureau.main", "district_id": "judge_bureau", "district_name": "判官司", "navigation_node_id": "district.judge_bureau.entry", "position": Vector3(51, 0, 36.5), "service": "案卷复核与司法文书"},
+		{"id": "service.patrol_office.main", "district_id": "patrol_office", "district_name": "巡城司", "navigation_node_id": "district.patrol_office.entry", "position": Vector3(0, 0, 2), "service": "治安与巡防调度"},
+		{"id": "service.reincarnation.main", "district_id": "reincarnation_bureau", "district_name": "轮回司", "navigation_node_id": "district.reincarnation.entry", "position": Vector3(0, 0, -78), "service": "轮回文牒与忘川通道"},
+		{"id": "service.barracks.main", "district_id": "barracks", "district_name": "阴兵大营", "navigation_node_id": "district.barracks.entry", "position": Vector3(-77, 0, -13.5), "service": "驻军与军需"},
+		{"id": "service.waystation.main", "district_id": "waystation", "district_name": "引魂驿站", "navigation_node_id": "district.waystation.entry", "position": Vector3(77, 0, -13.5), "service": "接引与分流"}
+	]
+
+
+static func get_spatial_binding_for_point(point: Dictionary) -> Dictionary:
+	var district_name := str(point.get("district", ""))
+	var district_id := ""
+	var entry_id := ""
+	for entrance in get_district_service_entrances():
+		if str(entrance["district_name"]) == district_name:
+			district_id = str(entrance["district_id"])
+			entry_id = str(entrance["navigation_node_id"])
+			break
+	var network := get_navigation_network()
+	var nearest_node_id := ""
+	var nearest_distance := INF
+	var point_position: Vector3 = point.get("position", Vector3.ZERO)
+	for node in network["nodes"]:
+		var node_position: Vector3 = node["position"]
+		var distance := point_position.distance_to(node_position)
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest_node_id = str(node["id"])
+	return {
+		"district_id": district_id,
+		"district_entry_node_id": entry_id,
+		"nearest_road_node_id": nearest_node_id,
+		"nearest_road_node_distance": nearest_distance,
+		"navigation_profile": "pedestrian"
+	}
 
 
 static func get_patrol_routes() -> Array[Dictionary]:
