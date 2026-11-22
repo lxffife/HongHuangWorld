@@ -429,6 +429,8 @@
 - 卷宗通过复核并进入候审时，会将轨迹关联达到 `partial_match` 或 `track_near_scene` 的人员快照写入 `case_parties`，但其 `suspect_status` 初始仍为 `unverified`，仅作为待核查人员，不自动认定为嫌疑人或犯罪人。
 - `update_case_party_procedural_status()` 记录送达通知、到场、无法联系或拒绝陈述等程序状态，并要求填写原因。`record_case_party_defense_statement()` 记录当事人申辩原文和时间；申辩不会自动改变物证审查结论。
 - `begin_case_hearing()` 开庭后，`present_case_evidence_at_hearing()` 只能出示已被判官司采信的物证，且每件物证只能出示一次。`close_case_hearing()` 要求至少出示一件物证并填写庭审记录，随后进入 `hearing_closed_pending_judgment`，等待独立判决。
+- `present_case_testimony_at_hearing()` 允许将已被判官司评为 `credible` 的证词带入庭审，且每案当前庭审轮次只能出示一次；争议或证据不足的证词不能作为可信证言出示。
+- `record_case_evidence_challenge_at_hearing()` 与 `record_case_testimony_challenge_at_hearing()` 支持当事人针对已出示物证/证言提出真实性、保管链、解释、关联性、可信度、时间、内容或身份方面的质证。质证必须填写理由并写入庭审记录，但不会自动推翻原先的采信/证词复核结果，须由判官在后续程序中重新评估。
 - `get_case_hearing_record()` 返回涉案人员程序状态、申辩记录、庭审举证记录及复核数据。当前庭审为流程数据原型，不包含真实玩家在线法庭、辩护人、检察官、证人出庭动画或司法权限系统。
 - 巡防历史记录清理会跳过所有尚未完成或仍可申诉的司法卷宗（退回补充、已移交、复核中、候审、庭审中、庭审结束待判决、已判决、申诉待处理），避免巡防记录达到数量上限时误删仍在审理的案件；未提交且已关闭的普通巡防记录仍可按旧规则清理。
 - 所有接口都返回明确的失败原因，例如案件不存在、现场调查未完成、卷宗未移交、复核未开始或处置类型无效。案件档案接口返回卷宗状态、复核状态、退回原因、待补材料和移交快照。
