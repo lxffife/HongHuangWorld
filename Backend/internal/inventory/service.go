@@ -744,17 +744,15 @@ func (s *Service) SalvageEquipment(ctx context.Context,accountID string,request 
 	quantity:=baseQuantity+max(0,quality-1)*perQualityBonus
 	if quantity<1||quantity>maxStack{return SalvageResult{},ErrInvalidRequest}
 	result:=SalvageResult{Applied:true,EquipmentItemID:itemID,MaterialItemID:materialID,MaterialName:materialName,MaterialQuantity:quantity,EquipmentQuality:quality}
-	_,err=tx.ExecContext(ctx,`INSERT INTO character_inventory(character_id,item_id,quantity)
+	grant,err:=tx.ExecContext(ctx,`INSERT INTO character_inventory(character_id,item_id,quantity)
 		VALUES($1::uuid,$2,$3)
 		ON CONFLICT(character_id,item_id) DO UPDATE
 		SET quantity=character_inventory.quantity+EXCLUDED.quantity,updated_at=now()
 		WHERE character_inventory.quantity+EXCLUDED.quantity<=$4`,characterID,materialID,quantity,maxStack)
 	if err!=nil{return SalvageResult{},fmt.Errorf("grant salvage material: %w",err)}
-	var ownedQuantity int
-	if err:=tx.QueryRowContext(ctx,`SELECT quantity FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2`,characterID,materialID).Scan(&ownedQuantity);err!=nil{
-		return SalvageResult{},fmt.Errorf("verify salvage material grant: %w",err)
-	}
-	if ownedQuantity<quantity{return SalvageResult{},ErrInventoryFull}
+	affected,err:=grant.RowsAffected()
+	if err!=nil{return SalvageResult{},fmt.Errorf("verify salvage material grant: %w",err)}
+	if affected!=1{return SalvageResult{},ErrInventoryFull}
 	if _,err:=tx.ExecContext(ctx,`INSERT INTO equipment_salvage_events(character_id,request_id,item_instance_id,equipment_item_id,material_item_id,material_quantity,equipment_quality)
 		VALUES($1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7)`,characterID,request.RequestID,request.InstanceID,itemID,materialID,quantity,quality);err!=nil{
 		return SalvageResult{},fmt.Errorf("record equipment salvage: %w",err)
