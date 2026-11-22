@@ -3748,7 +3748,7 @@ struct EnetServer::Impl {
             const auto projectile_id = make_event_uuid();
             player.last_spell_at_by_id[pending.spell_id] = now;
             projectiles.push_back(ProjectileRuntime{
-                projectile_id, player.character_id, player.session_id, pending.spell_id, target->runtime_id,
+                projectile_id, player.character_id, {}, {}, target->runtime_id,
                 player.x, player.y + 1.15F, player.z,
                 static_cast<float>(dx / distance) * projectile_speed,
                 static_cast<float>(dz / distance) * projectile_speed,
@@ -4136,7 +4136,7 @@ struct EnetServer::Impl {
             }
             const auto projectile_id = make_event_uuid();
             projectiles.push_back(ProjectileRuntime{
-                projectile_id, player.character_id, target->runtime_id,
+                projectile_id, player.character_id, player.session_id, pending.spell_id, target->runtime_id,
                 player.x, player.y + 1.15F, player.z,
                 static_cast<float>(dx / distance) * spell->projectile_speed,
                 static_cast<float>(dz / distance) * spell->projectile_speed,
