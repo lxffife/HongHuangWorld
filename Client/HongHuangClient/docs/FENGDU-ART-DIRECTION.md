@@ -95,7 +95,7 @@
 
 - The graybox owns a local demonstration clock, starting at 18:00 and advancing one in-game minute per real second. It is not authoritative world time.
 - Market merchants are visible only from 18:00 to 06:00. Soldiers drill from 06:00 to 22:00 and use a subdued rest idle outside that window. Waystation guides and waiting souls remain present.
-- Three waiting-soul stand-ins hold fixed queue slots at the waystation entrance, facing the registration desk. The desk-side guide and front actor share a 28-second local presentation cycle: ledger check, call gesture, front-soul acknowledgement, then registration gesture. The acknowledgement does not translate the actor through the desk or rails. This remains presentation-only, not a queue service or registration flow.
+- Three waiting-soul stand-ins hold fixed queue slots at the waystation entrance, facing the registration desk. The desk-side guide and waiting souls share a 28-second local presentation cycle and process the three slots front-to-back over three cycles: ledger check, call, acknowledgement and registered pose. A completed actor stays in its slot; the next actor becomes active in the following cycle. Do not translate actors through the narrow desk/rail geometry: no safe exit corridor has been verified in a live scene. This is still a local visual state demonstration, not a real queue, registration result, queue refill or dispatch service; those states must be server-authoritative.
 - NPC animation updates are distance-tiered: full-rate nearby, approximately 0.32-second intervals at medium range and 0.8-second intervals at long range. This is a prototype optimization, not a substitute for profiling a populated production city.
 
 
