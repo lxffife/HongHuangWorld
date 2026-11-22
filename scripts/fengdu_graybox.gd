@@ -68,6 +68,7 @@ var judge_workbench_root: Control
 var judge_case_list: ItemList
 var judge_case_detail: RichTextLabel
 var judge_workbench_hint: Label
+var judge_review_actions: HFlowContainer
 var judge_selected_incident_id := ""
 var judge_workbench_open := false
 
@@ -4966,6 +4967,8 @@ func _build_judge_bureau_workbench() -> void:
 	judge_case_detail.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	judge_case_detail.scroll_active = true
 	right.add_child(judge_case_detail)
+	judge_review_actions = HFlowContainer.new()
+	right.add_child(judge_review_actions)
 	var action_row := HFlowContainer.new()
 	right.add_child(action_row)
 	_add_judge_action_button(action_row, "开始复核", _judge_action_begin_review)
@@ -5097,6 +5100,61 @@ func _show_judge_case_detail(incident_id: String) -> void:
 	judge_case_detail.text = "\n".join(lines)
 
 
+func _refresh_judge_review_actions(submission: Dictionary, review: Dictionary) -> void:
+	if judge_review_actions == null:
+		return
+	for child in judge_review_actions.get_children():
+		child.queue_free()
+	var workflow := str(get_patrol_case_dossier(judge_selected_incident_id).get("case_workflow_state", ""))
+	if workflow != "under_judicial_review":
+		return
+	var assessments: Dictionary = review.get("evidence_assessments", {})
+	for tag_value in submission.get("evidence_tags", []):
+		var tag := str(tag_value)
+		var current := str(assessments.get(tag, {}).get("assessment", "待复核"))
+		var caption := "物证 %s：%s" % [tag, current]
+		var accepted := Button.new()
+		accepted.text = caption + " · 采信"
+		accepted.pressed.connect(func(): _judge_assess_evidence(tag, "accepted"))
+		judge_review_actions.add_child(accepted)
+		var verify := Button.new()
+		verify.text = "待核验"
+		verify.pressed.connect(func(): _judge_assess_evidence(tag, "needs_verification"))
+		judge_review_actions.add_child(verify)
+		var rejected := Button.new()
+		rejected.text = "不采信"
+		rejected.pressed.connect(func(): _judge_assess_evidence(tag, "rejected"))
+		judge_review_actions.add_child(rejected)
+	if int(submission.get("witness_count", 0)) > 0:
+		var testimony_review: Dictionary = review.get("testimony_assessment", {})
+		var testimony_state := str(testimony_review.get("assessment", "待复核"))
+		var credible := Button.new()
+		credible.text = "证词可信（当前：%s）" % testimony_state
+		credible.pressed.connect(func(): _judge_assess_testimony("credible"))
+		judge_review_actions.add_child(credible)
+		var disputed := Button.new()
+		disputed.text = "证词存疑"
+		disputed.pressed.connect(func(): _judge_assess_testimony("disputed"))
+		judge_review_actions.add_child(disputed)
+		var insufficient := Button.new()
+		insufficient.text = "证词不足"
+		insufficient.pressed.connect(func(): _judge_assess_testimony("insufficient"))
+		judge_review_actions.add_child(insufficient)
+
+
+func _judge_assess_evidence(tag: String, assessment: String) -> void:
+	if judge_selected_incident_id.is_empty():
+		return
+	var reason := "判官司工作台逐项复核：%s" % assessment
+	_run_judge_action(record_judicial_evidence_assessment(judge_selected_incident_id, tag, assessment, reason), "物证 %s 已更新为 %s。" % [tag, assessment])
+
+
+func _judge_assess_testimony(assessment: String) -> void:
+	if judge_selected_incident_id.is_empty():
+		return
+	_run_judge_action(record_judicial_testimony_assessment(judge_selected_incident_id, assessment, "判官司工作台逐项复核：%s" % assessment), "证词复核结果已更新：%s。" % assessment)
+
+
 func _run_judge_action(result: Dictionary, success_text: String) -> void:
 	if not bool(result.get("ok", false)):
 		if judge_workbench_hint != null:
@@ -5116,26 +5174,7 @@ func _judge_action_begin_review() -> void:
 func _judge_action_complete_review() -> void:
 	if judge_selected_incident_id.is_empty():
 		return
-	var dossier := get_patrol_case_dossier(judge_selected_incident_id)
-	if not bool(dossier.get("ok", false)):
-		return
-	var submission: Dictionary = dossier.get("case_submission", {})
-	var review: Dictionary = dossier.get("judicial_review", {})
-	var assessments: Dictionary = review.get("evidence_assessments", {})
-	for tag_value in submission.get("evidence_tags", []):
-		var tag := str(tag_value)
-		if not assessments.has(tag):
-			var assessment_result := record_judicial_evidence_assessment(judge_selected_incident_id, tag, "accepted", "工作台复核：该物证与移交材料一致，暂予采信。")
-			if not bool(assessment_result.get("ok", false)):
-				_run_judge_action(assessment_result, "")
-				return
-	if int(submission.get("witness_count", 0)) > 0 and not review.get("testimony_assessment", {}).has("assessment"):
-		var testimony_result := record_judicial_testimony_assessment(judge_selected_incident_id, "credible", "工作台复核：证词无已记录的前后矛盾，暂予可信。")
-		if not bool(testimony_result.get("ok", false)):
-			_run_judge_action(testimony_result, "")
-			return
 	_run_judge_action(complete_judge_bureau_review(judge_selected_incident_id), "材料复核完成；是否接纳候审由判官另行决定。")
-
 
 func _judge_action_accept_hearing() -> void:
 	if judge_selected_incident_id.is_empty():
