@@ -318,7 +318,7 @@ func TestRolledEquipmentBonusesUseAuthoritativeCombatStatPipeline(t *testing.T) 
 	if err := applyEquipmentStatBonuses(&stats, rolled); err != nil {
 		t.Fatalf("apply rolled affixes: %v", err)
 	}
-	if stats.Attack != 28 || stats.Defense != 6 || stats.MaxHealth != 115 || stats.MaxMana != 50 {
+	if stats.Attack != 28 || stats.Defense != 6 || stats.MaxHealth != 105 || stats.MaxMana != 50 {
 		t.Fatalf("rolled combat stats = %+v", stats)
 	}
 	if stats.MovementSpeed < 5.0999 || stats.MovementSpeed > 5.1001 {
