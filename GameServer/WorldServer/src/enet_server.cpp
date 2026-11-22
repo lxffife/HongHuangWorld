@@ -320,6 +320,7 @@ struct ProjectileRuntime {
     std::int64_t attack{};
     std::int32_t power_basis_points{10000};
     std::int32_t defense_penetration_basis_points{};
+    bool critical{};
     Clock::time_point expires_at{};
     std::string projectile_type{"arrow"};
     std::int32_t slow_duration_ms{};
@@ -329,6 +330,14 @@ struct ProjectileRuntime {
     std::int32_t burn_interval_ms{};
     std::int32_t burn_damage_basis_points{};
 };
+
+bool roll_critical_hit(std::int32_t agility) {
+    const auto chance = honghuang::simulation::critical_chance_basis_points(agility);
+    if (chance <= 0) return false;
+    static thread_local std::mt19937 generator(std::random_device{}());
+    std::uniform_int_distribution<std::int32_t> roll(1, 10000);
+    return roll(generator) <= chance;
+}
 
 std::string make_event_uuid() {
     static thread_local std::mt19937_64 generator(std::random_device{}());
@@ -3878,6 +3887,7 @@ struct EnetServer::Impl {
                 static_cast<float>(dz / distance) * projectile_speed,
                 player.attack, combat_profile.power_basis_points,
                 combat_profile.defense_penetration_basis_points,
+                roll_critical_hit(player.agility),
                 now + std::chrono::milliseconds(2200)
             });
             broadcast_player_action_event(player, "attack", target->runtime_id, "ranged_shot", peer);
@@ -3895,9 +3905,11 @@ struct EnetServer::Impl {
             static_cast<std::int64_t>(target->definition.max_health)
         };
         honghuang::simulation::DamageResult damage{};
+        const bool critical_hit = roll_critical_hit(player.agility);
         const honghuang::simulation::AttackProfile attack_profile{
             combat_profile.power_basis_points,
-            combat_profile.defense_penetration_basis_points
+            combat_profile.defense_penetration_basis_points,
+            critical_hit
         };
         if (!honghuang::simulation::calculate_damage(attacker, defender, attack_profile, damage)) {
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
@@ -4268,6 +4280,7 @@ struct EnetServer::Impl {
                     player.spell_mastery.contains(std::string(spell->id))
                         ? player.spell_mastery.at(std::string(spell->id)).level : 1),
                 spell->defense_penetration_basis_points,
+                roll_critical_hit(player.agility),
                 now + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<float>(spell->projectile_lifetime_seconds)),
                 spell->element == honghuang::simulation::SpellElement::Ice ? "ice_bolt" : "fireball",
                 spell->slow_duration_ms, spell->slow_multiplier, spell->freeze_duration_ms,
@@ -4324,7 +4337,8 @@ struct EnetServer::Impl {
             honghuang::simulation::DamageResult damage{};
             const honghuang::simulation::AttackProfile attack_profile{
                 projectile->power_basis_points,
-                projectile->defense_penetration_basis_points
+                projectile->defense_penetration_basis_points,
+                projectile->critical
             };
             if (honghuang::simulation::calculate_damage(attacker, defender, attack_profile, damage)) {
                 std::string contribution_error;
