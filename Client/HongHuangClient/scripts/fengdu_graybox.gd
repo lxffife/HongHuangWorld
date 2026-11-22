@@ -2171,6 +2171,11 @@ func _begin_patrol_dispatch(target_position: Vector3, incident_profile: Dictiona
 	incident["witness_testimony_tag"] = ""
 	incident["witness_question_stage"] = 0
 	incident["investigation_timeline"] = []
+	incident["nearby_actor_snapshots"] = _capture_incident_nearby_activity(target_position)
+	incident["suspect_lead_count"] = incident["nearby_actor_snapshots"].size()
+	_append_incident_timeline_entry(incident, "incident_report", "巡防报告登记：" + str(incident.get("title", "现场事件")), "patrol")
+	if int(incident["suspect_lead_count"]) > 0:
+		_append_incident_timeline_entry(incident, "activity_snapshot", "案发地点附近记录到 %d 名活动人员，均列为待核查线索" % int(incident["suspect_lead_count"]), "local_activity")
 	patrol_incident_records.append(incident.duplicate(true))
 	patrol_incident_queue.append(incident)
 	patrol_incident_queue.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
@@ -3541,6 +3546,66 @@ func _interact_with_patrol_incident(incident_id: String) -> void:
 		npc_detail_label.text = "请走近现场证人（3.8 米内）再按 E 询问或追问。"
 	else:
 		npc_detail_label.text = "现场可调查的物证和证人都已完成记录，等待巡城司汇总。"
+
+
+func _capture_incident_nearby_activity(target_position: Vector3) -> Array[Dictionary]:
+	var snapshots: Array[Dictionary] = []
+	for agent in npc_agents:
+		var role := str(agent.get("role", ""))
+		if role in ["patrol_guard", "gate_guard"] or str(agent.get("importance", "")) == "ambient":
+			continue
+		var actor_root: Node3D = agent.get("root")
+		if actor_root == null or not is_instance_valid(actor_root) or not actor_root.visible:
+			continue
+		var distance := actor_root.global_position.distance_to(target_position)
+		if distance > 32.0:
+			continue
+		snapshots.append({
+			"actor_id": str(agent.get("npc_id", "")),
+			"display_name": str(agent.get("display_name", "无名坊民")),
+			"role": role,
+			"district": str(agent.get("district", "")),
+			"position": actor_root.global_position,
+			"distance_at_report": distance,
+			"activity_at_report": str(agent.get("activity", "")),
+			"behavior_state_at_report": str(agent.get("state", "idle")),
+			"lead_status": "unverified"
+		})
+	snapshots.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a.get("distance_at_report", 999.0)) < float(b.get("distance_at_report", 999.0))
+	)
+	if snapshots.size() > 8:
+		snapshots.resize(8)
+	return snapshots
+
+
+func get_patrol_case_dossier(incident_id: String) -> Dictionary:
+	var record_index := _find_patrol_incident_record(incident_id)
+	if record_index < 0:
+		return {"ok": false, "reason": "case_not_found"}
+	var record: Dictionary = patrol_incident_records[record_index]
+	var timeline: Array = record.get("investigation_timeline", []).duplicate(true)
+	timeline.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a.get("at", 0.0)) < float(b.get("at", 0.0))
+	)
+	return {
+		"ok": true,
+		"incident_id": incident_id,
+		"title": str(record.get("title", "巡防案件")),
+		"state": str(record.get("state", "")),
+		"severity": str(record.get("severity_label", "一般")),
+		"created_at": float(record.get("created_at", 0.0)),
+		"resolved_at": float(record.get("resolved_at", -1.0)),
+		"result_label": str(record.get("result_label", "")),
+		"deduction_code": str(record.get("deduction_code", "inconclusive")),
+		"deduction_label": str(record.get("deduction_label", "尚无推断")),
+		"evidence_tags": record.get("player_clue_tags", []).duplicate(),
+		"testimony_tag": str(record.get("witness_testimony_tag", "")),
+		"testimony_conflict": bool(record.get("witness_revised", false)),
+		"timeline": timeline,
+		"nearby_actor_snapshots": record.get("nearby_actor_snapshots", []).duplicate(true),
+		"player_contribution_log": record.get("player_contribution_log", []).duplicate(true)
+	}
 
 
 func _append_incident_timeline_entry(record: Dictionary, entry_type: String, label: String, source: String) -> void:
