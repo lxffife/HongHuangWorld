@@ -220,19 +220,35 @@ func (s *Service) CurrentInventory(ctx context.Context, accountID string) ([]Ite
 // CreateDrop is called only by an authenticated world server after its own
 // authoritative loot roll. The server supplies the item and quantity.
 
+func (s *Service) expireGroundDrops(ctx context.Context,nodeKey string)error{
+	tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return fmt.Errorf("begin ground drop expiration: %w",err)}
+	defer tx.Rollback()
+	rows,err:=tx.QueryContext(ctx,`SELECT item_instance_id::text FROM ground_drops
+		WHERE server_id=(SELECT id FROM server_registry WHERE node_key=$1)
+		  AND status='available' AND expires_at<=now() AND item_instance_id IS NOT NULL
+		FOR UPDATE`,nodeKey)
+	if err!=nil{return fmt.Errorf("load expired equipment drops: %w",err)}
+	instanceIDs:=make([]string,0)
+	for rows.Next(){var id string;if err:=rows.Scan(&id);err!=nil{rows.Close();return fmt.Errorf("scan expired equipment instance: %w",err)};instanceIDs=append(instanceIDs,id)}
+	if err:=rows.Err();err!=nil{rows.Close();return fmt.Errorf("iterate expired equipment drops: %w",err)}
+	if err:=rows.Close();err!=nil{return fmt.Errorf("close expired equipment drops: %w",err)}
+	if _,err:=tx.ExecContext(ctx,`UPDATE ground_drops SET status='expired',item_instance_id=NULL,updated_at=now()
+		WHERE server_id=(SELECT id FROM server_registry WHERE node_key=$1)
+		  AND status='available' AND expires_at<=now()`,nodeKey);err!=nil{return fmt.Errorf("mark expired ground drops: %w",err)}
+	for _,id:=range instanceIDs{
+		if _,err:=tx.ExecContext(ctx,`DELETE FROM item_instances ii WHERE ii.id=$1::uuid
+			AND NOT EXISTS(SELECT 1 FROM character_item_instances ci WHERE ci.item_instance_id=ii.id)
+			AND NOT EXISTS(SELECT 1 FROM character_equipment ce WHERE ce.item_instance_id=ii.id)`,id);err!=nil{
+			return fmt.Errorf("discard expired equipment instance %s: %w",id,err)
+		}
+	}
+	if err:=tx.Commit();err!=nil{return fmt.Errorf("commit ground drop expiration: %w",err)}
+	return nil
+}
+
 func (s *Service) ListGroundDrops(ctx context.Context, nodeKey string) ([]GroundDropSnapshot, error) {
 	if strings.TrimSpace(nodeKey) == "" { return nil, ErrInvalidRequest }
-	if _,err:=s.db.ExecContext(ctx,`UPDATE ground_drops SET status='expired',item_instance_id=NULL,updated_at=now()
-		WHERE server_id=(SELECT id FROM server_registry WHERE node_key=$1)
-		  AND status='available' AND expires_at<=now()`,nodeKey);err!=nil{
-		return nil,fmt.Errorf("expire old ground drops: %w",err)
-	}
-	if _,err:=s.db.ExecContext(ctx,`DELETE FROM item_instances ii
-		WHERE NOT EXISTS(SELECT 1 FROM ground_drops d WHERE d.item_instance_id=ii.id)
-		  AND NOT EXISTS(SELECT 1 FROM character_item_instances ci WHERE ci.item_instance_id=ii.id)
-		  AND NOT EXISTS(SELECT 1 FROM character_equipment ce WHERE ce.item_instance_id=ii.id)`);err!=nil{
-		return nil,fmt.Errorf("discard unclaimed equipment instances: %w",err)
-	}
+	if err:=s.expireGroundDrops(ctx,nodeKey);err!=nil{return nil,fmt.Errorf("expire old ground drops: %w",err)}
 	rows, err := s.db.QueryContext(ctx, `SELECT d.id::text, d.session_id::text, d.owner_character_id::text,
 		d.item_id, i.name, COALESCE(ii.quality, i.quality), d.quantity, d.position_x, d.position_z,
 		GREATEST(0, CEIL(EXTRACT(EPOCH FROM (d.expires_at - now()))))::integer,
