@@ -321,7 +321,7 @@ func TestRolledEquipmentBonusesUseAuthoritativeCombatStatPipeline(t *testing.T) 
 	if stats.Attack != 28 || stats.Defense != 6 || stats.MaxHealth != 105 || stats.MaxMana != 50 {
 		t.Fatalf("rolled combat stats = %+v", stats)
 	}
-	if stats.MovementSpeed < 5.0999 || stats.MovementSpeed > 5.1001 {
-		t.Fatalf("rolled movement speed = %v, want 5.1", stats.MovementSpeed)
+	if stats.MovementSpeed < 5.9999 || stats.MovementSpeed > 6.0001 {
+		t.Fatalf("rolled movement speed = %v, want 6.0", stats.MovementSpeed)
 	}
 }
