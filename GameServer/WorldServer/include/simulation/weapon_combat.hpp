@@ -31,6 +31,11 @@ inline WeaponCombatProfile weapon_combat_profile(std::string_view weapon_type) {
 
  // Agility shortens the weapon's server-authoritative attack interval by 0.1%
  // per point, capped at 20%. A 100 ms floor prevents extreme attack rates.
+// Agility grants 0.1% critical chance per point, capped at 15%.
+inline std::int32_t critical_chance_basis_points(std::int32_t agility) {
+    return std::clamp(agility, 0, 150) * 10;
+}
+
 inline std::chrono::milliseconds agility_adjusted_attack_cooldown(
     std::chrono::milliseconds base_cooldown, std::int32_t agility) {
     if (base_cooldown.count() <= 0) return std::chrono::milliseconds::zero();
