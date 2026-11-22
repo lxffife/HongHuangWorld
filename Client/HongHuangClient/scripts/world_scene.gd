@@ -2542,7 +2542,11 @@ func _on_inventory_request_completed(result: int, response_code: int, _headers: 
 		inventory_status.text = "中心服返回了无效的背包数据。"
 		return
 	inventory_cache = parsed.get("items", [])
-	inventory_status.text = "物品种类：" + str(inventory_cache.size())
+	var capacity: Dictionary = parsed.get("capacity", {})
+	var used_slots := int(capacity.get("used_slots", inventory_cache.size()))
+	var max_slots := int(capacity.get("max_slots", 40))
+	var free_slots := int(capacity.get("free_slots", max(0, max_slots - used_slots)))
+	inventory_status.text = "背包格子：" + str(used_slots) + " / " + str(max_slots) + " · 空余 " + str(free_slots) + " · 物品种类 " + str(inventory_cache.size())
 	_render_inventory_items()
 
 func _on_inventory_filter_pressed(filter_type: String) -> void:
