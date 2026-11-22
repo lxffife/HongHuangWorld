@@ -42,6 +42,8 @@ var market_lights: Array[OmniLight3D] = []
 var market_customers: Array[Dictionary] = []
 var market_stall_registry: Array[Dictionary] = []
 var market_stage_actor: Dictionary = {}
+var market_caravans: Array[Dictionary] = []
+var market_event_label: Label3D
 
 var mats: Dictionary = {}
 
@@ -758,7 +760,9 @@ func _build_npc_population() -> void:
 
 	# Ambient customers and the auction host are visual actors, not server-owned NPCs.
 	_build_market_customers()
+	_build_market_caravans()
 	_build_market_auction_host()
+	_build_market_event_sign()
 
 	# One visible patrol guard follows the closed route; the other guards remain at posts.
 	if patrol_route.size() > 1:
@@ -793,8 +797,10 @@ func _build_market_customers() -> void:
 	# Static ambient props only: they are not server-owned or interactive NPC agents.
 	var market_center: Vector3 = district_markers.get("万魂鬼市", Vector3(55.0, 0.0, -53.0))
 	var customer_stalls: Array[Dictionary] = [
-		{"position": market_center + Vector3(-7.1, 0.0, -6.5), "yaw": PI * 0.5},
-		{"position": market_center + Vector3(7.1, 0.0, 6.5), "yaw": -PI * 0.5}
+		{"position": market_center + Vector3(-7.1, 0.0, -6.5), "yaw": PI * 0.5, "tint": "#9cabb5"},
+		{"position": market_center + Vector3(7.1, 0.0, 6.5), "yaw": -PI * 0.5, "tint": "#b7a18a"},
+		{"position": market_center + Vector3(-7.1, 0.0, 0.0), "yaw": PI * 0.5, "tint": "#8fae9a"},
+		{"position": market_center + Vector3(7.1, 0.0, 0.0), "yaw": -PI * 0.5, "tint": "#a99abf"}
 	]
 	for index in range(customer_stalls.size()):
 		var customer_root := Node3D.new()
@@ -803,6 +809,9 @@ func _build_market_customers() -> void:
 		customer_root.rotation.y = float(customer_stalls[index]["yaw"])
 		add_child(customer_root)
 		var customer_figure := _create_npc_figure(customer_root, "market_customer")
+		var customer_robe := customer_figure["body"].material_override as StandardMaterial3D
+		if customer_robe != null:
+			customer_robe.albedo_color = Color(str(customer_stalls[index]["tint"]))
 		var parcel := MeshInstance3D.new()
 		var parcel_mesh := BoxMesh.new()
 		parcel_mesh.size = Vector3(0.34, 0.32, 0.34)
@@ -821,6 +830,107 @@ func _build_market_customers() -> void:
 			"base_yaw": float(customer_stalls[index]["yaw"]),
 			"phase": float(index) * 2.4
 		})
+
+func _build_market_caravans() -> void:
+	# Two small supply carts use the rear service lanes, never the central 9m aisle.
+	var market_center: Vector3 = district_markers.get("万魂鬼市", Vector3(55.0, 0.0, -53.0))
+	for index in range(2):
+		var side := -1.0 if index == 0 else 1.0
+		var root := Node3D.new()
+		root.name = "AmbientMarketCaravan_%02d" % (index + 1)
+		root.position = market_center + Vector3(side * 15.3, 0.0, -7.0 if index == 0 else 7.0)
+		root.rotation.y = PI if index == 0 else 0.0
+		add_child(root)
+		var driver := _create_npc_figure(root, "market_customer")
+		var driver_material := driver["body"].material_override as StandardMaterial3D
+		if driver_material != null:
+			driver_material.albedo_color = Color("#8b7766") if index == 0 else Color("#6e8292")
+		var cart := Node3D.new()
+		cart.name = "SupplyCart"
+		cart.position = Vector3(0.0, 0.0, 1.45)
+		root.add_child(cart)
+		var wood := StandardMaterial3D.new()
+		wood.albedo_color = Color("#715b47")
+		wood.roughness = 0.94
+		var bed := MeshInstance3D.new()
+		var bed_mesh := BoxMesh.new()
+		bed_mesh.size = Vector3(1.25, 0.22, 1.35)
+		bed.mesh = bed_mesh
+		bed.position.y = 0.62
+		bed.material_override = wood
+		cart.add_child(bed)
+		for wheel_side in [-1.0, 1.0]:
+			var wheel := MeshInstance3D.new()
+			var wheel_mesh := CylinderMesh.new()
+			wheel_mesh.top_radius = 0.34
+			wheel_mesh.bottom_radius = 0.34
+			wheel_mesh.height = 0.14
+			wheel.mesh = wheel_mesh
+			wheel.rotation.z = PI * 0.5
+			wheel.position = Vector3(wheel_side * 0.68, 0.38, 0.0)
+			wheel.material_override = wood
+			cart.add_child(wheel)
+		for pack_index in range(3):
+			var pack := MeshInstance3D.new()
+			var pack_mesh := BoxMesh.new()
+			pack_mesh.size = Vector3(0.38, 0.42, 0.38)
+			pack.mesh = pack_mesh
+			pack.position = Vector3(float(pack_index - 1) * 0.38, 0.94, 0.0)
+			var pack_material := StandardMaterial3D.new()
+			pack_material.albedo_color = Color("#9c8063") if index == 0 else Color("#667b83")
+			pack_material.roughness = 0.9
+			pack.material_override = pack_material
+			cart.add_child(pack)
+		market_caravans.append({
+			"root": root,
+			"body": driver["body"],
+			"left_arm": driver["left_arm"],
+			"right_arm": driver["right_arm"],
+			"base_x": root.position.x,
+			"base_z": root.position.z,
+			"phase": float(index) * PI,
+			"direction": 1.0 if index == 0 else -1.0
+		})
+
+
+func _build_market_event_sign() -> void:
+	var market_center: Vector3 = district_markers.get("万魂鬼市", Vector3(55.0, 0.0, -53.0))
+	market_event_label = Label3D.new()
+	market_event_label.name = "GhostMarketAuctionSchedule"
+	market_event_label.position = market_center + Vector3(0.0, 6.3, 11.0)
+	market_event_label.font_size = 18
+	market_event_label.pixel_size = 0.012
+	market_event_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	market_event_label.modulate = Color("#e8c58b")
+	market_event_label.outline_size = 5
+	market_event_label.outline_modulate = Color("#101722")
+	add_child(market_event_label)
+	_update_market_event_sign()
+
+
+func _update_market_event_sign() -> void:
+	if market_event_label == null:
+		return
+	var hour := int(npc_world_minutes / 60.0)
+	var minute := int(fposmod(npc_world_minutes, 60.0))
+	var minute_of_day := hour * 60 + minute
+	if minute_of_day >= 19 * 60 + 30 and minute_of_day < 20 * 60:
+		market_event_label.text = "竞宝预告 · 20:00 开场"
+		market_event_label.modulate = Color("#d7bd98")
+		market_event_label.visible = npc_schedule_night
+	elif _is_market_auction_time():
+		market_event_label.text = "万魂竞宝 · 正在举行"
+		market_event_label.modulate = Color("#f0d29a")
+		market_event_label.visible = npc_schedule_night
+	elif minute_of_day >= 22 * 60 and minute_of_day < 22 * 60 + 30:
+		market_event_label.text = "本场竞宝已结束"
+		market_event_label.modulate = Color("#aeb7c2")
+		market_event_label.visible = npc_schedule_night
+	else:
+		market_event_label.text = "竞宝时段 · 20:00–22:00"
+		market_event_label.modulate = Color("#d7bd98")
+		market_event_label.visible = npc_schedule_night
+
 
 
 func _build_market_ambience() -> void:
@@ -865,6 +975,23 @@ func _update_market_ambience(delta: float) -> void:
 		left_arm.rotation.z = deg_to_rad(-18.0) + sin(phase * 0.8) * 0.035
 		right_arm.rotation.z = deg_to_rad(18.0) - sin(phase * 0.8 + 1.1) * 0.045
 		customer_root.rotation.y = float(customer_data["base_yaw"]) + sin(phase * 0.24) * 0.035
+	for caravan_data in market_caravans:
+		var caravan_root: Node3D = caravan_data["root"]
+		caravan_root.visible = npc_schedule_night
+		if not npc_schedule_night:
+			continue
+		var caravan_phase := market_ambience_time * 0.42 + float(caravan_data["phase"])
+		var travel_offset := sin(caravan_phase) * 7.0
+		caravan_root.position = Vector3(float(caravan_data["base_x"]), 0.0, float(caravan_data["base_z"]) + travel_offset)
+		var travel_direction := cos(caravan_phase) * float(caravan_data["direction"])
+		caravan_root.rotation.y = PI if travel_direction < 0.0 else 0.0
+		var driver_body: MeshInstance3D = caravan_data["body"]
+		var driver_left: MeshInstance3D = caravan_data["left_arm"]
+		var driver_right: MeshInstance3D = caravan_data["right_arm"]
+		driver_body.position.y = 0.92 + absf(sin(caravan_phase * 2.0)) * 0.025
+		driver_left.rotation.z = deg_to_rad(-18.0) + sin(caravan_phase * 2.0) * 0.04
+		driver_right.rotation.z = deg_to_rad(18.0) - sin(caravan_phase * 2.0) * 0.04
+	_update_market_event_sign()
 	if not market_stage_actor.is_empty():
 		var host_root: Node3D = market_stage_actor["root"]
 		var auction_active := _is_market_auction_time()
