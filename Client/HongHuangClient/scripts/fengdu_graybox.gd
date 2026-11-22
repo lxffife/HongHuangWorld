@@ -2470,7 +2470,9 @@ func _process_autonomous_judicial_cases(delta: float) -> void:
 					record_judicial_evidence_assessment(incident_id, tag, "accepted", "NPC 判官依据巡城司勘验记录完成常规复核")
 			if int(submission.get("witness_count", 0)) > 0 and not str(submission.get("testimony_tag", "")).is_empty():
 				if record.get("judicial_review", {}).get("testimony_assessment", {}).is_empty():
-					record_judicial_testimony_assessment(incident_id, "credible", "常规 NPC 证词与基础勘验材料未发现明显冲突")
+					var testimony_status := "disputed" if bool(record.get("witness_revised", false)) else "credible"
+					var testimony_reason := "证人前后陈述存在矛盾，NPC 判官将其列为争议材料，不单独据此定案" if testimony_status == "disputed" else "常规 NPC 证词与基础勘验材料未发现明显冲突"
+					record_judicial_testimony_assessment(incident_id, testimony_status, testimony_reason)
 			var review_result := complete_judge_bureau_review(incident_id)
 			if bool(review_result.get("ok", false)) and bool(review_result.get("hearing_eligible", false)):
 				record_judge_bureau_case_disposition(incident_id, "accept_for_hearing")
@@ -2509,8 +2511,6 @@ func _seed_autonomous_case_material(record: Dictionary) -> void:
 		if not tags.has(tag_value):
 			tags.append(tag_value)
 	record["player_clue_tags"] = tags
-	record["player_evidence_count"] = maxi(int(record.get("player_evidence_count", 0)), tags.size())
-	record["player_witness_count"] = maxi(int(record.get("player_witness_count", 0)), 1)
 	if str(record.get("witness_testimony_tag", "")).is_empty():
 		var incident_type := str(record.get("type", ""))
 		record["witness_testimony_tag"] = "witness_dispute" if incident_type == "crowd_disorder" else ("witness_violence" if incident_type == "hostile_encounter" else "witness_shadow")
@@ -4071,7 +4071,8 @@ func complete_judge_bureau_review(incident_id: String) -> Dictionary:
 			"testimony_assessment_required": testimony_missing
 		}
 	var testimony_status := str(testimony_review.get("assessment", "not_applicable"))
-	var hearing_eligible := accepted_count > 0 and unresolved_count == 0 and testimony_status not in ["disputed", "insufficient"]
+	var autonomous_evidence_override := bool(record.get("autonomous_processing", false)) and accepted_count >= 2 and unresolved_count == 0
+	var hearing_eligible := accepted_count > 0 and unresolved_count == 0 and (testimony_status not in ["disputed", "insufficient"] or autonomous_evidence_override)
 	review["review_complete"] = true
 	review["hearing_eligible"] = hearing_eligible
 	review["completed_at"] = npc_simulation_time
