@@ -5120,6 +5120,7 @@ func _build_judge_bureau_workbench() -> void:
 	judge_workbench_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	judge_workbench_hint.add_theme_color_override("font_color", Color("#e7c58e"))
 	root_column.add_child(judge_workbench_hint)
+	judge_workbench_hint.text = "原型操作台：当前客户端规则演示，不代表真实官职授权或服务端司法权限。"
 
 
 func _add_judge_action_button(parent: Container, title: String, callback: Callable) -> void:
@@ -5173,8 +5174,6 @@ func _refresh_judge_bureau_workbench() -> void:
 	else:
 		judge_selected_incident_id = ""
 		judge_case_detail.text = "[center][color=#a9bdcf]当前没有已移交判官司的卷宗[/color][/center]\n\n巡城司完成现场调查并正式移交后，案件才会出现在这里。"
-	if judge_workbench_hint != null:
-		judge_workbench_hint.text = "原型操作台：操作会调用当前客户端案件规则；并非真实官职授权或服务端司法权限。NPC 出庭状态未完成物理导航接入。"
 
 
 func _on_judge_case_selected(index: int) -> void:
