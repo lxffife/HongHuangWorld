@@ -4783,6 +4783,12 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 				for topic in topics:
 					lines.append("· " + str(topic))
 			npc_dialogue_label.text = "\n".join(PackedStringArray(lines))
+			if str(npc_data.get("interaction_type", "")) == "equipment_crafting":
+				var forge_button := Button.new()
+				_apply_button_theme(forge_button, true)
+				forge_button.text = "打开鬼工坊 · 装备打造"
+				forge_button.pressed.connect(_open_equipment_crafting)
+				npc_choice_container.add_child(forge_button)
 			var choices: Variant = dialogue.get("choices", [])
 			if choices is Array:
 				for choice_variant in choices:
@@ -4794,7 +4800,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 						choice_button.tooltip_text = str(choice.get("description", ""))
 						choice_button.pressed.connect(_submit_npc_fate_choice.bind(str(npc_data.get("id", "")), str(choice.get("id", ""))))
 						npc_choice_container.add_child(choice_button)
-			npc_status_label.text = "交互已由中心服验证。选择会影响功德与业力；与该 NPC 的因果抉择只能作出一次。"
+			npc_status_label.text = "交互已由中心服验证。" + ("铁匠工坊可在此开启，打造结果由中心服结算。" if str(npc_data.get("interaction_type", "")) == "equipment_crafting" else "选择会影响功德与业力；与该 NPC 的因果抉择只能作出一次。")
 			npc_trial_button.visible = str(npc_data.get("interaction_type", "")) == "soul_trials"
 			npc_eligibility_button.visible = str(npc_data.get("interaction_type", "")) == "reincarnation_guidance"
 			npc_soul_button.visible = true
@@ -5025,6 +5031,8 @@ func _render_world_npcs() -> void:
 				accent_color = Color("#a9c5d9")
 			"soup_keeper":
 				accent_color = Color("#9bd8ce")
+			"blacksmith":
+				accent_color = Color("#e09a55")
 			_:
 				accent_color = Color("#e6c77d")
 
