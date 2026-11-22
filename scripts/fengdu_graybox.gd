@@ -898,6 +898,8 @@ func _build_market_customers() -> void:
 			"base_position": base_position,
 			"event_position": event_position,
 			"preferred_stall_id": "ghost_market.stall.%02d" % (index + 1),
+			"event_delay": float(index) * 1.15,
+			"event_elapsed": 0.0,
 			"waypoints": customer_waypoints,
 			"route_index": 0,
 			"route_progress": 0.0,
@@ -1150,6 +1152,14 @@ func _update_market_ambience(delta: float) -> void:
 			if customer_state != "event_approach" and customer_state != "event_watch":
 				customer_data["state"] = "event_approach"
 				customer_state = "event_approach"
+				customer_data["event_elapsed"] = 0.0
+			var event_elapsed := float(customer_data.get("event_elapsed", 0.0)) + delta
+			customer_data["event_elapsed"] = event_elapsed
+			if event_elapsed < float(customer_data.get("event_delay", 0.0)):
+				customer_body.rotation.x = sin(customer_phase * 0.5) * deg_to_rad(1.4)
+				customer_left.rotation.z = deg_to_rad(-18.0) + sin(customer_phase * 0.5) * 0.02
+				customer_right.rotation.z = deg_to_rad(18.0) - sin(customer_phase * 0.5 + 0.7) * 0.02
+				continue
 			var event_target: Vector3 = customer_data["event_position"]
 			var event_delta: Vector3 = event_target - customer_root.position
 			if event_delta.length() > 0.18:
@@ -1172,6 +1182,7 @@ func _update_market_ambience(delta: float) -> void:
 			continue
 		if customer_state == "event_approach" or customer_state == "event_watch":
 			customer_data["state"] = "return_to_stall"
+			customer_data["event_elapsed"] = 0.0
 			customer_state = "return_to_stall"
 		if customer_state == "return_to_stall":
 			var home_position: Vector3 = customer_data["base_position"]
