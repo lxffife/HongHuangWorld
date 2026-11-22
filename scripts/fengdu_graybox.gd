@@ -1856,8 +1856,11 @@ func _update_market_gate_inspection(delta: float) -> void:
 			market_inspection_remaining = 10.0
 			market_inspection_sequence += 1
 	var inspecting := market_inspection_remaining > 0.0
-	market_inspection_label.text = ("巡夜巡查 · 入口核验 #%d" % market_inspection_sequence) if inspecting else "夜市巡防 · 正常"
-	market_inspection_label.modulate = Color("#e4bd82") if inspecting else Color("#a9c3d2")
+	var minute_of_day := int(npc_world_minutes / 60.0) * 60 + int(fposmod(npc_world_minutes, 60.0))
+	var welcoming_guests := minute_of_day >= 19 * 60 + 30 and minute_of_day < 20 * 60
+	var guiding_departure := minute_of_day >= 22 * 60 and minute_of_day < 22 * 60 + 30
+	market_inspection_label.text = ("巡夜巡查 · 入口核验 #%d" % market_inspection_sequence) if inspecting else ("宾客入场 · 入口引导" if welcoming_guests else ("竞宝散场 · 引导离席" if guiding_departure else "夜市巡防 · 正常"))
+	market_inspection_label.modulate = Color("#e4bd82") if inspecting else (Color("#d7bd98") if welcoming_guests or guiding_departure else Color("#a9c3d2"))
 	for index in range(market_guards.size()):
 		var guard_data: Dictionary = market_guards[index]
 		var guard_root: Node3D = guard_data["root"]
@@ -1866,11 +1869,19 @@ func _update_market_gate_inspection(delta: float) -> void:
 		var phase := market_ambience_time * 1.3 + float(guard_data["phase"])
 		var left_arm: MeshInstance3D = guard_data["left_arm"]
 		var right_arm: MeshInstance3D = guard_data["right_arm"]
+		var side := -1.0 if index == 0 else 1.0
 		if inspecting:
-			var side := -1.0 if index == 0 else 1.0
 			guard_root.rotation.y = float(guard_data["base_yaw"]) + side * 0.32
 			left_arm.rotation.z = deg_to_rad(-52.0) + sin(phase) * 0.035
 			right_arm.rotation.z = deg_to_rad(52.0) - sin(phase) * 0.035
+		elif welcoming_guests:
+			guard_root.rotation.y = float(guard_data["base_yaw"]) - side * 0.2
+			left_arm.rotation.z = deg_to_rad(-34.0) + sin(phase * 0.8) * 0.025
+			right_arm.rotation.z = deg_to_rad(34.0) - sin(phase * 0.8 + 0.6) * 0.025
+		elif guiding_departure:
+			guard_root.rotation.y = float(guard_data["base_yaw"]) + side * 0.24
+			left_arm.rotation.z = deg_to_rad(-42.0) + sin(phase * 0.9) * 0.03
+			right_arm.rotation.z = deg_to_rad(42.0) - sin(phase * 0.9 + 0.5) * 0.03
 		else:
 			guard_root.rotation.y = float(guard_data["base_yaw"]) + sin(phase * 0.2) * 0.025
 			left_arm.rotation.z = deg_to_rad(-18.0) + sin(phase * 0.6) * 0.018
