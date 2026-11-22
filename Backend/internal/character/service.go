@@ -1829,3 +1829,47 @@ func (s *Service) Reincarnate(ctx context.Context, accountID, name, raceID, rout
 	}
 	return result, nil
 }
+
+
+// SpellMasteryProgress is the persistent proficiency state for one spell.
+type SpellMasteryProgress struct {
+	SpellID string `json:"spell_id"`
+	Experience int64 `json:"experience"`
+	Level int `json:"level"`
+}
+
+// SpellMasteryForSession exposes only the authenticated character's mastery to
+// the world node currently hosting that exact session.
+func (s *Service) SpellMasteryForSession(ctx context.Context, nodeKey, sessionID, characterID string) ([]SpellMasteryProgress, error) {
+	if strings.TrimSpace(nodeKey) == "" || !validUUID(sessionID) || !validUUID(characterID) {
+		return nil, ErrInvalidSpellMasteryReward
+	}
+	var serverID string
+	if err := s.db.QueryRowContext(ctx, `SELECT id::text FROM server_registry WHERE node_key=$1`, nodeKey).Scan(&serverID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) { return nil, ErrRewardSession }
+		return nil, fmt.Errorf("resolve server for spell mastery query: %w", err)
+	}
+	var verified string
+	err := s.db.QueryRowContext(ctx, `SELECT ws.id::text FROM world_sessions ws
+		JOIN characters c ON c.id=ws.character_id
+		WHERE ws.id=$1::uuid AND ws.server_id=$2 AND c.id=$3::uuid
+		AND c.status='alive' AND ws.session_state='active'`,
+		sessionID, serverID, characterID).Scan(&verified)
+	if errors.Is(err, sql.ErrNoRows) { return nil, ErrRewardSession }
+	if err != nil { return nil, fmt.Errorf("verify spell mastery query session: %w", err) }
+
+	rows, err := s.db.QueryContext(ctx, `SELECT spell_id, experience, level
+		FROM character_spell_mastery WHERE character_id=$1::uuid ORDER BY spell_id`, characterID)
+	if err != nil { return nil, fmt.Errorf("query character spell mastery: %w", err) }
+	defer rows.Close()
+	result := make([]SpellMasteryProgress, 0, 2)
+	for rows.Next() {
+		var item SpellMasteryProgress
+		if err := rows.Scan(&item.SpellID, &item.Experience, &item.Level); err != nil {
+			return nil, fmt.Errorf("scan character spell mastery: %w", err)
+		}
+		result = append(result, item)
+	}
+	if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate character spell mastery: %w", err) }
+	return result, nil
+}
