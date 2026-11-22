@@ -2194,6 +2194,7 @@ func _advance_patrol_dispatch(agent: Dictionary, elapsed: float, phase: float) -
 		if dispatch_state == "enroute":
 			agent["dispatch_state"] = "on_scene"
 			agent["dispatch_wait_remaining"] = 6.0
+			agent["alert_facing"] = root.rotation.y
 			agent["state"] = "alert_watch"
 			print("[FengduPatrol] guard arrived at incident #%d" % int(agent.get("dispatch_incident_sequence", 0)))
 		elif dispatch_state == "returning":
@@ -2212,6 +2213,7 @@ func _advance_patrol_dispatch(agent: Dictionary, elapsed: float, phase: float) -
 			if dispatch_state == "enroute":
 				agent["dispatch_state"] = "on_scene"
 				agent["dispatch_wait_remaining"] = 6.0
+				agent["alert_facing"] = root.rotation.y
 				agent["state"] = "alert_watch"
 				print("[FengduPatrol] guard arrived at incident #%d" % int(agent.get("dispatch_incident_sequence", 0)))
 			else:
