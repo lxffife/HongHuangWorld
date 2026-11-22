@@ -17,6 +17,10 @@ var mouse_captured := false
 var status_label: Label
 var district_markers: Dictionary = {}
 var npc_spawn_points: Dictionary = {}
+var activity_points: Array[Dictionary] = []
+var patrol_route: Array[Vector3] = []
+var activity_debug_root: Node3D
+var activity_debug_visible := false
 
 var mats: Dictionary = {}
 
@@ -30,6 +34,7 @@ func _ready() -> void:
 	_build_city_walls()
 	_build_gate_complexes()
 	_build_districts()
+	_build_activity_registry()
 	_build_palace_axis()
 	_build_street_furnishings()
 	_build_player()
@@ -80,6 +85,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_capture_mouse()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		_release_mouse()
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_F6:
+		_toggle_activity_debug()
 	elif event is InputEventMouseMotion and mouse_captured:
 		var motion := event as InputEventMouseMotion
 		player.rotation.y -= motion.relative.x * MOUSE_SENSITIVITY
@@ -490,6 +497,153 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 			]
 
 
+func _build_activity_registry() -> void:
+	# Convert legacy district coordinate lists into semantic, client-local activity records.
+	activity_points.clear()
+	for district_name in npc_spawn_points.keys():
+		var role := "resident"
+		var activity := "social_idle"
+		var schedule_tag := "day_night"
+		match str(district_name):
+			"万魂鬼市":
+				role = "merchant"
+				activity = "trade_idle"
+				schedule_tag = "night"
+			"万家魂坊":
+				role = "resident"
+				activity = "social_idle"
+			"阴兵大营":
+				role = "soldier"
+				activity = "drill"
+				schedule_tag = "always"
+			"引魂驿站":
+				role = "guide"
+				activity = "registration"
+				schedule_tag = "always"
+			"巡城司":
+				role = "patrol_guard"
+				activity = "patrol_watch"
+				schedule_tag = "always"
+		var positions: Array = npc_spawn_points[district_name]
+		for index in range(positions.size()):
+			var point: Dictionary = {
+				"district": str(district_name),
+				"role": role,
+				"activity": activity,
+				"position": positions[index],
+				"facing": 0.0,
+				"schedule_tag": schedule_tag,
+				"capacity": 1,
+				"radius": 1.4
+			}
+			activity_points.append(point)
+
+	# Patrol route follows the existing north-south/east-west distributor roads.
+	# This is a visualization/planning path, not a NavigationAgent path.
+	patrol_route = [
+		Vector3(0, 0, 12),
+		Vector3(0, 0, 32),
+		Vector3(0, 0, 78),
+		Vector3(0, 0, 96),
+		Vector3(34, 0, 78),
+		Vector3(34, 0, 32),
+		Vector3(34, 0, -32),
+		Vector3(0, 0, -78),
+		Vector3(0, 0, -96),
+		Vector3(-34, 0, -78),
+		Vector3(-34, 0, -32),
+		Vector3(-34, 0, 32),
+		Vector3(0, 0, 12)
+	]
+	for route_position in patrol_route:
+		activity_points.append({
+			"district": "巡城司",
+			"role": "patrol_guard",
+			"activity": "patrol_route",
+			"position": route_position,
+			"facing": 0.0,
+			"schedule_tag": "night",
+			"capacity": 1,
+			"radius": 1.0
+		})
+
+
+func _toggle_activity_debug() -> void:
+	activity_debug_visible = not activity_debug_visible
+	if activity_debug_visible:
+		_build_activity_debug()
+	elif activity_debug_root != null:
+		activity_debug_root.queue_free()
+		activity_debug_root = null
+
+
+func _build_activity_debug() -> void:
+	if activity_debug_root != null:
+		activity_debug_root.queue_free()
+	activity_debug_root = Node3D.new()
+	activity_debug_root.name = "ActivityPointDebug"
+	add_child(activity_debug_root)
+
+	for point in activity_points:
+		var marker := MeshInstance3D.new()
+		var sphere := SphereMesh.new()
+		sphere.radius = 0.38 if str(point["activity"]) != "patrol_route" else 0.25
+		sphere.height = sphere.radius * 2.0
+		marker.mesh = sphere
+		var marker_material := StandardMaterial3D.new()
+		marker_material.albedo_color = _activity_color(str(point["role"]))
+		marker_material.emission_enabled = true
+		marker_material.emission = marker_material.albedo_color
+		marker_material.emission_energy_multiplier = 0.65
+		marker.material_override = marker_material
+		marker.position = point["position"] + Vector3(0, 0.55, 0)
+		activity_debug_root.add_child(marker)
+
+		var label := Label3D.new()
+		label.text = "%s · %s" % [str(point["district"]), str(point["activity"])]
+		label.position = marker.position + Vector3(0, 0.65, 0)
+		label.font_size = 14
+		label.pixel_size = 0.01
+		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		label.modulate = _activity_color(str(point["role"]))
+		activity_debug_root.add_child(label)
+
+	for index in range(patrol_route.size() - 1):
+		var start := patrol_route[index] + Vector3(0, 0.18, 0)
+		var finish := patrol_route[index + 1] + Vector3(0, 0.18, 0)
+		var segment_length := start.distance_to(finish)
+		if segment_length <= 0.1:
+			continue
+		var segment := MeshInstance3D.new()
+		var segment_mesh := BoxMesh.new()
+		segment_mesh.size = Vector3(0.12, 0.12, segment_length)
+		segment.mesh = segment_mesh
+		var route_material := StandardMaterial3D.new()
+		route_material.albedo_color = Color("#d9b56f")
+		route_material.emission_enabled = true
+		route_material.emission = Color("#d9b56f")
+		route_material.emission_energy_multiplier = 0.8
+		segment.material_override = route_material
+		segment.position = (start + finish) * 0.5
+		segment.look_at(finish, Vector3.UP)
+		activity_debug_root.add_child(segment)
+
+
+func _activity_color(role: String) -> Color:
+	match role:
+		"merchant":
+			return Color("#e5b56e")
+		"resident":
+			return Color("#91c4d8")
+		"soldier":
+			return Color("#c77e75")
+		"guide":
+			return Color("#b5a1dc")
+		"patrol_guard":
+			return Color("#a7c18a")
+	return Color("#d0d0d0")
+
+
 func _weapon_rack(center: Vector3) -> void:
 	_box("UnderworldWeaponRackBase", center + Vector3(0, 0.75, 0), Vector3(2.8, 0.25, 0.8), "dark_stone", false)
 	for x in [-1.0, 1.0]:
@@ -676,7 +830,7 @@ func _build_hud() -> void:
 	status_label = Label.new()
 	column.add_child(status_label)
 	var help := Label.new()
-	help.text = "WASD 移动 · 空格跳跃 · 鼠标左键捕获视角 · ESC 释放鼠标"
+	help.text = "WASD 移动 · 空格跳跃 · 鼠标左键捕获视角 · ESC 释放鼠标 · F6 活动点调试"
 	column.add_child(help)
 
 
