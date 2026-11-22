@@ -2167,6 +2167,8 @@ func _begin_patrol_dispatch(target_position: Vector3, incident_profile: Dictiona
 	incident["witness_root"] = scene_clues.get("witness_root")
 	incident["witness_name"] = str(scene_clues.get("witness_name", ""))
 	incident["witness_questioned"] = false
+	incident["player_clue_tags"] = []
+	incident["witness_testimony_tag"] = ""
 	patrol_incident_records.append(incident.duplicate(true))
 	patrol_incident_queue.append(incident)
 	patrol_incident_queue.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
@@ -2336,14 +2338,36 @@ func _update_patrol_incident_lifecycle(delta: float) -> void:
 			record["witness_count"] = witness_count + player_witnesses
 			var completed_player_actions: Array = record.get("player_action_ids", [])
 			record["player_contribution_count"] = completed_player_actions.size()
+			var clue_tags: Array = record.get("player_clue_tags", [])
+			var testimony_tag := str(record.get("witness_testimony_tag", ""))
+			var deduction_code := "inconclusive"
+			var deduction_label := "线索不足，暂不能确认完整经过"
+			if clue_tags.has("movement_trace") and testimony_tag == "witness_shadow":
+				deduction_code = "route_corroborated"
+				deduction_label = "脚印方向与证人所述黑影路线吻合"
+			elif clue_tags.has("spirit_residue") and clue_tags.has("broken_artifact"):
+				deduction_code = "artifact_linked"
+				deduction_label = "阴气残留与魂器碎片存在关联"
+			elif clue_tags.has("movement_trace") and clue_tags.has("spirit_residue"):
+				deduction_code = "trace_linked"
+				deduction_label = "行动轨迹与阴气残留位置相互印证"
+			elif testimony_tag == "witness_dispute":
+				deduction_code = "dispute_reported"
+				deduction_label = "证人证实现场发生争执，仍需补充物证"
+			elif testimony_tag == "witness_violence":
+				deduction_code = "violence_reported"
+				deduction_label = "证人报告发生暴力冲突，仍需核验现场"
+			record["deduction_code"] = deduction_code
+			record["deduction_label"] = deduction_label
+			record["player_clue_tags"] = clue_tags
 			if player_evidence + player_witnesses > 0:
 				result_label = "玩家补充线索 · " + result_label
 			record["state"] = "resolved"
 			record["result_code"] = result_code
 			record["result_label"] = result_label
 			record["resolved_at"] = npc_simulation_time
-			print("[FengduPatrol] incident %s resolved: %s; evidence %d, witnesses %d" % [
-				str(record.get("incident_id", "")), result_label, evidence_count, witness_count
+			print("[FengduPatrol] incident %s resolved: %s; deduction %s; evidence %d, witnesses %d" % [
+				str(record.get("incident_id", "")), result_label, deduction_label, evidence_count, witness_count
 			])
 		patrol_incident_records[index] = record
 	_prune_patrol_incident_history()
@@ -3417,6 +3441,11 @@ func _interact_with_patrol_incident(incident_id: String) -> void:
 		action_ids.append(clue_id)
 		record["player_action_ids"] = action_ids
 		record["player_evidence_count"] = int(record.get("player_evidence_count", 0)) + 1
+		var clue_tags: Array = record.get("player_clue_tags", [])
+		var clue_tag := str(nearest_evidence.get_meta("clue_tag", ""))
+		if clue_tag != "" and not clue_tags.has(clue_tag):
+			clue_tags.append(clue_tag)
+		record["player_clue_tags"] = clue_tags
 		nearest_evidence.visible = false
 		var evidence_log: Array = record.get("player_contribution_log", [])
 		evidence_log.append({"action_id": clue_id, "label": str(nearest_evidence.get_meta("clue_label", "现场物证")), "at": npc_simulation_time})
@@ -3435,6 +3464,8 @@ func _interact_with_patrol_incident(incident_id: String) -> void:
 		if witness_distance <= 3.8:
 			record["witness_questioned"] = true
 			record["player_witness_count"] = int(record.get("player_witness_count", 0)) + 1
+			var testimony_tag := "witness_shadow" if str(record.get("type", "")) == "suspicious_activity" else ("witness_dispute" if str(record.get("type", "")) == "crowd_disorder" else "witness_violence")
+			record["witness_testimony_tag"] = testimony_tag
 			var witness_id := "question_witness"
 			var witness_actions: Array = record.get("player_action_ids", [])
 			witness_actions.append(witness_id)
@@ -3462,9 +3493,9 @@ func _spawn_patrol_incident_clues(incident: Dictionary) -> Dictionary:
 	var center: Vector3 = incident.get("target_position", Vector3.ZERO)
 	var evidence_nodes: Array[Node3D] = []
 	var clue_specs := [
-		{"id": "clue_footprints", "label": "巷口脚印", "offset": Vector3(-2.0, 0.22, 0.8), "color": Color("#78b9c8")},
-		{"id": "clue_residue", "label": "残留阴气", "offset": Vector3(1.8, 0.28, -0.6), "color": Color("#9b8bd1")},
-		{"id": "clue_fragment", "label": "破损魂器碎片", "offset": Vector3(0.4, 0.2, 2.0), "color": Color("#d5a56c")}
+		{"id": "clue_footprints", "label": "巷口脚印", "tag": "movement_trace", "offset": Vector3(-2.0, 0.22, 0.8), "color": Color("#78b9c8")},
+		{"id": "clue_residue", "label": "残留阴气", "tag": "spirit_residue", "offset": Vector3(1.8, 0.28, -0.6), "color": Color("#9b8bd1")},
+		{"id": "clue_fragment", "label": "破损魂器碎片", "tag": "broken_artifact", "offset": Vector3(0.4, 0.2, 2.0), "color": Color("#d5a56c")}
 	]
 	for spec in clue_specs:
 		var clue := MeshInstance3D.new()
@@ -3483,6 +3514,7 @@ func _spawn_patrol_incident_clues(incident: Dictionary) -> Dictionary:
 		clue.position = center + spec["offset"]
 		clue.set_meta("clue_id", str(spec["id"]))
 		clue.set_meta("clue_label", str(spec["label"]))
+		clue.set_meta("clue_tag", str(spec["tag"]))
 		add_child(clue)
 		var marker := Label3D.new()
 		marker.text = "可调查 · " + str(spec["label"])
