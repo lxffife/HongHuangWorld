@@ -427,7 +427,7 @@
 - `complete_judge_bureau_review(incident_id)` 要求所有物证标签和已有证词均完成审查。只有至少一件物证被采信、没有待核验物证、证词没有被标记为争议或不足，才允许进入候审；否则只能退回补充或继续核验。`accept_for_hearing` 会再次检查复核完成标记和候审资格，不能绕过审查步骤。
 - 证据采信只代表本原型中判官司对材料的审阅意见，不代表事实已经成立；`judicial_conclusion` 仍为 `not_determined`，没有自动定罪。
 - 卷宗通过复核并进入候审时，会将轨迹关联达到 `partial_match` 或 `track_near_scene` 的人员快照写入 `case_parties`，但其 `suspect_status` 初始仍为 `unverified`，仅作为待核查人员，不自动认定为嫌疑人或犯罪人。
-- `update_case_party_procedural_status()` 记录送达通知、到场、无法联系或拒绝陈述等程序状态，并要求填写原因。`record_case_party_defense_statement()` 记录当事人申辩原文和时间；申辩不会自动改变物证审查结论。
+- `update_case_party_procedural_status()` 记录送达通知、到场、无法联系或拒绝陈述等程序状态，并要求填写原因；状态必须按 `notice_pending → notice_served → appeared/declined_to_respond` 等合法顺序推进，未完成通知/回应程序（或未记录无法联系原因）的人员不能直接进入判决。`record_case_party_defense_statement()` 记录当事人申辩原文和时间；申辩不会自动改变物证审查结论。
 - `begin_case_hearing()` 开庭后，`present_case_evidence_at_hearing()` 只能出示已被判官司采信的物证，且每件物证只能出示一次。`close_case_hearing()` 要求至少出示一件物证并填写庭审记录，随后进入 `hearing_closed_pending_judgment`，等待独立判决。
 - `present_case_testimony_at_hearing()` 允许将已被判官司评为 `credible` 的证词带入庭审，且每案当前庭审轮次只能出示一次；争议或证据不足的证词不能作为可信证言出示。
 - `record_case_evidence_challenge_at_hearing()` 与 `record_case_testimony_challenge_at_hearing()` 支持当事人针对已出示物证/证言提出真实性、保管链、解释、关联性、可信度、时间、内容或身份方面的质证。质证必须填写理由并写入庭审记录，但不会自动推翻原先的采信/证词复核结果，须由判官在后续程序中重新评估。
