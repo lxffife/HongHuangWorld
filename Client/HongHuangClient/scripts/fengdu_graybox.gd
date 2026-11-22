@@ -71,6 +71,7 @@ var judge_workbench_hint: Label
 var judge_review_actions: HFlowContainer
 var judge_selected_incident_id := ""
 var judge_workbench_open := false
+var judge_workbench_refresh_elapsed := 0.0
 
 var mats: Dictionary = {}
 
@@ -98,6 +99,11 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_update_npc_agents(delta)
+	if judge_workbench_open:
+		judge_workbench_refresh_elapsed += delta
+		if judge_workbench_refresh_elapsed >= 1.0:
+			judge_workbench_refresh_elapsed = 0.0
+			_show_judge_case_detail(judge_selected_incident_id)
 	if player == null:
 		return
 	var input_dir := Vector2.ZERO
@@ -5351,7 +5357,8 @@ func _judge_present_testimony() -> void:
 func _judge_record_case_judgment(outcome: String) -> void:
 	if judge_selected_incident_id.is_empty():
 		return
-	_run_judge_action(record_case_judgment(judge_selected_incident_id, outcome, "根据庭审已完成的举证与质证程序作出判决。", []), "本案判决结果已记录：" + outcome)
+	var no_party_evidence: Array[String] = []
+	_run_judge_action(record_case_judgment(judge_selected_incident_id, outcome, "根据庭审已完成的举证与质证程序作出判决。", no_party_evidence), "本案判决结果已记录：" + outcome)
 
 
 func _judge_record_party_judgment(party_id: String, outcome: String) -> void:
