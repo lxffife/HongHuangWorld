@@ -429,6 +429,7 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 			_box("GhostMarketMainAisle", center + Vector3(0, 0.12, 0), Vector3(9.0, 0.18, 21.0), "road_edge", false)
 			_box("GhostMarketAuctionDais", center + Vector3(0, 0.55, 8.0), Vector3(7.0, 1.1, 4.5), "dark_stone", false)
 			_box("GhostMarketAuctionDesk", center + Vector3(0, 1.45, 8.0), Vector3(4.2, 0.7, 1.2), "gold", false)
+			_market_auction_steps(center)
 			_roof_tier(center + Vector3(0, 3.1, 8.0), 8.0, 2.0)
 			_label("万魂竞宝台", center + Vector3(0, 5.65, 8.0), 22, Color("#f0d29a"))
 			_market_display_orb(center + Vector3(-1.15, 2.0, 8.0), 0.18, Color("#83c7e4"))
@@ -1583,6 +1584,16 @@ func _market_audience_bench(center: Vector3, facing: float) -> void:
 		_box("GhostMarketAudienceSupport", center + Vector3(0.0, 0.35, z_offset), Vector3(1.1, 0.7, 0.24), "stone", false)
 	_box("GhostMarketAudienceFootRail", center + Vector3(facing * 0.58, 0.2, 0.0), Vector3(0.16, 0.16, 3.5), "roof_edge", false)
 
+
+func _market_auction_steps(center: Vector3) -> void:
+	# Three shallow ceremonial steps approach the south face of the dais.
+	for index in range(3):
+		var step_height := 0.18 * float(index + 1)
+		var step_z := 5.48 - float(index) * 0.48
+		_box("GhostMarketAuctionStep", center + Vector3(0.0, step_height * 0.5, step_z), Vector3(5.2 - float(index) * 0.35, step_height, 0.48), "road_edge", false)
+	for side in [-1.0, 1.0]:
+		_box("GhostMarketAuctionStepRailBase", center + Vector3(side * 2.92, 0.32, 5.35), Vector3(0.24, 0.64, 1.35), "dark_stone", false)
+		_box("GhostMarketAuctionStepRailCap", center + Vector3(side * 2.92, 0.72, 5.35), Vector3(0.38, 0.16, 1.45), "gold", false)
 
 func _market_auction_pedestal(center: Vector3, accent: Color) -> void:
 	# Paired low-poly standards frame the dais without narrowing the walkable aisle.
