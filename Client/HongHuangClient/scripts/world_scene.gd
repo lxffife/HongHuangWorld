@@ -4181,11 +4181,10 @@ func _on_equipment_request_completed(result: int, response_code: int, _headers: 
 			var quality_names := ["普通", "优秀", "精良", "稀有", "传说"]
 			var quality := int(item.get("quality", 1))
 			var quality_name: String = quality_names[clampi(quality - 1, 0, quality_names.size() - 1)]
-			var affix_names: Array[String] = []
+			var affix_suffix := ""
 			for affix in item.get("affixes", []):
 				if affix is Dictionary:
-					affix_names.append(str(affix.get("name", "词缀")) + "+" + str(affix.get("value", 0)))
-			var affix_suffix := " · " + "、".join(affix_names) if not affix_names.is_empty() else ""
+					affix_suffix += (" · " if affix_suffix.is_empty() else "、") + str(affix.get("name", "词缀")) + "+" + str(affix.get("value", 0))
 			label.text = str(labels[slot]) + "：" + str(item.get("name", "未知装备")) + " · " + quality_name + affix_suffix
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(label)
