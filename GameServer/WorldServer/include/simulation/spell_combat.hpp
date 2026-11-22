@@ -81,6 +81,21 @@ inline bool valid_spell_definition(const SpellDefinition& spell) {
           spell.burn_damage_basis_points > 0));
 }
 
+// Spirit is the primary attribute for spell output. Each point grants
+// 0.25% spell power, capped at +25%; use integer basis points so combat
+// resolution remains deterministic across platforms.
+inline std::int32_t spell_power_basis_points(std::int32_t base_power_basis_points,
+                                             std::int32_t spirit) {
+    if (base_power_basis_points <= 0 || base_power_basis_points > 100000 || spirit < 0) {
+        return std::max(0, base_power_basis_points);
+    }
+    const auto bonus_basis_points = std::min<std::int64_t>(
+        static_cast<std::int64_t>(spirit) * 25, 2500);
+    const auto scaled = static_cast<std::int64_t>(base_power_basis_points) *
+        (10000 + bonus_basis_points) / 10000;
+    return static_cast<std::int32_t>(std::min<std::int64_t>(scaled, 100000));
+}
+
 inline bool can_pay_spell_cost(std::int64_t current_mana, std::int32_t mana_cost) {
     return current_mana >= 0 && mana_cost > 0 && current_mana >= mana_cost;
 }
