@@ -444,6 +444,9 @@ func validUUID(value string) bool {
 }
 
 type EquippedItem struct {
+	InstanceID string `json:"instance_id,omitempty"`
+	RolledStats map[string]int `json:"rolled_stats,omitempty"`
+	Affixes []EquipmentAffix `json:"affixes,omitempty"`
 	Slot string `json:"slot"`
 	ItemID string `json:"item_id"`
 	Name string `json:"name"`
@@ -457,30 +460,37 @@ type EquippedItem struct {
 	SetDescription string `json:"set_description,omitempty"`
 	SetBonusTiers map[int]map[string]int `json:"set_bonus_tiers,omitempty"`
 }
-type EquipmentRequest struct { ItemID string; Slot string }
+type EquipmentRequest struct { ItemID string; InstanceID string; Slot string }
 var validEquipmentSlots = map[string]bool{"weapon":true,"head":true,"chest":true,"legs":true,"boots":true,"accessory":true}
 
 func (s *Service) CurrentEquipment(ctx context.Context, accountID string) ([]EquippedItem, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT e.slot, i.id, i.name, i.quality, COALESCE(i.weapon_type, ''), i.icon_key, i.description, i.base_stats, COALESCE(es.id, ''), COALESCE(es.name, ''), COALESCE(es.description, ''), COALESCE(es.bonus_tiers, '{}'::jsonb)
+	rows,err:=s.db.QueryContext(ctx,`SELECT e.slot,i.id,i.name,COALESCE(ii.quality,i.quality),COALESCE(ii.id::text,''),COALESCE(i.weapon_type,''),i.icon_key,i.description,
+		i.base_stats,COALESCE(ii.rolled_stats,'{}'::jsonb),COALESCE(ii.affixes,'[]'::jsonb),
+		COALESCE(es.id,''),COALESCE(es.name,''),COALESCE(es.description,''),COALESCE(es.bonus_tiers,'{}'::jsonb)
 		FROM souls soul JOIN characters c ON c.id=soul.current_character_id
 		JOIN character_equipment e ON e.character_id=c.id JOIN item_definitions i ON i.id=e.item_id
+		LEFT JOIN item_instances ii ON ii.id=e.item_instance_id
 		LEFT JOIN equipment_sets es ON es.id=i.equipment_set_id
-		WHERE soul.account_id=$1 AND c.status='alive' ORDER BY e.slot`, accountID)
-	if err != nil { return nil, fmt.Errorf("load current equipment: %w",err) }
+		WHERE soul.account_id=$1 AND c.status='alive' ORDER BY e.slot`,accountID)
+	if err!=nil{return nil,fmt.Errorf("load current equipment: %w",err)}
 	defer rows.Close()
 	items:=make([]EquippedItem,0)
-	for rows.Next() {
-		var item EquippedItem; var stats, setTiers []byte
-		if err:=rows.Scan(&item.Slot,&item.ItemID,&item.Name,&item.Quality,&item.WeaponType,&item.IconKey,&item.Description,&stats,&item.SetID,&item.SetName,&item.SetDescription,&setTiers); err!=nil { return nil,fmt.Errorf("scan equipped item: %w",err) }
-		item.BaseStats=map[string]int{}
-		if len(stats)>0 { if err:=json.Unmarshal(stats,&item.BaseStats); err!=nil { return nil,fmt.Errorf("decode equipment stats: %w",err) } }
-		if len(setTiers)>0 { if err:=json.Unmarshal(setTiers,&item.SetBonusTiers); err!=nil { return nil,fmt.Errorf("decode equipped set tiers: %w",err) } }
+	for rows.Next(){
+		var item EquippedItem;var baseRaw,rolledRaw,affixesRaw,setTiers []byte
+		if err:=rows.Scan(&item.Slot,&item.ItemID,&item.Name,&item.Quality,&item.InstanceID,&item.WeaponType,&item.IconKey,&item.Description,
+			&baseRaw,&rolledRaw,&affixesRaw,&item.SetID,&item.SetName,&item.SetDescription,&setTiers);err!=nil{
+			return nil,fmt.Errorf("scan equipped item: %w",err)
+		}
+		item.BaseStats=map[string]int{};item.RolledStats=map[string]int{};item.Affixes=[]EquipmentAffix{}
+		if len(baseRaw)>0{if err:=json.Unmarshal(baseRaw,&item.BaseStats);err!=nil{return nil,fmt.Errorf("decode equipment stats: %w",err)}}
+		if len(rolledRaw)>0{if err:=json.Unmarshal(rolledRaw,&item.RolledStats);err!=nil{return nil,fmt.Errorf("decode equipment rolled stats: %w",err)}}
+		if len(affixesRaw)>0{if err:=json.Unmarshal(affixesRaw,&item.Affixes);err!=nil{return nil,fmt.Errorf("decode equipment affixes: %w",err)}}
+		if len(setTiers)>0{if err:=json.Unmarshal(setTiers,&item.SetBonusTiers);err!=nil{return nil,fmt.Errorf("decode equipped set tiers: %w",err)}}
 		items=append(items,item)
 	}
-	if err:=rows.Err(); err!=nil { return nil,fmt.Errorf("iterate current equipment: %w",err) }
+	if err:=rows.Err();err!=nil{return nil,fmt.Errorf("iterate current equipment: %w",err)}
 	return items,nil
 }
-
 // Equip mutates the authoritative loadout even during an active world session.
 // WorldServer polls the session combat snapshot and applies the change asynchronously.
 func ensureEquipmentSessionStable(ctx context.Context, tx *sql.Tx, characterID string) error {
@@ -492,69 +502,112 @@ func ensureEquipmentSessionStable(ctx context.Context, tx *sql.Tx, characterID s
 	return nil
 }
 
-func (s *Service) Equip(ctx context.Context, accountID string, request EquipmentRequest) error {
-	if strings.TrimSpace(accountID)=="" || strings.TrimSpace(request.ItemID)=="" || !validEquipmentSlots[request.Slot] { return ErrInvalidRequest }
-	tx,err:=s.db.BeginTx(ctx,nil); if err!=nil { return fmt.Errorf("begin equip item: %w",err) }; defer tx.Rollback()
+func (s *Service) Equip(ctx context.Context,accountID string,request EquipmentRequest)error{
+	if strings.TrimSpace(accountID)==""||!validEquipmentSlots[request.Slot]||
+		(strings.TrimSpace(request.InstanceID)==""&&strings.TrimSpace(request.ItemID)=="")||
+		(request.InstanceID!=""&&!validUUID(request.InstanceID)){return ErrInvalidRequest}
+	tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return fmt.Errorf("begin equip item: %w",err)};defer tx.Rollback()
 	var characterID string
-	if err:=tx.QueryRowContext(ctx,`SELECT c.id::text FROM souls soul JOIN characters c ON c.id=soul.current_character_id WHERE soul.account_id=$1 AND c.status='alive' FOR UPDATE OF c`,accountID).Scan(&characterID); err!=nil {
-		if errors.Is(err,sql.ErrNoRows) { return ErrInvalidRequest }; return fmt.Errorf("resolve current character: %w",err)
+	if err:=tx.QueryRowContext(ctx,`SELECT c.id::text FROM souls soul JOIN characters c ON c.id=soul.current_character_id
+		WHERE soul.account_id=$1 AND c.status='alive' FOR UPDATE OF c`,accountID).Scan(&characterID);err!=nil{
+		if errors.Is(err,sql.ErrNoRows){return ErrInvalidRequest};return fmt.Errorf("resolve current character: %w",err)
 	}
-	if err := ensureEquipmentSessionStable(ctx, tx, characterID); err != nil { return err }
-	var itemSlot string
-	if err:=tx.QueryRowContext(ctx,`SELECT equipment_slot FROM item_definitions WHERE id=$1 AND enabled AND item_type='equipment'`,request.ItemID).Scan(&itemSlot); err!=nil {
-		if errors.Is(err,sql.ErrNoRows) { return ErrInvalidRequest }; return fmt.Errorf("load equipment definition: %w",err)
+	if err:=ensureEquipmentSessionStable(ctx,tx,characterID);err!=nil{return err}
+	itemID:=""
+	if request.InstanceID!=""{
+		var itemSlot string
+		err=tx.QueryRowContext(ctx,`SELECT i.id,i.equipment_slot FROM character_item_instances ci
+			JOIN item_instances ii ON ii.id=ci.item_instance_id JOIN item_definitions i ON i.id=ii.item_id
+			WHERE ci.character_id=$1::uuid AND ii.id=$2::uuid AND i.enabled AND i.item_type='equipment'
+			FOR UPDATE OF ci,ii`,characterID,request.InstanceID).Scan(&itemID,&itemSlot)
+		if errors.Is(err,sql.ErrNoRows){return ErrInvalidRequest};if err!=nil{return fmt.Errorf("lock equipment instance: %w",err)}
+		if request.ItemID!=""&&request.ItemID!=itemID{return ErrInvalidRequest}
+		if itemSlot!=request.Slot{return ErrInvalidRequest}
+	}else{
+		var itemSlot string
+		if err:=tx.QueryRowContext(ctx,`SELECT equipment_slot FROM item_definitions WHERE id=$1 AND enabled AND item_type='equipment'`,request.ItemID).Scan(&itemSlot);err!=nil{
+			if errors.Is(err,sql.ErrNoRows){return ErrInvalidRequest};return fmt.Errorf("load equipment definition: %w",err)
+		}
+		if itemSlot!=request.Slot{return ErrInvalidRequest}
+		itemID=request.ItemID
 	}
-	if itemSlot!=request.Slot { return ErrInvalidRequest }
 	var quantity int
-	if err:=tx.QueryRowContext(ctx,`SELECT quantity FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2 FOR UPDATE`,characterID,request.ItemID).Scan(&quantity); err!=nil {
-		if errors.Is(err,sql.ErrNoRows) { return ErrInvalidRequest }; return fmt.Errorf("lock inventory equipment: %w",err)
+	if request.InstanceID==""{
+		if err:=tx.QueryRowContext(ctx,`SELECT quantity FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2 FOR UPDATE`,characterID,itemID).Scan(&quantity);err!=nil{
+			if errors.Is(err,sql.ErrNoRows){return ErrInvalidRequest};return fmt.Errorf("lock inventory equipment: %w",err)
+		}
 	}
-	var previous string
-	err=tx.QueryRowContext(ctx,`SELECT item_id FROM character_equipment WHERE character_id=$1::uuid AND slot=$2 FOR UPDATE`,characterID,request.Slot).Scan(&previous)
-	if err!=nil && !errors.Is(err,sql.ErrNoRows) { return fmt.Errorf("lock previous equipment: %w",err) }
-	if previous==request.ItemID { return tx.Commit() }
-	if quantity==1 {
-		if _,err:=tx.ExecContext(ctx,`DELETE FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2`,characterID,request.ItemID); err!=nil { return fmt.Errorf("consume equipment item: %w",err) }
-	} else {
-		if _,err:=tx.ExecContext(ctx,`UPDATE character_inventory SET quantity=quantity-1,updated_at=now() WHERE character_id=$1::uuid AND item_id=$2`,characterID,request.ItemID); err!=nil { return fmt.Errorf("consume equipment item: %w",err) }
+	var previousItem string;var previousInstance sql.NullString
+	err=tx.QueryRowContext(ctx,`SELECT item_id,item_instance_id::text FROM character_equipment
+		WHERE character_id=$1::uuid AND slot=$2 FOR UPDATE`,characterID,request.Slot).Scan(&previousItem,&previousInstance)
+	if err!=nil&&!errors.Is(err,sql.ErrNoRows){return fmt.Errorf("lock previous equipment: %w",err)}
+	if previousItem==itemID&&((request.InstanceID==""&&!previousInstance.Valid)||(request.InstanceID!=""&&previousInstance.Valid&&previousInstance.String==request.InstanceID)){
+		return tx.Commit()
 	}
-	if previous!="" {
+	if request.InstanceID!=""{
+		if _,err:=tx.ExecContext(ctx,`DELETE FROM character_item_instances WHERE character_id=$1::uuid AND item_instance_id=$2::uuid`,characterID,request.InstanceID);err!=nil{
+			return fmt.Errorf("consume equipment instance: %w",err)
+		}
+	}else if quantity==1{
+		if _,err:=tx.ExecContext(ctx,`DELETE FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2`,characterID,itemID);err!=nil{return fmt.Errorf("consume equipment item: %w",err)}
+	}else{
+		if _,err:=tx.ExecContext(ctx,`UPDATE character_inventory SET quantity=quantity-1,updated_at=now() WHERE character_id=$1::uuid AND item_id=$2`,characterID,itemID);err!=nil{return fmt.Errorf("consume equipment item: %w",err)}
+	}
+	if previousItem!=""{
+		if previousInstance.Valid{
+			if _,err:=tx.ExecContext(ctx,`INSERT INTO character_item_instances(character_id,item_instance_id) VALUES($1::uuid,$2::uuid)`,characterID,previousInstance.String);err!=nil{
+				return fmt.Errorf("return replaced equipment instance: %w",err)
+			}
+		}else{
+			var max int
+			if err:=tx.QueryRowContext(ctx,`SELECT max_stack FROM item_definitions WHERE id=$1 AND enabled`,previousItem).Scan(&max);err!=nil{return fmt.Errorf("load replaced item stack limit: %w",err)}
+			res,err:=tx.ExecContext(ctx,`INSERT INTO character_inventory(character_id,item_id,quantity) VALUES($1::uuid,$2,1)
+				ON CONFLICT(character_id,item_id) DO UPDATE SET quantity=character_inventory.quantity+1,updated_at=now()
+				WHERE character_inventory.quantity+1<=$3`,characterID,previousItem,max)
+			if err!=nil{return fmt.Errorf("return replaced equipment: %w",err)}
+			n,err:=res.RowsAffected();if err!=nil{return err};if n==0{return ErrInventoryFull}
+		}
+	}
+	instanceArg:=request.InstanceID
+	_,err=tx.ExecContext(ctx,`INSERT INTO character_equipment(character_id,slot,item_id,item_instance_id)
+		VALUES($1::uuid,$2,$3,NULLIF($4,'')::uuid)
+		ON CONFLICT(character_id,slot) DO UPDATE SET item_id=EXCLUDED.item_id,item_instance_id=EXCLUDED.item_instance_id,equipped_at=now()`,
+		characterID,request.Slot,itemID,instanceArg)
+	if err!=nil{return fmt.Errorf("save equipped item: %w",err)}
+	if err:=tx.Commit();err!=nil{return fmt.Errorf("commit equipped item: %w",err)}
+	return nil
+}
+func (s *Service) Unequip(ctx context.Context,accountID,slot string)error{
+	if strings.TrimSpace(accountID)==""||!validEquipmentSlots[slot]{return ErrInvalidRequest}
+	tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return fmt.Errorf("begin unequip item: %w",err)};defer tx.Rollback()
+	var characterID string
+	if err:=tx.QueryRowContext(ctx,`SELECT c.id::text FROM souls soul JOIN characters c ON c.id=soul.current_character_id
+		WHERE soul.account_id=$1 AND c.status='alive' FOR UPDATE OF c`,accountID).Scan(&characterID);err!=nil{
+		if errors.Is(err,sql.ErrNoRows){return ErrInvalidRequest};return fmt.Errorf("resolve current character: %w",err)
+	}
+	if err:=ensureEquipmentSessionStable(ctx,tx,characterID);err!=nil{return err}
+	var itemID string;var instanceID sql.NullString
+	if err:=tx.QueryRowContext(ctx,`SELECT item_id,item_instance_id::text FROM character_equipment
+		WHERE character_id=$1::uuid AND slot=$2 FOR UPDATE`,characterID,slot).Scan(&itemID,&instanceID);err!=nil{
+		if errors.Is(err,sql.ErrNoRows){return ErrInvalidRequest};return fmt.Errorf("load equipped item: %w",err)
+	}
+	if instanceID.Valid{
+		if _,err:=tx.ExecContext(ctx,`INSERT INTO character_item_instances(character_id,item_instance_id) VALUES($1::uuid,$2::uuid)`,characterID,instanceID.String);err!=nil{
+			return fmt.Errorf("return unequipped equipment instance: %w",err)
+		}
+	}else{
 		var max int
-		if err:=tx.QueryRowContext(ctx,`SELECT max_stack FROM item_definitions WHERE id=$1 AND enabled`,previous).Scan(&max); err!=nil { return fmt.Errorf("load replaced item stack limit: %w",err) }
+		if err:=tx.QueryRowContext(ctx,`SELECT max_stack FROM item_definitions WHERE id=$1 AND enabled`,itemID).Scan(&max);err!=nil{return fmt.Errorf("load equipment stack limit: %w",err)}
 		res,err:=tx.ExecContext(ctx,`INSERT INTO character_inventory(character_id,item_id,quantity) VALUES($1::uuid,$2,1)
 			ON CONFLICT(character_id,item_id) DO UPDATE SET quantity=character_inventory.quantity+1,updated_at=now()
-			WHERE character_inventory.quantity+1<=$3`,characterID,previous,max)
-		if err!=nil { return fmt.Errorf("return replaced equipment: %w",err) }
-		n,err:=res.RowsAffected(); if err!=nil { return err }; if n==0 { return ErrInventoryFull }
+			WHERE character_inventory.quantity+1<=$3`,characterID,itemID,max)
+		if err!=nil{return fmt.Errorf("return unequipped item: %w",err)}
+		n,err:=res.RowsAffected();if err!=nil{return err};if n==0{return ErrInventoryFull}
 	}
-	_,err=tx.ExecContext(ctx,`INSERT INTO character_equipment(character_id,slot,item_id) VALUES($1::uuid,$2,$3)
-		ON CONFLICT(character_id,slot) DO UPDATE SET item_id=EXCLUDED.item_id,equipped_at=now()`,characterID,request.Slot,request.ItemID)
-	if err!=nil { return fmt.Errorf("save equipped item: %w",err) }
-	if err:=tx.Commit(); err!=nil { return fmt.Errorf("commit equipped item: %w",err) }; return nil
+	if _,err:=tx.ExecContext(ctx,`DELETE FROM character_equipment WHERE character_id=$1::uuid AND slot=$2`,characterID,slot);err!=nil{return fmt.Errorf("remove equipment slot: %w",err)}
+	if err:=tx.Commit();err!=nil{return fmt.Errorf("commit unequipped item: %w",err)}
+	return nil
 }
-
-func (s *Service) Unequip(ctx context.Context, accountID, slot string) error {
-	if strings.TrimSpace(accountID)=="" || !validEquipmentSlots[slot] { return ErrInvalidRequest }
-	tx,err:=s.db.BeginTx(ctx,nil); if err!=nil { return fmt.Errorf("begin unequip item: %w",err) }; defer tx.Rollback()
-	var characterID,itemID string
-	if err:=tx.QueryRowContext(ctx,`SELECT c.id::text FROM souls soul JOIN characters c ON c.id=soul.current_character_id WHERE soul.account_id=$1 AND c.status='alive' FOR UPDATE OF c`,accountID).Scan(&characterID); err!=nil {
-		if errors.Is(err,sql.ErrNoRows) { return ErrInvalidRequest }; return fmt.Errorf("resolve current character: %w",err)
-	}
-	if err := ensureEquipmentSessionStable(ctx, tx, characterID); err != nil { return err }
-	if err:=tx.QueryRowContext(ctx,`SELECT item_id FROM character_equipment WHERE character_id=$1::uuid AND slot=$2 FOR UPDATE`,characterID,slot).Scan(&itemID); err!=nil {
-		if errors.Is(err,sql.ErrNoRows) { return ErrInvalidRequest }; return fmt.Errorf("load equipped item: %w",err)
-	}
-	var max int
-	if err:=tx.QueryRowContext(ctx,`SELECT max_stack FROM item_definitions WHERE id=$1 AND enabled`,itemID).Scan(&max); err!=nil { return fmt.Errorf("load equipment stack limit: %w",err) }
-	res,err:=tx.ExecContext(ctx,`INSERT INTO character_inventory(character_id,item_id,quantity) VALUES($1::uuid,$2,1)
-		ON CONFLICT(character_id,item_id) DO UPDATE SET quantity=character_inventory.quantity+1,updated_at=now()
-		WHERE character_inventory.quantity+1<=$3`,characterID,itemID,max)
-	if err!=nil { return fmt.Errorf("return unequipped item: %w",err) }
-	n,err:=res.RowsAffected(); if err!=nil { return err }; if n==0 { return ErrInventoryFull }
-	if _,err:=tx.ExecContext(ctx,`DELETE FROM character_equipment WHERE character_id=$1::uuid AND slot=$2`,characterID,slot); err!=nil { return fmt.Errorf("remove equipment slot: %w",err) }
-	if err:=tx.Commit(); err!=nil { return fmt.Errorf("commit unequipped item: %w",err) }; return nil
-}
-
 type CombatStats struct {
 	Equipment []EquippedItem `json:"equipment"`
 	Health int `json:"health"`
