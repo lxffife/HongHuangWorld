@@ -21,6 +21,8 @@ var activity_points: Array[Dictionary] = []
 var patrol_route: Array[Vector3] = []
 var activity_debug_root: Node3D
 var activity_debug_visible := false
+var npc_agents: Array[Dictionary] = []
+var npc_simulation_time := 0.0
 
 var mats: Dictionary = {}
 
@@ -35,13 +37,16 @@ func _ready() -> void:
 	_build_gate_complexes()
 	_build_districts()
 	_build_activity_registry()
+	_build_npc_population()
 	_build_palace_axis()
 	_build_street_furnishings()
 	_build_player()
 	_build_hud()
 
 
+
 func _process(delta: float) -> void:
+	_update_npc_agents(delta)
 	if player == null:
 		return
 	var input_dir := Vector2.ZERO
@@ -568,6 +573,181 @@ func _build_activity_registry() -> void:
 			"capacity": 1,
 			"radius": 1.0
 		})
+
+
+func _build_npc_population() -> void:
+	# These are lightweight client-side visual stand-ins. They have no collision,
+	# gameplay authority, network identity, dialogue or interaction yet.
+	npc_agents.clear()
+	for point in activity_points:
+		if str(point["activity"]) == "patrol_route":
+			continue
+		var npc_root := Node3D.new()
+		npc_root.name = "LocalNPC_" + str(point["role"])
+		npc_root.position = point["position"]
+		add_child(npc_root)
+		var agent := _create_npc_figure(npc_root, str(point["role"]), str(point["activity"]))
+		agent["root"] = npc_root
+		agent["role"] = str(point["role"])
+		agent["activity"] = str(point["activity"])
+		agent["phase"] = float(npc_agents.size()) * 1.37
+		agent["moving"] = false
+		agent["base_position"] = point["position"]
+		npc_agents.append(agent)
+
+	# One visible patrol guard follows the closed route; the other guards remain at posts.
+	if patrol_route.size() > 1:
+		var patrol_root := Node3D.new()
+		patrol_root.name = "LocalNPC_PatrolWalker"
+		patrol_root.position = patrol_route[0]
+		add_child(patrol_root)
+		var patrol_agent := _create_npc_figure(patrol_root, "patrol_guard", "patrol_route")
+		patrol_agent["root"] = patrol_root
+		patrol_agent["role"] = "patrol_guard"
+		patrol_agent["activity"] = "patrol_route"
+		patrol_agent["phase"] = 0.0
+		patrol_agent["moving"] = true
+		patrol_agent["route_index"] = 0
+		patrol_agent["route_progress"] = 0.0
+		patrol_agent["move_speed"] = 2.6
+		npc_agents.append(patrol_agent)
+
+
+func _create_npc_figure(root: Node3D, role: String, activity: String) -> Dictionary:
+	var tint := _activity_color(role)
+	var robe_material := StandardMaterial3D.new()
+	robe_material.albedo_color = tint
+	robe_material.roughness = 0.82
+	var dark_material := StandardMaterial3D.new()
+	dark_material.albedo_color = Color("#252c36")
+	dark_material.roughness = 0.9
+	var accent_material := StandardMaterial3D.new()
+	accent_material.albedo_color = Color("#d7b477") if role in ["merchant", "guide"] else Color("#8797a8")
+	accent_material.emission_enabled = role == "guide"
+	accent_material.emission = Color("#d7b477")
+
+	var body := MeshInstance3D.new()
+	var robe := CapsuleMesh.new()
+	robe.radius = 0.34
+	robe.height = 1.45
+	body.mesh = robe
+	body.position = Vector3(0, 0.92, 0)
+	body.material_override = robe_material
+	root.add_child(body)
+
+	var head := MeshInstance3D.new()
+	var head_mesh := SphereMesh.new()
+	head_mesh.radius = 0.24
+	head_mesh.height = 0.48
+	head.mesh = head_mesh
+	head.position = Vector3(0, 1.82, 0)
+	head.material_override = dark_material
+	root.add_child(head)
+
+	var left_arm := MeshInstance3D.new()
+	var arm_mesh := CapsuleMesh.new()
+	arm_mesh.radius = 0.105
+	arm_mesh.height = 0.78
+	left_arm.mesh = arm_mesh
+	left_arm.position = Vector3(-0.39, 1.12, 0)
+	left_arm.rotation.z = deg_to_rad(-18.0)
+	left_arm.material_override = robe_material
+	root.add_child(left_arm)
+
+	var right_arm := MeshInstance3D.new()
+	right_arm.mesh = arm_mesh
+	right_arm.position = Vector3(0.39, 1.12, 0)
+	right_arm.rotation.z = deg_to_rad(18.0)
+	right_arm.material_override = robe_material
+	root.add_child(right_arm)
+
+	var belt := MeshInstance3D.new()
+	var belt_mesh := BoxMesh.new()
+	belt_mesh.size = Vector3(0.64, 0.12, 0.38)
+	belt.mesh = belt_mesh
+	belt.position = Vector3(0, 0.72, 0)
+	belt.material_override = accent_material
+	root.add_child(belt)
+
+	if role == "merchant":
+		var canopy := MeshInstance3D.new()
+		var canopy_mesh := BoxMesh.new()
+		canopy_mesh.size = Vector3(0.72, 0.12, 0.58)
+		canopy.mesh = canopy_mesh
+		canopy.position = Vector3(0, 2.12, 0)
+		canopy.material_override = accent_material
+		root.add_child(canopy)
+	elif role == "soldier":
+		var spear := MeshInstance3D.new()
+		var spear_mesh := CylinderMesh.new()
+		spear_mesh.top_radius = 0.035
+		spear_mesh.bottom_radius = 0.055
+		spear_mesh.height = 2.2
+		spear.mesh = spear_mesh
+		spear.position = Vector3(0.55, 1.25, -0.08)
+		spear.rotation.z = deg_to_rad(-8.0)
+		spear.material_override = accent_material
+		root.add_child(spear)
+	elif role == "guide":
+		var lantern := MeshInstance3D.new()
+		var lantern_mesh := SphereMesh.new()
+		lantern_mesh.radius = 0.16
+		lantern_mesh.height = 0.32
+		lantern.mesh = lantern_mesh
+		lantern.position = Vector3(0.58, 1.05, -0.08)
+		lantern.material_override = accent_material
+		root.add_child(lantern)
+
+	return {"body": body, "left_arm": left_arm, "right_arm": right_arm}
+
+
+func _update_npc_agents(delta: float) -> void:
+	npc_simulation_time += delta
+	for agent in npc_agents:
+		var root: Node3D = agent["root"]
+		var body: MeshInstance3D = agent["body"]
+		var left_arm: MeshInstance3D = agent["left_arm"]
+		var right_arm: MeshInstance3D = agent["right_arm"]
+		var phase := npc_simulation_time * 1.8 + float(agent["phase"])
+		var activity := str(agent["activity"])
+		if bool(agent["moving"]):
+			var route_index := int(agent["route_index"])
+			var route_progress := float(agent["route_progress"])
+			var start: Vector3 = patrol_route[route_index]
+			var next_index := (route_index + 1) % patrol_route.size()
+			var finish: Vector3 = patrol_route[next_index]
+			var segment_length := maxf(start.distance_to(finish), 0.01)
+			route_progress += float(agent["move_speed"]) * delta / segment_length
+			while route_progress >= 1.0:
+				route_progress -= 1.0
+				route_index = next_index
+				next_index = (route_index + 1) % patrol_route.size()
+				start = patrol_route[route_index]
+				finish = patrol_route[next_index]
+				segment_length = maxf(start.distance_to(finish), 0.01)
+			root.position = start.lerp(finish, route_progress)
+			var direction := finish - start
+			if direction.length_squared() > 0.01:
+				root.rotation.y = atan2(-direction.x, -direction.z)
+			agent["route_index"] = route_index
+			agent["route_progress"] = route_progress
+			body.position.y = 0.92 + absf(sin(phase * 2.4)) * 0.07
+			left_arm.rotation.z = deg_to_rad(-28.0) + sin(phase * 2.4) * 0.18
+			right_arm.rotation.z = deg_to_rad(28.0) - sin(phase * 2.4) * 0.18
+		else:
+			var base_position: Vector3 = agent["base_position"]
+			root.position = base_position + Vector3(0, absf(sin(phase)) * 0.035, 0)
+			body.position.y = 0.92 + sin(phase) * 0.025
+			if activity == "drill":
+				left_arm.rotation.z = deg_to_rad(-18.0) + sin(phase * 2.0) * 0.28
+				right_arm.rotation.z = deg_to_rad(18.0) - sin(phase * 2.0) * 0.28
+			elif activity == "trade_idle":
+				left_arm.rotation.z = deg_to_rad(-18.0) + sin(phase * 0.8) * 0.08
+				right_arm.rotation.z = deg_to_rad(18.0) + sin(phase * 0.8 + 1.0) * 0.08
+			elif activity == "social_idle":
+				root.rotation.y = sin(phase * 0.45) * 0.35
+			else:
+				root.rotation.y = float(agent.get("facing", 0.0))
 
 
 func _toggle_activity_debug() -> void:
