@@ -63,6 +63,7 @@ var patrol_alert_sequence := 0
 var patrol_incident_queue: Array[Dictionary] = []
 var patrol_incident_records: Array[Dictionary] = []
 var patrol_dispatch_queue_elapsed := 0.0
+var patrol_incident_focus_id := ""
 
 var mats: Dictionary = {}
 
@@ -2156,6 +2157,11 @@ func _begin_patrol_dispatch(target_position: Vector3, incident_profile: Dictiona
 	incident["investigation_remaining"] = float(incident.get("scene_duration", 6.0))
 	incident["evidence_count"] = 0
 	incident["witness_count"] = 0
+	incident["player_action_ids"] = []
+	incident["player_contribution_log"] = []
+	incident["player_evidence_count"] = 0
+	incident["player_witness_count"] = 0
+	incident["player_contribution_count"] = 0
 	patrol_incident_records.append(incident.duplicate(true))
 	patrol_incident_queue.append(incident)
 	patrol_incident_queue.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
@@ -2317,11 +2323,18 @@ func _update_patrol_incident_lifecycle(delta: float) -> void:
 			var witness_count := 1 if incident_type == "suspicious_activity" else (2 if incident_type == "crowd_disorder" else 4)
 			var result_code := "cleared" if incident_type == "suspicious_activity" else ("mediated" if incident_type == "crowd_disorder" else "secured")
 			var result_label := "排除异常" if result_code == "cleared" else ("纠纷调解" if result_code == "mediated" else "现场控制")
+			var player_evidence := int(record.get("player_evidence_count", 0))
+			var player_witnesses := int(record.get("player_witness_count", 0))
+			record["patrol_evidence_count"] = evidence_count
+			record["patrol_witness_count"] = witness_count
+			record["evidence_count"] = evidence_count + player_evidence
+			record["witness_count"] = witness_count + player_witnesses
+			record["player_contribution_count"] = (record.get("player_action_ids", []) as Array).size()
+			if player_evidence + player_witnesses > 0:
+				result_label = "玩家补充线索 · " + result_label
 			record["state"] = "resolved"
 			record["result_code"] = result_code
 			record["result_label"] = result_label
-			record["evidence_count"] = evidence_count
-			record["witness_count"] = witness_count
 			record["resolved_at"] = npc_simulation_time
 			print("[FengduPatrol] incident %s resolved: %s; evidence %d, witnesses %d" % [
 				str(record.get("incident_id", "")), result_label, evidence_count, witness_count
@@ -3308,7 +3321,32 @@ func _update_hud() -> void:
 
 
 func _update_npc_interaction_hint() -> void:
-	if npc_hint_label == null:
+	if npc_hint_label == null or player == null:
+		return
+	patrol_incident_focus_id = ""
+	var nearest_incident_distance := 9.0
+	var nearest_incident: Dictionary = {}
+	for incident in patrol_incident_records:
+		var incident_state := str(incident.get("state", ""))
+		if incident_state not in ["assigned", "investigating"]:
+			continue
+		var incident_position: Vector3 = incident.get("target_position", Vector3.ZERO)
+		var distance := player.global_position.distance_to(incident_position)
+		if distance < nearest_incident_distance:
+			nearest_incident_distance = distance
+			nearest_incident = incident
+	if not nearest_incident.is_empty():
+		patrol_incident_focus_id = str(nearest_incident.get("incident_id", ""))
+		npc_focus_agent = {}
+		if str(nearest_incident.get("state", "")) == "investigating":
+			var actions: Array = nearest_incident.get("player_action_ids", [])
+			var remaining_actions := 3 - actions.size()
+			npc_hint_label.text = "E 参与现场调查 · %s（还可调查 %d 项）" % [
+				str(nearest_incident.get("title", "巡防事件")),
+				maxi(remaining_actions, 0)
+			]
+		else:
+			npc_hint_label.text = "巡城卫正在赶赴现场 · %s" % str(nearest_incident.get("title", "巡防事件"))
 		return
 	var nearest_agent: Dictionary = {}
 	var nearest_distance := 3.8
@@ -3329,8 +3367,61 @@ func _update_npc_interaction_hint() -> void:
 		npc_hint_label.text = "E 交互  ·  %s（%s）" % [str(npc_focus_agent["display_name"]), str(npc_focus_agent["district"])]
 
 
+func _interact_with_patrol_incident(incident_id: String) -> void:
+	var record_index := _find_patrol_incident_record(incident_id)
+	if record_index < 0:
+		npc_detail_label.text = "巡防事件记录已更新，请稍后再查看。"
+		return
+	var record: Dictionary = patrol_incident_records[record_index]
+	if str(record.get("state", "")) != "investigating":
+		npc_detail_label.text = "%s：巡城卫尚未全部到场，暂不能开始现场调查。" % str(record.get("title", "巡防事件"))
+		return
+	var action_ids: Array = record.get("player_action_ids", [])
+	var actions := [
+		{"id": "inspect_scene", "label": "检查现场痕迹", "kind": "evidence"},
+		{"id": "question_witness", "label": "询问现场目击者", "kind": "witness"},
+		{"id": "collect_evidence", "label": "收集可疑物证", "kind": "evidence"}
+	]
+	for action in actions:
+		var action_id := str(action["id"])
+		if action_ids.has(action_id):
+			continue
+		action_ids.append(action_id)
+		var player_evidence := int(record.get("player_evidence_count", 0))
+		var player_witnesses := int(record.get("player_witness_count", 0))
+		if str(action["kind"]) == "evidence":
+			player_evidence += 1
+			record["player_evidence_count"] = player_evidence
+		else:
+			player_witnesses += 1
+			record["player_witness_count"] = player_witnesses
+		var contribution_log: Array = record.get("player_contribution_log", [])
+		contribution_log.append({
+			"action_id": action_id,
+			"label": str(action["label"]),
+			"at": npc_simulation_time
+		})
+		record["player_contribution_log"] = contribution_log
+		record["player_action_ids"] = action_ids
+		patrol_incident_records[record_index] = record
+		npc_detail_label.text = "现场调查 · %s\n已完成：%s\n玩家补充：物证 %d 件、目击者线索 %d 条\n\n线索已记入本地事件档案。" % [
+			str(record.get("title", "巡防事件")),
+			str(action["label"]),
+			player_evidence,
+			player_witnesses
+		]
+		print("[FengduPatrol] player contributed to %s: %s" % [incident_id, action_id])
+		return
+	npc_detail_label.text = "现场调查 · %s\n你已完成本次可参与的三项调查：检查现场、询问目击者、收集物证。\n等待巡城司汇总调查结论。" % str(record.get("title", "巡防事件"))
+
+
 func _interact_with_focused_npc() -> void:
-	if npc_focus_agent.is_empty() or npc_detail_label == null:
+	if npc_detail_label == null:
+		return
+	if patrol_incident_focus_id != "":
+		_interact_with_patrol_incident(patrol_incident_focus_id)
+		return
+	if npc_focus_agent.is_empty():
 		return
 	var npc_name := str(npc_focus_agent.get("display_name", "无名阴差"))
 	var npc_id := str(npc_focus_agent.get("npc_id", "unknown"))
