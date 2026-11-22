@@ -148,6 +148,19 @@ var equipment_action_busy := false
 var inventory_visible := false
 var inventory_request_busy := false
 
+var party_http: HTTPRequest
+var party_refresh_timer: Timer
+var party_button: Button
+var party_panel: PanelContainer
+var party_status_label: Label
+var party_members_box: VBoxContainer
+var party_invites_box: VBoxContainer
+var party_username_input: LineEdit
+var party_data: Dictionary = {}
+var party_invitations: Array = []
+var party_request_context := ""
+var party_action_busy := false
+
 var npc_http: HTTPRequest
 var npc_request_context := ""
 var npc_definitions: Array = []
@@ -255,6 +268,7 @@ func _ready() -> void:
 	reconnect_http.request_completed.connect(_on_reconnect_request_completed)
 	_refresh_character_status()
 	_build_inventory_ui()
+	_build_party_ui()
 	_build_npc_ui()
 	_build_death_ui()
 	get_viewport().size_changed.connect(_layout_hud)
@@ -1937,6 +1951,8 @@ func is_gameplay_input_blocked() -> bool:
 	# including Chinese IME candidate/composition states.
 	if chat_expanded or (is_instance_valid(friend_panel) and friend_panel.visible):
 		return true
+	if is_instance_valid(party_panel) and party_panel.visible:
+		return true
 	var focused_control := get_viewport().gui_get_focus_owner()
 	return focused_control is LineEdit or focused_control is TextEdit
 
@@ -2007,6 +2023,16 @@ func _layout_hud() -> void:
 		chat_panel.custom_minimum_size = Vector2(chat_width, chat_height)
 		if is_instance_valid(chat_scroll):
 			chat_scroll.custom_minimum_size = Vector2(chat_width - 54.0, maxf(150.0, chat_height - 190.0))
+	# Party management is a centered modal, matching the inventory interaction layer.
+	if is_instance_valid(party_panel):
+		var party_width := minf(520.0, maxf(300.0, viewport_size.x - 32.0))
+		var party_height := minf(620.0, maxf(300.0, viewport_size.y - 36.0))
+		party_panel.set_anchors_preset(Control.PRESET_CENTER)
+		party_panel.offset_left = -party_width * 0.5
+		party_panel.offset_right = party_width * 0.5
+		party_panel.offset_top = -party_height * 0.5
+		party_panel.offset_bottom = party_height * 0.5
+		party_panel.custom_minimum_size = Vector2(party_width, party_height)
 	# Inventory is a centered modal rather than competing with the friend/chat drawers.
 	if is_instance_valid(inventory_panel):
 		var inventory_width := minf(620.0, maxf(260.0, viewport_size.x - 32.0))
@@ -2424,6 +2450,277 @@ func _apply_button_theme(button: Button, primary: bool = false) -> void:
 	button.add_theme_color_override("font_color", Color("#f2e8d6"))
 	button.add_theme_color_override("font_hover_color", Color("#ffffff"))
 	button.add_theme_font_size_override("font_size", 14)
+
+
+func _build_party_ui() -> void:
+	var hud := get_node_or_null("HUD") as CanvasLayer
+	if hud == null:
+		return
+	party_button = Button.new()
+	party_button.text = "队伍"
+	party_button.custom_minimum_size = Vector2(92.0, 40.0)
+	party_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	party_button.offset_left = -222.0
+	party_button.offset_top = 18.0
+	party_button.offset_right = -124.0
+	party_button.offset_bottom = 58.0
+	_apply_button_theme(party_button, true)
+	party_button.pressed.connect(_toggle_party_panel)
+	hud.add_child(party_button)
+
+	party_panel = PanelContainer.new()
+	party_panel.set_anchors_preset(Control.PRESET_CENTER)
+	party_panel.offset_left = -250.0
+	party_panel.offset_right = 250.0
+	party_panel.offset_top = -300.0
+	party_panel.offset_bottom = 300.0
+	party_panel.visible = false
+	_apply_panel_theme(party_panel)
+	hud.add_child(party_panel)
+
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 10)
+	party_panel.add_child(layout)
+	var heading := HBoxContainer.new()
+	layout.add_child(heading)
+	var title := Label.new()
+	title.text = "仙盟同道 · 队伍"
+	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_color_override("font_color", Color("#f2e8d6"))
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_child(title)
+	var close_button := Button.new()
+	close_button.text = "关闭"
+	_apply_button_theme(close_button)
+	close_button.pressed.connect(func(): party_panel.visible = false)
+	heading.add_child(close_button)
+	party_status_label = Label.new()
+	party_status_label.text = "正在读取队伍……"
+	party_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	layout.add_child(party_status_label)
+
+	var member_title := Label.new()
+	member_title.text = "队伍成员"
+	member_title.add_theme_color_override("font_color", Color("#d9b879"))
+	layout.add_child(member_title)
+	var member_scroll := ScrollContainer.new()
+	member_scroll.custom_minimum_size = Vector2(440.0, 180.0)
+	member_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	layout.add_child(member_scroll)
+	party_members_box = VBoxContainer.new()
+	party_members_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	member_scroll.add_child(party_members_box)
+
+	var invite_row := HBoxContainer.new()
+	layout.add_child(invite_row)
+	party_username_input = LineEdit.new()
+	party_username_input.placeholder_text = "输入同一世界实例玩家用户名"
+	party_username_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	party_username_input.max_length = 32
+	invite_row.add_child(party_username_input)
+	var invite_button := Button.new()
+	invite_button.text = "邀请"
+	_apply_button_theme(invite_button, true)
+	invite_button.pressed.connect(_party_invite)
+	invite_row.add_child(invite_button)
+
+	var invitation_title := Label.new()
+	invitation_title.text = "收到的邀请"
+	invitation_title.add_theme_color_override("font_color", Color("#d9b879"))
+	layout.add_child(invitation_title)
+	party_invites_box = VBoxContainer.new()
+	layout.add_child(party_invites_box)
+
+	var actions := HBoxContainer.new()
+	layout.add_child(actions)
+	var create_button := Button.new()
+	create_button.text = "创建队伍"
+	_apply_button_theme(create_button, true)
+	create_button.pressed.connect(func(): _party_request("POST", "/api/v1/party", {}, "action"))
+	actions.add_child(create_button)
+	var leave_button := Button.new()
+	leave_button.text = "离开队伍"
+	_apply_button_theme(leave_button)
+	leave_button.pressed.connect(func(): _party_request("POST", "/api/v1/party/leave", {}, "action"))
+	actions.add_child(leave_button)
+	var disband_button := Button.new()
+	disband_button.text = "解散队伍"
+	_apply_button_theme(disband_button)
+	disband_button.pressed.connect(func():
+		var dialog := ConfirmationDialog.new()
+		dialog.title = "解散队伍"
+		dialog.dialog_text = "确定解散当前队伍吗？所有队员都会离队。"
+		add_child(dialog)
+		dialog.confirmed.connect(func(): _party_request("POST", "/api/v1/party/disband", {}, "action"))
+		dialog.confirmed.connect(dialog.queue_free)
+		dialog.canceled.connect(dialog.queue_free)
+		dialog.popup_centered()
+	)
+	actions.add_child(disband_button)
+
+	party_http = HTTPRequest.new()
+	party_http.timeout = 12.0
+	add_child(party_http)
+	party_http.request_completed.connect(_on_party_request_completed)
+	party_refresh_timer = Timer.new()
+	party_refresh_timer.wait_time = 15.0
+	party_refresh_timer.one_shot = false
+	party_refresh_timer.timeout.connect(func():
+		if is_instance_valid(party_panel) and party_panel.visible and party_request_context == "":
+			_party_request("GET", "/api/v1/party/current", {}, "current")
+	)
+	add_child(party_refresh_timer)
+	party_refresh_timer.start()
+	_layout_hud()
+
+func _toggle_party_panel() -> void:
+	if not is_instance_valid(party_panel):
+		return
+	party_panel.visible = not party_panel.visible
+	if party_panel.visible:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		_party_request("GET", "/api/v1/party/current", {}, "current")
+
+func _party_request(method: String, path: String, payload: Dictionary, context: String) -> void:
+	if party_http == null or party_request_context != "" or HHSession.access_token.is_empty():
+		return
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token, "Content-Type: application/json"])
+	var http_method := HTTPClient.METHOD_GET
+	var body := ""
+	if method == "POST":
+		http_method = HTTPClient.METHOD_POST
+		body = JSON.stringify(payload)
+	party_request_context = context
+	var error := party_http.request(HHSession.api_base + path, headers, http_method, body)
+	if error != OK:
+		party_request_context = ""
+		party_status_label.text = "队伍请求提交失败：" + str(error)
+
+func _party_invite() -> void:
+	if not is_instance_valid(party_username_input):
+		return
+	var username := party_username_input.text.strip_edges()
+	if username.length() < 3:
+		party_status_label.text = "请输入至少 3 个字符的玩家用户名。"
+		return
+	_party_request("POST", "/api/v1/party/invitations", {"username": username}, "action")
+	if party_request_context == "action":
+		party_username_input.clear()
+
+func _on_party_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	var context := party_request_context
+	party_request_context = ""
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	var data: Dictionary = parsed if parsed is Dictionary else {}
+	if context == "current":
+		if result == HTTPRequest.RESULT_SUCCESS and response_code >= 200 and response_code < 300:
+			party_data = data
+		elif response_code == 404:
+			party_data = {}
+		else:
+			party_status_label.text = "读取队伍失败（HTTP " + str(response_code) + "）"
+			return
+		_render_party_members()
+		_party_request("GET", "/api/v1/party/invitations", {}, "invitations")
+		return
+	if context == "invitations":
+		if result == HTTPRequest.RESULT_SUCCESS and response_code >= 200 and response_code < 300:
+			party_invitations = data.get("invitations", [])
+			_render_party_invitations()
+		else:
+			party_invites_box.add_child(_party_label("邀请列表读取失败（HTTP " + str(response_code) + "）"))
+		return
+	if context == "action":
+		if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+			party_status_label.text = "队伍操作失败（HTTP " + str(response_code) + "）：" + body.get_string_from_utf8()
+			return
+		_show_notification("队伍操作已完成", 3.0)
+		_party_request("GET", "/api/v1/party/current", {}, "current")
+
+func _party_label(value: String) -> Label:
+	var label := Label.new()
+	label.text = value
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_color_override("font_color", Color("#c8d4df"))
+	return label
+
+func _render_party_members() -> void:
+	for child in party_members_box.get_children():
+		child.queue_free()
+	var members: Array = party_data.get("members", [])
+	if party_data.is_empty():
+		party_status_label.text = "当前没有队伍。创建队伍后，可邀请同一世界实例的玩家。"
+		party_members_box.add_child(_party_label("尚无队伍成员"))
+		return
+	party_status_label.text = "队伍 " + str(party_data.get("id", "")).substr(0, 8) + " · " + str(members.size()) + " / " + str(party_data.get("max_members", 5)) + " 人"
+	var my_account_id := str(HHSession.account_id)
+	var is_leader := str(party_data.get("leader_account_id", "")) == my_account_id
+	for member_value in members:
+		if not (member_value is Dictionary):
+			continue
+		var member: Dictionary = member_value
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 7)
+		party_members_box.add_child(row)
+		var online_dot := Label.new()
+		online_dot.text = "●"
+		online_dot.add_theme_color_override("font_color", Color("#69c58b") if bool(member.get("online", false)) else Color("#75808b"))
+		row.add_child(online_dot)
+		var name_label := Label.new()
+		name_label.text = str(member.get("character_name", "未知角色")) + "（" + str(member.get("username", "")) + "）"
+		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_label.add_theme_color_override("font_color", Color("#eee2ce"))
+		row.add_child(name_label)
+		var role_label := Label.new()
+		role_label.text = "队长" if str(member.get("role", "")) == "leader" else "队员"
+		role_label.add_theme_color_override("font_color", Color("#d9b879"))
+		row.add_child(role_label)
+		if is_leader and str(member.get("account_id", "")) != my_account_id:
+			var transfer_button := Button.new()
+			transfer_button.text = "转让"
+			_apply_button_theme(transfer_button)
+			transfer_button.pressed.connect(func(account_id: String):
+				_party_request("POST", "/api/v1/party/transfer-leadership", {"account_id": account_id}, "action")
+			.bind(str(member.get("account_id", ""))))
+			row.add_child(transfer_button)
+			var kick_button := Button.new()
+			kick_button.text = "移出"
+			_apply_button_theme(kick_button)
+			kick_button.pressed.connect(func(account_id: String):
+				_party_request("POST", "/api/v1/party/kick", {"account_id": account_id}, "action")
+			.bind(str(member.get("account_id", ""))))
+			row.add_child(kick_button)
+
+func _render_party_invitations() -> void:
+	for child in party_invites_box.get_children():
+		child.queue_free()
+	if party_invitations.is_empty():
+		party_invites_box.add_child(_party_label("暂无待处理邀请"))
+		return
+	for invitation_value in party_invitations:
+		if not (invitation_value is Dictionary):
+			continue
+		var invitation: Dictionary = invitation_value
+		var row := HBoxContainer.new()
+		party_invites_box.add_child(row)
+		var inviter := Label.new()
+		inviter.text = str(invitation.get("inviter_name", "玩家")) + " 邀请你加入队伍"
+		inviter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(inviter)
+		var accept_button := Button.new()
+		accept_button.text = "接受"
+		_apply_button_theme(accept_button, true)
+		accept_button.pressed.connect(func(invitation_id: String):
+			_party_request("POST", "/api/v1/party/invitations/" + invitation_id + "/respond", {"decision": "accept"}, "action")
+		.bind(str(invitation.get("id", ""))))
+		row.add_child(accept_button)
+		var decline_button := Button.new()
+		decline_button.text = "拒绝"
+		_apply_button_theme(decline_button)
+		decline_button.pressed.connect(func(invitation_id: String):
+			_party_request("POST", "/api/v1/party/invitations/" + invitation_id + "/respond", {"decision": "decline"}, "action")
+		.bind(str(invitation.get("id", ""))))
+		row.add_child(decline_button)
 
 func _build_inventory_ui() -> void:
 	var hud := get_node_or_null("HUD") as CanvasLayer
