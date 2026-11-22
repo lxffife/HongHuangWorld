@@ -129,6 +129,8 @@ var salvage_http: HTTPRequest
 var salvage_busy := false
 var enhancement_http: HTTPRequest
 var enhancement_busy := false
+var crafting_http: HTTPRequest
+var crafting_busy := false
 var inventory_button: Button
 var inventory_panel: PanelContainer
 var inventory_status: Label
@@ -2481,6 +2483,11 @@ func _build_inventory_ui() -> void:
 		_apply_button_theme(filter_button)
 		filter_button.pressed.connect(_on_inventory_filter_pressed.bind(filter_data[0]))
 		filter_row.add_child(filter_button)
+	var crafting_button := Button.new()
+	crafting_button.text = "锻造"
+	_apply_button_theme(crafting_button, true)
+	crafting_button.pressed.connect(_open_equipment_crafting)
+	filter_row.add_child(crafting_button)
 	inventory_sort_option = OptionButton.new()
 	inventory_sort_option.add_item("品质优先", 0)
 	inventory_sort_option.add_item("名称排序", 1)
@@ -2514,6 +2521,10 @@ func _build_inventory_ui() -> void:
 	enhancement_http.timeout = 15.0
 	add_child(enhancement_http)
 	enhancement_http.request_completed.connect(_on_enhance_equipment_completed)
+	crafting_http = HTTPRequest.new()
+	crafting_http.timeout = 15.0
+	add_child(crafting_http)
+	crafting_http.request_completed.connect(_on_craft_equipment_completed)
 	consumable_http = HTTPRequest.new()
 	consumable_http.timeout = 10.0
 	add_child(consumable_http)
@@ -4225,6 +4236,66 @@ func _on_equipment_request_completed(result: int, response_code: int, _headers: 
 			button.pressed.connect(_on_unequip_item_pressed.bind(slot))
 			row.add_child(button)
 
+
+func _open_equipment_crafting() -> void:
+	if crafting_busy:
+		return
+	var dialog := ConfirmationDialog.new()
+	dialog.title = "锻造工坊 · 初级装备"
+	dialog.dialog_text = "选择要打造的装备。打造会消耗背包材料，并生成带有随机词缀的独立装备。"
+	dialog.ok_button_text = "关闭"
+	dialog.get_ok_button().visible = false
+	var options := VBoxContainer.new()
+	dialog.add_child(options)
+	var blade := Button.new()
+	blade.text = "荒狼骨刃  ·  荒狼獠牙 ×5  +  荒狼皮 ×2"
+	_apply_button_theme(blade, true)
+	blade.pressed.connect(func():
+		dialog.queue_free()
+		_submit_equipment_crafting("forge_wolfbone_blade", "荒狼骨刃")
+	)
+	options.add_child(blade)
+	var vest := Button.new()
+	vest.text = "荒狼皮甲  ·  荒狼獠牙 ×2  +  荒狼皮 ×5"
+	_apply_button_theme(vest, true)
+	vest.pressed.connect(func():
+		dialog.queue_free()
+		_submit_equipment_crafting("forge_wolfhide_vest", "荒狼皮甲")
+	)
+	options.add_child(vest)
+	var cancel := Button.new()
+	cancel.text = "暂不打造"
+	_apply_button_theme(cancel)
+	cancel.pressed.connect(dialog.queue_free)
+	options.add_child(cancel)
+	add_child(dialog)
+	dialog.close_requested.connect(dialog.queue_free)
+	dialog.popup_centered(Vector2i(540, 240))
+
+func _submit_equipment_crafting(recipe_id: String, recipe_name: String) -> void:
+	if crafting_busy or crafting_http == null or HHSession.access_token.is_empty():
+		return
+	crafting_busy = true
+	inventory_status.text = "正在打造「" + recipe_name + "」……"
+	var payload := {"request_id": _make_request_uuid(), "recipe_id": recipe_id}
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token, "Content-Type: application/json"])
+	var error := crafting_http.request(HHSession.api_base + "/api/v1/characters/current/inventory/craft", headers, HTTPClient.METHOD_POST, JSON.stringify(payload))
+	if error != OK:
+		crafting_busy = false
+		inventory_status.text = "打造请求提交失败，错误码：" + str(error)
+
+func _on_craft_equipment_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	crafting_busy = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		inventory_status.text = "装备打造失败：" + body.get_string_from_utf8()
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if parsed is Dictionary:
+		var item_name := str(parsed.get("item_name", "新装备"))
+		var quality_names := ["普通", "优秀", "精良", "稀有", "传说"]
+		var quality := clampi(int(parsed.get("quality", 1)), 1, 5)
+		inventory_status.text = "打造成功：%s · %s品质 · 随机词缀 %d 条" % [item_name, quality_names[quality - 1], (parsed.get("affixes", []) as Array).size()]
+	_refresh_inventory()
 
 func _confirm_enhance_equipment(instance_id: String, item_name: String, level: int, quality: int) -> void:
 	if enhancement_busy or instance_id.is_empty():
