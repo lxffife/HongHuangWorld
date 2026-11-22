@@ -4135,6 +4135,117 @@ func present_case_evidence_at_hearing(incident_id: String, evidence_tag: String,
 	return {"ok": true, "presented_evidence_tags": presented}
 
 
+func present_case_testimony_at_hearing(incident_id: String, statement: String) -> Dictionary:
+	var record_index := _find_patrol_incident_record(incident_id)
+	if record_index < 0:
+		return {"ok": false, "reason": "case_not_found"}
+	var record: Dictionary = patrol_incident_records[record_index]
+	if str(record.get("case_workflow_state", "")) != "hearing_in_progress":
+		return {"ok": false, "reason": "hearing_not_in_progress"}
+	if str(record.get("witness_testimony_tag", "")).is_empty():
+		return {"ok": false, "reason": "no_witness_testimony"}
+	if statement.strip_edges().is_empty():
+		return {"ok": false, "reason": "testimony_presentation_required"}
+	var testimony_review: Dictionary = record.get("judicial_review", {}).get("testimony_assessment", {})
+	if str(testimony_review.get("assessment", "")) != "credible":
+		return {"ok": false, "reason": "testimony_not_assessed_as_credible"}
+	var hearing: Dictionary = record.get("hearing_record", {}).duplicate(true)
+	if bool(hearing.get("testimony_presented", false)):
+		return {"ok": false, "reason": "testimony_already_presented"}
+	hearing["testimony_presented"] = true
+	hearing["testimony_presentation"] = {
+		"testimony_tag": str(record.get("witness_testimony_tag", "")),
+		"statement": statement.strip_edges(),
+		"presented_at": npc_simulation_time
+	}
+	var proceedings: Array = hearing.get("proceedings", []).duplicate(true)
+	proceedings.append({
+		"entry_type": "testimony_presentation",
+		"testimony_tag": str(record.get("witness_testimony_tag", "")),
+		"statement": statement.strip_edges(),
+		"at": npc_simulation_time
+	})
+	hearing["proceedings"] = proceedings
+	record["hearing_record"] = hearing
+	_append_incident_timeline_entry(record, "testimony_presented", "庭审出示证人陈述", "judge_bureau")
+	patrol_incident_records[record_index] = record
+	return {"ok": true, "testimony_presented": true}
+
+
+func record_case_evidence_challenge_at_hearing(incident_id: String, party_id: String, evidence_tag: String, challenge: String, reason: String) -> Dictionary:
+	var record_index := _find_patrol_incident_record(incident_id)
+	if record_index < 0:
+		return {"ok": false, "reason": "case_not_found"}
+	var record: Dictionary = patrol_incident_records[record_index]
+	if str(record.get("case_workflow_state", "")) != "hearing_in_progress":
+		return {"ok": false, "reason": "hearing_not_in_progress"}
+	if challenge not in ["authenticity_disputed", "chain_of_custody_disputed", "interpretation_disputed", "relevance_disputed"]:
+		return {"ok": false, "reason": "invalid_evidence_challenge"}
+	if reason.strip_edges().is_empty():
+		return {"ok": false, "reason": "challenge_reason_required"}
+	var party_found := false
+	for party_value in record.get("case_submission", {}).get("case_parties", []):
+		if str(party_value.get("party_id", "")) == party_id:
+			party_found = true
+			break
+	if not party_found:
+		return {"ok": false, "reason": "case_party_not_found"}
+	var hearing: Dictionary = record.get("hearing_record", {}).duplicate(true)
+	if not hearing.get("presented_evidence_tags", []).has(evidence_tag):
+		return {"ok": false, "reason": "evidence_not_presented"}
+	var proceedings: Array = hearing.get("proceedings", []).duplicate(true)
+	proceedings.append({
+		"entry_type": "evidence_challenge",
+		"party_id": party_id,
+		"evidence_tag": evidence_tag,
+		"challenge": challenge,
+		"reason": reason.strip_edges(),
+		"at": npc_simulation_time
+	})
+	hearing["proceedings"] = proceedings
+	record["hearing_record"] = hearing
+	_append_incident_timeline_entry(record, "evidence_challenged", "庭审中对物证提出质证", party_id)
+	patrol_incident_records[record_index] = record
+	return {"ok": true, "evidence_tag": evidence_tag, "challenge_recorded": true, "evidence_assessment_unchanged": true}
+
+
+func record_case_testimony_challenge_at_hearing(incident_id: String, party_id: String, challenge: String, reason: String) -> Dictionary:
+	var record_index := _find_patrol_incident_record(incident_id)
+	if record_index < 0:
+		return {"ok": false, "reason": "case_not_found"}
+	var record: Dictionary = patrol_incident_records[record_index]
+	if str(record.get("case_workflow_state", "")) != "hearing_in_progress":
+		return {"ok": false, "reason": "hearing_not_in_progress"}
+	if challenge not in ["credibility_disputed", "time_disputed", "content_disputed", "identity_disputed"]:
+		return {"ok": false, "reason": "invalid_testimony_challenge"}
+	if reason.strip_edges().is_empty():
+		return {"ok": false, "reason": "challenge_reason_required"}
+	var party_found := false
+	for party_value in record.get("case_submission", {}).get("case_parties", []):
+		if str(party_value.get("party_id", "")) == party_id:
+			party_found = true
+			break
+	if not party_found:
+		return {"ok": false, "reason": "case_party_not_found"}
+	var hearing: Dictionary = record.get("hearing_record", {}).duplicate(true)
+	if not bool(hearing.get("testimony_presented", false)):
+		return {"ok": false, "reason": "testimony_not_presented"}
+	var proceedings: Array = hearing.get("proceedings", []).duplicate(true)
+	proceedings.append({
+		"entry_type": "testimony_challenge",
+		"party_id": party_id,
+		"testimony_tag": str(record.get("witness_testimony_tag", "")),
+		"challenge": challenge,
+		"reason": reason.strip_edges(),
+		"at": npc_simulation_time
+	})
+	hearing["proceedings"] = proceedings
+	record["hearing_record"] = hearing
+	_append_incident_timeline_entry(record, "testimony_challenged", "庭审中对证人陈述提出质证", party_id)
+	patrol_incident_records[record_index] = record
+	return {"ok": true, "testimony_challenge_recorded": true, "testimony_assessment_unchanged": true}
+
+
 func close_case_hearing(incident_id: String, hearing_note: String) -> Dictionary:
 	var record_index := _find_patrol_incident_record(incident_id)
 	if record_index < 0:
