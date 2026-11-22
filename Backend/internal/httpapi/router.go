@@ -77,6 +77,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/servers/souls/absorptions", souls.applyAbsorption)
 		spellMasteryAPI := &spellMasteryHandlers{characterService: character.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
 		mux.HandleFunc("POST /api/v1/servers/characters/spell-mastery", spellMasteryAPI.apply)
+		mux.HandleFunc("GET /api/v1/servers/characters/spell-mastery", spellMasteryAPI.current)
 		worlds := &worldHandlers{service: world.NewService(db), logger: logger}
 		npcs := &npcHandlers{authService: authService, service: npc.NewService(db), logger: logger}
 		mux.HandleFunc("GET /api/v1/worlds/current/npcs", npcs.list)
@@ -195,7 +196,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 			"GET /api/v1/characters/current/inventory", "GET /api/v1/characters/current/equipment",
 			"POST /api/v1/characters/current/equipment/equip", "POST /api/v1/characters/current/equipment/unequip", "POST /api/v1/characters/current/inventory/use", "POST /api/v1/servers/inventory/use", "POST /api/v1/servers/sessions/combat-stats", "GET /api/v1/servers/loot-table", "GET /api/v1/servers/monster-spawn-config", "GET /api/v1/servers/drops", "POST /api/v1/servers/drops",
 			"POST /api/v1/servers/drops/pickup", "POST /api/v1/servers/heartbeat",
-			"POST /api/v1/servers/characters/rewards", "GET /api/v1/economy/currencies", "GET /api/v1/economy/wallet", "POST /api/v1/worlds/enter",
+			"POST /api/v1/servers/characters/rewards", "POST /api/v1/servers/characters/spell-mastery", "GET /api/v1/servers/characters/spell-mastery", "GET /api/v1/economy/currencies", "GET /api/v1/economy/wallet", "POST /api/v1/worlds/enter",
 			"POST /api/v1/factions", "GET /api/v1/factions/mine", "POST /api/v1/factions/{factionID}/applications", "GET /api/v1/factions/{factionID}/applications", "GET /api/v1/factions/{factionID}/members", "POST /api/v1/factions/{factionID}/applications/{applicationID}/review",
 			"POST /api/v1/factions/{factionID}/treasury/contributions", "POST /api/v1/factions/{factionID}/bounties", "GET /api/v1/bounties", "POST /api/v1/bounties/{taskID}/join", "GET /api/v1/bounties/{taskID}/progress", "POST /api/v1/bounties/{taskID}/leave", "POST /api/v1/bounties/{taskID}/complete", "POST /api/v1/bounties/{taskID}/cancel", "GET /api/v1/bounties/{taskID}/contributions", "POST /api/v1/servers/bounties/expire",
 			"GET /api/v1/servers/bounties/objectives",
