@@ -957,17 +957,15 @@ func _build_market_customers() -> void:
 
 func _market_customer_route_for_index(customer_index: int) -> Array[String]:
 	# Each visitor follows one side of the market, avoiding the central aisle.
-	var routes: Array[Array] = [
-		["ghost_market.stall.01", "ghost_market.stall.02", "ghost_market.stall.03"],
-		["ghost_market.stall.02", "ghost_market.stall.03", "ghost_market.stall.01"],
-		["ghost_market.stall.03", "ghost_market.stall.01", "ghost_market.stall.02"],
-		["ghost_market.stall.04", "ghost_market.stall.05", "ghost_market.stall.06"]
-	]
-	var route_index := clampi(customer_index, 0, routes.size() - 1)
-	var route: Array[String] = []
-	for stall_id in routes[route_index]:
-		route.append(str(stall_id))
-	return route
+	match clampi(customer_index, 0, 3):
+		0:
+			return ["ghost_market.stall.01", "ghost_market.stall.02", "ghost_market.stall.03"]
+		1:
+			return ["ghost_market.stall.02", "ghost_market.stall.03", "ghost_market.stall.01"]
+		2:
+			return ["ghost_market.stall.03", "ghost_market.stall.01", "ghost_market.stall.02"]
+		_:
+			return ["ghost_market.stall.04", "ghost_market.stall.05", "ghost_market.stall.06"]
 
 
 func _market_customer_stand_position(stall_id: String, customer_index: int) -> Vector3:
@@ -1326,6 +1324,9 @@ func _update_market_ambience(delta: float) -> void:
 				customer_data["state"] = "browse"
 				customer_data["route_index"] = 0
 				customer_data["route_progress"] = 0.0
+				customer_data["route_stall_index"] = 0
+				customer_data["target_stall_id"] = str(customer_data.get("preferred_stall_id", ""))
+				customer_data["target_position"] = _market_customer_stand_position(str(customer_data.get("target_stall_id", "")), customer_index)
 			continue
 		var customer_index := int(str(customer_data.get("customer_id", "customer.01")).get_slice(".", 2)) - 1
 		var target_stall_id := str(customer_data.get("target_stall_id", customer_data.get("preferred_stall_id", "")))
