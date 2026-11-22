@@ -147,6 +147,21 @@ func (h *inventoryHandlers) salvageEquipment(w http.ResponseWriter,r *http.Reque
 	}
 }
 
+func (h *inventoryHandlers) enhanceEquipment(w http.ResponseWriter,r *http.Request){
+	account,ok:=h.authenticateAccount(w,r);if !ok{return}
+	var request salvageEquipmentRequest
+	if err:=decodeJSON(w,r,&request);err!=nil{http.Error(w,"invalid request body",http.StatusBadRequest);return}
+	result,err:=h.service.EnhanceEquipment(r.Context(),account.ID,inventory.EnhancementRequest{RequestID:request.RequestID,InstanceID:request.InstanceID})
+	switch{
+	case err==nil:writeJSON(w,http.StatusOK,result)
+	case errors.Is(err,inventory.ErrInvalidRequest):http.Error(w,"equipment instance cannot be enhanced or reached its quality cap",http.StatusBadRequest)
+	case errors.Is(err,inventory.ErrInsufficientMaterials):http.Error(w,"not enough enhancement materials",http.StatusConflict)
+	case errors.Is(err,inventory.ErrCharacterInWorld):http.Error(w,"character is changing world sessions; retry shortly",http.StatusConflict)
+	case errors.Is(err,inventory.ErrIdempotencyConflict):http.Error(w,"request id was already used",http.StatusConflict)
+	default:h.logger.Error("enhance equipment failed","account_id",account.ID,"error",err);http.Error(w,"internal server error",http.StatusInternalServerError)
+	}
+}
+
 func (h *inventoryHandlers) equipment(w http.ResponseWriter, r *http.Request) {
 	account, ok := h.authenticateAccount(w, r)
 	if !ok { return }
