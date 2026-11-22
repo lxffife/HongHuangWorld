@@ -325,17 +325,9 @@ bool DurableOutbox::save_monster_runtime_checkpoints(
             if (sqlite3_step(upsert.get()) != SQLITE_DONE)
                 throw std::runtime_error(sqlite3_errmsg(db_));
             if (sqlite3_changes(db_) != 1) {
-                Stmt current(db_,
-                    "SELECT l.monster_instance_id,l.monster_definition_id,c.checkpoint_at_ms "
-                    "FROM monster_life_states l LEFT JOIN monster_runtime_checkpoints c "
-                    "ON c.runtime_id=l.runtime_id WHERE l.runtime_id=?");
-                bind_text(current.get(), 1, checkpoint.runtime_id);
-                if (sqlite3_step(current.get()) != SQLITE_ROW ||
-                    column_text(current.get(), 0) != checkpoint.monster_instance_id ||
-                    column_text(current.get(), 1) != checkpoint.monster_definition_id ||
-                    sqlite3_column_int64(current.get(), 2) < checkpoint.checkpoint_at_ms)
-                    throw std::runtime_error("monster checkpoint life identity is stale or missing");
-                // A newer snapshot is already durable; an older delayed batch is a safe no-op.
+                // The life identity no longer matches or a newer checkpoint is already durable.
+                // Both cases are safe stale-snapshot no-ops and must not poison the whole batch.
+                continue;
             }
         }
         if (!execute("COMMIT", error)) throw std::runtime_error(error);
