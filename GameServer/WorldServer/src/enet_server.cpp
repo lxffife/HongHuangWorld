@@ -78,6 +78,7 @@ struct BountyObjectiveSubscription {
 
 struct PlayerState {
     std::vector<BountyObjectiveSubscription> bounty_objectives;
+    std::unordered_map<std::string, honghuang::simulation::SpellMastery> spell_mastery;
     std::string session_id;
     std::string character_id;
     std::string name;
@@ -629,6 +630,68 @@ bool deliver_character_reward(const ServerConfig& config, const CharacterRewardE
 bool backend_inventory_request(const ServerConfig& config, const std::string& path,
                                const Json* body, long& http_status, Json& response,
                                std::string& error);
+
+bool fetch_spell_mastery(const ServerConfig& config, const std::string& session_id,
+                          const std::string& character_id,
+                          std::unordered_map<std::string, honghuang::simulation::SpellMastery>& mastery,
+                          long& http_status, std::string& error) {
+    CURL* curl = curl_easy_init();
+    if (curl == nullptr) { error = "could not initialize spell mastery HTTP client"; return false; }
+    const std::string url = config.backend_url +
+        "/api/v1/servers/characters/spell-mastery?session_id=" + session_id +
+        "&character_id=" + character_id;
+    std::string response_text;
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, "Accept: application/json");
+    const std::string auth_header = "X-World-Server-Key: " + config.api_key;
+    const std::string node_header = "X-World-Server-Node: " + config.node_key;
+    headers = curl_slist_append(headers, auth_header.c_str());
+    headers = curl_slist_append(headers, node_header.c_str());
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, collect_response);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_text);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 1500L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 4000L);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+    const auto result = curl_easy_perform(curl);
+    http_status = 0;
+    if (result == CURLE_OK) curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+    if (result != CURLE_OK) {
+        error = std::string("spell mastery request failed: ") + curl_easy_strerror(result);
+        return false;
+    }
+    if (http_status != 200) {
+        error = "spell mastery lookup rejected by backend (HTTP " + std::to_string(http_status) + ")";
+        return false;
+    }
+    try {
+        const auto response = Json::parse(response_text);
+        const auto items = response.at("spell_mastery");
+        if (!items.is_array()) throw std::runtime_error("spell_mastery must be an array");
+        std::unordered_map<std::string, honghuang::simulation::SpellMastery> parsed;
+        for (const auto& item : items) {
+            const auto spell_id = item.at("spell_id").get<std::string>();
+            const auto experience = item.at("experience").get<std::int64_t>();
+            const auto level = item.at("level").get<std::int32_t>();
+            if ((spell_id != "fireball" && spell_id != "ice_bolt") ||
+                experience < 0 || experience > honghuang::simulation::kSpellMasteryMaxXp ||
+                level != honghuang::simulation::spell_mastery_level(experience)) {
+                throw std::runtime_error("invalid spell mastery entry");
+            }
+            parsed.emplace(spell_id, honghuang::simulation::SpellMastery{
+                spell_id == "fireball" ? "fireball" : "ice_bolt", experience, level});
+        }
+        mastery = std::move(parsed);
+        return true;
+    } catch (const std::exception& exception) {
+        error = std::string("invalid spell mastery response: ") + exception.what();
+        return false;
+    }
+}
 
 bool fetch_bounty_objectives(const ServerConfig& config, const std::string& session_id,
                              const std::string& character_id,
@@ -4140,7 +4203,10 @@ struct EnetServer::Impl {
                 player.x, player.y + 1.15F, player.z,
                 static_cast<float>(dx / distance) * spell->projectile_speed,
                 static_cast<float>(dz / distance) * spell->projectile_speed,
-                player.attack, honghuang::simulation::spell_power_basis_points(spell->power_basis_points, player.spirit),
+                player.attack, honghuang::simulation::effective_spell_power_basis_points(
+                    spell->power_basis_points, player.spirit,
+                    player.spell_mastery.contains(std::string(spell->id))
+                        ? player.spell_mastery.at(std::string(spell->id)).level : 1),
                 spell->defense_penetration_basis_points,
                 now + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<float>(spell->projectile_lifetime_seconds)),
                 spell->element == honghuang::simulation::SpellElement::Ice ? "ice_bolt" : "fireball",
@@ -4281,6 +4347,15 @@ struct EnetServer::Impl {
                                                "spell_mastery_reward", mastery_payload, mastery_error)) {
                         std::cerr << "[SpellMastery] confirmed hit XP could not be queued: "
                                   << mastery_error << std::endl;
+                    } else {
+                        auto& mastery = owner->second.spell_mastery[projectile->spell_id];
+                        if (mastery.spell_id.empty())
+                            mastery.spell_id = projectile->spell_id == "fireball" ? "fireball" : "ice_bolt";
+                        mastery = honghuang::simulation::award_spell_mastery_xp(mastery, 1);
+                        send_json(owner->first, honghuang::protocol::MessageType::CombatEvent,
+                            Json{{"accepted", true}, {"action", "spell_mastery"},
+                                 {"spell_id", projectile->spell_id},
+                                 {"experience", mastery.experience}, {"level", mastery.level}});
                     }
                 }
                 std::int64_t experience_reward = 0;
@@ -4991,6 +5066,13 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                         player.movement_speed = honghuang::simulation::effective_player_movement_speed(
                             combat_stats.at("movement_speed").get<float>());
                         player.name = snapshot.value("name", std::string{});
+                        long mastery_http_status = 0;
+                        std::string mastery_error;
+                        if (!fetch_spell_mastery(impl_->config, player.session_id, player.character_id,
+                                                 player.spell_mastery, mastery_http_status, mastery_error)) {
+                            std::cerr << "Spell mastery unavailable for character "
+                                      << player.character_id << ": " << mastery_error << '\\n';
+                        }
                         long bounty_http_status = 0;
                         std::string bounty_error;
                         if (!fetch_bounty_objectives(impl_->config, player.session_id, player.character_id,
@@ -5033,6 +5115,11 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                         Json client_welcome = snapshot;
                         client_welcome["mana"] = impl_->players.at(event.peer).mana;
                         client_welcome["max_mana"] = impl_->players.at(event.peer).max_mana;
+                        Json mastery_snapshot = Json::array();
+                        for (const auto& [spell_id, mastery] : impl_->players.at(event.peer).spell_mastery) {
+                            mastery_snapshot.push_back({{"spell_id", spell_id}, {"experience", mastery.experience}, {"level", mastery.level}});
+                        }
+                        client_welcome["spell_mastery"] = std::move(mastery_snapshot);
                         client_welcome.erase("session_id");
                         send_json(event.peer, honghuang::protocol::MessageType::ServerWelcome, client_welcome);
                         std::cout << "Authenticated character entered world: "
