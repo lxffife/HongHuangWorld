@@ -269,6 +269,15 @@ func scanGroundDrop(row interface{ Scan(...any) error }, drop *GroundDrop) error
 	return nil
 }
 
+func equipmentAffixRollCount(quality int) int {
+	switch {
+	case quality >= 5: return 3
+	case quality >= 3: return 2
+	case quality >= 1: return 1
+	default: return 0
+	}
+}
+
 func secureRandomInt(max int64)(int64,error){
 	if max<=0{return 0,ErrInvalidRequest}
 	value,err:=rand.Int(rand.Reader,big.NewInt(max));if err!=nil{return 0,fmt.Errorf("generate equipment affix roll: %w",err)}
@@ -291,7 +300,7 @@ func createGroundDropInstance(ctx context.Context,tx *sql.Tx,request DropRequest
 	pool:=make([]candidate,0)
 	for rows.Next(){var a candidate;if err:=rows.Scan(&a.id,&a.name,&a.key,&a.min,&a.max,&a.weight);err!=nil{rows.Close();return GroundDrop{},fmt.Errorf("scan equipment affix: %w",err)};pool=append(pool,a)}
 	if err:=rows.Err();err!=nil{rows.Close();return GroundDrop{},fmt.Errorf("iterate equipment affixes: %w",err)};rows.Close()
-	rollCount:=1;if quality>=4{rollCount=2}
+	rollCount:=equipmentAffixRollCount(quality)
 	for n:=0;n<rollCount&&len(pool)>0;n++{
 		total:=int64(0);for _,a:=range pool{total+=int64(a.weight)}
 		pick,err:=secureRandomInt(total);if err!=nil{return GroundDrop{},err}
