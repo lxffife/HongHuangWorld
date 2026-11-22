@@ -755,9 +755,10 @@ func _build_npc_population() -> void:
 func _build_market_customers() -> void:
 	# Keep only two customers so the central aisle remains visibly open.
 	# Static ambient props only: they are not server-owned or interactive NPC agents.
+	var market_center: Vector3 = district_markers.get("万魂鬼市", Vector3(55.0, 0.0, -53.0))
 	var customer_stalls: Array[Dictionary] = [
-		{"position": Vector3(-7.1, 0.0, -6.5), "yaw": PI * 0.5},
-		{"position": Vector3(7.1, 0.0, 6.5), "yaw": -PI * 0.5}
+		{"position": market_center + Vector3(-7.1, 0.0, -6.5), "yaw": PI * 0.5},
+		{"position": market_center + Vector3(7.1, 0.0, 6.5), "yaw": -PI * 0.5}
 	]
 	for index in range(customer_stalls.size()):
 		var customer_root := Node3D.new()
