@@ -862,12 +862,27 @@ func _build_market_customers() -> void:
 		parcel.material_override = parcel_material
 		parcel.position = Vector3(0.42, 0.42, 0.12)
 		customer_root.add_child(parcel)
+		var base_position: Vector3 = customer_stalls[index]["position"]
+		var local_side := -1.0 if index % 2 == 0 else 1.0
+		var customer_waypoints: Array[Vector3] = [
+			base_position,
+			base_position + Vector3(local_side * 0.55, 0.0, -1.0),
+			base_position + Vector3(local_side * 0.55, 0.0, 1.0)
+		]
 		market_customers.append({
+			"customer_id": "ghost_market.customer.%02d" % (index + 1),
 			"root": customer_root,
 			"body": customer_figure["body"],
 			"left_arm": customer_figure["left_arm"],
 			"right_arm": customer_figure["right_arm"],
 			"base_yaw": float(customer_stalls[index]["yaw"]),
+			"base_position": base_position,
+			"waypoints": customer_waypoints,
+			"route_index": 0,
+			"route_progress": 0.0,
+			"move_speed": 0.42 + float(index % 2) * 0.08,
+			"state": "browse",
+			"state_elapsed": float(index) * 1.7,
 			"phase": float(index) * 2.4
 		})
 
@@ -922,6 +937,7 @@ func _build_market_caravans() -> void:
 			pack.material_override = pack_material
 			cart.add_child(pack)
 		var cargo_type := "魂珠与魂籍" if index == 0 else "药材与法器"
+		var cargo_palette := Color("#8d789e") if index == 0 else Color("#718d70")
 		var cargo_label := Label3D.new()
 		cargo_label.name = "SupplyCargoLabel"
 		cargo_label.text = cargo_type
@@ -933,17 +949,29 @@ func _build_market_caravans() -> void:
 		cargo_label.outline_size = 4
 		cargo_label.outline_modulate = Color("#171d25")
 		cart.add_child(cargo_label)
+		var cargo_status := Label3D.new()
+		cargo_status.name = "SupplyCargoStatus"
+		cargo_status.text = "待命"
+		cargo_status.position = Vector3(0.0, 2.05, 1.45)
+		cargo_status.font_size = 10
+		cargo_status.pixel_size = 0.008
+		cargo_status.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		cargo_status.modulate = cargo_palette
+		cargo_status.outline_size = 4
+		cargo_status.outline_modulate = Color("#171d25")
+		cart.add_child(cargo_status)
 		market_caravans.append({
+			"caravan_id": "ghost_market.caravan.%02d" % (index + 1),
 			"cargo_type": cargo_type,
 			"cargo_palette": cargo_palette,
 			"root": root,
 			"body": driver["body"],
 			"left_arm": driver["left_arm"],
 			"right_arm": driver["right_arm"],
+			"cargo_status": cargo_status,
 			"base_x": root.position.x,
 			"base_z": root.position.z,
-			"phase": float(index) * PI,
-			"direction": 1.0 if index == 0 else -1.0
+			"phase": float(index) * 17.0
 		})
 
 
@@ -1044,15 +1072,44 @@ func _update_market_ambience(delta: float) -> void:
 		customer_root.visible = npc_schedule_night
 		if not npc_schedule_night:
 			continue
-		var phase := market_ambience_time * 1.1 + float(customer_data["phase"])
-		var body: MeshInstance3D = customer_data["body"]
-		var left_arm: MeshInstance3D = customer_data["left_arm"]
-		var right_arm: MeshInstance3D = customer_data["right_arm"]
-		# Small browsing gestures: a gentle lean and alternating hand movement, with no pathing.
-		body.rotation.x = deg_to_rad(2.5) + absf(sin(phase * 0.55)) * deg_to_rad(2.0)
-		left_arm.rotation.z = deg_to_rad(-18.0) + sin(phase * 0.8) * 0.035
-		right_arm.rotation.z = deg_to_rad(18.0) - sin(phase * 0.8 + 1.1) * 0.045
-		customer_root.rotation.y = float(customer_data["base_yaw"]) + sin(phase * 0.24) * 0.035
+		var customer_elapsed := float(customer_data.get("state_elapsed", 0.0)) + delta
+		var customer_state := str(customer_data.get("state", "browse"))
+		var customer_duration := 4.5 if customer_state == "browse" else 3.0
+		if customer_elapsed >= customer_duration:
+			customer_elapsed = 0.0
+			customer_state = "walk" if customer_state == "browse" else "browse"
+			customer_data["state"] = customer_state
+		customer_data["state_elapsed"] = customer_elapsed
+		var waypoints: Array = customer_data.get("waypoints", [])
+		if waypoints.size() > 1:
+			var route_index := int(customer_data.get("route_index", 0))
+			var route_progress := float(customer_data.get("route_progress", 0.0))
+			if customer_state == "walk":
+				var from_position: Vector3 = waypoints[route_index]
+				var next_index := (route_index + 1) % waypoints.size()
+				var to_position: Vector3 = waypoints[next_index]
+				var segment_length := maxf(from_position.distance_to(to_position), 0.01)
+				route_progress += float(customer_data.get("move_speed", 0.45)) * delta / segment_length
+				if route_progress >= 1.0:
+					route_progress = 0.0
+					route_index = next_index
+					from_position = waypoints[route_index]
+					to_position = waypoints[(route_index + 1) % waypoints.size()]
+				customer_root.position = from_position.lerp(to_position, route_progress)
+				var walk_direction := to_position - from_position
+				if walk_direction.length_squared() > 0.001:
+					customer_root.rotation.y = atan2(-walk_direction.x, -walk_direction.z)
+				customer_data["route_index"] = route_index
+				customer_data["route_progress"] = route_progress
+			else:
+				customer_root.rotation.y = float(customer_data["base_yaw"]) + sin(market_ambience_time * 0.45 + float(customer_data["phase"])) * 0.08
+		var customer_phase := market_ambience_time * 1.1 + float(customer_data["phase"])
+		var customer_body: MeshInstance3D = customer_data["body"]
+		var customer_left: MeshInstance3D = customer_data["left_arm"]
+		var customer_right: MeshInstance3D = customer_data["right_arm"]
+		customer_body.rotation.x = deg_to_rad(2.5) + absf(sin(customer_phase * 0.55)) * deg_to_rad(2.0)
+		customer_left.rotation.z = deg_to_rad(-18.0) + sin(customer_phase * 0.8) * 0.035
+		customer_right.rotation.z = deg_to_rad(18.0) - sin(customer_phase * 0.8 + 1.1) * 0.045
 	for guard_data in market_guards:
 		var guard_root: Node3D = guard_data["root"]
 		guard_root.visible = npc_schedule_night
@@ -1071,17 +1128,34 @@ func _update_market_ambience(delta: float) -> void:
 		caravan_root.visible = npc_schedule_night
 		if not npc_schedule_night:
 			continue
-		var caravan_phase := market_ambience_time * 0.42 + float(caravan_data["phase"])
-		var travel_offset := sin(caravan_phase) * 6.0
-		caravan_root.position = Vector3(float(caravan_data["base_x"]), 0.0, float(caravan_data["base_z"]) + travel_offset)
-		var travel_direction := cos(caravan_phase) * float(caravan_data["direction"])
-		caravan_root.rotation.y = PI if travel_direction < 0.0 else 0.0
+		# 44-second local loop: arrive, stop and unload, depart, then circle back outside the market.
+		var route_time := fposmod(market_ambience_time + float(caravan_data["phase"]), 44.0)
+		var stop_offset := 0.0
+		var caravan_state := "驶入"
+		if route_time < 8.0:
+			stop_offset = lerpf(-5.0, 0.0, smoothstep(0.0, 8.0, route_time))
+		elif route_time < 23.0:
+			caravan_state = "卸货中"
+		elif route_time < 31.0:
+			caravan_state = "离场"
+			stop_offset = lerpf(0.0, 5.0, smoothstep(23.0, 31.0, route_time))
+		else:
+			caravan_state = "补给整备"
+			stop_offset = 5.0
+		caravan_root.position = Vector3(float(caravan_data["base_x"]), 0.0, float(caravan_data["base_z"]) + stop_offset)
+		var travel_direction := -1.0 if route_time < 8.0 else (1.0 if route_time >= 23.0 and route_time < 31.0 else 0.0)
+		if travel_direction != 0.0:
+			caravan_root.rotation.y = PI if travel_direction < 0.0 else 0.0
+		var cargo_status: Label3D = caravan_data["cargo_status"]
+		cargo_status.text = caravan_state + " · " + str(caravan_data["cargo_type"])
+		var caravan_phase := market_ambience_time * 1.6 + float(caravan_data["phase"])
 		var driver_body: MeshInstance3D = caravan_data["body"]
 		var driver_left: MeshInstance3D = caravan_data["left_arm"]
 		var driver_right: MeshInstance3D = caravan_data["right_arm"]
-		driver_body.position.y = 0.92 + absf(sin(caravan_phase * 2.0)) * 0.025
-		driver_left.rotation.z = deg_to_rad(-18.0) + sin(caravan_phase * 2.0) * 0.04
-		driver_right.rotation.z = deg_to_rad(18.0) - sin(caravan_phase * 2.0) * 0.04
+		var unloading := caravan_state == "卸货中"
+		driver_body.position.y = 0.92 + (absf(sin(caravan_phase * 2.0)) * 0.025 if not unloading else 0.0)
+		driver_left.rotation.z = deg_to_rad(-18.0) + (sin(caravan_phase * 2.0) * 0.04 if not unloading else -0.12)
+		driver_right.rotation.z = deg_to_rad(18.0) - (sin(caravan_phase * 2.0) * 0.04 if not unloading else 0.12)
 	_update_market_event_sign()
 	if not market_stage_actor.is_empty():
 		var host_root: Node3D = market_stage_actor["root"]
