@@ -275,9 +275,9 @@ static func get_administrative_layout() -> Dictionary:
 		"soul_registry": {
 			"archive_tower": {"point_id": "soul_registry.archive.tower", "offset": Vector3(0.0, 7.0, 2.0), "size": Vector3(8.0, 14.0, 7.0)},
 			"floor_bands": [
-				{"point_id": "soul_registry.archive.floor.01", "offset": Vector3(0.0, 3.5, 2.0)},
-				{"point_id": "soul_registry.archive.floor.02", "offset": Vector3(0.0, 7.0, 2.0)},
-				{"point_id": "soul_registry.archive.floor.03", "offset": Vector3(0.0, 10.5, 2.0)}
+				{"point_id": "soul_registry.archive.floor.01", "level": 1, "offset": Vector3(0.0, 3.5, 2.0)},
+				{"point_id": "soul_registry.archive.floor.02", "level": 2, "offset": Vector3(0.0, 7.0, 2.0)},
+				{"point_id": "soul_registry.archive.floor.03", "level": 3, "offset": Vector3(0.0, 10.5, 2.0)}
 			],
 			"archive_roof_base": Vector3(0.0, 14.9, 2.0),
 			"identity_verification": {"point_id": "soul_registry.identity.verification", "offset": Vector3(0.0, 0.0, -8.0)},
