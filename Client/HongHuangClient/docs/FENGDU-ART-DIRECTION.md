@@ -80,3 +80,11 @@
 - Activity-point facing is assigned by district purpose rather than a universal forward direction. Residents orient toward the shared square; the guide faces the intake approach; soldiers and merchants face their work areas.
 - Idle motions use per-agent phase offsets and cadence variation: merchant greeting, resident conversation turns, soldier readying motions, and guide ledger-check/directing gestures. One patrol guard interpolates between the closed-loop road nodes; it does not use NavigationAgent3D.
 - These figures are local scene decoration only: no collision, combat, dialogue, shop, quest, network identity or authoritative state. Replace them with licensed rigged assets and server-backed actors in later production passes.
+
+
+## NPC schedule and population prototype
+
+- The graybox owns a local demonstration clock, starting at 18:00 and advancing one in-game minute per real second. It is not authoritative world time.
+- Market merchants are visible only from 18:00 to 06:00. Soldiers drill from 06:00 to 22:00 and use a subdued rest idle outside that window. Waystation guides and waiting souls remain present.
+- Three waiting-soul stand-ins form a fixed line at the waystation entrance, facing the registration desk. This is a visual queue, not a queue service.
+- NPC animation updates are distance-tiered: full-rate nearby, approximately 0.32-second intervals at medium range and 0.8-second intervals at long range. This is a prototype optimization, not a substitute for profiling a populated production city.
