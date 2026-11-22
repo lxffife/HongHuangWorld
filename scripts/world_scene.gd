@@ -127,6 +127,8 @@ var projectile_targets: Dictionary = {}
 var inventory_http: HTTPRequest
 var salvage_http: HTTPRequest
 var salvage_busy := false
+var enhancement_http: HTTPRequest
+var enhancement_busy := false
 var inventory_button: Button
 var inventory_panel: PanelContainer
 var inventory_status: Label
@@ -2508,6 +2510,10 @@ func _build_inventory_ui() -> void:
 	salvage_http.timeout = 15.0
 	add_child(salvage_http)
 	salvage_http.request_completed.connect(_on_salvage_equipment_completed)
+	enhancement_http = HTTPRequest.new()
+	enhancement_http.timeout = 15.0
+	add_child(enhancement_http)
+	enhancement_http.request_completed.connect(_on_enhance_equipment_completed)
 	consumable_http = HTTPRequest.new()
 	consumable_http.timeout = 10.0
 	add_child(consumable_http)
@@ -2600,7 +2606,8 @@ func _render_inventory_items() -> void:
 		var quality := int(item.get("quality", 1))
 		var quality_names := ["普通", "优秀", "精良", "稀有", "传说"]
 		var quality_name: String = quality_names[clampi(quality - 1, 0, quality_names.size() - 1)]
-		line.text = str(item.get("name", item.get("item_id", "未知物品"))) + " · " + quality_name + " · ×" + str(item.get("quantity", 0))
+		var enhancement_level := int(item.get("enhancement_level", 0))
+		line.text = str(item.get("name", item.get("item_id", "未知物品"))) + (" +" + str(enhancement_level) if enhancement_level > 0 else "") + " · " + quality_name + " · ×" + str(item.get("quantity", 0))
 		line.add_theme_color_override("font_color", Color("#e7dfd2"))
 		line.add_theme_font_size_override("font_size", 14)
 		line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2619,6 +2626,12 @@ func _render_inventory_items() -> void:
 			row.add_child(equip_button)
 			var instance_id := str(item.get("instance_id", ""))
 			if not instance_id.is_empty():
+				var enhance_button := Button.new()
+				enhance_button.text = "强化"
+				enhance_button.disabled = enhancement_busy
+				_apply_button_theme(enhance_button, true)
+				enhance_button.pressed.connect(_confirm_enhance_equipment.bind(instance_id, str(item.get("name", "装备")), enhancement_level, quality))
+				row.add_child(enhance_button)
 				var salvage_button := Button.new()
 				salvage_button.text = "分解"
 				salvage_button.disabled = salvage_busy
@@ -4203,7 +4216,7 @@ func _on_equipment_request_completed(result: int, response_code: int, _headers: 
 			for affix in item.get("affixes", []):
 				if affix is Dictionary:
 					affix_suffix += (" · " if affix_suffix.is_empty() else "、") + str(affix.get("name", "词缀")) + "+" + str(affix.get("value", 0))
-			label.text = str(labels[slot]) + "：" + str(item.get("name", "未知装备")) + " · " + quality_name + affix_suffix
+			label.text = str(labels[slot]) + "：" + str(item.get("name", "未知装备")) + (" +" + str(item.get("enhancement_level", 0)) if int(item.get("enhancement_level", 0)) > 0 else "") + " · " + quality_name + affix_suffix
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(label)
 		if not item.is_empty():
@@ -4212,6 +4225,56 @@ func _on_equipment_request_completed(result: int, response_code: int, _headers: 
 			button.pressed.connect(_on_unequip_item_pressed.bind(slot))
 			row.add_child(button)
 
+
+func _confirm_enhance_equipment(instance_id: String, item_name: String, level: int, quality: int) -> void:
+	if enhancement_busy or instance_id.is_empty():
+		return
+	var caps := [0, 3, 5, 8, 10, 12]
+	var max_level := caps[clampi(quality, 1, 5)]
+	if level >= max_level:
+		inventory_status.text = "该品质装备已达到强化上限 +" + str(max_level)
+		return
+	var costs := [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16]
+	var rates := [100, 85, 70, 60, 50, 40, 30, 25, 20, 15, 10, 8]
+	var target := level + 1
+	var dialog := ConfirmationDialog.new()
+	dialog.title = "装备强化 +" + str(target)
+	dialog.dialog_text = "强化「" + item_name + "」至 +" + str(target) + "？\n需要对应锻造材料 ×" + str(costs[target - 1]) + "，成功率 " + str(rates[target - 1]) + "%。\n失败只消耗材料，不会损坏或降级装备。"
+	add_child(dialog)
+	dialog.confirmed.connect(func():
+		dialog.queue_free()
+		_submit_equipment_enhancement(instance_id)
+	)
+	dialog.canceled.connect(dialog.queue_free)
+	dialog.close_requested.connect(dialog.queue_free)
+	dialog.popup_centered(Vector2i(440, 200))
+
+func _submit_equipment_enhancement(instance_id: String) -> void:
+	if enhancement_busy or enhancement_http == null or HHSession.access_token.is_empty():
+		return
+	enhancement_busy = true
+	inventory_status.text = "正在强化装备……"
+	var payload := {"request_id": _make_request_uuid(), "instance_id": instance_id}
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token, "Content-Type: application/json"])
+	var error := enhancement_http.request(HHSession.api_base + "/api/v1/characters/current/inventory/enhance", headers, HTTPClient.METHOD_POST, JSON.stringify(payload))
+	if error != OK:
+		enhancement_busy = false
+		inventory_status.text = "强化请求提交失败，错误码：" + str(error)
+
+func _on_enhance_equipment_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	enhancement_busy = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		inventory_status.text = "装备强化失败：" + body.get_string_from_utf8()
+		_render_inventory_items()
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if parsed is Dictionary:
+		var new_level := int(parsed.get("enhancement_level", 0))
+		if bool(parsed.get("succeeded", false)):
+			inventory_status.text = "强化成功：装备提升至 +" + str(new_level)
+		else:
+			inventory_status.text = "强化失败：材料已消耗，装备保持原等级"
+	_refresh_inventory()
 
 func _confirm_salvage_equipment(instance_id: String, item_name: String) -> void:
 	if salvage_busy or instance_id.is_empty():
