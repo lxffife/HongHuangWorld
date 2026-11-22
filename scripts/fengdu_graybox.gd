@@ -774,6 +774,15 @@ func _advance_npc_behavior(agent: Dictionary, elapsed: float) -> void:
 	var duration := float(agent.get("state_duration", 5.0))
 	var cycle_index := int(agent.get("state_cycle_index", 0))
 	var role := str(agent.get("role", ""))
+	if role == "soldier" and str(agent.get("activity", "")) == "rest":
+		agent["state"] = "rest"
+		agent["state_elapsed"] = state_elapsed
+		return
+	if role == "soldier" and str(agent.get("state", "")) == "rest":
+		agent["state_cycle_index"] = 0
+		agent["state"] = "formation_ready"
+		state_elapsed = 0.0
+		duration = _npc_behavior_duration(role, "formation_ready", float(agent.get("phase", 0.0)))
 	while state_elapsed >= duration:
 		state_elapsed -= duration
 		cycle_index = (cycle_index + 1) % states.size()
