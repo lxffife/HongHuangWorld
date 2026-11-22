@@ -28,6 +28,7 @@ add_executable(world_server
     src/enet_server.cpp
     src/frame.cpp
     src/durable_outbox.cpp
+    src/monster_runtime_checkpoint_writer.cpp
     src/monster_contribution_writer.cpp
     src/monster_death_finalizer.cpp
 )
