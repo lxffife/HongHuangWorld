@@ -4346,7 +4346,7 @@ struct EnetServer::Impl {
                     if (!enqueue_durable_event(mastery_payload.at("event_id").get<std::string>(),
                                                "spell_mastery_reward", mastery_payload, mastery_error)) {
                         std::cerr << "[SpellMastery] confirmed hit XP could not be queued: "
-                                      << player.character_id << ": " << mastery_error << '\n';
+                                  << mastery_error << std::endl;
                     } else {
                         auto& mastery = owner->second.spell_mastery[projectile->spell_id];
                         if (mastery.spell_id.empty())
@@ -5071,7 +5071,7 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                         if (!fetch_spell_mastery(impl_->config, player.session_id, player.character_id,
                                                  player.spell_mastery, mastery_http_status, mastery_error)) {
                             std::cerr << "Spell mastery unavailable for character "
-                                      << player.character_id << ": " << mastery_error << '\\n';
+                                      << player.character_id << ": " << mastery_error << '\n';
                         }
                         long bounty_http_status = 0;
                         std::string bounty_error;
