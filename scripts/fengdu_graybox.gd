@@ -9,6 +9,9 @@ const WALL_THICKNESS := 5.0
 const GATE_WIDTH := 16.0
 const PLAYER_SPEED := 8.0
 const MOUSE_SENSITIVITY := 0.0025
+const NPC_DAY_SECONDS_PER_MINUTE := 1.0
+const NPC_NEAR_UPDATE_DISTANCE := 60.0
+const NPC_FAR_UPDATE_DISTANCE := 110.0
 
 var player: CharacterBody3D
 var camera: Camera3D
@@ -23,6 +26,9 @@ var activity_debug_root: Node3D
 var activity_debug_visible := false
 var npc_agents: Array[Dictionary] = []
 var npc_simulation_time := 0.0
+var npc_world_minutes := 18.0 * 60.0
+var npc_schedule_bucket := -1
+var npc_schedule_night := true
 
 var mats: Dictionary = {}
 
@@ -543,6 +549,21 @@ func _build_activity_registry() -> void:
 			}
 			activity_points.append(point)
 
+	# Three arrivals wait between the entrance rails before reaching the registration desk.
+	var waystation_center := Vector3(77.0, 0.0, 0.0)
+	for queue_index in range(3):
+		var queue_position := waystation_center + Vector3(0.0, 0.0, -6.0 + float(queue_index) * 2.5)
+		activity_points.append({
+			"district": "引魂驿站",
+			"role": "waiting_soul",
+			"activity": "queue_wait",
+			"position": queue_position,
+			"facing": PI,
+			"schedule_tag": "always",
+			"capacity": 1,
+			"radius": 0.8
+		})
+
 	# Patrol route follows the existing north-south/east-west distributor roads.
 	# This is a visualization/planning path, not a NavigationAgent path.
 	patrol_route = [
@@ -607,11 +628,13 @@ func _build_npc_population() -> void:
 		agent["root"] = npc_root
 		agent["role"] = str(point["role"])
 		agent["activity"] = str(point["activity"])
+		agent["schedule_tag"] = str(point["schedule_tag"])
 		agent["phase"] = float(npc_agents.size()) * 1.37
 		agent["moving"] = false
 		agent["base_position"] = point["position"]
 		agent["facing"] = float(point["facing"])
 		agent["gesture_rate"] = 0.72 + float(npc_agents.size() % 5) * 0.13
+		agent["update_accumulator"] = 0.0
 		npc_root.rotation.y = float(point["facing"])
 		npc_agents.append(agent)
 
@@ -630,11 +653,13 @@ func _build_npc_population() -> void:
 		patrol_agent["route_index"] = 0
 		patrol_agent["route_progress"] = 0.0
 		patrol_agent["move_speed"] = 2.6
+		patrol_agent["update_accumulator"] = 0.0
 		npc_agents.append(patrol_agent)
+	_apply_npc_schedules()
 
 
 func _create_npc_figure(root: Node3D, role: String) -> Dictionary:
-	var tint := _activity_color(role)
+	var tint := Color("#b8c5cf") if role == "waiting_soul" else _activity_color(role)
 	var robe_material := StandardMaterial3D.new()
 	robe_material.albedo_color = tint
 	robe_material.roughness = 0.82
@@ -734,8 +759,33 @@ func _create_npc_figure(root: Node3D, role: String) -> Dictionary:
 
 func _update_npc_agents(delta: float) -> void:
 	npc_simulation_time += delta
+	npc_world_minutes = fposmod(npc_world_minutes + delta / NPC_DAY_SECONDS_PER_MINUTE, 1440.0)
+	var schedule_bucket := int(npc_world_minutes / 5.0)
+	if schedule_bucket != npc_schedule_bucket:
+		npc_schedule_bucket = schedule_bucket
+		_apply_npc_schedules()
+
 	for agent in npc_agents:
 		var root: Node3D = agent["root"]
+		if not root.visible:
+			continue
+		var distance_to_player := 0.0
+		if player != null:
+			distance_to_player = root.global_position.distance_to(player.global_position)
+		var update_interval := 0.0
+		if distance_to_player > NPC_FAR_UPDATE_DISTANCE:
+			update_interval = 0.8
+		elif distance_to_player > NPC_NEAR_UPDATE_DISTANCE:
+			update_interval = 0.32
+		var elapsed := delta
+		if update_interval > 0.0:
+			var accumulated := float(agent.get("update_accumulator", 0.0)) + delta
+			if accumulated < update_interval:
+				agent["update_accumulator"] = accumulated
+				continue
+			elapsed = accumulated
+			agent["update_accumulator"] = 0.0
+
 		var body: MeshInstance3D = agent["body"]
 		var left_arm: MeshInstance3D = agent["left_arm"]
 		var right_arm: MeshInstance3D = agent["right_arm"]
@@ -748,7 +798,7 @@ func _update_npc_agents(delta: float) -> void:
 			var next_index := (route_index + 1) % patrol_route.size()
 			var finish: Vector3 = patrol_route[next_index]
 			var segment_length := maxf(start.distance_to(finish), 0.01)
-			route_progress += float(agent["move_speed"]) * delta / segment_length
+			route_progress += float(agent["move_speed"]) * elapsed / segment_length
 			while route_progress >= 1.0:
 				route_progress -= 1.0
 				route_index = next_index
@@ -771,30 +821,62 @@ func _update_npc_agents(delta: float) -> void:
 			body.position.y = 0.92 + sin(phase) * 0.025
 			root.rotation.y = float(agent["facing"])
 			if activity == "drill":
-				# Alternating spear-ready motions; each soldier has a slightly different cadence.
 				var drill_swing := sin(phase * 2.0) * 0.28
 				left_arm.rotation.z = deg_to_rad(-18.0) + drill_swing
 				right_arm.rotation.z = deg_to_rad(18.0) - drill_swing
+			elif activity == "rest":
+				left_arm.rotation.z = deg_to_rad(-18.0) + sin(phase * 0.35) * 0.025
+				right_arm.rotation.z = deg_to_rad(18.0) - sin(phase * 0.35) * 0.025
 			elif activity == "trade_idle":
-				# Merchants make small, unsynchronized welcoming gestures.
 				left_arm.rotation.z = deg_to_rad(-18.0) + sin(phase * 0.8) * 0.08
 				right_arm.rotation.z = deg_to_rad(18.0) + sin(phase * 0.8 + float(agent["phase"])) * 0.13
 			elif activity == "social_idle":
-				# Residents turn toward one another in short conversational beats.
 				root.rotation.y = float(agent["facing"]) + sin(phase * 0.45) * 0.22
 				left_arm.rotation.z = deg_to_rad(-18.0) + sin(phase * 0.9) * 0.06
 				right_arm.rotation.z = deg_to_rad(18.0) - sin(phase * 0.9 + 0.8) * 0.06
 			elif activity == "registration":
-				# The guide checks a small ledger, then raises a hand to direct the next soul.
 				var gesture := sin(phase * 0.62)
 				left_arm.rotation.z = deg_to_rad(-18.0) + maxf(gesture, 0.0) * 0.18
 				right_arm.rotation.z = deg_to_rad(18.0) - maxf(-gesture, 0.0) * 0.34
 				var ledger: MeshInstance3D = agent.get("ledger")
 				if ledger != null:
 					ledger.rotation.x = deg_to_rad(-18.0) + maxf(gesture, 0.0) * 0.24
+			elif activity == "queue_wait":
+				# Waiting souls keep their place, occasionally glance toward the desk.
+				root.rotation.y = float(agent["facing"]) + sin(phase * 0.28) * 0.08
+				left_arm.rotation.z = deg_to_rad(-18.0)
+				right_arm.rotation.z = deg_to_rad(18.0) + sin(phase * 0.4) * 0.035
 			else:
 				left_arm.rotation.z = deg_to_rad(-18.0)
 				right_arm.rotation.z = deg_to_rad(18.0)
+
+
+func _apply_npc_schedules() -> void:
+	var hour := int(npc_world_minutes / 60.0)
+	npc_schedule_night = hour >= 18 or hour < 6
+	for agent in npc_agents:
+		var role := str(agent.get("role", ""))
+		var activity := str(agent.get("activity", ""))
+		var root: Node3D = agent["root"]
+		if str(agent.get("schedule_tag", "")) == "night":
+			root.visible = npc_schedule_night
+		if role == "soldier":
+			agent["activity"] = "drill" if hour >= 6 and hour < 22 else "rest"
+		elif role == "merchant":
+			agent["activity"] = "trade_idle"
+		elif role == "waiting_soul":
+			agent["activity"] = "queue_wait"
+		elif role == "guide":
+			agent["activity"] = "registration"
+		elif role == "resident":
+			agent["activity"] = "social_idle"
+	# Clock display is intentionally local to this graybox, not a server-authoritative world clock.
+
+
+func _format_npc_clock() -> String:
+	var hour := int(npc_world_minutes / 60.0)
+	var minute := int(fposmod(npc_world_minutes, 60.0))
+	return "%02d:%02d" % [hour, minute]
 
 
 func _toggle_activity_debug() -> void:
@@ -870,6 +952,8 @@ func _activity_color(role: String) -> Color:
 			return Color("#b5a1dc")
 		"patrol_guard":
 			return Color("#a7c18a")
+		"waiting_soul":
+			return Color("#b8c5cf")
 	return Color("#d0d0d0")
 
 
@@ -1074,7 +1158,8 @@ func _update_hud() -> void:
 		if distance < nearest_distance:
 			nearest_distance = distance
 			nearest = str(district_name)
-	status_label.text = "位置 %.1f, %.1f  ·  附近：%s" % [p.x, p.z, nearest]
+	var period := "夜" if npc_schedule_night else "昼"
+	status_label.text = "%s %s  ·  位置 %.1f, %.1f  ·  附近：%s" % [period, _format_npc_clock(), p.x, p.z, nearest]
 
 
 func _box(node_name: String, center: Vector3, size: Vector3, material_key: String, collision: bool) -> Node3D:
