@@ -87,8 +87,16 @@ static func get_navigation_network() -> Dictionary:
 			{"id": "junction.west.south", "position": Vector3(-34, 0, -32), "kind": "junction"},
 			{"id": "junction.east.north", "position": Vector3(34, 0, 32), "kind": "junction"},
 			{"id": "junction.east.south", "position": Vector3(34, 0, -32), "kind": "junction"},
-			{"id": "junction.palace.west", "position": Vector3(-27, 0, 34), "kind": "junction"},
-			{"id": "junction.palace.east", "position": Vector3(27, 0, 34), "kind": "junction"},
+			{"id": "junction.west.far_south", "position": Vector3(-34, 0, -66), "kind": "junction"},
+			{"id": "junction.east.far_south", "position": Vector3(34, 0, -66), "kind": "junction"},
+			{"id": "junction.west.registry", "position": Vector3(-34, 0, -8), "kind": "junction"},
+			{"id": "junction.east.merit", "position": Vector3(34, 0, -8), "kind": "junction"},
+			{"id": "junction.west.service", "position": Vector3(-34, 0, -13.5), "kind": "junction"},
+			{"id": "junction.east.service", "position": Vector3(34, 0, -13.5), "kind": "junction"},
+			{"id": "junction.palace.west", "position": Vector3(-27, 0, 32), "kind": "junction"},
+			{"id": "junction.palace.east", "position": Vector3(27, 0, 32), "kind": "junction"},
+			{"id": "junction.ten_kings.connector", "position": Vector3(-27, 0, 36.5), "kind": "junction"},
+			{"id": "junction.judge.connector", "position": Vector3(27, 0, 36.5), "kind": "junction"},
 			{"id": "district.soul_ward.entry", "position": Vector3(-55, 0, -66), "kind": "district_entry"},
 			{"id": "district.ghost_market.entry", "position": Vector3(55, 0, -66), "kind": "district_entry"},
 			{"id": "district.soul_registry.entry", "position": Vector3(-52, 0, -8), "kind": "district_entry"},
@@ -113,28 +121,35 @@ static func get_navigation_network() -> Dictionary:
 			{"id": "road.west.south", "from": "junction.west.south", "to": "junction.south", "width": 6.0, "two_way": true},
 			{"id": "road.east.north", "from": "junction.north", "to": "junction.east.north", "width": 6.0, "two_way": true},
 			{"id": "road.east.south", "from": "junction.south", "to": "junction.east.south", "width": 6.0, "two_way": true},
+			{"id": "road.west.south.extension", "from": "junction.west.south", "to": "junction.west.far_south", "width": 6.0, "two_way": true},
+			{"id": "road.east.south.extension", "from": "junction.east.south", "to": "junction.east.far_south", "width": 6.0, "two_way": true},
+			{"id": "road.west.registry.branch", "from": "junction.west", "to": "junction.west.registry", "width": 6.0, "two_way": true},
+			{"id": "road.east.merit.branch", "from": "junction.east", "to": "junction.east.merit", "width": 6.0, "two_way": true},
+			{"id": "road.west.service.branch", "from": "junction.west", "to": "junction.west.service", "width": 6.0, "two_way": true},
+			{"id": "road.east.service.branch", "from": "junction.east", "to": "junction.east.service", "width": 6.0, "two_way": true},
 			{"id": "road.palace.west", "from": "junction.palace.west", "to": "junction.north", "width": 5.0, "two_way": true},
 			{"id": "road.palace.east", "from": "junction.north", "to": "junction.palace.east", "width": 5.0, "two_way": true},
-			{"id": "road.soul_ward.connector", "from": "junction.west.south", "to": "district.soul_ward.entry", "width": 4.5, "two_way": true},
-			{"id": "road.ghost_market.connector", "from": "junction.east.south", "to": "district.ghost_market.entry", "width": 4.5, "two_way": true},
-			{"id": "road.soul_registry.connector", "from": "junction.west", "to": "district.soul_registry.entry", "width": 4.5, "two_way": true},
-			{"id": "road.merit_bureau.connector", "from": "junction.east", "to": "district.merit_bureau.entry", "width": 4.5, "two_way": true},
-			{"id": "road.ten_kings.connector", "from": "junction.palace.west", "to": "district.ten_kings.entry", "width": 4.5, "two_way": true},
-			{"id": "road.judge_bureau.connector", "from": "junction.palace.east", "to": "district.judge_bureau.entry", "width": 4.5, "two_way": true},
+			{"id": "road.ten_kings.approach", "from": "junction.palace.west", "to": "junction.ten_kings.connector", "width": 5.0, "two_way": true},
+			{"id": "road.judge.approach", "from": "junction.palace.east", "to": "junction.judge.connector", "width": 5.0, "two_way": true},
+			{"id": "road.soul_ward.connector", "from": "junction.west.far_south", "to": "district.soul_ward.entry", "width": 4.5, "two_way": true},
+			{"id": "road.ghost_market.connector", "from": "junction.east.far_south", "to": "district.ghost_market.entry", "width": 4.5, "two_way": true},
+			{"id": "road.soul_registry.connector", "from": "junction.west.registry", "to": "district.soul_registry.entry", "width": 4.5, "two_way": true},
+			{"id": "road.merit_bureau.connector", "from": "junction.east.merit", "to": "district.merit_bureau.entry", "width": 4.5, "two_way": true},
+			{"id": "road.ten_kings.connector", "from": "junction.ten_kings.connector", "to": "district.ten_kings.entry", "width": 4.5, "two_way": true},
+			{"id": "road.judge_bureau.connector", "from": "junction.judge.connector", "to": "district.judge_bureau.entry", "width": 4.5, "two_way": true},
 			{"id": "road.patrol_office.connector", "from": "junction.center", "to": "district.patrol_office.entry", "width": 5.0, "two_way": true},
 			{"id": "road.reincarnation.connector", "from": "junction.south", "to": "district.reincarnation.entry", "width": 4.5, "two_way": true},
-			{"id": "road.barracks.connector", "from": "junction.west", "to": "district.barracks.entry", "width": 4.5, "two_way": true},
-			{"id": "road.waystation.connector", "from": "junction.east", "to": "district.waystation.entry", "width": 4.5, "two_way": true}
+			{"id": "road.barracks.connector", "from": "junction.west.service", "to": "district.barracks.entry", "width": 4.5, "two_way": true},
+			{"id": "road.waystation.connector", "from": "junction.east.service", "to": "district.waystation.entry", "width": 4.5, "two_way": true}
 		],
 		"routes": [
 			{"id": "route.south_gate_to_reincarnation", "from": "gate.south", "to": "district.reincarnation.entry", "waypoints": ["gate.south", "junction.south", "district.reincarnation.entry"], "purpose": "忘川与轮回方向"},
-			{"id": "route.waystation_to_registry", "from": "district.waystation.entry", "to": "district.soul_registry.entry", "waypoints": ["district.waystation.entry", "junction.east", "junction.center", "junction.west", "district.soul_registry.entry"], "purpose": "新魂登记"},
-			{"id": "route.registry_to_judgment", "from": "district.soul_registry.entry", "to": "district.ten_kings.entry", "waypoints": ["district.soul_registry.entry", "junction.west", "junction.north", "junction.palace.west", "district.ten_kings.entry"], "purpose": "鬼籍核验后进入审判"},
-			{"id": "route.registry_to_judge_review", "from": "district.soul_registry.entry", "to": "district.judge_bureau.entry", "waypoints": ["district.soul_registry.entry", "junction.west", "junction.center", "junction.east", "junction.north", "junction.palace.east", "district.judge_bureau.entry"], "purpose": "档案复核与文书交接"},
-			{"id": "route.judgment_to_reincarnation", "from": "district.ten_kings.entry", "to": "district.reincarnation.entry", "waypoints": ["district.ten_kings.entry", "junction.palace.west", "junction.north", "junction.center", "junction.south", "district.reincarnation.entry"], "purpose": "判决后前往轮回司"}
+			{"id": "route.waystation_to_registry", "from": "district.waystation.entry", "to": "district.soul_registry.entry", "waypoints": ["district.waystation.entry", "junction.east.service", "junction.east", "junction.center", "junction.west", "junction.west.registry", "district.soul_registry.entry"], "purpose": "新魂登记"},
+			{"id": "route.registry_to_judgment", "from": "district.soul_registry.entry", "to": "district.ten_kings.entry", "waypoints": ["district.soul_registry.entry", "junction.west.registry", "junction.west", "junction.west.north", "junction.north", "junction.palace.west", "junction.ten_kings.connector", "district.ten_kings.entry"], "purpose": "鬼籍核验后进入审判"},
+			{"id": "route.registry_to_judge_review", "from": "district.soul_registry.entry", "to": "district.judge_bureau.entry", "waypoints": ["district.soul_registry.entry", "junction.west.registry", "junction.west", "junction.center", "junction.east", "junction.east.north", "junction.north", "junction.palace.east", "junction.judge.connector", "district.judge_bureau.entry"], "purpose": "档案复核与文书交接"},
+			{"id": "route.judgment_to_reincarnation", "from": "district.ten_kings.entry", "to": "district.reincarnation.entry", "waypoints": ["district.ten_kings.entry", "junction.ten_kings.connector", "junction.palace.west", "junction.north", "junction.center", "junction.south", "district.reincarnation.entry"], "purpose": "判决后前往轮回司"}
 		]
 	}
-
 
 static func get_approach_roads() -> Array[Dictionary]:
 	return [
