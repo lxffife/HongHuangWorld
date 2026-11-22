@@ -1,6 +1,7 @@
 extends Node3D
 
 const WORLD_LAYOUT = preload("res://scripts/fengdu_world_layout.gd")
+const WORLD_NAVIGATION = preload("res://scripts/fengdu_navigation.gd")
 ## Walkable Fengdu capital graybox. All dimensions in meters.
 ## This is a client-side art/navigation prototype; gates and permissions are not authoritative.
 
@@ -24,6 +25,8 @@ var status_label: Label
 var district_markers: Dictionary = {}
 var npc_spawn_points: Dictionary = {}
 var activity_points: Array[Dictionary] = []
+var navigation_network_data: Dictionary = {}
+var last_navigation_route: Dictionary = {}
 var patrol_route: Array[Vector3] = []
 var activity_debug_root: Node3D
 var activity_debug_visible := false
@@ -553,10 +556,10 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 func _build_activity_registry() -> void:
 	# Consume presentation-independent NPC placements and route data.
 	activity_points.clear()
-	var navigation_network: Dictionary = WORLD_LAYOUT.get_navigation_network()
+	navigation_network_data = WORLD_LAYOUT.get_navigation_network()
 	for point in WORLD_LAYOUT.get_npc_activity_points():
 		var bound_point: Dictionary = point.duplicate(true)
-		bound_point.merge(WORLD_LAYOUT.get_spatial_binding_for_point(bound_point, navigation_network), true)
+		bound_point.merge(WORLD_LAYOUT.get_spatial_binding_for_point(bound_point, navigation_network_data), true)
 		activity_points.append(bound_point)
 	var routes: Array = WORLD_LAYOUT.get_patrol_routes()
 	patrol_route.clear()
@@ -578,8 +581,36 @@ func _build_activity_registry() -> void:
 			"capacity": 1,
 			"radius": 1.0
 		}
-		route_point.merge(WORLD_LAYOUT.get_spatial_binding_for_point(route_point, navigation_network), true)
+		route_point.merge(WORLD_LAYOUT.get_spatial_binding_for_point(route_point, navigation_network_data), true)
 		activity_points.append(route_point)
+
+
+func get_navigation_route_to_district(district_id: String, origin: Vector3 = Vector3.ZERO) -> Dictionary:
+	# Public scene adapter for UI, quest and NPC callers. Does not move an actor.
+	if navigation_network_data.is_empty():
+		navigation_network_data = WORLD_LAYOUT.get_navigation_network()
+	last_navigation_route = WORLD_NAVIGATION.find_path_to_district(
+		navigation_network_data,
+		origin,
+		district_id,
+		WORLD_LAYOUT.get_district_service_entrances()
+	)
+	return last_navigation_route.duplicate(true)
+
+
+func get_navigation_route_between_positions(origin: Vector3, destination: Vector3) -> Dictionary:
+	if navigation_network_data.is_empty():
+		navigation_network_data = WORLD_LAYOUT.get_navigation_network()
+	var destination_node := WORLD_NAVIGATION.find_nearest_node(navigation_network_data, destination)
+	if not bool(destination_node.get("found", false)):
+		return {"found": false, "reason": "no_navigation_nodes", "node_ids": [], "points": [], "distance": INF}
+	last_navigation_route = WORLD_NAVIGATION.find_path_from_position(
+		navigation_network_data,
+		origin,
+		str(destination_node["node_id"])
+	)
+	last_navigation_route["destination_connector_distance"] = float(destination_node["distance"])
+	return last_navigation_route.duplicate(true)
 
 
 func _district_key(district_name: String) -> String:
