@@ -248,6 +248,40 @@ static func get_market_stalls() -> Array[Dictionary]:
 	return result
 
 
+static func get_waystation_layout() -> Dictionary:
+	# Arrival, registration, waiting, and dispatch are authored as semantic local-space points.
+	return {
+		"district": "引魂驿站",
+		"arrival_lane": {"point_id": "waystation.arrival.lane", "offset": Vector3(0.0, 0.1, -7.0), "size": Vector3(7.0, 0.16, 11.0)},
+		"canopy": {"point_id": "waystation.registration.canopy", "offset": Vector3(0.0, 4.0, -2.0), "size": Vector3(12.0, 0.8, 6.0), "roof_offset": Vector3(0.0, 5.0, -2.0), "roof_width": 15.0, "roof_height": 2.6},
+		"registration_desk": {"point_id": "waystation.registration.desk", "offset": Vector3(0.0, 1.0, 0.5), "size": Vector3(5.0, 1.8, 1.2)},
+		"registration_ledger": {"point_id": "waystation.registration.ledger", "offset": Vector3(0.0, 2.05, 0.5), "size": Vector3(2.4, 0.18, 0.8)},
+		"waiting_pavilions": [
+			{"point_id": "waystation.waiting_pavilion.left", "offset": Vector3(-6.5, 1.8, 8.0), "size": Vector3(4.0, 3.6, 4.0), "roof_offset": Vector3(-6.5, 4.3, 8.0), "roof_width": 5.5, "roof_height": 1.7},
+			{"point_id": "waystation.waiting_pavilion.right", "offset": Vector3(6.5, 1.8, 8.0), "size": Vector3(4.0, 3.6, 4.0), "roof_offset": Vector3(6.5, 4.3, 8.0), "roof_width": 5.5, "roof_height": 1.7}
+		],
+		"queue_rails": [
+			{"point_id": "waystation.queue_rail.left", "offset": Vector3(-3.5, 0.8, -7.0), "size": Vector3(0.22, 1.6, 8.0)},
+			{"point_id": "waystation.queue_rail.right", "offset": Vector3(3.5, 0.8, -7.0), "size": Vector3(0.22, 1.6, 8.0)}
+		],
+		"queue_positions": [Vector3(0.0, 0.0, -6.0), Vector3(0.0, 0.0, -3.5), Vector3(0.0, 0.0, -1.0)],
+		"dispatch_gate": {
+			"point_id": "waystation.dispatch.gate",
+			"left_post_offset": Vector3(-3.5, 2.8, 10.5), "right_post_offset": Vector3(3.5, 2.8, 10.5),
+			"post_size": Vector3(0.7, 5.6, 0.7),
+			"lintel_offset": Vector3(0.0, 5.3, 10.5), "lintel_size": Vector3(7.5, 0.8, 0.8),
+			"label_offset": Vector3(0.0, 6.3, 10.5)
+		},
+		"guide_posts": [
+			{"point_id": "waystation.guide.01", "offset": Vector3(-2.0, 0.0, -9.0), "facing": PI * 0.5, "activity": "arrival_assist"},
+			{"point_id": "waystation.guide.02", "offset": Vector3(2.0, 0.0, -9.0), "facing": PI * 0.5, "activity": "arrival_assist"},
+			{"point_id": "waystation.guide.03", "offset": Vector3(-2.0, 0.0, 3.0), "facing": PI * 0.5, "activity": "registration"},
+			{"point_id": "waystation.guide.04", "offset": Vector3(2.0, 0.0, 3.0), "facing": PI * 0.5, "activity": "registration"},
+			{"point_id": "waystation.guide.05", "offset": Vector3(0.0, 0.0, 8.5), "facing": PI * 0.5, "activity": "dispatch"}
+		]
+	}
+
+
 static func get_npc_activity_points() -> Array[Dictionary]:
 	# Stable prototype placements; renderers may replace these coordinates after terrain sampling.
 	var points: Array[Dictionary] = []
@@ -273,15 +307,21 @@ static func get_npc_activity_points() -> Array[Dictionary]:
 	var soldier_positions := [Vector3(-80, 0, -5.5), Vector3(-74, 0, -5.5), Vector3(-80, 0, 2), Vector3(-74, 0, 2), Vector3(-77, 0, 7)]
 	for i in range(soldier_positions.size()):
 		points.append(_npc_point("barracks.soldier.%02d" % (i + 1), "阴兵大营", "soldier", "drill", soldier_positions[i], -PI * 0.5, "always", 1, 1.4))
-	var guide_positions := [Vector3(75, 0, -9), Vector3(79, 0, -9), Vector3(75, 0, 3), Vector3(79, 0, 3), Vector3(77, 0, 8.5)]
-	for i in range(guide_positions.size()):
-		points.append(_npc_point("waystation.guide.%02d" % (i + 1), "引魂驿站", "guide", "registration", guide_positions[i], PI * 0.5, "always", 1, 1.4))
+	var waystation: Dictionary = get_waystation_layout()
+	var waystation_center := Vector3(77.0, 0.0, 0.0)
+	for guide in waystation["guide_posts"]:
+		var guide_point := _npc_point(str(guide["point_id"]), "引魂驿站", "guide", str(guide["activity"]), waystation_center + guide["offset"], float(guide["facing"]), "always", 1, 1.4)
+		guide_point["waystation_station_id"] = str(guide["point_id"])
+		points.append(guide_point)
 	var patrol_positions := [Vector3(-7, 0, 12), Vector3(7, 0, 12), Vector3(0, 0, 3), Vector3(0, 0, 15)]
 	for i in range(patrol_positions.size()):
 		points.append(_npc_point("patrol_office.guard.%02d" % (i + 1), "巡城司", "patrol_guard", "patrol_watch", patrol_positions[i], PI if i % 2 == 0 else 0.0, "always", 1, 1.4))
-	var queue_positions := [Vector3(77, 0, -6), Vector3(77, 0, -3.5), Vector3(77, 0, -1)]
+	var queue_positions: Array = waystation["queue_positions"]
 	for i in range(queue_positions.size()):
-		points.append(_npc_point("waystation.waiting_soul.%02d" % (i + 1), "引魂驿站", "waiting_soul", "queue_wait", queue_positions[i], PI, "always", 1, 0.8))
+		var queue_point := _npc_point("waystation.waiting_soul.%02d" % (i + 1), "引魂驿站", "waiting_soul", "queue_wait", waystation_center + queue_positions[i], PI, "always", 1, 0.8)
+		queue_point["queue_lane_id"] = "waystation.queue.main"
+		queue_point["queue_slot"] = i
+		points.append(queue_point)
 	return points
 
 
