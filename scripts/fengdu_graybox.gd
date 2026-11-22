@@ -1943,30 +1943,9 @@ func _update_npc_agents(delta: float) -> void:
 		if str(agent.get("role", "")) == "merchant":
 			_update_merchant_proximity_behavior(agent, distance_to_player)
 			_update_merchant_market_activity(agent)
-		var patrol_alert_override := false
-		if str(agent.get("role", "")) == "patrol_guard":
-			var should_alert := patrol_alert_remaining > 0.0 and root.global_position.distance_to(patrol_alert_position) <= 60.0
-			var was_alerted := bool(agent.get("alert_override", false))
-			if should_alert:
-				if not was_alerted:
-					agent["alert_resume_moving"] = bool(agent.get("moving", false))
-					agent["alert_hold_position"] = root.position
-				var alert_direction := patrol_alert_position - root.global_position
-				if alert_direction.length_squared() > 0.01:
-					agent["alert_facing"] = atan2(-alert_direction.x, -alert_direction.z)
-				agent["alert_override"] = true
-				agent["state"] = "alert_watch"
-				patrol_alert_override = true
-			elif was_alerted:
-				agent["alert_override"] = false
-				agent["moving"] = bool(agent.get("alert_resume_moving", false))
-				agent["state"] = "patrol_walk" if bool(agent["moving"]) else "patrol_watch"
-		if patrol_alert_override:
-			root.position = agent.get("alert_hold_position", root.position)
-			root.rotation.y = float(agent.get("alert_facing", root.rotation.y))
-			body.position.y = 0.92 + sin(phase * 1.4) * 0.018
-			left_arm.rotation.z = deg_to_rad(-58.0) + sin(phase * 1.6) * 0.08
-			right_arm.rotation.z = deg_to_rad(58.0) - sin(phase * 1.6) * 0.08
+		var dispatch_state := str(agent.get("dispatch_state", ""))
+		if str(agent.get("role", "")) == "patrol_guard" and dispatch_state != "":
+			_advance_patrol_dispatch(agent, elapsed, phase)
 		elif bool(agent["moving"]):
 			var route_index := int(agent["route_index"])
 			var route_progress := float(agent["route_progress"])
@@ -2066,14 +2045,16 @@ func _update_market_gate_inspection(delta: float) -> void:
 			# The gate guard reports a suspicious inspection finding to the patrol network.
 			var market_center: Vector3 = district_markers.get("万魂鬼市", Vector3(55.0, 0.0, -53.0))
 			patrol_alert_position = market_center + Vector3(0.0, 0.0, -12.0)
-			patrol_alert_remaining = maxf(patrol_alert_remaining, 7.0)
+			patrol_alert_remaining = maxf(patrol_alert_remaining, 45.0)
 			patrol_alert_sequence += 1
+			_begin_patrol_dispatch(patrol_alert_position)
 			print("[FengduPatrol] market gate report #%d dispatched to patrol guards" % patrol_alert_sequence)
 	var inspecting := market_inspection_remaining > 0.0
 	var minute_of_day := int(npc_world_minutes / 60.0) * 60 + int(fposmod(npc_world_minutes, 60.0))
 	var welcoming_guests := minute_of_day >= 19 * 60 + 30 and minute_of_day < 20 * 60
 	var guiding_departure := minute_of_day >= 22 * 60 and minute_of_day < 22 * 60 + 30
-	market_inspection_label.text = ("巡夜巡查 · 入口核验 #%d" % market_inspection_sequence) if inspecting else ("宾客入场 · 入口引导" if welcoming_guests else ("竞宝散场 · 引导离席" if guiding_departure else "夜市巡防 · 正常"))
+	var dispatch_status := _patrol_dispatch_status_text()
+	market_inspection_label.text = dispatch_status if dispatch_status != "" else (("巡夜巡查 · 入口核验 #%d" % market_inspection_sequence) if inspecting else ("宾客入场 · 入口引导" if welcoming_guests else ("竞宝散场 · 引导离席" if guiding_departure else "夜市巡防 · 正常")))
 	market_inspection_label.modulate = Color("#e4bd82") if inspecting else (Color("#d7bd98") if welcoming_guests or guiding_departure else Color("#a9c3d2"))
 	for index in range(market_guards.size()):
 		var guard_data: Dictionary = market_guards[index]
@@ -2102,6 +2083,177 @@ func _update_market_gate_inspection(delta: float) -> void:
 			right_arm.rotation.z = deg_to_rad(18.0) - sin(phase * 0.6 + 0.8) * 0.018
 	for light in market_lights:
 		light.light_energy = 0.82 if inspecting else (0.48 + 0.08 * (0.5 + 0.5 * sin(market_ambience_time)))
+
+
+func _begin_patrol_dispatch(target_position: Vector3) -> void:
+	# Select the nearest available road patrol actor; this is a local prototype dispatcher.
+	var selected_agent: Dictionary = {}
+	var selected_distance := INF
+	for agent in npc_agents:
+		if str(agent.get("role", "")) != "patrol_guard":
+			continue
+		if str(agent.get("activity", "")) != "patrol_route" or str(agent.get("dispatch_state", "")) != "":
+			continue
+		var guard_root: Node3D = agent.get("root")
+		if guard_root == null or not is_instance_valid(guard_root):
+			continue
+		var distance := guard_root.global_position.distance_to(target_position)
+		if distance < selected_distance:
+			selected_distance = distance
+			selected_agent = agent
+	if selected_agent.is_empty():
+		print("[FengduPatrol] no available patrol guard for incident #%d" % patrol_alert_sequence)
+		return
+
+	var guard_root: Node3D = selected_agent["root"]
+	var dispatch_path := _build_patrol_dispatch_path(guard_root.position, target_position)
+	if not bool(dispatch_path.get("found", false)):
+		print("[FengduPatrol] route planning failed: %s" % str(dispatch_path.get("reason", "unknown")))
+		return
+	var route_index := int(selected_agent.get("route_index", 0))
+	var resume_index := posmod(route_index, maxi(patrol_route.size(), 1))
+	var resume_position: Vector3 = patrol_route[resume_index] if not patrol_route.is_empty() else guard_root.position
+	selected_agent["dispatch_resume_route_index"] = resume_index
+	selected_agent["dispatch_resume_position"] = resume_position
+	selected_agent["dispatch_target_position"] = target_position
+	selected_agent["dispatch_waypoints"] = dispatch_path.get("points", [])
+	selected_agent["dispatch_waypoint_index"] = 1
+	selected_agent["dispatch_state"] = "enroute"
+	selected_agent["dispatch_wait_remaining"] = 0.0
+	selected_agent["dispatch_incident_sequence"] = patrol_alert_sequence
+	selected_agent["state"] = "patrol_dispatch"
+	selected_agent["moving"] = false
+	print("[FengduPatrol] guard %s en route; path %.1fm, %d waypoints" % [
+		str(selected_agent.get("npc_id", "unknown")),
+		float(dispatch_path.get("distance", 0.0)),
+		(dispatch_path.get("points", []) as Array).size()
+	])
+
+
+func _build_patrol_dispatch_path(origin: Vector3, destination: Vector3) -> Dictionary:
+	# Connect arbitrary incident/actor positions to the nearest stable road nodes.
+	var start_node := WORLD_NAVIGATION.find_nearest_node(navigation_network_data, origin)
+	var goal_node := WORLD_NAVIGATION.find_nearest_node(navigation_network_data, destination)
+	if not bool(start_node.get("found", false)) or not bool(goal_node.get("found", false)):
+		return {"found": false, "reason": "no_nearby_road_node", "points": [], "distance": INF}
+	var route := WORLD_NAVIGATION.find_path(
+		navigation_network_data,
+		str(start_node.get("node_id", "")),
+		str(goal_node.get("node_id", ""))
+	)
+	if not bool(route.get("found", false)):
+		return route
+	var points: Array[Vector3] = [origin]
+	for point in route.get("points", []):
+		var road_point: Vector3 = point
+		if points.back().distance_to(road_point) > 0.35:
+			points.append(road_point)
+	if points.back().distance_to(destination) > 0.35:
+		points.append(destination)
+	return {
+		"found": true,
+		"reason": "",
+		"node_ids": route.get("node_ids", []),
+		"points": points,
+		"distance": float(route.get("distance", 0.0)) + origin.distance_to(route.get("points", [origin])[0]) + destination.distance_to(route.get("points", [destination])[-1])
+	}
+
+
+func _advance_patrol_dispatch(agent: Dictionary, elapsed: float, phase: float) -> void:
+	var root: Node3D = agent["root"]
+	var body: MeshInstance3D = agent["body"]
+	var left_arm: MeshInstance3D = agent["left_arm"]
+	var right_arm: MeshInstance3D = agent["right_arm"]
+	var dispatch_state := str(agent.get("dispatch_state", ""))
+	if dispatch_state == "on_scene":
+		var wait_remaining := maxf(0.0, float(agent.get("dispatch_wait_remaining", 0.0)) - elapsed)
+		agent["dispatch_wait_remaining"] = wait_remaining
+		agent["state"] = "alert_watch"
+		body.position.y = 0.92 + sin(phase * 1.4) * 0.018
+		left_arm.rotation.z = deg_to_rad(-58.0) + sin(phase * 1.6) * 0.08
+		right_arm.rotation.z = deg_to_rad(58.0) - sin(phase * 1.6) * 0.08
+		if wait_remaining <= 0.0:
+			var resume_position: Vector3 = agent.get("dispatch_resume_position", root.position)
+			var return_path := _build_patrol_dispatch_path(root.position, resume_position)
+			if bool(return_path.get("found", false)):
+				agent["dispatch_waypoints"] = return_path.get("points", [])
+				agent["dispatch_waypoint_index"] = 1
+				agent["dispatch_state"] = "returning"
+				agent["state"] = "patrol_return"
+				print("[FengduPatrol] incident #%d cleared; guard returning to patrol route" % int(agent.get("dispatch_incident_sequence", 0)))
+			else:
+				_finish_patrol_dispatch(agent)
+		return
+
+	var waypoints: Array = agent.get("dispatch_waypoints", [])
+	var waypoint_index := int(agent.get("dispatch_waypoint_index", 0))
+	if waypoints.is_empty() or waypoint_index >= waypoints.size():
+		if dispatch_state == "enroute":
+			agent["dispatch_state"] = "on_scene"
+			agent["dispatch_wait_remaining"] = 6.0
+			agent["state"] = "alert_watch"
+			print("[FengduPatrol] guard arrived at incident #%d" % int(agent.get("dispatch_incident_sequence", 0)))
+		elif dispatch_state == "returning":
+			_finish_patrol_dispatch(agent)
+		return
+
+	var target: Vector3 = waypoints[waypoint_index]
+	var offset := target - root.position
+	var distance := offset.length()
+	var travel_step := float(agent.get("move_speed", 2.6)) * elapsed
+	if distance <= maxf(travel_step, 0.18):
+		root.position = target
+		waypoint_index += 1
+		agent["dispatch_waypoint_index"] = waypoint_index
+		if waypoint_index >= waypoints.size():
+			if dispatch_state == "enroute":
+				agent["dispatch_state"] = "on_scene"
+				agent["dispatch_wait_remaining"] = 6.0
+				agent["state"] = "alert_watch"
+				print("[FengduPatrol] guard arrived at incident #%d" % int(agent.get("dispatch_incident_sequence", 0)))
+			else:
+				_finish_patrol_dispatch(agent)
+	else:
+		root.position = root.position.move_toward(target, travel_step)
+	var direction := target - root.position
+	if direction.length_squared() > 0.01:
+		root.rotation.y = atan2(-direction.x, -direction.z)
+	agent["dispatch_waypoint_index"] = waypoint_index
+	body.position.y = 0.92 + absf(sin(phase * 2.4)) * 0.07
+	left_arm.rotation.z = deg_to_rad(-28.0) + sin(phase * 2.4) * 0.18
+	right_arm.rotation.z = deg_to_rad(28.0) - sin(phase * 2.4) * 0.18
+	agent["state"] = "patrol_dispatch" if dispatch_state == "enroute" else "patrol_return"
+
+
+func _finish_patrol_dispatch(agent: Dictionary) -> void:
+	var root: Node3D = agent["root"]
+	var resume_index := int(agent.get("dispatch_resume_route_index", 0))
+	if not patrol_route.is_empty():
+		resume_index = posmod(resume_index, patrol_route.size())
+		root.position = patrol_route[resume_index]
+	agent["route_index"] = resume_index
+	agent["route_progress"] = 0.0
+	agent["patrol_pause_remaining"] = 1.2
+	agent["moving"] = true
+	agent["dispatch_state"] = ""
+	agent["dispatch_waypoints"] = []
+	agent["dispatch_waypoint_index"] = 0
+	agent["state"] = "patrol_watch"
+	print("[FengduPatrol] guard resumed perimeter patrol at node %s" % str(patrol_route_node_ids[resume_index] if resume_index < patrol_route_node_ids.size() else resume_index))
+
+
+func _patrol_dispatch_status_text() -> String:
+	for agent in npc_agents:
+		if str(agent.get("role", "")) != "patrol_guard":
+			continue
+		match str(agent.get("dispatch_state", "")):
+			"enroute":
+				return "巡城卫已接令 · 正沿官道赶赴现场"
+			"on_scene":
+				return "巡城卫已抵达 · 现场警戒中"
+			"returning":
+				return "现场处置完成 · 巡城卫正在归队"
+	return ""
 
 
 func _update_patrol_alert(delta: float) -> void:
