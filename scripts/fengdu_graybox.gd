@@ -465,7 +465,10 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 						"position": stall_position,
 						"facing": stall_facing,
 						"display_items": _market_display_items_for_type(stall_type),
-					"open_schedule": "18:00-06:00",
+						"restock_group": "soul_goods" if stall_index < 2 else ("herb_goods" if stall_index < 4 else ""),
+						"restock_label": _create_market_stall_status_label(stall_position, stall_facing),
+						"business_state": "closed",
+						"open_schedule": "18:00-06:00",
 					"interaction_type": _market_interaction_for_type(stall_type),
 					"presentation_state": "client_visual_only"
 				})
@@ -1044,22 +1047,25 @@ func _update_market_event_sign() -> void:
 	var hour := int(npc_world_minutes / 60.0)
 	var minute := int(fposmod(npc_world_minutes, 60.0))
 	var minute_of_day := hour * 60 + minute
-	if minute_of_day >= 19 * 60 + 30 and minute_of_day < 20 * 60:
-		market_event_label.text = "竞宝预告 · 20:00 开场"
+	if minute_of_day >= 19 * 60 and minute_of_day < 19 * 60 + 30:
+		market_event_label.text = "竞宝筹备 · 主持与席位准备中"
+		market_event_label.modulate = Color("#c5b18e")
+	elif minute_of_day >= 19 * 60 + 30 and minute_of_day < 20 * 60:
+		market_event_label.text = "宾客入场 · 竞宝即将开场"
 		market_event_label.modulate = Color("#d7bd98")
-		market_event_label.visible = npc_schedule_night
 	elif _is_market_auction_time():
 		market_event_label.text = "万魂竞宝 · 正在举行"
 		market_event_label.modulate = Color("#f0d29a")
-		market_event_label.visible = npc_schedule_night
 	elif minute_of_day >= 22 * 60 and minute_of_day < 22 * 60 + 30:
-		market_event_label.text = "本场竞宝已结束"
+		market_event_label.text = "竞宝散场 · 清点与离席"
 		market_event_label.modulate = Color("#aeb7c2")
-		market_event_label.visible = npc_schedule_night
+	elif minute_of_day >= 22 * 60 + 30 and minute_of_day < 22 * 60 + 45:
+		market_event_label.text = "本场竞宝结束 · 下场待定"
+		market_event_label.modulate = Color("#aeb7c2")
 	else:
 		market_event_label.text = "竞宝时段 · 20:00–22:00"
 		market_event_label.modulate = Color("#d7bd98")
-		market_event_label.visible = npc_schedule_night
+	market_event_label.visible = npc_schedule_night
 
 
 
@@ -1212,6 +1218,7 @@ func _update_market_ambience(delta: float) -> void:
 		driver_body.position.y = 0.92 + (absf(sin(caravan_phase * 2.0)) * 0.025 if not unloading else 0.0)
 		driver_left.rotation.z = deg_to_rad(-18.0) + (sin(caravan_phase * 2.0) * 0.04 if not unloading else -0.12)
 		driver_right.rotation.z = deg_to_rad(18.0) - (sin(caravan_phase * 2.0) * 0.04 if not unloading else 0.12)
+	_update_market_stall_states()
 	_update_market_event_sign()
 	var auction_hour := int(npc_world_minutes / 60.0)
 	var auction_minute := int(fposmod(npc_world_minutes, 60.0))
@@ -1998,6 +2005,61 @@ func _market_display_items_for_type(stall_type: String) -> Array:
 		"魂器铺": return ["魂器", "封存魂匣"]
 		"悬赏交易": return ["悬赏卷", "交易凭物"]
 	return []
+
+
+func _create_market_stall_status_label(stall_position: Vector3, facing: float) -> Label3D:
+	var status := Label3D.new()
+	status.name = "GhostMarketBusinessStatus"
+	status.position = stall_position + Vector3(facing * 2.28, 4.0, 0.0)
+	status.font_size = 11
+	status.pixel_size = 0.009
+	status.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	status.modulate = Color("#a9c3d2")
+	status.outline_size = 4
+	status.outline_modulate = Color("#101722")
+	status.text = "休市"
+	add_child(status)
+	return status
+
+
+func _update_market_stall_states() -> void:
+	# Match the two existing supply routes to only the stalls that sell those goods.
+	var unloading_groups: Array[String] = []
+	if npc_schedule_night:
+		for caravan_data in market_caravans:
+			var route_time := fposmod(market_ambience_time + float(caravan_data.get("phase", 0.0)), 44.0)
+			if route_time >= 8.0 and route_time < 23.0:
+				var cargo_type := str(caravan_data.get("cargo_type", ""))
+				if cargo_type == "魂珠与魂籍":
+					unloading_groups.append("soul_goods")
+				elif cargo_type == "药材与法器":
+					unloading_groups.append("herb_goods")
+	for stall in market_stall_registry:
+		var group := str(stall.get("restock_group", ""))
+		var state := "closed"
+		if npc_schedule_night:
+			state = "restocking" if group != "" and unloading_groups.has(group) else "open"
+		stall["business_state"] = state
+		var status_label: Label3D = stall.get("restock_label")
+		if status_label != null:
+			status_label.visible = true
+			match state:
+				"restocking":
+					status_label.text = "补货中 · 暂缓接待"
+					status_label.modulate = Color("#e6c58d")
+				"open":
+					status_label.text = "营业中"
+					status_label.modulate = Color("#9fc6a7")
+				_:
+					status_label.text = "白日休市"
+					status_label.modulate = Color("#8e9aa7")
+	for agent in npc_agents:
+		if not agent.has("market_stall_id"):
+			continue
+		for stall in market_stall_registry:
+			if str(agent.get("market_stall_id", "")) == str(stall.get("stall_id", "")):
+				agent["market_business_state"] = str(stall.get("business_state", "closed"))
+				break
 
 
 func _market_interaction_for_type(stall_type: String) -> String:
