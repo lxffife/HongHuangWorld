@@ -150,6 +150,53 @@ static func get_wall_merlons() -> Array[Dictionary]:
 
 
 
+
+static func get_market_auction_layout() -> Dictionary:
+	return {
+		"district": "万魂鬼市",
+		"dais_offset": Vector3(0.0, 0.55, 8.0),
+		"dais_size": Vector3(7.0, 1.1, 4.5),
+		"desk_offset": Vector3(0.0, 1.45, 8.0),
+		"desk_size": Vector3(4.2, 0.7, 1.2),
+		"roof_offset": Vector3(0.0, 3.1, 8.0),
+		"roof_width": 8.0,
+		"roof_height": 2.0,
+		"label_offset": Vector3(0.0, 5.65, 8.0),
+		"step_center_offset": Vector3(0.0, 0.0, 8.0),
+		"audience_seats": [
+			{"point_id": "ghost_market.auction.seat.01", "offset": Vector3(-8.0, 0.0, 5.8), "facing": PI},
+			{"point_id": "ghost_market.auction.seat.02", "offset": Vector3(-8.0, 0.0, 9.4), "facing": PI},
+			{"point_id": "ghost_market.auction.seat.03", "offset": Vector3(8.0, 0.0, 5.8), "facing": 0.0},
+			{"point_id": "ghost_market.auction.seat.04", "offset": Vector3(8.0, 0.0, 9.4), "facing": 0.0}
+		],
+		"pedestals": [
+			{"point_id": "ghost_market.auction.pedestal.left", "offset": Vector3(-4.95, 0.0, 7.8), "facing": 1.0},
+			{"point_id": "ghost_market.auction.pedestal.right", "offset": Vector3(4.95, 0.0, 7.8), "facing": -1.0}
+		]
+	}
+
+
+static func get_market_caravans() -> Array[Dictionary]:
+	return [
+		{
+			"caravan_id": "ghost_market.caravan.01",
+			"cargo_type": "魂珠与魂籍",
+			"cargo_palette": "#8d789e",
+			"offset": Vector3(-15.3, 0.0, -7.0),
+			"facing": PI,
+			"phase": 0.0
+		},
+		{
+			"caravan_id": "ghost_market.caravan.02",
+			"cargo_type": "药材与法器",
+			"cargo_palette": "#718d70",
+			"offset": Vector3(15.3, 0.0, 7.0),
+			"facing": 0.0,
+			"phase": 17.0
+		}
+	]
+
+
 static func get_market_stalls() -> Array[Dictionary]:
 	# Stable stall identity and placement; stall visuals/catalogs remain adapter-owned.
 	var market_center := Vector3(55.0, 0.0, -53.0)
