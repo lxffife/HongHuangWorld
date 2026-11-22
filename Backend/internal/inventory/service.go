@@ -174,6 +174,19 @@ func inventorySlotAvailable(usedSlots,maxSlots int,needsNewSlot bool)bool{
 	return usedSlots>=0&&maxSlots>=1&&(!needsNewSlot||usedSlots<maxSlots)
 }
 
+func ensureInventorySlot(ctx context.Context,tx *sql.Tx,characterID string,needsNewSlot bool)error{
+	var usedSlots,maxSlots int
+	if err:=tx.QueryRowContext(ctx,`SELECT
+		(SELECT count(*) FROM character_inventory ci WHERE ci.character_id=c.id)+
+		(SELECT count(*) FROM character_item_instances ii WHERE ii.character_id=c.id),
+		COALESCE((SELECT cap.max_slots FROM character_inventory_capacity cap WHERE cap.character_id=c.id),40)
+		FROM characters c WHERE c.id=$1::uuid`,characterID).Scan(&usedSlots,&maxSlots);err!=nil{
+		return fmt.Errorf("load inventory capacity: %w",err)
+	}
+	if !inventorySlotAvailable(usedSlots,maxSlots,needsNewSlot){return ErrInventoryFull}
+	return nil
+}
+
 func (s *Service) CurrentCapacity(ctx context.Context,accountID string)(InventoryCapacity,error){
 	var result InventoryCapacity
 	err:=s.db.QueryRowContext(ctx,`SELECT
@@ -634,6 +647,15 @@ func (s *Service) Equip(ctx context.Context,accountID string,request EquipmentRe
 		if _,err:=tx.ExecContext(ctx,`UPDATE character_inventory SET quantity=quantity-1,updated_at=now() WHERE character_id=$1::uuid AND item_id=$2`,characterID,itemID);err!=nil{return fmt.Errorf("consume equipment item: %w",err)}
 	}
 	if previousItem!=""{
+		needsNewSlot:=previousInstance.Valid
+		if !previousInstance.Valid{
+			var existingPreviousStack bool
+			if err:=tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2)`,characterID,previousItem).Scan(&existingPreviousStack);err!=nil{
+				return fmt.Errorf("check replaced item stack: %w",err)
+			}
+			needsNewSlot=!existingPreviousStack
+		}
+		if err:=ensureInventorySlot(ctx,tx,characterID,needsNewSlot);err!=nil{return err}
 		if previousInstance.Valid{
 			if _,err:=tx.ExecContext(ctx,`INSERT INTO character_item_instances(character_id,item_instance_id) VALUES($1::uuid,$2::uuid)`,characterID,previousInstance.String);err!=nil{
 				return fmt.Errorf("return replaced equipment instance: %w",err)
@@ -671,6 +693,15 @@ func (s *Service) Unequip(ctx context.Context,accountID,slot string)error{
 		WHERE character_id=$1::uuid AND slot=$2 FOR UPDATE`,characterID,slot).Scan(&itemID,&instanceID);err!=nil{
 		if errors.Is(err,sql.ErrNoRows){return ErrInvalidRequest};return fmt.Errorf("load equipped item: %w",err)
 	}
+	needsNewSlot:=instanceID.Valid
+	if !instanceID.Valid{
+		var existingStack bool
+		if err:=tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2)`,characterID,itemID).Scan(&existingStack);err!=nil{
+			return fmt.Errorf("check unequipped item stack: %w",err)
+		}
+		needsNewSlot=!existingStack
+	}
+	if err:=ensureInventorySlot(ctx,tx,characterID,needsNewSlot);err!=nil{return err}
 	if instanceID.Valid{
 		if _,err:=tx.ExecContext(ctx,`INSERT INTO character_item_instances(character_id,item_instance_id) VALUES($1::uuid,$2::uuid)`,characterID,instanceID.String);err!=nil{
 			return fmt.Errorf("return unequipped equipment instance: %w",err)
