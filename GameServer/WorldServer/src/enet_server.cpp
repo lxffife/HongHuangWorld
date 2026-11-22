@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cstdlib>
 #include <deque>
 #include <filesystem>
 #include <atomic>
@@ -1914,7 +1915,8 @@ struct EnetServer::Impl {
             const double dx = checkpoint.x - monster.definition.spawn_x;
             const double dz = checkpoint.z - monster.definition.spawn_z;
             const double leash = static_cast<double>(monster.definition.leash_radius);
-            if (dx * dx + dz * dz > leash * leash) {
+            const bool position_within_leash = dx * dx + dz * dz <= leash * leash;
+            if (!position_within_leash) {
                 std::cerr << "[MonsterCheckpoint] out-of-leash position ignored; runtime="
                           << checkpoint.runtime_id << std::endl;
                 monster.state.x = monster.definition.spawn_x;
@@ -1936,12 +1938,14 @@ struct EnetServer::Impl {
             monster.attack_target_character_id.clear();
             monster.attack_phase = MonsterAttackPhase::Ready;
             monster.last_attack_at = Clock::time_point{};
-            monster.checkpoint_state_initialized = true;
-            monster.last_checkpoint_x = monster.state.x;
-            monster.last_checkpoint_z = monster.state.z;
-            monster.last_checkpoint_yaw = monster.state.yaw;
-            monster.last_checkpoint_mode = static_cast<int>(monster.state.mode);
-            monster.last_checkpoint_respawn_at_ms = checkpoint.respawn_at_ms;
+            monster.checkpoint_state_initialized = position_within_leash;
+            if (position_within_leash) {
+                monster.last_checkpoint_x = monster.state.x;
+                monster.last_checkpoint_z = monster.state.z;
+                monster.last_checkpoint_yaw = monster.state.yaw;
+                monster.last_checkpoint_mode = static_cast<int>(monster.state.mode);
+                monster.last_checkpoint_respawn_at_ms = checkpoint.respawn_at_ms;
+            }
             ++restored;
         }
         std::cout << "[MonsterCheckpoint] restored runtime snapshots=" << restored << std::endl;
@@ -2060,7 +2064,7 @@ struct EnetServer::Impl {
                 }
                 runtime->state.health = 0.0F;
                 runtime->state.target_id.clear();
-                runtime->state.mode = honghuang::simulation::MonsterMode::Alive;
+                runtime->state.mode = honghuang::simulation::MonsterMode::Idle;
                 runtime->respawn_at = Clock::time_point{};
                 honghuang::simulation::clear_negative_statuses(
                     runtime->slow_effect, runtime->freeze_effect, runtime->burn_effect);
@@ -2749,7 +2753,7 @@ struct EnetServer::Impl {
             if (current.definition.id != next.definition.id) {
                 const bool untouched_life = !current.contribution_closing &&
                     !current.death_intent_persisted && current.damage_contributions.empty() &&
-                    current.state.mode == honghuang::simulation::MonsterMode::Alive &&
+                    current.state.mode == honghuang::simulation::MonsterMode::Idle &&
                     current.state.health >= current.definition.max_health;
                 if (untouched_life && durable_outbox) {
                     const auto next_instance_id = make_event_uuid();
