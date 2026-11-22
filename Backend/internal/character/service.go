@@ -674,8 +674,7 @@ func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward 
 		 JOIN characters c ON c.id = ws.character_id
 		 WHERE ws.id = $1::uuid AND ws.server_id = $2 AND c.id = $3::uuid
 		   AND c.status = 'alive'
-		   AND (ws.session_state = 'active' OR
-		        (ws.session_state = 'closed' AND ws.updated_at >= now() - INTERVAL '10 minutes'))
+		   AND ws.session_state IN ('active', 'closed')
 		 FOR UPDATE OF ws, c`, reward.SessionID, serverID, reward.CharacterID,
 	).Scan(&activeCharacterID)
 	if errors.Is(err, sql.ErrNoRows) {
