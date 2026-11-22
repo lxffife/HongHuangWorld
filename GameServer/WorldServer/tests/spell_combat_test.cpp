@@ -56,6 +56,7 @@ int main() {
     assert(spell_power_basis_points(12500, 20) == 13125);
     assert(spell_power_basis_points(0, 100) == 0);
     assert(spell_power_basis_points(-100, 100) == 0);
+    assert(spell_power_basis_points(100001, 100) == 0);
     assert(spell_power_basis_points(10000, -1) == 10000);
 
     // Cooldowns are tracked per spell: casting one spell must not block another.
