@@ -305,7 +305,8 @@ bool DurableOutbox::save_monster_runtime_checkpoints(
             "monster_instance_id=excluded.monster_instance_id,"
             "monster_definition_id=excluded.monster_definition_id,x=excluded.x,z=excluded.z,"
             "yaw=excluded.yaw,mode=excluded.mode,respawn_at_ms=excluded.respawn_at_ms,"
-            "checkpoint_at_ms=excluded.checkpoint_at_ms");
+            "checkpoint_at_ms=excluded.checkpoint_at_ms "
+            "WHERE excluded.checkpoint_at_ms>=monster_runtime_checkpoints.checkpoint_at_ms");
         for (const auto& checkpoint : checkpoints) {
             sqlite3_reset(upsert.get());
             sqlite3_clear_bindings(upsert.get());
