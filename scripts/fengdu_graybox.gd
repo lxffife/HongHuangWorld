@@ -303,9 +303,81 @@ func _district(title: String, center: Vector3, footprint: Vector2, subtitle: Str
 		_box(title + "Hall", pos + Vector3(0, h * 0.5, 0), Vector3(w, h, w * 0.8), "palace", true)
 		_roof_tier(pos + Vector3(0, h + 0.7, 0), w * 1.45, 2.2)
 		_box(title + "Sign", pos + Vector3(0, h + 3.0, 0), Vector3(0.24, 1.0, 0.24), "gold", false)
+	_build_district_landmark(title, center, footprint)
 	_label(title, center + Vector3(0, 13, 0), 26, accent)
 	_label(subtitle, center + Vector3(0, 10.5, 0), 15, Color("#d2d6dc"))
 	district_markers[title] = center
+
+
+func _build_district_landmark(title: String, center: Vector3, footprint: Vector2) -> void:
+	# Each bureau receives one unmistakable silhouette beyond the shared hall grammar.
+	match title:
+		"十王府":
+			# A formal ten-court axis: paired judgment courts flank the central hall.
+			for side in [-1.0, 1.0]:
+				for i in range(3):
+					var z := center.z + float(i - 1) * 5.2
+					_box("TenKingsCourtWall", Vector3(center.x + side * 11.0, 1.1, z), Vector3(0.8, 2.2, 4.2), "stone", false)
+					_box("TenKingsCourtPavilion", Vector3(center.x + side * 11.0, 3.5, z), Vector3(4.0, 5.0, 3.6), "palace", false)
+					_roof_tier(Vector3(center.x + side * 11.0, 6.4, z), 5.2, 1.8)
+			_box("TenKingsJudgmentSteps", center + Vector3(0, 0.35, -8.0), Vector3(15, 0.7, 2.0), "road_edge", false)
+		"判官司":
+			# Archive tower and side galleries distinguish the civil judicial bureau.
+			_box("JudgeArchiveTower", center + Vector3(-9.0, 6.0, 2.0), Vector3(5.0, 12.0, 5.0), "dark_stone", false)
+			for level in range(3):
+				_roof_tier(center + Vector3(-9.0, 12.5 + float(level) * 3.0, 2.0), 6.2 - float(level) * 0.8, 1.5)
+			for side in [-1.0, 1.0]:
+				_box("JudgeGallery", center + Vector3(side * 9.0, 2.0, -7.0), Vector3(7.0, 4.0, 3.0), "palace", false)
+		"鬼籍司":
+			# Tall register library with repeated horizontal archive floors.
+			_box("SoulRegisterLibrary", center + Vector3(0, 7.0, 2.0), Vector3(8.0, 14.0, 7.0), "dark_stone", false)
+			for level in range(1, 4):
+				_box("SoulRegisterFloorBand", center + Vector3(0, float(level) * 3.5, 2.0), Vector3(9.0, 0.42, 8.0), "gold", false)
+				_roof_tier(center + Vector3(0, 14.5 + float(level) * 0.4, 2.0), 9.0 - float(level) * 0.8, 1.5)
+		"功过司":
+			# Two balanced halls represent merit and transgression records.
+			for side in [-1.0, 1.0]:
+				_box("MeritAndFaultHall", center + Vector3(side * 9.0, 3.5, 1.0), Vector3(7.0, 7.0, 7.0), "palace", false)
+				_roof_tier(center + Vector3(side * 9.0, 7.8, 1.0), 9.0, 2.4)
+			_box("MeritFaultBalanceBeam", center + Vector3(0, 5.0, -7.0), Vector3(15.0, 0.5, 0.5), "gold", false)
+			_box("MeritFaultBalancePost", center + Vector3(0, 2.8, -7.0), Vector3(0.6, 4.5, 0.6), "gold", false)
+		"轮回司":
+			# A monumental gate marks the transition toward the reincarnation route.
+			for side in [-1.0, 1.0]:
+				_box("ReincarnationPortalPillar", center + Vector3(side * 8.0, 6.0, 4.0), Vector3(2.0, 12.0, 2.0), "dark_stone", false)
+			_roof_tier(center + Vector3(0, 12.0, 4.0), 21.0, 3.5)
+			_box("ReincarnationThreshold", center + Vector3(0, 0.22, 4.0), Vector3(17.0, 0.44, 2.5), "gold", false)
+		"万魂鬼市":
+			# Dense low stalls contrast with the formal government compounds.
+			for x in [-10.0, -5.0, 5.0, 10.0]:
+				for z in [-7.0, 7.0]:
+					_box("GhostMarketStall", center + Vector3(x, 1.6, z), Vector3(3.6, 3.2, 3.2), "palace", false)
+					_roof_tier(center + Vector3(x, 3.7, z), 4.6, 1.4)
+		"万家魂坊":
+			# Small domestic courtyards, low walls and compact tiled houses.
+			for x in [-10.0, 0.0, 10.0]:
+				for z in [-6.0, 6.0]:
+					_box("SoulWardHouse", center + Vector3(x, 2.0, z), Vector3(5.0, 4.0, 4.5), "stone", false)
+					_roof_tier(center + Vector3(x, 4.6, z), 6.0, 1.6)
+					_box("SoulWardCourtyardWall", center + Vector3(x + 3.2, 0.9, z), Vector3(0.35, 1.8, 5.5), "dark_stone", false)
+		"阴兵大营":
+			# Barracks and watch posts use a strict military rhythm.
+			for side in [-1.0, 1.0]:
+				_box("UnderworldBarracks", center + Vector3(side * 5.0, 2.0, -7.0), Vector3(6.0, 4.0, 12.0), "dark_stone", false)
+				_roof_tier(center + Vector3(side * 5.0, 4.8, -7.0), 7.0, 1.8)
+				_box("BarracksWatchPost", center + Vector3(side * 6.0, 4.0, 8.0), Vector3(3.0, 8.0, 3.0), "stone", false)
+			_roof_tier(center + Vector3(side * 6.0, 8.5, 8.0), 4.5, 1.8)
+		"引魂驿站":
+			# Arrival canopy and paired waiting pavilions orient incoming souls.
+			_box("SoulWaystationCanopy", center + Vector3(0, 5.0, 0), Vector3(14.0, 1.0, 9.0), "gold", false)
+			_roof_tier(center + Vector3(0, 6.0, 0), 17.0, 3.0)
+			for side in [-1.0, 1.0]:
+				_box("WaystationWaitingPavilion", center + Vector3(side * 7.0, 2.0, 8.0), Vector3(4.0, 4.0, 4.0), "palace", false)
+				_roof_tier(center + Vector3(side * 7.0, 4.7, 8.0), 5.5, 1.7)
+		"巡城司":
+			# A watchtower and signal platform dominate the patrol headquarters.
+			_box("PatrolSignalTower", center + Vector3(0, 7.0, 3.0), Vector3(5.0, 14.0, 5.0), "dark_stone", false)
+			_roof_tier(center + Vector3(0, 14.5, 3.0), 7.0, 2.2)
 
 
 func _build_palace_axis() -> void:
