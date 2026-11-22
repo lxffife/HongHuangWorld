@@ -535,98 +535,27 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 
 
 func _build_activity_registry() -> void:
-	# Convert legacy district coordinate lists into semantic, client-local activity records.
+	# Consume presentation-independent NPC placements and route data.
 	activity_points.clear()
-	for district_name in npc_spawn_points.keys():
-		var role := "resident"
-		var activity := "social_idle"
-		var schedule_tag := "day_night"
-		match str(district_name):
-			"万魂鬼市":
-				role = "merchant"
-				activity = "trade_idle"
-				schedule_tag = "night"
-			"万家魂坊":
-				role = "resident"
-				activity = "social_idle"
-			"阴兵大营":
-				role = "soldier"
-				activity = "drill"
-				schedule_tag = "always"
-			"引魂驿站":
-				role = "guide"
-				activity = "registration"
-				schedule_tag = "always"
-			"巡城司":
-				role = "patrol_guard"
-				activity = "patrol_watch"
-				schedule_tag = "always"
-		var positions: Array = npc_spawn_points[district_name]
-		for index in range(positions.size()):
-			var district_key := _district_key(str(district_name))
-			var point: Dictionary = {
-				"point_id": "%s.%s.%02d" % [district_key, role, index + 1],
-				"district": str(district_name),
-				"role": role,
-				"activity": activity,
-				"position": positions[index],
-				"facing": _activity_facing(str(district_name), positions[index], index),
-				"schedule_tag": schedule_tag,
-				"capacity": 1,
-				"radius": 1.4
-			}
-			if str(district_name) == "万家魂坊":
-				var resident_routines := ["square_walk", "carry_goods", "well_idle", "home_idle", "tea_social"]
-				point["resident_activity"] = resident_routines[index % resident_routines.size()]
-				if index < 2:
-					point["waypoints"] = _soulward_resident_waypoints()
-			activity_points.append(point)
-
-	# Three arrivals wait between the entrance rails before reaching the registration desk.
-	var waystation_center := Vector3(77.0, 0.0, 0.0)
-	for queue_index in range(3):
-		var queue_position := waystation_center + Vector3(0.0, 0.0, -6.0 + float(queue_index) * 2.5)
-		activity_points.append({
-			"point_id": "waystation.waiting_soul.%02d" % (queue_index + 1),
-			"district": "引魂驿站",
-			"role": "waiting_soul",
-			"activity": "queue_wait",
-			"position": queue_position,
-			"facing": PI,
-			"schedule_tag": "always",
-			"capacity": 1,
-			"radius": 0.8
-		})
-
-	# Patrol route follows the existing north-south/east-west distributor roads.
-	# This is a visualization/planning path, not a NavigationAgent path.
-	patrol_route = [
-		Vector3(0, 0, 12),
-		Vector3(0, 0, 32),
-		Vector3(0, 0, 78),
-		Vector3(34, 0, 78),
-		Vector3(34, 0, 32),
-		Vector3(34, 0, -32),
-		Vector3(34, 0, -78),
-		Vector3(0, 0, -78),
-		Vector3(-34, 0, -78),
-		Vector3(-34, 0, -32),
-		Vector3(-34, 0, 32),
-		Vector3(-34, 0, 78),
-		Vector3(0, 0, 78),
-		Vector3(0, 0, 32),
-		Vector3(0, 0, 12)
-	]
+	for point in WORLD_LAYOUT.get_npc_activity_points():
+		activity_points.append(point.duplicate(true))
+	var routes: Array = WORLD_LAYOUT.get_patrol_routes()
+	patrol_route.clear()
+	if routes.is_empty():
+		return
+	var route: Dictionary = routes[0]
+	for node_position in route.get("nodes", []):
+		patrol_route.append(node_position)
 	for route_index in range(patrol_route.size()):
 		var route_position: Vector3 = patrol_route[route_index]
 		activity_points.append({
 			"point_id": "patrol.route.%02d" % (route_index + 1),
-			"district": "巡城司",
-			"role": "patrol_guard",
+			"district": str(route.get("district", "巡城司")),
+			"role": str(route.get("role", "patrol_guard")),
 			"activity": "patrol_route",
 			"position": route_position,
 			"facing": 0.0,
-			"schedule_tag": "night",
+			"schedule_tag": str(route.get("schedule_tag", "night")),
 			"capacity": 1,
 			"radius": 1.0
 		})
