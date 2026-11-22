@@ -88,3 +88,10 @@
 - Market merchants are visible only from 18:00 to 06:00. Soldiers drill from 06:00 to 22:00 and use a subdued rest idle outside that window. Waystation guides and waiting souls remain present.
 - Three waiting-soul stand-ins form a fixed line at the waystation entrance, facing the registration desk. This is a visual queue, not a queue service.
 - NPC animation updates are distance-tiered: full-rate nearby, approximately 0.32-second intervals at medium range and 0.8-second intervals at long range. This is a prototype optimization, not a substitute for profiling a populated production city.
+
+
+## NPC identity and interaction foundation
+
+- Each local NPC receives a deterministic prototype ID, display name, district, role, interaction type and importance tier. Activity-point IDs are stable within the authored district/role ordering; the moving patrol actor has its own fixed ID.
+- Within roughly 3.8m, the HUD offers an `E` interaction prompt. The current response is deliberately local placeholder text for trade, registration, queue guidance, patrol/dispatch and resident conversation.
+- These IDs are not account IDs or authoritative server actor IDs. Real services must supply authoritative identity and permission checks; local placeholder responses do not create inventory, shop transactions, quest state, registration records or chat history.
