@@ -673,6 +673,42 @@ func _npc_display_name(role: String, index: int) -> String:
 	return str(names[index % names.size()])
 
 
+func _bind_market_merchant(agent: Dictionary, point: Dictionary) -> void:
+	# Match the six market merchant agents to the six locally registered stall prototypes.
+	var point_position: Vector3 = point.get("position", Vector3.ZERO)
+	var nearest_stall: Dictionary = {}
+	var nearest_distance := INF
+	for stall in market_stall_registry:
+		var stall_position: Vector3 = stall.get("position", Vector3.ZERO)
+		var distance := point_position.distance_to(stall_position)
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest_stall = stall
+	if nearest_stall.is_empty():
+		return
+	var stall_type := str(nearest_stall.get("stall_type", ""))
+	var profile := _market_merchant_profile(stall_type)
+	agent["market_stall_id"] = str(nearest_stall.get("stall_id", ""))
+	agent["market_stall_type"] = stall_type
+	agent["market_service"] = str(nearest_stall.get("interaction_type", "unavailable"))
+	agent["market_goods"] = nearest_stall.get("display_items", [])
+	agent["market_business_state"] = "open" if npc_schedule_night else "closed"
+	agent["display_name"] = str(profile.get("name", agent.get("display_name", "无名掌柜")))
+	agent["merchant_title"] = str(profile.get("title", "掌柜"))
+	agent["interaction_type"] = "trade"
+
+
+func _market_merchant_profile(stall_type: String) -> Dictionary:
+	match stall_type:
+		"魂珠铺": return {"name": "孟照夜", "title": "魂珠掌柜"}
+		"魂籍铺": return {"name": "陆简", "title": "魂籍先生"}
+		"药材铺": return {"name": "青禾娘子", "title": "药材掌柜"}
+		"法器铺": return {"name": "玄铸", "title": "法器匠师"}
+		"魂器铺": return {"name": "百器翁", "title": "魂器鉴主"}
+		"悬赏交易": return {"name": "铁算盘", "title": "悬赏牙人"}
+	return {"name": "无名掌柜", "title": "掌柜"}
+
+
 func _interaction_type_for_role(role: String) -> String:
 	match role:
 		"merchant": return "trade"
@@ -731,6 +767,8 @@ func _build_npc_population() -> void:
 		agent["display_name"] = _npc_display_name(role, role_index)
 		agent["district"] = str(point["district"])
 		agent["interaction_type"] = _interaction_type_for_role(role)
+		if role == "merchant" and str(point["district"]) == "万魂鬼市":
+			_bind_market_merchant(agent, point)
 		agent["importance"] = "critical" if role == "guide" else ("regional" if role in ["merchant", "soldier", "patrol_guard"] else "ambient")
 		agent["root"] = npc_root
 		agent["role"] = role
@@ -883,7 +921,14 @@ func _build_market_caravans() -> void:
 			pack_material.roughness = 0.9
 			pack.material_override = pack_material
 			cart.add_child(pack)
+		var cargo_type := "魂珠与魂籍" if index == 0 else "药材与法器"
+		var cargo_palette := Color("#8d789e") if index == 0 else Color("#718d70")
+		for cargo_child in cart.get_children():
+			if cargo_child is MeshInstance3D and cargo_child.name == "":
+				pass
 		market_caravans.append({
+			"cargo_type": cargo_type,
+			"cargo_palette": cargo_palette,
 			"root": root,
 			"body": driver["body"],
 			"left_arm": driver["left_arm"],
@@ -2111,10 +2156,13 @@ func _interact_with_focused_npc() -> void:
 	match str(npc_focus_agent.get("interaction_type", "none")):
 		"trade":
 			var merchant_state := str(npc_focus_agent.get("state", "trade_idle"))
+			var stall_type := str(npc_focus_agent.get("market_stall_type", "鬼市商铺"))
+			var goods: Array = npc_focus_agent.get("market_goods", [])
+			var goods_text := "、".join(goods)
 			if merchant_state == "greet":
-				message = "%s：客官，夜市刚开张，来看看今日的新到魂器与冥府杂货。" % npc_name
+				message = "%s（%s）：客官，欢迎光临%s。今日陈列：%s。交易功能接入后即可查看真实货单。" % [npc_name, str(npc_focus_agent.get("merchant_title", "掌柜")), stall_type, goods_text]
 			else:
-				message = "%s：鬼市夜市已开。货物、魂钱与交易功能将在商店系统接入后开放。" % npc_name
+				message = "%s：本铺经营%s，陈列有%s。当前仅为场景展示，真实库存与交易尚未开放。" % [npc_name, stall_type, goods_text]
 		"registration": message = "%s：请准备好魂籍凭证，先登记来处，再按引导前往分流处。" % npc_name
 		"queue_info":
 			var queue_state := str(npc_focus_agent.get("state", "queue_wait"))
