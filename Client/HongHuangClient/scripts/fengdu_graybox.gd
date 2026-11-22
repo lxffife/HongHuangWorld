@@ -140,7 +140,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		_capture_mouse()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
-		_release_mouse()
+		if judge_workbench_open:
+			_close_judge_bureau_workbench()
+		else:
+			_release_mouse()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_F6:
 		_toggle_activity_debug()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_E:
@@ -4760,6 +4763,7 @@ func get_patrol_case_dossier(incident_id: String) -> Dictionary:
 		"state": str(record.get("state", "")),
 		"case_workflow_state": str(record.get("case_workflow_state", "unsubmitted")),
 		"judge_review_state": str(record.get("judge_review_state", "not_submitted")),
+		"judicial_conclusion": str(record.get("judicial_conclusion", "not_determined")),
 		"case_return_reason": str(record.get("case_return_reason", "")),
 		"case_required_material": record.get("case_required_material", []).duplicate(),
 		"case_submission": record.get("case_submission", {}).duplicate(true),
