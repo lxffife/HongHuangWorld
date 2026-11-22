@@ -371,31 +371,31 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 	match title:
 		"十王府":
 			# The paired hearing courts and central judgment approach are authored in layout data.
-			var admin_layout: Dictionary = WORLD_LAYOUT.get_administrative_layout()["ten_kings_court"]
-			for court in admin_layout["hearing_courts"]:
+			var ten_kings_layout: Dictionary = WORLD_LAYOUT.get_administrative_layout()["ten_kings_court"]
+			for court in ten_kings_layout["hearing_courts"]:
 				_box("TenKingsCourtWall", center + court["wall_offset"], Vector3(0.8, 2.2, 4.2), "stone", false)
 				_box("TenKingsCourtPavilion", center + court["offset"], Vector3(4.0, 5.0, 3.6), "palace", false)
 				_roof_tier(center + court["roof_offset"], 5.2, 1.8)
-			var steps: Dictionary = admin_layout["judgment_steps"]
-			_box("TenKingsJudgmentSteps", center + steps["offset"], steps["size"], "road_edge", false)
+			var judgment_steps: Dictionary = ten_kings_layout["judgment_steps"]
+			_box("TenKingsJudgmentSteps", center + judgment_steps["offset"], judgment_steps["size"], "road_edge", false)
 		"判官司":
 			# Archive and review galleries use stable spatial identities.
-			var admin_layout: Dictionary = WORLD_LAYOUT.get_administrative_layout()["judge_bureau"]
-			var archive: Dictionary = admin_layout["archive_tower"]
-			_box("JudgeArchiveTower", center + archive["offset"], archive["size"], "dark_stone", false)
+			var judge_layout: Dictionary = WORLD_LAYOUT.get_administrative_layout()["judge_bureau"]
+			var judge_archive: Dictionary = judge_layout["archive_tower"]
+			_box("JudgeArchiveTower", center + judge_archive["offset"], judge_archive["size"], "dark_stone", false)
 			for level in range(3):
-				_roof_tier(center + archive["roof_base"] + Vector3(0.0, float(level) * 3.0, 0.0), 6.2 - float(level) * 0.8, 1.5)
-			for gallery in admin_layout["galleries"]:
+				_roof_tier(center + judge_archive["roof_base"] + Vector3(0.0, float(level) * 3.0, 0.0), 6.2 - float(level) * 0.8, 1.5)
+			for gallery in judge_layout["galleries"]:
 				_box("JudgeGallery", center + gallery["offset"], gallery["size"], "palace", false)
 		"鬼籍司":
 			# The archive tower, its floor bands, and roof line are data-driven.
-			var admin_layout: Dictionary = WORLD_LAYOUT.get_administrative_layout()["soul_registry"]
-			var archive: Dictionary = admin_layout["archive_tower"]
-			_box("SoulRegisterLibrary", center + archive["offset"], archive["size"], "dark_stone", false)
-			for band in admin_layout["floor_bands"]:
+			var registry_layout: Dictionary = WORLD_LAYOUT.get_administrative_layout()["soul_registry"]
+			var registry_archive: Dictionary = registry_layout["archive_tower"]
+			_box("SoulRegisterLibrary", center + registry_archive["offset"], registry_archive["size"], "dark_stone", false)
+			for band in registry_layout["floor_bands"]:
 				_box("SoulRegisterFloorBand", center + band["offset"], Vector3(9.0, 0.42, 8.0), "gold", false)
-				var band_index := int(str(band["point_id"]).get_slice(".", -1))
-				_roof_tier(center + admin_layout["archive_roof_base"] + Vector3(0.0, float(band_index) * 0.4, 0.0), 9.0 - float(band_index) * 0.8, 1.5)
+				var band_index := int(band["level"])
+				_roof_tier(center + registry_layout["archive_roof_base"] + Vector3(0.0, float(band_index) * 0.4, 0.0), 9.0 - float(band_index) * 0.8, 1.5)
 		"功过司":
 			# Two balanced halls represent merit and transgression records.
 			for side in [-1.0, 1.0]:
@@ -405,12 +405,12 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 			_box("MeritFaultBalancePost", center + Vector3(0, 2.8, -7.0), Vector3(0.6, 4.5, 0.6), "gold", false)
 		"轮回司":
 			# Portal pillars, roof, and threshold are authored in the service layout.
-			var admin_layout: Dictionary = WORLD_LAYOUT.get_administrative_layout()["reincarnation_bureau"]
-			for pillar in admin_layout["portal_pillars"]:
+			var reincarnation_layout: Dictionary = WORLD_LAYOUT.get_administrative_layout()["reincarnation_bureau"]
+			for pillar in reincarnation_layout["portal_pillars"]:
 				_box("ReincarnationPortalPillar", center + pillar["offset"], pillar["size"], "dark_stone", false)
-			var portal_roof: Dictionary = admin_layout["portal_roof"]
+			var portal_roof: Dictionary = reincarnation_layout["portal_roof"]
 			_roof_tier(center + portal_roof["offset"], float(portal_roof["width"]), float(portal_roof["height"]))
-			var threshold: Dictionary = admin_layout["threshold"]
+			var threshold: Dictionary = reincarnation_layout["threshold"]
 			_box("ReincarnationThreshold", center + threshold["offset"], threshold["size"], "gold", false)
 		"万魂鬼市":
 			# A broad central trading aisle runs from the southern compound gate to the auction dais.
