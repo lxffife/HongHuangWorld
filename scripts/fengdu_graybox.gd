@@ -5308,7 +5308,7 @@ func _refresh_judge_review_actions(submission: Dictionary, review: Dictionary) -
 		var judgment_data := get_case_judgment_and_appeals(judge_selected_incident_id)
 		var party_judgments: Dictionary = judgment_data.get("party_judgments", {})
 		var parties: Array = submission.get("case_parties", [])
-		if parties.is_empty() and not judgment_data.has("case_judgment"):
+		if parties.is_empty() and judgment_data.get("case_judgment", {}).is_empty():
 			var acquit_case := Button.new()
 			acquit_case.text = "本案判决 · 无罪"
 			acquit_case.pressed.connect(func(): _judge_record_case_judgment("acquitted"))
@@ -5359,7 +5359,8 @@ func _judge_record_party_judgment(party_id: String, outcome: String) -> void:
 		return
 	var cited: Array[String] = []
 	if outcome == "responsible":
-		var hearing: Dictionary = get_case_hearing_record(judge_selected_incident_id)
+		var hearing_result: Dictionary = get_case_hearing_record(judge_selected_incident_id)
+		var hearing: Dictionary = hearing_result.get("hearing_record", {})
 		for tag_value in hearing.get("presented_evidence_tags", []):
 			cited.append(str(tag_value))
 	var reason := "根据庭审记录作出判决；当前原型以已完成程序和已出示证据为依据。"
