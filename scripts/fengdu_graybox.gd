@@ -1140,8 +1140,8 @@ func _update_market_ambience(delta: float) -> void:
 			caravan_state = "离场"
 			stop_offset = lerpf(0.0, 5.0, smoothstep(23.0, 31.0, route_time))
 		else:
-			caravan_state = "补给整备"
-			stop_offset = 5.0
+			caravan_state = "绕行返回"
+			stop_offset = lerpf(5.0, -5.0, smoothstep(31.0, 44.0, route_time))
 		caravan_root.position = Vector3(float(caravan_data["base_x"]), 0.0, float(caravan_data["base_z"]) + stop_offset)
 		var travel_direction := -1.0 if route_time < 8.0 else (1.0 if route_time >= 23.0 and route_time < 31.0 else 0.0)
 		if travel_direction != 0.0:
