@@ -739,7 +739,8 @@ func _update_merchant_market_activity(agent: Dictionary) -> void:
 		if glance_phase < 2.8:
 			var market_center: Vector3 = district_markers.get("万魂鬼市", Vector3(55.0, 0.0, -53.0))
 			var stage_position := market_center + Vector3(0.0, 0.0, 10.35)
-			var stage_direction := stage_position - (agent["root"] as Node3D).global_position
+			var merchant_root: Node3D = agent["root"]
+			var stage_direction := stage_position - merchant_root.global_position
 			agent["auction_facing"] = atan2(-stage_direction.x, -stage_direction.z)
 			agent["state"] = "auction_watch"
 			agent["market_activity"] = "watch_auction"
