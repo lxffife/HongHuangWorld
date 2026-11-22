@@ -212,7 +212,7 @@ func _build_ground_and_roads() -> void:
 	_box("EastWestMainRoad", Vector3(0, 0.04, 0), Vector3(190, 0.12, 13), "road", false)
 	_box("CentralProcessionalWay", Vector3(0, 0.06, 38), Vector3(20, 0.14, 100), "road_edge", false)
 	# Tier 2: district distributors. Their alignment follows the compound edges.
-	for x in [-38.0, 38.0]:
+	for x in [-34.0, 34.0]:
 		_box("DistrictNorthSouthStreet", Vector3(x, 0.025, 0), Vector3(6.0, 0.1, 176.0), "road", false)
 	for z in [-32.0, 32.0]:
 		_box("DistrictCrossStreet", Vector3(0, 0.035, z), Vector3(176.0, 0.1, 6.0), "road", false)
@@ -346,7 +346,7 @@ func _build_district_compound(title: String, center: Vector3, footprint: Vector2
 		_box(title + "CompoundGatePost", center + Vector3(side * gate_w * 0.5, 1.65, -half_z), Vector3(0.9, 3.3, 1.0), "stone", true)
 	_box(title + "CompoundGateLintel", center + Vector3(0, 3.25, -half_z), Vector3(gate_w + 1.2, 0.65, 1.15), "gold", false)
 	# Paved inner path leads from the gate toward the central hall; it is visual only.
-	_box(title + "CourtyardEntryPath", center + Vector3(0, 0.49, -half_z * 0.28), Vector3(minf(gate_w * 0.72, 4.2), 0.08, half_z * 0.72), "road_edge", false)
+	_box(title + "CourtyardEntryPath", center + Vector3(0, 0.49, -half_z * 0.42), Vector3(minf(gate_w * 0.72, 4.2), 0.08, half_z * 1.08), "road_edge", false)
 	_box(title + "GateThreshold", center + Vector3(0, 0.52, -half_z), Vector3(gate_w, 0.12, 1.6), "gold", false)
 
 
