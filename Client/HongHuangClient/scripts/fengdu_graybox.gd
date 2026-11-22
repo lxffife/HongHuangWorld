@@ -922,6 +922,17 @@ func _build_market_caravans() -> void:
 			pack.material_override = pack_material
 			cart.add_child(pack)
 		var cargo_type := "魂珠与魂籍" if index == 0 else "药材与法器"
+		var cargo_label := Label3D.new()
+		cargo_label.name = "SupplyCargoLabel"
+		cargo_label.text = cargo_type
+		cargo_label.position = Vector3(0.0, 1.55, 1.45)
+		cargo_label.font_size = 11
+		cargo_label.pixel_size = 0.009
+		cargo_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		cargo_label.modulate = Color("#e2c99c")
+		cargo_label.outline_size = 4
+		cargo_label.outline_modulate = Color("#171d25")
+		cart.add_child(cargo_label)
 		market_caravans.append({
 			"cargo_type": cargo_type,
 			"cargo_palette": cargo_palette,
@@ -1782,6 +1793,8 @@ func _market_stall(center: Vector3, facing: float, stall_type: String) -> void:
 			_box("GhostMarketStallPost", center + Vector3(side * 2.0, 1.55, z_side * 2.0), Vector3(0.22, 3.0, 0.22), "gold", false)
 	_box("GhostMarketStallSign", center + Vector3(facing * 2.15, 2.55, 0), Vector3(0.18, 0.9, 1.6), "gold", false)
 	_label(stall_type, center + Vector3(facing * 2.28, 3.18, 0), 17, Color("#f0d5a4"))
+	var merchant_profile := _market_merchant_profile(stall_type)
+	_label(str(merchant_profile.get("name", "无名掌柜")), center + Vector3(facing * 2.28, 2.82, 0), 11, Color("#d8c5a8"))
 	var sign_accent := Color("#83c7e4")
 	match stall_type:
 		"魂珠铺":
