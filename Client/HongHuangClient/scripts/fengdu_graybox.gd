@@ -3501,6 +3501,7 @@ func _interact_with_patrol_incident(incident_id: String) -> void:
 			record["player_witness_count"] = int(record.get("player_witness_count", 0)) + 1
 			var testimony_tag := "witness_shadow" if str(record.get("type", "")) == "suspicious_activity" else ("witness_dispute" if str(record.get("type", "")) == "crowd_disorder" else "witness_violence")
 			record["witness_testimony_tag"] = testimony_tag
+			record["witness_testimony_at"] = npc_simulation_time
 			var witness_id := "question_witness_first"
 			var witness_actions: Array = record.get("player_action_ids", [])
 			witness_actions.append(witness_id)
@@ -3524,6 +3525,7 @@ func _interact_with_patrol_incident(incident_id: String) -> void:
 			record["witness_revised"] = conflict_found
 			var revised_tag := "witness_revised_conflict" if conflict_found else "witness_confirmed"
 			record["witness_revised_testimony_tag"] = revised_tag
+			record["witness_revised_testimony_at"] = npc_simulation_time
 			var followup_id := "question_witness_followup"
 			var followup_actions: Array = record.get("player_action_ids", [])
 			followup_actions.append(followup_id)
@@ -3632,6 +3634,79 @@ func _capture_incident_nearby_activity(target_position: Vector3) -> Array[Dictio
 	return snapshots
 
 
+func _assess_incident_activity_leads(record: Dictionary) -> Array[Dictionary]:
+	var assessments: Array[Dictionary] = []
+	var incident_at := float(record.get("created_at", 0.0))
+	var clue_tags: Array = record.get("player_clue_tags", [])
+	var testimony_tag := str(record.get("witness_testimony_tag", ""))
+	var testimony_at := float(record.get("witness_testimony_at", -1.0))
+	for raw_lead in record.get("nearby_actor_snapshots", []):
+		var lead: Dictionary = raw_lead.duplicate(true)
+		var trail: Array = lead.get("activity_trail", [])
+		var closest_distance := float(lead.get("closest_distance_in_history", 999.0))
+		var incident_window_samples: Array = []
+		for sample in trail:
+			var sample_at := float(sample.get("at", -1.0))
+			if sample_at >= incident_at - 15.0 and sample_at <= incident_at + 1.0:
+				incident_window_samples.append(sample)
+		var direction_code := "insufficient_samples"
+		var direction_label := "轨迹采样不足，无法判断移动方向"
+		if incident_window_samples.size() >= 2:
+			var first_sample: Dictionary = incident_window_samples[0]
+			var last_sample: Dictionary = incident_window_samples[incident_window_samples.size() - 1]
+			var first_distance := float(first_sample.get("distance_to_incident", 999.0))
+			var last_distance := float(last_sample.get("distance_to_incident", 999.0))
+			if last_distance < first_distance - 1.0:
+				direction_code = "approaching_scene"
+				direction_label = "事发前轨迹呈接近案发点趋势"
+			elif last_distance > first_distance + 1.0:
+				direction_code = "leaving_scene"
+				direction_label = "事发前轨迹呈远离案发点趋势"
+			else:
+				direction_code = "passing_or_stationary"
+				direction_label = "事发前轨迹未显示明显接近或远离趋势"
+		var track_match := false
+		if clue_tags.has("movement_trace") and not incident_window_samples.is_empty():
+			for sample in incident_window_samples:
+				if float(sample.get("distance_to_incident", 999.0)) <= 8.0:
+					track_match = true
+					break
+		var testimony_relation := "not_comparable"
+		var testimony_note := "尚无可用于交叉核验的证词时间信息"
+		if testimony_at >= 0.0 and not incident_window_samples.is_empty():
+			if testimony_tag == "witness_shadow" and track_match:
+				testimony_relation = "spatial_temporal_overlap"
+				testimony_note = "黑影证词对应的事发时间窗内存在接近现场的人员轨迹，但不能据此确认身份"
+			elif testimony_tag in ["witness_dispute", "witness_violence"]:
+				testimony_relation = "scene_activity_only"
+				testimony_note = "证词描述争执或冲突；现有轨迹只能说明人员位置，不能证明其参与冲突"
+			else:
+				testimony_relation = "no_match_found"
+				testimony_note = "当前轨迹未形成与证词相符的空间时间关联"
+		var lead_status := "unverified"
+		var lead_status_label := "待核查"
+		if track_match and testimony_relation == "spatial_temporal_overlap":
+			lead_status = "partial_match"
+			lead_status_label = "时空线索部分吻合"
+		elif track_match:
+			lead_status = "track_near_scene"
+			lead_status_label = "轨迹接近现场，尚待核实"
+		elif closest_distance > 20.0 and float(lead.get("distance_at_report", 999.0)) > 20.0:
+			lead_status = "low_relevance"
+			lead_status_label = "现有轨迹关联较弱"
+		lead["movement_direction_code"] = direction_code
+		lead["movement_direction_label"] = direction_label
+		lead["incident_window_sample_count"] = incident_window_samples.size()
+		lead["movement_trace_match"] = track_match
+		lead["testimony_relation"] = testimony_relation
+		lead["testimony_relation_note"] = testimony_note
+		lead["lead_status"] = lead_status
+		lead["lead_status_label"] = lead_status_label
+		lead["assessment_is_not_a_verdict"] = true
+		assessments.append(lead)
+	return assessments
+
+
 func get_patrol_case_dossier(incident_id: String) -> Dictionary:
 	var record_index := _find_patrol_incident_record(incident_id)
 	if record_index < 0:
@@ -3641,6 +3716,7 @@ func get_patrol_case_dossier(incident_id: String) -> Dictionary:
 	timeline.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return float(a.get("at", 0.0)) < float(b.get("at", 0.0))
 	)
+	var lead_assessments := _assess_incident_activity_leads(record)
 	return {
 		"ok": true,
 		"incident_id": incident_id,
@@ -3656,7 +3732,10 @@ func get_patrol_case_dossier(incident_id: String) -> Dictionary:
 		"testimony_tag": str(record.get("witness_testimony_tag", "")),
 		"testimony_conflict": bool(record.get("witness_revised", false)),
 		"timeline": timeline,
-		"nearby_actor_snapshots": record.get("nearby_actor_snapshots", []).duplicate(true),
+		"nearby_actor_snapshots": lead_assessments,
+		"lead_assessments": lead_assessments.duplicate(true),
+		"witness_testimony_at": float(record.get("witness_testimony_at", -1.0)),
+		"witness_revised_testimony_at": float(record.get("witness_revised_testimony_at", -1.0)),
 		"activity_trail_window_seconds": 45.0,
 		"activity_trail_sample_interval_seconds": 2.5,
 		"player_contribution_log": record.get("player_contribution_log", []).duplicate(true)
