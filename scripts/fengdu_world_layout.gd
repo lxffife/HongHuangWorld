@@ -163,6 +163,26 @@ static func get_market_auction_layout() -> Dictionary:
 		"roof_height": 2.0,
 		"label_offset": Vector3(0.0, 5.65, 8.0),
 		"step_center_offset": Vector3(0.0, 0.0, 0.0),
+		"steps": [
+			{"point_id": "ghost_market.auction.step.01", "offset": Vector3(0.0, 0.09, 5.48), "size": Vector3(5.2, 0.18, 0.48)},
+			{"point_id": "ghost_market.auction.step.02", "offset": Vector3(0.0, 0.18, 5.0), "size": Vector3(4.85, 0.36, 0.48)},
+			{"point_id": "ghost_market.auction.step.03", "offset": Vector3(0.0, 0.27, 4.52), "size": Vector3(4.5, 0.54, 0.48)}
+		],
+		"step_rails": [
+			{"point_id": "ghost_market.auction.step_rail.left", "offset": Vector3(-2.92, 0.32, 5.35), "base_size": Vector3(0.24, 0.64, 1.35), "cap_offset": Vector3(0.0, 0.4, 0.0), "cap_size": Vector3(0.38, 0.16, 1.45)},
+			{"point_id": "ghost_market.auction.step_rail.right", "offset": Vector3(2.92, 0.32, 5.35), "base_size": Vector3(0.24, 0.64, 1.35), "cap_offset": Vector3(0.0, 0.4, 0.0), "cap_size": Vector3(0.38, 0.16, 1.45)}
+		],
+		"showcase_orbs": [
+			{"point_id": "ghost_market.auction.showcase.01", "offset": Vector3(-1.15, 2.0, 8.0), "radius": 0.18, "tint": "#83c7e4"},
+			{"point_id": "ghost_market.auction.showcase.02", "offset": Vector3(0.0, 2.0, 8.0), "radius": 0.22, "tint": "#e8c477"},
+			{"point_id": "ghost_market.auction.showcase.03", "offset": Vector3(1.15, 2.0, 8.0), "radius": 0.18, "tint": "#b99bdc"}
+		],
+		"audience_event_points": [
+			{"point_id": "ghost_market.auction.event_guest.01", "offset": Vector3(-10.8, 0.0, 4.2)},
+			{"point_id": "ghost_market.auction.event_guest.02", "offset": Vector3(10.8, 0.0, 4.2)},
+			{"point_id": "ghost_market.auction.event_guest.03", "offset": Vector3(-10.8, 0.0, 7.2)},
+			{"point_id": "ghost_market.auction.event_guest.04", "offset": Vector3(10.8, 0.0, 7.2)}
+		],
 		"audience_seats": [
 			{"point_id": "ghost_market.auction.seat.01", "offset": Vector3(-8.0, 0.0, 5.8), "facing": PI},
 			{"point_id": "ghost_market.auction.seat.02", "offset": Vector3(-8.0, 0.0, 9.4), "facing": PI},
@@ -188,6 +208,8 @@ static func get_market_caravans() -> Array[Dictionary]:
 			"cargo_palette": "#8d789e",
 			"offset": Vector3(-15.3, 0.0, -7.0),
 			"facing": PI,
+			"route_offsets": [Vector3(0.0, 0.0, -5.0), Vector3.ZERO, Vector3(0.0, 0.0, 5.0), Vector3(0.0, 0.0, -5.0)],
+			"restock_stall_id": "ghost_market.stall.01",
 			"phase": 0.0
 		},
 		{
@@ -196,6 +218,8 @@ static func get_market_caravans() -> Array[Dictionary]:
 			"cargo_palette": "#718d70",
 			"offset": Vector3(15.3, 0.0, 7.0),
 			"facing": 0.0,
+			"route_offsets": [Vector3(0.0, 0.0, -5.0), Vector3.ZERO, Vector3(0.0, 0.0, 5.0), Vector3(0.0, 0.0, -5.0)],
+			"restock_stall_id": "ghost_market.stall.03",
 			"phase": 17.0
 		}
 	]
