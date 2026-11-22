@@ -207,13 +207,21 @@ func _lantern_post(position: Vector3) -> void:
 
 func _build_ground_and_roads() -> void:
 	_box("CityGround", Vector3(0, -0.55, 0), Vector3(600, 1, 600), "ground", true)
+	# Tier 1: ceremonial north-south and east-west axes.
 	_box("NorthSouthMainRoad", Vector3(0, 0.03, 0), Vector3(13, 0.12, 190), "road", false)
 	_box("EastWestMainRoad", Vector3(0, 0.04, 0), Vector3(190, 0.12, 13), "road", false)
 	_box("CentralProcessionalWay", Vector3(0, 0.06, 38), Vector3(20, 0.14, 100), "road_edge", false)
+	# Tier 2: district distributors. Their alignment follows the compound edges.
+	for x in [-38.0, 38.0]:
+		_box("DistrictNorthSouthStreet", Vector3(x, 0.025, 0), Vector3(6.0, 0.1, 176.0), "road", false)
+	for z in [-32.0, 32.0]:
+		_box("DistrictCrossStreet", Vector3(0, 0.035, z), Vector3(176.0, 0.1, 6.0), "road", false)
+	# Tier 3: quieter perimeter lanes connecting the residential and service quarters.
+	for z in [-78.0, 78.0]:
+		_box("PerimeterLane", Vector3(0, 0.02, z), Vector3(160.0, 0.08, 4.0), "bridge", false)
+	# Palace approach remains a pedestrian-scale pair of parallel stone paths.
 	for x in [-27.0, 27.0]:
 		_box("PalaceApproach", Vector3(x, 0.035, 34), Vector3(5, 0.1, 90), "road", false)
-	for z in [-32.0, 32.0]:
-		_box("DistrictCrossStreet", Vector3(0, 0.035, z), Vector3(150, 0.1, 7), "road", false)
 
 
 func _build_moat_and_bridges() -> void:
@@ -289,6 +297,7 @@ func _build_districts() -> void:
 func _district(title: String, center: Vector3, footprint: Vector2, subtitle: String, building_count: int, accent: Color) -> void:
 	var base_size := Vector3(footprint.x, 0.45, footprint.y)
 	_box(title + "Foundation", center + Vector3(0, 0.22, 0), base_size, "district", false)
+	_build_district_compound(title, center, footprint)
 	var count := maxi(building_count, 1)
 	var columns := ceili(sqrt(float(count)))
 	for i in range(count):
@@ -307,6 +316,26 @@ func _district(title: String, center: Vector3, footprint: Vector2, subtitle: Str
 	_label(title, center + Vector3(0, 13, 0), 26, accent)
 	_label(subtitle, center + Vector3(0, 10.5, 0), 15, Color("#d2d6dc"))
 	district_markers[title] = center
+
+
+func _build_district_compound(title: String, center: Vector3, footprint: Vector2) -> void:
+	# Low compound walls frame each functional quarter while leaving a wide southern entrance.
+	var half_x := footprint.x * 0.5
+	var half_z := footprint.y * 0.5
+	var wall_h := 2.4
+	var wall_t := 0.65
+	var gate_w := clampf(footprint.x * 0.32, 5.0, 7.0)
+	var side_len := maxf(1.0, half_x - gate_w * 0.5)
+	_box(title + "NorthCompoundWall", center + Vector3(0, wall_h * 0.5, half_z), Vector3(footprint.x, wall_h, wall_t), "dark_stone", true)
+	_box(title + "WestCompoundWall", center + Vector3(-half_x, wall_h * 0.5, 0), Vector3(wall_t, wall_h, footprint.y), "dark_stone", true)
+	_box(title + "EastCompoundWall", center + Vector3(half_x, wall_h * 0.5, 0), Vector3(wall_t, wall_h, footprint.y), "dark_stone", true)
+	for side in [-1.0, 1.0]:
+		_box(title + "SouthCompoundWall", center + Vector3(side * (gate_w * 0.5 + side_len * 0.5), wall_h * 0.5, -half_z), Vector3(side_len, wall_h, wall_t), "dark_stone", true)
+		_box(title + "CompoundGatePost", center + Vector3(side * gate_w * 0.5, 1.65, -half_z), Vector3(0.9, 3.3, 1.0), "stone", true)
+	_box(title + "CompoundGateLintel", center + Vector3(0, 3.25, -half_z), Vector3(gate_w + 1.2, 0.65, 1.15), "gold", false)
+	# Paved inner path leads from the gate toward the central hall; it is visual only.
+	_box(title + "CourtyardEntryPath", center + Vector3(0, 0.49, -half_z * 0.28), Vector3(minf(gate_w * 0.72, 4.2), 0.08, half_z * 0.72), "road_edge", false)
+	_box(title + "GateThreshold", center + Vector3(0, 0.52, -half_z), Vector3(gate_w, 0.12, 1.6), "gold", false)
 
 
 func _build_district_landmark(title: String, center: Vector3, footprint: Vector2) -> void:
