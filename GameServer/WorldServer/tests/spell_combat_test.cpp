@@ -59,6 +59,14 @@ int main() {
     assert(spell_power_basis_points(100001, 100) == 0);
     assert(spell_power_basis_points(10000, -1) == 10000);
 
+    // Spirit and mastery bonuses combine in a deterministic, bounded order.
+    assert(effective_spell_power_basis_points(10000, 0, 1) == 10000);
+    assert(effective_spell_power_basis_points(10000, 0, 2) == 10100);
+    assert(effective_spell_power_basis_points(10000, 20, 3) == 10710);
+    assert(effective_spell_power_basis_points(12500, 100, 10) == 13625);
+    assert(effective_spell_power_basis_points(0, 100, 10) == 0);
+    assert(effective_spell_power_basis_points(10000, -1, 99) == 10900);
+
     // Cooldowns are tracked per spell: casting one spell must not block another.
     assert(spell_cooldown_remaining_ms(1000, 1000, fireball->cooldown_ms) == 1800);
     assert(spell_cooldown_remaining_ms(1000, 1500, fireball->cooldown_ms) == 1300);
