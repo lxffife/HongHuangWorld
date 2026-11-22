@@ -430,9 +430,12 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 			_box("GhostMarketAuctionDais", center + Vector3(0, 0.55, 8.0), Vector3(7.0, 1.1, 4.5), "dark_stone", false)
 			_box("GhostMarketAuctionDesk", center + Vector3(0, 1.45, 8.0), Vector3(4.2, 0.7, 1.2), "gold", false)
 			_roof_tier(center + Vector3(0, 3.1, 8.0), 8.0, 2.0)
+			var stall_types := ["魂珠铺", "魂籍铺", "药材铺", "法器铺", "魂器铺", "悬赏交易"]
+			var stall_index := 0
 			for side in [-1.0, 1.0]:
 				for z in [-6.5, 0.0, 6.5]:
-					_market_stall(center + Vector3(side * 10.5, 0, z), -side)
+					_market_stall(center + Vector3(side * 10.5, 0, z), -side, stall_types[stall_index])
+					stall_index += 1
 				_box("GhostMarketBackLane", center + Vector3(side * 15.0, 0.08, 0), Vector3(2.0, 0.16, 20.0), "bridge", false)
 			_notice_board(center + Vector3(-5.5, 0, -9.5), "鬼市告示")
 			_notice_board(center + Vector3(5.5, 0, -9.5), "悬赏榜")
@@ -1455,8 +1458,8 @@ func _training_dummy(center: Vector3) -> void:
 	_box("TrainingDummyTarget", center + Vector3(0, 2.0, 0), Vector3(0.55, 0.55, 0.55), "palace", false)
 
 
-func _market_stall(center: Vector3, facing: float) -> void:
-	# Stall front faces the central aisle; rear stock remains tucked against the compound edge.
+func _market_stall(center: Vector3, facing: float, stall_type: String) -> void:
+	# Every stall faces the central aisle; type-specific displays remain decorative and non-interactive.
 	_box("GhostMarketStallCounter", center + Vector3(facing * 0.85, 0.72, 0), Vector3(1.25, 1.05, 3.8), "palace", false)
 	_box("GhostMarketStallStock", center + Vector3(-facing * 0.9, 1.05, 0), Vector3(1.7, 2.1, 3.8), "dark_stone", false)
 	_box("GhostMarketStallAwning", center + Vector3(0, 3.0, 0), Vector3(4.8, 0.28, 4.8), "roof", false)
@@ -1464,13 +1467,35 @@ func _market_stall(center: Vector3, facing: float) -> void:
 		for z_side in [-1.0, 1.0]:
 			_box("GhostMarketStallPost", center + Vector3(side * 2.0, 1.55, z_side * 2.0), Vector3(0.22, 3.0, 0.22), "gold", false)
 	_box("GhostMarketStallSign", center + Vector3(facing * 2.15, 2.55, 0), Vector3(0.18, 0.9, 1.6), "gold", false)
-	# Three small display groups sit on the aisle-facing counter; the center aisle remains clear.
+	_label(stall_type, center + Vector3(facing * 2.28, 3.18, 0), 17, Color("#f0d5a4"))
 	var counter_front := center + Vector3(facing * 0.85, 1.26, 0)
-	_market_display_orb(counter_front + Vector3(0, 0.22, -1.22), 0.22, Color("#83b9d2"))
-	_market_display_orb(counter_front + Vector3(0, 0.22, 1.22), 0.22, Color("#b99bdc"))
-	_box("GhostMarketScrollDisplay", counter_front + Vector3(0, 0.10, 0), Vector3(0.48, 0.16, 0.78), "gold", false)
-	_box("GhostMarketHerbBundleDisplay", counter_front + Vector3(-facing * 0.30, 0.14, 0.58), Vector3(0.32, 0.22, 0.42), "district", false)
-
+	match stall_type:
+		"魂珠铺":
+			_market_display_orb(counter_front + Vector3(0, 0.24, -1.12), 0.25, Color("#83c7e4"))
+			_market_display_orb(counter_front + Vector3(0, 0.24, 0.0), 0.29, Color("#b99bdc"))
+			_market_display_orb(counter_front + Vector3(0, 0.24, 1.12), 0.22, Color("#e8c477"))
+		"魂籍铺":
+			for z_offset in [-0.92, 0.0, 0.92]:
+				var scroll := _box("GhostMarketRegisterScroll", counter_front + Vector3(0, 0.16, z_offset), Vector3(0.52, 0.28, 0.72), "gold", false)
+				scroll.rotation.y = deg_to_rad(12.0 * z_offset)
+			_box("GhostMarketRegisterLedger", counter_front + Vector3(-facing * 0.16, 0.32, 0), Vector3(0.72, 0.12, 0.9), "road_edge", false)
+		"药材铺":
+			for z_offset in [-1.0, 0.0, 1.0]:
+				_box("GhostMarketHerbBundle", counter_front + Vector3(-facing * 0.18, 0.2, z_offset), Vector3(0.42, 0.34, 0.64), "district", false)
+			_market_display_orb(counter_front + Vector3(0, 0.2, 1.48), 0.16, Color("#8dbb86"))
+		"法器铺":
+			for z_offset in [-0.9, 0.0, 0.9]:
+				var artifact := _box("GhostMarketRitualArtifact", counter_front + Vector3(-facing * 0.1, 0.34, z_offset), Vector3(0.22, 0.72, 0.22), "gold", false)
+				artifact.rotation.x = deg_to_rad(18.0)
+				_box("GhostMarketArtifactBase", counter_front + Vector3(0, 0.12, z_offset), Vector3(0.58, 0.18, 0.58), "dark_stone", false)
+		"魂器铺":
+			for z_offset in [-0.9, 0.0, 0.9]:
+				_market_display_orb(counter_front + Vector3(0, 0.28, z_offset), 0.22, Color("#9b9fc9"))
+				_box("GhostMarketSoulVessel", counter_front + Vector3(-facing * 0.2, 0.18, z_offset), Vector3(0.42, 0.3, 0.48), "palace", false)
+		"悬赏交易":
+			_box("GhostMarketBountyScroll", counter_front + Vector3(0, 0.2, -0.82), Vector3(0.58, 0.26, 0.8), "gold", false)
+			_box("GhostMarketTradeToken", counter_front + Vector3(-facing * 0.16, 0.18, 0.55), Vector3(0.38, 0.28, 0.38), "road_edge", false)
+			_market_display_orb(counter_front + Vector3(0, 0.26, 1.25), 0.18, Color("#d4a96d"))
 
 func _market_display_orb(position: Vector3, radius: float, tint: Color) -> void:
 	var mesh := SphereMesh.new()
