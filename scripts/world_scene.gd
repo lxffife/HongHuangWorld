@@ -3039,9 +3039,12 @@ func _on_combat_event(event: Dictionary) -> void:
 	# durable settlement batch. Do not treat this as a normal zero-damage hit.
 	if str(event.get("action", "")) == "monster_death_settlement":
 		if bool(event.get("committed", false)):
-			var settled_experience := int(event.get("experience_reward", 0))
-			var settled_cultivation := int(event.get("cultivation_reward", 0))
-			_show_notification("击败奖励已结算：经验 +" + str(settled_experience) + " · 修为 +" + str(settled_cultivation), 4.5)
+			if bool(event.get("contribution_only", false)):
+				_show_notification("参与战斗奖励已结算，经验与修为正在同步", 4.5)
+			else:
+				var settled_experience := int(event.get("experience_reward", 0))
+				var settled_cultivation := int(event.get("cultivation_reward", 0))
+				_show_notification("击败奖励已结算：经验 +" + str(settled_experience) + " · 修为 +" + str(settled_cultivation), 4.5)
 			_refresh_reward_status_later()
 		else:
 			_show_notification("怪物已击败，奖励正在安全结算……", 3.0)
