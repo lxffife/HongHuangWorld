@@ -222,21 +222,16 @@ func (s *Service) CurrentInventory(ctx context.Context, accountID string) ([]Ite
 
 func (s *Service) ListGroundDrops(ctx context.Context, nodeKey string) ([]GroundDropSnapshot, error) {
 	if strings.TrimSpace(nodeKey) == "" { return nil, ErrInvalidRequest }
-	if _,err:=s.db.ExecContext(ctx,`WITH expired_instances AS MATERIALIZED (
-			SELECT item_instance_id FROM ground_drops
-			WHERE server_id=(SELECT id FROM server_registry WHERE node_key=$1)
-			  AND status='available' AND expires_at<=now() AND item_instance_id IS NOT NULL
-		), marked_drops AS (
-			UPDATE ground_drops SET status='expired',item_instance_id=NULL,updated_at=now()
-			WHERE server_id=(SELECT id FROM server_registry WHERE node_key=$1)
-			  AND status='available' AND expires_at<=now()
-			RETURNING id
-		)
-		DELETE FROM item_instances ii USING expired_instances e
-		WHERE ii.id=e.item_instance_id
+	if _,err:=s.db.ExecContext(ctx,`UPDATE ground_drops SET status='expired',item_instance_id=NULL,updated_at=now()
+		WHERE server_id=(SELECT id FROM server_registry WHERE node_key=$1)
+		  AND status='available' AND expires_at<=now()`,nodeKey);err!=nil{
+		return nil,fmt.Errorf("expire old ground drops: %w",err)
+	}
+	if _,err:=s.db.ExecContext(ctx,`DELETE FROM item_instances ii
+		WHERE NOT EXISTS(SELECT 1 FROM ground_drops d WHERE d.item_instance_id=ii.id)
 		  AND NOT EXISTS(SELECT 1 FROM character_item_instances ci WHERE ci.item_instance_id=ii.id)
-		  AND NOT EXISTS(SELECT 1 FROM character_equipment ce WHERE ce.item_instance_id=ii.id)`,nodeKey);err!=nil{
-		return nil,fmt.Errorf("expire old ground drops and discard unclaimed gear instances: %w",err)
+		  AND NOT EXISTS(SELECT 1 FROM character_equipment ce WHERE ce.item_instance_id=ii.id)`);err!=nil{
+		return nil,fmt.Errorf("discard unclaimed equipment instances: %w",err)
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT d.id::text, d.session_id::text, d.owner_character_id::text,
 		d.item_id, i.name, COALESCE(ii.quality, i.quality), d.quantity, d.position_x, d.position_z,
