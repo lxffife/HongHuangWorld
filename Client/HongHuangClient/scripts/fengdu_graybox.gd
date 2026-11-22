@@ -2378,6 +2378,13 @@ func _prune_patrol_incident_history() -> void:
 				break
 		if removable_index < 0:
 			return
+		var archived: Dictionary = patrol_incident_records[removable_index]
+		for clue_node in archived.get("evidence_nodes", []):
+			if is_instance_valid(clue_node):
+				clue_node.queue_free()
+		var witness_root: Node3D = archived.get("witness_root")
+		if witness_root != null and is_instance_valid(witness_root):
+			witness_root.queue_free()
 		patrol_incident_records.remove_at(removable_index)
 
 
@@ -3486,7 +3493,7 @@ func _spawn_patrol_incident_clues(incident: Dictionary) -> Dictionary:
 		evidence_nodes.append(clue)
 	var witness_root := Node3D.new()
 	witness_root.name = "IncidentWitness_" + str(incident.get("incident_id", "unknown"))
-	witness_root.position = center + Vector3(3.0, 0.0, 1.8)
+	witness_root.position = center + Vector3(5.0, 0.0, 4.5)
 	add_child(witness_root)
 	_create_npc_figure(witness_root, "resident")
 	var witness_label := Label3D.new()
