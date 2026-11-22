@@ -1849,8 +1849,9 @@ func _sync_soldier_formation(agent: Dictionary) -> void:
 
 
 func _update_merchant_proximity_behavior(agent: Dictionary, distance_to_player: float) -> void:
-	# Merchants greet nearby players but remain rooted behind their own stall.
-	var should_greet := distance_to_player <= 5.0 and player != null
+	# Merchants greet nearby players but pause reception while their matching stall is restocked.
+	var can_receive := str(agent.get("market_business_state", "open")) == "open"
+	var should_greet := distance_to_player <= 5.0 and player != null and can_receive
 	var was_greeting := bool(agent.get("player_greeting", false))
 	if should_greet:
 		agent["player_greeting"] = true
