@@ -4065,6 +4065,8 @@ func record_case_party_defense_statement(incident_id: String, party_id: String, 
 		var party: Dictionary = parties[index]
 		if str(party.get("party_id", "")) != party_id:
 			continue
+		if str(party.get("procedural_status", "notice_pending")) != "appeared":
+			return {"ok": false, "reason": "party_must_appear_before_defense"}
 		party["defense_status"] = "statement_recorded"
 		party["defense_statement"] = statement.strip_edges()
 		party["response_at"] = npc_simulation_time
@@ -4195,6 +4197,8 @@ func record_case_evidence_challenge_at_hearing(incident_id: String, party_id: St
 	for party_value in record.get("case_submission", {}).get("case_parties", []):
 		if str(party_value.get("party_id", "")) == party_id:
 			party_found = true
+			if str(party_value.get("procedural_status", "notice_pending")) != "appeared":
+				return {"ok": false, "reason": "party_must_appear_to_challenge"}
 			break
 	if not party_found:
 		return {"ok": false, "reason": "case_party_not_found"}
@@ -4232,6 +4236,8 @@ func record_case_testimony_challenge_at_hearing(incident_id: String, party_id: S
 	for party_value in record.get("case_submission", {}).get("case_parties", []):
 		if str(party_value.get("party_id", "")) == party_id:
 			party_found = true
+			if str(party_value.get("procedural_status", "notice_pending")) != "appeared":
+				return {"ok": false, "reason": "party_must_appear_to_challenge"}
 			break
 	if not party_found:
 		return {"ok": false, "reason": "case_party_not_found"}
