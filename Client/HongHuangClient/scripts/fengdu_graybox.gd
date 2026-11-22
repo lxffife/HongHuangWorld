@@ -1,4 +1,6 @@
 extends Node3D
+
+const WORLD_LAYOUT = preload("res://scripts/fengdu_world_layout.gd")
 ## Walkable Fengdu capital graybox. All dimensions in meters.
 ## This is a client-side art/navigation prototype; gates and permissions are not authoritative.
 
@@ -309,10 +311,8 @@ func _build_city_walls() -> void:
 
 
 func _build_gate_complexes() -> void:
-	_gate("北天门", Vector3(0, 0, CITY_HALF), Vector3(0, 0, 1), "罗酆山古道")
-	_gate("南幽门", Vector3(0, 0, -CITY_HALF), Vector3(0, 0, -1), "忘川与轮回渡口")
-	_gate("东玄门", Vector3(CITY_HALF, 0, 0), Vector3(1, 0, 0), "幽冥荒原远域官道")
-	_gate("西冥门", Vector3(-CITY_HALF, 0, 0), Vector3(-1, 0, 0), "阴司军屯与古战场")
+	for gate_data in WORLD_LAYOUT.get_gates():
+		_gate(str(gate_data.get("name", "城门")), gate_data.get("position", Vector3.ZERO), gate_data.get("outward", Vector3.FORWARD), str(gate_data.get("destination", "")))
 
 
 func _gate(title: String, center: Vector3, outward: Vector3, destination: String) -> void:
@@ -342,16 +342,15 @@ func _gate(title: String, center: Vector3, outward: Vector3, destination: String
 
 
 func _build_districts() -> void:
-	_district("万家魂坊", Vector3(-55, 0, -53), Vector2(34, 26), "居住 · 工匠 · 社区", 5, Color("#a9b9c4"))
-	_district("万魂鬼市", Vector3(55, 0, -53), Vector2(34, 26), "交易 · 拍卖 · 情报", 6, Color("#d7b47b"))
-	_district("鬼籍司", Vector3(-52, 0, 4), Vector2(27, 24), "新魂登记 · 身份凭籍", 4, Color("#9cb8c8"))
-	_district("功过司", Vector3(52, 0, 4), Vector2(27, 24), "功德 · 罪业 · 因果", 4, Color("#c4b28e"))
-	_district("十王府", Vector3(-51, 0, 48), Vector2(30, 23), "十殿审判 · 刑狱协调", 5, Color("#b9a4a4"))
-	_district("判官司", Vector3(51, 0, 48), Vector2(30, 23), "案卷复核 · 司法文书", 5, Color("#b9a4a4"))
-	_district("巡城司", Vector3(0, 0, 12), Vector2(23, 20), "治安 · 巡逻 · 夜禁", 4, Color("#a5b2c0"))
-	_district("轮回司", Vector3(0, 0, -68), Vector2(32, 20), "轮回文牒 · 忘川通道", 5, Color("#b6a5d0"))
-	_district("阴兵大营", Vector3(-77, 0, 0), Vector2(18, 27), "城防 · 军需 · 驻军", 3, Color("#9ba6b2"))
-	_district("引魂驿站", Vector3(77, 0, 0), Vector2(18, 27), "接引 · 分流 · 远途驿传", 3, Color("#a8b7c3"))
+	for district_data in WORLD_LAYOUT.get_districts():
+		_district(
+			str(district_data.get("name", "未命名区域")),
+			district_data.get("center", Vector3.ZERO),
+			district_data.get("footprint", Vector2(20, 20)),
+			str(district_data.get("subtitle", "")),
+			int(district_data.get("building_count", 1)),
+			Color(str(district_data.get("accent", "#a9b9c4")))
+		)
 
 
 func _district(title: String, center: Vector3, footprint: Vector2, subtitle: String, building_count: int, accent: Color) -> void:
@@ -2740,7 +2739,7 @@ func _hanging_lantern(center: Vector3) -> void:
 
 func _build_palace_axis() -> void:
 	# A walled northern palace precinct with two ceremonial gates and a layered court axis.
-	var center := Vector3(0, 0, 72)
+	var center: Vector3 = WORLD_LAYOUT.get_city_config().get("imperial_palace_center", Vector3(0, 0, 72))
 	district_markers["酆都皇城"] = center
 	_label("酆都皇城", center + Vector3(0, 38, 0), 30, Color("#e0c08b"))
 	_box("ImperialPalaceTerrace", center + Vector3(0, 0.55, 0), Vector3(43, 1.1, 28), "gold", false)
