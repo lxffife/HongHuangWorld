@@ -59,7 +59,16 @@ func _process(delta: float) -> void:
 	elif Input.is_key_pressed(KEY_SPACE):
 		player.velocity.y = 8.5
 	player.move_and_slide()
+	_update_camera()
 	_update_hud()
+
+
+func _update_camera() -> void:
+	if camera == null or player == null:
+		return
+	var offset := Vector3(0, 4.6, 8.0).rotated(Vector3.UP, player.rotation.y)
+	camera.global_position = player.global_position + offset
+	camera.look_at(player.global_position + Vector3(0, 1.25, 0), Vector3.UP)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -71,7 +80,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		var motion := event as InputEventMouseMotion
 		player.rotation.y -= motion.relative.x * MOUSE_SENSITIVITY
 		camera_pitch = clampf(camera_pitch - motion.relative.y * MOUSE_SENSITIVITY, deg_to_rad(-55.0), deg_to_rad(8.0))
-		camera.rotation.x = camera_pitch
 
 
 func _capture_mouse() -> void:
@@ -222,7 +230,6 @@ func _build_districts() -> void:
 	_district("判官司", Vector3(51, 0, 48), Vector2(30, 23), "案卷复核 · 司法文书", 5, Color("#b9a4a4"))
 	_district("巡城司", Vector3(0, 0, 12), Vector2(23, 20), "治安 · 巡逻 · 夜禁", 4, Color("#a5b2c0"))
 	_district("轮回司", Vector3(0, 0, -68), Vector2(32, 20), "轮回文牒 · 忘川通道", 5, Color("#b6a5d0"))
-	_district("酆都皇城", Vector3(0, 0, 72), Vector2(40, 25), "帝阙 · 议政 · 幽冥法印", 6, Color("#e0c08b"))
 	_district("阴兵大营", Vector3(-77, 0, 0), Vector2(18, 27), "城防 · 军需 · 驻军", 3, Color("#9ba6b2"))
 	_district("引魂驿站", Vector3(77, 0, 0), Vector2(18, 27), "接引 · 分流 · 远途驿传", 3, Color("#a8b7c3"))
 
@@ -252,6 +259,8 @@ func _district(title: String, center: Vector3, footprint: Vector2, subtitle: Str
 func _build_palace_axis() -> void:
 	# The palace is the city's visual anchor, intentionally larger than every bureau.
 	var center := Vector3(0, 0, 72)
+	district_markers["酆都皇城"] = center
+	_label("酆都皇城", center + Vector3(0, 34, 0), 30, Color("#e0c08b"))
 	_box("ImperialPalaceTerrace", center + Vector3(0, 0.55, 0), Vector3(43, 1.1, 28), "gold", true)
 	_box("ImperialMainHall", center + Vector3(0, 9, 0), Vector3(23, 17, 15), "palace", true)
 	for x in [-9.0, -4.5, 0.0, 4.5, 9.0]:
