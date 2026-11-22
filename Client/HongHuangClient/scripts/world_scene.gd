@@ -2653,8 +2653,10 @@ func _render_party_members() -> void:
 		party_members_box.add_child(_party_label("尚无队伍成员"))
 		return
 	party_status_label.text = "队伍 " + str(party_data.get("id", "")).substr(0, 8) + " · " + str(members.size()) + " / " + str(party_data.get("max_members", 5)) + " 人"
-	var my_account_id := str(HHSession.account_id)
-	var is_leader := str(party_data.get("leader_account_id", "")) == my_account_id
+	var is_leader := false
+	for member_value in members:
+		if member_value is Dictionary and bool(member_value.get("is_self", false)):
+			is_leader = str(member_value.get("role", "")) == "leader"
 	for member_value in members:
 		if not (member_value is Dictionary):
 			continue
@@ -2675,21 +2677,26 @@ func _render_party_members() -> void:
 		role_label.text = "队长" if str(member.get("role", "")) == "leader" else "队员"
 		role_label.add_theme_color_override("font_color", Color("#d9b879"))
 		row.add_child(role_label)
-		if is_leader and str(member.get("account_id", "")) != my_account_id:
+		if is_leader and not bool(member.get("is_self", false)):
 			var transfer_button := Button.new()
 			transfer_button.text = "转让"
 			_apply_button_theme(transfer_button)
-			transfer_button.pressed.connect(func(account_id: String):
-				_party_request("POST", "/api/v1/party/transfer-leadership", {"account_id": account_id}, "action")
-			.bind(str(member.get("account_id", ""))))
+			transfer_button.pressed.connect(_party_transfer_leadership.bind(str(member.get("account_id", ""))))
 			row.add_child(transfer_button)
 			var kick_button := Button.new()
 			kick_button.text = "移出"
 			_apply_button_theme(kick_button)
-			kick_button.pressed.connect(func(account_id: String):
-				_party_request("POST", "/api/v1/party/kick", {"account_id": account_id}, "action")
-			.bind(str(member.get("account_id", ""))))
+			kick_button.pressed.connect(_party_kick_member.bind(str(member.get("account_id", ""))))
 			row.add_child(kick_button)
+
+func _party_transfer_leadership(account_id: String) -> void:
+	_party_request("POST", "/api/v1/party/transfer-leadership", {"account_id": account_id}, "action")
+
+func _party_kick_member(account_id: String) -> void:
+	_party_request("POST", "/api/v1/party/kick", {"account_id": account_id}, "action")
+
+func _party_respond_invitation(invitation_id: String, decision: String) -> void:
+	_party_request("POST", "/api/v1/party/invitations/" + invitation_id + "/respond", {"decision": decision}, "action")
 
 func _render_party_invitations() -> void:
 	for child in party_invites_box.get_children():
@@ -2710,16 +2717,12 @@ func _render_party_invitations() -> void:
 		var accept_button := Button.new()
 		accept_button.text = "接受"
 		_apply_button_theme(accept_button, true)
-		accept_button.pressed.connect(func(invitation_id: String):
-			_party_request("POST", "/api/v1/party/invitations/" + invitation_id + "/respond", {"decision": "accept"}, "action")
-		.bind(str(invitation.get("id", ""))))
+		accept_button.pressed.connect(_party_respond_invitation.bind(str(invitation.get("id", "")), "accept"))
 		row.add_child(accept_button)
 		var decline_button := Button.new()
 		decline_button.text = "拒绝"
 		_apply_button_theme(decline_button)
-		decline_button.pressed.connect(func(invitation_id: String):
-			_party_request("POST", "/api/v1/party/invitations/" + invitation_id + "/respond", {"decision": "decline"}, "action")
-		.bind(str(invitation.get("id", ""))))
+		decline_button.pressed.connect(_party_respond_invitation.bind(str(invitation.get("id", "")), "decline"))
 		row.add_child(decline_button)
 
 func _build_inventory_ui() -> void:
