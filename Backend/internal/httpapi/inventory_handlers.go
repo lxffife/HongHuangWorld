@@ -127,6 +127,26 @@ type equipmentActionRequest struct {
 	Slot string `json:"slot"`
 }
 
+type salvageEquipmentRequest struct {
+	RequestID string `json:"request_id"`
+	InstanceID string `json:"instance_id"`
+}
+
+func (h *inventoryHandlers) salvageEquipment(w http.ResponseWriter,r *http.Request){
+	account,ok:=h.authenticateAccount(w,r);if !ok{return}
+	var request salvageEquipmentRequest
+	if err:=decodeJSON(w,r,&request);err!=nil{http.Error(w,"invalid request body",http.StatusBadRequest);return}
+	result,err:=h.service.SalvageEquipment(r.Context(),account.ID,inventory.SalvageRequest{RequestID:request.RequestID,InstanceID:request.InstanceID})
+	switch{
+	case err==nil:writeJSON(w,http.StatusOK,result)
+	case errors.Is(err,inventory.ErrInvalidRequest):http.Error(w,"equipment instance is not owned, equipped, or salvageable",http.StatusBadRequest)
+	case errors.Is(err,inventory.ErrCharacterInWorld):http.Error(w,"leave the world before salvaging equipment",http.StatusConflict)
+	case errors.Is(err,inventory.ErrInventoryFull):http.Error(w,"material stack is full",http.StatusConflict)
+	case errors.Is(err,inventory.ErrIdempotencyConflict):http.Error(w,"request id was already used",http.StatusConflict)
+	default:h.logger.Error("salvage equipment failed","account_id",account.ID,"error",err);http.Error(w,"internal server error",http.StatusInternalServerError)
+	}
+}
+
 func (h *inventoryHandlers) equipment(w http.ResponseWriter, r *http.Request) {
 	account, ok := h.authenticateAccount(w, r)
 	if !ok { return }
