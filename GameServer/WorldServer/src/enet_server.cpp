@@ -86,6 +86,7 @@ struct PlayerState {
     Json equipment{Json::array()};
     std::int64_t attack{20};
     std::int64_t defense{};
+    std::int32_t strength{};
     std::int64_t health{100};
     std::int64_t max_health{100};
     std::int64_t mana{};
@@ -3486,7 +3487,7 @@ struct EnetServer::Impl {
             };
             if (!integer_field("attack") || !integer_field("defense") ||
                 !integer_field("max_health") || !integer_field("max_mana") ||
-                !integer_field("constitution") || !integer_field("agility") ||
+                !integer_field("strength") || !integer_field("constitution") || !integer_field("agility") ||
                 !integer_field("spirit") || !integer_field("vitality") ||
                 !stats.contains("movement_speed") || !stats["movement_speed"].is_number() ||
                 !stats.contains("equipment") || !stats["equipment"].is_array()) {
@@ -3497,6 +3498,7 @@ struct EnetServer::Impl {
             const auto defense = stats["defense"].get<std::int64_t>();
             const auto max_health = stats["max_health"].get<std::int64_t>();
             const auto max_mana = stats["max_mana"].get<std::int64_t>();
+            const auto strength = std::clamp<std::int64_t>(stats["strength"].get<std::int64_t>(), 0, 100000);
             const auto speed = stats["movement_speed"].get<double>();
             const auto constitution = std::clamp<std::int64_t>(stats["constitution"].get<std::int64_t>(), 0, 100000);
             const auto agility = std::clamp<std::int64_t>(stats["agility"].get<std::int64_t>(), 0, 100000);
@@ -3515,7 +3517,7 @@ struct EnetServer::Impl {
             const bool spirit_changed = previous_spirit != spirit;
             const bool combat_stats_changed = player.attack != attack || player.defense != defense ||
                 player.max_health != max_health || player.max_mana != max_mana ||
-                player.constitution != constitution || player.agility != agility ||
+                player.strength != strength || player.constitution != constitution || player.agility != agility ||
                 spirit_changed || player.vitality != vitality ||
                 std::abs(static_cast<double>(player.movement_speed) - speed) > 0.0001;
             // Spirit changes alter the regeneration interval. Start a fresh interval
@@ -3529,6 +3531,7 @@ struct EnetServer::Impl {
             player.max_mana = max_mana;
             player.attack = attack;
             player.defense = defense;
+            player.strength = static_cast<std::int32_t>(strength);
             player.constitution = static_cast<std::int32_t>(constitution);
             player.agility = static_cast<std::int32_t>(agility);
             player.spirit = static_cast<std::int32_t>(spirit);
@@ -3539,11 +3542,19 @@ struct EnetServer::Impl {
                 broadcast_player_event(honghuang::protocol::MessageType::PlayerJoined, player);
             }
             if (combat_stats_changed || equipment_changed) {
+                const auto weapon_profile = honghuang::simulation::weapon_combat_profile(player_weapon_type(player));
+                const auto attack_interval = honghuang::simulation::agility_adjusted_attack_cooldown(
+                    weapon_profile.cooldown, player.agility);
                 send_json(found->first, honghuang::protocol::MessageType::CombatEvent,
                     Json{{"action", "equipment_refresh"}, {"accepted", true},
                          {"health", player.health}, {"max_health", player.max_health},
                          {"mana", player.mana}, {"max_mana", player.max_mana},
                          {"attack", player.attack}, {"defense", player.defense},
+                         {"strength", player.strength}, {"constitution", player.constitution},
+                         {"agility", player.agility}, {"spirit", player.spirit}, {"vitality", player.vitality},
+                         {"critical_chance_basis_points", honghuang::simulation::critical_chance_basis_points(player.agility)},
+                         {"critical_damage_basis_points", 15000},
+                         {"attack_interval_ms", attack_interval.count()},
                          {"movement_speed", player.movement_speed}});
             }
         }
@@ -5125,6 +5136,8 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                         player.character_id = character_id;
                         player.attack = combat_stats.at("attack").get<std::int64_t>();
                         player.defense = combat_stats.at("defense").get<std::int64_t>();
+                        player.strength = static_cast<std::int32_t>(std::clamp<std::int64_t>(
+                            combat_stats.at("strength").get<std::int64_t>(), 0, 100000));
                         player.health = combat_stats.at("health").get<std::int64_t>();
                         player.max_health = combat_stats.at("max_health").get<std::int64_t>();
                         player.mana = combat_stats.at("mana").get<std::int64_t>();
@@ -5187,8 +5200,28 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                         impl_->broadcast_player_event(
                             honghuang::protocol::MessageType::PlayerJoined, impl_->players.at(event.peer));
                         Json client_welcome = snapshot;
-                        client_welcome["mana"] = impl_->players.at(event.peer).mana;
-                        client_welcome["max_mana"] = impl_->players.at(event.peer).max_mana;
+                        const auto& welcomed_player = impl_->players.at(event.peer);
+                        const auto welcome_weapon = honghuang::simulation::weapon_combat_profile(
+                            player_weapon_type(welcomed_player));
+                        const auto welcome_interval = honghuang::simulation::agility_adjusted_attack_cooldown(
+                            welcome_weapon.cooldown, welcomed_player.agility);
+                        client_welcome["health"] = welcomed_player.health;
+                        client_welcome["max_health"] = welcomed_player.max_health;
+                        client_welcome["mana"] = welcomed_player.mana;
+                        client_welcome["max_mana"] = welcomed_player.max_mana;
+                        client_welcome["attack"] = welcomed_player.attack;
+                        client_welcome["defense"] = welcomed_player.defense;
+                        client_welcome["strength"] = welcomed_player.strength;
+                        client_welcome["constitution"] = welcomed_player.constitution;
+                        client_welcome["agility"] = welcomed_player.agility;
+                        client_welcome["spirit"] = welcomed_player.spirit;
+                        client_welcome["vitality"] = welcomed_player.vitality;
+                        client_welcome["movement_speed"] = welcomed_player.movement_speed;
+                        client_welcome["critical_chance_basis_points"] =
+                            honghuang::simulation::critical_chance_basis_points(welcomed_player.agility);
+                        client_welcome["critical_damage_basis_points"] = 15000;
+                        client_welcome["attack_interval_ms"] = welcome_interval.count();
+                        client_welcome["equipment"] = welcomed_player.equipment;
                         Json mastery_snapshot = Json::array();
                         for (const auto& [spell_id, mastery] : impl_->players.at(event.peer).spell_mastery) {
                             mastery_snapshot.push_back({{"spell_id", spell_id}, {"experience", mastery.experience}, {"level", mastery.level}});
