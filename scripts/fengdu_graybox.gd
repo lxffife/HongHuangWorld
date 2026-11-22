@@ -69,6 +69,7 @@ var judge_case_list: ItemList
 var judge_case_detail: RichTextLabel
 var judge_workbench_hint: Label
 var judge_review_actions: HFlowContainer
+var judge_statement_input: LineEdit
 var judge_selected_incident_id := ""
 var judge_workbench_open := false
 var judge_workbench_refresh_elapsed := 0.0
@@ -4922,6 +4923,53 @@ func summon_case_parties_to_judge_bureau(incident_id: String) -> Dictionary:
 	return {"ok": true, "summoned_count": summoned, "unavailable_count": unavailable}
 
 
+func call_case_party_into_hearing(incident_id: String, party_id: String) -> Dictionary:
+	var record_index := _find_patrol_incident_record(incident_id)
+	if record_index < 0:
+		return {"ok": false, "reason": "case_not_found"}
+	var record: Dictionary = patrol_incident_records[record_index]
+	if str(record.get("case_workflow_state", "")) != "hearing_in_progress":
+		return {"ok": false, "reason": "hearing_not_in_progress"}
+	var party: Dictionary = {}
+	for party_value in record.get("case_submission", {}).get("case_parties", []):
+		if str(party_value.get("party_id", "")) == party_id:
+			party = party_value
+			break
+	if party.is_empty():
+		return {"ok": false, "reason": "case_party_not_found"}
+	if str(party.get("procedural_status", "")) != "appeared":
+		return {"ok": false, "reason": "party_must_appear_before_entering_hearing"}
+	for index in range(npc_agents.size()):
+		var agent: Dictionary = npc_agents[index]
+		if str(agent.get("npc_id", "")) != str(party.get("actor_id", party_id)):
+			continue
+		if str(agent.get("judicial_attendance_state", "")) != "waiting":
+			return {"ok": false, "reason": "party_not_waiting_in_hall"}
+		var root: Node3D = agent.get("root")
+		if root == null or not is_instance_valid(root):
+			return {"ok": false, "reason": "party_actor_instance_missing"}
+		var seat_index := int(agent.get("judicial_seat_index", 0))
+		var destination := Vector3(51.0 + float(seat_index % 3 - 1) * 1.6, 0.0, 35.0 + float(seat_index / 3) * 1.4)
+		var route_result := get_navigation_route_between_positions(root.global_position, destination)
+		if not bool(route_result.get("found", false)):
+			return {"ok": false, "reason": "hearing_route_unavailable"}
+		var waypoints: Array = route_result.get("points", []).duplicate()
+		waypoints.push_front(root.global_position)
+		waypoints.append(destination)
+		agent["judicial_attendance_state"] = "called_to_hearing"
+		agent["judicial_attendance_target_state"] = "in_hearing"
+		agent["judicial_waypoints"] = waypoints
+		agent["judicial_route_index"] = 0
+		agent["judicial_route_progress"] = 0.0
+		agent["judicial_destination"] = destination
+		agent["judicial_move_speed"] = 2.4
+		npc_agents[index] = agent
+		_append_incident_timeline_entry(record, "party_called_to_hearing", "传唤涉案人员进入庭审席位", party_id)
+		patrol_incident_records[record_index] = record
+		return {"ok": true, "party_id": party_id, "attendance_state": "called_to_hearing"}
+	return {"ok": false, "reason": "party_actor_not_found"}
+
+
 func _advance_judicial_attendance(agent: Dictionary, delta: float) -> void:
 	var root: Node3D = agent.get("root")
 	if root == null or not is_instance_valid(root):
@@ -4946,14 +4994,16 @@ func _advance_judicial_attendance(agent: Dictionary, delta: float) -> void:
 	if next_index == waypoints.size() - 1 and progress >= 1.0:
 		var destination: Vector3 = agent.get("judicial_destination", finish)
 		root.position = destination
-		agent["judicial_attendance_state"] = "waiting"
+		var target_state := str(agent.get("judicial_attendance_target_state", "waiting"))
+		agent["judicial_attendance_state"] = target_state
 		agent["judicial_route_progress"] = 1.0
-		var incident_id := str(agent.get("judicial_incident_id", ""))
-		var party_id := str(agent.get("judicial_party_id", ""))
-		var arrival_result := update_case_party_procedural_status(incident_id, party_id, "appeared", "涉案人员已沿判官司路网抵达候审区。")
-		if not bool(arrival_result.get("ok", false)):
-			agent["judicial_attendance_state"] = "arrival_record_failed"
-			print("[JudgeBureau] arrival status failed party=%s reason=%s" % [party_id, str(arrival_result.get("reason", ""))])
+		if target_state == "waiting":
+			var incident_id := str(agent.get("judicial_incident_id", ""))
+			var party_id := str(agent.get("judicial_party_id", ""))
+			var arrival_result := update_case_party_procedural_status(incident_id, party_id, "appeared", "涉案人员已沿判官司路网抵达候审区。")
+			if not bool(arrival_result.get("ok", false)):
+				agent["judicial_attendance_state"] = "arrival_record_failed"
+				print("[JudgeBureau] arrival status failed party=%s reason=%s" % [party_id, str(arrival_result.get("reason", ""))])
 		return
 	root.position = start.lerp(finish, progress)
 	var direction := finish - start
@@ -5118,6 +5168,10 @@ func _build_judge_bureau_workbench() -> void:
 	right.add_child(judge_case_detail)
 	judge_review_actions = HFlowContainer.new()
 	right.add_child(judge_review_actions)
+	judge_statement_input = LineEdit.new()
+	judge_statement_input.placeholder_text = "输入申辩或质证理由（必填），再选择对应人员与操作"
+	judge_statement_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right.add_child(judge_statement_input)
 	var action_row := HFlowContainer.new()
 	right.add_child(action_row)
 	_add_judge_action_button(action_row, "开始复核", _judge_action_begin_review)
@@ -5314,6 +5368,50 @@ func _refresh_judge_review_actions(submission: Dictionary, review: Dictionary) -
 			testimony_button.text = "庭审出示证人陈述"
 			testimony_button.pressed.connect(_judge_present_testimony)
 			judge_review_actions.add_child(testimony_button)
+		for party_value in submission.get("case_parties", []):
+			var party: Dictionary = party_value
+			var party_id := str(party.get("party_id", ""))
+			var party_name := str(party.get("display_name", party_id))
+			if str(party.get("procedural_status", "")) == "appeared":
+				var attendance_state := "not_summoned"
+				for attendance_value in get_case_party_attendance(judge_selected_incident_id):
+					if str(attendance_value.get("party_id", "")) == party_id:
+						attendance_state = str(attendance_value.get("attendance_state", ""))
+						break
+				if attendance_state == "waiting":
+					var call_button := Button.new()
+					call_button.text = party_name + " · 传唤入庭"
+					call_button.pressed.connect(func(): _judge_call_party_into_hearing(party_id))
+					judge_review_actions.add_child(call_button)
+				var defense_button := Button.new()
+				defense_button.text = party_name + " · 记录申辩"
+				defense_button.pressed.connect(func(): _judge_record_defense(party_id))
+				judge_review_actions.add_child(defense_button)
+				for tag_value in presented:
+					var challenge_tag := str(tag_value)
+					for challenge_data in [
+						["质疑真实性", "authenticity_disputed"],
+						["质疑保管链", "chain_of_custody_disputed"],
+						["质疑证据解释", "interpretation_disputed"],
+						["质疑关联性", "relevance_disputed"]
+					]:
+						var challenge_button := Button.new()
+						challenge_button.text = party_name + " · " + str(challenge_data[0]) + "：" + challenge_tag
+						var challenge_code := str(challenge_data[1])
+						challenge_button.pressed.connect(func(): _judge_challenge_evidence(party_id, challenge_tag, challenge_code))
+						judge_review_actions.add_child(challenge_button)
+				if bool(hearing.get("testimony_presented", false)):
+					for testimony_challenge in [
+						["质疑证人可信度", "credibility_disputed"],
+						["质疑陈述时间", "time_disputed"],
+						["质疑陈述内容", "content_disputed"],
+						["质疑证人身份", "identity_disputed"]
+					]:
+						var testimony_challenge_button := Button.new()
+						testimony_challenge_button.text = party_name + " · " + str(testimony_challenge[0])
+						var testimony_code := str(testimony_challenge[1])
+						testimony_challenge_button.pressed.connect(func(): _judge_challenge_testimony(party_id, testimony_code))
+						judge_review_actions.add_child(testimony_challenge_button)
 	elif workflow == "hearing_closed_pending_judgment":
 		var judgment_data := get_case_judgment_and_appeals(judge_selected_incident_id)
 		var party_judgments: Dictionary = judgment_data.get("party_judgments", {})
@@ -5344,6 +5442,42 @@ func _refresh_judge_review_actions(submission: Dictionary, review: Dictionary) -
 			responsible.text = "%s · 承担责任" % str(party.get("display_name", party_id))
 			responsible.pressed.connect(func(): _judge_record_party_judgment(party_id, "responsible"))
 			judge_review_actions.add_child(responsible)
+
+
+func _judge_record_defense(party_id: String) -> void:
+	if judge_selected_incident_id.is_empty() or judge_statement_input == null:
+		return
+	var statement := judge_statement_input.text.strip_edges()
+	if statement.is_empty():
+		_run_judge_action({"ok": false, "reason": "请先输入当事人申辩内容"}, "")
+		return
+	_run_judge_action(record_case_party_defense_statement(judge_selected_incident_id, party_id, statement), "已记录当事人申辩：" + party_id)
+
+
+func _judge_challenge_evidence(party_id: String, evidence_tag: String, challenge: String) -> void:
+	if judge_selected_incident_id.is_empty() or judge_statement_input == null:
+		return
+	var reason := judge_statement_input.text.strip_edges()
+	if reason.is_empty():
+		_run_judge_action({"ok": false, "reason": "请先输入质证理由"}, "")
+		return
+	_run_judge_action(record_case_evidence_challenge_at_hearing(judge_selected_incident_id, party_id, evidence_tag, challenge, reason), "已记录物证质证意见：" + evidence_tag)
+
+
+func _judge_challenge_testimony(party_id: String, challenge: String) -> void:
+	if judge_selected_incident_id.is_empty() or judge_statement_input == null:
+		return
+	var reason := judge_statement_input.text.strip_edges()
+	if reason.is_empty():
+		_run_judge_action({"ok": false, "reason": "请先输入质证理由"}, "")
+		return
+	_run_judge_action(record_case_testimony_challenge_at_hearing(judge_selected_incident_id, party_id, challenge, reason), "已记录证人陈述质证意见。")
+
+
+func _judge_call_party_into_hearing(party_id: String) -> void:
+	if judge_selected_incident_id.is_empty():
+		return
+	_run_judge_action(call_case_party_into_hearing(judge_selected_incident_id, party_id), "已传唤涉案人员进入庭审席位。")
 
 
 func _judge_present_evidence(tag: String) -> void:
