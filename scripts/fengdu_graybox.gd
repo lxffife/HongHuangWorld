@@ -499,20 +499,27 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 				center + Vector3(0, 0, 7.0)
 			]
 		"引魂驿站":
-			# A clear arrival-to-registration-to-dispatch sequence guides newly arrived souls.
-			_box("SoulWaystationArrivalLane", center + Vector3(0, 0.1, -7.0), Vector3(7.0, 0.16, 11.0), "road_edge", false)
-			_box("SoulWaystationCanopy", center + Vector3(0, 4.0, -2.0), Vector3(12.0, 0.8, 6.0), "gold", false)
-			_roof_tier(center + Vector3(0, 5.0, -2.0), 15.0, 2.6)
-			_box("SoulRegistrationDesk", center + Vector3(0, 1.0, 0.5), Vector3(5.0, 1.8, 1.2), "palace", false)
-			_box("SoulRegistrationLedger", center + Vector3(0, 2.05, 0.5), Vector3(2.4, 0.18, 0.8), "gold", false)
-			for side in [-1.0, 1.0]:
-				_box("WaystationWaitingPavilion", center + Vector3(side * 6.5, 1.8, 8.0), Vector3(4.0, 3.6, 4.0), "palace", false)
-				_roof_tier(center + Vector3(side * 6.5, 4.3, 8.0), 5.5, 1.7)
-				_box("WaystationQueueRail", center + Vector3(side * 3.5, 0.8, -7.0), Vector3(0.22, 1.6, 8.0), "gold", false)
-			_box("SoulDispatchGateLeft", center + Vector3(-3.5, 2.8, 10.5), Vector3(0.7, 5.6, 0.7), "dark_stone", false)
-			_box("SoulDispatchGateRight", center + Vector3(3.5, 2.8, 10.5), Vector3(0.7, 5.6, 0.7), "dark_stone", false)
-			_box("SoulDispatchGateLintel", center + Vector3(0, 5.3, 10.5), Vector3(7.5, 0.8, 0.8), "gold", false)
-			_label("分流通道", center + Vector3(0, 6.3, 10.5), 16, Color("#d7bd98"))
+			# Render the semantic arrival -> registration -> waiting -> dispatch layout.
+			var waystation: Dictionary = WORLD_LAYOUT.get_waystation_layout()
+			var arrival: Dictionary = waystation["arrival_lane"]
+			_box("SoulWaystationArrivalLane", center + arrival["offset"], arrival["size"], "road_edge", false)
+			var canopy: Dictionary = waystation["canopy"]
+			_box("SoulWaystationCanopy", center + canopy["offset"], canopy["size"], "gold", false)
+			_roof_tier(center + canopy["roof_offset"], float(canopy["roof_width"]), float(canopy["roof_height"]))
+			var desk: Dictionary = waystation["registration_desk"]
+			_box("SoulRegistrationDesk", center + desk["offset"], desk["size"], "palace", false)
+			var ledger: Dictionary = waystation["registration_ledger"]
+			_box("SoulRegistrationLedger", center + ledger["offset"], ledger["size"], "gold", false)
+			for pavilion in waystation["waiting_pavilions"]:
+				_box("WaystationWaitingPavilion", center + pavilion["offset"], pavilion["size"], "palace", false)
+				_roof_tier(center + pavilion["roof_offset"], float(pavilion["roof_width"]), float(pavilion["roof_height"]))
+			for rail in waystation["queue_rails"]:
+				_box("WaystationQueueRail", center + rail["offset"], rail["size"], "gold", false)
+			var dispatch: Dictionary = waystation["dispatch_gate"]
+			_box("SoulDispatchGateLeft", center + dispatch["left_post_offset"], dispatch["post_size"], "dark_stone", false)
+			_box("SoulDispatchGateRight", center + dispatch["right_post_offset"], dispatch["post_size"], "dark_stone", false)
+			_box("SoulDispatchGateLintel", center + dispatch["lintel_offset"], dispatch["lintel_size"], "gold", false)
+			_label("分流通道", center + dispatch["label_offset"], 16, Color("#d7bd98"))
 			npc_spawn_points["引魂驿站"] = [
 				center + Vector3(-2.0, 0, -9.0), center + Vector3(2.0, 0, -9.0),
 				center + Vector3(-2.0, 0, 3.0), center + Vector3(2.0, 0, 3.0),
