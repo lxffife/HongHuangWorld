@@ -170,3 +170,26 @@ func TestDominantInheritanceAttributeUsesRaceWeightForTies(t *testing.T) {
 		t.Fatalf("empty inheritance dominant attribute = %q, want empty", got)
 	}
 }
+
+
+func TestApplyPartyCombatBonus(t *testing.T) {
+	tests := []struct {
+		name  string
+		value int64
+		want  int64
+	}{
+		{name: "zero reward", value: 0, want: 0},
+		{name: "negative reward unchanged", value: -10, want: -10},
+		{name: "small reward rounds down", value: 9, want: 9},
+		{name: "ten percent bonus", value: 30, want: 33},
+		{name: "cultivation bonus", value: 15, want: 16},
+		{name: "large reward", value: 1000000, want: 1100000},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := applyPartyCombatBonus(test.value); got != test.want {
+				t.Fatalf("applyPartyCombatBonus(%d) = %d, want %d", test.value, got, test.want)
+			}
+		})
+	}
+}
