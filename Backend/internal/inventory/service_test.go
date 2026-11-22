@@ -264,3 +264,38 @@ func TestLiveConsumableEffectReportsRequestedAmountForLateApplication(t *testing
 		t.Fatalf("effect amounts = health:%d mana:%d, want 60/40", result.HealthEffect, result.ManaEffect)
 	}
 }
+
+
+func TestEquipmentInstancePayloadSerializesAffixIdentityAndRolledStats(t *testing.T) {
+	item := ItemStack{
+		InstanceID: "00000000-0000-4000-8000-000000000001",
+		ItemID: "starter_iron_sword", Name: "铁剑", ItemType: "equipment",
+		Quality: 4, Quantity: 1,
+		RolledStats: map[string]int{"attack": 5, "strength": 2},
+		Affixes: []EquipmentAffix{{ID: "weapon_attack_keen", Name: "锋锐", StatKey: "attack", Value: 5}},
+	}
+	encoded, err := json.Marshal(item)
+	if err != nil { t.Fatalf("marshal equipment instance: %v", err) }
+	var decoded map[string]any
+	if err := json.Unmarshal(encoded, &decoded); err != nil { t.Fatalf("decode equipment instance: %v", err) }
+	if decoded["instance_id"] != item.InstanceID { t.Fatalf("instance_id = %v", decoded["instance_id"]) }
+	rolled, ok := decoded["rolled_stats"].(map[string]any)
+	if !ok || rolled["attack"] != float64(5) || rolled["strength"] != float64(2) {
+		t.Fatalf("rolled_stats = %v", decoded["rolled_stats"])
+	}
+	affixes, ok := decoded["affixes"].([]any)
+	if !ok || len(affixes) != 1 { t.Fatalf("affixes = %v", decoded["affixes"]) }
+	affix, ok := affixes[0].(map[string]any)
+	if !ok || affix["id"] != "weapon_attack_keen" || affix["value"] != float64(5) {
+		t.Fatalf("affix payload = %v", affixes[0])
+	}
+}
+
+func TestSecureRandomIntStaysWithinExclusiveUpperBound(t *testing.T) {
+	for i := 0; i < 128; i++ {
+		value, err := secureRandomInt(7)
+		if err != nil { t.Fatalf("secureRandomInt: %v", err) }
+		if value < 0 || value >= 7 { t.Fatalf("random value %d outside [0,7)", value) }
+	}
+	if _, err := secureRandomInt(0); err == nil { t.Fatal("zero upper bound must be rejected") }
+}
