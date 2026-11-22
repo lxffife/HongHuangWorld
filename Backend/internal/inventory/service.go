@@ -16,7 +16,7 @@ var (
 	ErrInvalidRequest = errors.New("invalid inventory request")
 	ErrSessionInvalid = errors.New("world session is not active on this server")
 	ErrDropUnavailable = errors.New("drop is unavailable")
-	ErrInventoryFull = errors.New("inventory stack is full")
+	ErrInventoryFull = errors.New("inventory is full")
 	ErrCharacterInWorld = errors.New("character has an active world session")
 )
 
@@ -460,6 +460,15 @@ func (s *Service) PickupDrop(ctx context.Context, nodeKey string, request Pickup
 		COALESCE((SELECT cap.max_slots FROM character_inventory_capacity cap WHERE cap.character_id=c.id),40)
 		FROM characters c WHERE c.id=$1::uuid`,lockedCharacter).Scan(&usedSlots,&maxSlots)
 	if err!=nil{return Result{},fmt.Errorf("load pickup inventory capacity: %w",err)}
+	// Another request with the same event ID may have completed while this
+	// transaction waited for the character row lock.
+	if err:=tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM item_pickup_events WHERE server_id=$1 AND event_id=$2::uuid)`,serverID,request.EventID).Scan(&duplicate);err!=nil{
+		return Result{},fmt.Errorf("recheck pickup idempotency: %w",err)
+	}
+	if duplicate{
+		if err:=tx.Commit();err!=nil{return Result{},fmt.Errorf("commit concurrent duplicate pickup: %w",err)}
+		return Result{Applied:false},nil
+	}
 	var itemID string
 	var itemInstanceID sql.NullString
 	var quantity int
