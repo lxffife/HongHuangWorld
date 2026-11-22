@@ -721,6 +721,9 @@ func _build_npc_population() -> void:
 		npc_root.rotation.y = float(point["facing"])
 		npc_agents.append(agent)
 
+	# A few non-interactive customers browse from the aisle side of selected stalls.
+	_build_market_customers()
+
 	# One visible patrol guard follows the closed route; the other guards remain at posts.
 	if patrol_route.size() > 1:
 		var patrol_root := Node3D.new()
@@ -747,6 +750,32 @@ func _build_npc_population() -> void:
 	_rebuild_npc_population_index()
 	_apply_npc_schedules()
 
+
+
+func _build_market_customers() -> void:
+	# Keep only two customers so the central aisle remains visibly open.
+	# Static ambient props only: they are not server-owned or interactive NPC agents.
+	var customer_stalls: Array[Dictionary] = [
+		{"position": Vector3(-7.1, 0.0, -6.5), "yaw": PI * 0.5},
+		{"position": Vector3(7.1, 0.0, 6.5), "yaw": -PI * 0.5}
+	]
+	for index in range(customer_stalls.size()):
+		var customer_root := Node3D.new()
+		customer_root.name = "AmbientMarketCustomer_%02d" % (index + 1)
+		customer_root.position = customer_stalls[index]["position"]
+		customer_root.rotation.y = float(customer_stalls[index]["yaw"])
+		add_child(customer_root)
+		_create_npc_figure(customer_root, "market_customer")
+		var parcel := MeshInstance3D.new()
+		var parcel_mesh := BoxMesh.new()
+		parcel_mesh.size = Vector3(0.34, 0.32, 0.34)
+		parcel.mesh = parcel_mesh
+		var parcel_material := StandardMaterial3D.new()
+		parcel_material.albedo_color = Color("#9a8063")
+		parcel_material.roughness = 0.9
+		parcel.material_override = parcel_material
+		parcel.position = Vector3(0.42, 0.42, 0.12)
+		customer_root.add_child(parcel)
 
 
 func _initialize_npc_behavior(agent: Dictionary) -> void:
@@ -1013,7 +1042,7 @@ func _create_npc_figure(root: Node3D, role: String) -> Dictionary:
 	dark_material.albedo_color = Color("#252c36")
 	dark_material.roughness = 0.9
 	var accent_material := StandardMaterial3D.new()
-	accent_material.albedo_color = Color("#d7b477") if role in ["merchant", "guide"] else Color("#8797a8")
+	accent_material.albedo_color = Color("#d7b477") if role in ["merchant", "guide"] else (Color("#c49a72") if role == "market_customer" else Color("#8797a8"))
 	accent_material.emission_enabled = role == "guide"
 	accent_material.emission = Color("#d7b477")
 
@@ -1342,6 +1371,8 @@ func _activity_color(role: String) -> Color:
 			return Color("#a7c18a")
 		"waiting_soul":
 			return Color("#b8c5cf")
+		"market_customer":
+			return Color("#9cabb5")
 	return Color("#d0d0d0")
 
 
