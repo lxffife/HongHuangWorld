@@ -307,6 +307,8 @@ struct SoulAbsorptionEvent {
 struct ProjectileRuntime {
     std::string id;
     std::string owner_character_id;
+    std::string owner_session_id;
+    std::string spell_id;
     std::string target_entity_id;
     float x{};
     float y{};
@@ -1281,6 +1283,10 @@ struct EnetServer::Impl {
                     } else if (event->event_type == "bounty_monster_contributions") {
                         Json response;
                         delivered = backend_inventory_request(config, "/api/v1/servers/bounties/contributions",
+                                                              &payload, status, response, delivery_error);
+                    } else if (event->event_type == "spell_mastery_reward") {
+                        Json response;
+                        delivered = backend_inventory_request(config, "/api/v1/servers/characters/spell-mastery",
                                                               &payload, status, response, delivery_error);
                     } else if (event->event_type == "soul_absorption") {
                         SoulAbsorptionEvent absorption{
@@ -3742,7 +3748,7 @@ struct EnetServer::Impl {
             const auto projectile_id = make_event_uuid();
             player.last_spell_at_by_id[pending.spell_id] = now;
             projectiles.push_back(ProjectileRuntime{
-                projectile_id, player.character_id, target->runtime_id,
+                projectile_id, player.character_id, player.session_id, pending.spell_id, target->runtime_id,
                 player.x, player.y + 1.15F, player.z,
                 static_cast<float>(dx / distance) * projectile_speed,
                 static_cast<float>(dz / distance) * projectile_speed,
@@ -4262,6 +4268,21 @@ struct EnetServer::Impl {
                     }
                 }
                 record_monster_damage(*target, owner->second, damage.damage);
+                if (!projectile->spell_id.empty()) {
+                    const Json mastery_payload{
+                        {"event_id", make_event_uuid()},
+                        {"session_id", projectile->owner_session_id},
+                        {"character_id", projectile->owner_character_id},
+                        {"spell_id", projectile->spell_id},
+                        {"experience", 1}
+                    };
+                    std::string mastery_error;
+                    if (!enqueue_durable_event(mastery_payload.at("event_id").get<std::string>(),
+                                               "spell_mastery_reward", mastery_payload, mastery_error)) {
+                        std::cerr << "[SpellMastery] confirmed hit XP could not be queued: "
+                                  << mastery_error << std::endl;
+                    }
+                }
                 std::int64_t experience_reward = 0;
                 std::int64_t cultivation_reward = 0;
                 if (damage.defeated) {
