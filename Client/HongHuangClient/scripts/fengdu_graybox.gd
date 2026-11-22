@@ -39,7 +39,7 @@ var npc_schedule_night := true
 var market_ambience_time := 0.0
 var market_orbs: Array[MeshInstance3D] = []
 var market_lights: Array[OmniLight3D] = []
-var market_customers: Array[Node3D] = []
+var market_customers: Array[Dictionary] = []
 
 var mats: Dictionary = {}
 
@@ -772,7 +772,7 @@ func _build_market_customers() -> void:
 		customer_root.position = customer_stalls[index]["position"]
 		customer_root.rotation.y = float(customer_stalls[index]["yaw"])
 		add_child(customer_root)
-		_create_npc_figure(customer_root, "market_customer")
+		var customer_figure := _create_npc_figure(customer_root, "market_customer")
 		var parcel := MeshInstance3D.new()
 		var parcel_mesh := BoxMesh.new()
 		parcel_mesh.size = Vector3(0.34, 0.32, 0.34)
@@ -783,7 +783,14 @@ func _build_market_customers() -> void:
 		parcel.material_override = parcel_material
 		parcel.position = Vector3(0.42, 0.42, 0.12)
 		customer_root.add_child(parcel)
-		market_customers.append(customer_root)
+		market_customers.append({
+			"root": customer_root,
+			"body": customer_figure["body"],
+			"left_arm": customer_figure["left_arm"],
+			"right_arm": customer_figure["right_arm"],
+			"base_yaw": float(customer_stalls[index]["yaw"]),
+			"phase": float(index) * 2.4
+		})
 
 
 func _build_market_ambience() -> void:
@@ -814,8 +821,20 @@ func _update_market_ambience(delta: float) -> void:
 		if material != null:
 			var pulse := 0.5 + 0.5 * sin(market_ambience_time * 1.8 + float(index) * 0.83)
 			material.emission_energy_multiplier = 0.16 + night_factor * (0.42 + pulse * 0.38)
-	for customer in market_customers:
-		customer.visible = npc_schedule_night
+	for customer_data in market_customers:
+		var customer_root: Node3D = customer_data["root"]
+		customer_root.visible = npc_schedule_night
+		if not npc_schedule_night:
+			continue
+		var phase := market_ambience_time * 1.1 + float(customer_data["phase"])
+		var body: MeshInstance3D = customer_data["body"]
+		var left_arm: MeshInstance3D = customer_data["left_arm"]
+		var right_arm: MeshInstance3D = customer_data["right_arm"]
+		# Small browsing gestures: a gentle lean and alternating hand movement, with no pathing.
+		body.rotation.x = deg_to_rad(2.5) + absf(sin(phase * 0.55)) * deg_to_rad(2.0)
+		left_arm.rotation.z = deg_to_rad(-18.0) + sin(phase * 0.8) * 0.035
+		right_arm.rotation.z = deg_to_rad(18.0) - sin(phase * 0.8 + 1.1) * 0.045
+		customer_root.rotation.y = float(customer_data["base_yaw"]) + sin(phase * 0.24) * 0.035
 
 
 func _initialize_npc_behavior(agent: Dictionary) -> void:
@@ -1328,8 +1347,9 @@ func _apply_npc_schedules() -> void:
 			agent["activity"] = "registration"
 		elif role == "resident":
 			agent["activity"] = "social_idle"
-	for customer in market_customers:
-		customer.visible = npc_schedule_night
+	for customer_data in market_customers:
+		var customer_root: Node3D = customer_data["root"]
+		customer_root.visible = npc_schedule_night
 	_update_market_ambience(0.0)
 	# Clock display is intentionally local to this graybox, not a server-authoritative world clock.
 
