@@ -47,6 +47,17 @@ int main() {
     assert(!can_pay_spell_cost(100, 0));
     assert(!can_pay_spell_cost(100, -1));
 
+    // Spirit increases spell output with deterministic integer scaling and a hard cap.
+    assert(spell_power_basis_points(10000, 0) == 10000);
+    assert(spell_power_basis_points(10000, 1) == 10025);
+    assert(spell_power_basis_points(10000, 20) == 10500);
+    assert(spell_power_basis_points(10000, 100) == 12500);
+    assert(spell_power_basis_points(10000, 1000) == 12500);
+    assert(spell_power_basis_points(12500, 20) == 13125);
+    assert(spell_power_basis_points(0, 100) == 0);
+    assert(spell_power_basis_points(-100, 100) == 0);
+    assert(spell_power_basis_points(10000, -1) == 10000);
+
     // Cooldowns are tracked per spell: casting one spell must not block another.
     assert(spell_cooldown_remaining_ms(1000, 1000, fireball->cooldown_ms) == 1800);
     assert(spell_cooldown_remaining_ms(1000, 1500, fireball->cooldown_ms) == 1300);
