@@ -2596,9 +2596,13 @@ func _patrol_dispatch_status_text() -> String:
 		var latest_incident: Dictionary = patrol_incident_records.back()
 		var closed_at := float(latest_incident.get("closed_at", -1000.0))
 		if str(latest_incident.get("state", "")) == "closed" and npc_simulation_time - closed_at <= 12.0:
-			return "事件结案 · %s · %s · 证据 %d 件 · 目击者 %d 人" % [
+			var timeline_summary := str(latest_incident.get("timeline_summary", "暂无玩家调查记录"))
+			if timeline_summary.length() > 64:
+				timeline_summary = timeline_summary.left(64) + "…"
+			return "事件结案 · %s · %s · 时间线：%s · 证据 %d 件 · 目击者 %d 人" % [
 				str(latest_incident.get("result_label", "已处理")),
 				str(latest_incident.get("deduction_label", "暂无额外线索结论")),
+				timeline_summary,
 				int(latest_incident.get("evidence_count", 0)),
 				int(latest_incident.get("witness_count", 0))
 			]
@@ -3533,8 +3537,8 @@ func _interact_with_patrol_incident(incident_id: String) -> void:
 			remaining_evidence += 1
 	if remaining_evidence > 0:
 		npc_detail_label.text = "请走近地面发光的物证标记（3.2 米内）再按 E 调查。"
-	elif witness_root != null and is_instance_valid(witness_root) and not bool(record.get("witness_questioned", false)):
-		npc_detail_label.text = "请走近现场证人（3.8 米内）再按 E 询问。"
+	elif witness_root != null and is_instance_valid(witness_root) and int(record.get("witness_question_stage", 0)) < 2:
+		npc_detail_label.text = "请走近现场证人（3.8 米内）再按 E 询问或追问。"
 	else:
 		npc_detail_label.text = "现场可调查的物证和证人都已完成记录，等待巡城司汇总。"
 
