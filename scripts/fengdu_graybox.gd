@@ -666,13 +666,10 @@ func _build_activity_registry() -> void:
 
 
 func _district_key(district_name: String) -> String:
-	match district_name:
-		"万魂鬼市": return "ghost_market"
-		"万家魂坊": return "soul_ward"
-		"阴兵大营": return "barracks"
-		"引魂驿站": return "waystation"
-		"巡城司": return "patrol_office"
-		_: return "bureau"
+	for district_data in WORLD_LAYOUT.get_districts():
+		if str(district_data.get("name", "")) == district_name:
+			return str(district_data.get("id", "bureau"))
+	return "bureau"
 
 
 func _npc_display_name(role: String, index: int) -> String:
