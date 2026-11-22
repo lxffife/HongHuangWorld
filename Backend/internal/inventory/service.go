@@ -171,6 +171,13 @@ type InventoryCapacity struct {
 	FreeSlots int `json:"free_slots"`
 }
 
+func equipmentSalvageYield(baseQuantity,quality,perQualityBonus,maxStack int)(int,bool){
+	if baseQuantity<1||quality<1||quality>5||perQualityBonus<0||maxStack<1{return 0,false}
+	quantity:=baseQuantity+(quality-1)*perQualityBonus
+	if quantity<1||quantity>maxStack{return 0,false}
+	return quantity,true
+}
+
 func inventorySlotAvailable(usedSlots,maxSlots int,needsNewSlot bool)bool{
 	return usedSlots>=0&&maxSlots>=1&&(!needsNewSlot||usedSlots<maxSlots)
 }
@@ -741,8 +748,8 @@ func (s *Service) SalvageEquipment(ctx context.Context,accountID string,request 
 		return SalvageResult{},fmt.Errorf("check equipped salvage instance: %w",err)
 	}
 	if equipped{return SalvageResult{},ErrInvalidRequest}
-	quantity:=baseQuantity+max(0,quality-1)*perQualityBonus
-	if quantity<1||quantity>maxStack{return SalvageResult{},ErrInvalidRequest}
+	quantity,validYield:=equipmentSalvageYield(baseQuantity,quality,perQualityBonus,maxStack)
+	if !validYield{return SalvageResult{},ErrInvalidRequest}
 	result:=SalvageResult{Applied:true,EquipmentItemID:itemID,MaterialItemID:materialID,MaterialName:materialName,MaterialQuantity:quantity,EquipmentQuality:quality}
 	grant,err:=tx.ExecContext(ctx,`INSERT INTO character_inventory(character_id,item_id,quantity)
 		VALUES($1::uuid,$2,$3)
