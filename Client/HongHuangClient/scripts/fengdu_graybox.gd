@@ -415,31 +415,29 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 			_market_display_orb(center + Vector3(-1.15, 2.0, 8.0), 0.18, Color("#83c7e4"))
 			_market_display_orb(center + Vector3(0.0, 2.0, 8.0), 0.22, Color("#e8c477"))
 			_market_display_orb(center + Vector3(1.15, 2.0, 8.0), 0.18, Color("#b99bdc"))
-			var stall_types := ["魂珠铺", "魂籍铺", "药材铺", "法器铺", "魂器铺", "悬赏交易"]
-			var stall_index := 0
 			market_stall_registry.clear()
+			for stall_data in WORLD_LAYOUT.get_market_stalls():
+				var stall_position: Vector3 = stall_data["position"]
+				var stall_facing: float = float(stall_data["facing"])
+				var stall_type: String = str(stall_data["stall_type"])
+				_market_stall(stall_position, stall_facing, stall_type)
+				var display_items: Array = _market_display_items_for_type(stall_type)
+				market_stall_registry.append({
+					"stall_id": str(stall_data["stall_id"]),
+					"stall_type": stall_type,
+					"district": str(stall_data["district"]),
+					"position": stall_position,
+					"facing": stall_facing,
+					"display_items": display_items,
+					"restock_group": str(stall_data["restock_group"]),
+					"restock_label": _create_market_stall_status_label(stall_position, stall_facing),
+					"catalog_label": _create_market_stall_catalog_label(stall_position, stall_facing, display_items),
+					"business_state": "closed",
+					"open_schedule": str(stall_data["open_schedule"]),
+					"interaction_type": _market_interaction_for_type(stall_type),
+					"presentation_state": str(stall_data["presentation_state"])
+				})
 			for side in [-1.0, 1.0]:
-				for z in [-6.5, 0.0, 6.5]:
-					var stall_position := center + Vector3(side * 10.5, 0, z)
-					var stall_facing := -side
-					var stall_type: String = stall_types[stall_index]
-					_market_stall(stall_position, stall_facing, stall_type)
-					market_stall_registry.append({
-						"stall_id": "ghost_market.stall.%02d" % (stall_index + 1),
-						"stall_type": stall_type,
-						"district": "万魂鬼市",
-						"position": stall_position,
-						"facing": stall_facing,
-						"display_items": _market_display_items_for_type(stall_type),
-						"restock_group": "soul_goods" if stall_index < 2 else ("herb_goods" if stall_index < 4 else ""),
-						"restock_label": _create_market_stall_status_label(stall_position, stall_facing),
-						"catalog_label": _create_market_stall_catalog_label(stall_position, stall_facing, _market_display_items_for_type(stall_type)),
-						"business_state": "closed",
-						"open_schedule": "18:00-06:00",
-						"interaction_type": _market_interaction_for_type(stall_type),
-						"presentation_state": "client_visual_only"
-					})
-					stall_index += 1
 				_box("GhostMarketBackLane", center + Vector3(side * 15.0, 0.08, 0), Vector3(2.0, 0.16, 20.0), "bridge", false)
 			_market_notice_board(center + Vector3(-5.5, 0, -9.5), "鬼市告示", Color("#83c7e4"))
 			_market_notice_board(center + Vector3(5.5, 0, -9.5), "悬赏榜", Color("#d27d68"))
