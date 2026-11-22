@@ -426,6 +426,10 @@
 - 判官司开始复核后，必须逐项审查卷宗中的每个物证标签：`record_judicial_evidence_assessment(incident_id, evidence_tag, assessment, reason)` 支持 `accepted`、`needs_verification`、`rejected`；只能审查移交卷宗已有的物证标签，且必须填写理由。证词通过 `record_judicial_testimony_assessment(incident_id, assessment, reason)` 审查，状态为 `credible`、`disputed`、`insufficient`；存在前后矛盾的证词不能被直接标记为可信。
 - `complete_judge_bureau_review(incident_id)` 要求所有物证标签和已有证词均完成审查。只有至少一件物证被采信、没有待核验物证、证词没有被标记为争议或不足，才允许进入候审；否则只能退回补充或继续核验。`accept_for_hearing` 会再次检查复核完成标记和候审资格，不能绕过审查步骤。
 - 证据采信只代表本原型中判官司对材料的审阅意见，不代表事实已经成立；`judicial_conclusion` 仍为 `not_determined`，没有自动定罪。
+- 卷宗通过复核并进入候审时，会将轨迹关联达到 `partial_match` 或 `track_near_scene` 的人员快照写入 `case_parties`，但其 `suspect_status` 初始仍为 `unverified`，仅作为待核查人员，不自动认定为嫌疑人或犯罪人。
+- `update_case_party_procedural_status()` 记录送达通知、到场、无法联系或拒绝陈述等程序状态，并要求填写原因。`record_case_party_defense_statement()` 记录当事人申辩原文和时间；申辩不会自动改变物证审查结论。
+- `begin_case_hearing()` 开庭后，`present_case_evidence_at_hearing()` 只能出示已被判官司采信的物证，且每件物证只能出示一次。`close_case_hearing()` 要求至少出示一件物证并填写庭审记录，随后进入 `hearing_closed_pending_judgment`，等待独立判决。
+- `get_case_hearing_record()` 返回涉案人员程序状态、申辩记录、庭审举证记录及复核数据。当前庭审为流程数据原型，不包含真实玩家在线法庭、辩护人、检察官、证人出庭动画或司法权限系统。
 - 所有接口都返回明确的失败原因，例如案件不存在、现场调查未完成、卷宗未移交、复核未开始或处置类型无效。案件档案接口返回卷宗状态、复核状态、退回原因、待补材料和移交快照。
 - `get_judge_bureau_case_queue()` 返回判官司待处理、复核中和候审案件摘要，按移交时间排序；`get_patrol_case_supplement_queue()` 返回退回巡城司补充的案件摘要，包含退回原因、待补材料和退回时间。两类队列互相独立，供后续两个衙门的工作台界面接入。
 - 通过形式复核不等于事实认定或定罪。`judicial_conclusion` 始终为 `not_determined`；当前没有判官、证据采信、当事人申辩、实体审理、判决或申诉机制。上述接口是客户端流程原型，不是权限安全的司法服务；正式联机需迁移到服务端并验证办案权限、审计日志和不可篡改卷宗。
