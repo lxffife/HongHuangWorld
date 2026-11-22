@@ -3064,6 +3064,12 @@ func _update_spell_mastery_hud() -> void:
 
 
 func _on_combat_event(event: Dictionary) -> void:
+	if str(event.get("action", "")) == "player_death_persisted":
+		if is_instance_valid(respawn_button):
+			respawn_button.disabled = false
+		if is_instance_valid(death_message_label):
+			death_message_label.text = "死亡记录已安全保存。\n可以复活并返回冥界·酆都。"
+		return
 	# Death rewards are acknowledged only after the server has committed the
 	# durable settlement batch. Do not treat this as a normal zero-damage hit.
 	if str(event.get("action", "")) == "monster_death_settlement":
@@ -3216,7 +3222,9 @@ func _on_combat_event(event: Dictionary) -> void:
 			local_player.is_dead = true
 			local_target_position = local_player.position
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-			death_message_label.text = "角色已倒地，无法继续行动。\n受到 " + str(incoming_damage) + " 点伤害，生命 " + str(current_health) + "/" + str(max_health) + "。\n确认后将结算复活并返回角色界面。"
+			death_message_label.text = "角色已倒地，无法继续行动。\n受到 " + str(incoming_damage) + " 点伤害，生命 " + str(current_health) + "/" + str(max_health) + "。\n正在安全保存死亡记录，请稍候……"
+			if is_instance_valid(respawn_button):
+				respawn_button.disabled = true
 			death_panel.visible = true
 		else:
 			var hit_message := "受到怪物攻击 -" + str(incoming_damage) + " 生命"
@@ -4258,6 +4266,7 @@ func _build_death_ui() -> void:
 	layout.add_child(death_message_label)
 	respawn_button = Button.new()
 	respawn_button.text = "复活并返回角色界面"
+	respawn_button.disabled = true
 	respawn_button.custom_minimum_size.y = 44.0
 	respawn_button.pressed.connect(_on_respawn_pressed)
 	layout.add_child(respawn_button)
