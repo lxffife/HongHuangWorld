@@ -9,6 +9,12 @@ const WALL_HEIGHT := 13.0
 const WALL_THICKNESS := 5.0
 const GATE_WIDTH := 16.0
 const OUTER_LANDSCAPE_EXTENT := 600.0
+const MOAT_WIDTH := 7.0
+const MOAT_SURFACE_Y := -0.12
+const MOAT_THICKNESS := 0.22
+const BRIDGE_CENTER_OFFSET := 7.5
+const BRIDGE_LENGTH := 17.0
+const BRIDGE_DECK_HEIGHT := 0.45
 
 static func get_city_config() -> Dictionary:
 	return {
@@ -56,6 +62,90 @@ static func get_approach_roads() -> Array[Dictionary]:
 		{"id": "east_approach", "center": Vector3(151, 0.02, 0), "size": Vector3(72, 0.12, 11), "surface": "road"},
 		{"id": "west_approach", "center": Vector3(-151, 0.02, 0), "size": Vector3(72, 0.12, 11), "surface": "road"}
 	]
+
+
+
+static func get_moat_segments() -> Array[Dictionary]:
+	var center := MOAT_HALF - MOAT_WIDTH * 0.5
+	return [
+		{"id": "north_moat", "center": Vector3(0, MOAT_SURFACE_Y, center), "size": Vector3(MOAT_HALF * 2.0, MOAT_THICKNESS, MOAT_WIDTH)},
+		{"id": "south_moat", "center": Vector3(0, MOAT_SURFACE_Y, -center), "size": Vector3(MOAT_HALF * 2.0, MOAT_THICKNESS, MOAT_WIDTH)},
+		{"id": "east_moat", "center": Vector3(center, MOAT_SURFACE_Y, 0), "size": Vector3(MOAT_WIDTH, MOAT_THICKNESS, MOAT_HALF * 2.0)},
+		{"id": "west_moat", "center": Vector3(-center, MOAT_SURFACE_Y, 0), "size": Vector3(MOAT_WIDTH, MOAT_THICKNESS, MOAT_HALF * 2.0)}
+	]
+
+
+static func get_bridges() -> Array[Dictionary]:
+	return [
+		{"id": "north_bridge", "gate_id": "north_heaven_gate", "center": Vector3(0, 0.12, CITY_HALF + BRIDGE_CENTER_OFFSET), "size": Vector3(GATE_WIDTH, BRIDGE_DECK_HEIGHT, BRIDGE_LENGTH)},
+		{"id": "south_bridge", "gate_id": "south_ghost_gate", "center": Vector3(0, 0.12, -CITY_HALF - BRIDGE_CENTER_OFFSET), "size": Vector3(GATE_WIDTH, BRIDGE_DECK_HEIGHT, BRIDGE_LENGTH)},
+		{"id": "east_bridge", "gate_id": "east_mystic_gate", "center": Vector3(CITY_HALF + BRIDGE_CENTER_OFFSET, 0.12, 0), "size": Vector3(BRIDGE_LENGTH, BRIDGE_DECK_HEIGHT, GATE_WIDTH)},
+		{"id": "west_bridge", "gate_id": "west_dark_gate", "center": Vector3(-CITY_HALF - BRIDGE_CENTER_OFFSET, 0.12, 0), "size": Vector3(BRIDGE_LENGTH, BRIDGE_DECK_HEIGHT, GATE_WIDTH)}
+	]
+
+
+static func get_wall_segments() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	var side_length := CITY_HALF * 2.0
+	var segment_length := (side_length - GATE_WIDTH) * 0.5
+	for z_sign in [-1.0, 1.0]:
+		for side_sign in [-1.0, 1.0]:
+			var z_side := "north" if z_sign > 0.0 else "south"
+			var x_side := "east" if side_sign > 0.0 else "west"
+			var x := side_sign * (GATE_WIDTH * 0.5 + segment_length * 0.5)
+			result.append({
+				"id": "%s_wall_%s" % [z_side, x_side],
+				"center": Vector3(x, WALL_HEIGHT * 0.5, z_sign * CITY_HALF),
+				"size": Vector3(segment_length, WALL_HEIGHT, WALL_THICKNESS)
+			})
+			var x_side_name := "east" if z_sign > 0.0 else "west"
+			var z_side_name := "north" if side_sign > 0.0 else "south"
+			var z := side_sign * (GATE_WIDTH * 0.5 + segment_length * 0.5)
+			result.append({
+				"id": "%s_wall_%s" % [x_side_name, z_side_name],
+				"center": Vector3(z_sign * CITY_HALF, WALL_HEIGHT * 0.5, z),
+				"size": Vector3(WALL_THICKNESS, WALL_HEIGHT, segment_length)
+			})
+	return result
+
+
+static func get_wall_towers() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for x_sign in [-1.0, 1.0]:
+		for z_sign in [-1.0, 1.0]:
+			var x_side := "east" if x_sign > 0.0 else "west"
+			var z_side := "north" if z_sign > 0.0 else "south"
+			var center := Vector3(x_sign * CITY_HALF, 10.0, z_sign * CITY_HALF)
+			result.append({
+				"id": "%s_%s_corner_tower" % [z_side, x_side],
+				"center": center,
+				"size": Vector3(10, 20, 10),
+				"roof_center": center + Vector3(0, 10.4, 0),
+				"roof_width": 12.0,
+				"roof_height": 4.0
+			})
+	return result
+
+
+static func get_wall_merlons() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	var side_length := CITY_HALF * 2.0
+	for side_sign in [-1.0, 1.0]:
+		for index in range(1, 8):
+			var offset := -CITY_HALF + float(index) * (side_length / 8.0)
+			var side_name := "north" if side_sign > 0.0 else "south"
+			result.append({
+				"id": "%s_wall_merlon_%d" % [side_name, index],
+				"center": Vector3(offset, WALL_HEIGHT + 1.1, side_sign * CITY_HALF),
+				"size": Vector3(2.0, 2.2, 5.8)
+			})
+			side_name = "east" if side_sign > 0.0 else "west"
+			result.append({
+				"id": "%s_wall_merlon_%d" % [side_name, index],
+				"center": Vector3(side_sign * CITY_HALF, WALL_HEIGHT + 1.1, offset),
+				"size": Vector3(5.8, 2.2, 2.0)
+			})
+	return result
 
 
 static func get_districts() -> Array[Dictionary]:
