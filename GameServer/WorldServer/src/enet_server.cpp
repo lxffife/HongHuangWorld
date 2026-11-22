@@ -2209,15 +2209,76 @@ struct EnetServer::Impl {
                 }
             }
 
-            if (reward_eligible && !killer_session_id.empty() && !killer_character_id.empty()) {
-                const auto reward_id = make_event_uuid();
-                append_event("character_reward", Json{
-                    {"event_id", reward_id},
-                    {"session_id", killer_session_id},
-                    {"character_id", killer_character_id},
-                    {"experience", 20 + static_cast<std::int64_t>(level) * 10},
-                    {"cultivation", 10 + static_cast<std::int64_t>(level) * 5}
+            // Base combat rewards belong to every authenticated contributor, not
+            // only the final hitter. Allocate integer rewards proportionally and
+            // distribute rounding leftovers by descending damage (stable tie-break).
+            struct RewardRecipient {
+                std::string session_id;
+                std::string character_id;
+                std::int64_t damage{};
+                std::int64_t experience{};
+                std::int64_t cultivation{};
+            };
+            std::vector<RewardRecipient> reward_recipients;
+            long double total_damage = 0.0L;
+            for (const auto& record : records) {
+                if (record.total_damage <= 0 || record.hit_count <= 0 ||
+                    record.session_id.empty() || record.character_id.empty()) continue;
+                reward_recipients.push_back(RewardRecipient{
+                    record.session_id, record.character_id, record.total_damage, 0, 0
                 });
+                total_damage += static_cast<long double>(record.total_damage);
+            }
+            std::sort(reward_recipients.begin(), reward_recipients.end(),
+                [](const RewardRecipient& left, const RewardRecipient& right) {
+                    if (left.damage != right.damage) return left.damage > right.damage;
+                    if (left.character_id != right.character_id)
+                        return left.character_id < right.character_id;
+                    return left.session_id < right.session_id;
+                });
+
+            if (total_damage > 0.0L && !reward_recipients.empty()) {
+                const auto base_experience = 20 + static_cast<std::int64_t>(level) * 10;
+                const auto base_cultivation = 10 + static_cast<std::int64_t>(level) * 5;
+                std::int64_t assigned_experience = 0;
+                std::int64_t assigned_cultivation = 0;
+                for (auto& recipient : reward_recipients) {
+                    const auto share = static_cast<long double>(recipient.damage) / total_damage;
+                    recipient.experience = static_cast<std::int64_t>(std::floor(
+                        static_cast<long double>(base_experience) * share));
+                    recipient.cultivation = static_cast<std::int64_t>(std::floor(
+                        static_cast<long double>(base_cultivation) * share));
+                    assigned_experience += recipient.experience;
+                    assigned_cultivation += recipient.cultivation;
+                }
+                auto experience_remainder = base_experience - assigned_experience;
+                auto cultivation_remainder = base_cultivation - assigned_cultivation;
+                for (auto& recipient : reward_recipients) {
+                    if (experience_remainder > 0) {
+                        ++recipient.experience;
+                        --experience_remainder;
+                    }
+                    if (cultivation_remainder > 0) {
+                        ++recipient.cultivation;
+                        --cultivation_remainder;
+                    }
+                }
+                for (const auto& recipient : reward_recipients) {
+                    if (recipient.experience <= 0 && recipient.cultivation <= 0) continue;
+                    const auto reward_id = make_event_uuid();
+                    append_event("character_reward", Json{
+                        {"event_id", reward_id},
+                        {"session_id", recipient.session_id},
+                        {"character_id", recipient.character_id},
+                        {"experience", recipient.experience},
+                        {"cultivation", recipient.cultivation}
+                    });
+                }
+            }
+
+            // Soul absorption and physical loot remain last-hit rewards. They
+            // are intentionally separate from the shared combat contribution pool.
+            if (reward_eligible && !killer_session_id.empty() && !killer_character_id.empty()) {
                 if (world_id == "underworld_fengdu") {
                     const auto soul_reward_id = make_event_uuid();
                     append_event("soul_reward", Json{
@@ -2307,7 +2368,6 @@ struct EnetServer::Impl {
             }
             monster->state.mode = honghuang::simulation::MonsterMode::Dead;
             monster->respawn_at = now + std::chrono::seconds(monster->retry_spawn_seconds);
-            const auto killer_character_id = monster->death_killer_character_id;
             monster->death_finalizer_submitted = true;
             monster->death_context_captured = false;
             monster->death_killer_session_id.clear();
@@ -2315,14 +2375,20 @@ struct EnetServer::Impl {
             monster->death_killer_bounty_objectives.clear();
             monster->death_reward_eligible = false;
             monster->pending_death_drops.clear();
-            if (!killer_character_id.empty()) {
+
+            // Notify currently connected contributors only after the durable
+            // reward batch is committed. Clients then refresh authoritative progression.
+            std::unordered_set<std::string> notified_characters;
+            for (const auto& [contributor_key, contribution] : monster->damage_contributions) {
+                (void)contributor_key;
+                if (contribution.character_id.empty() ||
+                    !notified_characters.insert(contribution.character_id).second) continue;
                 for (const auto& [peer, player] : players) {
-                    if (player.character_id != killer_character_id) continue;
+                    if (player.character_id != contribution.character_id) continue;
                     send_json(peer, honghuang::protocol::MessageType::CombatEvent, Json{
                         {"accepted", true}, {"action", "monster_death_settlement"},
                         {"target_entity_id", monster->runtime_id}, {"committed", true},
-                        {"experience_reward", 20 + static_cast<std::int64_t>(monster->definition.level) * 10},
-                        {"cultivation_reward", 10 + static_cast<std::int64_t>(monster->definition.level) * 5}
+                        {"contribution_only", true}
                     });
                     break;
                 }
