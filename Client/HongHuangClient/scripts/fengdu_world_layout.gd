@@ -169,6 +169,10 @@ static func get_market_auction_layout() -> Dictionary:
 			{"point_id": "ghost_market.auction.seat.03", "offset": Vector3(8.0, 0.0, 5.8), "facing": 0.0},
 			{"point_id": "ghost_market.auction.seat.04", "offset": Vector3(8.0, 0.0, 9.4), "facing": 0.0}
 		],
+		"audience_benches": [
+			{"point_id": "ghost_market.auction.bench.left", "offset": Vector3(-6.25, 0.0, 7.6), "facing": 1.0},
+			{"point_id": "ghost_market.auction.bench.right", "offset": Vector3(6.25, 0.0, 7.6), "facing": -1.0}
+		],
 		"pedestals": [
 			{"point_id": "ghost_market.auction.pedestal.left", "offset": Vector3(-4.95, 0.0, 7.8), "facing": 1.0},
 			{"point_id": "ghost_market.auction.pedestal.right", "offset": Vector3(4.95, 0.0, 7.8), "facing": -1.0}
