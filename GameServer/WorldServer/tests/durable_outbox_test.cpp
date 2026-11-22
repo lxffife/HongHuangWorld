@@ -4,6 +4,7 @@
 
 #include <cassert>
 #include <cstdio>
+#include <limits>
 #include <string>
 #include <atomic>
 #include <thread>
@@ -570,6 +571,52 @@ int main() {
         assert(restored.health == 0.0);
     }
     remove_database(pending_life_recovery_path);
+
+    const std::string checkpoint_path = "world_outbox_monster_checkpoint_test.sqlite";
+    remove_database(checkpoint_path);
+    {
+        honghuang::persistence::DurableOutbox box(checkpoint_path, 8);
+        std::string error;
+        honghuang::persistence::MonsterLifeStateRecord life{
+            "checkpoint-spawn", "checkpoint-life-1", "wolf", 83.0};
+        honghuang::persistence::MonsterLifeStateRecord persisted;
+        assert(box.ensure_monster_life_state(life, persisted, error));
+        const honghuang::persistence::MonsterRuntimeCheckpointRecord checkpoint{
+            "checkpoint-spawn", "checkpoint-life-1", "wolf",
+            12.25, -8.5, 1.2, 1, 0, 2000};
+        assert(box.save_monster_runtime_checkpoints({checkpoint}, error));
+        auto saved = box.load_monster_runtime_checkpoints(error);
+        assert(error.empty() && saved.size() == 1);
+        assert(saved.front().x == 12.25 && saved.front().z == -8.5 &&
+               saved.front().yaw == 1.2 && saved.front().mode == 1);
+        assert(!box.save_monster_runtime_checkpoints({
+            {"checkpoint-spawn", "checkpoint-life-1", "wolf",
+             std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0, 0, 0, 2001}}, error));
+        assert(!box.save_monster_runtime_checkpoints({checkpoint, checkpoint}, error));
+    }
+    {
+        // A process restart restores the last checkpoint, but stale life snapshots
+        // cannot overwrite a respawned life even if they arrive late from a batch.
+        honghuang::persistence::DurableOutbox reopened(checkpoint_path, 8);
+        std::string error;
+        auto restored = reopened.load_monster_runtime_checkpoints(error);
+        assert(error.empty() && restored.size() == 1);
+        assert(restored.front().monster_instance_id == "checkpoint-life-1");
+        assert(restored.front().x == 12.25);
+        assert(reopened.respawn_monster_life("checkpoint-life-1",
+            {"checkpoint-spawn", "checkpoint-life-2", "wolf", 100.0}, error));
+        assert(!reopened.save_monster_runtime_checkpoints({
+            {"checkpoint-spawn", "checkpoint-life-1", "wolf",
+             99.0, 99.0, 0.0, 0, 0, 3000}}, error));
+        assert(reopened.save_monster_runtime_checkpoints({
+            {"checkpoint-spawn", "checkpoint-life-2", "wolf",
+             2.0, 3.0, 0.5, 0, 0, 4000}}, error));
+        restored = reopened.load_monster_runtime_checkpoints(error);
+        assert(error.empty() && restored.size() == 1);
+        assert(restored.front().monster_instance_id == "checkpoint-life-2");
+        assert(restored.front().x == 2.0 && restored.front().checkpoint_at_ms == 4000);
+    }
+    remove_database(checkpoint_path);
 
     return 0;
 }
