@@ -83,6 +83,8 @@
 
 
 ## NPC behavior state presentation
+- The first spatial locomotion pass is restricted to four corners of the Soulward public square. Keep the old well's footprint clear; the tea pavilion resident remains at its existing idle point. Movement heading must not be overwritten by idle/social look gestures. Do not extend this route pattern across enclosed compounds without navigation and stuck recovery.
+
 
 - Prefer readable, role-specific short behavior loops over synchronized idle animation. Each local actor cycles through small state sets with per-agent phase offsets and state durations.
 - Merchants alternate between serving, greeting and arranging-stock gestures; residents use subtle conversation, tea-house and quiet-idle poses; soldiers keep drill and rest visually distinct; guides alternate ledger inspection and directing gestures.
