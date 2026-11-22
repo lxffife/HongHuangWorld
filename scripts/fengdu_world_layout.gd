@@ -118,6 +118,8 @@ static func get_navigation_network() -> Dictionary:
 			{"id": "road.cross.west", "from": "junction.west", "to": "junction.center", "width": 13.0, "two_way": true},
 			{"id": "road.cross.east", "from": "junction.center", "to": "junction.east", "width": 13.0, "two_way": true},
 			{"id": "road.west.north", "from": "junction.west.north", "to": "junction.north", "width": 6.0, "two_way": true},
+			{"id": "road.west.vertical.north", "from": "junction.west", "to": "junction.west.north", "width": 6.0, "two_way": true},
+			{"id": "road.east.vertical.north", "from": "junction.east", "to": "junction.east.north", "width": 6.0, "two_way": true},
 			{"id": "road.west.south", "from": "junction.west.south", "to": "junction.south", "width": 6.0, "two_way": true},
 			{"id": "road.east.north", "from": "junction.north", "to": "junction.east.north", "width": 6.0, "two_way": true},
 			{"id": "road.east.south", "from": "junction.south", "to": "junction.east.south", "width": 6.0, "two_way": true},
