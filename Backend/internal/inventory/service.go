@@ -755,14 +755,19 @@ func (s *Service) CraftEquipment(ctx context.Context,accountID string,request Cr
 	rows,err:=tx.QueryContext(ctx,`SELECT ri.item_id,ri.quantity,COALESCE(ci.quantity,0)
 		FROM equipment_crafting_ingredients ri
 		LEFT JOIN character_inventory ci ON ci.character_id=$2::uuid AND ci.item_id=ri.item_id
-		WHERE ri.recipe_id=$1 ORDER BY ri.item_id FOR UPDATE OF ci`,request.RecipeID,characterID)
+		WHERE ri.recipe_id=$1 ORDER BY ri.item_id`,request.RecipeID,characterID)
 	if err!=nil{return CraftResult{},fmt.Errorf("load crafting ingredients: %w",err)}
 	ingredients:=make([]ingredient,0)
 	for rows.Next(){var v ingredient;if err:=rows.Scan(&v.itemID,&v.quantity,&v.available);err!=nil{rows.Close();return CraftResult{},fmt.Errorf("scan crafting ingredient: %w",err)};ingredients=append(ingredients,v)}
 	if err:=rows.Err();err!=nil{rows.Close();return CraftResult{},fmt.Errorf("iterate crafting ingredients: %w",err)}
 	if err:=rows.Close();err!=nil{return CraftResult{},fmt.Errorf("close crafting ingredients: %w",err)}
 	if len(ingredients)==0{return CraftResult{},ErrInvalidRequest}
-	for _,v:=range ingredients{if v.available<v.quantity{return CraftResult{},ErrInsufficientMaterials}}
+	for i:=range ingredients{
+		if err:=tx.QueryRowContext(ctx,`SELECT quantity FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2 FOR UPDATE`,characterID,ingredients[i].itemID).Scan(&ingredients[i].available);err!=nil{
+			if errors.Is(err,sql.ErrNoRows){return CraftResult{},ErrInsufficientMaterials};return CraftResult{},fmt.Errorf("lock crafting material %s: %w",ingredients[i].itemID,err)
+		}
+		if ingredients[i].available<ingredients[i].quantity{return CraftResult{},ErrInsufficientMaterials}
+	}
 	if err:=ensureInventorySlot(ctx,tx,characterID,true);err!=nil{return CraftResult{},err}
 	for _,v:=range ingredients{
 		if _,err:=tx.ExecContext(ctx,`UPDATE character_inventory SET quantity=quantity-$3,updated_at=now() WHERE character_id=$1::uuid AND item_id=$2 AND quantity >= $3`,characterID,v.itemID,v.quantity);err!=nil{return CraftResult{},fmt.Errorf("consume crafting material %s: %w",v.itemID,err)}
