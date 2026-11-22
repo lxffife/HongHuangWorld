@@ -46,6 +46,10 @@ var market_caravans: Array[Dictionary] = []
 var market_guards: Array[Dictionary] = []
 var market_audience: Array[Dictionary] = []
 var market_event_label: Label3D
+var patrol_alert_elapsed := 0.0
+var patrol_alert_remaining := 0.0
+var patrol_alert_position := Vector3(0.0, 0.0, 12.0)
+var patrol_alert_sequence := 0
 
 var mats: Dictionary = {}
 
@@ -1426,6 +1430,11 @@ func _apply_npc_behavior_pose(agent: Dictionary, phase: float) -> void:
 		"patrol_watch":
 			if not bool(agent.get("moving", false)):
 				root.rotation.y = facing + sin(phase * 0.25) * 0.12
+		"alert_watch":
+			root.rotation.y = float(agent.get("alert_facing", facing))
+			left_arm.rotation.z = deg_to_rad(-58.0) + sin(phase * 1.6) * 0.08
+			right_arm.rotation.z = deg_to_rad(58.0) - sin(phase * 1.6) * 0.08
+			body.rotation.x = deg_to_rad(-3.0) + sin(phase * 1.1) * 0.015
 		"queue_wait", "queue_glance":
 			root.rotation.y = facing + (sin(phase * 0.28) * 0.08 if state == "queue_glance" else 0.0)
 			left_arm.rotation.z = deg_to_rad(-18.0)
@@ -1608,6 +1617,7 @@ func _update_npc_agents(delta: float) -> void:
 	_update_npc_population_manager()
 	npc_world_minutes = fposmod(npc_world_minutes + delta / NPC_DAY_SECONDS_PER_MINUTE, 1440.0)
 	_update_market_ambience(delta)
+	_update_patrol_alert(delta)
 	var schedule_bucket := int(npc_world_minutes / 5.0)
 	if schedule_bucket != npc_schedule_bucket:
 		npc_schedule_bucket = schedule_bucket
@@ -1643,6 +1653,13 @@ func _update_npc_agents(delta: float) -> void:
 			_sync_soldier_formation(agent)
 		if str(agent.get("role", "")) == "merchant":
 			_update_merchant_proximity_behavior(agent, distance_to_player)
+		if str(agent.get("role", "")) == "patrol_guard" and patrol_alert_remaining > 0.0:
+			var alert_distance := root.global_position.distance_to(patrol_alert_position)
+			if alert_distance <= 24.0:
+				var alert_direction := patrol_alert_position - root.global_position
+				if alert_direction.length_squared() > 0.01:
+					agent["alert_facing"] = atan2(-alert_direction.x, -alert_direction.z)
+				agent["state"] = "alert_watch"
 		if bool(agent["moving"]):
 			var route_index := int(agent["route_index"])
 			var route_progress := float(agent["route_progress"])
@@ -1721,6 +1738,19 @@ func _update_npc_agents(delta: float) -> void:
 				left_arm.rotation.z = deg_to_rad(-18.0)
 				right_arm.rotation.z = deg_to_rad(18.0)
 		_apply_npc_behavior_pose(agent, phase)
+
+
+func _update_patrol_alert(delta: float) -> void:
+	# Deterministic signal-tower drill; client presentation only, not a security incident.
+	if patrol_alert_remaining > 0.0:
+		patrol_alert_remaining = maxf(0.0, patrol_alert_remaining - delta)
+		return
+	patrol_alert_elapsed += delta
+	if patrol_alert_elapsed >= 48.0:
+		patrol_alert_elapsed = 0.0
+		patrol_alert_remaining = 7.0
+		patrol_alert_sequence += 1
+		print("[FengduPatrol] signal drill #%d at patrol headquarters" % patrol_alert_sequence)
 
 
 func _sync_soldier_formation(agent: Dictionary) -> void:
@@ -2359,7 +2389,9 @@ func _interact_with_focused_npc() -> void:
 			var patrol_index := int(npc_focus_agent.get("route_index", 0))
 			var patrol_names := ["中轴巡街", "北城官道", "北侧坊巷", "东侧官道", "东城外廊", "东南巡段", "南城官道", "西南巡段", "西侧官道", "西城外廊", "西北坊巷", "北西巡段", "北城回巡", "中轴复核", "巡防起点"]
 			var patrol_zone := patrol_names[patrol_index % patrol_names.size()] if str(npc_focus_agent.get("activity", "")) == "patrol_route" else "巡城司值守区"
-			if patrol_state == "patrol_watch":
+			if patrol_state == "alert_watch":
+				message = "%s：信号塔已发出警戒令，附近巡卫正在响应并确认周边动静。\n这是本地警戒演练，不代表真实治安事件或服务端执法结果。" % npc_name
+			elif patrol_state == "patrol_watch":
 				message = "%s：当前驻察%s。城门、坊巷与主街均在巡防簿册之内。\n本地演示：巡逻卫正在检查此处，不代表服务端治安事件。" % [npc_name, patrol_zone]
 			else:
 				message = "%s：巡防事务请报明来意。负责区域：%s。军令与治安任务尚未接入。" % [npc_name, patrol_zone]
