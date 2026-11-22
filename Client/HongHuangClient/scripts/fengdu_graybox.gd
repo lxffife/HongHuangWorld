@@ -1713,7 +1713,7 @@ func _apply_npc_behavior_pose(agent: Dictionary, phase: float) -> void:
 		"direct_souls", "registration":
 			left_arm.rotation.z = deg_to_rad(-18.0) + maxf(gesture, 0.0) * 0.18
 			right_arm.rotation.z = deg_to_rad(18.0) - maxf(-gesture, 0.0) * 0.34
-		"patrol_walk":
+		"patrol_walk", "patrol_dispatch", "patrol_return":
 			left_arm.rotation.z = deg_to_rad(-28.0) + sin(phase * 2.4) * 0.18
 			right_arm.rotation.z = deg_to_rad(28.0) - sin(phase * 2.4) * 0.18
 		"patrol_watch":
@@ -2143,8 +2143,11 @@ func _build_patrol_dispatch_path(origin: Vector3, destination: Vector3) -> Dicti
 	)
 	if not bool(route.get("found", false)):
 		return route
+	var route_points: Array = route.get("points", [])
+	if route_points.is_empty():
+		return {"found": false, "reason": "empty_route_points", "points": [], "distance": INF}
 	var points: Array[Vector3] = [origin]
-	for point in route.get("points", []):
+	for point in route_points:
 		var road_point: Vector3 = point
 		if points.back().distance_to(road_point) > 0.35:
 			points.append(road_point)
@@ -2155,7 +2158,7 @@ func _build_patrol_dispatch_path(origin: Vector3, destination: Vector3) -> Dicti
 		"reason": "",
 		"node_ids": route.get("node_ids", []),
 		"points": points,
-		"distance": float(route.get("distance", 0.0)) + origin.distance_to(route.get("points", [origin])[0]) + destination.distance_to(route.get("points", [destination])[-1])
+		"distance": float(route.get("distance", 0.0)) + origin.distance_to(route_points[0]) + destination.distance_to(route_points[-1])
 	}
 
 
