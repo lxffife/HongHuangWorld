@@ -314,6 +314,9 @@ static func create_npc(npc_type: String, npc_name: String) -> Node3D:
 		"soup_keeper":
 			robe = Color("#315d68")
 			trim = Color("#9bd8ce")
+		"blacksmith":
+			robe = Color("#51433a")
+			trim = Color("#e09a55")
 		_:
 			robe = Color("#746044")
 			trim = Color("#e6c77d")
@@ -348,6 +351,10 @@ static func create_npc(npc_type: String, npc_name: String) -> Node3D:
 		bowl.height = 0.12
 		_part(root, "ForgetfulnessBowl", bowl, Vector3(0.43, 1.02, -0.10), Color("#83c9bd"), Vector3.ZERO, 0.65, 0.22)
 		_part(root, "BowlMist", _sphere(0.075), Vector3(0.43, 1.16, -0.10), Color("#b6fff0"), Vector3.ZERO, 1.5, 0.0, 0.42)
+	elif npc_type == "blacksmith":
+		_part(root, "SmithApron", _box(Vector3(0.56, 0.72, 0.12)), Vector3(0.0, 0.78, -0.29), Color("#8a5b37"), Vector3.ZERO, 0.0, 0.15)
+		_part(root, "HammerHandle", _capsule(0.045, 0.72), Vector3(0.62, 1.12, -0.04), Color("#795338"), Vector3(0.0, 0.0, -0.65))
+		_part(root, "HammerHead", _box(Vector3(0.36, 0.16, 0.18)), Vector3(0.82, 1.42, -0.04), Color("#9ca5aa"), Vector3(0.0, 0.0, -0.65), 0.0, 0.55)
 	elif npc_type == "judge":
 		_part(root, "JudgeCrownBase", _box(Vector3(0.62, 0.16, 0.24)), Vector3(0.0, 2.14, 0.0), trim, Vector3.ZERO, 0.25, 0.3)
 		_part(root, "CrownFinial", _sphere(0.09), Vector3(0.0, 2.29, 0.0), Color("#e9d4ff"), Vector3.ZERO, 0.55)
