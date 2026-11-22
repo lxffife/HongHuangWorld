@@ -78,6 +78,7 @@ var mana_label: Label
 var health_bar: ProgressBar
 var mana_bar: ProgressBar
 var spell_cooldown_labels: Dictionary = {}
+var spell_mastery_labels: Dictionary = {}
 var spell_cooldown_remaining: Dictionary = {"fireball": 0.0, "ice_bolt": 0.0}
 var notification_panel: PanelContainer
 var notification_label: Label
@@ -952,7 +953,13 @@ func _build_combat_hud() -> void:
 		cooldown_label.add_theme_font_size_override("font_size", 11)
 		spell_cooldown_labels[spell_id] = cooldown_label
 		vitals_layout.add_child(cooldown_label)
+		var mastery_label := Label.new()
+		mastery_label.add_theme_color_override("font_color", Color("#9db9a7"))
+		mastery_label.add_theme_font_size_override("font_size", 10)
+		spell_mastery_labels[spell_id] = mastery_label
+		vitals_layout.add_child(mastery_label)
 	_update_spell_cooldown_hud()
+	_update_spell_mastery_hud()
 	notification_panel = PanelContainer.new()
 	notification_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	notification_panel.position = Vector2(-220.0, 96.0)
@@ -3034,6 +3041,28 @@ func _set_monster_freeze_visual(monster: Node3D, enabled: bool) -> void:
 		ring.visible = enabled
 
 
+func _update_spell_mastery_hud() -> void:
+	var entries: Variant = HHSession.world_snapshot.get("spell_mastery", [])
+	for spell_id in ["fireball", "ice_bolt"]:
+		var experience := 0
+		var level := 1
+		if entries is Array:
+			for entry in entries:
+				if entry is Dictionary and str(entry.get("spell_id", "")) == spell_id:
+					experience = clampi(int(entry.get("experience", 0)), 0, 4500)
+					level = clampi(int(entry.get("level", 1)), 1, 10)
+					break
+		var label: Label = spell_mastery_labels.get(spell_id) as Label
+		if not is_instance_valid(label):
+			continue
+		var next_thresholds := [100, 300, 600, 1000, 1500, 2100, 2800, 3600, 4500]
+		var progress_text := "已达上限"
+		if level < 10:
+			var next_xp := int(next_thresholds[level - 1])
+			progress_text = str(experience) + " / " + str(next_xp) + " 熟练度"
+		label.text = ("火球术" if spell_id == "fireball" else "冰锥术") + " · 熟练 Lv." + str(level) + " · " + progress_text
+
+
 func _on_combat_event(event: Dictionary) -> void:
 	# Death rewards are acknowledged only after the server has committed the
 	# durable settlement batch. Do not treat this as a normal zero-damage hit.
@@ -3087,6 +3116,30 @@ func _on_combat_event(event: Dictionary) -> void:
 		else:
 			_show_notification(str(event.get("reason", "消耗品使用失败。")), 3.0)
 			_refresh_inventory()
+		return
+	if str(event.get("action", "")) == "spell_mastery":
+		var spell_id := str(event.get("spell_id", ""))
+		if spell_id != "fireball" and spell_id != "ice_bolt":
+			return
+		var entries: Variant = HHSession.world_snapshot.get("spell_mastery", [])
+		if not (entries is Array):
+			entries = []
+		var previous_level := 1
+		var found := false
+		for index in range(entries.size()):
+			var item: Variant = entries[index]
+			if item is Dictionary and str(item.get("spell_id", "")) == spell_id:
+				previous_level = int(item.get("level", 1))
+				entries[index] = {"spell_id": spell_id, "experience": int(event.get("experience", 0)), "level": int(event.get("level", 1))}
+				found = true
+				break
+		if not found:
+			entries.append({"spell_id": spell_id, "experience": int(event.get("experience", 0)), "level": int(event.get("level", 1))})
+		HHSession.world_snapshot["spell_mastery"] = entries
+		_update_spell_mastery_hud()
+		var new_level := int(event.get("level", 1))
+		if new_level > previous_level:
+			_show_notification(("火球术" if spell_id == "fireball" else "冰锥术") + "熟练度提升至 Lv." + str(new_level) + "！", 3.0)
 		return
 	if str(event.get("action", "")) == "spell_cast":
 		if event.has("mana"):
