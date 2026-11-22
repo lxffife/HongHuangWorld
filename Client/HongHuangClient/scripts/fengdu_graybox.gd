@@ -60,6 +60,8 @@ var patrol_alert_elapsed := 0.0
 var patrol_alert_remaining := 0.0
 var patrol_alert_position := Vector3(0.0, 0.0, 12.0)
 var patrol_alert_sequence := 0
+var patrol_incident_queue: Array[Dictionary] = []
+var patrol_dispatch_queue_elapsed := 0.0
 
 var mats: Dictionary = {}
 
@@ -808,34 +810,40 @@ func _build_npc_population() -> void:
 	_build_market_auction_host()
 	_build_market_event_sign()
 
-	# One visible patrol guard follows the closed route; the other guards remain at posts.
+	# Three route walkers cover different perimeter sectors; static gate guards remain at their posts.
 	if patrol_route.size() > 1:
-		var patrol_root := Node3D.new()
-		patrol_root.name = "LocalNPC_PatrolWalker"
-		patrol_root.position = patrol_route[0]
-		add_child(patrol_root)
-		var patrol_agent := _create_npc_figure(patrol_root, "patrol_guard")
-		patrol_agent["npc_id"] = "patrol.guard.walker.01"
-		patrol_agent["display_name"] = "巡城卫·巡夜"
-		patrol_agent["district"] = "巡城司"
-		patrol_agent["interaction_type"] = "dispatch"
-		patrol_agent["importance"] = "regional"
-		patrol_agent["root"] = patrol_root
-		patrol_agent["role"] = "patrol_guard"
-		patrol_agent["activity"] = "patrol_route"
-		patrol_agent["phase"] = 0.0
-		patrol_agent["moving"] = true
-		patrol_agent["route_node_ids"] = patrol_route_node_ids.duplicate()
-		patrol_agent["route_network_id"] = "route.patrol.perimeter_loop"
-		patrol_agent["route_index"] = 0
-		patrol_agent["route_progress"] = 0.0
-		patrol_agent["move_speed"] = 2.6
-		patrol_agent["update_accumulator"] = 0.0
-		_initialize_npc_behavior(patrol_agent)
-		npc_agents.append(patrol_agent)
+		for patrol_slot in range(3):
+			var route_start_index := int(round(float(patrol_route.size()) * float(patrol_slot) / 3.0)) % patrol_route.size()
+			_create_patrol_route_guard(patrol_slot, route_start_index)
 	_rebuild_npc_population_index()
 	_apply_npc_schedules()
 
+
+
+func _create_patrol_route_guard(patrol_slot: int, route_start_index: int) -> void:
+	var patrol_root := Node3D.new()
+	patrol_root.name = "LocalNPC_PatrolWalker_%02d" % (patrol_slot + 1)
+	patrol_root.position = patrol_route[route_start_index]
+	add_child(patrol_root)
+	var patrol_agent := _create_npc_figure(patrol_root, "patrol_guard")
+	patrol_agent["npc_id"] = "patrol.guard.walker.%02d" % (patrol_slot + 1)
+	patrol_agent["display_name"] = "巡城卫·%s" % ["北巡", "东巡", "西巡"][patrol_slot]
+	patrol_agent["district"] = "巡城司"
+	patrol_agent["interaction_type"] = "dispatch"
+	patrol_agent["importance"] = "regional"
+	patrol_agent["root"] = patrol_root
+	patrol_agent["role"] = "patrol_guard"
+	patrol_agent["activity"] = "patrol_route"
+	patrol_agent["phase"] = float(patrol_slot) * 1.73
+	patrol_agent["moving"] = true
+	patrol_agent["route_node_ids"] = patrol_route_node_ids.duplicate()
+	patrol_agent["route_network_id"] = "route.patrol.perimeter_loop"
+	patrol_agent["route_index"] = route_start_index
+	patrol_agent["route_progress"] = 0.0
+	patrol_agent["move_speed"] = 2.6
+	patrol_agent["update_accumulator"] = 0.0
+	_initialize_npc_behavior(patrol_agent)
+	npc_agents.append(patrol_agent)
 
 
 func _build_market_customers() -> void:
@@ -2047,8 +2055,13 @@ func _update_market_gate_inspection(delta: float) -> void:
 			patrol_alert_position = market_center + Vector3(0.0, 0.0, -12.0)
 			patrol_alert_remaining = maxf(patrol_alert_remaining, 45.0)
 			patrol_alert_sequence += 1
-			_begin_patrol_dispatch(patrol_alert_position)
-			print("[FengduPatrol] market gate report #%d dispatched to patrol guards" % patrol_alert_sequence)
+			var incident_profile := _patrol_incident_profile(patrol_alert_sequence)
+			_begin_patrol_dispatch(patrol_alert_position, incident_profile)
+			print("[FengduPatrol] market gate report #%d queued: %s / %s" % [
+				patrol_alert_sequence,
+				str(incident_profile.get("title", "未知事件")),
+				str(incident_profile.get("severity_label", "一般"))
+			])
 	var inspecting := market_inspection_remaining > 0.0
 	var minute_of_day := int(npc_world_minutes / 60.0) * 60 + int(fposmod(npc_world_minutes, 60.0))
 	var welcoming_guests := minute_of_day >= 19 * 60 + 30 and minute_of_day < 20 * 60
@@ -2094,46 +2107,142 @@ func _update_market_gate_inspection(delta: float) -> void:
 		light.light_energy = 0.82 if inspecting else (0.48 + 0.08 * (0.5 + 0.5 * sin(market_ambience_time)))
 
 
-func _begin_patrol_dispatch(target_position: Vector3) -> void:
-	# Select the nearest available road patrol actor; this is a local prototype dispatcher.
-	var selected_agent: Dictionary = {}
-	var selected_distance := INF
-	for agent in npc_agents:
-		if str(agent.get("role", "")) != "patrol_guard":
-			continue
-		if str(agent.get("activity", "")) != "patrol_route" or str(agent.get("dispatch_state", "")) != "":
-			continue
-		var guard_root: Node3D = agent.get("root")
-		if guard_root == null or not is_instance_valid(guard_root):
-			continue
-		var distance := guard_root.position.distance_to(target_position)
-		if distance < selected_distance:
-			selected_distance = distance
-			selected_agent = agent
-	if selected_agent.is_empty():
-		print("[FengduPatrol] no available patrol guard for incident #%d" % patrol_alert_sequence)
-		return
+func _patrol_incident_profile(sequence: int) -> Dictionary:
+	# Scripted local demo cycle exercises response tiers; real incident facts must come from the game service.
+	match posmod(sequence - 1, 3):
+		0:
+			return {
+				"type": "suspicious_activity",
+				"title": "可疑魂影",
+				"severity": "low",
+				"severity_label": "低级",
+				"priority": 1,
+				"required_guards": 1,
+				"scene_duration": 5.0
+			}
+		1:
+			return {
+				"type": "crowd_disorder",
+				"title": "鬼市纠纷",
+				"severity": "medium",
+				"severity_label": "中级",
+				"priority": 2,
+				"required_guards": 2,
+				"scene_duration": 8.0
+			}
+		_:
+			return {
+				"type": "violent_conflict",
+				"title": "恶性冲突",
+				"severity": "high",
+				"severity_label": "高级",
+				"priority": 3,
+				"required_guards": 3,
+				"scene_duration": 12.0
+			}
 
-	var guard_root: Node3D = selected_agent["root"]
-	var dispatch_path := _build_patrol_dispatch_path(guard_root.position, target_position)
-	if not bool(dispatch_path.get("found", false)):
-		print("[FengduPatrol] route planning failed: %s" % str(dispatch_path.get("reason", "unknown")))
-		return
-	var route_index := int(selected_agent.get("route_index", 0))
+
+func _begin_patrol_dispatch(target_position: Vector3, incident_profile: Dictionary) -> void:
+	var incident := incident_profile.duplicate(true)
+	incident["incident_id"] = "fengdu.incident.%04d" % patrol_alert_sequence
+	incident["target_position"] = target_position
+	incident["created_order"] = patrol_alert_sequence
+	patrol_incident_queue.append(incident)
+	patrol_incident_queue.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var a_priority := int(a.get("priority", 0))
+		var b_priority := int(b.get("priority", 0))
+		if a_priority == b_priority:
+			return int(a.get("created_order", 0)) < int(b.get("created_order", 0))
+		return a_priority > b_priority
+	)
+	_process_patrol_dispatch_queue()
+
+
+func _process_patrol_dispatch_queue() -> void:
+	while not patrol_incident_queue.is_empty():
+		var incident: Dictionary = patrol_incident_queue[0]
+		var available_guards: Array[Dictionary] = []
+		for agent in npc_agents:
+			if str(agent.get("role", "")) != "patrol_guard":
+				continue
+			if str(agent.get("activity", "")) != "patrol_route" or str(agent.get("dispatch_state", "")) != "":
+				continue
+			var guard_root: Node3D = agent.get("root")
+			if guard_root == null or not is_instance_valid(guard_root):
+				continue
+			available_guards.append({
+				"agent": agent,
+				"distance": guard_root.position.distance_to(incident["target_position"])
+			})
+		available_guards.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			return float(a["distance"]) < float(b["distance"])
+		)
+		var required_guards := maxi(1, int(incident.get("required_guards", 1)))
+		if available_guards.size() < required_guards:
+			return
+
+		var dispatch_batch: Array[Dictionary] = []
+		var route_failed := false
+		for guard_slot in range(required_guards):
+			var candidate: Dictionary = available_guards[guard_slot]
+			var agent: Dictionary = candidate["agent"]
+			var guard_root: Node3D = agent["root"]
+			var lateral_offset := (float(guard_slot) - float(required_guards - 1) * 0.5) * 1.35
+			var guard_target: Vector3 = incident["target_position"] + Vector3(lateral_offset, 0.0, 0.0)
+			var path := _build_patrol_dispatch_path(guard_root.position, guard_target)
+			if not bool(path.get("found", false)):
+				print("[FengduPatrol] incident %s route failed: %s" % [
+					str(incident.get("incident_id", "")),
+					str(path.get("reason", "unknown"))
+				])
+				route_failed = true
+				break
+			dispatch_batch.append({
+				"agent": agent,
+				"path": path,
+				"target": guard_target
+			})
+		if route_failed:
+			return
+
+		patrol_incident_queue.pop_front()
+		for dispatch_data in dispatch_batch:
+			_start_patrol_guard_dispatch(
+				dispatch_data["agent"],
+				dispatch_data["path"],
+				dispatch_data["target"],
+				incident
+			)
+		print("[FengduPatrol] incident %s (%s) assigned to %d guards" % [
+			str(incident.get("incident_id", "")),
+			str(incident.get("severity_label", "一般")),
+			dispatch_batch.size()
+		])
+
+
+func _start_patrol_guard_dispatch(agent: Dictionary, dispatch_path: Dictionary, target_position: Vector3, incident: Dictionary) -> void:
+	var guard_root: Node3D = agent["root"]
+	var route_index := int(agent.get("route_index", 0))
 	var resume_index := posmod(route_index, maxi(patrol_route.size(), 1))
 	var resume_position: Vector3 = patrol_route[resume_index] if not patrol_route.is_empty() else guard_root.position
-	selected_agent["dispatch_resume_route_index"] = resume_index
-	selected_agent["dispatch_resume_position"] = resume_position
-	selected_agent["dispatch_target_position"] = target_position
-	selected_agent["dispatch_waypoints"] = dispatch_path.get("points", [])
-	selected_agent["dispatch_waypoint_index"] = 1
-	selected_agent["dispatch_state"] = "enroute"
-	selected_agent["dispatch_wait_remaining"] = 0.0
-	selected_agent["dispatch_incident_sequence"] = patrol_alert_sequence
-	selected_agent["state"] = "patrol_dispatch"
-	selected_agent["moving"] = false
+	agent["dispatch_resume_route_index"] = resume_index
+	agent["dispatch_resume_position"] = resume_position
+	agent["dispatch_target_position"] = target_position
+	agent["dispatch_waypoints"] = dispatch_path.get("points", [])
+	agent["dispatch_waypoint_index"] = 1
+	agent["dispatch_state"] = "enroute"
+	agent["dispatch_wait_remaining"] = 0.0
+	agent["dispatch_incident_id"] = str(incident.get("incident_id", ""))
+	agent["dispatch_incident_type"] = str(incident.get("type", "unknown"))
+	agent["dispatch_severity"] = str(incident.get("severity", "low"))
+	agent["dispatch_priority"] = int(incident.get("priority", 1))
+	agent["dispatch_scene_duration"] = float(incident.get("scene_duration", 6.0))
+	agent["dispatch_required_guards"] = int(incident.get("required_guards", 1))
+	agent["dispatch_incident_sequence"] = int(incident.get("created_order", patrol_alert_sequence))
+	agent["state"] = "patrol_dispatch"
+	agent["moving"] = false
 	print("[FengduPatrol] guard %s en route; path %.1fm, %d waypoints" % [
-		str(selected_agent.get("npc_id", "unknown")),
+		str(agent.get("npc_id", "unknown")),
 		float(dispatch_path.get("distance", 0.0)),
 		(dispatch_path.get("points", []) as Array).size()
 	])
@@ -2192,7 +2301,7 @@ func _advance_patrol_dispatch(agent: Dictionary, elapsed: float, phase: float) -
 				agent["dispatch_waypoint_index"] = 1
 				agent["dispatch_state"] = "returning"
 				agent["state"] = "patrol_return"
-				print("[FengduPatrol] incident #%d cleared; guard returning to patrol route" % int(agent.get("dispatch_incident_sequence", 0)))
+				print("[FengduPatrol] incident %s cleared; guard returning to patrol route" % str(agent.get("dispatch_incident_id", "unknown")))
 			else:
 				_finish_patrol_dispatch(agent)
 		return
@@ -2202,7 +2311,7 @@ func _advance_patrol_dispatch(agent: Dictionary, elapsed: float, phase: float) -
 	if waypoints.is_empty() or waypoint_index >= waypoints.size():
 		if dispatch_state == "enroute":
 			agent["dispatch_state"] = "on_scene"
-			agent["dispatch_wait_remaining"] = 6.0
+			agent["dispatch_wait_remaining"] = float(agent.get("dispatch_scene_duration", 6.0))
 			agent["alert_facing"] = root.rotation.y
 			agent["state"] = "alert_watch"
 			print("[FengduPatrol] guard arrived at incident #%d" % int(agent.get("dispatch_incident_sequence", 0)))
@@ -2252,28 +2361,59 @@ func _finish_patrol_dispatch(agent: Dictionary) -> void:
 	agent["dispatch_state"] = ""
 	agent["dispatch_waypoints"] = []
 	agent["dispatch_waypoint_index"] = 0
+	agent["dispatch_incident_id"] = ""
+	agent["dispatch_incident_type"] = ""
+	agent["dispatch_severity"] = ""
+	agent["dispatch_priority"] = 0
+	agent["dispatch_required_guards"] = 0
 	agent["state"] = "patrol_watch"
 	print("[FengduPatrol] guard resumed perimeter patrol at node %s" % str(patrol_route_node_ids[resume_index] if resume_index < patrol_route_node_ids.size() else resume_index))
 
 
 func _patrol_dispatch_status_text() -> String:
+	var enroute_count := 0
+	var on_scene_count := 0
+	var returning_count := 0
+	var active_severity := ""
 	for agent in npc_agents:
 		if str(agent.get("role", "")) != "patrol_guard":
 			continue
-		match str(agent.get("dispatch_state", "")):
+		var state := str(agent.get("dispatch_state", ""))
+		if state == "":
+			continue
+		if active_severity == "":
+			active_severity = str(agent.get("dispatch_severity", ""))
+		match state:
 			"enroute":
-				return "巡城卫已接令 · 正沿官道赶赴现场"
+				enroute_count += 1
 			"on_scene":
-				return "巡城卫已抵达 · 现场警戒中"
+				on_scene_count += 1
 			"returning":
-				return "现场处置完成 · 巡城卫正在归队"
+				returning_count += 1
+	var queued_count := patrol_incident_queue.size()
+	if enroute_count > 0:
+		return "巡防增援 · %d 名巡城卫正在赶赴现场 · 待处理 %d" % [enroute_count, queued_count]
+	if on_scene_count > 0:
+		return "现场处置 · %d 名巡城卫执行警戒 · 待处理 %d" % [on_scene_count, queued_count]
+	if returning_count > 0:
+		return "巡防归队 · %d 名巡城卫正在返回 · 待处理 %d" % [returning_count, queued_count]
+	if queued_count > 0:
+		var next_incident: Dictionary = patrol_incident_queue[0]
+		return "巡防待命 · %s（%s）等待足够人员" % [
+			str(next_incident.get("title", "事件")),
+			str(next_incident.get("severity_label", "一般"))
+		]
 	return ""
 
 
 func _update_patrol_alert(delta: float) -> void:
-	# Alert duration is driven by a gate report; no unrelated periodic drill is generated.
+	# Dispatch queue is serviced at a low cadence; it never recalculates a route per frame.
 	if patrol_alert_remaining > 0.0:
 		patrol_alert_remaining = maxf(0.0, patrol_alert_remaining - delta)
+	patrol_dispatch_queue_elapsed += delta
+	if patrol_dispatch_queue_elapsed >= 0.5:
+		patrol_dispatch_queue_elapsed = 0.0
+		_process_patrol_dispatch_queue()
 
 
 func _sync_soldier_formation(agent: Dictionary) -> void:
