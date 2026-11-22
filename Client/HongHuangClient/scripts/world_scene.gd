@@ -3188,7 +3188,10 @@ func _on_combat_event(event: Dictionary) -> void:
 			if is_instance_valid(defeated_nameplate):
 				defeated_nameplate.visible = false
 	var damage := int(event.get("damage", 0))
-	if not selected_monster_id.is_empty() and monster_entities.has(selected_monster_id):
+	# CombatEvent health belongs to its target, not necessarily the currently
+	# selected target. Never let an off-target hit corrupt the target HUD.
+	var health_target_id := str(event.get("target_entity_id", ""))
+	if not selected_monster_id.is_empty() and health_target_id == selected_monster_id and monster_entities.has(selected_monster_id):
 		var selected_entity: Dictionary = monster_entities[selected_monster_id]
 		if event.has("health"):
 			selected_entity["health"] = int(event.get("health", 0))
@@ -4007,6 +4010,8 @@ func _on_reconnected_welcomed(snapshot: Dictionary) -> void:
 		reconnect_network.combat_event.connect(_on_combat_event)
 	if not reconnect_network.monster_action_event.is_connected(_on_monster_action_event):
 		reconnect_network.monster_action_event.connect(_on_monster_action_event)
+	if not reconnect_network.player_action_event.is_connected(_on_player_action_event):
+		reconnect_network.player_action_event.connect(_on_player_action_event)
 	if not reconnect_network.pickup_event.is_connected(_on_pickup_event):
 		reconnect_network.pickup_event.connect(_on_pickup_event)
 	if not reconnect_network.chat_event.is_connected(_on_chat_event):
