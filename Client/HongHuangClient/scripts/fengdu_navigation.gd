@@ -3,6 +3,56 @@ extends RefCounted
 ## This is a logical planner; NavigationAgent3D remains responsible for physical movement.
 
 
+static func validate_network(network: Dictionary) -> Dictionary:
+	var errors: Array[String] = []
+	var node_ids: Dictionary = {}
+	for node in network.get("nodes", []):
+		var node_id := str(node.get("id", ""))
+		if node_id == "":
+			errors.append("node_missing_id")
+		elif node_ids.has(node_id):
+			errors.append("duplicate_node:" + node_id)
+		else:
+			node_ids[node_id] = true
+	var edge_ids: Dictionary = {}
+	for edge in network.get("edges", []):
+		var edge_id := str(edge.get("id", ""))
+		var from_id := str(edge.get("from", ""))
+		var to_id := str(edge.get("to", ""))
+		if edge_id == "":
+			errors.append("edge_missing_id")
+		elif edge_ids.has(edge_id):
+			errors.append("duplicate_edge:" + edge_id)
+		else:
+			edge_ids[edge_id] = true
+		if not node_ids.has(from_id) or not node_ids.has(to_id):
+			errors.append("edge_endpoint_missing:" + edge_id)
+		if from_id == to_id:
+			errors.append("self_loop:" + edge_id)
+	for route in network.get("routes", []):
+		var waypoints: Array = route.get("waypoints", [])
+		for index in range(maxi(waypoints.size() - 1, 0)):
+			var from_id := str(waypoints[index])
+			var to_id := str(waypoints[index + 1])
+			var connected := false
+			for edge in network.get("edges", []):
+				if str(edge.get("from", "")) == from_id and str(edge.get("to", "")) == to_id:
+					connected = true
+					break
+				if bool(edge.get("two_way", false)) and str(edge.get("from", "")) == to_id and str(edge.get("to", "")) == from_id:
+					connected = true
+					break
+			if not node_ids.has(from_id) or not node_ids.has(to_id) or not connected:
+				errors.append("route_segment_disconnected:" + str(route.get("id", "unknown")))
+	return {
+		"valid": errors.is_empty(),
+		"node_count": node_ids.size(),
+		"edge_count": edge_ids.size(),
+		"route_count": network.get("routes", []).size(),
+		"errors": errors
+	}
+
+
 static func find_nearest_node(network: Dictionary, world_position: Vector3, allowed_kinds: Array = []) -> Dictionary:
 	var best_node: Dictionary = {}
 	var best_distance := INF
