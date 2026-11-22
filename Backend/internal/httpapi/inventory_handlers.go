@@ -140,7 +140,7 @@ func (h *inventoryHandlers) salvageEquipment(w http.ResponseWriter,r *http.Reque
 	switch{
 	case err==nil:writeJSON(w,http.StatusOK,result)
 	case errors.Is(err,inventory.ErrInvalidRequest):http.Error(w,"equipment instance is not owned, equipped, or salvageable",http.StatusBadRequest)
-	case errors.Is(err,inventory.ErrCharacterInWorld):http.Error(w,"leave the world before salvaging equipment",http.StatusConflict)
+	case errors.Is(err,inventory.ErrCharacterInWorld):http.Error(w,"character is changing world sessions; retry shortly",http.StatusConflict)
 	case errors.Is(err,inventory.ErrInventoryFull):http.Error(w,"material stack is full",http.StatusConflict)
 	case errors.Is(err,inventory.ErrIdempotencyConflict):http.Error(w,"request id was already used",http.StatusConflict)
 	default:h.logger.Error("salvage equipment failed","account_id",account.ID,"error",err);http.Error(w,"internal server error",http.StatusInternalServerError)
