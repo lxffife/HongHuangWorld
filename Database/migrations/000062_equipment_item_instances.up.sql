@@ -34,6 +34,17 @@ CREATE TABLE character_item_instances (
 ALTER TABLE character_equipment
     ADD COLUMN item_instance_id UUID UNIQUE REFERENCES item_instances(id) ON DELETE RESTRICT;
 
+-- Early-game wolves can now drop real, independently rolled equipment.
+INSERT INTO item_definitions (id,name,category,quality,max_stack,icon_key,description,equipment_slot,base_stats) VALUES
+('wolfbone_short_sword','荒狼骨刃','equipment',2,1,'weapon_wolfbone_blade','以荒狼骨骼打磨而成的短刃，轻巧而锋利。','weapon','{"attack":8,"strength":1}'::jsonb),
+('wolfhide_vest','荒狼皮甲','equipment',2,1,'armor_wolfhide_vest','以荒狼皮革鞣制的护胸，兼具韧性与灵活性。','chest','{"defense":4,"vitality":1}'::jsonb)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO monster_loot_entries (monster_id,item_id,drop_chance_bp,min_quantity,max_quantity) VALUES
+('wilderness_wolf','wolfbone_short_sword',450,1,1),
+('wilderness_wolf','wolfhide_vest',350,1,1)
+ON CONFLICT (monster_id,item_id) DO NOTHING;
+
 INSERT INTO equipment_affix_definitions (id,name,equipment_slot,stat_key,min_value,max_value,weight,min_quality) VALUES
 ('weapon_attack_keen','锋锐','weapon','attack',2,5,100,1),
 ('weapon_strength','强力','weapon','strength',1,3,80,1),
