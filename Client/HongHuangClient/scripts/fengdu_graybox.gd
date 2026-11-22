@@ -46,6 +46,10 @@ var market_caravans: Array[Dictionary] = []
 var market_guards: Array[Dictionary] = []
 var market_audience: Array[Dictionary] = []
 var market_event_label: Label3D
+var market_inspection_label: Label3D
+var market_inspection_elapsed := 0.0
+var market_inspection_remaining := 0.0
+var market_inspection_sequence := 0
 var patrol_alert_elapsed := 0.0
 var patrol_alert_remaining := 0.0
 var patrol_alert_position := Vector3(0.0, 0.0, 12.0)
@@ -1007,6 +1011,16 @@ func _build_market_guards() -> void:
 			"phase": float(index) * 1.9,
 			"base_yaw": PI
 		})
+	market_inspection_label = Label3D.new()
+	market_inspection_label.name = "GhostMarketNightInspectionStatus"
+	market_inspection_label.position = market_center + Vector3(0.0, 3.35, -12.8)
+	market_inspection_label.font_size = 14
+	market_inspection_label.pixel_size = 0.01
+	market_inspection_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	market_inspection_label.modulate = Color("#a9c3d2")
+	market_inspection_label.outline_size = 5
+	market_inspection_label.outline_modulate = Color("#101722")
+	add_child(market_inspection_label)
 
 
 func _build_market_event_sign() -> void:
@@ -1164,6 +1178,7 @@ func _update_market_ambience(delta: float) -> void:
 		guard_left.rotation.z = deg_to_rad(-18.0) + sin(guard_phase * 0.6) * 0.018
 		guard_right.rotation.z = deg_to_rad(18.0) - sin(guard_phase * 0.6 + 0.8) * 0.018
 		guard_root.rotation.y = float(guard_data["base_yaw"]) + sin(guard_phase * 0.25) * 0.025
+	_update_market_gate_inspection(delta)
 	for caravan_data in market_caravans:
 		var caravan_root: Node3D = caravan_data["root"]
 		caravan_root.visible = npc_schedule_night
@@ -1653,14 +1668,31 @@ func _update_npc_agents(delta: float) -> void:
 			_sync_soldier_formation(agent)
 		if str(agent.get("role", "")) == "merchant":
 			_update_merchant_proximity_behavior(agent, distance_to_player)
-		if str(agent.get("role", "")) == "patrol_guard" and patrol_alert_remaining > 0.0:
-			var alert_distance := root.global_position.distance_to(patrol_alert_position)
-			if alert_distance <= 24.0:
+		var patrol_alert_override := false
+		if str(agent.get("role", "")) == "patrol_guard":
+			var should_alert := patrol_alert_remaining > 0.0 and root.global_position.distance_to(patrol_alert_position) <= 24.0
+			var was_alerted := bool(agent.get("alert_override", false))
+			if should_alert:
+				if not was_alerted:
+					agent["alert_resume_moving"] = bool(agent.get("moving", false))
+					agent["alert_hold_position"] = root.position
 				var alert_direction := patrol_alert_position - root.global_position
 				if alert_direction.length_squared() > 0.01:
 					agent["alert_facing"] = atan2(-alert_direction.x, -alert_direction.z)
+				agent["alert_override"] = true
 				agent["state"] = "alert_watch"
-		if bool(agent["moving"]):
+				patrol_alert_override = true
+			elif was_alerted:
+				agent["alert_override"] = false
+				agent["moving"] = bool(agent.get("alert_resume_moving", false))
+				agent["state"] = "patrol_walk" if bool(agent["moving"]) else "patrol_watch"
+		if patrol_alert_override:
+			root.position = agent.get("alert_hold_position", root.position)
+			root.rotation.y = float(agent.get("alert_facing", root.rotation.y))
+			body.position.y = 0.92 + sin(phase * 1.4) * 0.018
+			left_arm.rotation.z = deg_to_rad(-58.0) + sin(phase * 1.6) * 0.08
+			right_arm.rotation.z = deg_to_rad(58.0) - sin(phase * 1.6) * 0.08
+		elif bool(agent["moving"]):
 			var route_index := int(agent["route_index"])
 			var route_progress := float(agent["route_progress"])
 			var route: Array = agent.get("waypoints", patrol_route)
@@ -1738,6 +1770,44 @@ func _update_npc_agents(delta: float) -> void:
 				left_arm.rotation.z = deg_to_rad(-18.0)
 				right_arm.rotation.z = deg_to_rad(18.0)
 		_apply_npc_behavior_pose(agent, phase)
+
+
+func _update_market_gate_inspection(delta: float) -> void:
+	if market_inspection_label == null:
+		return
+	market_inspection_label.visible = npc_schedule_night
+	if not npc_schedule_night:
+		market_inspection_remaining = 0.0
+		market_inspection_label.text = "夜市巡防 · 白日休市"
+		return
+	if market_inspection_remaining > 0.0:
+		market_inspection_remaining = maxf(0.0, market_inspection_remaining - delta)
+	elif delta > 0.0:
+		market_inspection_elapsed += delta
+		if market_inspection_elapsed >= 72.0:
+			market_inspection_elapsed = 0.0
+			market_inspection_remaining = 10.0
+			market_inspection_sequence += 1
+	var inspecting := market_inspection_remaining > 0.0
+	market_inspection_label.text = ("巡夜巡查 · 入口核验 #%d" % market_inspection_sequence) if inspecting else "夜市巡防 · 正常"
+	market_inspection_label.modulate = Color("#e4bd82") if inspecting else Color("#a9c3d2")
+	for index in range(market_guards.size()):
+		var guard_data: Dictionary = market_guards[index]
+		var guard_root: Node3D = guard_data["root"]
+		if not guard_root.visible:
+			continue
+		var phase := market_ambience_time * 1.3 + float(guard_data["phase"])
+		if inspecting:
+			var side := -1.0 if index == 0 else 1.0
+			guard_root.rotation.y = float(guard_data["base_yaw"]) + side * 0.32
+			(guard_data["left_arm"] as MeshInstance3D).rotation.z = deg_to_rad(-52.0) + sin(phase) * 0.035
+			(guard_data["right_arm"] as MeshInstance3D).rotation.z = deg_to_rad(52.0) - sin(phase) * 0.035
+		else:
+			guard_root.rotation.y = float(guard_data["base_yaw"]) + sin(phase * 0.2) * 0.025
+			(guard_data["left_arm"] as MeshInstance3D).rotation.z = deg_to_rad(-18.0) + sin(phase * 0.6) * 0.018
+			(guard_data["right_arm"] as MeshInstance3D).rotation.z = deg_to_rad(18.0) - sin(phase * 0.6 + 0.8) * 0.018
+	for light in market_lights:
+		light.light_energy = 0.82 if inspecting else (0.48 + 0.08 * (0.5 + 0.5 * sin(market_ambience_time)))
 
 
 func _update_patrol_alert(delta: float) -> void:
