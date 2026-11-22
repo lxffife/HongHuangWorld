@@ -121,6 +121,7 @@ struct PlayerState {
     Clock::time_point last_pickup_at{};
     Clock::time_point last_chat_at{};
     Clock::time_point last_combat_refresh_at{};
+    bool death_snapshot_queued{false};
 };
 
 enum class MonsterAttackPhase { Ready, Windup, Recovery };
@@ -1143,6 +1144,7 @@ struct EnetServer::Impl {
     std::mutex persistence_mutex;
     std::condition_variable persistence_cv;
     std::unordered_map<std::string, PlayerState> pending_snapshots;
+    std::deque<std::string> completed_death_snapshots;
     std::unordered_set<std::string> revoked_sessions;
     bool persistence_stop_requested{false};
     std::thread persistence_thread;
@@ -2562,7 +2564,13 @@ struct EnetServer::Impl {
                         std::lock_guard lock(consumable_mutex);
                         snapshot_inflight_sessions.erase(session_id);
                     }
-                    if (saved) continue;
+                    if (saved) {
+                        if (player.health <= 0) {
+                            std::lock_guard lock(persistence_mutex);
+                            completed_death_snapshots.push_back(session_id);
+                        }
+                        continue;
+                    }
                     if (inactive) {
                         std::lock_guard lock(persistence_mutex);
                         revoked_sessions.insert(session_id);
@@ -2584,6 +2592,36 @@ struct EnetServer::Impl {
                 if (persistence_stop_requested) return;
             }
         });
+    }
+
+    void enqueue_death_snapshot(ENetPeer* peer) {
+        const auto found = players.find(peer);
+        if (found == players.end() || found->second.health > 0 ||
+            found->second.death_snapshot_queued) return;
+        auto& player = found->second;
+        player.death_snapshot_queued = true;
+        {
+            std::lock_guard lock(persistence_mutex);
+            pending_snapshots[player.session_id] = player;
+        }
+        persistence_cv.notify_one();
+    }
+
+    void drain_death_snapshot_results() {
+        std::deque<std::string> completed;
+        {
+            std::lock_guard lock(persistence_mutex);
+            completed.swap(completed_death_snapshots);
+        }
+        for (const auto& session_id : completed) {
+            for (const auto& [peer, player] : players) {
+                if (player.session_id != session_id || player.health > 0) continue;
+                send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                    Json{{"accepted", true}, {"action", "player_death_persisted"},
+                         {"health", 0}, {"character_id", player.character_id}});
+                break;
+            }
+        }
     }
 
     void enqueue_periodic_snapshots() {
@@ -4054,6 +4092,7 @@ struct EnetServer::Impl {
         drain_monster_death_results();
         drain_drop_results();
         drain_combat_refresh_results();
+        drain_death_snapshot_results();
         const auto now = Clock::now();
         for (auto& [peer, player] : players) {
             (void)peer;
@@ -4098,6 +4137,7 @@ struct EnetServer::Impl {
                         player.poison_effect = {};
                         player.poison_source_entity_id.clear();
                         player.slow_effect = {};
+                        enqueue_death_snapshot(peer);
                     }
                 } else if (!honghuang::simulation::periodic_damage_is_active(
                                player.poison_effect, effect_now_ms)) {
@@ -4769,6 +4809,7 @@ struct EnetServer::Impl {
                         target_player.slow_effect = {};
                         target_player.poison_effect = {};
                         target_player.poison_source_entity_id.clear();
+                        enqueue_death_snapshot(target_peer);
                     }
                     broadcast_player_action_event(target_player, "hit", monster.runtime_id, "heavy_slam", target_peer);
                     send_json(target_peer, honghuang::protocol::MessageType::CombatEvent,
@@ -4797,6 +4838,7 @@ struct EnetServer::Impl {
                 if (damage.defeated) {
                     honghuang::simulation::clear_negative_statuses(player.slow_effect,player.freeze_effect,player.poison_effect);
                     player.poison_source_entity_id.clear();
+                    enqueue_death_snapshot(victim->first);
                 }
                 bool applied_slow = false;
                 bool applied_poison = false;
