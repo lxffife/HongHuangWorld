@@ -708,6 +708,19 @@ type Reward struct {
 
 type RewardResult struct {
 	Applied bool `json:"applied"`
+	PartyBonusApplied bool `json:"party_bonus_applied"`
+}
+
+// Party members receive a modest combat bonus only on rewards backed by their
+// own persisted damage contribution. Non-contributing party members never
+// receive experience or cultivation from this path.
+const partyCombatBonusBasisPoints int64 = 1000
+
+func applyPartyCombatBonus(value int64) int64 {
+	if value <= 0 {
+		return value
+	}
+	return value + value*partyCombatBonusBasisPoints/10000
 }
 
 // ApplyServerReward accepts rewards from the node that hosted the exact session.
@@ -769,6 +782,32 @@ func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward 
 		return RewardResult{}, fmt.Errorf("verify active character session for reward: %w", err)
 	}
 
+	// Resolve party membership against the exact world instance recorded on the
+	// rewarded session. This is deliberately evaluated only after the session
+	// has been authenticated, and only this contributor's own reward is boosted.
+	// It never fans rewards out to party members who did not damage the monster.
+	var partyBonusApplied bool
+	err = tx.QueryRowContext(ctx,
+		`SELECT EXISTS (
+			SELECT 1
+			FROM party_members pm
+			JOIN parties p ON p.id = pm.party_id AND p.status = 'active'
+			JOIN world_sessions reward_session
+			  ON reward_session.id = $2::uuid AND reward_session.server_id = $3
+			WHERE pm.character_id = $1::uuid
+			  AND p.world_instance_id = reward_session.instance_id
+		)`, reward.CharacterID, reward.SessionID, serverID,
+	).Scan(&partyBonusApplied)
+	if err != nil {
+		return RewardResult{}, fmt.Errorf("resolve party combat bonus: %w", err)
+	}
+	appliedExperience := reward.Experience
+	appliedCultivation := reward.Cultivation
+	if partyBonusApplied {
+		appliedExperience = applyPartyCombatBonus(appliedExperience)
+		appliedCultivation = applyPartyCombatBonus(appliedCultivation)
+	}
+
 	var eventRecordID string
 	err = tx.QueryRowContext(ctx,
 		`INSERT INTO character_reward_events
@@ -807,7 +846,7 @@ func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward 
 	if err := tx.Commit(); err != nil {
 		return RewardResult{}, fmt.Errorf("commit character reward: %w", err)
 	}
-	return RewardResult{Applied: true}, nil
+	return RewardResult{Applied: true, PartyBonusApplied: partyBonusApplied}, nil
 }
 
 func validReward(nodeKey string, reward Reward) bool {
