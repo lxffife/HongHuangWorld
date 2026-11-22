@@ -2354,7 +2354,7 @@ func _prune_patrol_incident_history() -> void:
 		var removable_index := -1
 		for index in range(patrol_incident_records.size()):
 			var state := str(patrol_incident_records[index].get("state", ""))
-			if state == "closed" or state == "resolved":
+			if state == "closed":
 				removable_index = index
 				break
 		if removable_index < 0:
