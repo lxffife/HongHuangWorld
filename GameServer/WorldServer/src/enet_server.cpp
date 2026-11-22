@@ -3740,6 +3740,7 @@ struct EnetServer::Impl {
             }
             constexpr float projectile_speed = 24.0F;
             const auto projectile_id = make_event_uuid();
+            player.last_spell_at_by_id[pending.spell_id] = now;
             projectiles.push_back(ProjectileRuntime{
                 projectile_id, player.character_id, target->runtime_id,
                 player.x, player.y + 1.15F, player.z,
@@ -3871,7 +3872,8 @@ struct EnetServer::Impl {
         }
         if (projectiles.size() >= 128) { reject("当前投射物数量过多，请稍后再试。"); return; }
         player.mana -= spell->mana_cost;
-        player.last_spell_at_by_id[std::string(spell->id)] = now;
+        // Cooldown begins when the spell is actually released. Interrupted
+        // casts refund mana and must not consume a cooldown.
         player.pending_spell = PendingSpellCast{std::string(spell->id), target_id,
             now + std::chrono::milliseconds(spell->cast_time_ms)};
         send_json(peer, honghuang::protocol::MessageType::CombatEvent,
