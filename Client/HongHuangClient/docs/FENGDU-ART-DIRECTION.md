@@ -52,3 +52,4 @@
 2. Add modular gatehouse pieces: brackets, columns, ridge caps, corner finials and door leaves.
 3. Add terrain height bands and navigable ramps before adding decorative cliff meshes.
 4. Validate at the actual target resolution and on the target low-end GPU.
+\n## Market and residential quarter blockout\n\n- The ghost market uses a continuous central trading aisle, six inward-facing stalls, an auction dais, service-side lanes, notice boards and emissive lantern props.\n- The soul ward uses four offset courtyard homes around a shared square and well, with a small tea pavilion as a social anchor.\n- Candidate NPC activity coordinates are stored locally for later integration; they are not authoritative spawn points and do not imply NPC navigation is implemented.\n
