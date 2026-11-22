@@ -935,10 +935,10 @@ func _build_market_customers() -> void:
 			"base_yaw": float(customer_stalls[index]["yaw"]),
 			"base_position": base_position,
 			"event_position": event_position,
-			"preferred_stall_id": "ghost_market.stall.%02d" % (index + 1),
+			"preferred_stall_id": _market_customer_route_for_index(index)[0],
 			"stall_route_ids": _market_customer_route_for_index(index),
 			"route_stall_index": 0,
-			"target_stall_id": "ghost_market.stall.%02d" % (index + 1),
+			"target_stall_id": _market_customer_route_for_index(index)[0],
 			"target_position": _market_customer_stand_position("ghost_market.stall.%02d" % (index + 1), index),
 			"visit_count": 0,
 			"stop_elapsed": 0.0,
@@ -956,16 +956,16 @@ func _build_market_customers() -> void:
 
 
 func _market_customer_route_for_index(customer_index: int) -> Array[String]:
-	# Each visitor follows one side of the market, avoiding the central aisle.
+	# Keep two visitors on each side; route order follows each side physical stall positions.
 	match clampi(customer_index, 0, 3):
 		0:
 			return ["ghost_market.stall.01", "ghost_market.stall.02", "ghost_market.stall.03"]
 		1:
-			return ["ghost_market.stall.02", "ghost_market.stall.03", "ghost_market.stall.01"]
+			return ["ghost_market.stall.06", "ghost_market.stall.05", "ghost_market.stall.04"]
 		2:
-			return ["ghost_market.stall.03", "ghost_market.stall.01", "ghost_market.stall.02"]
+			return ["ghost_market.stall.02", "ghost_market.stall.03", "ghost_market.stall.01"]
 		_:
-			return ["ghost_market.stall.04", "ghost_market.stall.05", "ghost_market.stall.06"]
+			return ["ghost_market.stall.05", "ghost_market.stall.04", "ghost_market.stall.06"]
 
 
 func _market_customer_stand_position(stall_id: String, customer_index: int) -> Vector3:
@@ -974,7 +974,7 @@ func _market_customer_stand_position(stall_id: String, customer_index: int) -> V
 			continue
 		var stall_position: Vector3 = stall.get("position", Vector3.ZERO)
 		var facing := float(stall.get("facing", 0.0))
-		var side_offset := -0.55 if customer_index % 2 == 0 else 0.55
+		var side_offset := (float(customer_index) - 1.5) * 0.38
 		return stall_position + Vector3(facing * 2.75, 0.0, side_offset)
 	return Vector3.ZERO
 
