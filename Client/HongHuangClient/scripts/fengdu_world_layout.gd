@@ -487,7 +487,9 @@ static func get_district_service_entrances() -> Array[Dictionary]:
 	]
 
 
-static func get_spatial_binding_for_point(point: Dictionary) -> Dictionary:
+static func get_spatial_binding_for_point(point: Dictionary, network: Dictionary = {}) -> Dictionary:
+	if network.is_empty():
+		network = get_navigation_network()
 	var district_name := str(point.get("district", ""))
 	var district_id := ""
 	var entry_id := ""
@@ -496,7 +498,6 @@ static func get_spatial_binding_for_point(point: Dictionary) -> Dictionary:
 			district_id = str(entrance["district_id"])
 			entry_id = str(entrance["navigation_node_id"])
 			break
-	var network := get_navigation_network()
 	var nearest_node_id := ""
 	var nearest_distance := INF
 	var point_position: Vector3 = point.get("position", Vector3.ZERO)
