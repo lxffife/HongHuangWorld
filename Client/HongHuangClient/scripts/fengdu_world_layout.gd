@@ -55,6 +55,87 @@ static func get_roads() -> Array[Dictionary]:
 	]
 
 
+static func get_local_connectors() -> Array[Dictionary]:
+	# Short paved links connect district gates to the existing tier-2 and palace roads.
+	return [
+		{"id": "connector_soulward", "center": Vector3(-44.5, 0.035, -66.0), "size": Vector3(21.0, 0.1, 4.5), "surface": "road"},
+		{"id": "connector_ghost_market", "center": Vector3(44.5, 0.035, -66.0), "size": Vector3(21.0, 0.1, 4.5), "surface": "road"},
+		{"id": "connector_soul_registry", "center": Vector3(-43.0, 0.035, -8.0), "size": Vector3(18.0, 0.1, 4.5), "surface": "road"},
+		{"id": "connector_merit_bureau", "center": Vector3(43.0, 0.035, -8.0), "size": Vector3(18.0, 0.1, 4.5), "surface": "road"},
+		{"id": "connector_ten_kings", "center": Vector3(-39.0, 0.035, 36.5), "size": Vector3(24.0, 0.1, 4.5), "surface": "road"},
+		{"id": "connector_judge_bureau", "center": Vector3(39.0, 0.035, 36.5), "size": Vector3(24.0, 0.1, 4.5), "surface": "road"},
+		{"id": "connector_barracks", "center": Vector3(-55.5, 0.035, -13.5), "size": Vector3(43.0, 0.1, 4.5), "surface": "road"},
+		{"id": "connector_waystation", "center": Vector3(55.5, 0.035, -13.5), "size": Vector3(43.0, 0.1, 4.5), "surface": "road"},
+		{"id": "connector_reincarnation", "center": Vector3(0.0, 0.035, -45.0), "size": Vector3(4.5, 0.1, 26.0), "surface": "road"}
+	]
+
+
+static func get_navigation_network() -> Dictionary:
+	# Stable topology; positions are city-local meters and can be remapped to NavigationServer later.
+	return {
+		"nodes": [
+			{"id": "gate.north", "position": Vector3(0, 0, 96), "kind": "city_gate"},
+			{"id": "gate.south", "position": Vector3(0, 0, -96), "kind": "city_gate"},
+			{"id": "gate.east", "position": Vector3(96, 0, 0), "kind": "city_gate"},
+			{"id": "gate.west", "position": Vector3(-96, 0, 0), "kind": "city_gate"},
+			{"id": "junction.center", "position": Vector3(0, 0, 0), "kind": "junction"},
+			{"id": "junction.north", "position": Vector3(0, 0, 32), "kind": "junction"},
+			{"id": "junction.south", "position": Vector3(0, 0, -32), "kind": "junction"},
+			{"id": "junction.west", "position": Vector3(-34, 0, 0), "kind": "junction"},
+			{"id": "junction.east", "position": Vector3(34, 0, 0), "kind": "junction"},
+			{"id": "junction.west.north", "position": Vector3(-34, 0, 32), "kind": "junction"},
+			{"id": "junction.west.south", "position": Vector3(-34, 0, -32), "kind": "junction"},
+			{"id": "junction.east.north", "position": Vector3(34, 0, 32), "kind": "junction"},
+			{"id": "junction.east.south", "position": Vector3(34, 0, -32), "kind": "junction"},
+			{"id": "junction.palace.west", "position": Vector3(-27, 0, 34), "kind": "junction"},
+			{"id": "junction.palace.east", "position": Vector3(27, 0, 34), "kind": "junction"},
+			{"id": "district.soul_ward.entry", "position": Vector3(-55, 0, -66), "kind": "district_entry"},
+			{"id": "district.ghost_market.entry", "position": Vector3(55, 0, -66), "kind": "district_entry"},
+			{"id": "district.soul_registry.entry", "position": Vector3(-52, 0, -8), "kind": "district_entry"},
+			{"id": "district.merit_bureau.entry", "position": Vector3(52, 0, -8), "kind": "district_entry"},
+			{"id": "district.ten_kings.entry", "position": Vector3(-51, 0, 36.5), "kind": "district_entry"},
+			{"id": "district.judge_bureau.entry", "position": Vector3(51, 0, 36.5), "kind": "district_entry"},
+			{"id": "district.patrol_office.entry", "position": Vector3(0, 0, 2), "kind": "district_entry"},
+			{"id": "district.reincarnation.entry", "position": Vector3(0, 0, -58), "kind": "district_entry"},
+			{"id": "district.barracks.entry", "position": Vector3(-77, 0, -13.5), "kind": "district_entry"},
+			{"id": "district.waystation.entry", "position": Vector3(77, 0, -13.5), "kind": "district_entry"}
+		],
+		"edges": [
+			{"id": "road.gate.north", "from": "gate.north", "to": "junction.north", "width": 11.0, "two_way": true},
+			{"id": "road.gate.south", "from": "gate.south", "to": "junction.south", "width": 11.0, "two_way": true},
+			{"id": "road.gate.east", "from": "gate.east", "to": "junction.east", "width": 11.0, "two_way": true},
+			{"id": "road.gate.west", "from": "gate.west", "to": "junction.west", "width": 11.0, "two_way": true},
+			{"id": "road.axis.north", "from": "junction.north", "to": "junction.center", "width": 13.0, "two_way": true},
+			{"id": "road.axis.south", "from": "junction.center", "to": "junction.south", "width": 13.0, "two_way": true},
+			{"id": "road.cross.west", "from": "junction.west", "to": "junction.center", "width": 13.0, "two_way": true},
+			{"id": "road.cross.east", "from": "junction.center", "to": "junction.east", "width": 13.0, "two_way": true},
+			{"id": "road.west.north", "from": "junction.west.north", "to": "junction.north", "width": 6.0, "two_way": true},
+			{"id": "road.west.south", "from": "junction.west.south", "to": "junction.south", "width": 6.0, "two_way": true},
+			{"id": "road.east.north", "from": "junction.north", "to": "junction.east.north", "width": 6.0, "two_way": true},
+			{"id": "road.east.south", "from": "junction.south", "to": "junction.east.south", "width": 6.0, "two_way": true},
+			{"id": "road.palace.west", "from": "junction.palace.west", "to": "junction.north", "width": 5.0, "two_way": true},
+			{"id": "road.palace.east", "from": "junction.north", "to": "junction.palace.east", "width": 5.0, "two_way": true},
+			{"id": "road.soul_ward.connector", "from": "junction.west.south", "to": "district.soul_ward.entry", "width": 4.5, "two_way": true},
+			{"id": "road.ghost_market.connector", "from": "junction.east.south", "to": "district.ghost_market.entry", "width": 4.5, "two_way": true},
+			{"id": "road.soul_registry.connector", "from": "junction.west", "to": "district.soul_registry.entry", "width": 4.5, "two_way": true},
+			{"id": "road.merit_bureau.connector", "from": "junction.east", "to": "district.merit_bureau.entry", "width": 4.5, "two_way": true},
+			{"id": "road.ten_kings.connector", "from": "junction.palace.west", "to": "district.ten_kings.entry", "width": 4.5, "two_way": true},
+			{"id": "road.judge_bureau.connector", "from": "junction.palace.east", "to": "district.judge_bureau.entry", "width": 4.5, "two_way": true},
+			{"id": "road.patrol_office.connector", "from": "junction.center", "to": "district.patrol_office.entry", "width": 5.0, "two_way": true},
+			{"id": "road.reincarnation.connector", "from": "junction.south", "to": "district.reincarnation.entry", "width": 4.5, "two_way": true},
+			{"id": "road.barracks.connector", "from": "junction.west", "to": "district.barracks.entry", "width": 4.5, "two_way": true},
+			{"id": "road.waystation.connector", "from": "junction.east", "to": "district.waystation.entry", "width": 4.5, "two_way": true}
+		],
+		"routes": [
+			{"id": "route.south_gate_to_reincarnation", "from": "gate.south", "to": "district.reincarnation.entry", "waypoints": ["gate.south", "junction.south", "district.reincarnation.entry"], "purpose": "忘川与轮回方向"},
+			{"id": "route.waystation_to_registry", "from": "district.waystation.entry", "to": "district.soul_registry.entry", "waypoints": ["district.waystation.entry", "junction.east", "junction.center", "junction.west", "district.soul_registry.entry"], "purpose": "新魂登记"},
+			{"id": "route.registry_to_judgment", "from": "district.soul_registry.entry", "to": "district.ten_kings.entry", "waypoints": ["district.soul_registry.entry", "junction.west", "junction.north", "junction.palace.west", "district.ten_kings.entry"], "purpose": "鬼籍核验后进入审判"},
+			{"id": "route.registry_to_judge_review", "from": "district.soul_registry.entry", "to": "district.judge_bureau.entry", "waypoints": ["district.soul_registry.entry", "junction.west", "junction.center", "junction.east", "junction.north", "junction.palace.east", "district.judge_bureau.entry"], "purpose": "档案复核与文书交接"},
+			{"id": "route.judgment_to_reincarnation", "from": "district.ten_kings.entry", "to": "district.reincarnation.entry", "waypoints": ["district.ten_kings.entry", "junction.palace.west", "junction.north", "junction.center", "junction.south", "district.reincarnation.entry"], "purpose": "判决后前往轮回司"}
+		]
+	}
+
+
 static func get_approach_roads() -> Array[Dictionary]:
 	return [
 		{"id": "north_approach", "center": Vector3(0, 0.02, 151), "size": Vector3(11, 0.12, 72), "surface": "road"},
