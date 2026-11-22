@@ -4392,7 +4392,19 @@ func review_case_appeal(incident_id: String, appeal_id: String, decision: String
 			party_judgment["revised_at"] = npc_simulation_time
 			party_judgments[party_id] = party_judgment
 			record["party_judgments"] = party_judgments
-		record["judicial_conclusion"] = revised_outcome
+		if party_id.is_empty():
+			record["judicial_conclusion"] = revised_outcome
+		else:
+			var revised_outcomes: Array[String] = []
+			var all_party_judgments: Dictionary = record.get("party_judgments", {})
+			for party_judgment_value in all_party_judgments.values():
+				revised_outcomes.append(str(party_judgment_value.get("outcome", "")))
+			var aggregate_outcome := revised_outcomes[0] if not revised_outcomes.is_empty() else "insufficient_evidence"
+			for party_outcome in revised_outcomes:
+				if party_outcome != aggregate_outcome:
+					aggregate_outcome = "mixed_outcomes"
+					break
+			record["judicial_conclusion"] = aggregate_outcome
 		record["case_workflow_state"] = "judgment_issued"
 		record["judge_review_state"] = "judgment_revised_on_appeal"
 	elif decision == "reopen_hearing":
@@ -4448,6 +4460,10 @@ func review_case_appeal(incident_id: String, appeal_id: String, decision: String
 		if another_pending_appeal:
 			record["case_workflow_state"] = "appeal_pending"
 			record["judge_review_state"] = "appeal_pending"
+		else:
+			record["case_workflow_state"] = "judgment_issued"
+			if decision == "uphold":
+				record["judge_review_state"] = "judgment_issued"
 	record["appeal_records"] = appeal_records
 	_append_incident_timeline_entry(record, "appeal_decided", "申诉处理结果：%s" % decision, "judge_bureau")
 	patrol_incident_records[record_index] = record
