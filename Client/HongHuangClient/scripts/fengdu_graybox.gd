@@ -544,15 +544,17 @@ func _build_activity_registry() -> void:
 		Vector3(0, 0, 12),
 		Vector3(0, 0, 32),
 		Vector3(0, 0, 78),
-		Vector3(0, 0, 96),
 		Vector3(34, 0, 78),
 		Vector3(34, 0, 32),
 		Vector3(34, 0, -32),
+		Vector3(34, 0, -78),
 		Vector3(0, 0, -78),
-		Vector3(0, 0, -96),
 		Vector3(-34, 0, -78),
 		Vector3(-34, 0, -32),
 		Vector3(-34, 0, 32),
+		Vector3(-34, 0, 78),
+		Vector3(0, 0, 78),
+		Vector3(0, 0, 32),
 		Vector3(0, 0, 12)
 	]
 	for route_position in patrol_route:
