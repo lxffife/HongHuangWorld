@@ -48,7 +48,9 @@ func (h *inventoryHandlers) current(w http.ResponseWriter, r *http.Request) {
 	if err != nil { http.Error(w, "unauthorized", http.StatusUnauthorized); return }
 	items, err := h.service.CurrentInventory(r.Context(), account.ID)
 	if err != nil { h.logger.Error("load current inventory failed", "error", err); http.Error(w, "internal server error", http.StatusInternalServerError); return }
-	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+	capacity,err:=h.service.CurrentCapacity(r.Context(),account.ID)
+	if err!=nil{h.logger.Error("load current inventory capacity failed","error",err);http.Error(w,"internal server error",http.StatusInternalServerError);return}
+	writeJSON(w,http.StatusOK,map[string]any{"items":items,"capacity":capacity})
 }
 
 
