@@ -558,6 +558,8 @@ func _build_activity_registry() -> void:
 				"capacity": 1,
 				"radius": 1.4
 			}
+			if str(district_name) == "万家魂坊" and index < 4:
+				point["waypoints"] = _soulward_resident_waypoints()
 			activity_points.append(point)
 
 	# Three arrivals wait between the entrance rails before reaching the registration desk.
@@ -660,6 +662,17 @@ func _activity_facing(district_name: String, point_position: Vector3, index: int
 	return 0.0
 
 
+func _soulward_resident_waypoints() -> Array[Vector3]:
+	# Four clear corners of the public square; the central well and tea pavilion stay clear.
+	var center := Vector3(-55.0, 0.0, -53.0)
+	return [
+		center + Vector3(-4.0, 0.0, -2.0),
+		center + Vector3(4.0, 0.0, -2.0),
+		center + Vector3(4.0, 0.0, 3.0),
+		center + Vector3(-4.0, 0.0, 3.0)
+	]
+
+
 func _build_npc_population() -> void:
 	# These local stand-ins now have stable prototype identities and interaction metadata.
 	# They remain client-only and must later be reconciled with server-owned actor IDs.
@@ -686,8 +699,14 @@ func _build_npc_population() -> void:
 		agent["activity"] = str(point["activity"])
 		agent["schedule_tag"] = str(point["schedule_tag"])
 		agent["phase"] = float(npc_agents.size()) * 1.37
-		agent["moving"] = false
+		var npc_waypoints: Array = point.get("waypoints", [])
+		agent["moving"] = role == "resident" and npc_waypoints.size() > 1
 		agent["base_position"] = point["position"]
+		if bool(agent["moving"]):
+			agent["waypoints"] = npc_waypoints
+			agent["route_index"] = role_index % npc_waypoints.size()
+			agent["route_progress"] = 0.0
+			agent["move_speed"] = 1.05
 		agent["facing"] = float(point["facing"])
 		agent["gesture_rate"] = 0.72 + float(npc_agents.size() % 5) * 0.13
 		agent["update_accumulator"] = 0.0
@@ -738,7 +757,7 @@ func _npc_behavior_states(role: String) -> Array:
 		"merchant":
 			return ["trade_idle", "greet", "arrange_goods", "trade_idle", "close_shop"]
 		"resident":
-			return ["square_chat", "tea_social", "well_idle", "home_idle"]
+			return ["square_walk", "square_chat", "tea_social", "well_idle", "home_idle"]
 		"soldier":
 			return ["formation_ready", "drill", "formation_ready", "rest"]
 		"guide":
@@ -759,7 +778,7 @@ func _npc_behavior_duration(role: String, state: String, phase: float) -> float:
 			base = 6.0
 		"close_shop", "rest", "home_idle":
 			base = 8.0
-		"tea_social", "square_chat", "trade_idle", "drill":
+		"tea_social", "square_chat", "square_walk", "trade_idle", "drill":
 			base = 5.5
 		"patrol_walk", "patrol_watch":
 			base = 10.0
@@ -817,6 +836,9 @@ func _apply_npc_behavior_pose(agent: Dictionary, phase: float) -> void:
 		"close_shop":
 			left_arm.rotation.z = deg_to_rad(-12.0) + gesture * 0.04
 			right_arm.rotation.z = deg_to_rad(12.0) - gesture * 0.04
+		"square_walk":
+			left_arm.rotation.z = deg_to_rad(-24.0) + sin(phase * 2.4) * 0.14
+			right_arm.rotation.z = deg_to_rad(24.0) - sin(phase * 2.4) * 0.14
 		"square_chat", "tea_social":
 			root.rotation.y = facing + sin(phase * 0.38) * (0.24 if state == "square_chat" else 0.12)
 			left_arm.rotation.z = deg_to_rad(-28.0) + gesture * 0.08
@@ -844,6 +866,11 @@ func _apply_npc_behavior_pose(agent: Dictionary, phase: float) -> void:
 		"direct_souls", "registration":
 			left_arm.rotation.z = deg_to_rad(-18.0) + maxf(gesture, 0.0) * 0.18
 			right_arm.rotation.z = deg_to_rad(18.0) - maxf(-gesture, 0.0) * 0.34
+		"patrol_walk":
+			left_arm.rotation.z = deg_to_rad(-28.0) + sin(phase * 2.4) * 0.18
+			right_arm.rotation.z = deg_to_rad(28.0) - sin(phase * 2.4) * 0.18
+		"patrol_watch":
+			root.rotation.y = facing + sin(phase * 0.25) * 0.12
 		"queue_wait", "queue_glance":
 			root.rotation.y = facing + (sin(phase * 0.28) * 0.08 if state == "queue_glance" else 0.0)
 			left_arm.rotation.z = deg_to_rad(-18.0)
@@ -1040,17 +1067,18 @@ func _update_npc_agents(delta: float) -> void:
 		if bool(agent["moving"]):
 			var route_index := int(agent["route_index"])
 			var route_progress := float(agent["route_progress"])
-			var start: Vector3 = patrol_route[route_index]
-			var next_index := (route_index + 1) % patrol_route.size()
-			var finish: Vector3 = patrol_route[next_index]
+			var route: Array = agent.get("waypoints", patrol_route)
+			var start: Vector3 = route[route_index]
+			var next_index := (route_index + 1) % route.size()
+			var finish: Vector3 = route[next_index]
 			var segment_length := maxf(start.distance_to(finish), 0.01)
 			route_progress += float(agent["move_speed"]) * elapsed / segment_length
 			while route_progress >= 1.0:
 				route_progress -= 1.0
 				route_index = next_index
-				next_index = (route_index + 1) % patrol_route.size()
-				start = patrol_route[route_index]
-				finish = patrol_route[next_index]
+				next_index = (route_index + 1) % route.size()
+				start = route[route_index]
+				finish = route[next_index]
 				segment_length = maxf(start.distance_to(finish), 0.01)
 			root.position = start.lerp(finish, route_progress)
 			var direction := finish - start
@@ -1095,7 +1123,7 @@ func _update_npc_agents(delta: float) -> void:
 			else:
 				left_arm.rotation.z = deg_to_rad(-18.0)
 				right_arm.rotation.z = deg_to_rad(18.0)
-			_apply_npc_behavior_pose(agent, phase)
+		_apply_npc_behavior_pose(agent, phase)
 
 
 func _apply_npc_schedules() -> void:
