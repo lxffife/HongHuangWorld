@@ -188,6 +188,7 @@ func (s *Service) CurrentInventory(ctx context.Context, accountID string) ([]Ite
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate inventory: %w", err) }
+	if err := rows.Close(); err != nil { return nil, fmt.Errorf("close inventory stacks: %w", err) }
 	instanceRows, err := s.db.QueryContext(ctx, `SELECT ii.id::text,i.id,i.name,i.category,ii.quality,i.max_stack,i.icon_key,i.description,
 		i.item_type,COALESCE(i.equipment_slot,''),COALESCE(i.weapon_type,''),i.base_stats,ii.rolled_stats,ii.affixes,
 		COALESCE(es.id,''),COALESCE(es.name,''),COALESCE(es.description,''),COALESCE(es.bonus_tiers,'{}'::jsonb)
@@ -366,7 +367,8 @@ func (s *Service) CreateDrop(ctx context.Context, nodeKey string, request DropRe
 }
 
 // PickupDrop is called after the WorldServer has validated range and pickup
-// permissions. The DB transaction consumes one drop and adds one inventory stack.
+// permissions. The DB transaction atomically consumes a drop and transfers either
+// a stackable item or its unique equipment instance into the character inventory.
 func (s *Service) PickupDrop(ctx context.Context, nodeKey string, request PickupRequest) (Result, error) {
 	if strings.TrimSpace(nodeKey) == "" || !validUUID(request.EventID) || !validUUID(request.DropID) ||
 		!validUUID(request.SessionID) || !validUUID(request.CharacterID) {
