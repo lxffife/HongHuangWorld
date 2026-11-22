@@ -2428,7 +2428,8 @@ func _prune_patrol_incident_history() -> void:
 				"under_judicial_review",
 				"hearing_pending",
 				"hearing_in_progress",
-				"hearing_closed_pending_judgment"
+				"hearing_closed_pending_judgment",
+				"appeal_pending"
 			]
 			if state == "closed" and not legal_case_active:
 				removable_index = index
@@ -4160,6 +4161,325 @@ func close_case_hearing(incident_id: String, hearing_note: String) -> Dictionary
 	}
 
 
+func record_case_party_judgment(incident_id: String, party_id: String, outcome: String, reason: String, cited_evidence_tags: Array[String]) -> Dictionary:
+	var record_index := _find_patrol_incident_record(incident_id)
+	if record_index < 0:
+		return {"ok": false, "reason": "case_not_found"}
+	var record: Dictionary = patrol_incident_records[record_index]
+	if str(record.get("case_workflow_state", "")) != "hearing_closed_pending_judgment":
+		return {"ok": false, "reason": "hearing_must_be_closed_before_judgment"}
+	if outcome not in ["acquitted", "insufficient_evidence", "responsible", "mitigated"]:
+		return {"ok": false, "reason": "invalid_judgment_outcome"}
+	if reason.strip_edges().is_empty():
+		return {"ok": false, "reason": "judgment_reason_required"}
+	var submission: Dictionary = record.get("case_submission", {})
+	var parties: Array = submission.get("case_parties", [])
+	var party_found := false
+	for party_value in parties:
+		if str(party_value.get("party_id", "")) == party_id:
+			party_found = true
+			break
+	if not party_found:
+		return {"ok": false, "reason": "case_party_not_found"}
+	var judgments: Dictionary = record.get("party_judgments", {}).duplicate(true)
+	if judgments.has(party_id):
+		return {"ok": false, "reason": "party_judgment_already_recorded"}
+	var hearing: Dictionary = record.get("hearing_record", {})
+	var presented: Array = hearing.get("presented_evidence_tags", [])
+	var assessments: Dictionary = record.get("judicial_review", {}).get("evidence_assessments", {})
+	var validated_tags: Array[String] = []
+	for tag in cited_evidence_tags:
+		if not presented.has(tag):
+			return {"ok": false, "reason": "judgment_cites_unpresented_evidence", "evidence_tag": tag}
+		if not assessments.has(tag) or str(assessments[tag].get("assessment", "")) != "accepted":
+			return {"ok": false, "reason": "judgment_cites_unaccepted_evidence", "evidence_tag": tag}
+		if not validated_tags.has(tag):
+			validated_tags.append(tag)
+	if outcome in ["responsible", "mitigated"] and validated_tags.is_empty():
+		return {"ok": false, "reason": "responsibility_requires_presented_accepted_evidence"}
+	var defense_statement := ""
+	for party_value in parties:
+		if str(party_value.get("party_id", "")) == party_id:
+			defense_statement = str(party_value.get("defense_statement", ""))
+			break
+	judgments[party_id] = {
+		"party_id": party_id,
+		"outcome": outcome,
+		"reason": reason.strip_edges(),
+		"cited_evidence_tags": validated_tags,
+		"defense_statement_considered": not defense_statement.is_empty(),
+		"defense_statement": defense_statement,
+		"issued_at": npc_simulation_time,
+		"source": "judge_bureau"
+	}
+	record["party_judgments"] = judgments
+	_append_incident_timeline_entry(record, "party_judgment_recorded", "涉案人员判决已记录：%s" % outcome, party_id)
+	patrol_incident_records[record_index] = record
+	return {"ok": true, "party_id": party_id, "outcome": outcome, "case_finalized": false}
+
+
+func record_case_judgment(incident_id: String, outcome: String, reason: String, cited_evidence_tags: Array[String]) -> Dictionary:
+	var record_index := _find_patrol_incident_record(incident_id)
+	if record_index < 0:
+		return {"ok": false, "reason": "case_not_found"}
+	var record: Dictionary = patrol_incident_records[record_index]
+	if str(record.get("case_workflow_state", "")) != "hearing_closed_pending_judgment":
+		return {"ok": false, "reason": "hearing_must_be_closed_before_judgment"}
+	if not record.get("case_submission", {}).get("case_parties", []).is_empty():
+		return {"ok": false, "reason": "individual_party_judgments_required"}
+	if record.has("case_judgment"):
+		return {"ok": false, "reason": "case_judgment_already_recorded"}
+	if outcome not in ["acquitted", "insufficient_evidence", "responsible", "mitigated"]:
+		return {"ok": false, "reason": "invalid_judgment_outcome"}
+	if reason.strip_edges().is_empty():
+		return {"ok": false, "reason": "judgment_reason_required"}
+	var hearing: Dictionary = record.get("hearing_record", {})
+	var presented: Array = hearing.get("presented_evidence_tags", [])
+	var assessments: Dictionary = record.get("judicial_review", {}).get("evidence_assessments", {})
+	var validated_tags: Array[String] = []
+	for tag in cited_evidence_tags:
+		if not presented.has(tag):
+			return {"ok": false, "reason": "judgment_cites_unpresented_evidence", "evidence_tag": tag}
+		if not assessments.has(tag) or str(assessments[tag].get("assessment", "")) != "accepted":
+			return {"ok": false, "reason": "judgment_cites_unaccepted_evidence", "evidence_tag": tag}
+		if not validated_tags.has(tag):
+			validated_tags.append(tag)
+	if outcome in ["responsible", "mitigated"] and validated_tags.is_empty():
+		return {"ok": false, "reason": "responsibility_requires_presented_accepted_evidence"}
+	record["case_judgment"] = {
+		"outcome": outcome,
+		"reason": reason.strip_edges(),
+		"cited_evidence_tags": validated_tags,
+		"issued_at": npc_simulation_time,
+		"source": "judge_bureau"
+	}
+	_append_incident_timeline_entry(record, "case_judgment_recorded", "案件判决已记录：%s" % outcome, "judge_bureau")
+	patrol_incident_records[record_index] = record
+	return {"ok": true, "outcome": outcome, "case_finalized": false}
+
+
+func finalize_case_judgment(incident_id: String) -> Dictionary:
+	var record_index := _find_patrol_incident_record(incident_id)
+	if record_index < 0:
+		return {"ok": false, "reason": "case_not_found"}
+	var record: Dictionary = patrol_incident_records[record_index]
+	if str(record.get("case_workflow_state", "")) != "hearing_closed_pending_judgment":
+		return {"ok": false, "reason": "case_not_waiting_for_judgment"}
+	var parties: Array = record.get("case_submission", {}).get("case_parties", [])
+	var judgments: Dictionary = record.get("party_judgments", {})
+	var outcomes: Array[String] = []
+	if parties.is_empty():
+		if not record.has("case_judgment"):
+			return {"ok": false, "reason": "case_judgment_required"}
+		outcomes.append(str(record.get("case_judgment", {}).get("outcome", "insufficient_evidence")))
+	else:
+		var missing_parties: Array[String] = []
+		for party_value in parties:
+			var party_id := str(party_value.get("party_id", ""))
+			if not judgments.has(party_id):
+				missing_parties.append(party_id)
+			else:
+				outcomes.append(str(judgments[party_id].get("outcome", "")))
+		if not missing_parties.is_empty():
+			return {"ok": false, "reason": "party_judgments_incomplete", "missing_party_ids": missing_parties}
+	var overall_outcome := outcomes[0] if not outcomes.is_empty() else "insufficient_evidence"
+	for outcome in outcomes:
+		if outcome != overall_outcome:
+			overall_outcome = "mixed_outcomes"
+			break
+	record["case_workflow_state"] = "judgment_issued"
+	record["judge_review_state"] = "judgment_issued"
+	record["judicial_conclusion"] = overall_outcome
+	record["judgment_issued_at"] = npc_simulation_time
+	record["appeal_records"] = record.get("appeal_records", []).duplicate(true)
+	_append_incident_timeline_entry(record, "judgment_issued", "判官司完成判决：%s" % overall_outcome, "judge_bureau")
+	patrol_incident_records[record_index] = record
+	return {
+		"ok": true,
+		"case_workflow_state": "judgment_issued",
+		"judicial_conclusion": overall_outcome,
+		"party_judgment_count": outcomes.size(),
+		"appeal_available": true
+	}
+
+
+func submit_case_appeal(incident_id: String, party_id: String, reason: String, challenged_evidence_tags: Array[String]) -> Dictionary:
+	var record_index := _find_patrol_incident_record(incident_id)
+	if record_index < 0:
+		return {"ok": false, "reason": "case_not_found"}
+	var record: Dictionary = patrol_incident_records[record_index]
+	if str(record.get("case_workflow_state", "")) not in ["judgment_issued", "appeal_pending"]:
+		return {"ok": false, "reason": "case_not_appealable"}
+	if reason.strip_edges().is_empty():
+		return {"ok": false, "reason": "appeal_reason_required"}
+	var party_exists := false
+	if record.get("case_submission", {}).get("case_parties", []).is_empty():
+		party_exists = party_id.is_empty() and record.has("case_judgment")
+	else:
+		party_exists = record.get("party_judgments", {}).has(party_id)
+	if not party_exists:
+		return {"ok": false, "reason": "appealing_party_has_no_judgment"}
+	var appeal_records: Array = record.get("appeal_records", []).duplicate(true)
+	for appeal_value in appeal_records:
+		if str(appeal_value.get("party_id", "")) == party_id and str(appeal_value.get("status", "")) == "pending":
+			return {"ok": false, "reason": "appeal_already_pending"}
+	var judgment: Dictionary = record.get("case_judgment", {}) if party_id.is_empty() else record.get("party_judgments", {}).get(party_id, {})
+	var judgment_tags: Array = judgment.get("cited_evidence_tags", [])
+	for tag in challenged_evidence_tags:
+		if not judgment_tags.has(tag):
+			return {"ok": false, "reason": "appeal_references_evidence_not_in_judgment", "evidence_tag": tag}
+	var appeal_id := "%s.appeal.%d" % [incident_id, appeal_records.size() + 1]
+	appeal_records.append({
+		"appeal_id": appeal_id,
+		"party_id": party_id,
+		"reason": reason.strip_edges(),
+		"challenged_evidence_tags": challenged_evidence_tags.duplicate(),
+		"status": "pending",
+		"submitted_at": npc_simulation_time,
+		"decision": "",
+		"decision_reason": "",
+		"decided_at": -1.0
+	})
+	record["appeal_records"] = appeal_records
+	record["case_workflow_state"] = "appeal_pending"
+	record["judge_review_state"] = "appeal_pending"
+	_append_incident_timeline_entry(record, "appeal_submitted", "收到申诉申请", party_id if not party_id.is_empty() else "case_party")
+	patrol_incident_records[record_index] = record
+	return {"ok": true, "appeal_id": appeal_id, "status": "pending"}
+
+
+func review_case_appeal(incident_id: String, appeal_id: String, decision: String, reason: String, revised_outcome: String = "") -> Dictionary:
+	var record_index := _find_patrol_incident_record(incident_id)
+	if record_index < 0:
+		return {"ok": false, "reason": "case_not_found"}
+	var record: Dictionary = patrol_incident_records[record_index]
+	if str(record.get("case_workflow_state", "")) != "appeal_pending":
+		return {"ok": false, "reason": "no_appeal_pending"}
+	if decision not in ["uphold", "reopen_hearing", "revise_judgment"]:
+		return {"ok": false, "reason": "invalid_appeal_decision"}
+	if reason.strip_edges().is_empty():
+		return {"ok": false, "reason": "appeal_decision_reason_required"}
+	var appeal_records: Array = record.get("appeal_records", []).duplicate(true)
+	var appeal_index := -1
+	for index in range(appeal_records.size()):
+		if str(appeal_records[index].get("appeal_id", "")) == appeal_id and str(appeal_records[index].get("status", "")) == "pending":
+			appeal_index = index
+			break
+	if appeal_index < 0:
+		return {"ok": false, "reason": "pending_appeal_not_found"}
+	var appeal: Dictionary = appeal_records[appeal_index]
+	var party_id := str(appeal.get("party_id", ""))
+	if decision == "revise_judgment":
+		if revised_outcome not in ["acquitted", "insufficient_evidence", "responsible", "mitigated"]:
+			return {"ok": false, "reason": "invalid_revised_outcome"}
+		var tags: Array = appeal.get("challenged_evidence_tags", [])
+		if revised_outcome in ["responsible", "mitigated"] and tags.is_empty():
+			return {"ok": false, "reason": "revised_responsibility_requires_challenged_evidence"}
+		if party_id.is_empty():
+			var case_judgment: Dictionary = record.get("case_judgment", {}).duplicate(true)
+			case_judgment["outcome"] = revised_outcome
+			case_judgment["appeal_revision_reason"] = reason.strip_edges()
+			case_judgment["revised_at"] = npc_simulation_time
+			record["case_judgment"] = case_judgment
+		else:
+			var party_judgments: Dictionary = record.get("party_judgments", {}).duplicate(true)
+			var party_judgment: Dictionary = party_judgments.get(party_id, {}).duplicate(true)
+			if party_judgment.is_empty():
+				return {"ok": false, "reason": "party_judgment_not_found"}
+			party_judgment["outcome"] = revised_outcome
+			party_judgment["appeal_revision_reason"] = reason.strip_edges()
+			party_judgment["revised_at"] = npc_simulation_time
+			party_judgments[party_id] = party_judgment
+			record["party_judgments"] = party_judgments
+		record["judicial_conclusion"] = revised_outcome
+		record["case_workflow_state"] = "judgment_issued"
+		record["judge_review_state"] = "judgment_revised_on_appeal"
+	elif decision == "reopen_hearing":
+		var hearing_history: Array = record.get("hearing_history", []).duplicate(true)
+		hearing_history.append(record.get("hearing_record", {}).duplicate(true))
+		record["hearing_history"] = hearing_history
+		record["hearing_record"] = {
+			"state": "pending",
+			"opened_at": -1.0,
+			"closed_at": -1.0,
+			"presented_evidence_tags": [],
+			"proceedings": [],
+			"hearing_note": "",
+			"reopened_on_appeal": true
+		}
+		record["party_judgment_history"] = record.get("party_judgment_history", []).duplicate(true)
+		record["party_judgment_history"].append(record.get("party_judgments", {}).duplicate(true))
+		record["party_judgments"] = {}
+		if record.has("case_judgment"):
+			var case_history: Array = record.get("case_judgment_history", []).duplicate(true)
+			case_history.append(record["case_judgment"].duplicate(true))
+			record["case_judgment_history"] = case_history
+			record.erase("case_judgment")
+		record["case_workflow_state"] = "hearing_pending"
+		record["judge_review_state"] = "appeal_remanded_for_hearing"
+		record["judicial_conclusion"] = "not_determined"
+		record["judgment_issued_at"] = -1.0
+	else:
+		record["case_workflow_state"] = "judgment_issued"
+		record["judge_review_state"] = "appeal_rejected"
+	appeal["status"] = "resolved"
+	appeal["decision"] = decision
+	appeal["decision_reason"] = reason.strip_edges()
+	appeal["revised_outcome"] = revised_outcome
+	appeal["decided_at"] = npc_simulation_time
+	appeal_records[appeal_index] = appeal
+	record["appeal_records"] = appeal_records
+	_append_incident_timeline_entry(record, "appeal_decided", "申诉处理结果：%s" % decision, "judge_bureau")
+	patrol_incident_records[record_index] = record
+	return {
+		"ok": true,
+		"appeal_id": appeal_id,
+		"decision": decision,
+		"case_workflow_state": str(record.get("case_workflow_state", "")),
+		"judicial_conclusion": str(record.get("judicial_conclusion", "not_determined"))
+	}
+
+
+func get_case_judgment_and_appeals(incident_id: String) -> Dictionary:
+	var record_index := _find_patrol_incident_record(incident_id)
+	if record_index < 0:
+		return {"ok": false, "reason": "case_not_found"}
+	var record: Dictionary = patrol_incident_records[record_index]
+	return {
+		"ok": true,
+		"incident_id": incident_id,
+		"case_judgment": record.get("case_judgment", {}).duplicate(true),
+		"party_judgments": record.get("party_judgments", {}).duplicate(true),
+		"party_judgment_history": record.get("party_judgment_history", []).duplicate(true),
+		"case_judgment_history": record.get("case_judgment_history", []).duplicate(true),
+		"appeal_records": record.get("appeal_records", []).duplicate(true),
+		"judicial_conclusion": str(record.get("judicial_conclusion", "not_determined")),
+		"case_workflow_state": str(record.get("case_workflow_state", ""))
+	}
+
+
+func get_judge_bureau_appeal_queue() -> Array[Dictionary]:
+	var queue: Array[Dictionary] = []
+	for record_value in patrol_incident_records:
+		var record: Dictionary = record_value
+		for appeal_value in record.get("appeal_records", []):
+			var appeal: Dictionary = appeal_value
+			if str(appeal.get("status", "")) != "pending":
+				continue
+			queue.append({
+				"incident_id": str(record.get("incident_id", "")),
+				"appeal_id": str(appeal.get("appeal_id", "")),
+				"party_id": str(appeal.get("party_id", "")),
+				"title": str(record.get("title", "巡防案件")),
+				"reason": str(appeal.get("reason", "")),
+				"submitted_at": float(appeal.get("submitted_at", -1.0))
+			})
+	queue.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a.get("submitted_at", 0.0)) < float(b.get("submitted_at", 0.0))
+	)
+	return queue
+
+
 func get_case_hearing_record(incident_id: String) -> Dictionary:
 	var record_index := _find_patrol_incident_record(incident_id)
 	if record_index < 0:
@@ -4170,6 +4490,10 @@ func get_case_hearing_record(incident_id: String) -> Dictionary:
 		"incident_id": incident_id,
 		"case_parties": record.get("case_submission", {}).get("case_parties", []).duplicate(true),
 		"hearing_record": record.get("hearing_record", {}).duplicate(true),
+		"judicial_conclusion": str(record.get("judicial_conclusion", "not_determined")),
+		"party_judgments": record.get("party_judgments", {}).duplicate(true),
+		"case_judgment": record.get("case_judgment", {}).duplicate(true),
+		"appeal_records": record.get("appeal_records", []).duplicate(true),
 		"judicial_review": record.get("judicial_review", {}).duplicate(true),
 		"judicial_conclusion": "not_determined"
 	}
@@ -4180,7 +4504,7 @@ func get_judge_bureau_case_queue() -> Array[Dictionary]:
 	for record_value in patrol_incident_records:
 		var record: Dictionary = record_value
 		var workflow_state := str(record.get("case_workflow_state", ""))
-		if workflow_state not in ["transferred_to_judge_bureau", "under_judicial_review", "hearing_pending", "hearing_in_progress", "hearing_closed_pending_judgment"]:
+		if workflow_state not in ["transferred_to_judge_bureau", "under_judicial_review", "hearing_pending", "hearing_in_progress", "hearing_closed_pending_judgment", "judgment_issued", "appeal_pending"]:
 			continue
 		var submission: Dictionary = record.get("case_submission", {})
 		queue.append({
