@@ -3035,6 +3035,17 @@ func _set_monster_freeze_visual(monster: Node3D, enabled: bool) -> void:
 
 
 func _on_combat_event(event: Dictionary) -> void:
+	# Death rewards are acknowledged only after the server has committed the
+	# durable settlement batch. Do not treat this as a normal zero-damage hit.
+	if str(event.get("action", "")) == "monster_death_settlement":
+		if bool(event.get("committed", false)):
+			var settled_experience := int(event.get("experience_reward", 0))
+			var settled_cultivation := int(event.get("cultivation_reward", 0))
+			_show_notification("击败奖励已结算：经验 +" + str(settled_experience) + " · 修为 +" + str(settled_cultivation), 4.5)
+			_refresh_reward_status_later()
+		else:
+			_show_notification("怪物已击败，奖励正在安全结算……", 3.0)
+		return
 	if str(event.get("action", "")) == "equipment_refresh":
 		if not bool(event.get("accepted", false)):
 			return
@@ -3203,13 +3214,18 @@ func _on_combat_event(event: Dictionary) -> void:
 	if bool(event.get("defeated", false)):
 		if str(event.get("target_entity_id", "")) == selected_monster_id:
 			_clear_monster_target()
-		var experience := int(event.get("experience_reward", 0))
-		var cultivation := int(event.get("cultivation_reward", 0))
-		var defeat_message := monster_name + " 已被击败！伤害 " + str(damage) + " · 经验 +" + str(experience) + " · 修为 +" + str(cultivation)
+		var defeat_message := monster_name + " 已被击败！本次造成 " + str(damage) + " 点伤害"
+		if bool(event.get("settlement_pending", false)):
+			defeat_message += " · 奖励正在安全结算"
+		else:
+			var experience := int(event.get("experience_reward", 0))
+			var cultivation := int(event.get("cultivation_reward", 0))
+			defeat_message += " · 经验 +" + str(experience) + " · 修为 +" + str(cultivation)
 		if str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu":
 			defeat_message += " · 魂魄正在归入魂光"
 		_show_notification(defeat_message, 4.5)
-		_refresh_reward_status_later()
+		if not bool(event.get("settlement_pending", false)):
+			_refresh_reward_status_later()
 	else:
 		var projectile_type := str(event.get("projectile_type", ""))
 		var hit_prefix := "火球命中 " if projectile_type == "fireball" else ("冰锥命中 " if projectile_type == "ice_bolt" else "命中 ")
