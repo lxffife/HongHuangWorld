@@ -585,6 +585,9 @@ int main() {
             "checkpoint-spawn", "checkpoint-life-1", "wolf",
             12.25, -8.5, 1.2, 1, 0, 2000};
         assert(box.save_monster_runtime_checkpoints({checkpoint}, error));
+        assert(!box.save_monster_runtime_checkpoints({
+            {"checkpoint-spawn", "checkpoint-life-1", "wolf",
+             90.0, 90.0, 0.0, 0, 0, 1999}}, error));
         auto saved = box.load_monster_runtime_checkpoints(error);
         assert(error.empty() && saved.size() == 1);
         assert(saved.front().x == 12.25 && saved.front().z == -8.5 &&
