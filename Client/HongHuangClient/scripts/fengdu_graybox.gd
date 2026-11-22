@@ -4891,6 +4891,7 @@ func summon_case_parties_to_judge_bureau(incident_id: String) -> Dictionary:
 			unavailable += 1
 			continue
 		var waypoints: Array = route_result.get("points", []).duplicate()
+		waypoints.push_front(root.global_position)
 		if waypoints.is_empty() or waypoints[waypoints.size() - 1].distance_to(destination) > 0.5:
 			waypoints.append(destination)
 		elif waypoints.size() == 1:
