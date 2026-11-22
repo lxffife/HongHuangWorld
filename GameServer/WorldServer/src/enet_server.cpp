@@ -1969,8 +1969,15 @@ struct EnetServer::Impl {
             monster.state.health = static_cast<float>(persisted.health);
             if (persisted.health <= 0.0) {
                 monster.state.mode = honghuang::simulation::MonsterMode::Dead;
-                monster.respawn_at = Clock::now() + std::chrono::seconds(
-                    std::max(monster.retry_spawn_seconds, 1));
+                // Preserve the configured first-spawn delay on a brand-new rare spawn.
+                // A persisted checkpoint or committed death record will replace this
+                // provisional deadline during the following recovery stages.
+                if (monster.respawn_at.time_since_epoch().count() == 0) {
+                    const int initial_delay = monster.first_spawn_delay_seconds > 0
+                        ? monster.first_spawn_delay_seconds : monster.retry_spawn_seconds;
+                    monster.respawn_at = Clock::now() +
+                        std::chrono::seconds(std::max(initial_delay, 1));
+                }
             }
         }
         return true;
