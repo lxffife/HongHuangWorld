@@ -478,7 +478,7 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 			npc_spawn_points["阴兵大营"] = [
 				center + Vector3(-3.0, 0, -5.5), center + Vector3(3.0, 0, -5.5),
 				center + Vector3(-3.0, 0, 2.0), center + Vector3(3.0, 0, 2.0),
-				center + Vector3(0, 0, 10.0)
+				center + Vector3(0, 0, 7.0)
 			]
 		"引魂驿站":
 			# A clear arrival-to-registration-to-dispatch sequence guides newly arrived souls.
@@ -696,6 +696,8 @@ func _build_npc_population() -> void:
 		agent["importance"] = "critical" if role == "guide" else ("regional" if role in ["merchant", "soldier", "patrol_guard"] else "ambient")
 		agent["root"] = npc_root
 		agent["role"] = role
+		if role == "soldier":
+			agent["formation_slot"] = role_index
 		if role == "waiting_soul":
 			agent["queue_order"] = role_index
 		elif role == "guide" and role_index == 2:
@@ -903,6 +905,9 @@ func _apply_npc_behavior_pose(agent: Dictionary, phase: float) -> void:
 			var drill_swing := sin(phase * 2.0) * 0.28
 			left_arm.rotation.z = deg_to_rad(-18.0) + drill_swing
 			right_arm.rotation.z = deg_to_rad(18.0) - drill_swing
+		"drill_recover":
+			left_arm.rotation.z = deg_to_rad(-10.0) + sin(phase * 0.45) * 0.025
+			right_arm.rotation.z = deg_to_rad(10.0) - sin(phase * 0.45) * 0.025
 		"rest":
 			left_arm.rotation.z = deg_to_rad(-18.0) + sin(phase * 0.35) * 0.025
 			right_arm.rotation.z = deg_to_rad(18.0) - sin(phase * 0.35) * 0.025
@@ -1133,6 +1138,8 @@ func _update_npc_agents(delta: float) -> void:
 		var activity := str(agent["activity"])
 		_advance_npc_behavior(agent, elapsed)
 		_sync_waystation_call(agent)
+		if str(agent.get("role", "")) == "soldier":
+			_sync_soldier_formation(agent)
 		if str(agent.get("role", "")) == "merchant":
 			_update_merchant_proximity_behavior(agent, distance_to_player)
 		if bool(agent["moving"]):
@@ -1195,6 +1202,22 @@ func _update_npc_agents(delta: float) -> void:
 				left_arm.rotation.z = deg_to_rad(-18.0)
 				right_arm.rotation.z = deg_to_rad(18.0)
 		_apply_npc_behavior_pose(agent, phase)
+
+
+func _sync_soldier_formation(agent: Dictionary) -> void:
+	# All visible soldiers sample one shared drill cadence; the server will own combat orders later.
+	if str(agent.get("activity", "")) == "rest":
+		agent["state"] = "rest"
+		return
+	var formation_phase := fposmod(npc_simulation_time, 18.0)
+	if formation_phase < 4.0:
+		agent["state"] = "formation_ready"
+	elif formation_phase < 11.0:
+		agent["state"] = "drill"
+	elif formation_phase < 14.0:
+		agent["state"] = "drill_recover"
+	else:
+		agent["state"] = "formation_ready"
 
 
 func _update_merchant_proximity_behavior(agent: Dictionary, distance_to_player: float) -> void:
