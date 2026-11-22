@@ -553,9 +553,10 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 func _build_activity_registry() -> void:
 	# Consume presentation-independent NPC placements and route data.
 	activity_points.clear()
+	var navigation_network: Dictionary = WORLD_LAYOUT.get_navigation_network()
 	for point in WORLD_LAYOUT.get_npc_activity_points():
 		var bound_point: Dictionary = point.duplicate(true)
-		bound_point.merge(WORLD_LAYOUT.get_spatial_binding_for_point(bound_point), true)
+		bound_point.merge(WORLD_LAYOUT.get_spatial_binding_for_point(bound_point, navigation_network), true)
 		activity_points.append(bound_point)
 	var routes: Array = WORLD_LAYOUT.get_patrol_routes()
 	patrol_route.clear()
@@ -566,7 +567,7 @@ func _build_activity_registry() -> void:
 		patrol_route.append(node_position)
 	for route_index in range(patrol_route.size()):
 		var route_position: Vector3 = patrol_route[route_index]
-		activity_points.append({
+		var route_point := {
 			"point_id": "patrol.route.%02d" % (route_index + 1),
 			"district": str(route.get("district", "巡城司")),
 			"role": str(route.get("role", "patrol_guard")),
@@ -576,7 +577,9 @@ func _build_activity_registry() -> void:
 			"schedule_tag": str(route.get("schedule_tag", "night")),
 			"capacity": 1,
 			"radius": 1.0
-		})
+		}
+		route_point.merge(WORLD_LAYOUT.get_spatial_binding_for_point(route_point, navigation_network), true)
+		activity_points.append(route_point)
 
 
 func _district_key(district_name: String) -> String:
