@@ -193,6 +193,9 @@ func TestInventoryEndpointsUnavailableWithoutDatabase(t *testing.T) {
 		{http.MethodGet, "/api/v1/servers/drops"},
 		{http.MethodPost, "/api/v1/servers/drops"},
 		{http.MethodPost, "/api/v1/servers/drops/pickup"},
+		{http.MethodGet, "/api/v1/characters/current/equipment"},
+		{http.MethodPost, "/api/v1/characters/current/equipment/equip"},
+		{http.MethodPost, "/api/v1/characters/current/equipment/unequip"},
 	} {
 		t.Run(test.method+" "+test.path, func(t *testing.T) {
 			req := httptest.NewRequest(test.method, test.path, strings.NewReader("{}"))
