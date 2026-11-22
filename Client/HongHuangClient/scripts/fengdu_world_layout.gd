@@ -106,7 +106,13 @@ static func get_navigation_network() -> Dictionary:
 			{"id": "district.patrol_office.entry", "position": Vector3(0, 0, 2), "kind": "district_entry"},
 			{"id": "district.reincarnation.entry", "position": Vector3(0, 0, -78), "kind": "district_entry"},
 			{"id": "district.barracks.entry", "position": Vector3(-77, 0, -13.5), "kind": "district_entry"},
-			{"id": "district.waystation.entry", "position": Vector3(77, 0, -13.5), "kind": "district_entry"}
+			{"id": "district.waystation.entry", "position": Vector3(77, 0, -13.5), "kind": "district_entry"},
+			{"id": "patrol.route.south_gate", "position": Vector3(0, 0, 12), "kind": "patrol_waypoint"},
+			{"id": "patrol.route.north_west", "position": Vector3(0, 0, 78), "kind": "patrol_waypoint"},
+			{"id": "patrol.route.east_north", "position": Vector3(34, 0, 78), "kind": "patrol_waypoint"},
+			{"id": "patrol.route.east_south", "position": Vector3(34, 0, -78), "kind": "patrol_waypoint"},
+			{"id": "patrol.route.west_south", "position": Vector3(-34, 0, -78), "kind": "patrol_waypoint"},
+			{"id": "patrol.route.west_north", "position": Vector3(-34, 0, 78), "kind": "patrol_waypoint"}
 		],
 		"edges": [
 			{"id": "road.gate.north", "from": "gate.north", "to": "junction.north", "width": 11.0, "two_way": true},
@@ -142,14 +148,29 @@ static func get_navigation_network() -> Dictionary:
 			{"id": "road.patrol_office.connector", "from": "junction.center", "to": "district.patrol_office.entry", "width": 5.0, "two_way": true},
 			{"id": "road.reincarnation.connector", "from": "junction.south", "to": "district.reincarnation.entry", "width": 4.5, "two_way": true},
 			{"id": "road.barracks.connector", "from": "junction.west.service", "to": "district.barracks.entry", "width": 4.5, "two_way": true},
-			{"id": "road.waystation.connector", "from": "junction.east.service", "to": "district.waystation.entry", "width": 4.5, "two_way": true}
+			{"id": "road.waystation.connector", "from": "junction.east.service", "to": "district.waystation.entry", "width": 4.5, "two_way": true},
+			{"id": "patrol.edge.01", "from": "patrol.route.south_gate", "to": "junction.north", "width": 6.0, "two_way": true},
+			{"id": "patrol.edge.02", "from": "junction.north", "to": "patrol.route.north_west", "width": 6.0, "two_way": true},
+			{"id": "patrol.edge.03", "from": "patrol.route.north_west", "to": "patrol.route.east_north", "width": 6.0, "two_way": true},
+			{"id": "patrol.edge.04", "from": "patrol.route.east_north", "to": "junction.east.north", "width": 6.0, "two_way": true},
+			{"id": "patrol.edge.05", "from": "junction.east.north", "to": "junction.east.south", "width": 6.0, "two_way": true},
+			{"id": "patrol.edge.06", "from": "junction.east.south", "to": "patrol.route.east_south", "width": 6.0, "two_way": true},
+			{"id": "patrol.edge.07", "from": "patrol.route.east_south", "to": "district.reincarnation.entry", "width": 6.0, "two_way": true},
+			{"id": "patrol.edge.08", "from": "district.reincarnation.entry", "to": "patrol.route.west_south", "width": 6.0, "two_way": true},
+			{"id": "patrol.edge.09", "from": "patrol.route.west_south", "to": "junction.west.south", "width": 6.0, "two_way": true},
+			{"id": "patrol.edge.10", "from": "junction.west.south", "to": "junction.west.north", "width": 6.0, "two_way": true},
+			{"id": "patrol.edge.11", "from": "junction.west.north", "to": "patrol.route.west_north", "width": 6.0, "two_way": true},
+			{"id": "patrol.edge.12", "from": "patrol.route.west_north", "to": "patrol.route.north_west", "width": 6.0, "two_way": true},
+			{"id": "patrol.edge.13", "from": "patrol.route.north_west", "to": "junction.north", "width": 6.0, "two_way": true},
+			{"id": "patrol.edge.14", "from": "junction.north", "to": "patrol.route.south_gate", "width": 6.0, "two_way": true}
 		],
 		"routes": [
 			{"id": "route.south_gate_to_reincarnation", "from": "gate.south", "to": "district.reincarnation.entry", "waypoints": ["gate.south", "junction.south", "district.reincarnation.entry"], "purpose": "忘川与轮回方向"},
 			{"id": "route.waystation_to_registry", "from": "district.waystation.entry", "to": "district.soul_registry.entry", "waypoints": ["district.waystation.entry", "junction.east.service", "junction.east", "junction.center", "junction.west", "junction.west.registry", "district.soul_registry.entry"], "purpose": "新魂登记"},
 			{"id": "route.registry_to_judgment", "from": "district.soul_registry.entry", "to": "district.ten_kings.entry", "waypoints": ["district.soul_registry.entry", "junction.west.registry", "junction.west", "junction.west.north", "junction.north", "junction.palace.west", "junction.ten_kings.connector", "district.ten_kings.entry"], "purpose": "鬼籍核验后进入审判"},
 			{"id": "route.registry_to_judge_review", "from": "district.soul_registry.entry", "to": "district.judge_bureau.entry", "waypoints": ["district.soul_registry.entry", "junction.west.registry", "junction.west", "junction.center", "junction.east", "junction.east.north", "junction.north", "junction.palace.east", "junction.judge.connector", "district.judge_bureau.entry"], "purpose": "档案复核与文书交接"},
-			{"id": "route.judgment_to_reincarnation", "from": "district.ten_kings.entry", "to": "district.reincarnation.entry", "waypoints": ["district.ten_kings.entry", "junction.ten_kings.connector", "junction.palace.west", "junction.north", "junction.center", "junction.south", "district.reincarnation.entry"], "purpose": "判决后前往轮回司"}
+			{"id": "route.judgment_to_reincarnation", "from": "district.ten_kings.entry", "to": "district.reincarnation.entry", "waypoints": ["district.ten_kings.entry", "junction.ten_kings.connector", "junction.palace.west", "junction.north", "junction.center", "junction.south", "district.reincarnation.entry"], "purpose": "判决后前往轮回司"},
+			{"id": "route.patrol.perimeter_loop", "from": "patrol.route.south_gate", "to": "patrol.route.south_gate", "waypoints": ["patrol.route.south_gate", "junction.north", "patrol.route.north_west", "patrol.route.east_north", "junction.east.north", "junction.east.south", "patrol.route.east_south", "district.reincarnation.entry", "patrol.route.west_south", "junction.west.south", "junction.west.north", "patrol.route.west_north", "patrol.route.north_west", "junction.north", "patrol.route.south_gate"], "purpose": "巡城司闭环巡防"}
 		]
 	}
 
@@ -517,16 +538,22 @@ static func get_spatial_binding_for_point(point: Dictionary, network: Dictionary
 
 
 static func get_patrol_routes() -> Array[Dictionary]:
-	var node_positions := [
-		Vector3(0, 0, 12), Vector3(0, 0, 32), Vector3(0, 0, 78),
-		Vector3(34, 0, 78), Vector3(34, 0, 32), Vector3(34, 0, -32),
-		Vector3(34, 0, -78), Vector3(0, 0, -78), Vector3(-34, 0, -78),
-		Vector3(-34, 0, -32), Vector3(-34, 0, 32), Vector3(-34, 0, 78),
-		Vector3(0, 0, 78), Vector3(0, 0, 32), Vector3(0, 0, 12)
+	# Patrol waypoints are stable navigation-graph node IDs, not a second coordinate-only route.
+	var network := get_navigation_network()
+	var positions_by_id: Dictionary = {}
+	for node in network.get("nodes", []):
+		positions_by_id[str(node.get("id", ""))] = node.get("position", Vector3.ZERO)
+	var node_ids: Array[String] = [
+		"patrol.route.south_gate", "junction.north", "patrol.route.north_west",
+		"patrol.route.east_north", "junction.east.north", "junction.east.south",
+		"patrol.route.east_south", "district.reincarnation.entry", "patrol.route.west_south",
+		"junction.west.south", "junction.west.north", "patrol.route.west_north",
+		"patrol.route.north_west", "junction.north", "patrol.route.south_gate"
 	]
-	var node_ids: Array[String] = []
-	for i in range(node_positions.size()):
-		node_ids.append("patrol.route.node.%02d" % (i + 1))
+	var node_positions: Array[Vector3] = []
+	for node_id in node_ids:
+		if positions_by_id.has(node_id):
+			node_positions.append(positions_by_id[node_id])
 	return [{
 		"route_id": "fengdu.patrol.perimeter_loop",
 		"district": "巡城司",
