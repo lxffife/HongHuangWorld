@@ -2289,6 +2289,7 @@ func _advance_patrol_dispatch(agent: Dictionary, elapsed: float, phase: float) -
 	if dispatch_state == "on_scene":
 		var wait_remaining := maxf(0.0, float(agent.get("dispatch_wait_remaining", 0.0)) - elapsed)
 		agent["dispatch_wait_remaining"] = wait_remaining
+		root.rotation.y = float(agent.get("alert_facing", root.rotation.y))
 		agent["state"] = "alert_watch"
 		body.position.y = 0.92 + sin(phase * 1.4) * 0.018
 		left_arm.rotation.z = deg_to_rad(-58.0) + sin(phase * 1.6) * 0.08
