@@ -430,6 +430,10 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 			_box("GhostMarketAuctionDais", center + Vector3(0, 0.55, 8.0), Vector3(7.0, 1.1, 4.5), "dark_stone", false)
 			_box("GhostMarketAuctionDesk", center + Vector3(0, 1.45, 8.0), Vector3(4.2, 0.7, 1.2), "gold", false)
 			_roof_tier(center + Vector3(0, 3.1, 8.0), 8.0, 2.0)
+			_label("万魂竞宝台", center + Vector3(0, 5.65, 8.0), 22, Color("#f0d29a"))
+			_market_display_orb(center + Vector3(-1.15, 2.0, 8.0), 0.18, Color("#83c7e4"))
+			_market_display_orb(center + Vector3(0.0, 2.0, 8.0), 0.22, Color("#e8c477"))
+			_market_display_orb(center + Vector3(1.15, 2.0, 8.0), 0.18, Color("#b99bdc"))
 			var stall_types := ["魂珠铺", "魂籍铺", "药材铺", "法器铺", "魂器铺", "悬赏交易"]
 			var stall_index := 0
 			for side in [-1.0, 1.0]:
