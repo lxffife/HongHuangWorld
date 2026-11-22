@@ -936,6 +936,12 @@ func _build_market_customers() -> void:
 			"base_position": base_position,
 			"event_position": event_position,
 			"preferred_stall_id": "ghost_market.stall.%02d" % (index + 1),
+			"stall_route_ids": _market_customer_route_for_index(index),
+			"route_stall_index": 0,
+			"target_stall_id": "ghost_market.stall.%02d" % (index + 1),
+			"target_position": _market_customer_stand_position("ghost_market.stall.%02d" % (index + 1), index),
+			"visit_count": 0,
+			"stop_elapsed": 0.0,
 			"event_delay": float(index) * 1.15,
 			"event_elapsed": 0.0,
 			"waypoints": customer_waypoints,
@@ -947,6 +953,61 @@ func _build_market_customers() -> void:
 			"state_elapsed": float(index) * 1.7,
 			"phase": float(index) * 2.4
 		})
+
+
+func _market_customer_route_for_index(customer_index: int) -> Array[String]:
+	# Each visitor follows one side of the market, avoiding the central aisle.
+	var routes: Array[Array] = [
+		["ghost_market.stall.01", "ghost_market.stall.02", "ghost_market.stall.03"],
+		["ghost_market.stall.02", "ghost_market.stall.03", "ghost_market.stall.01"],
+		["ghost_market.stall.03", "ghost_market.stall.01", "ghost_market.stall.02"],
+		["ghost_market.stall.04", "ghost_market.stall.05", "ghost_market.stall.06"]
+	]
+	var route_index := clampi(customer_index, 0, routes.size() - 1)
+	var route: Array[String] = []
+	for stall_id in routes[route_index]:
+		route.append(str(stall_id))
+	return route
+
+
+func _market_customer_stand_position(stall_id: String, customer_index: int) -> Vector3:
+	for stall in market_stall_registry:
+		if str(stall.get("stall_id", "")) != stall_id:
+			continue
+		var stall_position: Vector3 = stall.get("position", Vector3.ZERO)
+		var facing := float(stall.get("facing", 0.0))
+		var side_offset := -0.55 if customer_index % 2 == 0 else 0.55
+		return stall_position + Vector3(facing * 2.75, 0.0, side_offset)
+	return Vector3.ZERO
+
+
+func _market_customer_next_open_stall(customer_data: Dictionary, customer_index: int) -> String:
+	var route: Array = customer_data.get("stall_route_ids", [])
+	if route.is_empty():
+		return ""
+	var current_index := int(customer_data.get("route_stall_index", 0))
+	for offset in range(1, route.size() + 1):
+		var candidate_index := (current_index + offset) % route.size()
+		var candidate_id := str(route[candidate_index])
+		if not _market_stall_is_restocking(candidate_id):
+			for stall in market_stall_registry:
+				if str(stall.get("stall_id", "")) == candidate_id and str(stall.get("business_state", "")) == "open":
+					customer_data["route_stall_index"] = candidate_index
+					customer_data["target_stall_id"] = candidate_id
+					customer_data["target_position"] = _market_customer_stand_position(candidate_id, customer_index)
+					return candidate_id
+	return ""
+
+
+func _market_customer_face_target(customer_root: Node3D, stall_id: String) -> void:
+	for stall in market_stall_registry:
+		if str(stall.get("stall_id", "")) == stall_id:
+			var stall_position: Vector3 = stall.get("position", Vector3.ZERO)
+			var look_direction := stall_position - customer_root.position
+			if look_direction.length_squared() > 0.001:
+				customer_root.rotation.y = atan2(-look_direction.x, -look_direction.z)
+			return
+
 
 func _build_market_caravans() -> void:
 	# Two small supply carts use the rear service lanes, never the central 9m aisle.
@@ -1266,53 +1327,67 @@ func _update_market_ambience(delta: float) -> void:
 				customer_data["route_index"] = 0
 				customer_data["route_progress"] = 0.0
 			continue
-		var stall_restocking := _market_stall_is_restocking(str(customer_data.get("preferred_stall_id", "")))
-		if stall_restocking:
+		var customer_index := int(str(customer_data.get("customer_id", "customer.01")).get_slice(".", 2)) - 1
+		var target_stall_id := str(customer_data.get("target_stall_id", customer_data.get("preferred_stall_id", "")))
+		var stall_restocking := _market_stall_is_restocking(target_stall_id)
+		var target_position: Vector3 = customer_data.get("target_position", customer_data.get("base_position", customer_root.position))
+		if stall_restocking and customer_state != "walk":
 			if customer_state != "restock_wait":
 				customer_data["resume_state"] = customer_state
 				customer_data["state"] = "restock_wait"
-			customer_root.rotation.y = float(customer_data["base_yaw"]) + sin(customer_phase * 0.4) * 0.12
-			customer_body.rotation.x = deg_to_rad(1.5) + sin(customer_phase * 0.45) * deg_to_rad(1.2)
-			customer_left.rotation.z = deg_to_rad(-18.0) + sin(customer_phase * 0.5) * 0.025
-			customer_right.rotation.z = deg_to_rad(18.0) - sin(customer_phase * 0.5 + 0.6) * 0.025
-			continue
-		elif customer_state == "restock_wait":
-			customer_state = str(customer_data.get("resume_state", "browse"))
-			customer_data["state"] = customer_state
+				customer_state = "restock_wait"
+		if customer_state == "restock_wait":
+			var next_stall_id := _market_customer_next_open_stall(customer_data, customer_index)
+			if not next_stall_id.is_empty():
+				target_stall_id = next_stall_id
+				target_position = customer_data["target_position"]
+				customer_data["state"] = "walk"
+				customer_data["state_elapsed"] = 0.0
+				customer_state = "walk"
+			else:
+				customer_root.rotation.y = float(customer_data["base_yaw"]) + sin(customer_phase * 0.4) * 0.12
+				customer_body.rotation.x = deg_to_rad(2.0) + sin(customer_phase * 0.45) * deg_to_rad(1.2)
+				customer_left.rotation.z = deg_to_rad(-18.0) + sin(customer_phase * 0.5) * 0.025
+				customer_right.rotation.z = deg_to_rad(18.0) - sin(customer_phase * 0.5 + 0.6) * 0.025
+				continue
 		var customer_elapsed := float(customer_data.get("state_elapsed", 0.0)) + delta
-		var customer_duration := 3.8 if customer_state == "browse" else (2.2 if customer_state == "inspect" else (3.0 if customer_state == "talk" else 3.0))
-		if customer_elapsed >= customer_duration:
+		var customer_duration := 3.4 if customer_state == "browse" else (2.4 if customer_state == "inspect" else (2.8 if customer_state == "talk" else 0.0))
+		if customer_state != "walk" and customer_elapsed >= customer_duration:
 			customer_elapsed = 0.0
 			match customer_state:
-				"browse": customer_state = "inspect"
-				"inspect": customer_state = "talk"
-				"talk": customer_state = "walk"
-				_: customer_state = "browse"
+				"browse":
+					customer_state = "inspect"
+				"inspect":
+					customer_state = "talk"
+				"talk":
+					var next_stall_id := _market_customer_next_open_stall(customer_data, customer_index)
+					if next_stall_id.is_empty():
+						customer_state = "restock_wait"
+					else:
+						target_stall_id = next_stall_id
+						target_position = customer_data["target_position"]
+						customer_state = "walk"
+				_:
+					customer_state = "browse"
 			customer_data["state"] = customer_state
 		customer_data["state_elapsed"] = customer_elapsed
-		var waypoints: Array = customer_data.get("waypoints", [])
-		if waypoints.size() > 1:
-			var route_index := int(customer_data.get("route_index", 0))
-			var route_progress := float(customer_data.get("route_progress", 0.0))
-			if customer_state == "walk":
-				var from_position: Vector3 = waypoints[route_index]
-				var next_index := (route_index + 1) % waypoints.size()
-				var to_position: Vector3 = waypoints[next_index]
-				var segment_length := maxf(from_position.distance_to(to_position), 0.01)
-				route_progress += float(customer_data.get("move_speed", 0.45)) * delta / segment_length
-				if route_progress >= 1.0:
-					route_progress = 0.0
-					route_index = next_index
-					from_position = waypoints[route_index]
-					to_position = waypoints[(route_index + 1) % waypoints.size()]
-				customer_root.position = from_position.lerp(to_position, route_progress)
-				var walk_direction := to_position - from_position
-				if walk_direction.length_squared() > 0.001:
-					customer_root.rotation.y = atan2(-walk_direction.x, -walk_direction.z)
-				customer_data["route_index"] = route_index
-				customer_data["route_progress"] = route_progress
+		if customer_state == "walk":
+			var walk_delta := target_position - customer_root.position
+			if walk_delta.length() > 0.16:
+				customer_root.position = customer_root.position.move_toward(target_position, float(customer_data.get("move_speed", 0.46)) * delta)
+				if walk_delta.length_squared() > 0.001:
+					customer_root.rotation.y = atan2(-walk_delta.x, -walk_delta.z)
+				customer_body.rotation.x = deg_to_rad(1.8)
+				customer_left.rotation.z = deg_to_rad(-18.0) - 0.035
+				customer_right.rotation.z = deg_to_rad(18.0) + 0.035
 			else:
-				customer_root.rotation.y = float(customer_data["base_yaw"]) + sin(market_ambience_time * 0.45 + float(customer_data["phase"])) * 0.08
+				customer_root.position = target_position
+				customer_data["state"] = "browse"
+				customer_data["state_elapsed"] = 0.0
+				customer_data["visit_count"] = int(customer_data.get("visit_count", 0)) + 1
+				_market_customer_face_target(customer_root, target_stall_id)
+			continue
+		_market_customer_face_target(customer_root, target_stall_id)
 		customer_body.rotation.x = deg_to_rad(2.5) + absf(sin(customer_phase * 0.55)) * deg_to_rad(2.0)
 		if customer_state == "inspect":
 			# Lean toward the stall display and bring one hand forward to examine an item.
