@@ -64,6 +64,12 @@ var patrol_incident_queue: Array[Dictionary] = []
 var patrol_incident_records: Array[Dictionary] = []
 var patrol_dispatch_queue_elapsed := 0.0
 var patrol_incident_focus_id := ""
+var judge_workbench_root: Control
+var judge_case_list: ItemList
+var judge_case_detail: RichTextLabel
+var judge_workbench_hint: Label
+var judge_selected_incident_id := ""
+var judge_workbench_open := false
 
 var mats: Dictionary = {}
 
@@ -85,6 +91,7 @@ func _ready() -> void:
 	_build_street_furnishings()
 	_build_player()
 	_build_hud()
+	_build_judge_bureau_workbench()
 
 
 
@@ -136,7 +143,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_F6:
 		_toggle_activity_debug()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_E:
-		_interact_with_focused_npc()
+		if judge_workbench_open:
+			_close_judge_bureau_workbench()
+		elif _is_player_at_judge_bureau():
+			_open_judge_bureau_workbench()
+		else:
+			_interact_with_focused_npc()
 	elif event is InputEventMouseMotion and mouse_captured:
 		var motion := event as InputEventMouseMotion
 		player.rotation.y -= motion.relative.x * MOUSE_SENSITIVITY
@@ -3401,6 +3413,10 @@ func _update_npc_interaction_hint() -> void:
 	if npc_hint_label == null or player == null:
 		return
 	patrol_incident_focus_id = ""
+	if player.global_position.distance_to(Vector3(51.0, 0.0, 36.5)) <= 7.0:
+		npc_focus_agent = {}
+		npc_hint_label.text = "E 打开判官司工作台 · 案卷复核与庭审"
+		return
 	var nearest_incident_distance := 9.0
 	var nearest_incident: Dictionary = {}
 	for incident in patrol_incident_records:
@@ -4885,6 +4901,264 @@ func _interact_with_focused_npc() -> void:
 		_: message = "%s 暂无可用交互。" % npc_name
 	npc_detail_label.text = message
 	print("[FengduNPC] interact id=%s type=%s" % [npc_id, str(npc_focus_agent.get("interaction_type", "none"))])
+
+
+func _is_player_at_judge_bureau() -> bool:
+	return player != null and player.global_position.distance_to(Vector3(51.0, 0.0, 36.5)) <= 7.0
+
+
+func _build_judge_bureau_workbench() -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "JudgeBureauWorkbenchLayer"
+	layer.layer = 12
+	add_child(layer)
+	judge_workbench_root = Control.new()
+	judge_workbench_root.name = "JudgeBureauWorkbench"
+	judge_workbench_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	judge_workbench_root.visible = false
+	layer.add_child(judge_workbench_root)
+	var backdrop := ColorRect.new()
+	backdrop.color = Color(0.025, 0.04, 0.065, 0.94)
+	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	judge_workbench_root.add_child(backdrop)
+	var shell := PanelContainer.new()
+	shell.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shell.offset_left = 48.0
+	shell.offset_top = 34.0
+	shell.offset_right = -48.0
+	shell.offset_bottom = -34.0
+	judge_workbench_root.add_child(shell)
+	var root_column := VBoxContainer.new()
+	root_column.add_theme_constant_override("separation", 12)
+	shell.add_child(root_column)
+	var header := HBoxContainer.new()
+	root_column.add_child(header)
+	var heading := Label.new()
+	heading.text = "判官司 · 司法卷宗工作台"
+	heading.add_theme_font_size_override("font_size", 24)
+	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_theme_color_override("font_color", Color("#e7c58e"))
+	header.add_child(heading)
+	var close_button := Button.new()
+	close_button.text = "关闭  [E / ESC]"
+	close_button.pressed.connect(_close_judge_bureau_workbench)
+	header.add_child(close_button)
+	var split := HSplitContainer.new()
+	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root_column.add_child(split)
+	var left := VBoxContainer.new()
+	left.custom_minimum_size.x = 300.0
+	split.add_child(left)
+	var queue_title := Label.new()
+	queue_title.text = "待办卷宗 · 选择案件查看详情"
+	queue_title.add_theme_color_override("font_color", Color("#a9bdcf"))
+	left.add_child(queue_title)
+	judge_case_list = ItemList.new()
+	judge_case_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	judge_case_list.item_selected.connect(_on_judge_case_selected)
+	left.add_child(judge_case_list)
+	var right := VBoxContainer.new()
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	split.add_child(right)
+	judge_case_detail = RichTextLabel.new()
+	judge_case_detail.bbcode_enabled = true
+	judge_case_detail.fit_content = false
+	judge_case_detail.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	judge_case_detail.scroll_active = true
+	right.add_child(judge_case_detail)
+	var action_row := HFlowContainer.new()
+	right.add_child(action_row)
+	_add_judge_action_button(action_row, "开始复核", _judge_action_begin_review)
+	_add_judge_action_button(action_row, "完成材料复核", _judge_action_complete_review)
+	_add_judge_action_button(action_row, "接纳候审", _judge_action_accept_hearing)
+	_add_judge_action_button(action_row, "开始庭审", _judge_action_begin_hearing)
+	_add_judge_action_button(action_row, "结庭", _judge_action_close_hearing)
+	_add_judge_action_button(action_row, "签发判决", _judge_action_finalize)
+	judge_workbench_hint = Label.new()
+	judge_workbench_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	judge_workbench_hint.add_theme_color_override("font_color", Color("#e7c58e"))
+	root_column.add_child(judge_workbench_hint)
+
+
+func _add_judge_action_button(parent: Container, title: String, callback: Callable) -> void:
+	var button := Button.new()
+	button.text = title
+	button.pressed.connect(callback)
+	parent.add_child(button)
+
+
+func _open_judge_bureau_workbench() -> void:
+	if judge_workbench_root == null:
+		return
+	judge_workbench_open = true
+	judge_workbench_root.visible = true
+	_release_mouse()
+	_refresh_judge_bureau_workbench()
+
+
+func _close_judge_bureau_workbench() -> void:
+	judge_workbench_open = false
+	if judge_workbench_root != null:
+		judge_workbench_root.visible = false
+
+
+func _refresh_judge_bureau_workbench() -> void:
+	if judge_case_list == null or judge_case_detail == null:
+		return
+	judge_case_list.clear()
+	var queue := get_judge_bureau_case_queue()
+	var selected_index := -1
+	for i in range(queue.size()):
+		var item: Dictionary = queue[i]
+		var label := "%s  ·  %s\n%s | 物证 %d | 证词 %d | 涉案 %d | 申诉 %d" % [
+			str(item.get("title", "巡防案件")),
+			str(item.get("incident_id", "")),
+			str(item.get("workflow_state", "")),
+			int(item.get("evidence_count", 0)),
+			int(item.get("witness_count", 0)),
+			int(item.get("party_count", 0)),
+			int(item.get("pending_appeal_count", 0))
+		]
+		judge_case_list.add_item(label)
+		if str(item.get("incident_id", "")) == judge_selected_incident_id:
+			selected_index = i
+	if selected_index < 0 and not queue.is_empty():
+		selected_index = 0
+		judge_selected_incident_id = str(queue[0].get("incident_id", ""))
+	if selected_index >= 0:
+		judge_case_list.select(selected_index)
+		_show_judge_case_detail(judge_selected_incident_id)
+	else:
+		judge_selected_incident_id = ""
+		judge_case_detail.text = "[center][color=#a9bdcf]当前没有已移交判官司的卷宗[/color][/center]\n\n巡城司完成现场调查并正式移交后，案件才会出现在这里。"
+	if judge_workbench_hint != null:
+		judge_workbench_hint.text = "原型操作台：操作会调用当前客户端案件规则；并非真实官职授权或服务端司法权限。NPC 出庭状态未完成物理导航接入。"
+
+
+func _on_judge_case_selected(index: int) -> void:
+	var queue := get_judge_bureau_case_queue()
+	if index < 0 or index >= queue.size():
+		return
+	judge_selected_incident_id = str(queue[index].get("incident_id", ""))
+	_show_judge_case_detail(judge_selected_incident_id)
+
+
+func _show_judge_case_detail(incident_id: String) -> void:
+	var dossier := get_patrol_case_dossier(incident_id)
+	if not bool(dossier.get("ok", false)):
+		judge_case_detail.text = "卷宗读取失败：" + str(dossier.get("reason", "unknown"))
+		return
+	var submission: Dictionary = dossier.get("case_submission", {})
+	var review: Dictionary = dossier.get("judicial_review", {})
+	var hearing: Dictionary = dossier.get("hearing_record", {})
+	var lines := PackedStringArray()
+	lines.append("[font_size=22][color=#e7c58e]%s[/color][/font_size]" % str(dossier.get("title", "巡防案件")))
+	lines.append("[color=#91a9bf]案卷编号：%s  |  严重程度：%s[/color]" % [incident_id, str(dossier.get("severity", "一般"))])
+	lines.append("卷宗状态：%s  |  复核状态：%s" % [str(dossier.get("case_workflow_state", "")), str(dossier.get("judge_review_state", ""))])
+	lines.append("初步推断：%s  |  现场结果：%s" % [str(submission.get("deduction_label", dossier.get("deduction_label", "尚无推断"))), str(dossier.get("result_label", ""))])
+	lines.append("\n[b][color=#a9bdcf]移交证据[/color][/b]")
+	var evidence_tags: Array = submission.get("evidence_tags", [])
+	var assessments: Dictionary = review.get("evidence_assessments", {})
+	if evidence_tags.is_empty():
+		lines.append("尚无移交物证")
+	for tag_value in evidence_tags:
+		var tag := str(tag_value)
+		var assessment: Dictionary = assessments.get(tag, {})
+		lines.append("• %s  →  %s" % [tag, str(assessment.get("assessment", "待复核"))])
+	lines.append("\n[b][color=#a9bdcf]证人陈述[/color][/b]")
+	lines.append("证词标签：%s  |  复核：%s  |  前后矛盾：%s" % [
+		str(submission.get("testimony_tag", "无")),
+		str(review.get("testimony_assessment", {}).get("assessment", "待复核")),
+		"是" if bool(submission.get("testimony_conflict", false)) else "否"
+	])
+	lines.append("\n[b][color=#a9bdcf]涉案人员与程序[/color][/b]")
+	var parties: Array = submission.get("case_parties", [])
+	if parties.is_empty():
+		lines.append("本案没有独立涉案人员记录")
+	for party_value in parties:
+		var party: Dictionary = party_value
+		lines.append("• %s（%s）— %s；申辩：%s" % [
+			str(party.get("display_name", party.get("party_id", "未知人员"))),
+			str(party.get("party_id", "")),
+			str(party.get("procedural_status", "notice_pending")),
+			"已记录" if not str(party.get("defense_statement", "")).is_empty() else "未记录"
+		])
+	lines.append("\n[b][color=#a9bdcf]庭审记录[/color][/b]")
+	lines.append("庭审：%s  |  已出示物证：%d  |  程序记录：%d" % [
+		str(hearing.get("state", "未开庭")),
+		hearing.get("presented_evidence_tags", []).size(),
+		hearing.get("proceedings", []).size()
+	])
+	lines.append("\n[b][color=#a9bdcf]判决与申诉[/color][/b]")
+	lines.append("判决：%s  |  待处理申诉：%d" % [
+		str(dossier.get("judicial_conclusion", "not_determined")),
+		get_judge_bureau_appeal_queue().filter(func(a: Dictionary) -> bool: return str(a.get("incident_id", "")) == incident_id).size()
+	])
+	judge_case_detail.text = "\n".join(lines)
+
+
+func _run_judge_action(result: Dictionary, success_text: String) -> void:
+	if not bool(result.get("ok", false)):
+		if judge_workbench_hint != null:
+			judge_workbench_hint.text = "操作未执行：%s" % str(result.get("reason", "unknown"))
+	else:
+		if judge_workbench_hint != null:
+			judge_workbench_hint.text = success_text
+	_refresh_judge_bureau_workbench()
+
+
+func _judge_action_begin_review() -> void:
+	if judge_selected_incident_id.is_empty():
+		return
+	_run_judge_action(begin_judge_bureau_case_review(judge_selected_incident_id), "已开始卷宗复核。")
+
+
+func _judge_action_complete_review() -> void:
+	if judge_selected_incident_id.is_empty():
+		return
+	var dossier := get_patrol_case_dossier(judge_selected_incident_id)
+	if not bool(dossier.get("ok", false)):
+		return
+	var submission: Dictionary = dossier.get("case_submission", {})
+	var review: Dictionary = dossier.get("judicial_review", {})
+	var assessments: Dictionary = review.get("evidence_assessments", {})
+	for tag_value in submission.get("evidence_tags", []):
+		var tag := str(tag_value)
+		if not assessments.has(tag):
+			var assessment_result := record_judicial_evidence_assessment(judge_selected_incident_id, tag, "accepted", "工作台复核：该物证与移交材料一致，暂予采信。")
+			if not bool(assessment_result.get("ok", false)):
+				_run_judge_action(assessment_result, "")
+				return
+	if int(submission.get("witness_count", 0)) > 0 and not review.get("testimony_assessment", {}).has("assessment"):
+		var testimony_result := record_judicial_testimony_assessment(judge_selected_incident_id, "credible", "工作台复核：证词无已记录的前后矛盾，暂予可信。")
+		if not bool(testimony_result.get("ok", false)):
+			_run_judge_action(testimony_result, "")
+			return
+	_run_judge_action(complete_judge_bureau_review(judge_selected_incident_id), "材料复核完成；是否接纳候审由判官另行决定。")
+
+
+func _judge_action_accept_hearing() -> void:
+	if judge_selected_incident_id.is_empty():
+		return
+	_run_judge_action(record_judge_bureau_case_disposition(judge_selected_incident_id, "accept_for_hearing"), "案件已接纳候审。")
+
+
+func _judge_action_begin_hearing() -> void:
+	if judge_selected_incident_id.is_empty():
+		return
+	_run_judge_action(begin_case_hearing(judge_selected_incident_id), "庭审已开始。请先完成涉案人员程序，再进行举证与申辩。")
+
+
+func _judge_action_close_hearing() -> void:
+	if judge_selected_incident_id.is_empty():
+		return
+	_run_judge_action(close_case_hearing(judge_selected_incident_id, "庭审记录已由判官司工作台封存。"), "庭审已结束，进入判决阶段。")
+
+
+func _judge_action_finalize() -> void:
+	if judge_selected_incident_id.is_empty():
+		return
+	_run_judge_action(finalize_case_judgment(judge_selected_incident_id), "判决已签发。")
 
 
 func _box(node_name: String, center: Vector3, size: Vector3, material_key: String, collision: bool) -> Node3D:
