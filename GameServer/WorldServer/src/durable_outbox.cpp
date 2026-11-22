@@ -96,7 +96,14 @@ DurableOutbox::DurableOutbox(const std::string& path, std::size_t capacity, bool
         "runtime_id TEXT PRIMARY KEY NOT NULL,monster_instance_id TEXT NOT NULL UNIQUE,"
         "monster_definition_id TEXT NOT NULL,health REAL NOT NULL,updated_at_ms INTEGER NOT NULL);"
         "CREATE INDEX IF NOT EXISTS idx_monster_life_states_instance "
-        "ON monster_life_states(monster_instance_id);";
+        "ON monster_life_states(monster_instance_id);"
+        "CREATE TABLE IF NOT EXISTS monster_runtime_checkpoints("
+        "runtime_id TEXT PRIMARY KEY NOT NULL,monster_instance_id TEXT NOT NULL,"
+        "monster_definition_id TEXT NOT NULL,x REAL NOT NULL,z REAL NOT NULL,yaw REAL NOT NULL,"
+        "mode INTEGER NOT NULL CHECK(mode BETWEEN 0 AND 3),respawn_at_ms INTEGER NOT NULL DEFAULT 0,"
+        "checkpoint_at_ms INTEGER NOT NULL);"
+        "CREATE INDEX IF NOT EXISTS idx_monster_runtime_checkpoints_instance "
+        "ON monster_runtime_checkpoints(monster_instance_id);";
     char* message = nullptr;
     if (sqlite3_exec(db_, schema, nullptr, nullptr, &message) != SQLITE_OK) {
         const std::string error = message ? message : sqlite3_errmsg(db_);
@@ -249,6 +256,108 @@ std::vector<MonsterLifeStateRecord> DurableOutbox::load_monster_life_states(std:
             result.push_back(MonsterLifeStateRecord{
                 column_text(query.get(), 0), column_text(query.get(), 1),
                 column_text(query.get(), 2), sqlite3_column_double(query.get(), 3)});
+        }
+        if (step != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+    } catch (const std::exception& exception) {
+        error = exception.what();
+        result.clear();
+    }
+    return result;
+}
+
+
+bool DurableOutbox::save_monster_runtime_checkpoints(
+    const std::vector<MonsterRuntimeCheckpointRecord>& checkpoints, std::string& error) {
+    error.clear();
+    if (checkpoints.empty()) return true;
+    std::vector<std::string> seen_runtime_ids;
+    seen_runtime_ids.reserve(checkpoints.size());
+    for (const auto& checkpoint : checkpoints) {
+        if (checkpoint.runtime_id.empty() || checkpoint.runtime_id.size() > 96 ||
+            checkpoint.monster_instance_id.empty() || checkpoint.monster_instance_id.size() > 96 ||
+            checkpoint.monster_definition_id.empty() || checkpoint.monster_definition_id.size() > 64 ||
+            !std::isfinite(checkpoint.x) || !std::isfinite(checkpoint.z) ||
+            !std::isfinite(checkpoint.yaw) || checkpoint.mode < 0 || checkpoint.mode > 3 ||
+            checkpoint.respawn_at_ms < 0 || checkpoint.checkpoint_at_ms <= 0) {
+            error = "invalid monster runtime checkpoint";
+            return false;
+        }
+        if (std::find(seen_runtime_ids.begin(), seen_runtime_ids.end(), checkpoint.runtime_id) !=
+            seen_runtime_ids.end()) {
+            error = "duplicate runtime ID in monster checkpoint batch";
+            return false;
+        }
+        seen_runtime_ids.push_back(checkpoint.runtime_id);
+    }
+
+    std::lock_guard lock(mutex_);
+    bool transaction_open = false;
+    try {
+        if (!execute("BEGIN IMMEDIATE", error)) return false;
+        transaction_open = true;
+        Stmt upsert(db_,
+            "INSERT INTO monster_runtime_checkpoints(runtime_id,monster_instance_id,"
+            "monster_definition_id,x,z,yaw,mode,respawn_at_ms,checkpoint_at_ms) "
+            "SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS("
+            "SELECT 1 FROM monster_life_states WHERE runtime_id=? "
+            "AND monster_instance_id=? AND monster_definition_id=?) "
+            "ON CONFLICT(runtime_id) DO UPDATE SET "
+            "monster_instance_id=excluded.monster_instance_id,"
+            "monster_definition_id=excluded.monster_definition_id,x=excluded.x,z=excluded.z,"
+            "yaw=excluded.yaw,mode=excluded.mode,respawn_at_ms=excluded.respawn_at_ms,"
+            "checkpoint_at_ms=excluded.checkpoint_at_ms");
+        for (const auto& checkpoint : checkpoints) {
+            sqlite3_reset(upsert.get());
+            sqlite3_clear_bindings(upsert.get());
+            bind_text(upsert.get(), 1, checkpoint.runtime_id);
+            bind_text(upsert.get(), 2, checkpoint.monster_instance_id);
+            bind_text(upsert.get(), 3, checkpoint.monster_definition_id);
+            sqlite3_bind_double(upsert.get(), 4, checkpoint.x);
+            sqlite3_bind_double(upsert.get(), 5, checkpoint.z);
+            sqlite3_bind_double(upsert.get(), 6, checkpoint.yaw);
+            sqlite3_bind_int(upsert.get(), 7, checkpoint.mode);
+            sqlite3_bind_int64(upsert.get(), 8, checkpoint.respawn_at_ms);
+            sqlite3_bind_int64(upsert.get(), 9, checkpoint.checkpoint_at_ms);
+            bind_text(upsert.get(), 10, checkpoint.runtime_id);
+            bind_text(upsert.get(), 11, checkpoint.monster_instance_id);
+            bind_text(upsert.get(), 12, checkpoint.monster_definition_id);
+            if (sqlite3_step(upsert.get()) != SQLITE_DONE)
+                throw std::runtime_error(sqlite3_errmsg(db_));
+            if (sqlite3_changes(db_) != 1)
+                throw std::runtime_error("monster checkpoint life identity is stale or missing");
+        }
+        if (!execute("COMMIT", error)) throw std::runtime_error(error);
+        transaction_open = false;
+        return true;
+    } catch (const std::exception& exception) {
+        if (transaction_open) { std::string ignored; execute("ROLLBACK", ignored); }
+        error = exception.what();
+        return false;
+    }
+}
+
+std::vector<MonsterRuntimeCheckpointRecord> DurableOutbox::load_monster_runtime_checkpoints(
+    std::string& error) const {
+    error.clear();
+    std::vector<MonsterRuntimeCheckpointRecord> result;
+    std::lock_guard lock(mutex_);
+    try {
+        Stmt query(db_,
+            "SELECT c.runtime_id,c.monster_instance_id,c.monster_definition_id,"
+            "c.x,c.z,c.yaw,c.mode,c.respawn_at_ms,c.checkpoint_at_ms "
+            "FROM monster_runtime_checkpoints c "
+            "JOIN monster_life_states l ON l.runtime_id=c.runtime_id "
+            "AND l.monster_instance_id=c.monster_instance_id "
+            "AND l.monster_definition_id=c.monster_definition_id "
+            "ORDER BY c.runtime_id");
+        int step = SQLITE_ROW;
+        while ((step = sqlite3_step(query.get())) == SQLITE_ROW) {
+            result.push_back(MonsterRuntimeCheckpointRecord{
+                column_text(query.get(), 0), column_text(query.get(), 1),
+                column_text(query.get(), 2), sqlite3_column_double(query.get(), 3),
+                sqlite3_column_double(query.get(), 4), sqlite3_column_double(query.get(), 5),
+                sqlite3_column_int(query.get(), 6), sqlite3_column_int64(query.get(), 7),
+                sqlite3_column_int64(query.get(), 8)});
         }
         if (step != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
     } catch (const std::exception& exception) {
