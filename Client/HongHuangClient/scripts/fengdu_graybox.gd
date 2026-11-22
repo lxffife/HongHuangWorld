@@ -2054,7 +2054,16 @@ func _update_market_gate_inspection(delta: float) -> void:
 	var welcoming_guests := minute_of_day >= 19 * 60 + 30 and minute_of_day < 20 * 60
 	var guiding_departure := minute_of_day >= 22 * 60 and minute_of_day < 22 * 60 + 30
 	var dispatch_status := _patrol_dispatch_status_text()
-	market_inspection_label.text = dispatch_status if dispatch_status != "" else (("巡夜巡查 · 入口核验 #%d" % market_inspection_sequence) if inspecting else ("宾客入场 · 入口引导" if welcoming_guests else ("竞宝散场 · 引导离席" if guiding_departure else "夜市巡防 · 正常")))
+	if dispatch_status != "":
+		market_inspection_label.text = dispatch_status
+	elif inspecting:
+		market_inspection_label.text = "巡夜巡查 · 入口核验 #%d" % market_inspection_sequence
+	elif welcoming_guests:
+		market_inspection_label.text = "宾客入场 · 入口引导"
+	elif guiding_departure:
+		market_inspection_label.text = "竞宝散场 · 引导离席"
+	else:
+		market_inspection_label.text = "夜市巡防 · 正常"
 	market_inspection_label.modulate = Color("#e4bd82") if inspecting else (Color("#d7bd98") if welcoming_guests or guiding_departure else Color("#a9c3d2"))
 	for index in range(market_guards.size()):
 		var guard_data: Dictionary = market_guards[index]
@@ -2097,7 +2106,7 @@ func _begin_patrol_dispatch(target_position: Vector3) -> void:
 		var guard_root: Node3D = agent.get("root")
 		if guard_root == null or not is_instance_valid(guard_root):
 			continue
-		var distance := guard_root.global_position.distance_to(target_position)
+		var distance := guard_root.position.distance_to(target_position)
 		if distance < selected_distance:
 			selected_distance = distance
 			selected_agent = agent
