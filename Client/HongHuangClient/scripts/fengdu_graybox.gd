@@ -1169,7 +1169,8 @@ func _build_market_audience() -> void:
 			"left_arm": figure["left_arm"],
 			"right_arm": figure["right_arm"],
 			"phase": float(index) * 1.65,
-			"base_yaw": root.rotation.y
+			"base_yaw": root.rotation.y,
+			"audience_state": "watch"
 		})
 
 
@@ -1364,15 +1365,23 @@ func _update_market_ambience(delta: float) -> void:
 		var spectator_body: MeshInstance3D = spectator["body"]
 		var spectator_left: MeshInstance3D = spectator["left_arm"]
 		var spectator_right: MeshInstance3D = spectator["right_arm"]
-		spectator_body.rotation.x = sin(spectator_phase * 0.65) * deg_to_rad(1.8)
-		if auction_active:
-			var applause := absf(sin(spectator_phase))
-			spectator_left.rotation.z = deg_to_rad(-18.0) - applause * 0.22
-			spectator_right.rotation.z = deg_to_rad(18.0) + applause * 0.22
+		var audience_clock := fposmod(market_ambience_time + float(spectator["phase"]) * 2.1, 18.0)
+		var bidding := auction_active and audience_clock >= 4.0 and audience_clock < 7.0
+		var cheering := auction_active and audience_clock >= 10.0 and audience_clock < 15.0
+		spectator["audience_state"] = "bid" if bidding else ("cheer" if cheering else "watch")
+		spectator_body.rotation.x = (deg_to_rad(4.0) if bidding else 0.0) + sin(spectator_phase * 0.65) * deg_to_rad(1.8)
+		if bidding:
+			# Each spectator raises a hand in a different time window; no synchronized crowd wave.
+			spectator_left.rotation.z = deg_to_rad(-18.0) - 0.06
+			spectator_right.rotation.z = deg_to_rad(18.0) + 0.72 + sin(spectator_phase * 1.4) * 0.035
+		elif cheering:
+			var applause := absf(sin(spectator_phase * 1.3))
+			spectator_left.rotation.z = deg_to_rad(-18.0) - applause * 0.2
+			spectator_right.rotation.z = deg_to_rad(18.0) + applause * 0.2
 		else:
 			spectator_left.rotation.z = deg_to_rad(-18.0) + sin(spectator_phase) * 0.025
 			spectator_right.rotation.z = deg_to_rad(18.0) - sin(spectator_phase + 0.8) * 0.025
-		spectator_root.rotation.y = float(spectator["base_yaw"]) + sin(spectator_phase * 0.25) * 0.035
+		spectator_root.rotation.y = float(spectator["base_yaw"]) + (0.0 if bidding else sin(spectator_phase * 0.25) * 0.035)
 	if not market_stage_actor.is_empty():
 		var host_root: Node3D = market_stage_actor["root"]
 		var auction_active := _is_market_auction_time()
@@ -1383,6 +1392,17 @@ func _update_market_ambience(delta: float) -> void:
 			var host_left: MeshInstance3D = market_stage_actor["left_arm"]
 			var host_right: MeshInstance3D = market_stage_actor["right_arm"]
 			var auction_elapsed_minutes := fposmod(npc_world_minutes - 20.0 * 60.0, 20.0)
+			var lot_index := mini(2, int(auction_elapsed_minutes / (20.0 / 3.0)))
+			var lot_parts: Array = market_stage_actor.get("lot_parts", [])
+			for lot_part_index in range(lot_parts.size()):
+				var lot_part: MeshInstance3D = lot_parts[lot_part_index]
+				lot_part.visible = lot_part_index == lot_index
+				if lot_part.visible:
+					lot_part.rotation.y = host_phase * 0.32
+			var lot_names: Array = market_stage_actor.get("lot_names", [])
+			var lot_label: Label3D = market_stage_actor.get("lot_label")
+			if lot_label != null and lot_index < lot_names.size():
+				lot_label.text = str(lot_names[lot_index])
 			host_body.rotation.x = sin(host_phase * 0.7) * deg_to_rad(1.5)
 			match int(auction_elapsed_minutes):
 				0, 1, 2:
@@ -2312,11 +2332,64 @@ func _build_market_auction_host() -> void:
 	sash.material_override = cap_material
 	sash.position = Vector3(0.0, 1.48, -0.29)
 	host_root.add_child(sash)
+	# Three reusable low-poly lots: soul gem, ritual implement and soul vessel.
+	var lot_root := Node3D.new()
+	lot_root.name = "AuctionLotDisplay"
+	lot_root.position = Vector3(0.0, 1.18, 2.25)
+	host_root.add_child(lot_root)
+	var lot_parts: Array[MeshInstance3D] = []
+	var lot_names := ["幽冥魂珠", "镇魂法器", "古战魂器"]
+	var lot_colors := [Color("#75c9e6"), Color("#d7a66b"), Color("#a28acb")]
+	for lot_index in range(3):
+		var lot := MeshInstance3D.new()
+		lot.name = "AuctionLot_%02d" % (lot_index + 1)
+		if lot_index == 0:
+			var gem := SphereMesh.new()
+			gem.radius = 0.48
+			gem.height = 0.96
+			lot.mesh = gem
+		elif lot_index == 1:
+			var ritual := CylinderMesh.new()
+			ritual.top_radius = 0.12
+			ritual.bottom_radius = 0.34
+			ritual.height = 0.95
+			lot.mesh = ritual
+		else:
+			var vessel := CapsuleMesh.new()
+			vessel.radius = 0.32
+			vessel.height = 1.05
+			lot.mesh = vessel
+		var lot_material := StandardMaterial3D.new()
+		lot_material.albedo_color = lot_colors[lot_index]
+		lot_material.metallic = 0.32
+		lot_material.roughness = 0.3
+		lot_material.emission_enabled = true
+		lot_material.emission = lot_colors[lot_index]
+		lot_material.emission_energy_multiplier = 0.24
+		lot.material_override = lot_material
+		lot.position.y = 0.62
+		lot.visible = lot_index == 0
+		lot_root.add_child(lot)
+		lot_parts.append(lot)
+	var lot_label := Label3D.new()
+	lot_label.name = "AuctionLotName"
+	lot_label.text = lot_names[0]
+	lot_label.position = Vector3(0.0, 1.45, 0.0)
+	lot_label.font_size = 12
+	lot_label.pixel_size = 0.009
+	lot_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lot_label.modulate = Color("#ead2a6")
+	lot_label.outline_size = 4
+	lot_label.outline_modulate = Color("#171d25")
+	lot_root.add_child(lot_label)
 	market_stage_actor = {
 		"root": host_root,
 		"body": figure["body"],
 		"left_arm": figure["left_arm"],
 		"right_arm": figure["right_arm"],
+		"lot_parts": lot_parts,
+		"lot_names": lot_names,
+		"lot_label": lot_label,
 		"phase": 1.7
 	}
 
