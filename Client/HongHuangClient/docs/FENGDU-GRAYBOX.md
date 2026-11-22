@@ -334,3 +334,5 @@
 - 灰盒场景预加载独立寻路模块并缓存一份导航网络，通过 `get_navigation_route_to_district()` 与 `get_navigation_route_between_positions()` 对外提供查询接口；查询只返回路径数据，不直接驱动玩家或 NPC。
 - 路径结果包含节点 ID 序列、世界坐标 waypoint、路径代价/长度、起终连接信息和失败原因。
 - 逻辑路网是高层路线规划，不替代 NavigationRegion3D/NavigationAgent3D 的网格寻路、碰撞避障和局部绕行；接入物理导航仍需在 Godot 场景中实测。
+
+- 新增 `validate_network()`：检查节点/边 ID 唯一性、边端点、自环，以及预设路线的每一段是否有真实道路边支撑；返回结构化错误列表，便于编辑器调试和后续自动化测试。
