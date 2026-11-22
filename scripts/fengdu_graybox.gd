@@ -1468,6 +1468,23 @@ func _market_stall(center: Vector3, facing: float, stall_type: String) -> void:
 			_box("GhostMarketStallPost", center + Vector3(side * 2.0, 1.55, z_side * 2.0), Vector3(0.22, 3.0, 0.22), "gold", false)
 	_box("GhostMarketStallSign", center + Vector3(facing * 2.15, 2.55, 0), Vector3(0.18, 0.9, 1.6), "gold", false)
 	_label(stall_type, center + Vector3(facing * 2.28, 3.18, 0), 17, Color("#f0d5a4"))
+	var sign_accent := Color("#83c7e4")
+	match stall_type:
+		"魂珠铺":
+			sign_accent = Color("#83c7e4")
+		"魂籍铺":
+			sign_accent = Color("#d6bd8b")
+		"药材铺":
+			sign_accent = Color("#8dbb86")
+		"法器铺":
+			sign_accent = Color("#e0a96f")
+		"魂器铺":
+			sign_accent = Color("#9b9fc9")
+		"悬赏交易":
+			sign_accent = Color("#d27d68")
+	# Paired low-cost emissive seals make each shop readable from the aisle without adding lights.
+	_market_display_orb(center + Vector3(facing * 2.28, 2.55, -0.72), 0.11, sign_accent)
+	_market_display_orb(center + Vector3(facing * 2.28, 2.55, 0.72), 0.11, sign_accent)
 	var counter_front := center + Vector3(facing * 0.85, 1.26, 0)
 	match stall_type:
 		"魂珠铺":
