@@ -23,6 +23,7 @@ var (
 
 type ItemStack struct {
 	InstanceID string `json:"instance_id,omitempty"`
+	EnhancementLevel int `json:"enhancement_level,omitempty"`
 	RolledStats map[string]int `json:"rolled_stats,omitempty"`
 	Affixes []EquipmentAffix `json:"affixes,omitempty"`
 	ItemID string `json:"item_id"`
@@ -235,7 +236,7 @@ func (s *Service) CurrentInventory(ctx context.Context, accountID string) ([]Ite
 	if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate inventory: %w", err) }
 	if err := rows.Close(); err != nil { return nil, fmt.Errorf("close inventory stacks: %w", err) }
 	instanceRows, err := s.db.QueryContext(ctx, `SELECT ii.id::text,i.id,i.name,i.category,ii.quality,i.max_stack,i.icon_key,i.description,
-		i.item_type,COALESCE(i.equipment_slot,''),COALESCE(i.weapon_type,''),i.base_stats,ii.rolled_stats,ii.affixes,
+		i.item_type,COALESCE(i.equipment_slot,''),COALESCE(i.weapon_type,''),i.base_stats,ii.rolled_stats,ii.affixes,ii.enhancement_level,
 		COALESCE(es.id,''),COALESCE(es.name,''),COALESCE(es.description,''),COALESCE(es.bonus_tiers,'{}'::jsonb)
 		FROM souls soul JOIN characters c ON c.id=soul.current_character_id
 		JOIN character_item_instances ci ON ci.character_id=c.id
@@ -248,7 +249,7 @@ func (s *Service) CurrentInventory(ctx context.Context, accountID string) ([]Ite
 	for instanceRows.Next(){
 		var item ItemStack;var baseRaw,rolledRaw,affixesRaw,setTiers []byte
 		if err:=instanceRows.Scan(&item.InstanceID,&item.ItemID,&item.Name,&item.Category,&item.Quality,&item.MaxStack,&item.IconKey,&item.Description,
-			&item.ItemType,&item.EquipmentSlot,&item.WeaponType,&baseRaw,&rolledRaw,&affixesRaw,&item.SetID,&item.SetName,&item.SetDescription,&setTiers);err!=nil{
+			&item.ItemType,&item.EquipmentSlot,&item.WeaponType,&baseRaw,&rolledRaw,&affixesRaw,&item.EnhancementLevel,&item.SetID,&item.SetName,&item.SetDescription,&setTiers);err!=nil{
 			return nil,fmt.Errorf("scan equipment item instance: %w",err)
 		}
 		item.Quantity=1;item.BaseStats=map[string]int{};item.RolledStats=map[string]int{};item.Affixes=[]EquipmentAffix{}
@@ -546,6 +547,7 @@ func validUUID(value string) bool {
 
 type EquippedItem struct {
 	InstanceID string `json:"instance_id,omitempty"`
+	EnhancementLevel int `json:"enhancement_level,omitempty"`
 	RolledStats map[string]int `json:"rolled_stats,omitempty"`
 	Affixes []EquipmentAffix `json:"affixes,omitempty"`
 	Slot string `json:"slot"`
@@ -561,6 +563,9 @@ type EquippedItem struct {
 	SetDescription string `json:"set_description,omitempty"`
 	SetBonusTiers map[int]map[string]int `json:"set_bonus_tiers,omitempty"`
 }
+type EnhancementRequest struct { RequestID string; InstanceID string }
+type EnhancementResult struct { Applied bool `json:"applied"`; Succeeded bool `json:"succeeded"`; OldLevel int `json:"old_level"`; EnhancementLevel int `json:"enhancement_level"`; MaxLevel int `json:"max_level"`; MaterialName string `json:"material_name"`; MaterialQuantity int `json:"material_quantity"`; SuccessRateBP int `json:"success_rate_bp"` }
+
 type SalvageRequest struct {
 	RequestID string
 	InstanceID string
@@ -580,7 +585,7 @@ var validEquipmentSlots = map[string]bool{"weapon":true,"head":true,"chest":true
 
 func (s *Service) CurrentEquipment(ctx context.Context, accountID string) ([]EquippedItem, error) {
 	rows,err:=s.db.QueryContext(ctx,`SELECT e.slot,i.id,i.name,COALESCE(ii.quality,i.quality),COALESCE(ii.id::text,''),COALESCE(i.weapon_type,''),i.icon_key,i.description,
-		i.base_stats,COALESCE(ii.rolled_stats,'{}'::jsonb),COALESCE(ii.affixes,'[]'::jsonb),
+		i.base_stats,COALESCE(ii.rolled_stats,'{}'::jsonb),COALESCE(ii.affixes,'[]'::jsonb),COALESCE(ii.enhancement_level,0),
 		COALESCE(es.id,''),COALESCE(es.name,''),COALESCE(es.description,''),COALESCE(es.bonus_tiers,'{}'::jsonb)
 		FROM souls soul JOIN characters c ON c.id=soul.current_character_id
 		JOIN character_equipment e ON e.character_id=c.id JOIN item_definitions i ON i.id=e.item_id
@@ -593,7 +598,7 @@ func (s *Service) CurrentEquipment(ctx context.Context, accountID string) ([]Equ
 	for rows.Next(){
 		var item EquippedItem;var baseRaw,rolledRaw,affixesRaw,setTiers []byte
 		if err:=rows.Scan(&item.Slot,&item.ItemID,&item.Name,&item.Quality,&item.InstanceID,&item.WeaponType,&item.IconKey,&item.Description,
-			&baseRaw,&rolledRaw,&affixesRaw,&item.SetID,&item.SetName,&item.SetDescription,&setTiers);err!=nil{
+			&baseRaw,&rolledRaw,&affixesRaw,&item.EnhancementLevel,&item.SetID,&item.SetName,&item.SetDescription,&setTiers);err!=nil{
 			return nil,fmt.Errorf("scan equipped item: %w",err)
 		}
 		item.BaseStats=map[string]int{};item.RolledStats=map[string]int{};item.Affixes=[]EquipmentAffix{}
@@ -700,6 +705,61 @@ func (s *Service) Equip(ctx context.Context,accountID string,request EquipmentRe
 	if err!=nil{return fmt.Errorf("save equipped item: %w",err)}
 	if err:=tx.Commit();err!=nil{return fmt.Errorf("commit equipped item: %w",err)}
 	return nil
+}
+
+
+func enhancementMaxLevel(quality int) int {
+	switch quality { case 1: return 3; case 2: return 5; case 3: return 8; case 4: return 10; case 5: return 12; default: return 0 }
+}
+
+func enhancementStatBonus(level int, slot string) map[string]int {
+	if level <= 0 { return map[string]int{} }
+	if slot == "weapon" { return map[string]int{"attack": level * 2} }
+	return map[string]int{"defense": level}
+}
+
+func (s *Service) EnhanceEquipment(ctx context.Context, accountID string, request EnhancementRequest) (EnhancementResult, error) {
+	if strings.TrimSpace(accountID)=="" || !validUUID(request.RequestID) || !validUUID(request.InstanceID) { return EnhancementResult{}, ErrInvalidRequest }
+	tx,err:=s.db.BeginTx(ctx,nil); if err!=nil{return EnhancementResult{},fmt.Errorf("begin equipment enhancement: %w",err)}; defer tx.Rollback()
+	var characterID string
+	if err:=tx.QueryRowContext(ctx, "SELECT c.id::text FROM souls soul JOIN characters c ON c.id=soul.current_character_id WHERE soul.account_id=$1 AND c.status='alive' FOR UPDATE OF c",accountID).Scan(&characterID);err!=nil{
+		if errors.Is(err,sql.ErrNoRows){return EnhancementResult{},ErrInvalidRequest};return EnhancementResult{},fmt.Errorf("resolve enhancement character: %w",err)
+	}
+	if err:=ensureEquipmentSessionStable(ctx,tx,characterID);err!=nil{return EnhancementResult{},err}
+	var replay EnhancementResult; var replayInstance string
+	err=tx.QueryRowContext(ctx, "SELECT item_instance_id::text,succeeded,old_level,target_level,material_quantity,success_rate_bp,(SELECT name FROM item_definitions WHERE id=material_item_id) FROM equipment_enhancement_events WHERE character_id=$1::uuid AND request_id=$2::uuid",characterID,request.RequestID).
+		Scan(&replayInstance,&replay.Succeeded,&replay.OldLevel,&replay.EnhancementLevel,&replay.MaterialQuantity,&replay.SuccessRateBP,&replay.MaterialName)
+	if err==nil{
+		if replayInstance!=request.InstanceID{return EnhancementResult{},ErrIdempotencyConflict}
+		replay.Applied=false
+		var quality int
+		if err:=tx.QueryRowContext(ctx,"SELECT quality FROM item_instances WHERE id=$1::uuid",request.InstanceID).Scan(&quality);err!=nil{return EnhancementResult{},fmt.Errorf("load replay equipment quality: %w",err)}
+		replay.MaxLevel=enhancementMaxLevel(quality)
+		if err:=tx.Commit();err!=nil{return EnhancementResult{},fmt.Errorf("commit enhancement replay: %w",err)}
+		return replay,nil
+	}
+	if !errors.Is(err,sql.ErrNoRows){return EnhancementResult{},fmt.Errorf("check enhancement idempotency: %w",err)}
+	var itemID,slot string;var quality,oldLevel int
+	err=tx.QueryRowContext(ctx, "SELECT ii.item_id,i.equipment_slot,ii.quality,ii.enhancement_level FROM character_item_instances ci JOIN item_instances ii ON ii.id=ci.item_instance_id JOIN item_definitions i ON i.id=ii.item_id WHERE ci.character_id=$1::uuid AND ii.id=$2::uuid AND i.enabled AND i.item_type='equipment' AND NOT EXISTS(SELECT 1 FROM character_equipment ce WHERE ce.item_instance_id=ii.id) FOR UPDATE OF ci,ii",characterID,request.InstanceID).Scan(&itemID,&slot,&quality,&oldLevel)
+	if errors.Is(err,sql.ErrNoRows){return EnhancementResult{},ErrInvalidRequest};if err!=nil{return EnhancementResult{},fmt.Errorf("lock enhancement equipment: %w",err)}
+	maxLevel:=enhancementMaxLevel(quality);if maxLevel==0||oldLevel>=maxLevel{return EnhancementResult{},ErrInvalidRequest}
+	target:=oldLevel+1
+	var materialID,materialName string;var cost,rate int
+	err=tx.QueryRowContext(ctx, "SELECT r.material_item_id,m.name,er.material_quantity,er.success_rate_bp FROM equipment_salvage_recipes r JOIN item_definitions m ON m.id=r.material_item_id AND m.enabled JOIN equipment_enhancement_rules er ON er.target_level=$2 WHERE r.equipment_item_id=$1 AND r.enabled",itemID,target).Scan(&materialID,&materialName,&cost,&rate)
+	if errors.Is(err,sql.ErrNoRows){return EnhancementResult{},ErrInvalidRequest};if err!=nil{return EnhancementResult{},fmt.Errorf("load enhancement recipe: %w",err)}
+	var available int
+	err=tx.QueryRowContext(ctx,"SELECT quantity FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2 FOR UPDATE",characterID,materialID).Scan(&available)
+	if errors.Is(err,sql.ErrNoRows)||available<cost{return EnhancementResult{},ErrInsufficientMaterials};if err!=nil{return EnhancementResult{},fmt.Errorf("lock enhancement materials: %w",err)}
+	roll,err:=secureRandomInt(10000);if err!=nil{return EnhancementResult{},err}
+	succeeded:=int(roll)<rate
+	if _,err:=tx.ExecContext(ctx,"UPDATE character_inventory SET quantity=quantity-$3,updated_at=now() WHERE character_id=$1::uuid AND item_id=$2 AND quantity >= $3",characterID,materialID,cost);err!=nil{return EnhancementResult{},fmt.Errorf("consume enhancement materials: %w",err)}
+	if _,err:=tx.ExecContext(ctx,"DELETE FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2 AND quantity<=0",characterID,materialID);err!=nil{return EnhancementResult{},fmt.Errorf("remove empty material stack: %w",err)}
+	newLevel:=oldLevel
+	if succeeded { newLevel=target; if _,err:=tx.ExecContext(ctx,"UPDATE item_instances SET enhancement_level=$2 WHERE id=$1::uuid",request.InstanceID,newLevel);err!=nil{return EnhancementResult{},fmt.Errorf("apply equipment enhancement: %w",err)} }
+	if _,err:=tx.ExecContext(ctx,"INSERT INTO equipment_enhancement_events(character_id,request_id,item_instance_id,equipment_item_id,old_level,target_level,material_item_id,material_quantity,success_rate_bp,succeeded) VALUES($1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7,$8,$9,$10)",characterID,request.RequestID,request.InstanceID,itemID,oldLevel,target,materialID,cost,rate,succeeded);err!=nil{return EnhancementResult{},fmt.Errorf("record enhancement attempt: %w",err)}
+	result:=EnhancementResult{Applied:true,Succeeded:succeeded,OldLevel:oldLevel,EnhancementLevel:newLevel,MaxLevel:maxLevel,MaterialName:materialName,MaterialQuantity:cost,SuccessRateBP:rate}
+	if err:=tx.Commit();err!=nil{return EnhancementResult{},fmt.Errorf("commit equipment enhancement: %w",err)}
+	return result,nil
 }
 
 func (s *Service) SalvageEquipment(ctx context.Context,accountID string,request SalvageRequest)(SalvageResult,error){
@@ -847,7 +907,7 @@ func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessio
 		nodeKey,sessionID,characterID).Scan(&result.Health,&result.Mana,&result.Attack,&result.Defense,&result.Strength,&result.Constitution,&result.Agility,&result.Spirit,&result.Vitality,&result.MovementSpeed,&result.MaxHealth,&result.MaxMana)
 	if errors.Is(err,sql.ErrNoRows) { return CombatStats{},ErrSessionInvalid }
 	if err!=nil { return CombatStats{},fmt.Errorf("load session combat attributes: %w",err) }
-	rows,err:=tx.QueryContext(ctx,`SELECT i.base_stats,COALESCE(ii.rolled_stats,'{}'::jsonb),COALESCE(i.equipment_set_id,''),COALESCE(es.bonus_tiers,'{}'::jsonb)
+	rows,err:=tx.QueryContext(ctx,`SELECT i.base_stats,COALESCE(ii.rolled_stats,'{}'::jsonb),COALESCE(ii.enhancement_level,0),COALESCE(e.slot,''),COALESCE(i.equipment_set_id,''),COALESCE(es.bonus_tiers,'{}'::jsonb)
 		FROM character_equipment e JOIN item_definitions i ON i.id=e.item_id
 		LEFT JOIN item_instances ii ON ii.id=e.item_instance_id
 		LEFT JOIN equipment_sets es ON es.id=i.equipment_set_id AND es.enabled
@@ -858,14 +918,16 @@ func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessio
 	setTiers:=map[string]map[int]map[string]int{}
 	for rows.Next() {
 		var raw, rolledRaw, tierRaw []byte
-		var setID string
-		if err:=rows.Scan(&raw,&rolledRaw,&setID,&tierRaw); err!=nil { return CombatStats{},fmt.Errorf("scan equipped combat bonuses: %w",err) }
+		var setID, slot string
+		var enhancementLevel int
+		if err:=rows.Scan(&raw,&rolledRaw,&enhancementLevel,&slot,&setID,&tierRaw); err!=nil { return CombatStats{},fmt.Errorf("scan equipped combat bonuses: %w",err) }
 		bonuses:=map[string]int{}
 		if len(raw)>0 { if err:=json.Unmarshal(raw,&bonuses); err!=nil { return CombatStats{},fmt.Errorf("decode equipped combat bonuses: %w",err) } }
 		if err := applyEquipmentStatBonuses(&result, bonuses); err != nil { return CombatStats{}, err }
 		rolledBonuses:=map[string]int{}
 		if len(rolledRaw)>0 { if err:=json.Unmarshal(rolledRaw,&rolledBonuses); err!=nil { return CombatStats{},fmt.Errorf("decode rolled equipment bonuses: %w",err) } }
 		if err:=applyEquipmentStatBonuses(&result,rolledBonuses);err!=nil{return CombatStats{},err}
+		if err:=applyEquipmentStatBonuses(&result,enhancementStatBonus(enhancementLevel,slot));err!=nil{return CombatStats{},err}
 		if setID!="" {
 			setCounts[setID]++
 			if _,exists:=setTiers[setID]; !exists {
@@ -891,7 +953,7 @@ func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessio
 	// Return the authoritative equipment list with combat stats so WorldServer
 	// can refresh weapon behavior and replicated appearance in the same update.
 	equipmentRows, err := tx.QueryContext(ctx, `SELECT e.slot,i.id,i.name,COALESCE(ii.quality,i.quality),COALESCE(ii.id::text,''),COALESCE(i.weapon_type,''),i.icon_key,i.description,
-		i.base_stats,COALESCE(ii.rolled_stats,'{}'::jsonb),COALESCE(ii.affixes,'[]'::jsonb),
+		i.base_stats,COALESCE(ii.rolled_stats,'{}'::jsonb),COALESCE(ii.affixes,'[]'::jsonb),COALESCE(ii.enhancement_level,0),
 		COALESCE(es.id,''),COALESCE(es.name,''),COALESCE(es.description,''),COALESCE(es.bonus_tiers,'{}'::jsonb)
 		FROM world_sessions ws JOIN server_registry sr ON sr.id=ws.server_id
 		JOIN character_equipment e ON e.character_id=ws.character_id
@@ -907,7 +969,7 @@ func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessio
 		var item EquippedItem
 		var rawStats,rawRolled,rawAffixes,rawTiers []byte
 		if err:=equipmentRows.Scan(&item.Slot,&item.ItemID,&item.Name,&item.Quality,&item.InstanceID,&item.WeaponType,&item.IconKey,&item.Description,
-			&rawStats,&rawRolled,&rawAffixes,&item.SetID,&item.SetName,&item.SetDescription,&rawTiers);err!=nil{
+			&rawStats,&rawRolled,&rawAffixes,&item.EnhancementLevel,&item.SetID,&item.SetName,&item.SetDescription,&rawTiers);err!=nil{
 			return CombatStats{},fmt.Errorf("scan session equipment: %w",err)
 		}
 		item.BaseStats=map[string]int{};item.RolledStats=map[string]int{};item.Affixes=[]EquipmentAffix{}
