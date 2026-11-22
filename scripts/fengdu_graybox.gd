@@ -256,7 +256,7 @@ func _lantern_post(position: Vector3) -> void:
 func _build_ground_and_roads() -> void:
 	_box("CityGround", Vector3(0, -0.55, 0), Vector3(600, 1, 600), "ground", true)
 	# Road geometry is generated from stable layout records, not embedded in this scene adapter.
-	for road_data in WORLD_LAYOUT.get_roads():
+	for road_data in WORLD_LAYOUT.get_roads() + WORLD_LAYOUT.get_local_connectors():
 		_box(str(road_data.get("id", "Road")), road_data.get("center", Vector3.ZERO), road_data.get("size", Vector3.ONE), str(road_data.get("surface", "road")), false)
 
 
