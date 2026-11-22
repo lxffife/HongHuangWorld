@@ -2162,6 +2162,11 @@ func _begin_patrol_dispatch(target_position: Vector3, incident_profile: Dictiona
 	incident["player_evidence_count"] = 0
 	incident["player_witness_count"] = 0
 	incident["player_contribution_count"] = 0
+	var scene_clues := _spawn_patrol_incident_clues(incident)
+	incident["evidence_nodes"] = scene_clues.get("evidence_nodes", [])
+	incident["witness_root"] = scene_clues.get("witness_root")
+	incident["witness_name"] = str(scene_clues.get("witness_name", ""))
+	incident["witness_questioned"] = false
 	patrol_incident_records.append(incident.duplicate(true))
 	patrol_incident_queue.append(incident)
 	patrol_incident_queue.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
@@ -3340,10 +3345,16 @@ func _update_npc_interaction_hint() -> void:
 		patrol_incident_focus_id = str(nearest_incident.get("incident_id", ""))
 		npc_focus_agent = {}
 		if str(nearest_incident.get("state", "")) == "investigating":
-			var actions: Array = nearest_incident.get("player_action_ids", [])
-			var remaining_actions := 3 - actions.size()
-			var investigation_hint := "调查已完成" if remaining_actions <= 0 else "还可调查 %d 项" % remaining_actions
-			npc_hint_label.text = "E 参与现场调查 · %s（%s）" % [
+			var remaining_clues := 0
+			for clue_node in nearest_incident.get("evidence_nodes", []):
+				if is_instance_valid(clue_node) and clue_node.visible:
+					remaining_clues += 1
+			var witness_root: Node3D = nearest_incident.get("witness_root")
+			var witness_available := witness_root != null and is_instance_valid(witness_root) and not bool(nearest_incident.get("witness_questioned", false))
+			var investigation_hint := "物证 %d 处 · 证人可询问" % remaining_clues if witness_available else "尚有物证 %d 处" % remaining_clues
+			if remaining_clues <= 0 and not witness_available:
+				investigation_hint = "调查线索已收集完毕"
+			npc_hint_label.text = "E 调查附近目标 · %s（%s）" % [
 				str(nearest_incident.get("title", "巡防事件")),
 				investigation_hint
 			]
@@ -3378,44 +3389,113 @@ func _interact_with_patrol_incident(incident_id: String) -> void:
 	if str(record.get("state", "")) != "investigating":
 		npc_detail_label.text = "%s：巡城卫尚未全部到场，暂不能开始现场调查。" % str(record.get("title", "巡防事件"))
 		return
-	var action_ids: Array = record.get("player_action_ids", [])
-	var actions := [
-		{"id": "inspect_scene", "label": "检查现场痕迹", "kind": "evidence"},
-		{"id": "question_witness", "label": "询问现场目击者", "kind": "witness"},
-		{"id": "collect_evidence", "label": "收集可疑物证", "kind": "evidence"}
-	]
-	for action in actions:
-		var action_id := str(action["id"])
-		if action_ids.has(action_id):
-			continue
-		action_ids.append(action_id)
-		var player_evidence := int(record.get("player_evidence_count", 0))
-		var player_witnesses := int(record.get("player_witness_count", 0))
-		if str(action["kind"]) == "evidence":
-			player_evidence += 1
-			record["player_evidence_count"] = player_evidence
-		else:
-			player_witnesses += 1
-			record["player_witness_count"] = player_witnesses
-		var contribution_log: Array = record.get("player_contribution_log", [])
-		contribution_log.append({
-			"action_id": action_id,
-			"label": str(action["label"]),
-			"at": npc_simulation_time
-		})
-		record["player_contribution_log"] = contribution_log
-		record["player_action_ids"] = action_ids
-		patrol_incident_records[record_index] = record
-		npc_detail_label.text = "现场调查 · %s\n已完成：%s\n玩家补充：物证 %d 件、目击者线索 %d 条\n\n线索已记入本地事件档案。" % [
-			str(record.get("title", "巡防事件")),
-			str(action["label"]),
-			player_evidence,
-			player_witnesses
-		]
-		print("[FengduPatrol] player contributed to %s: %s" % [incident_id, action_id])
+	if player == null:
 		return
-	npc_detail_label.text = "现场调查 · %s\n你已完成本次可参与的三项调查：检查现场、询问目击者、收集物证。\n等待巡城司汇总调查结论。" % str(record.get("title", "巡防事件"))
+	var evidence_nodes: Array = record.get("evidence_nodes", [])
+	var nearest_evidence: Node3D
+	var nearest_evidence_distance := 3.2
+	for clue_node in evidence_nodes:
+		if not is_instance_valid(clue_node) or not clue_node.visible:
+			continue
+		var clue_distance := player.global_position.distance_to(clue_node.global_position)
+		if clue_distance < nearest_evidence_distance:
+			nearest_evidence_distance = clue_distance
+			nearest_evidence = clue_node
+	if nearest_evidence != null:
+		var clue_id := str(nearest_evidence.get_meta("clue_id", ""))
+		var action_ids: Array = record.get("player_action_ids", [])
+		if clue_id == "" or action_ids.has(clue_id):
+			npc_detail_label.text = "这处痕迹已经检查过了。"
+			return
+		action_ids.append(clue_id)
+		record["player_action_ids"] = action_ids
+		record["player_evidence_count"] = int(record.get("player_evidence_count", 0)) + 1
+		nearest_evidence.visible = false
+		var evidence_log: Array = record.get("player_contribution_log", [])
+		evidence_log.append({"action_id": clue_id, "label": str(nearest_evidence.get_meta("clue_label", "现场物证")), "at": npc_simulation_time})
+		record["player_contribution_log"] = evidence_log
+		patrol_incident_records[record_index] = record
+		npc_detail_label.text = "现场物证已收录 · %s\n%s\n玩家已收集物证：%d 件" % [
+			str(record.get("title", "巡防事件")),
+			str(nearest_evidence.get_meta("clue_label", "现场物证")),
+			int(record.get("player_evidence_count", 0))
+		]
+		print("[FengduPatrol] player collected clue %s for %s" % [clue_id, incident_id])
+		return
+	var witness_root: Node3D = record.get("witness_root")
+	if witness_root != null and is_instance_valid(witness_root) and not bool(record.get("witness_questioned", false)):
+		var witness_distance := player.global_position.distance_to(witness_root.global_position)
+		if witness_distance <= 3.8:
+			record["witness_questioned"] = true
+			record["player_witness_count"] = int(record.get("player_witness_count", 0)) + 1
+			var witness_id := "question_witness"
+			var witness_actions: Array = record.get("player_action_ids", [])
+			witness_actions.append(witness_id)
+			record["player_action_ids"] = witness_actions
+			var witness_log: Array = record.get("player_contribution_log", [])
+			witness_log.append({"action_id": witness_id, "label": "询问目击者：" + str(record.get("witness_name", "现场证人")), "at": npc_simulation_time})
+			record["player_contribution_log"] = witness_log
+			patrol_incident_records[record_index] = record
+			npc_detail_label.text = "%s：我看见事发前有一道黑影从巷口经过，随后传来争执声。\n\n证词已记入案件档案，后续需要与现场物证交叉核验。" % str(record.get("witness_name", "目击者"))
+			print("[FengduPatrol] player questioned witness for %s" % incident_id)
+			return
+	var remaining_evidence := 0
+	for clue_node in evidence_nodes:
+		if is_instance_valid(clue_node) and clue_node.visible:
+			remaining_evidence += 1
+	if remaining_evidence > 0:
+		npc_detail_label.text = "请走近地面发光的物证标记（3.2 米内）再按 E 调查。"
+	elif witness_root != null and is_instance_valid(witness_root) and not bool(record.get("witness_questioned", false)):
+		npc_detail_label.text = "请走近现场证人（3.8 米内）再按 E 询问。"
+	else:
+		npc_detail_label.text = "现场可调查的物证和证人都已完成记录，等待巡城司汇总。"
 
+
+func _spawn_patrol_incident_clues(incident: Dictionary) -> Dictionary:
+	var center: Vector3 = incident.get("target_position", Vector3.ZERO)
+	var evidence_nodes: Array[Node3D] = []
+	var clue_specs := [
+		{"id": "clue_footprints", "label": "巷口脚印", "offset": Vector3(-2.0, 0.22, 0.8), "color": Color("#78b9c8")},
+		{"id": "clue_residue", "label": "残留阴气", "offset": Vector3(1.8, 0.28, -0.6), "color": Color("#9b8bd1")},
+		{"id": "clue_fragment", "label": "破损魂器碎片", "offset": Vector3(0.4, 0.2, 2.0), "color": Color("#d5a56c")}
+	]
+	for spec in clue_specs:
+		var clue := MeshInstance3D.new()
+		clue.name = "IncidentEvidence_" + str(spec["id"])
+		var mesh := SphereMesh.new()
+		mesh.radius = 0.2
+		mesh.height = 0.4
+		clue.mesh = mesh
+		var material := StandardMaterial3D.new()
+		material.albedo_color = spec["color"]
+		material.emission_enabled = true
+		material.emission = spec["color"]
+		material.emission_energy_multiplier = 1.2
+		material.roughness = 0.35
+		clue.material_override = material
+		clue.position = center + spec["offset"]
+		clue.set_meta("clue_id", str(spec["id"]))
+		clue.set_meta("clue_label", str(spec["label"]))
+		add_child(clue)
+		var marker := Label3D.new()
+		marker.text = "可调查 · " + str(spec["label"])
+		marker.position = Vector3(0, 0.55, 0)
+		marker.font_size = 28
+		marker.modulate = spec["color"]
+		clue.add_child(marker)
+		evidence_nodes.append(clue)
+	var witness_root := Node3D.new()
+	witness_root.name = "IncidentWitness_" + str(incident.get("incident_id", "unknown"))
+	witness_root.position = center + Vector3(3.0, 0.0, 1.8)
+	add_child(witness_root)
+	_create_npc_figure(witness_root, "resident")
+	var witness_label := Label3D.new()
+	witness_label.text = "目击者 · 可询问"
+	witness_label.position = Vector3(0, 2.35, 0)
+	witness_label.font_size = 28
+	witness_label.modulate = Color("#e6c58d")
+	witness_root.add_child(witness_label)
+	return {"evidence_nodes": evidence_nodes, "witness_root": witness_root, "witness_name": "坊民证人"}
 
 func _interact_with_focused_npc() -> void:
 	if npc_detail_label == null:
