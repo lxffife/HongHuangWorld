@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <string_view>
+#include "simulation/spell_mastery.hpp"
 
 namespace honghuang::simulation {
 
@@ -92,6 +93,16 @@ inline std::int32_t spell_power_basis_points(std::int32_t base_power_basis_point
         static_cast<std::int64_t>(spirit) * 25, 2500);
     const auto scaled = static_cast<std::int64_t>(base_power_basis_points) *
         (10000 + bonus_basis_points) / 10000;
+    return static_cast<std::int32_t>(std::min<std::int64_t>(scaled, 100000));
+}
+
+inline std::int32_t effective_spell_power_basis_points(std::int32_t base_power_basis_points,
+                                                        std::int32_t spirit,
+                                                        std::int32_t mastery_level) {
+    const auto spirit_power = spell_power_basis_points(base_power_basis_points, spirit);
+    if (spirit_power <= 0) return 0;
+    const auto mastery_bonus = spell_mastery_power_bonus_basis_points(mastery_level);
+    const auto scaled = static_cast<std::int64_t>(spirit_power) * (10000 + mastery_bonus) / 10000;
     return static_cast<std::int32_t>(std::min<std::int64_t>(scaled, 100000));
 }
 
