@@ -76,6 +76,7 @@
 ## First local NPC visual pass
 
 - Use primitive, low-cost humanoid silhouettes as temporary placeholders: robe capsule, head sphere, simple arms and role props. No external model dependency is introduced.
-- Role accents: merchant headwear silhouette, soldier spear, guide soul lantern, and distinct role material tints.
-- Idle motions are intentionally subtle. One patrol guard interpolates between the closed-loop road nodes; it does not use NavigationAgent3D.
+- Role accents: merchant headwear silhouette, soldier spear, guide soul lantern and a small registration ledger, plus distinct role material tints.
+- Activity-point facing is assigned by district purpose rather than a universal forward direction. Residents orient toward the shared square; the guide faces the intake approach; soldiers and merchants face their work areas.
+- Idle motions use per-agent phase offsets and cadence variation: merchant greeting, resident conversation turns, soldier readying motions, and guide ledger-check/directing gestures. One patrol guard interpolates between the closed-loop road nodes; it does not use NavigationAgent3D.
 - These figures are local scene decoration only: no collision, combat, dialogue, shop, quest, network identity or authoritative state. Replace them with licensed rigged assets and server-backed actors in later production passes.
