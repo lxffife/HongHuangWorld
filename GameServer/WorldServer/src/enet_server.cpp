@@ -11,6 +11,7 @@
 #include "simulation/status_effect.hpp"
 #include "persistence/durable_outbox.hpp"
 #include "persistence/monster_contribution_writer.hpp"
+#include "persistence/monster_runtime_checkpoint_writer.hpp"
 #include "persistence/monster_death_finalizer.hpp"
 #include "network/chat_delivery_policy.hpp"
 
@@ -180,6 +181,12 @@ struct MonsterRuntime {
     std::unordered_map<std::string, MonsterDamageContribution> damage_contributions;
     // runtime_id identifies the stable spawn point; this ID identifies one life of that spawn.
     std::string contribution_instance_id;
+    bool checkpoint_state_initialized{false};
+    float last_checkpoint_x{};
+    float last_checkpoint_z{};
+    float last_checkpoint_yaw{};
+    int last_checkpoint_mode{-1};
+    std::int64_t last_checkpoint_respawn_at_ms{};
     // Latch the lethal transition before later hits can enqueue against this life.
     bool contribution_closing{false};
     bool death_context_captured{false};
@@ -1046,7 +1053,8 @@ struct EnetServer::Impl {
     std::vector<GroundDropRuntime> ground_drops;
     std::vector<ProjectileRuntime> projectiles;
     std::unique_ptr<honghuang::persistence::DurableOutbox> durable_outbox;
-    // Declared after durable_outbox so it is destroyed first and never outlives its SQLite owner.
+    // All persistence workers are declared after the SQLite owner and stop before it is destroyed.
+    std::unique_ptr<honghuang::persistence::MonsterRuntimeCheckpointWriter> monster_checkpoint_writer;
     std::unique_ptr<honghuang::persistence::MonsterContributionWriter> monster_contribution_writer;
     std::unique_ptr<honghuang::persistence::MonsterDeathFinalizer> monster_death_finalizer;
     std::mutex outbox_mutex;
@@ -1828,6 +1836,115 @@ struct EnetServer::Impl {
         monster.death_intent_persisted = true;
         monster.contribution_closing = true;
         monster.state.health = remaining_health;
+        return true;
+    }
+
+    std::int64_t monster_respawn_deadline_unix_ms(const MonsterRuntime& monster) const {
+        if (monster.respawn_at.time_since_epoch().count() == 0) return 0;
+        const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+            monster.respawn_at - Clock::now()).count();
+        return wall_clock_ms() + std::max<std::int64_t>(0, remaining);
+    }
+
+    bool submit_monster_runtime_checkpoint(MonsterRuntime& monster, bool force = false) {
+        if (!monster_checkpoint_writer) return false;
+        const auto respawn_deadline = monster_respawn_deadline_unix_ms(monster);
+        const int mode = static_cast<int>(monster.state.mode);
+        const bool dirty = force || !monster.checkpoint_state_initialized ||
+            std::abs(monster.state.x - monster.last_checkpoint_x) >= 0.05F ||
+            std::abs(monster.state.z - monster.last_checkpoint_z) >= 0.05F ||
+            std::abs(monster.state.yaw - monster.last_checkpoint_yaw) >= 0.05F ||
+            mode != monster.last_checkpoint_mode ||
+            std::llabs(respawn_deadline - monster.last_checkpoint_respawn_at_ms) >= 250;
+        if (!dirty) return true;
+        honghuang::persistence::MonsterRuntimeCheckpointRecord checkpoint{
+            monster.runtime_id, monster.contribution_instance_id, monster.definition.id,
+            static_cast<double>(monster.state.x), static_cast<double>(monster.state.z),
+            static_cast<double>(monster.state.yaw), mode, respawn_deadline, wall_clock_ms()};
+        std::string error;
+        if (!monster_checkpoint_writer->submit(checkpoint, error)) {
+            std::cerr << "[MonsterCheckpoint] submit deferred; runtime=" << monster.runtime_id
+                      << " reason=" << error << std::endl;
+            return false;
+        }
+        monster.checkpoint_state_initialized = true;
+        monster.last_checkpoint_x = monster.state.x;
+        monster.last_checkpoint_z = monster.state.z;
+        monster.last_checkpoint_yaw = monster.state.yaw;
+        monster.last_checkpoint_mode = mode;
+        monster.last_checkpoint_respawn_at_ms = respawn_deadline;
+        return true;
+    }
+
+    bool restore_monster_runtime_checkpoints() {
+        if (!durable_outbox) return false;
+        std::string error;
+        const auto checkpoints = durable_outbox->load_monster_runtime_checkpoints(error);
+        if (!error.empty()) {
+            std::cerr << "[MonsterCheckpoint] startup load failed: " << error << std::endl;
+            return false;
+        }
+        std::size_t restored = 0;
+        for (const auto& checkpoint : checkpoints) {
+            auto found = std::find_if(monsters.begin(), monsters.end(),
+                [&](const MonsterRuntime& candidate) {
+                    return candidate.runtime_id == checkpoint.runtime_id &&
+                        candidate.contribution_instance_id == checkpoint.monster_instance_id &&
+                        candidate.definition.id == checkpoint.monster_definition_id;
+                });
+            if (found == monsters.end()) continue;
+            auto& monster = *found;
+            if (!std::isfinite(checkpoint.x) || !std::isfinite(checkpoint.z) ||
+                !std::isfinite(checkpoint.yaw) || checkpoint.mode < 0 || checkpoint.mode > 3) {
+                std::cerr << "[MonsterCheckpoint] invalid snapshot ignored; runtime="
+                          << checkpoint.runtime_id << std::endl;
+                continue;
+            }
+            if (monster.state.health <= 0.0F) {
+                monster.state.mode = honghuang::simulation::MonsterMode::Dead;
+                monster.state.target_id.clear();
+                if (checkpoint.respawn_at_ms > 0) {
+                    const auto remaining = std::max<std::int64_t>(
+                        0, checkpoint.respawn_at_ms - wall_clock_ms());
+                    monster.respawn_at = Clock::now() + std::chrono::milliseconds(remaining);
+                }
+                ++restored;
+                continue;
+            }
+            const double dx = checkpoint.x - monster.definition.spawn_x;
+            const double dz = checkpoint.z - monster.definition.spawn_z;
+            const double leash = static_cast<double>(monster.definition.leash_radius);
+            if (dx * dx + dz * dz > leash * leash) {
+                std::cerr << "[MonsterCheckpoint] out-of-leash position ignored; runtime="
+                          << checkpoint.runtime_id << std::endl;
+                monster.state.x = monster.definition.spawn_x;
+                monster.state.z = monster.definition.spawn_z;
+                monster.state.yaw = 0.0F;
+                monster.state.mode = honghuang::simulation::MonsterMode::Idle;
+            } else {
+                monster.state.x = static_cast<float>(checkpoint.x);
+                monster.state.z = static_cast<float>(checkpoint.z);
+                monster.state.yaw = static_cast<float>(checkpoint.yaw);
+                const auto saved_mode =
+                    static_cast<honghuang::simulation::MonsterMode>(checkpoint.mode);
+                // Never restore a chase target or attack phase from a previous process.
+                monster.state.mode = saved_mode == honghuang::simulation::MonsterMode::Returning
+                    ? honghuang::simulation::MonsterMode::Returning
+                    : honghuang::simulation::MonsterMode::Idle;
+            }
+            monster.state.target_id.clear();
+            monster.attack_target_character_id.clear();
+            monster.attack_phase = MonsterAttackPhase::Ready;
+            monster.last_attack_at = Clock::time_point{};
+            monster.checkpoint_state_initialized = true;
+            monster.last_checkpoint_x = monster.state.x;
+            monster.last_checkpoint_z = monster.state.z;
+            monster.last_checkpoint_yaw = monster.state.yaw;
+            monster.last_checkpoint_mode = static_cast<int>(monster.state.mode);
+            monster.last_checkpoint_respawn_at_ms = checkpoint.respawn_at_ms;
+            ++restored;
+        }
+        std::cout << "[MonsterCheckpoint] restored runtime snapshots=" << restored << std::endl;
         return true;
     }
 
@@ -4154,6 +4271,8 @@ struct EnetServer::Impl {
             projectile = projectiles.erase(projectile);
         }
         for (auto& monster : monsters) {
+            // Coalesce dirty state in memory; the dedicated worker batches SQLite writes.
+            (void)submit_monster_runtime_checkpoint(monster);
             if (monster.contribution_closing && !monster.death_finalizer_submitted)
                 submit_monster_death_finalization(monster);
             if (monster.contribution_closing &&
@@ -4206,6 +4325,8 @@ struct EnetServer::Impl {
                     monster.death_reward_eligible = false;
                     monster.pending_death_drops.clear();
                     monster.respawn_at = Clock::time_point{};
+                    monster.checkpoint_state_initialized = false;
+                    (void)submit_monster_runtime_checkpoint(monster, true);
                     monster.attack_phase = MonsterAttackPhase::Ready;
                     honghuang::simulation::clear_negative_statuses(monster.slow_effect,monster.freeze_effect,monster.burn_effect);
                     monster.burn_owner_character_id.clear();
@@ -4623,6 +4744,9 @@ bool EnetServer::start() {
     try {
         impl_->durable_outbox = std::make_unique<honghuang::persistence::DurableOutbox>(
             outbox_path.string(), 10000);
+        impl_->monster_checkpoint_writer =
+            std::make_unique<honghuang::persistence::MonsterRuntimeCheckpointWriter>(
+                *impl_->durable_outbox);
         impl_->monster_contribution_writer =
             std::make_unique<honghuang::persistence::MonsterContributionWriter>(
                 *impl_->durable_outbox);
@@ -4631,6 +4755,7 @@ bool EnetServer::start() {
                 *impl_->durable_outbox, *impl_->monster_contribution_writer);
     } catch (const std::exception& exception) {
         impl_->monster_contribution_writer.reset();
+        impl_->monster_checkpoint_writer.reset();
         impl_->durable_outbox.reset();
         std::cerr << "Could not initialize durable persistence workers: " << exception.what() << '\n';
         return false;
@@ -4686,6 +4811,10 @@ bool EnetServer::start() {
     }
     if (!impl_->restore_monster_life_states()) {
         std::cerr << "WorldServer startup blocked: durable monster life states could not be restored\n";
+        return false;
+    }
+    if (!impl_->restore_monster_runtime_checkpoints()) {
+        std::cerr << "WorldServer startup blocked: monster runtime checkpoints could not be restored\n";
         return false;
     }
     impl_->restore_pending_monster_deaths();
@@ -5000,6 +5129,16 @@ void EnetServer::stop() {
         impl_->drain_consumable_results();
         impl_->stop_combat_refresh_worker();
         impl_->drain_combat_refresh_results();
+        // Force a final coalesced checkpoint before SQLite workers are stopped.
+        for (auto& monster : impl_->monsters)
+            (void)impl_->submit_monster_runtime_checkpoint(monster, true);
+        if (impl_->monster_checkpoint_writer &&
+            !impl_->monster_checkpoint_writer->stop_after_drain(std::chrono::seconds(5))) {
+            std::cerr << "[MonsterCheckpoint] shutdown flush timed out; pending="
+                      << impl_->monster_checkpoint_writer->pending_count()
+                      << " last_error=" << impl_->monster_checkpoint_writer->last_error()
+                      << ". Latest snapshots remain best-effort; life health/death stay durable.\n";
+        }
         // Retry admission for any lethal life that was closing when the main loop stopped.
         for (auto& monster : impl_->monsters) {
             if (monster.contribution_closing && !monster.death_finalizer_submitted)
