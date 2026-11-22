@@ -17,7 +17,7 @@ var (
 	ErrSessionInvalid = errors.New("world session is not active on this server")
 	ErrDropUnavailable = errors.New("drop is unavailable")
 	ErrInventoryFull = errors.New("inventory is full")
-	ErrInsufficientMaterials = errors.New("insufficient enhancement materials")
+	ErrInsufficientMaterials = errors.New("insufficient materials")
 	ErrCharacterInWorld = errors.New("character has an active world session")
 	ErrIdempotencyConflict = errors.New("request id was already used for another operation")
 )
