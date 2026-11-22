@@ -2502,15 +2502,18 @@ func _process_autonomous_judicial_cases(delta: float) -> void:
 
 
 func _seed_autonomous_case_material(record: Dictionary) -> void:
-	var tags: Array = record.get("player_clue_tags", []).duplicate()
+	var player_tags: Array = record.get("player_clue_tags", []).duplicate()
+	var autonomous_tags: Array = []
 	var available_tags := ["movement_trace", "spirit_residue", "broken_artifact"]
 	var required_count := maxi(2, int(record.get("patrol_evidence_count", 2)))
+	var combined_count := player_tags.size()
 	for tag_value in available_tags:
-		if tags.size() >= required_count:
+		if combined_count >= required_count:
 			break
-		if not tags.has(tag_value):
-			tags.append(tag_value)
-	record["autonomous_evidence_tags"] = tags
+		if not player_tags.has(tag_value):
+			autonomous_tags.append(tag_value)
+			combined_count += 1
+	record["autonomous_evidence_tags"] = autonomous_tags
 	if str(record.get("witness_testimony_tag", "")).is_empty():
 		var incident_type := str(record.get("type", ""))
 		record["witness_testimony_tag"] = "witness_dispute" if incident_type == "crowd_disorder" else ("witness_violence" if incident_type == "hostile_encounter" else "witness_shadow")
