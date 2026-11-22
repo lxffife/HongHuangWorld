@@ -5252,41 +5252,118 @@ func _refresh_judge_review_actions(submission: Dictionary, review: Dictionary) -
 		return
 	for child in judge_review_actions.get_children():
 		child.queue_free()
-	var workflow := str(get_patrol_case_dossier(judge_selected_incident_id).get("case_workflow_state", ""))
-	if workflow != "under_judicial_review":
-		return
+	var dossier := get_patrol_case_dossier(judge_selected_incident_id)
+	var workflow := str(dossier.get("case_workflow_state", ""))
 	var assessments: Dictionary = review.get("evidence_assessments", {})
-	for tag_value in submission.get("evidence_tags", []):
-		var tag := str(tag_value)
-		var current := str(assessments.get(tag, {}).get("assessment", "待复核"))
-		var caption := "物证 %s：%s" % [tag, current]
-		var accepted := Button.new()
-		accepted.text = caption + " · 采信"
-		accepted.pressed.connect(func(): _judge_assess_evidence(tag, "accepted"))
-		judge_review_actions.add_child(accepted)
-		var verify := Button.new()
-		verify.text = "待核验"
-		verify.pressed.connect(func(): _judge_assess_evidence(tag, "needs_verification"))
-		judge_review_actions.add_child(verify)
-		var rejected := Button.new()
-		rejected.text = "不采信"
-		rejected.pressed.connect(func(): _judge_assess_evidence(tag, "rejected"))
-		judge_review_actions.add_child(rejected)
-	if int(submission.get("witness_count", 0)) > 0:
+	if workflow == "under_judicial_review":
+		for tag_value in submission.get("evidence_tags", []):
+			var tag := str(tag_value)
+			var current := str(assessments.get(tag, {}).get("assessment", "待复核"))
+			var caption := "物证 %s：%s" % [tag, current]
+			var accepted := Button.new()
+			accepted.text = caption + " · 采信"
+			accepted.pressed.connect(func(): _judge_assess_evidence(tag, "accepted"))
+			judge_review_actions.add_child(accepted)
+			var verify := Button.new()
+			verify.text = "待核验"
+			verify.pressed.connect(func(): _judge_assess_evidence(tag, "needs_verification"))
+			judge_review_actions.add_child(verify)
+			var rejected := Button.new()
+			rejected.text = "不采信"
+			rejected.pressed.connect(func(): _judge_assess_evidence(tag, "rejected"))
+			judge_review_actions.add_child(rejected)
+		if int(submission.get("witness_count", 0)) > 0:
+			var testimony_review: Dictionary = review.get("testimony_assessment", {})
+			var testimony_state := str(testimony_review.get("assessment", "待复核"))
+			var credible := Button.new()
+			credible.text = "证词可信（当前：%s）" % testimony_state
+			credible.pressed.connect(func(): _judge_assess_testimony("credible"))
+			judge_review_actions.add_child(credible)
+			var disputed := Button.new()
+			disputed.text = "证词存疑"
+			disputed.pressed.connect(func(): _judge_assess_testimony("disputed"))
+			judge_review_actions.add_child(disputed)
+			var insufficient := Button.new()
+			insufficient.text = "证词不足"
+			insufficient.pressed.connect(func(): _judge_assess_testimony("insufficient"))
+			judge_review_actions.add_child(insufficient)
+	elif workflow == "hearing_in_progress":
+		var hearing: Dictionary = dossier.get("hearing_record", {})
+		var presented: Array = hearing.get("presented_evidence_tags", [])
+		for tag_value in submission.get("evidence_tags", []):
+			var tag := str(tag_value)
+			if presented.has(tag) or str(assessments.get(tag, {}).get("assessment", "")) != "accepted":
+				continue
+			var present_button := Button.new()
+			present_button.text = "庭审出示物证 · " + tag
+			present_button.pressed.connect(func(): _judge_present_evidence(tag))
+			judge_review_actions.add_child(present_button)
 		var testimony_review: Dictionary = review.get("testimony_assessment", {})
-		var testimony_state := str(testimony_review.get("assessment", "待复核"))
-		var credible := Button.new()
-		credible.text = "证词可信（当前：%s）" % testimony_state
-		credible.pressed.connect(func(): _judge_assess_testimony("credible"))
-		judge_review_actions.add_child(credible)
-		var disputed := Button.new()
-		disputed.text = "证词存疑"
-		disputed.pressed.connect(func(): _judge_assess_testimony("disputed"))
-		judge_review_actions.add_child(disputed)
-		var insufficient := Button.new()
-		insufficient.text = "证词不足"
-		insufficient.pressed.connect(func(): _judge_assess_testimony("insufficient"))
-		judge_review_actions.add_child(insufficient)
+		if int(submission.get("witness_count", 0)) > 0 and str(testimony_review.get("assessment", "")) == "credible" and not bool(hearing.get("testimony_presented", false)):
+			var testimony_button := Button.new()
+			testimony_button.text = "庭审出示证人陈述"
+			testimony_button.pressed.connect(_judge_present_testimony)
+			judge_review_actions.add_child(testimony_button)
+	elif workflow == "hearing_closed_pending_judgment":
+		var judgment_data := get_case_judgment_and_appeals(judge_selected_incident_id)
+		var party_judgments: Dictionary = judgment_data.get("party_judgments", {})
+		var parties: Array = submission.get("case_parties", [])
+		if parties.is_empty() and not judgment_data.has("case_judgment"):
+			var acquit_case := Button.new()
+			acquit_case.text = "本案判决 · 无罪"
+			acquit_case.pressed.connect(func(): _judge_record_case_judgment("acquitted"))
+			judge_review_actions.add_child(acquit_case)
+			var insufficient_case := Button.new()
+			insufficient_case.text = "本案判决 · 证据不足"
+			insufficient_case.pressed.connect(func(): _judge_record_case_judgment("insufficient_evidence"))
+			judge_review_actions.add_child(insufficient_case)
+		for party_value in parties:
+			var party: Dictionary = party_value
+			var party_id := str(party.get("party_id", ""))
+			if party_judgments.has(party_id):
+				continue
+			var acquit := Button.new()
+			acquit.text = "%s · 无罪" % str(party.get("display_name", party_id))
+			acquit.pressed.connect(func(): _judge_record_party_judgment(party_id, "acquitted"))
+			judge_review_actions.add_child(acquit)
+			var insufficient_party := Button.new()
+			insufficient_party.text = "%s · 证据不足" % str(party.get("display_name", party_id))
+			insufficient_party.pressed.connect(func(): _judge_record_party_judgment(party_id, "insufficient_evidence"))
+			judge_review_actions.add_child(insufficient_party)
+			var responsible := Button.new()
+			responsible.text = "%s · 承担责任" % str(party.get("display_name", party_id))
+			responsible.pressed.connect(func(): _judge_record_party_judgment(party_id, "responsible"))
+			judge_review_actions.add_child(responsible)
+
+
+func _judge_present_evidence(tag: String) -> void:
+	if judge_selected_incident_id.is_empty():
+		return
+	_run_judge_action(present_case_evidence_at_hearing(judge_selected_incident_id, tag, "庭审中向各方出示该项已采信物证。"), "已在庭审中出示物证：" + tag)
+
+
+func _judge_present_testimony() -> void:
+	if judge_selected_incident_id.is_empty():
+		return
+	_run_judge_action(present_case_testimony_at_hearing(judge_selected_incident_id, "庭审中宣读经复核的证人陈述。"), "已在庭审中出示证人陈述。")
+
+
+func _judge_record_case_judgment(outcome: String) -> void:
+	if judge_selected_incident_id.is_empty():
+		return
+	_run_judge_action(record_case_judgment(judge_selected_incident_id, outcome, "根据庭审已完成的举证与质证程序作出判决。", []), "本案判决结果已记录：" + outcome)
+
+
+func _judge_record_party_judgment(party_id: String, outcome: String) -> void:
+	if judge_selected_incident_id.is_empty():
+		return
+	var cited: Array[String] = []
+	if outcome == "responsible":
+		var hearing: Dictionary = get_case_hearing_record(judge_selected_incident_id)
+		for tag_value in hearing.get("presented_evidence_tags", []):
+			cited.append(str(tag_value))
+	var reason := "根据庭审记录作出判决；当前原型以已完成程序和已出示证据为依据。"
+	_run_judge_action(record_case_party_judgment(judge_selected_incident_id, party_id, outcome, reason, cited), "涉案人员判决已记录：" + outcome)
 
 
 func _judge_assess_evidence(tag: String, assessment: String) -> void:
