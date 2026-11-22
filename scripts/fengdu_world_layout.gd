@@ -162,7 +162,7 @@ static func get_market_auction_layout() -> Dictionary:
 		"roof_width": 8.0,
 		"roof_height": 2.0,
 		"label_offset": Vector3(0.0, 5.65, 8.0),
-		"step_center_offset": Vector3(0.0, 0.0, 8.0),
+		"step_center_offset": Vector3(0.0, 0.0, 0.0),
 		"audience_seats": [
 			{"point_id": "ghost_market.auction.seat.01", "offset": Vector3(-8.0, 0.0, 5.8), "facing": PI},
 			{"point_id": "ghost_market.auction.seat.02", "offset": Vector3(-8.0, 0.0, 9.4), "facing": PI},
