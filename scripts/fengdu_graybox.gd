@@ -467,6 +467,7 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 						"display_items": _market_display_items_for_type(stall_type),
 						"restock_group": "soul_goods" if stall_index < 2 else ("herb_goods" if stall_index < 4 else ""),
 						"restock_label": _create_market_stall_status_label(stall_position, stall_facing),
+						"catalog_label": _create_market_stall_catalog_label(stall_position, stall_facing, _market_display_items_for_type(stall_type)),
 						"business_state": "closed",
 						"open_schedule": "18:00-06:00",
 						"interaction_type": _market_interaction_for_type(stall_type),
@@ -2266,6 +2267,25 @@ func _create_market_stall_status_label(stall_position: Vector3, facing: float) -
 	return status
 
 
+func _create_market_stall_catalog_label(stall_position: Vector3, facing: float, items: Array) -> Label3D:
+	# Compact floating catalog cards improve stall readability without adding per-item meshes.
+	var catalog := Label3D.new()
+	catalog.name = "GhostMarketCatalogCard"
+	catalog.position = stall_position + Vector3(facing * 2.35, 1.62, 0.0)
+	catalog.font_size = 10
+	catalog.pixel_size = 0.008
+	catalog.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	catalog.modulate = Color("#d8d0bd")
+	catalog.outline_size = 4
+	catalog.outline_modulate = Color("#111820")
+	var item_lines: Array[String] = []
+	for item_index in range(mini(items.size(), 3)):
+		item_lines.append(str(items[item_index]))
+	catalog.text = "陈列目录\n" + " · ".join(item_lines) + "\n现场询价"
+	add_child(catalog)
+	return catalog
+
+
 func _market_restock_destination(cargo_type: String, caravan_id: String) -> Vector3:
 	# Alternate between the two matching stalls; use each stall's facing, not world origin.
 	var target_group := "soul_goods" if cargo_type == "魂珠与魂籍" else "herb_goods"
@@ -2323,6 +2343,20 @@ func _update_market_stall_states() -> void:
 				_:
 					status_label.text = "白日休市"
 					status_label.modulate = Color("#8e9aa7")
+		var catalog_label: Label3D = stall.get("catalog_label")
+		if catalog_label != null:
+			catalog_label.visible = true
+			catalog_label.modulate = Color("#c9b18b") if state == "restocking" else (Color("#d8d0bd") if state == "open" else Color("#87919c"))
+			if state == "restocking":
+				catalog_label.text = "补货整理中\n稍候再来"
+			elif state == "closed":
+				catalog_label.text = "白日休市\n夜间开市"
+			else:
+				var items: Array = stall.get("display_items", [])
+				var item_lines: Array[String] = []
+				for item_index in range(mini(items.size(), 3)):
+					item_lines.append(str(items[item_index]))
+				catalog_label.text = "陈列目录\n" + " · ".join(item_lines) + "\n现场询价"
 	for agent in npc_agents:
 		if not agent.has("market_stall_id"):
 			continue
