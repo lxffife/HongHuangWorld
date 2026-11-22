@@ -727,17 +727,15 @@ func (s *Service) EnhanceEquipment(ctx context.Context, accountID string, reques
 		if errors.Is(err,sql.ErrNoRows){return EnhancementResult{},ErrInvalidRequest};return EnhancementResult{},fmt.Errorf("resolve enhancement character: %w",err)
 	}
 	if err:=ensureEquipmentSessionStable(ctx,tx,characterID);err!=nil{return EnhancementResult{},err}
-	var replay EnhancementResult; var replayInstance string; var replayTarget int
-	err=tx.QueryRowContext(ctx, "SELECT item_instance_id::text,succeeded,old_level,target_level,material_quantity,success_rate_bp,(SELECT name FROM item_definitions WHERE id=material_item_id) FROM equipment_enhancement_events WHERE character_id=$1::uuid AND request_id=$2::uuid",characterID,request.RequestID).
-		Scan(&replayInstance,&replay.Succeeded,&replay.OldLevel,&replayTarget,&replay.MaterialQuantity,&replay.SuccessRateBP,&replay.MaterialName)
+	var replay EnhancementResult; var replayInstance string; var replayTarget,replayQuality int
+	err=tx.QueryRowContext(ctx, "SELECT item_instance_id::text,succeeded,old_level,target_level,equipment_quality,material_quantity,success_rate_bp,(SELECT name FROM item_definitions WHERE id=material_item_id) FROM equipment_enhancement_events WHERE character_id=$1::uuid AND request_id=$2::uuid",characterID,request.RequestID).
+		Scan(&replayInstance,&replay.Succeeded,&replay.OldLevel,&replayTarget,&replayQuality,&replay.MaterialQuantity,&replay.SuccessRateBP,&replay.MaterialName)
 	if err==nil{
 		if replayInstance!=request.InstanceID{return EnhancementResult{},ErrIdempotencyConflict}
 		replay.Applied=false
 		replay.EnhancementLevel=replay.OldLevel
 		if replay.Succeeded { replay.EnhancementLevel=replayTarget }
-		var quality int
-		if err:=tx.QueryRowContext(ctx,"SELECT quality FROM item_instances WHERE id=$1::uuid",request.InstanceID).Scan(&quality);err!=nil{return EnhancementResult{},fmt.Errorf("load replay equipment quality: %w",err)}
-		replay.MaxLevel=enhancementMaxLevel(quality)
+		replay.MaxLevel=enhancementMaxLevel(replayQuality)
 		if err:=tx.Commit();err!=nil{return EnhancementResult{},fmt.Errorf("commit enhancement replay: %w",err)}
 		return replay,nil
 	}
@@ -752,14 +750,16 @@ func (s *Service) EnhanceEquipment(ctx context.Context, accountID string, reques
 	if errors.Is(err,sql.ErrNoRows){return EnhancementResult{},ErrInvalidRequest};if err!=nil{return EnhancementResult{},fmt.Errorf("load enhancement recipe: %w",err)}
 	var available int
 	err=tx.QueryRowContext(ctx,"SELECT quantity FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2 FOR UPDATE",characterID,materialID).Scan(&available)
-	if errors.Is(err,sql.ErrNoRows)||available<cost{return EnhancementResult{},ErrInsufficientMaterials};if err!=nil{return EnhancementResult{},fmt.Errorf("lock enhancement materials: %w",err)}
+	if errors.Is(err,sql.ErrNoRows){return EnhancementResult{},ErrInsufficientMaterials}
+	if err!=nil{return EnhancementResult{},fmt.Errorf("lock enhancement materials: %w",err)}
+	if available<cost{return EnhancementResult{},ErrInsufficientMaterials}
 	roll,err:=secureRandomInt(10000);if err!=nil{return EnhancementResult{},err}
 	succeeded:=int(roll)<rate
 	if _,err:=tx.ExecContext(ctx,"UPDATE character_inventory SET quantity=quantity-$3,updated_at=now() WHERE character_id=$1::uuid AND item_id=$2 AND quantity >= $3",characterID,materialID,cost);err!=nil{return EnhancementResult{},fmt.Errorf("consume enhancement materials: %w",err)}
 	if _,err:=tx.ExecContext(ctx,"DELETE FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2 AND quantity<=0",characterID,materialID);err!=nil{return EnhancementResult{},fmt.Errorf("remove empty material stack: %w",err)}
 	newLevel:=oldLevel
 	if succeeded { newLevel=target; if _,err:=tx.ExecContext(ctx,"UPDATE item_instances SET enhancement_level=$2 WHERE id=$1::uuid",request.InstanceID,newLevel);err!=nil{return EnhancementResult{},fmt.Errorf("apply equipment enhancement: %w",err)} }
-	if _,err:=tx.ExecContext(ctx,"INSERT INTO equipment_enhancement_events(character_id,request_id,item_instance_id,equipment_item_id,old_level,target_level,material_item_id,material_quantity,success_rate_bp,succeeded) VALUES($1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7,$8,$9,$10)",characterID,request.RequestID,request.InstanceID,itemID,oldLevel,target,materialID,cost,rate,succeeded);err!=nil{return EnhancementResult{},fmt.Errorf("record enhancement attempt: %w",err)}
+	if _,err:=tx.ExecContext(ctx,"INSERT INTO equipment_enhancement_events(character_id,request_id,item_instance_id,equipment_item_id,old_level,target_level,equipment_quality,material_item_id,material_quantity,success_rate_bp,succeeded) VALUES($1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7,$8,$9,$10,$11)",characterID,request.RequestID,request.InstanceID,itemID,oldLevel,target,quality,materialID,cost,rate,succeeded);err!=nil{return EnhancementResult{},fmt.Errorf("record enhancement attempt: %w",err)}
 	result:=EnhancementResult{Applied:true,Succeeded:succeeded,OldLevel:oldLevel,EnhancementLevel:newLevel,MaxLevel:maxLevel,MaterialName:materialName,MaterialQuantity:cost,SuccessRateBP:rate}
 	if err:=tx.Commit();err!=nil{return EnhancementResult{},fmt.Errorf("commit equipment enhancement: %w",err)}
 	return result,nil
