@@ -1077,6 +1077,12 @@ func _update_compact_hud(progression: Dictionary = {}) -> void:
 		"修为 " + str(cultivation),
 		"灵力 " + str(int(snapshot.get("mana", 0))) + " / " + str(int(snapshot.get("max_mana", 0)))
 	]
+	if snapshot.has("attack"):
+		var critical_rate := float(snapshot.get("critical_chance_basis_points", 0)) / 100.0
+		var critical_damage := float(snapshot.get("critical_damage_basis_points", 15000)) / 100.0
+		var attack_interval := maxf(0.1, float(snapshot.get("attack_interval_ms", 700)) / 1000.0)
+		lines.append("战斗 攻击 " + str(int(snapshot.get("attack", 0))) + " · 防御 " + str(int(snapshot.get("defense", 0))) + " · 暴击 " + str(snappedf(critical_rate, 0.1)) + "%")
+		lines.append("暴击伤害 " + str(snappedf(critical_damage, 1.0)) + "% · 攻击间隔 " + str(snappedf(attack_interval, 0.01)) + "秒")
 	if world_id == "underworld_fengdu":
 		lines.append("魂力 " + str(soul_essence_profile.get("soul_power", 0)) + "  ·  吞噬 " + str(soul_essence_profile.get("absorbed_count", 0)) + "  ·  " + str(soul_essence_profile.get("growth_name", "初生魂团")))
 		var progress_by_attribute: Dictionary = {}
@@ -1104,16 +1110,16 @@ func _update_compact_hud(progression: Dictionary = {}) -> void:
 			progress_parts.append(str(attribute_labels.get(attribute, attribute)) + "+" + str(applied) + " " + milestone_text)
 		if not progress_parts.is_empty():
 			lines.append("来世资质 · " + "  ".join(PackedStringArray(progress_parts)))
-		compact_hud_panel.custom_minimum_size = Vector2(420.0, 116.0)
-		compact_hud_label.custom_minimum_size = Vector2(396.0, 96.0)
+		compact_hud_panel.custom_minimum_size = Vector2(460.0, 160.0)
+		compact_hud_label.custom_minimum_size = Vector2(436.0, 140.0)
 		var pending_choices: Array = soul_essence_profile.get("pending_rare_choices", [])
 		if is_instance_valid(soul_choice_button):
 			soul_choice_button.visible = not pending_choices.is_empty()
 			if not pending_choices.is_empty():
 				soul_choice_button.text = "分配无相灵魄 · " + str(pending_choices.size())
 	else:
-		compact_hud_panel.custom_minimum_size = Vector2(340.0, 112.0)
-		compact_hud_label.custom_minimum_size = Vector2(316.0, 92.0)
+		compact_hud_panel.custom_minimum_size = Vector2(460.0, 160.0)
+		compact_hud_label.custom_minimum_size = Vector2(436.0, 140.0)
 	compact_hud_label.text = "\n".join(PackedStringArray(lines))
 
 func _apply_world_player_form() -> void:
@@ -3091,6 +3097,9 @@ func _on_combat_event(event: Dictionary) -> void:
 		HHSession.world_snapshot["max_health"] = int(event.get("max_health", HHSession.world_snapshot.get("max_health", 0)))
 		HHSession.world_snapshot["mana"] = int(event.get("mana", HHSession.world_snapshot.get("mana", 0)))
 		HHSession.world_snapshot["max_mana"] = int(event.get("max_mana", HHSession.world_snapshot.get("max_mana", 0)))
+		for stat_key in ["attack", "defense", "strength", "constitution", "agility", "spirit", "vitality", "critical_chance_basis_points", "critical_damage_basis_points", "attack_interval_ms", "movement_speed"]:
+			if event.has(stat_key):
+				HHSession.world_snapshot[stat_key] = event[stat_key]
 		_update_vitals(int(HHSession.world_snapshot["health"]), int(HHSession.world_snapshot["max_health"]))
 		if is_instance_valid(mana_label):
 			mana_label.text = "灵力  " + str(int(HHSession.world_snapshot["mana"])) + " / " + str(int(HHSession.world_snapshot["max_mana"]))
@@ -3098,7 +3107,8 @@ func _on_combat_event(event: Dictionary) -> void:
 		inventory_status.text = "装备属性已同步。"
 		_refresh_inventory()
 		_refresh_equipment()
-		_show_notification("装备属性已同步。")
+		var crit_rate := float(HHSession.world_snapshot.get("critical_chance_basis_points", 0)) / 100.0
+		_show_notification("装备属性已同步 · 攻击 " + str(HHSession.world_snapshot.get("attack", 0)) + " · 防御 " + str(HHSession.world_snapshot.get("defense", 0)) + " · 暴击 " + str(snappedf(crit_rate, 0.1)) + "%")
 		return
 	if str(event.get("action", "")) == "consumable_use":
 		if bool(event.get("pending", false)):
