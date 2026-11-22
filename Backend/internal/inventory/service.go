@@ -711,11 +711,9 @@ func (s *Service) SalvageEquipment(ctx context.Context,accountID string,request 
 		if errors.Is(err,sql.ErrNoRows){return SalvageResult{},ErrInvalidRequest}
 		return SalvageResult{},fmt.Errorf("resolve salvage character: %w",err)
 	}
-	var activeSession bool
-	if err:=tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM world_sessions WHERE character_id=$1::uuid AND session_state IN ('connecting','active','saving'))`,characterID).Scan(&activeSession);err!=nil{
-		return SalvageResult{},fmt.Errorf("check active session before salvage: %w",err)
-	}
-	if activeSession{return SalvageResult{},ErrCharacterInWorld}
+	// Inventory mutations are safe during an active session because only
+	// unequipped instances are salvaged. Block only session hand-off windows.
+	if err:=ensureEquipmentSessionStable(ctx,tx,characterID);err!=nil{return SalvageResult{},err}
 	var existing SalvageResult
 	var existingInstance string
 	err=tx.QueryRowContext(ctx,`SELECT item_instance_id::text,equipment_item_id,material_item_id,
