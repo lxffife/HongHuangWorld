@@ -23,9 +23,19 @@ int main() {
     assert(result.remaining_health == 60);
     assert(!result.defeated);
 
+    // Critical hits multiply attack power by 1.5 before defense is applied.
+    const AttackProfile critical_profile{10000, 0, true};
+    const CombatantStats critical_test_target{attack: 1, defense: 10, current_health: 100, max_health: 100};
+    const CombatantStats critical_test_attacker{attack: 40, defense: 0, current_health: 100, max_health: 100};
+    assert(calculate_damage(critical_test_attacker, critical_test_target, critical_profile, result));
+    assert(result.critical);
+    assert(result.damage == 50);
+    assert(result.remaining_health == 50);
+
     const AttackProfile full_penetration{10000, 10000};
     assert(calculate_damage(attacker, defender, full_penetration, result));
     assert(result.damage == 100);
+    assert(!result.critical);
 
     const CombatantStats heavily_armored{attack: 1, defense: 1000, current_health: 25, max_health: 25};
     assert(calculate_damage(attacker, heavily_armored, AttackProfile{}, result));
