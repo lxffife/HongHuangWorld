@@ -71,3 +71,11 @@
 - The scene converts the legacy per-district candidate positions into semantic activity records: district, role, activity, position, facing, schedule tag, capacity and radius.
 - F6 toggles a lightweight debug overlay; it is off by default. Marker colors distinguish merchants, residents, soldiers, guides and patrol guards.
 - The patrol planning loop follows the existing distributor/perimeter road grid. It is not a navigation mesh, a live NPC simulation or server-authoritative movement.
+
+
+## First local NPC visual pass
+
+- Use primitive, low-cost humanoid silhouettes as temporary placeholders: robe capsule, head sphere, simple arms and role props. No external model dependency is introduced.
+- Role accents: merchant headwear silhouette, soldier spear, guide soul lantern, and distinct role material tints.
+- Idle motions are intentionally subtle. One patrol guard interpolates between the closed-loop road nodes; it does not use NavigationAgent3D.
+- These figures are local scene decoration only: no collision, combat, dialogue, shop, quest, network identity or authoritative state. Replace them with licensed rigged assets and server-backed actors in later production passes.
