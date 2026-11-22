@@ -2446,12 +2446,19 @@ func _process_autonomous_judicial_cases(delta: float) -> void:
 		if str(record.get("state", "")) != "closed":
 			continue
 		var workflow := str(record.get("case_workflow_state", "unsubmitted"))
-		if workflow in ["judgment_issued", "appeal_pending"]:
+		if workflow in ["judgment_issued", "appeal_pending", "returned_for_supplement"]:
 			continue
+		# Manually submitted cases belong to the player's chosen investigation path.
+		if workflow != "unsubmitted" and not bool(record.get("autonomous_processing", false)):
+			continue
+		if not bool(record.get("autonomous_processing", false)):
+			var review_after := float(record.get("autonomous_review_after", npc_simulation_time))
+			if npc_simulation_time < review_after:
+				continue
 		var incident_id := str(record.get("incident_id", ""))
 		if incident_id.is_empty():
 			continue
-		if workflow in ["unsubmitted", "returned_for_supplement"]:
+		if workflow == "unsubmitted":
 			_seed_autonomous_case_material(record)
 			record["autonomous_processing"] = true
 			patrol_incident_records[index] = record
@@ -2538,6 +2545,8 @@ func _mark_patrol_guard_returned(agent: Dictionary) -> void:
 	if not assigned.is_empty() and returned.size() >= assigned.size():
 		record["state"] = "closed"
 		record["closed_at"] = npc_simulation_time
+		record["autonomous_review_after"] = npc_simulation_time + 30.0
+		_append_incident_timeline_entry(record, "player_review_window", "案件已归档，玩家可在 NPC 判官自动复核前介入调查", "patrol_office")
 		print("[FengduPatrol] incident %s archived; all assigned guards returned" % incident_id)
 	patrol_incident_records[record_index] = record
 
@@ -4886,6 +4895,9 @@ func get_patrol_case_dossier(incident_id: String) -> Dictionary:
 		"created_at": float(record.get("created_at", 0.0)),
 		"resolved_at": float(record.get("resolved_at", -1.0)),
 		"result_label": str(record.get("result_label", "")),
+		"player_can_intervene": str(record.get("state", "")) == "closed" and str(record.get("case_workflow_state", "unsubmitted")) == "unsubmitted",
+		"autonomous_review_in_seconds": maxf(0.0, float(record.get("autonomous_review_after", npc_simulation_time)) - npc_simulation_time),
+		"autonomous_processing": bool(record.get("autonomous_processing", false)),
 		"deduction_code": str(record.get("deduction_code", "inconclusive")),
 		"deduction_label": str(record.get("deduction_label", "尚无推断")),
 		"evidence_tags": record.get("player_clue_tags", []).duplicate(),
