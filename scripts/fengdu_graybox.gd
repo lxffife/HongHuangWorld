@@ -2584,8 +2584,9 @@ func _patrol_dispatch_status_text() -> String:
 		var latest_incident: Dictionary = patrol_incident_records.back()
 		var closed_at := float(latest_incident.get("closed_at", -1000.0))
 		if str(latest_incident.get("state", "")) == "closed" and npc_simulation_time - closed_at <= 12.0:
-			return "事件结案 · %s · 证据 %d 件 · 目击者 %d 人" % [
+			return "事件结案 · %s · %s · 证据 %d 件 · 目击者 %d 人" % [
 				str(latest_incident.get("result_label", "已处理")),
+				str(latest_incident.get("deduction_label", "暂无额外线索结论")),
 				int(latest_incident.get("evidence_count", 0)),
 				int(latest_incident.get("witness_count", 0))
 			]
