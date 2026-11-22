@@ -261,39 +261,20 @@ func _build_ground_and_roads() -> void:
 
 
 func _build_moat_and_bridges() -> void:
-	var width := 7.0
-	var center := MOAT_HALF - width * 0.5
-	_box("NorthMoat", Vector3(0, -0.12, center), Vector3(MOAT_HALF * 2.0, 0.22, width), "water", false)
-	_box("SouthMoat", Vector3(0, -0.12, -center), Vector3(MOAT_HALF * 2.0, 0.22, width), "water", false)
-	_box("EastMoat", Vector3(center, -0.12, 0), Vector3(width, 0.22, MOAT_HALF * 2.0), "water", false)
-	_box("WestMoat", Vector3(-center, -0.12, 0), Vector3(width, 0.22, MOAT_HALF * 2.0), "water", false)
-	_box("NorthBridge", Vector3(0, 0.12, CITY_HALF + 7.5), Vector3(GATE_WIDTH, 0.45, 17), "bridge", true)
-	_box("SouthBridge", Vector3(0, 0.12, -CITY_HALF - 7.5), Vector3(GATE_WIDTH, 0.45, 17), "bridge", true)
-	_box("EastBridge", Vector3(CITY_HALF + 7.5, 0.12, 0), Vector3(17, 0.45, GATE_WIDTH), "bridge", true)
-	_box("WestBridge", Vector3(-CITY_HALF - 7.5, 0.12, 0), Vector3(17, 0.45, GATE_WIDTH), "bridge", true)
+	for moat_data in WORLD_LAYOUT.get_moat_segments():
+		_box(str(moat_data.get("id", "Moat")), moat_data.get("center", Vector3.ZERO), moat_data.get("size", Vector3.ONE), "water", false)
+	for bridge_data in WORLD_LAYOUT.get_bridges():
+		_box(str(bridge_data.get("id", "Bridge")), bridge_data.get("center", Vector3.ZERO), bridge_data.get("size", Vector3.ONE), "bridge", true)
 
 
 func _build_city_walls() -> void:
-	var half := CITY_HALF
-	var side_len := half * 2.0
-	var segment := (side_len - GATE_WIDTH) * 0.5
-	for sign in [-1.0, 1.0]:
-		for side in [-1.0, 1.0]:
-			var z := sign * half
-			var x := side * (GATE_WIDTH * 0.5 + segment * 0.5)
-			_box("NorthSouthWall", Vector3(x, WALL_HEIGHT * 0.5, z), Vector3(segment, WALL_HEIGHT, WALL_THICKNESS), "wall", true)
-			var x2 := sign * half
-			var z2 := side * (GATE_WIDTH * 0.5 + segment * 0.5)
-			_box("EastWestWall", Vector3(x2, WALL_HEIGHT * 0.5, z2), Vector3(WALL_THICKNESS, WALL_HEIGHT, segment), "wall", true)
-	for x in [-half, half]:
-		for z in [-half, half]:
-			_box("CornerTower", Vector3(x, 10.0, z), Vector3(10, 20, 10), "dark_stone", true)
-			_roof_tier(Vector3(x, 20.4, z), 12.0, 4.0)
-	for side in [-1.0, 1.0]:
-		for i in range(1, 8):
-			var p := -half + float(i) * (side_len / 8.0)
-			_box("WallMerlon", Vector3(p, WALL_HEIGHT + 1.1, side * half), Vector3(2.0, 2.2, 5.8), "stone", true)
-			_box("WallMerlon", Vector3(side * half, WALL_HEIGHT + 1.1, p), Vector3(5.8, 2.2, 2.0), "stone", true)
+	for wall_data in WORLD_LAYOUT.get_wall_segments():
+		_box(str(wall_data.get("id", "CityWall")), wall_data.get("center", Vector3.ZERO), wall_data.get("size", Vector3.ONE), "wall", true)
+	for tower_data in WORLD_LAYOUT.get_wall_towers():
+		_box(str(tower_data.get("id", "CornerTower")), tower_data.get("center", Vector3.ZERO), tower_data.get("size", Vector3.ONE), "dark_stone", true)
+		_roof_tier(tower_data.get("roof_center", Vector3.ZERO), float(tower_data.get("roof_width", 12.0)), float(tower_data.get("roof_height", 4.0)))
+	for merlon_data in WORLD_LAYOUT.get_wall_merlons():
+		_box(str(merlon_data.get("id", "WallMerlon")), merlon_data.get("center", Vector3.ZERO), merlon_data.get("size", Vector3.ONE), "stone", true)
 
 
 func _build_gate_complexes() -> void:
