@@ -554,7 +554,9 @@ func _build_activity_registry() -> void:
 	# Consume presentation-independent NPC placements and route data.
 	activity_points.clear()
 	for point in WORLD_LAYOUT.get_npc_activity_points():
-		activity_points.append(point.duplicate(true))
+		var bound_point: Dictionary = point.duplicate(true)
+		bound_point.merge(WORLD_LAYOUT.get_spatial_binding_for_point(bound_point), true)
+		activity_points.append(bound_point)
 	var routes: Array = WORLD_LAYOUT.get_patrol_routes()
 	patrol_route.clear()
 	if routes.is_empty():
