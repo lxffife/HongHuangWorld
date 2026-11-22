@@ -13,6 +13,7 @@
 #include "persistence/monster_contribution_writer.hpp"
 #include "persistence/monster_runtime_checkpoint_writer.hpp"
 #include "persistence/monster_death_finalizer.hpp"
+#include "persistence/monster_reward_distribution.hpp"
 #include "network/chat_delivery_policy.hpp"
 
 #include <enet/enet.h>
@@ -2212,68 +2213,21 @@ struct EnetServer::Impl {
             // Base combat rewards belong to every authenticated contributor, not
             // only the final hitter. Allocate integer rewards proportionally and
             // distribute rounding leftovers by descending damage (stable tie-break).
-            struct RewardRecipient {
-                std::string session_id;
-                std::string character_id;
-                std::int64_t damage{};
-                std::int64_t experience{};
-                std::int64_t cultivation{};
-            };
-            std::vector<RewardRecipient> reward_recipients;
-            long double total_damage = 0.0L;
-            for (const auto& record : records) {
-                if (record.total_damage <= 0 || record.hit_count <= 0 ||
-                    record.session_id.empty() || record.character_id.empty()) continue;
-                reward_recipients.push_back(RewardRecipient{
-                    record.session_id, record.character_id, record.total_damage, 0, 0
+            const auto reward_recipients =
+                honghuang::persistence::allocate_monster_combat_rewards(
+                    records,
+                    20 + static_cast<std::int64_t>(level) * 10,
+                    10 + static_cast<std::int64_t>(level) * 5);
+            for (const auto& recipient : reward_recipients) {
+                if (recipient.experience <= 0 && recipient.cultivation <= 0) continue;
+                const auto reward_id = make_event_uuid();
+                append_event("character_reward", Json{
+                    {"event_id", reward_id},
+                    {"session_id", recipient.session_id},
+                    {"character_id", recipient.character_id},
+                    {"experience", recipient.experience},
+                    {"cultivation", recipient.cultivation}
                 });
-                total_damage += static_cast<long double>(record.total_damage);
-            }
-            std::sort(reward_recipients.begin(), reward_recipients.end(),
-                [](const RewardRecipient& left, const RewardRecipient& right) {
-                    if (left.damage != right.damage) return left.damage > right.damage;
-                    if (left.character_id != right.character_id)
-                        return left.character_id < right.character_id;
-                    return left.session_id < right.session_id;
-                });
-
-            if (total_damage > 0.0L && !reward_recipients.empty()) {
-                const auto base_experience = 20 + static_cast<std::int64_t>(level) * 10;
-                const auto base_cultivation = 10 + static_cast<std::int64_t>(level) * 5;
-                std::int64_t assigned_experience = 0;
-                std::int64_t assigned_cultivation = 0;
-                for (auto& recipient : reward_recipients) {
-                    const auto share = static_cast<long double>(recipient.damage) / total_damage;
-                    recipient.experience = static_cast<std::int64_t>(std::floor(
-                        static_cast<long double>(base_experience) * share));
-                    recipient.cultivation = static_cast<std::int64_t>(std::floor(
-                        static_cast<long double>(base_cultivation) * share));
-                    assigned_experience += recipient.experience;
-                    assigned_cultivation += recipient.cultivation;
-                }
-                auto experience_remainder = base_experience - assigned_experience;
-                auto cultivation_remainder = base_cultivation - assigned_cultivation;
-                for (auto& recipient : reward_recipients) {
-                    if (experience_remainder > 0) {
-                        ++recipient.experience;
-                        --experience_remainder;
-                    }
-                    if (cultivation_remainder > 0) {
-                        ++recipient.cultivation;
-                        --cultivation_remainder;
-                    }
-                }
-                for (const auto& recipient : reward_recipients) {
-                    if (recipient.experience <= 0 && recipient.cultivation <= 0) continue;
-                    const auto reward_id = make_event_uuid();
-                    append_event("character_reward", Json{
-                        {"event_id", reward_id},
-                        {"session_id", recipient.session_id},
-                        {"character_id", recipient.character_id},
-                        {"experience", recipient.experience},
-                        {"cultivation", recipient.cultivation}
-                    });
-                }
             }
 
             // Soul absorption and physical loot remain last-hit rewards. They
