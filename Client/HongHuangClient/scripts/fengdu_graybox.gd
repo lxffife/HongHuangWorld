@@ -73,6 +73,8 @@ var judge_statement_input: LineEdit
 var judge_selected_incident_id := ""
 var judge_workbench_open := false
 var judge_workbench_refresh_elapsed := 0.0
+var autonomous_judicial_elapsed := 0.0
+const AUTONOMOUS_JUDICIAL_INTERVAL := 5.0
 
 var mats: Dictionary = {}
 
@@ -1944,6 +1946,7 @@ func _update_npc_agents(delta: float) -> void:
 	npc_world_minutes = fposmod(npc_world_minutes + delta / NPC_DAY_SECONDS_PER_MINUTE, 1440.0)
 	_update_market_ambience(delta)
 	_update_patrol_alert(delta)
+	_process_autonomous_judicial_cases(delta)
 	var schedule_bucket := int(npc_world_minutes / 5.0)
 	if schedule_bucket != npc_schedule_bucket:
 		npc_schedule_bucket = schedule_bucket
@@ -2430,6 +2433,91 @@ func _update_patrol_incident_lifecycle(delta: float) -> void:
 			])
 		patrol_incident_records[index] = record
 	_prune_patrol_incident_history()
+
+
+func _process_autonomous_judicial_cases(delta: float) -> void:
+	# NPC adjudication is deliberately low-frequency; ordinary cases never wait for a player.
+	autonomous_judicial_elapsed += delta
+	if autonomous_judicial_elapsed < AUTONOMOUS_JUDICIAL_INTERVAL:
+		return
+	autonomous_judicial_elapsed = 0.0
+	for index in range(patrol_incident_records.size()):
+		var record: Dictionary = patrol_incident_records[index]
+		if str(record.get("state", "")) != "closed":
+			continue
+		var workflow := str(record.get("case_workflow_state", "unsubmitted"))
+		if workflow in ["judgment_issued", "appeal_pending"]:
+			continue
+		var incident_id := str(record.get("incident_id", ""))
+		if incident_id.is_empty():
+			continue
+		if workflow in ["unsubmitted", "returned_for_supplement"]:
+			_seed_autonomous_case_material(record)
+			record["autonomous_processing"] = true
+			patrol_incident_records[index] = record
+			var transfer := submit_patrol_case_to_judge_bureau(incident_id)
+			if not bool(transfer.get("ok", false)):
+				continue
+		record = patrol_incident_records[index]
+		if str(record.get("case_workflow_state", "")) == "transferred_to_judge_bureau":
+			begin_judge_bureau_case_review(incident_id)
+			record = patrol_incident_records[index]
+		if str(record.get("case_workflow_state", "")) == "under_judicial_review":
+			var submission: Dictionary = record.get("case_submission", {})
+			for tag_value in submission.get("evidence_tags", []):
+				var tag := str(tag_value)
+				if not record.get("judicial_review", {}).get("evidence_assessments", {}).has(tag):
+					record_judicial_evidence_assessment(incident_id, tag, "accepted", "NPC 判官依据巡城司勘验记录完成常规复核")
+			if int(submission.get("witness_count", 0)) > 0 and not str(submission.get("testimony_tag", "")).is_empty():
+				if record.get("judicial_review", {}).get("testimony_assessment", {}).is_empty():
+					record_judicial_testimony_assessment(incident_id, "credible", "常规 NPC 证词与基础勘验材料未发现明显冲突")
+			var review_result := complete_judge_bureau_review(incident_id)
+			if bool(review_result.get("ok", false)) and bool(review_result.get("hearing_eligible", false)):
+				record_judge_bureau_case_disposition(incident_id, "accept_for_hearing")
+		record = patrol_incident_records[index]
+		if str(record.get("case_workflow_state", "")) == "hearing_pending":
+			begin_case_hearing(incident_id)
+			record = patrol_incident_records[index]
+		if str(record.get("case_workflow_state", "")) == "hearing_in_progress":
+			var current_submission: Dictionary = record.get("case_submission", {})
+			for tag_value in current_submission.get("evidence_tags", []):
+				var tag := str(tag_value)
+				if not record.get("hearing_record", {}).get("presented_evidence_tags", []).has(tag):
+					present_case_evidence_at_hearing(incident_id, tag)
+			if not str(current_submission.get("testimony_tag", "")).is_empty() and str(record.get("judicial_review", {}).get("testimony_assessment", {}).get("assessment", "")) == "credible" and not bool(record.get("hearing_record", {}).get("testimony_presented", false)):
+				present_case_testimony_at_hearing(incident_id)
+			close_case_hearing(incident_id, "NPC 判官已完成常规案件审理；玩家未参与，案件按现有材料自动归档。")
+			record = patrol_incident_records[index]
+		if str(record.get("case_workflow_state", "")) == "hearing_closed_pending_judgment":
+			var final_submission: Dictionary = record.get("case_submission", {})
+			var final_tags: Array[String] = []
+			for tag_value in final_submission.get("evidence_tags", []):
+				final_tags.append(str(tag_value))
+			var result_code := str(record.get("result_code", ""))
+			var outcome := "acquitted" if result_code == "cleared" else ("mitigated" if result_code == "mediated" else "responsible")
+			record_case_judgment(incident_id, outcome, "NPC 判官依据巡防处置结果与卷宗材料作出常规裁定。", final_tags)
+			finalize_case_judgment(incident_id)
+
+
+func _seed_autonomous_case_material(record: Dictionary) -> void:
+	var tags: Array = record.get("player_clue_tags", []).duplicate()
+	var available_tags := ["movement_trace", "spirit_residue", "broken_artifact"]
+	var required_count := maxi(2, int(record.get("patrol_evidence_count", 2)))
+	for tag_value in available_tags:
+		if tags.size() >= required_count:
+			break
+		if not tags.has(tag_value):
+			tags.append(tag_value)
+	record["player_clue_tags"] = tags
+	record["player_evidence_count"] = maxi(int(record.get("player_evidence_count", 0)), tags.size())
+	record["player_witness_count"] = maxi(int(record.get("player_witness_count", 0)), 1)
+	if str(record.get("witness_testimony_tag", "")).is_empty():
+		var incident_type := str(record.get("type", ""))
+		record["witness_testimony_tag"] = "witness_dispute" if incident_type == "crowd_disorder" else ("witness_violence" if incident_type == "hostile_encounter" else "witness_shadow")
+	if not record.has("autonomous_case_note"):
+		record["autonomous_case_note"] = "由巡城司 NPC 自动补齐基础勘验材料；玩家可在移交前介入并补充线索。"
+
+
 
 
 func _mark_patrol_guard_returned(agent: Dictionary) -> void:
@@ -3780,6 +3868,9 @@ func submit_patrol_case_to_judge_bureau(incident_id: String) -> Dictionary:
 		return {"ok": false, "reason": "patrol_investigation_not_complete", "patrol_state": patrol_state}
 	var evidence_count := int(record.get("player_evidence_count", 0))
 	var witness_count := int(record.get("player_witness_count", 0))
+	if bool(record.get("autonomous_processing", false)):
+		evidence_count = maxi(evidence_count, int(record.get("patrol_evidence_count", 0)))
+		witness_count = maxi(witness_count, int(record.get("patrol_witness_count", 0)))
 	var enough_material := evidence_count >= 2 or (evidence_count >= 1 and witness_count >= 1)
 	var required_material: Array[String] = []
 	if evidence_count < 1:
@@ -3805,24 +3896,25 @@ func submit_patrol_case_to_judge_bureau(incident_id: String) -> Dictionary:
 	var transfer_id := incident_id + ".transfer"
 	var lead_assessments: Array[Dictionary] = _assess_incident_activity_leads(record)
 	var case_parties: Array[Dictionary] = []
-	for lead in lead_assessments:
-		var lead_status := str(lead.get("lead_status", "unverified"))
-		if lead_status not in ["partial_match", "track_near_scene"]:
-			continue
-		var actor_id := str(lead.get("actor_id", ""))
-		if actor_id.is_empty():
-			continue
-		case_parties.append({
-			"party_id": actor_id,
-			"actor_id": actor_id,
-			"display_name": str(lead.get("display_name", "待核查人员")),
-			"lead_status": lead_status,
-			"suspect_status": "unverified",
-			"procedural_status": "notice_pending",
-			"defense_status": "not_heard",
-			"defense_statement": "",
-			"response_at": -1.0
-		})
+	if not bool(record.get("autonomous_processing", false)):
+		for lead in lead_assessments:
+			var lead_status := str(lead.get("lead_status", "unverified"))
+			if lead_status not in ["partial_match", "track_near_scene"]:
+				continue
+			var actor_id := str(lead.get("actor_id", ""))
+			if actor_id.is_empty():
+				continue
+			case_parties.append({
+				"party_id": actor_id,
+				"actor_id": actor_id,
+				"display_name": str(lead.get("display_name", "待核查人员")),
+				"lead_status": lead_status,
+				"suspect_status": "unverified",
+				"procedural_status": "notice_pending",
+				"defense_status": "not_heard",
+				"defense_statement": "",
+				"response_at": -1.0
+			})
 	var submission := {
 		"transfer_id": transfer_id,
 		"incident_id": incident_id,
