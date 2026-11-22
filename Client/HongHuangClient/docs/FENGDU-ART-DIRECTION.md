@@ -82,6 +82,13 @@
 - These figures are local scene decoration only: no collision, combat, dialogue, shop, quest, network identity or authoritative state. Replace them with licensed rigged assets and server-backed actors in later production passes.
 
 
+## NPC behavior state presentation
+
+- Prefer readable, role-specific short behavior loops over synchronized idle animation. Each local actor cycles through small state sets with per-agent phase offsets and state durations.
+- Merchants alternate between serving, greeting and arranging-stock gestures; residents use subtle conversation, tea-house and quiet-idle poses; soldiers keep drill and rest visually distinct; guides alternate ledger inspection and directing gestures.
+- Keep the current prototype motions within each actor's assigned activity point until safe walkable waypoints and obstacle avoidance are implemented. Do not fake long-distance navigation by moving actors through walls, stalls or queue rails.
+- The state machine is a client presentation layer. Authoritative schedules, actor state, queue order, shop inventory and interaction outcomes must come from services in the production game.
+
 ## NPC schedule and population prototype
 
 - The graybox owns a local demonstration clock, starting at 18:00 and advancing one in-game minute per real second. It is not authoritative world time.
