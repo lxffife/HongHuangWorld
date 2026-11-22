@@ -922,10 +922,6 @@ func _build_market_caravans() -> void:
 			pack.material_override = pack_material
 			cart.add_child(pack)
 		var cargo_type := "魂珠与魂籍" if index == 0 else "药材与法器"
-		var cargo_palette := Color("#8d789e") if index == 0 else Color("#718d70")
-		for cargo_child in cart.get_children():
-			if cargo_child is MeshInstance3D and cargo_child.name == "":
-				pass
 		market_caravans.append({
 			"cargo_type": cargo_type,
 			"cargo_palette": cargo_palette,
@@ -1595,6 +1591,8 @@ func _apply_npc_schedules() -> void:
 			agent["activity"] = "drill" if hour >= 6 and hour < 22 else "rest"
 		elif role == "merchant":
 			agent["activity"] = "trade_idle"
+			if agent.has("market_stall_id"):
+				agent["market_business_state"] = "open" if npc_schedule_night else "closed"
 		elif role == "waiting_soul":
 			agent["activity"] = "queue_wait"
 		elif role == "guide":
@@ -2158,7 +2156,7 @@ func _interact_with_focused_npc() -> void:
 			var merchant_state := str(npc_focus_agent.get("state", "trade_idle"))
 			var stall_type := str(npc_focus_agent.get("market_stall_type", "鬼市商铺"))
 			var goods: Array = npc_focus_agent.get("market_goods", [])
-			var goods_text := "、".join(goods)
+			var goods_text := "、".join(PackedStringArray(goods))
 			if merchant_state == "greet":
 				message = "%s（%s）：客官，欢迎光临%s。今日陈列：%s。交易功能接入后即可查看真实货单。" % [npc_name, str(npc_focus_agent.get("merchant_title", "掌柜")), stall_type, goods_text]
 			else:
