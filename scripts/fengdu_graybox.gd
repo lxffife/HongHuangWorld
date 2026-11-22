@@ -468,7 +468,7 @@ func _build_palace_axis() -> void:
 	_roof_tier(center + Vector3(0, 19, 0), 31, 5)
 	_roof_tier(center + Vector3(0, 25, 0), 23, 4)
 	_label("酆都大帝 · 皇城正殿", center + Vector3(0, 32, 0), 38, Color("#f1d49d"))
-	for z in [48.0, 34.0, 20.0, 6.0]:
+	for z in [42.0, 34.0, 20.0, 6.0]:
 		_box("PalaceProcessionStep", Vector3(0, 0.35, z), Vector3(20, 0.7, 3), "road_edge", true)
 
 
