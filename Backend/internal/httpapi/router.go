@@ -18,6 +18,7 @@ import (
 	"github.com/liflife/HongHuangWorld/Backend/internal/faction"
 	"github.com/liflife/HongHuangWorld/Backend/internal/inventory"
 	"github.com/liflife/HongHuangWorld/Backend/internal/npc"
+	"github.com/liflife/HongHuangWorld/Backend/internal/party"
 	"github.com/liflife/HongHuangWorld/Backend/internal/serverregistry"
 	"github.com/liflife/HongHuangWorld/Backend/internal/soul"
 	"github.com/liflife/HongHuangWorld/Backend/internal/task"
@@ -107,6 +108,16 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/characters/current/bloodlines/awaken", characters.awakenBloodline)
 		mux.HandleFunc("POST /api/v1/characters/current/techniques/train", characters.trainTechnique)
 		mux.HandleFunc("POST /api/v1/characters/current/attributes/allocate", characters.allocateAttributePoints)
+		partyAPI := &partyHandlers{authService: authService, service: party.NewService(db), logger: logger}
+		mux.HandleFunc("GET /api/v1/party/current", partyAPI.current)
+		mux.HandleFunc("POST /api/v1/party", partyAPI.create)
+		mux.HandleFunc("POST /api/v1/party/invitations", partyAPI.invite)
+		mux.HandleFunc("GET /api/v1/party/invitations", partyAPI.invitations)
+		mux.HandleFunc("POST /api/v1/party/invitations/{invitationID}/respond", partyAPI.respond)
+		mux.HandleFunc("POST /api/v1/party/leave", partyAPI.leave)
+		mux.HandleFunc("POST /api/v1/party/kick", partyAPI.kick)
+		mux.HandleFunc("POST /api/v1/party/transfer-leadership", partyAPI.transfer)
+		mux.HandleFunc("POST /api/v1/party/disband", partyAPI.disband)
 		factionService := faction.NewService(db)
 		factionAPI := &factionHandlers{authService: authService, service: factionService, logger: logger}
 		mux.HandleFunc("POST /api/v1/factions", factionAPI.createSect)
@@ -187,6 +198,8 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/internal/admin/players/{accountID}/disconnect", unavailable)
 		for _, route := range []string{
 			"POST /api/v1/auth/register", "POST /api/v1/auth/login", "GET /api/v1/account/me",
+			"GET /api/v1/party/current", "POST /api/v1/party", "POST /api/v1/party/invitations", "GET /api/v1/party/invitations", "POST /api/v1/party/invitations/{invitationID}/respond", "POST /api/v1/party/leave", "POST /api/v1/party/kick", "POST /api/v1/party/transfer-leadership", "POST /api/v1/party/disband",
+			
 			"POST /api/v1/chat/messages", "GET /api/v1/chat/messages", "GET /api/v1/servers/chat/messages", "POST /api/v1/servers/chat/messages",
 			"POST /api/v1/souls", "GET /api/v1/souls/current", "GET /api/v1/souls/current/essence", "GET /api/v1/souls/current/fusions", "POST /api/v1/souls/current/fusions", "GET /api/v1/souls/current/progression", "POST /api/v1/souls/current/breakthrough", "GET /api/v1/souls/current/trials", "GET /api/v1/souls/current/reincarnation-eligibility", "POST /api/v1/servers/souls/rewards", "GET /api/v1/worlds", "GET /api/v1/worlds/current/npcs", "POST /api/v1/worlds/current/npcs/interact", "POST /api/v1/worlds/current/npcs/choose", "POST /api/v1/worlds/current/npcs/discover",
 			"GET /api/v1/worlds/current/exploration-progress", "GET /api/v1/worlds/current/exploration-points", "POST /api/v1/worlds/current/exploration-points/discover", "GET /api/v1/worlds/current/exploration-events", "POST /api/v1/worlds/current/exploration-events/trigger",
