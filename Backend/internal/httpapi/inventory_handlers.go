@@ -104,9 +104,7 @@ func (h *inventoryHandlers) pickupDrop(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, inventory.ErrSessionInvalid): http.Error(w, "active character session not found on this server", http.StatusConflict)
 	case errors.Is(err, inventory.ErrDropUnavailable): http.Error(w, "ground drop is unavailable", http.StatusConflict)
 	case errors.Is(err, inventory.ErrInventoryFull): http.Error(w, "inventory stack is full", http.StatusConflict)
-	case errors.Is(err, inventory.ErrCharacterInWorld): http.Error(w, "leave the world before changing equipment; re-enter to apply the new combat stats", http.StatusConflict)
-	case errors.Is(err, inventory.ErrCharacterInWorld): http.Error(w, "leave the world before changing equipment; re-enter to apply the new combat stats", http.StatusConflict)
-	case errors.Is(err, inventory.ErrCharacterInWorld): http.Error(w, "leave the world before changing equipment; re-enter to apply the new combat stats", http.StatusConflict)
+	case errors.Is(err, inventory.ErrCharacterInWorld): http.Error(w, "character is changing world sessions; retry shortly", http.StatusConflict)
 	default: h.logger.Error("pickup ground drop failed", "error", err); http.Error(w, "internal server error", http.StatusInternalServerError)
 	}
 }
@@ -170,6 +168,7 @@ func (h *inventoryHandlers) writeEquipmentResult(w http.ResponseWriter, operatio
 	case err == nil: writeJSON(w, http.StatusOK, map[string]any{"success": true})
 	case errors.Is(err, inventory.ErrInvalidRequest): http.Error(w, "invalid equipment request or item is not owned", http.StatusBadRequest)
 	case errors.Is(err, inventory.ErrInventoryFull): http.Error(w, "inventory stack is full", http.StatusConflict)
+	case errors.Is(err, inventory.ErrCharacterInWorld): http.Error(w, "character is changing world sessions; retry shortly", http.StatusConflict)
 	default: h.logger.Error(operation, "error", err); http.Error(w, "internal server error", http.StatusInternalServerError)
 	}
 }
