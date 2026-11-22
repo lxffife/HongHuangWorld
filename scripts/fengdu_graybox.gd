@@ -3436,9 +3436,16 @@ func _interact_with_patrol_incident(incident_id: String) -> void:
 	if player == null:
 		return
 	var evidence_nodes: Array = record.get("evidence_nodes", [])
+	var witness_root: Node3D = record.get("witness_root")
+	var witness_stage := int(record.get("witness_question_stage", 0))
+	var witness_in_range := witness_root != null and is_instance_valid(witness_root) and player.global_position.distance_to(witness_root.global_position) <= 3.8
+	var has_clues: Array = record.get("player_clue_tags", [])
+	var prioritize_witness := witness_in_range and (witness_stage == 0 or (witness_stage == 1 and not has_clues.is_empty()))
 	var nearest_evidence: Node3D
 	var nearest_evidence_distance := 3.2
 	for clue_node in evidence_nodes:
+		if prioritize_witness:
+			break
 		if not is_instance_valid(clue_node) or not clue_node.visible:
 			continue
 		var clue_distance := player.global_position.distance_to(clue_node.global_position)
@@ -3473,7 +3480,6 @@ func _interact_with_patrol_incident(incident_id: String) -> void:
 		]
 		print("[FengduPatrol] player collected clue %s for %s" % [clue_id, incident_id])
 		return
-	var witness_root: Node3D = record.get("witness_root")
 	if witness_root != null and is_instance_valid(witness_root):
 		var witness_distance := player.global_position.distance_to(witness_root.global_position)
 		var question_stage := int(record.get("witness_question_stage", 0))
