@@ -66,7 +66,8 @@ func _process(delta: float) -> void:
 func _update_camera() -> void:
 	if camera == null or player == null:
 		return
-	var offset := Vector3(0, 4.6, 8.0).rotated(Vector3.UP, player.rotation.y)
+	var orbit_offset := Vector3(0, 0, 8.0).rotated(Vector3.RIGHT, camera_pitch) + Vector3(0, 1.8, 0)
+	var offset := orbit_offset.rotated(Vector3.UP, player.rotation.y)
 	camera.global_position = player.global_position + offset
 	camera.look_at(player.global_position + Vector3(0, 1.25, 0), Vector3.UP)
 
@@ -236,7 +237,7 @@ func _build_districts() -> void:
 
 func _district(title: String, center: Vector3, footprint: Vector2, subtitle: String, building_count: int, accent: Color) -> void:
 	var base_size := Vector3(footprint.x, 0.45, footprint.y)
-	_box(title + "Foundation", center + Vector3(0, 0.22, 0), base_size, "district", true)
+	_box(title + "Foundation", center + Vector3(0, 0.22, 0), base_size, "district", false)
 	var count := maxi(building_count, 1)
 	var columns := ceili(sqrt(float(count)))
 	for i in range(count):
@@ -261,7 +262,7 @@ func _build_palace_axis() -> void:
 	var center := Vector3(0, 0, 72)
 	district_markers["酆都皇城"] = center
 	_label("酆都皇城", center + Vector3(0, 34, 0), 30, Color("#e0c08b"))
-	_box("ImperialPalaceTerrace", center + Vector3(0, 0.55, 0), Vector3(43, 1.1, 28), "gold", true)
+	_box("ImperialPalaceTerrace", center + Vector3(0, 0.55, 0), Vector3(43, 1.1, 28), "gold", false)
 	_box("ImperialMainHall", center + Vector3(0, 9, 0), Vector3(23, 17, 15), "palace", true)
 	for x in [-9.0, -4.5, 0.0, 4.5, 9.0]:
 		_box("PalacePillar", center + Vector3(x, 7.0, 8.0), Vector3(0.9, 14, 0.9), "gold", true)
