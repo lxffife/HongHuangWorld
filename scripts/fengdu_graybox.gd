@@ -886,6 +886,8 @@ func _build_market_customers() -> void:
 			base_position + Vector3(local_side * 0.55, 0.0, -1.0),
 			base_position + Vector3(local_side * 0.55, 0.0, 1.0)
 		]
+		var market_side := -1.0 if index % 2 == 0 else 1.0
+		var event_position := market_center + Vector3(market_side * 10.8, 0.0, 4.2 if index < 2 else 7.2)
 		market_customers.append({
 			"customer_id": "ghost_market.customer.%02d" % (index + 1),
 			"root": customer_root,
@@ -894,11 +896,14 @@ func _build_market_customers() -> void:
 			"right_arm": customer_figure["right_arm"],
 			"base_yaw": float(customer_stalls[index]["yaw"]),
 			"base_position": base_position,
+			"event_position": event_position,
+			"preferred_stall_id": "ghost_market.stall.%02d" % (index + 1),
 			"waypoints": customer_waypoints,
 			"route_index": 0,
 			"route_progress": 0.0,
 			"move_speed": 0.42 + float(index % 2) * 0.08,
 			"state": "browse",
+			"resume_state": "browse",
 			"state_elapsed": float(index) * 1.7,
 			"phase": float(index) * 2.4
 		})
@@ -1133,8 +1138,66 @@ func _update_market_ambience(delta: float) -> void:
 		customer_root.visible = npc_schedule_night
 		if not npc_schedule_night:
 			continue
-		var customer_elapsed := float(customer_data.get("state_elapsed", 0.0)) + delta
+		var minute_of_day := int(npc_world_minutes / 60.0) * 60 + int(fposmod(npc_world_minutes, 60.0))
+		var event_gathering := minute_of_day >= 19 * 60 + 30 and minute_of_day < 22 * 60 + 30
 		var customer_state := str(customer_data.get("state", "browse"))
+		var customer_body: MeshInstance3D = customer_data["body"]
+		var customer_left: MeshInstance3D = customer_data["left_arm"]
+		var customer_right: MeshInstance3D = customer_data["right_arm"]
+		var customer_phase := market_ambience_time * 1.1 + float(customer_data["phase"])
+		if event_gathering:
+			if customer_state != "event_approach" and customer_state != "event_watch":
+				customer_data["state"] = "event_approach"
+				customer_state = "event_approach"
+			var event_target: Vector3 = customer_data["event_position"]
+			var event_delta: Vector3 = event_target - customer_root.position
+			if event_delta.length() > 0.18:
+				customer_root.position = customer_root.position.move_toward(event_target, 1.15 * delta)
+				customer_root.rotation.y = atan2(-event_delta.x, -event_delta.z)
+				customer_data["state"] = "event_approach"
+			else:
+				customer_root.position = event_target
+				customer_data["state"] = "event_watch"
+				var stage_direction: Vector3 = market_center + Vector3(0.0, 0.0, 13.0) - customer_root.position
+				customer_root.rotation.y = atan2(-stage_direction.x, -stage_direction.z)
+			customer_body.rotation.x = sin(customer_phase * 0.5) * deg_to_rad(1.4)
+			if _is_market_auction_time():
+				var applause := absf(sin(customer_phase * 1.7))
+				customer_left.rotation.z = deg_to_rad(-18.0) - applause * 0.16
+				customer_right.rotation.z = deg_to_rad(18.0) + applause * 0.16
+			else:
+				customer_left.rotation.z = deg_to_rad(-18.0) + sin(customer_phase * 0.5) * 0.02
+				customer_right.rotation.z = deg_to_rad(18.0) - sin(customer_phase * 0.5 + 0.7) * 0.02
+			continue
+		if customer_state == "event_approach" or customer_state == "event_watch":
+			customer_data["state"] = "return_to_stall"
+			customer_state = "return_to_stall"
+		if customer_state == "return_to_stall":
+			var home_position: Vector3 = customer_data["base_position"]
+			var home_delta: Vector3 = home_position - customer_root.position
+			if home_delta.length() > 0.18:
+				customer_root.position = customer_root.position.move_toward(home_position, 1.0 * delta)
+				customer_root.rotation.y = atan2(-home_delta.x, -home_delta.z)
+			else:
+				customer_root.position = home_position
+				customer_data["state"] = "browse"
+				customer_data["route_index"] = 0
+				customer_data["route_progress"] = 0.0
+			continue
+		var stall_restocking := _market_stall_is_restocking(str(customer_data.get("preferred_stall_id", "")))
+		if stall_restocking:
+			if customer_state != "restock_wait":
+				customer_data["resume_state"] = customer_state
+				customer_data["state"] = "restock_wait"
+			customer_root.rotation.y = float(customer_data["base_yaw"]) + sin(customer_phase * 0.4) * 0.12
+			customer_body.rotation.x = deg_to_rad(1.5) + sin(customer_phase * 0.45) * deg_to_rad(1.2)
+			customer_left.rotation.z = deg_to_rad(-18.0) + sin(customer_phase * 0.5) * 0.025
+			customer_right.rotation.z = deg_to_rad(18.0) - sin(customer_phase * 0.5 + 0.6) * 0.025
+			continue
+		elif customer_state == "restock_wait":
+			customer_state = str(customer_data.get("resume_state", "browse"))
+			customer_data["state"] = customer_state
+		var customer_elapsed := float(customer_data.get("state_elapsed", 0.0)) + delta
 		var customer_duration := 4.5 if customer_state == "browse" else 3.0
 		if customer_elapsed >= customer_duration:
 			customer_elapsed = 0.0
@@ -1164,10 +1227,6 @@ func _update_market_ambience(delta: float) -> void:
 				customer_data["route_progress"] = route_progress
 			else:
 				customer_root.rotation.y = float(customer_data["base_yaw"]) + sin(market_ambience_time * 0.45 + float(customer_data["phase"])) * 0.08
-		var customer_phase := market_ambience_time * 1.1 + float(customer_data["phase"])
-		var customer_body: MeshInstance3D = customer_data["body"]
-		var customer_left: MeshInstance3D = customer_data["left_arm"]
-		var customer_right: MeshInstance3D = customer_data["right_arm"]
 		customer_body.rotation.x = deg_to_rad(2.5) + absf(sin(customer_phase * 0.55)) * deg_to_rad(2.0)
 		customer_left.rotation.z = deg_to_rad(-18.0) + sin(customer_phase * 0.8) * 0.035
 		customer_right.rotation.z = deg_to_rad(18.0) - sin(customer_phase * 0.8 + 1.1) * 0.045
@@ -2021,6 +2080,15 @@ func _create_market_stall_status_label(stall_position: Vector3, facing: float) -
 	status.text = "休市"
 	add_child(status)
 	return status
+
+
+func _market_stall_is_restocking(stall_id: String) -> bool:
+	if stall_id.is_empty():
+		return false
+	for stall in market_stall_registry:
+		if str(stall.get("stall_id", "")) == stall_id:
+			return str(stall.get("business_state", "")) == "restocking"
+	return false
 
 
 func _update_market_stall_states() -> void:
