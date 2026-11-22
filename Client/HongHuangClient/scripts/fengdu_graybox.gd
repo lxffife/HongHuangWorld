@@ -1033,6 +1033,21 @@ func _build_market_caravans() -> void:
 		unload_crate.material_override = unload_crate_material
 		unload_crate.visible = false
 		add_child(unload_crate)
+		# Three persistent, reusable depot crates per caravan; these remain after unloading.
+		var storage_crates: Array[MeshInstance3D] = []
+		for storage_index in range(3):
+			var storage_crate := MeshInstance3D.new()
+			storage_crate.name = "MarketDepotCrate_%02d_%02d" % [index + 1, storage_index + 1]
+			var storage_mesh := BoxMesh.new()
+			storage_mesh.size = Vector3(0.5, 0.46, 0.5)
+			storage_crate.mesh = storage_mesh
+			var storage_material := StandardMaterial3D.new()
+			storage_material.albedo_color = Color("#9c8063") if index == 0 else Color("#718d70")
+			storage_material.roughness = 0.92
+			storage_crate.material_override = storage_material
+			storage_crate.visible = false
+			add_child(storage_crate)
+			storage_crates.append(storage_crate)
 		market_caravans.append({
 			"caravan_id": "ghost_market.caravan.%02d" % (index + 1),
 			"cargo_type": cargo_type,
@@ -1043,6 +1058,9 @@ func _build_market_caravans() -> void:
 			"right_arm": driver["right_arm"],
 			"cargo_status": cargo_status,
 			"unload_crate": unload_crate,
+			"storage_crates": storage_crates,
+			"delivered_crates": 0,
+			"last_unload_cycle": -1,
 			"base_x": root.position.x,
 			"base_z": root.position.z,
 			"phase": float(index) * 17.0
@@ -1261,10 +1279,14 @@ func _update_market_ambience(delta: float) -> void:
 			customer_state = str(customer_data.get("resume_state", "browse"))
 			customer_data["state"] = customer_state
 		var customer_elapsed := float(customer_data.get("state_elapsed", 0.0)) + delta
-		var customer_duration := 4.5 if customer_state == "browse" else 3.0
+		var customer_duration := 3.8 if customer_state == "browse" else (2.2 if customer_state == "inspect" else (3.0 if customer_state == "talk" else 3.0))
 		if customer_elapsed >= customer_duration:
 			customer_elapsed = 0.0
-			customer_state = "walk" if customer_state == "browse" else "browse"
+			match customer_state:
+				"browse": customer_state = "inspect"
+				"inspect": customer_state = "talk"
+				"talk": customer_state = "walk"
+				_: customer_state = "browse"
 			customer_data["state"] = customer_state
 		customer_data["state_elapsed"] = customer_elapsed
 		var waypoints: Array = customer_data.get("waypoints", [])
@@ -1291,8 +1313,19 @@ func _update_market_ambience(delta: float) -> void:
 			else:
 				customer_root.rotation.y = float(customer_data["base_yaw"]) + sin(market_ambience_time * 0.45 + float(customer_data["phase"])) * 0.08
 		customer_body.rotation.x = deg_to_rad(2.5) + absf(sin(customer_phase * 0.55)) * deg_to_rad(2.0)
-		customer_left.rotation.z = deg_to_rad(-18.0) + sin(customer_phase * 0.8) * 0.035
-		customer_right.rotation.z = deg_to_rad(18.0) - sin(customer_phase * 0.8 + 1.1) * 0.045
+		if customer_state == "inspect":
+			# Lean toward the stall display and bring one hand forward to examine an item.
+			customer_body.rotation.x = deg_to_rad(9.0) + sin(customer_phase) * deg_to_rad(1.2)
+			customer_left.rotation.z = deg_to_rad(-18.0) - 0.08
+			customer_right.rotation.z = deg_to_rad(18.0) + 0.28 + sin(customer_phase * 1.4) * 0.025
+		elif customer_state == "talk":
+			# A brief exchange gesture; this remains ambient acting, not a shop transaction.
+			customer_body.rotation.x = deg_to_rad(3.5)
+			customer_left.rotation.z = deg_to_rad(-18.0) - maxf(sin(customer_phase * 1.2), 0.0) * 0.18
+			customer_right.rotation.z = deg_to_rad(18.0) + maxf(sin(customer_phase * 1.2 + 1.2), 0.0) * 0.16
+		else:
+			customer_left.rotation.z = deg_to_rad(-18.0) + sin(customer_phase * 0.8) * 0.035
+			customer_right.rotation.z = deg_to_rad(18.0) - sin(customer_phase * 0.8 + 1.1) * 0.045
 	for guard_data in market_guards:
 		var guard_root: Node3D = guard_data["root"]
 		guard_root.visible = npc_schedule_night
@@ -1341,13 +1374,26 @@ func _update_market_ambience(delta: float) -> void:
 		driver_left.rotation.z = deg_to_rad(-18.0) + (sin(caravan_phase * 2.0) * 0.04 if not unloading else -0.12)
 		driver_right.rotation.z = deg_to_rad(18.0) - (sin(caravan_phase * 2.0) * 0.04 if not unloading else 0.12)
 		var unload_crate: MeshInstance3D = caravan_data["unload_crate"]
-		unload_crate.visible = unloading and fposmod(route_time - 8.0, 5.0) < 2.2
+		var transfer_elapsed := fposmod(route_time - 8.0, 5.0)
+		var transfer_cycle := int((route_time - 8.0) / 5.0) if unloading else -1
+		if unloading and transfer_elapsed >= 2.2 and int(caravan_data.get("last_unload_cycle", -1)) != transfer_cycle:
+			caravan_data["last_unload_cycle"] = transfer_cycle
+			caravan_data["delivered_crates"] = mini(3, int(caravan_data.get("delivered_crates", 0)) + 1)
+		var storage_crates: Array = caravan_data.get("storage_crates", [])
+		var delivered_count := int(caravan_data.get("delivered_crates", 0))
+		var depot_position := _market_restock_destination(str(caravan_data["cargo_type"]), str(caravan_data["caravan_id"]))
+		for storage_index in range(storage_crates.size()):
+			var stored_crate: MeshInstance3D = storage_crates[storage_index]
+			stored_crate.visible = storage_index < delivered_count
+			if stored_crate.visible:
+				var stack_offset := Vector3(float(storage_index % 2) * 0.56, 0.25 + float(storage_index / 2) * 0.48, float(storage_index / 2) * 0.08)
+				stored_crate.global_position = depot_position + stack_offset
+				stored_crate.rotation.y = float(storage_index % 2) * 0.12
+		unload_crate.visible = unloading and transfer_elapsed < 2.2
 		if unload_crate.visible:
-			var transfer_elapsed := fposmod(route_time - 8.0, 5.0)
 			var source_position := caravan_root.global_position + caravan_root.global_transform.basis * Vector3(0.0, 1.05, 1.45)
-			var target_position := _market_restock_destination(str(caravan_data["cargo_type"]), str(caravan_data["caravan_id"]))
 			var transfer_weight := smoothstep(0.0, 2.2, transfer_elapsed)
-			unload_crate.global_position = source_position.lerp(target_position, transfer_weight)
+			unload_crate.global_position = source_position.lerp(depot_position + Vector3(0.0, 0.25, -0.08), transfer_weight)
 			unload_crate.rotation.y = sin(transfer_elapsed * 2.4) * 0.08
 	_update_market_stall_states()
 	_update_market_event_sign()
@@ -1864,7 +1910,7 @@ func _update_npc_agents(delta: float) -> void:
 			_update_merchant_market_activity(agent)
 		var patrol_alert_override := false
 		if str(agent.get("role", "")) == "patrol_guard":
-			var should_alert := patrol_alert_remaining > 0.0 and root.global_position.distance_to(patrol_alert_position) <= 24.0
+			var should_alert := patrol_alert_remaining > 0.0 and root.global_position.distance_to(patrol_alert_position) <= 60.0
 			var was_alerted := bool(agent.get("alert_override", false))
 			if should_alert:
 				if not was_alerted:
@@ -1982,6 +2028,12 @@ func _update_market_gate_inspection(delta: float) -> void:
 			market_inspection_elapsed = 0.0
 			market_inspection_remaining = 10.0
 			market_inspection_sequence += 1
+			# The gate guard reports a suspicious inspection finding to the patrol network.
+			var market_center: Vector3 = district_markers.get("万魂鬼市", Vector3(55.0, 0.0, -53.0))
+			patrol_alert_position = market_center + Vector3(0.0, 0.0, -12.0)
+			patrol_alert_remaining = maxf(patrol_alert_remaining, 7.0)
+			patrol_alert_sequence += 1
+			print("[FengduPatrol] market gate report #%d dispatched to patrol guards" % patrol_alert_sequence)
 	var inspecting := market_inspection_remaining > 0.0
 	var minute_of_day := int(npc_world_minutes / 60.0) * 60 + int(fposmod(npc_world_minutes, 60.0))
 	var welcoming_guests := minute_of_day >= 19 * 60 + 30 and minute_of_day < 20 * 60
@@ -2018,16 +2070,9 @@ func _update_market_gate_inspection(delta: float) -> void:
 
 
 func _update_patrol_alert(delta: float) -> void:
-	# Deterministic signal-tower drill; client presentation only, not a security incident.
+	# Alert duration is driven by a gate report; no unrelated periodic drill is generated.
 	if patrol_alert_remaining > 0.0:
 		patrol_alert_remaining = maxf(0.0, patrol_alert_remaining - delta)
-		return
-	patrol_alert_elapsed += delta
-	if patrol_alert_elapsed >= 48.0:
-		patrol_alert_elapsed = 0.0
-		patrol_alert_remaining = 7.0
-		patrol_alert_sequence += 1
-		print("[FengduPatrol] signal drill #%d at patrol headquarters" % patrol_alert_sequence)
 
 
 func _sync_soldier_formation(agent: Dictionary) -> void:
