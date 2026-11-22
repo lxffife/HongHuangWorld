@@ -3795,9 +3795,136 @@ func begin_judge_bureau_case_review(incident_id: String) -> Dictionary:
 		return {"ok": false, "reason": "review_not_pending"}
 	record["case_workflow_state"] = "under_judicial_review"
 	record["judge_review_state"] = "reviewing"
+	record["judicial_review"] = {
+		"evidence_assessments": {},
+		"testimony_assessment": {},
+		"review_complete": false,
+		"hearing_eligible": false,
+		"started_at": npc_simulation_time,
+		"completed_at": -1.0
+	}
 	_append_incident_timeline_entry(record, "judge_review_started", "判官司已受理卷宗并开始复核", "judge_bureau")
 	patrol_incident_records[record_index] = record
 	return {"ok": true, "case_workflow_state": "under_judicial_review", "judge_review_state": "reviewing"}
+
+
+func record_judicial_evidence_assessment(incident_id: String, evidence_tag: String, assessment: String, reason: String) -> Dictionary:
+	var record_index := _find_patrol_incident_record(incident_id)
+	if record_index < 0:
+		return {"ok": false, "reason": "case_not_found"}
+	var record: Dictionary = patrol_incident_records[record_index]
+	if str(record.get("case_workflow_state", "")) != "under_judicial_review":
+		return {"ok": false, "reason": "case_not_under_review"}
+	if assessment not in ["accepted", "needs_verification", "rejected"]:
+		return {"ok": false, "reason": "invalid_evidence_assessment"}
+	if reason.strip_edges().is_empty():
+		return {"ok": false, "reason": "assessment_reason_required"}
+	var submitted_tags: Array = record.get("case_submission", {}).get("evidence_tags", [])
+	if not submitted_tags.has(evidence_tag):
+		return {"ok": false, "reason": "evidence_tag_not_in_submission"}
+	var review: Dictionary = record.get("judicial_review", {}).duplicate(true)
+	var assessments: Dictionary = review.get("evidence_assessments", {})
+	assessments[evidence_tag] = {
+		"assessment": assessment,
+		"reason": reason.strip_edges(),
+		"reviewed_at": npc_simulation_time
+	}
+	review["evidence_assessments"] = assessments
+	review["review_complete"] = false
+	review["hearing_eligible"] = false
+	review["completed_at"] = -1.0
+	record["judicial_review"] = review
+	record["judge_review_state"] = "reviewing"
+	_append_incident_timeline_entry(record, "evidence_assessed", "判官司复核物证（%s）：%s" % [evidence_tag, assessment], "judge_bureau")
+	patrol_incident_records[record_index] = record
+	return {"ok": true, "evidence_tag": evidence_tag, "assessment": assessment}
+
+
+func record_judicial_testimony_assessment(incident_id: String, assessment: String, reason: String) -> Dictionary:
+	var record_index := _find_patrol_incident_record(incident_id)
+	if record_index < 0:
+		return {"ok": false, "reason": "case_not_found"}
+	var record: Dictionary = patrol_incident_records[record_index]
+	if str(record.get("case_workflow_state", "")) != "under_judicial_review":
+		return {"ok": false, "reason": "case_not_under_review"}
+	if str(record.get("witness_testimony_tag", "")).is_empty():
+		return {"ok": false, "reason": "no_testimony_in_submission"}
+	if assessment not in ["credible", "disputed", "insufficient"]:
+		return {"ok": false, "reason": "invalid_testimony_assessment"}
+	if bool(record.get("witness_revised", false)) and assessment == "credible":
+		return {"ok": false, "reason": "conflicting_testimony_cannot_be_marked_credible"}
+	if reason.strip_edges().is_empty():
+		return {"ok": false, "reason": "assessment_reason_required"}
+	var review: Dictionary = record.get("judicial_review", {}).duplicate(true)
+	review["testimony_assessment"] = {
+		"assessment": assessment,
+		"reason": reason.strip_edges(),
+		"reviewed_at": npc_simulation_time
+	}
+	review["review_complete"] = false
+	review["hearing_eligible"] = false
+	review["completed_at"] = -1.0
+	record["judicial_review"] = review
+	record["judge_review_state"] = "reviewing"
+	_append_incident_timeline_entry(record, "testimony_assessed", "判官司复核证词：%s" % assessment, "judge_bureau")
+	patrol_incident_records[record_index] = record
+	return {"ok": true, "testimony_assessment": assessment}
+
+
+func complete_judge_bureau_review(incident_id: String) -> Dictionary:
+	var record_index := _find_patrol_incident_record(incident_id)
+	if record_index < 0:
+		return {"ok": false, "reason": "case_not_found"}
+	var record: Dictionary = patrol_incident_records[record_index]
+	if str(record.get("case_workflow_state", "")) != "under_judicial_review":
+		return {"ok": false, "reason": "case_not_under_review"}
+	var review: Dictionary = record.get("judicial_review", {}).duplicate(true)
+	var submitted_tags: Array = record.get("case_submission", {}).get("evidence_tags", [])
+	var assessments: Dictionary = review.get("evidence_assessments", {})
+	var missing_tags: Array[String] = []
+	var accepted_count := 0
+	var unresolved_count := 0
+	for tag_value in submitted_tags:
+		var tag := str(tag_value)
+		if not assessments.has(tag):
+			missing_tags.append(tag)
+			continue
+		var assessment := str(assessments[tag].get("assessment", ""))
+		if assessment == "accepted":
+			accepted_count += 1
+		elif assessment == "needs_verification":
+			unresolved_count += 1
+	var testimony_tag := str(record.get("witness_testimony_tag", ""))
+	var testimony_review: Dictionary = review.get("testimony_assessment", {})
+	var testimony_missing := not testimony_tag.is_empty() and testimony_review.is_empty()
+	if not missing_tags.is_empty() or testimony_missing:
+		return {
+			"ok": false,
+			"reason": "review_items_incomplete",
+			"missing_evidence_tags": missing_tags,
+			"testimony_assessment_required": testimony_missing
+		}
+	var testimony_status := str(testimony_review.get("assessment", "not_applicable"))
+	var hearing_eligible := accepted_count > 0 and unresolved_count == 0 and testimony_status not in ["disputed", "insufficient"]
+	review["review_complete"] = true
+	review["hearing_eligible"] = hearing_eligible
+	review["completed_at"] = npc_simulation_time
+	review["accepted_evidence_count"] = accepted_count
+	review["unresolved_evidence_count"] = unresolved_count
+	review["testimony_status"] = testimony_status
+	record["judicial_review"] = review
+	record["judge_review_state"] = "review_complete"
+	_append_incident_timeline_entry(record, "judge_review_completed", "判官司完成证据与证词复核；%s" % ("可进入候审" if hearing_eligible else "需补充或进一步核验"), "judge_bureau")
+	patrol_incident_records[record_index] = record
+	return {
+		"ok": true,
+		"review_complete": true,
+		"hearing_eligible": hearing_eligible,
+		"accepted_evidence_count": accepted_count,
+		"unresolved_evidence_count": unresolved_count,
+		"testimony_status": testimony_status,
+		"judicial_conclusion": "not_determined"
+	}
 
 
 func record_judge_bureau_case_disposition(incident_id: String, disposition: String) -> Dictionary:
@@ -3809,6 +3936,12 @@ func record_judge_bureau_case_disposition(incident_id: String, disposition: Stri
 		return {"ok": false, "reason": "case_not_under_review"}
 	if disposition not in ["request_supplement", "accept_for_hearing"]:
 		return {"ok": false, "reason": "invalid_disposition"}
+	if disposition == "accept_for_hearing":
+		var judicial_review: Dictionary = record.get("judicial_review", {})
+		if not bool(judicial_review.get("review_complete", false)):
+			return {"ok": false, "reason": "judicial_review_not_completed"}
+		if not bool(judicial_review.get("hearing_eligible", false)):
+			return {"ok": false, "reason": "evidence_or_testimony_requires_supplement"}
 	if disposition == "request_supplement":
 		record["case_workflow_state"] = "returned_for_supplement"
 		record["judge_review_state"] = "supplement_requested"
@@ -3852,6 +3985,7 @@ func get_patrol_case_dossier(incident_id: String) -> Dictionary:
 		"case_return_reason": str(record.get("case_return_reason", "")),
 		"case_required_material": record.get("case_required_material", []).duplicate(),
 		"case_submission": record.get("case_submission", {}).duplicate(true),
+		"judicial_review": record.get("judicial_review", {}).duplicate(true),
 		"severity": str(record.get("severity_label", "一般")),
 		"created_at": float(record.get("created_at", 0.0)),
 		"resolved_at": float(record.get("resolved_at", -1.0)),
