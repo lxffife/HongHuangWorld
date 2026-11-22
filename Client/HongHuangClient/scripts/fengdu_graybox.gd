@@ -40,6 +40,8 @@ var market_ambience_time := 0.0
 var market_orbs: Array[MeshInstance3D] = []
 var market_lights: Array[OmniLight3D] = []
 var market_customers: Array[Dictionary] = []
+var market_stall_registry: Array[Dictionary] = []
+var market_stage_actor: Dictionary = {}
 
 var mats: Dictionary = {}
 
@@ -437,9 +439,24 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 			_market_display_orb(center + Vector3(1.15, 2.0, 8.0), 0.18, Color("#b99bdc"))
 			var stall_types := ["魂珠铺", "魂籍铺", "药材铺", "法器铺", "魂器铺", "悬赏交易"]
 			var stall_index := 0
+			market_stall_registry.clear()
 			for side in [-1.0, 1.0]:
 				for z in [-6.5, 0.0, 6.5]:
-					_market_stall(center + Vector3(side * 10.5, 0, z), -side, stall_types[stall_index])
+					var stall_position := center + Vector3(side * 10.5, 0, z)
+					var stall_facing := -side
+					var stall_type: String = stall_types[stall_index]
+					_market_stall(stall_position, stall_facing, stall_type)
+					market_stall_registry.append({
+						"stall_id": "ghost_market.stall.%02d" % (stall_index + 1),
+						"stall_type": stall_type,
+						"district": "万魂鬼市",
+						"position": stall_position,
+						"facing": stall_facing,
+						"display_items": _market_display_items_for_type(stall_type),
+					"open_schedule": "18:00-06:00",
+					"interaction_type": _market_interaction_for_type(stall_type),
+					"presentation_state": "client_visual_only"
+				})
 					stall_index += 1
 				_box("GhostMarketBackLane", center + Vector3(side * 15.0, 0.08, 0), Vector3(2.0, 0.16, 20.0), "bridge", false)
 			_market_notice_board(center + Vector3(-5.5, 0, -9.5), "鬼市告示", Color("#83c7e4"))
@@ -739,8 +756,9 @@ func _build_npc_population() -> void:
 		npc_root.rotation.y = float(point["facing"])
 		npc_agents.append(agent)
 
-	# A few non-interactive customers browse from the aisle side of selected stalls.
+	# Ambient customers and the auction host are visual actors, not server-owned NPCs.
 	_build_market_customers()
+	_build_market_auction_host()
 
 	# One visible patrol guard follows the closed route; the other guards remain at posts.
 	if patrol_route.size() > 1:
@@ -847,6 +865,19 @@ func _update_market_ambience(delta: float) -> void:
 		left_arm.rotation.z = deg_to_rad(-18.0) + sin(phase * 0.8) * 0.035
 		right_arm.rotation.z = deg_to_rad(18.0) - sin(phase * 0.8 + 1.1) * 0.045
 		customer_root.rotation.y = float(customer_data["base_yaw"]) + sin(phase * 0.24) * 0.035
+	if not market_stage_actor.is_empty():
+		var host_root: Node3D = market_stage_actor["root"]
+		var auction_active := _is_market_auction_time()
+		host_root.visible = npc_schedule_night and auction_active
+		if host_root.visible:
+			var host_phase := market_ambience_time * 1.25 + float(market_stage_actor["phase"])
+			var host_body: MeshInstance3D = market_stage_actor["body"]
+			var host_left: MeshInstance3D = market_stage_actor["left_arm"]
+			var host_right: MeshInstance3D = market_stage_actor["right_arm"]
+			host_body.rotation.x = sin(host_phase * 0.7) * deg_to_rad(1.5)
+			host_left.rotation.z = deg_to_rad(-18.0) - maxf(sin(host_phase), 0.0) * 0.32
+			host_right.rotation.z = deg_to_rad(18.0) + maxf(sin(host_phase + 1.1), 0.0) * 0.3
+			host_root.rotation.y = sin(host_phase * 0.35) * 0.025
 
 
 func _initialize_npc_behavior(agent: Dictionary) -> void:
@@ -1465,6 +1496,71 @@ func _training_dummy(center: Vector3) -> void:
 	_box("TrainingDummyPost", center + Vector3(0, 1.0, 0), Vector3(0.3, 2.0, 0.3), "dark_stone", false)
 	_box("TrainingDummyCrossbar", center + Vector3(0, 1.55, 0), Vector3(1.2, 0.18, 0.18), "gold", false)
 	_box("TrainingDummyTarget", center + Vector3(0, 2.0, 0), Vector3(0.55, 0.55, 0.55), "palace", false)
+
+
+func _market_display_items_for_type(stall_type: String) -> Array[String]:
+	match stall_type:
+		"魂珠铺": return ["青魂珠", "紫魂珠", "金魂珠"]
+		"魂籍铺": return ["魂籍卷册", "登记簿"]
+		"药材铺": return ["幽冥药包", "灵草"]
+		"法器铺": return ["镇魂法器", "仪式器具"]
+		"魂器铺": return ["魂器", "封存魂匣"]
+		"悬赏交易": return ["悬赏卷", "交易凭物"]
+	return []
+
+
+func _market_interaction_for_type(stall_type: String) -> String:
+	match stall_type:
+		"魂珠铺": return "trade_soul_gems"
+		"魂籍铺": return "archive_service"
+		"药材铺": return "trade_herbs"
+		"法器铺": return "trade_ritual_items"
+		"魂器铺": return "appraise_soul_vessels"
+		"悬赏交易": return "bounty_exchange"
+	return "unavailable"
+
+
+func _is_market_auction_time() -> bool:
+	var hour := int(npc_world_minutes / 60.0)
+	return hour >= 20 and hour < 22
+
+
+func _build_market_auction_host() -> void:
+	# One ceremonial stage actor appears during the local 20:00-22:00 auction window.
+	# It is deliberately excluded from npc_agents and all server interaction systems.
+	var market_center: Vector3 = district_markers.get("万魂鬼市", Vector3(55.0, 0.0, -53.0))
+	var host_root := Node3D.new()
+	host_root.name = "AmbientMarketAuctionHost"
+	host_root.position = market_center + Vector3(0.0, 0.0, 10.35)
+	add_child(host_root)
+	var figure := _create_npc_figure(host_root, "market_customer")
+	var robe_material := figure["body"].material_override as StandardMaterial3D
+	if robe_material != null:
+		robe_material.albedo_color = Color("#6d557b")
+	var cap := MeshInstance3D.new()
+	var cap_mesh := BoxMesh.new()
+	cap_mesh.size = Vector3(0.62, 0.18, 0.56)
+	cap.mesh = cap_mesh
+	var cap_material := StandardMaterial3D.new()
+	cap_material.albedo_color = Color("#c39a5b")
+	cap_material.roughness = 0.62
+	cap.material_override = cap_material
+	cap.position = Vector3(0.0, 2.1, 0.0)
+	host_root.add_child(cap)
+	var sash := MeshInstance3D.new()
+	var sash_mesh := BoxMesh.new()
+	sash_mesh.size = Vector3(0.72, 0.16, 0.12)
+	sash.mesh = sash_mesh
+	sash.material_override = cap_material
+	sash.position = Vector3(0.0, 1.48, -0.29)
+	host_root.add_child(sash)
+	market_stage_actor = {
+		"root": host_root,
+		"body": figure["body"],
+		"left_arm": figure["left_arm"],
+		"right_arm": figure["right_arm"],
+		"phase": 1.7
+	}
 
 
 func _market_stall(center: Vector3, facing: float, stall_type: String) -> void:
