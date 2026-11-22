@@ -795,7 +795,7 @@ func _build_npc_population() -> void:
 
 
 func _build_market_customers() -> void:
-	# Keep only two customers so the central aisle remains visibly open.
+	# Four customers browse selected stalls while leaving the central aisle visibly open.
 	# Static ambient props only: they are not server-owned or interactive NPC agents.
 	var market_center: Vector3 = district_markers.get("万魂鬼市", Vector3(55.0, 0.0, -53.0))
 	var customer_stalls: Array[Dictionary] = [
@@ -1020,7 +1020,7 @@ func _update_market_ambience(delta: float) -> void:
 		if not npc_schedule_night:
 			continue
 		var caravan_phase := market_ambience_time * 0.42 + float(caravan_data["phase"])
-		var travel_offset := sin(caravan_phase) * 7.0
+		var travel_offset := sin(caravan_phase) * 6.0
 		caravan_root.position = Vector3(float(caravan_data["base_x"]), 0.0, float(caravan_data["base_z"]) + travel_offset)
 		var travel_direction := cos(caravan_phase) * float(caravan_data["direction"])
 		caravan_root.rotation.y = PI if travel_direction < 0.0 else 0.0
