@@ -2169,6 +2169,8 @@ func _begin_patrol_dispatch(target_position: Vector3, incident_profile: Dictiona
 	incident["witness_questioned"] = false
 	incident["player_clue_tags"] = []
 	incident["witness_testimony_tag"] = ""
+	incident["witness_question_stage"] = 0
+	incident["investigation_timeline"] = []
 	patrol_incident_records.append(incident.duplicate(true))
 	patrol_incident_queue.append(incident)
 	patrol_incident_queue.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
@@ -2342,7 +2344,10 @@ func _update_patrol_incident_lifecycle(delta: float) -> void:
 			var testimony_tag := str(record.get("witness_testimony_tag", ""))
 			var deduction_code := "inconclusive"
 			var deduction_label := "线索不足，暂不能确认完整经过"
-			if clue_tags.has("movement_trace") and testimony_tag == "witness_shadow":
+			if bool(record.get("witness_revised", false)):
+				deduction_code = "testimony_conflict"
+				deduction_label = "证人前后陈述与现场物证存在矛盾，需要复核"
+			elif clue_tags.has("movement_trace") and testimony_tag == "witness_shadow":
 				deduction_code = "route_corroborated"
 				deduction_label = "脚印方向与证人所述黑影路线吻合"
 			elif clue_tags.has("spirit_residue") and clue_tags.has("broken_artifact"):
@@ -2359,6 +2364,13 @@ func _update_patrol_incident_lifecycle(delta: float) -> void:
 				deduction_label = "证人报告发生暴力冲突，仍需核验现场"
 			record["deduction_code"] = deduction_code
 			record["deduction_label"] = deduction_label
+			var timeline: Array = record.get("investigation_timeline", [])
+			timeline.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a.get("at", 0.0)) < float(b.get("at", 0.0)))
+			record["investigation_timeline"] = timeline
+			var timeline_labels: Array[String] = []
+			for entry in timeline:
+				timeline_labels.append(str(entry.get("label", "调查记录")))
+			record["timeline_summary"] = " → ".join(timeline_labels)
 			record["player_clue_tags"] = clue_tags
 			if player_evidence + player_witnesses > 0:
 				result_label = "玩家补充线索 · " + result_label
@@ -3382,7 +3394,7 @@ func _update_npc_interaction_hint() -> void:
 				if is_instance_valid(clue_node) and clue_node.visible:
 					remaining_clues += 1
 			var witness_root: Node3D = nearest_incident.get("witness_root")
-			var witness_available := witness_root != null and is_instance_valid(witness_root) and not bool(nearest_incident.get("witness_questioned", false))
+			var witness_available := witness_root != null and is_instance_valid(witness_root) and int(nearest_incident.get("witness_question_stage", 0)) < 2
 			var investigation_hint := "物证 %d 处 · 证人可询问" % remaining_clues if witness_available else "尚有物证 %d 处" % remaining_clues
 			if remaining_clues <= 0 and not witness_available:
 				investigation_hint = "调查线索已收集完毕"
@@ -3449,8 +3461,10 @@ func _interact_with_patrol_incident(incident_id: String) -> void:
 		record["player_clue_tags"] = clue_tags
 		nearest_evidence.visible = false
 		var evidence_log: Array = record.get("player_contribution_log", [])
-		evidence_log.append({"action_id": clue_id, "label": str(nearest_evidence.get_meta("clue_label", "现场物证")), "at": npc_simulation_time})
+		var clue_label := str(nearest_evidence.get_meta("clue_label", "现场物证"))
+		evidence_log.append({"action_id": clue_id, "label": clue_label, "at": npc_simulation_time})
 		record["player_contribution_log"] = evidence_log
+		_append_incident_timeline_entry(record, "evidence", clue_label, "player")
 		patrol_incident_records[record_index] = record
 		npc_detail_label.text = "现场物证已收录 · %s\n%s\n玩家已收集物证：%d 件" % [
 			str(record.get("title", "巡防事件")),
@@ -3460,23 +3474,52 @@ func _interact_with_patrol_incident(incident_id: String) -> void:
 		print("[FengduPatrol] player collected clue %s for %s" % [clue_id, incident_id])
 		return
 	var witness_root: Node3D = record.get("witness_root")
-	if witness_root != null and is_instance_valid(witness_root) and not bool(record.get("witness_questioned", false)):
+	if witness_root != null and is_instance_valid(witness_root):
 		var witness_distance := player.global_position.distance_to(witness_root.global_position)
-		if witness_distance <= 3.8:
+		var question_stage := int(record.get("witness_question_stage", 0))
+		if witness_distance <= 3.8 and question_stage == 0:
+			record["witness_question_stage"] = 1
 			record["witness_questioned"] = true
 			record["player_witness_count"] = int(record.get("player_witness_count", 0)) + 1
 			var testimony_tag := "witness_shadow" if str(record.get("type", "")) == "suspicious_activity" else ("witness_dispute" if str(record.get("type", "")) == "crowd_disorder" else "witness_violence")
 			record["witness_testimony_tag"] = testimony_tag
-			var witness_id := "question_witness"
+			var witness_id := "question_witness_first"
 			var witness_actions: Array = record.get("player_action_ids", [])
 			witness_actions.append(witness_id)
 			record["player_action_ids"] = witness_actions
+			var witness_name := str(record.get("witness_name", "现场证人"))
 			var witness_log: Array = record.get("player_contribution_log", [])
-			witness_log.append({"action_id": witness_id, "label": "询问目击者：" + str(record.get("witness_name", "现场证人")), "at": npc_simulation_time})
+			witness_log.append({"action_id": witness_id, "label": "首次询问：" + witness_name, "at": npc_simulation_time})
 			record["player_contribution_log"] = witness_log
+			_append_incident_timeline_entry(record, "testimony", "首次证词：" + witness_name, "witness")
 			patrol_incident_records[record_index] = record
-			npc_detail_label.text = "%s：我看见事发前有一道黑影从巷口经过，随后传来争执声。\n\n证词已记入案件档案，后续需要与现场物证交叉核验。" % str(record.get("witness_name", "目击者"))
-			print("[FengduPatrol] player questioned witness for %s" % incident_id)
+			npc_detail_label.text = "%s：事发时我看见一道黑影从巷口经过，随后听到争执声。\n\n先记录这份证词。找到物证后，可以回来追问细节。" % witness_name
+			print("[FengduPatrol] player recorded first testimony for %s" % incident_id)
+			return
+		if witness_distance <= 3.8 and question_stage == 1:
+			var clue_tags: Array = record.get("player_clue_tags", [])
+			if clue_tags.is_empty():
+				npc_detail_label.text = "证人：你先找找现场痕迹，再来问我。我不想凭空猜测。"
+				return
+			var conflict_found := clue_tags.has("broken_artifact") or (clue_tags.has("spirit_residue") and str(record.get("witness_testimony_tag", "")) == "witness_shadow")
+			record["witness_question_stage"] = 2
+			record["witness_revised"] = conflict_found
+			var revised_tag := "witness_revised_conflict" if conflict_found else "witness_confirmed"
+			record["witness_revised_testimony_tag"] = revised_tag
+			var followup_id := "question_witness_followup"
+			var followup_actions: Array = record.get("player_action_ids", [])
+			followup_actions.append(followup_id)
+			record["player_action_ids"] = followup_actions
+			var followup_label := "追问后证词出现矛盾" if conflict_found else "追问后证词得到部分印证"
+			var followup_log: Array = record.get("player_contribution_log", [])
+			followup_log.append({"action_id": followup_id, "label": followup_label, "at": npc_simulation_time})
+			record["player_contribution_log"] = followup_log
+			_append_incident_timeline_entry(record, "testimony_followup", followup_label, "witness")
+			patrol_incident_records[record_index] = record
+			if conflict_found:
+				npc_detail_label.text = "%s：你找到的物证……我想起来了，我当时没有看清黑影。那件魂器碎片是争执之后才出现的。\n\n前后说法存在矛盾，已标记为待复核证词。" % str(record.get("witness_name", "现场证人"))
+			else:
+				npc_detail_label.text = "%s：我确认当时确实有人经过巷口，但无法看清对方身份。\n\n补充证词已记入案件时间线。" % str(record.get("witness_name", "现场证人"))
 			return
 	var remaining_evidence := 0
 	for clue_node in evidence_nodes:
@@ -3488,6 +3531,18 @@ func _interact_with_patrol_incident(incident_id: String) -> void:
 		npc_detail_label.text = "请走近现场证人（3.8 米内）再按 E 询问。"
 	else:
 		npc_detail_label.text = "现场可调查的物证和证人都已完成记录，等待巡城司汇总。"
+
+
+func _append_incident_timeline_entry(record: Dictionary, entry_type: String, label: String, source: String) -> void:
+	var timeline: Array = record.get("investigation_timeline", [])
+	timeline.append({
+		"entry_type": entry_type,
+		"label": label,
+		"source": source,
+		"at": npc_simulation_time,
+		"sequence": timeline.size()
+	})
+	record["investigation_timeline"] = timeline
 
 
 func _spawn_patrol_incident_clues(incident: Dictionary) -> Dictionary:
