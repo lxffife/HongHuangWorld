@@ -1133,6 +1133,8 @@ func _update_npc_agents(delta: float) -> void:
 		var activity := str(agent["activity"])
 		_advance_npc_behavior(agent, elapsed)
 		_sync_waystation_call(agent)
+		if str(agent.get("role", "")) == "merchant":
+			_update_merchant_proximity_behavior(agent, distance_to_player)
 		if bool(agent["moving"]):
 			var route_index := int(agent["route_index"])
 			var route_progress := float(agent["route_progress"])
@@ -1193,6 +1195,26 @@ func _update_npc_agents(delta: float) -> void:
 				left_arm.rotation.z = deg_to_rad(-18.0)
 				right_arm.rotation.z = deg_to_rad(18.0)
 		_apply_npc_behavior_pose(agent, phase)
+
+
+func _update_merchant_proximity_behavior(agent: Dictionary, distance_to_player: float) -> void:
+	# Merchants greet nearby players but remain rooted behind their own stall.
+	var should_greet := distance_to_player <= 5.0 and player != null
+	var was_greeting := bool(agent.get("player_greeting", false))
+	if should_greet:
+		agent["player_greeting"] = true
+		agent["state"] = "greet"
+		return
+	if was_greeting:
+		agent["player_greeting"] = false
+		var states: Array = agent.get("behavior_states", [])
+		var idle_index := states.find("trade_idle")
+		if idle_index < 0:
+			idle_index = 0
+		agent["state_cycle_index"] = idle_index
+		agent["state"] = str(states[idle_index]) if not states.is_empty() else "trade_idle"
+		agent["state_elapsed"] = 0.0
+		agent["state_duration"] = _npc_behavior_duration("merchant", str(agent["state"]), float(agent.get("phase", 0.0)))
 
 
 func _apply_npc_schedules() -> void:
@@ -1542,7 +1564,12 @@ func _interact_with_focused_npc() -> void:
 	var npc_id := str(npc_focus_agent.get("npc_id", "unknown"))
 	var message := ""
 	match str(npc_focus_agent.get("interaction_type", "none")):
-		"trade": message = "%s：鬼市夜市已开。货物、魂钱与交易功能将在商店系统接入后开放。" % npc_name
+		"trade":
+			var merchant_state := str(npc_focus_agent.get("state", "trade_idle"))
+			if merchant_state == "greet":
+				message = "%s：客官，夜市刚开张，来看看今日的新到魂器与冥府杂货。" % npc_name
+			else:
+				message = "%s：鬼市夜市已开。货物、魂钱与交易功能将在商店系统接入后开放。" % npc_name
 		"registration": message = "%s：请准备好魂籍凭证，先登记来处，再按引导前往分流处。" % npc_name
 		"queue_info":
 			var queue_state := str(npc_focus_agent.get("state", "queue_wait"))
