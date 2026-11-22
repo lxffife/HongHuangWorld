@@ -2314,7 +2314,7 @@ func _advance_patrol_dispatch(agent: Dictionary, elapsed: float, phase: float) -
 			agent["dispatch_wait_remaining"] = float(agent.get("dispatch_scene_duration", 6.0))
 			agent["alert_facing"] = root.rotation.y
 			agent["state"] = "alert_watch"
-			print("[FengduPatrol] guard arrived at incident #%d" % int(agent.get("dispatch_incident_sequence", 0)))
+			print("[FengduPatrol] guard arrived at incident %s" % str(agent.get("dispatch_incident_id", "unknown")))
 		elif dispatch_state == "returning":
 			_finish_patrol_dispatch(agent)
 		return
@@ -2330,7 +2330,7 @@ func _advance_patrol_dispatch(agent: Dictionary, elapsed: float, phase: float) -
 		if waypoint_index >= waypoints.size():
 			if dispatch_state == "enroute":
 				agent["dispatch_state"] = "on_scene"
-				agent["dispatch_wait_remaining"] = 6.0
+				agent["dispatch_wait_remaining"] = float(agent.get("dispatch_scene_duration", 6.0))
 				agent["alert_facing"] = root.rotation.y
 				agent["state"] = "alert_watch"
 				print("[FengduPatrol] guard arrived at incident #%d" % int(agent.get("dispatch_incident_sequence", 0)))
@@ -2383,6 +2383,7 @@ func _patrol_dispatch_status_text() -> String:
 			continue
 		if active_severity == "":
 			active_severity = str(agent.get("dispatch_severity", ""))
+	var severity_label := "高级" if active_severity == "high" else ("中级" if active_severity == "medium" else "低级")
 		match state:
 			"enroute":
 				enroute_count += 1
@@ -2392,11 +2393,11 @@ func _patrol_dispatch_status_text() -> String:
 				returning_count += 1
 	var queued_count := patrol_incident_queue.size()
 	if enroute_count > 0:
-		return "巡防增援 · %d 名巡城卫正在赶赴现场 · 待处理 %d" % [enroute_count, queued_count]
+		return "巡防增援 · %s事件 · %d 名巡城卫赶赴现场 · 待处理 %d" % [severity_label, enroute_count, queued_count]
 	if on_scene_count > 0:
-		return "现场处置 · %d 名巡城卫执行警戒 · 待处理 %d" % [on_scene_count, queued_count]
+		return "现场处置 · %s事件 · %d 名巡城卫警戒 · 待处理 %d" % [severity_label, on_scene_count, queued_count]
 	if returning_count > 0:
-		return "巡防归队 · %d 名巡城卫正在返回 · 待处理 %d" % [returning_count, queued_count]
+		return "巡防归队 · %s事件 · %d 名巡城卫返回 · 待处理 %d" % [severity_label, returning_count, queued_count]
 	if queued_count > 0:
 		var next_incident: Dictionary = patrol_incident_queue[0]
 		return "巡防待命 · %s（%s）等待足够人员" % [
