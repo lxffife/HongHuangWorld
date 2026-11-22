@@ -44,6 +44,7 @@ var market_stall_registry: Array[Dictionary] = []
 var market_stage_actor: Dictionary = {}
 var market_caravans: Array[Dictionary] = []
 var market_guards: Array[Dictionary] = []
+var market_audience: Array[Dictionary] = []
 var market_event_label: Label3D
 
 var mats: Dictionary = {}
@@ -1052,7 +1053,38 @@ func _build_market_ambience() -> void:
 		light.shadow_enabled = false
 		add_child(light)
 		market_lights.append(light)
+	_build_market_audience()
 	_update_market_ambience(0.0)
+
+
+func _build_market_audience() -> void:
+	# Four ambient spectators frame the auction seating; they are not interactive NPCs.
+	var market_center: Vector3 = district_markers.get("万魂鬼市", Vector3(55.0, 0.0, -53.0))
+	var audience_positions: Array[Vector3] = [
+		market_center + Vector3(-8.0, 0.0, 5.8),
+		market_center + Vector3(-8.0, 0.0, 9.4),
+		market_center + Vector3(8.0, 0.0, 5.8),
+		market_center + Vector3(8.0, 0.0, 9.4)
+	]
+	var robes: Array[Color] = [Color("#7e899d"), Color("#9c806e"), Color("#718b82"), Color("#8d789e")]
+	for index in range(audience_positions.size()):
+		var root := Node3D.new()
+		root.name = "AmbientAuctionSpectator_%02d" % (index + 1)
+		root.position = audience_positions[index]
+		root.rotation.y = PI if index < 2 else 0.0
+		add_child(root)
+		var figure := _create_npc_figure(root, "market_customer")
+		var robe := figure["body"].material_override as StandardMaterial3D
+		if robe != null:
+			robe.albedo_color = robes[index]
+		market_audience.append({
+			"root": root,
+			"body": figure["body"],
+			"left_arm": figure["left_arm"],
+			"right_arm": figure["right_arm"],
+			"phase": float(index) * 1.65,
+			"base_yaw": root.rotation.y
+		})
 
 
 func _update_market_ambience(delta: float) -> void:
@@ -1157,6 +1189,29 @@ func _update_market_ambience(delta: float) -> void:
 		driver_left.rotation.z = deg_to_rad(-18.0) + (sin(caravan_phase * 2.0) * 0.04 if not unloading else -0.12)
 		driver_right.rotation.z = deg_to_rad(18.0) - (sin(caravan_phase * 2.0) * 0.04 if not unloading else 0.12)
 	_update_market_event_sign()
+	var auction_hour := int(npc_world_minutes / 60.0)
+	var auction_minute := int(fposmod(npc_world_minutes, 60.0))
+	var auction_minute_of_day := auction_hour * 60 + auction_minute
+	var audience_visible := npc_schedule_night and auction_minute_of_day >= 19 * 60 + 30 and auction_minute_of_day < 22 * 60 + 30
+	var auction_active := _is_market_auction_time()
+	for spectator in market_audience:
+		var spectator_root: Node3D = spectator["root"]
+		spectator_root.visible = audience_visible
+		if not audience_visible:
+			continue
+		var spectator_phase := market_ambience_time * (2.2 if auction_active else 0.55) + float(spectator["phase"])
+		var spectator_body: MeshInstance3D = spectator["body"]
+		var spectator_left: MeshInstance3D = spectator["left_arm"]
+		var spectator_right: MeshInstance3D = spectator["right_arm"]
+		spectator_body.rotation.x = sin(spectator_phase * 0.65) * deg_to_rad(1.8)
+		if auction_active:
+			var applause := absf(sin(spectator_phase))
+			spectator_left.rotation.z = deg_to_rad(-18.0) - applause * 0.22
+			spectator_right.rotation.z = deg_to_rad(18.0) + applause * 0.22
+		else:
+			spectator_left.rotation.z = deg_to_rad(-18.0) + sin(spectator_phase) * 0.025
+			spectator_right.rotation.z = deg_to_rad(18.0) - sin(spectator_phase + 0.8) * 0.025
+		spectator_root.rotation.y = float(spectator["base_yaw"]) + sin(spectator_phase * 0.25) * 0.035
 	if not market_stage_actor.is_empty():
 		var host_root: Node3D = market_stage_actor["root"]
 		var auction_active := _is_market_auction_time()
@@ -2244,10 +2299,13 @@ func _interact_with_focused_npc() -> void:
 			var stall_type := str(npc_focus_agent.get("market_stall_type", "鬼市商铺"))
 			var goods: Array = npc_focus_agent.get("market_goods", [])
 			var goods_text := "、".join(PackedStringArray(goods))
+			var business_state := "营业中" if str(npc_focus_agent.get("market_business_state", "closed")) == "open" else "今日休市"
+			var stall_id := str(npc_focus_agent.get("market_stall_id", "待绑定"))
+			var service := str(npc_focus_agent.get("market_service", "unavailable"))
 			if merchant_state == "greet":
-				message = "%s（%s）：客官，欢迎光临%s。今日陈列：%s。交易功能接入后即可查看真实货单。" % [npc_name, str(npc_focus_agent.get("merchant_title", "掌柜")), stall_type, goods_text]
+				message = "%s（%s）\n%s · %s\n经营：%s\n陈列：%s\n服务标识：%s\n摊位编号：%s\n\n交易功能接入后可查看实时货单。" % [npc_name, str(npc_focus_agent.get("merchant_title", "掌柜")), stall_type, business_state, stall_type, goods_text, service, stall_id]
 			else:
-				message = "%s：本铺经营%s，陈列有%s。当前仅为场景展示，真实库存与交易尚未开放。" % [npc_name, stall_type, goods_text]
+				message = "%s · %s\n经营：%s\n陈列：%s\n服务标识：%s\n摊位编号：%s\n\n当前仅为场景展示，真实库存与交易尚未开放。" % [npc_name, business_state, stall_type, goods_text, service, stall_id]
 		"registration": message = "%s：请准备好魂籍凭证，先登记来处，再按引导前往分流处。" % npc_name
 		"queue_info":
 			var queue_state := str(npc_focus_agent.get("state", "queue_wait"))
