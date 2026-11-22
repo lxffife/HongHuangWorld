@@ -19,6 +19,7 @@ var (
 	ErrInsufficientPoints = errors.New("insufficient unspent attribute points")
 	ErrInvalidReward = errors.New("invalid character reward")
 	ErrRewardSession = errors.New("character has no active session on this server")
+	ErrInvalidSpellMasteryReward = errors.New("invalid spell mastery reward")
 	ErrInvalidRace = errors.New("race has no configured default cultivation system")
 	ErrInsufficientCultivation = errors.New("not enough cultivation for breakthrough")
 	ErrMaxRealm = errors.New("character has reached the highest configured realm")
@@ -610,6 +611,90 @@ func (s *Service) Memories(ctx context.Context, accountID string) ([]SoulMemory,
 		return nil, fmt.Errorf("iterate soul memories: %w", err)
 	}
 	return memories, nil
+}
+
+
+// SpellMasteryReward is emitted by the authoritative world server after a
+// projectile has dealt damage. Event IDs make retries safe across disconnects.
+type SpellMasteryReward struct {
+	EventID     string `json:"event_id"`
+	SessionID   string `json:"session_id"`
+	CharacterID string `json:"character_id"`
+	SpellID     string `json:"spell_id"`
+	Experience  int64  `json:"experience"`
+}
+
+type SpellMasteryResult struct {
+	Applied     bool  `json:"applied"`
+	Experience  int64 `json:"experience"`
+	Level       int   `json:"level"`
+}
+
+// ApplySpellMasteryReward verifies the exact world session and stores both the
+// idempotency record and progression update in one transaction.
+func (s *Service) ApplySpellMasteryReward(ctx context.Context, nodeKey string, reward SpellMasteryReward) (SpellMasteryResult, error) {
+	if !validSpellMasteryReward(nodeKey, reward) {
+		return SpellMasteryResult{}, ErrInvalidSpellMasteryReward
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil { return SpellMasteryResult{}, fmt.Errorf("begin spell mastery reward: %w", err) }
+	defer tx.Rollback()
+
+	var serverID string
+	if err := tx.QueryRowContext(ctx, `SELECT id::text FROM server_registry WHERE node_key=$1`, nodeKey).Scan(&serverID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) { return SpellMasteryResult{}, ErrRewardSession }
+		return SpellMasteryResult{}, fmt.Errorf("resolve server for spell mastery: %w", err)
+	}
+	var duplicate bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM character_spell_mastery_events WHERE server_id=$1 AND event_id=$2::uuid)`, serverID, reward.EventID).Scan(&duplicate); err != nil {
+		return SpellMasteryResult{}, fmt.Errorf("check spell mastery event: %w", err)
+	}
+	if duplicate {
+		var xp int64
+		var level int
+		if err := tx.QueryRowContext(ctx, `SELECT experience, level FROM character_spell_mastery WHERE character_id=$1::uuid AND spell_id=$2`, reward.CharacterID, reward.SpellID).Scan(&xp, &level); err != nil {
+			if errors.Is(err, sql.ErrNoRows) { xp, level = 0, 1 } else { return SpellMasteryResult{}, err }
+		}
+		if err := tx.Commit(); err != nil { return SpellMasteryResult{}, fmt.Errorf("commit duplicate spell mastery: %w", err) }
+		return SpellMasteryResult{Applied:false, Experience:xp, Level:level}, nil
+	}
+	var verified string
+	err = tx.QueryRowContext(ctx, `SELECT c.id::text FROM world_sessions ws JOIN characters c ON c.id=ws.character_id
+		WHERE ws.id=$1::uuid AND ws.server_id=$2 AND c.id=$3::uuid AND c.status='alive'
+		AND ws.session_state IN ('active','closed') FOR UPDATE OF ws,c`,
+		reward.SessionID, serverID, reward.CharacterID).Scan(&verified)
+	if errors.Is(err, sql.ErrNoRows) { return SpellMasteryResult{}, ErrRewardSession }
+	if err != nil { return SpellMasteryResult{}, fmt.Errorf("verify spell mastery session: %w", err) }
+
+	if _, err := tx.ExecContext(ctx, `INSERT INTO character_spell_mastery_events(server_id,event_id,character_id,spell_id,experience_awarded)
+		VALUES($1,$2::uuid,$3::uuid,$4,$5)`, serverID,reward.EventID,reward.CharacterID,reward.SpellID,reward.Experience); err != nil {
+		return SpellMasteryResult{}, fmt.Errorf("record spell mastery event: %w", err)
+	}
+	var xp int64
+	var level int
+	err = tx.QueryRowContext(ctx, `INSERT INTO character_spell_mastery(character_id,spell_id,experience,level,updated_at)
+		VALUES($1::uuid,$2,LEAST($3,4500),CASE WHEN $3>=4500 THEN 10 WHEN $3>=3600 THEN 9 WHEN $3>=2800 THEN 8 WHEN $3>=2100 THEN 7 WHEN $3>=1500 THEN 6 WHEN $3>=1000 THEN 5 WHEN $3>=600 THEN 4 WHEN $3>=300 THEN 3 WHEN $3>=100 THEN 2 ELSE 1 END,now())
+		ON CONFLICT(character_id,spell_id) DO UPDATE SET
+		experience=LEAST(4500,character_spell_mastery.experience+EXCLUDED.experience),
+		level=CASE WHEN LEAST(4500,character_spell_mastery.experience+EXCLUDED.experience)>=4500 THEN 10
+		WHEN LEAST(4500,character_spell_mastery.experience+EXCLUDED.experience)>=3600 THEN 9
+		WHEN LEAST(4500,character_spell_mastery.experience+EXCLUDED.experience)>=2800 THEN 8
+		WHEN LEAST(4500,character_spell_mastery.experience+EXCLUDED.experience)>=2100 THEN 7
+		WHEN LEAST(4500,character_spell_mastery.experience+EXCLUDED.experience)>=1500 THEN 6
+		WHEN LEAST(4500,character_spell_mastery.experience+EXCLUDED.experience)>=1000 THEN 5
+		WHEN LEAST(4500,character_spell_mastery.experience+EXCLUDED.experience)>=600 THEN 4
+		WHEN LEAST(4500,character_spell_mastery.experience+EXCLUDED.experience)>=300 THEN 3
+		WHEN LEAST(4500,character_spell_mastery.experience+EXCLUDED.experience)>=100 THEN 2 ELSE 1 END,updated_at=now()
+		RETURNING experience,level`, reward.CharacterID,reward.SpellID,reward.Experience).Scan(&xp,&level)
+	if err != nil { return SpellMasteryResult{}, fmt.Errorf("update spell mastery: %w", err) }
+	if err := tx.Commit(); err != nil { return SpellMasteryResult{}, fmt.Errorf("commit spell mastery reward: %w", err) }
+	return SpellMasteryResult{Applied:true,Experience:xp,Level:level}, nil
+}
+
+func validSpellMasteryReward(nodeKey string, reward SpellMasteryReward) bool {
+	return nodeKey != "" && validUUID(reward.EventID) && validUUID(reward.SessionID) &&
+		validUUID(reward.CharacterID) && (reward.SpellID=="fireball" || reward.SpellID=="ice_bolt") &&
+		reward.Experience > 0 && reward.Experience <= 10
 }
 
 type Reward struct {
