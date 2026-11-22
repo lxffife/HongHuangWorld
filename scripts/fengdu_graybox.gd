@@ -12,6 +12,7 @@ const MOUSE_SENSITIVITY := 0.0025
 const NPC_DAY_SECONDS_PER_MINUTE := 1.0
 const NPC_NEAR_UPDATE_DISTANCE := 60.0
 const NPC_FAR_UPDATE_DISTANCE := 110.0
+const NPC_REGION_CULL_DISTANCE := 220.0
 
 var player: CharacterBody3D
 var camera: Camera3D
@@ -25,6 +26,9 @@ var patrol_route: Array[Vector3] = []
 var activity_debug_root: Node3D
 var activity_debug_visible := false
 var npc_agents: Array[Dictionary] = []
+var npc_population_by_district: Dictionary = {}
+var npc_region_lod: Dictionary = {}
+var npc_region_distance: Dictionary = {}
 var npc_focus_agent: Dictionary = {}
 var npc_hint_label: Label
 var npc_detail_label: Label
@@ -676,7 +680,7 @@ func _build_npc_population() -> void:
 		agent["display_name"] = _npc_display_name(role, role_index)
 		agent["district"] = str(point["district"])
 		agent["interaction_type"] = _interaction_type_for_role(role)
-		agent["importance"] = "regional" if role in ["merchant", "guide", "soldier", "patrol_guard"] else "ambient"
+		agent["importance"] = "critical" if role == "guide" else ("regional" if role in ["merchant", "soldier", "patrol_guard"] else "ambient"
 		agent["root"] = npc_root
 		agent["role"] = role
 		agent["activity"] = str(point["activity"])
@@ -712,7 +716,51 @@ func _build_npc_population() -> void:
 		patrol_agent["move_speed"] = 2.6
 		patrol_agent["update_accumulator"] = 0.0
 		npc_agents.append(patrol_agent)
+	_rebuild_npc_population_index()
 	_apply_npc_schedules()
+
+
+func _rebuild_npc_population_index() -> void:
+	npc_population_by_district.clear()
+	npc_region_lod.clear()
+	npc_region_distance.clear()
+	for agent_index in range(npc_agents.size()):
+		var district := str(npc_agents[agent_index].get("district", "未归类"))
+		if not npc_population_by_district.has(district):
+			npc_population_by_district[district] = []
+			npc_region_lod[district] = "far"
+			npc_region_distance[district] = INF
+		npc_population_by_district[district].append(agent_index)
+
+
+func _update_npc_population_manager() -> void:
+	# One regional pass assigns a shared LOD tier; individual NPCs do not run independent AI.
+	for district in npc_population_by_district.keys():
+		var nearest_distance := INF
+		for agent_index in npc_population_by_district[district]:
+			var root: Node3D = npc_agents[agent_index].get("root")
+			if root == null or not root.visible or player == null:
+				continue
+			nearest_distance = minf(nearest_distance, root.global_position.distance_to(player.global_position))
+		npc_region_distance[district] = nearest_distance
+		if nearest_distance <= NPC_NEAR_UPDATE_DISTANCE:
+			npc_region_lod[district] = "near"
+		elif nearest_distance <= NPC_FAR_UPDATE_DISTANCE:
+			npc_region_lod[district] = "mid"
+		else:
+			npc_region_lod[district] = "far"
+
+
+func _npc_lod_interval(agent: Dictionary, region_lod: String) -> float:
+	var interval := 0.0
+	match region_lod:
+		"mid": interval = 0.32
+		"far": interval = 0.8
+		_: interval = 0.0
+	match str(agent.get("importance", "ambient")):
+		"critical": interval *= 0.5
+		"ambient": interval *= 1.5
+	return interval
 
 
 func _create_npc_figure(root: Node3D, role: String) -> Dictionary:
@@ -816,6 +864,7 @@ func _create_npc_figure(root: Node3D, role: String) -> Dictionary:
 
 func _update_npc_agents(delta: float) -> void:
 	npc_simulation_time += delta
+	_update_npc_population_manager()
 	npc_world_minutes = fposmod(npc_world_minutes + delta / NPC_DAY_SECONDS_PER_MINUTE, 1440.0)
 	var schedule_bucket := int(npc_world_minutes / 5.0)
 	if schedule_bucket != npc_schedule_bucket:
@@ -829,11 +878,13 @@ func _update_npc_agents(delta: float) -> void:
 		var distance_to_player := 0.0
 		if player != null:
 			distance_to_player = root.global_position.distance_to(player.global_position)
-		var update_interval := 0.0
-		if distance_to_player > NPC_FAR_UPDATE_DISTANCE:
-			update_interval = 0.8
-		elif distance_to_player > NPC_NEAR_UPDATE_DISTANCE:
-			update_interval = 0.32
+		var district := str(agent.get("district", "未归类"))
+		var region_lod := str(npc_region_lod.get(district, "far"))
+		var update_interval := _npc_lod_interval(agent, region_lod)
+		if distance_to_player <= NPC_NEAR_UPDATE_DISTANCE:
+			update_interval = 0.0
+		elif distance_to_player > NPC_REGION_CULL_DISTANCE:
+			update_interval = maxf(update_interval, 1.2)
 		var elapsed := delta
 		if update_interval > 0.0:
 			var accumulated := float(agent.get("update_accumulator", 0.0)) + delta
@@ -913,7 +964,6 @@ func _apply_npc_schedules() -> void:
 	npc_schedule_night = hour >= 18 or hour < 6
 	for agent in npc_agents:
 		var role := str(agent.get("role", ""))
-		var activity := str(agent.get("activity", ""))
 		var root: Node3D = agent["root"]
 		if str(agent.get("schedule_tag", "")) == "night":
 			root.visible = npc_schedule_night
