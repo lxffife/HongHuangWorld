@@ -4026,6 +4026,14 @@ func update_case_party_procedural_status(incident_id: String, party_id: String, 
 		var party: Dictionary = parties[index]
 		if str(party.get("party_id", "")) != party_id:
 			continue
+		var current_status := str(party.get("procedural_status", "notice_pending"))
+		var allowed_next_statuses: Array = []
+		if current_status == "notice_pending":
+			allowed_next_statuses = ["notice_served", "unavailable"]
+		elif current_status == "notice_served":
+			allowed_next_statuses = ["appeared", "unavailable", "declined_to_respond"]
+		if not allowed_next_statuses.has(status):
+			return {"ok": false, "reason": "invalid_procedural_status_transition", "current_status": current_status}
 		party["procedural_status"] = status
 		party["procedural_reason"] = reason.strip_edges()
 		party["procedural_updated_at"] = npc_simulation_time
@@ -4287,12 +4295,16 @@ func record_case_party_judgment(incident_id: String, party_id: String, outcome: 
 	var submission: Dictionary = record.get("case_submission", {})
 	var parties: Array = submission.get("case_parties", [])
 	var party_found := false
+	var party_procedural_status := "notice_pending"
 	for party_value in parties:
 		if str(party_value.get("party_id", "")) == party_id:
 			party_found = true
+			party_procedural_status = str(party_value.get("procedural_status", "notice_pending"))
 			break
 	if not party_found:
 		return {"ok": false, "reason": "case_party_not_found"}
+	if party_procedural_status not in ["appeared", "declined_to_respond", "unavailable"]:
+		return {"ok": false, "reason": "party_procedure_not_completed", "procedural_status": party_procedural_status}
 	var judgments: Dictionary = record.get("party_judgments", {}).duplicate(true)
 	if judgments.has(party_id):
 		return {"ok": false, "reason": "party_judgment_already_recorded"}
