@@ -1123,6 +1123,7 @@ func _build_market_audience() -> void:
 
 func _update_market_ambience(delta: float) -> void:
 	market_ambience_time += delta
+	var market_center: Vector3 = district_markers.get("万魂鬼市", Vector3(55.0, 0.0, -53.0))
 	var night_factor := 1.0 if npc_schedule_night else 0.0
 	for index in range(market_lights.size()):
 		var pulse := 0.5 + 0.5 * sin(market_ambience_time * 1.35 + float(index) * 1.7)
