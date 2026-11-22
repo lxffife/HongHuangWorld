@@ -1924,6 +1924,9 @@ func _update_npc_agents(delta: float) -> void:
 
 	for agent in npc_agents:
 		var root: Node3D = agent["root"]
+		if root == null or not is_instance_valid(root):
+			continue
+		_record_npc_activity_sample(agent, root)
 		if not root.visible:
 			continue
 		var distance_to_player := 0.0
@@ -3548,31 +3551,81 @@ func _interact_with_patrol_incident(incident_id: String) -> void:
 		npc_detail_label.text = "现场可调查的物证和证人都已完成记录，等待巡城司汇总。"
 
 
+func _record_npc_activity_sample(agent: Dictionary, actor_root: Node3D) -> void:
+	# Sampling is independent of visual LOD and schedule visibility so hidden/resting
+	# actors do not disappear from the event-time reconstruction.
+	var last_sample := float(agent.get("activity_history_last_sample_at", -999.0))
+	if npc_simulation_time - last_sample < 2.5:
+		return
+	var history: Array = agent.get("activity_history", [])
+	history.append({
+		"at": npc_simulation_time,
+		"position": actor_root.global_position,
+		"activity": str(agent.get("activity", "")),
+		"behavior_state": str(agent.get("state", "idle")),
+		"visible": actor_root.visible
+	})
+	while not history.is_empty() and npc_simulation_time - float(history[0].get("at", npc_simulation_time)) > 45.0:
+		history.pop_front()
+	while history.size() > 24:
+		history.pop_front()
+	agent["activity_history"] = history
+	agent["activity_history_last_sample_at"] = npc_simulation_time
+
+
 func _capture_incident_nearby_activity(target_position: Vector3) -> Array[Dictionary]:
 	var snapshots: Array[Dictionary] = []
+	var history_start := maxf(0.0, npc_simulation_time - 45.0)
 	for agent in npc_agents:
 		var role := str(agent.get("role", ""))
 		if role in ["patrol_guard", "gate_guard"]:
 			continue
 		var actor_root: Node3D = agent.get("root")
-		if actor_root == null or not is_instance_valid(actor_root) or not actor_root.visible:
+		if actor_root == null or not is_instance_valid(actor_root):
 			continue
-		var distance := actor_root.global_position.distance_to(target_position)
-		if distance > 32.0:
+		var current_position: Vector3 = actor_root.global_position
+		var current_distance := current_position.distance_to(target_position)
+		var trail: Array[Dictionary] = []
+		var closest_distance := current_distance
+		for sample in agent.get("activity_history", []):
+			var sample_at := float(sample.get("at", -1.0))
+			if sample_at < history_start or sample_at > npc_simulation_time:
+				continue
+			var sample_position: Vector3 = sample.get("position", current_position)
+			var distance_to_incident := sample_position.distance_to(target_position)
+			if distance_to_incident > 40.0:
+				continue
+			closest_distance = minf(closest_distance, distance_to_incident)
+			trail.append({
+				"at": sample_at,
+				"position": sample_position,
+				"distance_to_incident": distance_to_incident,
+				"activity": str(sample.get("activity", "")),
+				"behavior_state": str(sample.get("behavior_state", "idle")),
+				"visible": bool(sample.get("visible", true))
+			})
+		if current_distance > 32.0 and trail.is_empty():
 			continue
+		trail.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			return float(a.get("at", 0.0)) < float(b.get("at", 0.0))
+		)
 		snapshots.append({
 			"actor_id": str(agent.get("npc_id", "")),
 			"display_name": str(agent.get("display_name", "无名坊民")),
 			"role": role,
 			"district": str(agent.get("district", "")),
-			"position": actor_root.global_position,
-			"distance_at_report": distance,
+			"position": current_position,
+			"distance_at_report": current_distance,
+			"closest_distance_in_history": closest_distance,
 			"activity_at_report": str(agent.get("activity", "")),
 			"behavior_state_at_report": str(agent.get("state", "idle")),
+			"visible_at_report": actor_root.visible,
+			"activity_trail": trail,
+			"trail_sample_count": trail.size(),
 			"lead_status": "unverified"
 		})
 	snapshots.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return float(a.get("distance_at_report", 999.0)) < float(b.get("distance_at_report", 999.0))
+		return float(a.get("closest_distance_in_history", 999.0)) < float(b.get("closest_distance_in_history", 999.0))
 	)
 	if snapshots.size() > 8:
 		snapshots.resize(8)
@@ -3604,6 +3657,8 @@ func get_patrol_case_dossier(incident_id: String) -> Dictionary:
 		"testimony_conflict": bool(record.get("witness_revised", false)),
 		"timeline": timeline,
 		"nearby_actor_snapshots": record.get("nearby_actor_snapshots", []).duplicate(true),
+		"activity_trail_window_seconds": 45.0,
+		"activity_trail_sample_interval_seconds": 2.5,
 		"player_contribution_log": record.get("player_contribution_log", []).duplicate(true)
 	}
 
