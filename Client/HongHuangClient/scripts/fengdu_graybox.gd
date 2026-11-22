@@ -2429,6 +2429,7 @@ func _prune_patrol_incident_history() -> void:
 				"hearing_pending",
 				"hearing_in_progress",
 				"hearing_closed_pending_judgment",
+				"judgment_issued",
 				"appeal_pending"
 			]
 			if state == "closed" and not legal_case_active:
@@ -4428,6 +4429,25 @@ func review_case_appeal(incident_id: String, appeal_id: String, decision: String
 	appeal["revised_outcome"] = revised_outcome
 	appeal["decided_at"] = npc_simulation_time
 	appeal_records[appeal_index] = appeal
+	if decision == "reopen_hearing":
+		for pending_index in range(appeal_records.size()):
+			if pending_index == appeal_index:
+				continue
+			var other_appeal: Dictionary = appeal_records[pending_index]
+			if str(other_appeal.get("status", "")) == "pending":
+				other_appeal["status"] = "superseded"
+				other_appeal["decision_reason"] = "案件已因申诉发回重审，原待处理申诉并入重审程序"
+				other_appeal["decided_at"] = npc_simulation_time
+				appeal_records[pending_index] = other_appeal
+	else:
+		var another_pending_appeal := false
+		for other_appeal in appeal_records:
+			if str(other_appeal.get("status", "")) == "pending":
+				another_pending_appeal = true
+				break
+		if another_pending_appeal:
+			record["case_workflow_state"] = "appeal_pending"
+			record["judge_review_state"] = "appeal_pending"
 	record["appeal_records"] = appeal_records
 	_append_incident_timeline_entry(record, "appeal_decided", "申诉处理结果：%s" % decision, "judge_bureau")
 	patrol_incident_records[record_index] = record
