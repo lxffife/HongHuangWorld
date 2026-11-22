@@ -37,6 +37,17 @@ struct MonsterLifeStateRecord {
  std::string monster_definition_id;
  double health{};
 };
+struct MonsterRuntimeCheckpointRecord {
+ std::string runtime_id;
+ std::string monster_instance_id;
+ std::string monster_definition_id;
+ double x{};
+ double z{};
+ double yaw{};
+ int mode{}; // MonsterMode wire-stable values: Idle=0, Chasing=1, Returning=2, Dead=3.
+ std::int64_t respawn_at_ms{};
+ std::int64_t checkpoint_at_ms{};
+};
 struct OutboxEvent { std::string event_id; std::string event_type; std::string payload; std::uint32_t attempts{}; std::int64_t next_retry_at_ms{}; std::int64_t created_at_ms{}; std::string last_error; };
 class DurableOutbox {
 public:
@@ -51,6 +62,11 @@ public:
  bool ensure_monster_life_state(const MonsterLifeStateRecord& initial,
                                 MonsterLifeStateRecord& persisted, std::string& error);
  std::vector<MonsterLifeStateRecord> load_monster_life_states(std::string& error) const;
+ // Batch-save only checkpoints that still match the authoritative durable life identity.
+ bool save_monster_runtime_checkpoints(
+     const std::vector<MonsterRuntimeCheckpointRecord>& checkpoints, std::string& error);
+ std::vector<MonsterRuntimeCheckpointRecord> load_monster_runtime_checkpoints(
+     std::string& error) const;
  // Atomically commit health and the contribution inbox row before the caller mutates memory.
  bool admit_monster_damage(const MonsterContributionRecord& contribution,
                            const std::string& runtime_id, double expected_health,
