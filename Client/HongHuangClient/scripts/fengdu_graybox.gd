@@ -25,6 +25,9 @@ var patrol_route: Array[Vector3] = []
 var activity_debug_root: Node3D
 var activity_debug_visible := false
 var npc_agents: Array[Dictionary] = []
+var npc_focus_agent: Dictionary = {}
+var npc_hint_label: Label
+var npc_detail_label: Label
 var npc_simulation_time := 0.0
 var npc_world_minutes := 18.0 * 60.0
 var npc_schedule_bucket := -1
@@ -98,6 +101,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_release_mouse()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_F6:
 		_toggle_activity_debug()
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_E:
+		_interact_with_focused_npc()
 	elif event is InputEventMouseMotion and mouse_captured:
 		var motion := event as InputEventMouseMotion
 		player.rotation.y -= motion.relative.x * MOUSE_SENSITIVITY
@@ -537,7 +542,9 @@ func _build_activity_registry() -> void:
 				schedule_tag = "always"
 		var positions: Array = npc_spawn_points[district_name]
 		for index in range(positions.size()):
+			var district_key := _district_key(str(district_name))
 			var point: Dictionary = {
+				"point_id": "%s.%s.%02d" % [district_key, role, index + 1],
 				"district": str(district_name),
 				"role": role,
 				"activity": activity,
@@ -554,6 +561,7 @@ func _build_activity_registry() -> void:
 	for queue_index in range(3):
 		var queue_position := waystation_center + Vector3(0.0, 0.0, -6.0 + float(queue_index) * 2.5)
 		activity_points.append({
+			"point_id": "waystation.waiting_soul.%02d" % (queue_index + 1),
 			"district": "引魂驿站",
 			"role": "waiting_soul",
 			"activity": "queue_wait",
@@ -583,8 +591,10 @@ func _build_activity_registry() -> void:
 		Vector3(0, 0, 32),
 		Vector3(0, 0, 12)
 	]
-	for route_position in patrol_route:
+	for route_index in range(patrol_route.size()):
+		var route_position: Vector3 = patrol_route[route_index]
 		activity_points.append({
+			"point_id": "patrol.route.%02d" % (route_index + 1),
 			"district": "巡城司",
 			"role": "patrol_guard",
 			"activity": "patrol_route",
@@ -594,6 +604,39 @@ func _build_activity_registry() -> void:
 			"capacity": 1,
 			"radius": 1.0
 		})
+
+
+func _district_key(district_name: String) -> String:
+	match district_name:
+		"万魂鬼市": return "ghost_market"
+		"万家魂坊": return "soul_ward"
+		"阴兵大营": return "barracks"
+		"引魂驿站": return "waystation"
+		"巡城司": return "patrol_office"
+		_: return "bureau"
+
+
+func _npc_display_name(role: String, index: int) -> String:
+	var names: Array = []
+	match role:
+		"merchant": names = ["孟掌柜", "铁算盘", "柳娘子", "百宝翁", "铁算盘", "阿福"]
+		"resident": names = ["沈阿婆", "小石头", "顾裁缝", "青禾", "老陶", "阿宁"]
+		"soldier": names = ["阴兵校尉", "持戟卫", "巡营兵", "守垒兵"]
+		"guide": names = ["引魂使·无咎", "引魂使·青灯", "引魂使·渡厄"]
+		"waiting_soul": names = ["新魂·甲", "新魂·乙", "新魂·丙"]
+		"patrol_guard": names = ["巡城卫·陈肃", "巡城卫·陆衡"]
+		_: names = ["无名阴差"]
+	return str(names[index % names.size()])
+
+
+func _interaction_type_for_role(role: String) -> String:
+	match role:
+		"merchant": return "trade"
+		"guide": return "registration"
+		"waiting_soul": return "queue_info"
+		"soldier", "patrol_guard": return "dispatch"
+		"resident": return "talk"
+	return "none"
 
 
 func _activity_facing(district_name: String, point_position: Vector3, index: int) -> float:
@@ -614,9 +657,10 @@ func _activity_facing(district_name: String, point_position: Vector3, index: int
 
 
 func _build_npc_population() -> void:
-	# These are lightweight client-side visual stand-ins. They have no collision,
-	# gameplay authority, network identity, dialogue or interaction yet.
+	# These local stand-ins now have stable prototype identities and interaction metadata.
+	# They remain client-only and must later be reconciled with server-owned actor IDs.
 	npc_agents.clear()
+	var role_counts: Dictionary = {}
 	for point in activity_points:
 		if str(point["activity"]) == "patrol_route":
 			continue
@@ -624,9 +668,17 @@ func _build_npc_population() -> void:
 		npc_root.name = "LocalNPC_" + str(point["role"])
 		npc_root.position = point["position"]
 		add_child(npc_root)
-		var agent := _create_npc_figure(npc_root, str(point["role"]))
+		var role := str(point["role"])
+		var role_index := int(role_counts.get(role, 0))
+		role_counts[role] = role_index + 1
+		var agent := _create_npc_figure(npc_root, role)
+		agent["npc_id"] = str(point["point_id"])
+		agent["display_name"] = _npc_display_name(role, role_index)
+		agent["district"] = str(point["district"])
+		agent["interaction_type"] = _interaction_type_for_role(role)
+		agent["importance"] = "regional" if role in ["merchant", "guide", "soldier", "patrol_guard"] else "ambient"
 		agent["root"] = npc_root
-		agent["role"] = str(point["role"])
+		agent["role"] = role
 		agent["activity"] = str(point["activity"])
 		agent["schedule_tag"] = str(point["schedule_tag"])
 		agent["phase"] = float(npc_agents.size()) * 1.37
@@ -645,6 +697,11 @@ func _build_npc_population() -> void:
 		patrol_root.position = patrol_route[0]
 		add_child(patrol_root)
 		var patrol_agent := _create_npc_figure(patrol_root, "patrol_guard")
+		patrol_agent["npc_id"] = "patrol.guard.walker.01"
+		patrol_agent["display_name"] = "巡城卫·陈肃"
+		patrol_agent["district"] = "巡城司"
+		patrol_agent["interaction_type"] = "dispatch"
+		patrol_agent["importance"] = "regional"
 		patrol_agent["root"] = patrol_root
 		patrol_agent["role"] = "patrol_guard"
 		patrol_agent["activity"] = "patrol_route"
@@ -1132,7 +1189,7 @@ func _build_hud() -> void:
 	add_child(layer)
 	var panel := PanelContainer.new()
 	panel.position = Vector2(18, 18)
-	panel.custom_minimum_size = Vector2(390, 96)
+	panel.custom_minimum_size = Vector2(440, 142)
 	layer.add_child(panel)
 	var column := VBoxContainer.new()
 	panel.add_child(column)
@@ -1142,8 +1199,15 @@ func _build_hud() -> void:
 	column.add_child(title)
 	status_label = Label.new()
 	column.add_child(status_label)
+	npc_hint_label = Label.new()
+	npc_hint_label.add_theme_color_override("font_color", Color("#e8c58b"))
+	column.add_child(npc_hint_label)
+	npc_detail_label = Label.new()
+	npc_detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	npc_detail_label.custom_minimum_size = Vector2(410, 34)
+	column.add_child(npc_detail_label)
 	var help := Label.new()
-	help.text = "WASD 移动 · 空格跳跃 · 鼠标左键捕获视角 · ESC 释放鼠标 · F6 活动点调试"
+	help.text = "WASD 移动 · 空格跳跃 · 鼠标左键捕获视角 · ESC 释放 · E 交互 · F6 活动点"
 	column.add_child(help)
 
 
@@ -1160,6 +1224,46 @@ func _update_hud() -> void:
 			nearest = str(district_name)
 	var period := "夜" if npc_schedule_night else "昼"
 	status_label.text = "%s %s  ·  位置 %.1f, %.1f  ·  附近：%s" % [period, _format_npc_clock(), p.x, p.z, nearest]
+	_update_npc_interaction_hint()
+
+
+func _update_npc_interaction_hint() -> void:
+	if npc_hint_label == null:
+		return
+	var nearest_agent: Dictionary = {}
+	var nearest_distance := 3.8
+	for agent in npc_agents:
+		if str(agent.get("interaction_type", "none")) == "none":
+			continue
+		var root: Node3D = agent.get("root")
+		if root == null or not root.visible:
+			continue
+		var distance := player.global_position.distance_to(root.global_position)
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest_agent = agent
+	npc_focus_agent = nearest_agent
+	if npc_focus_agent.is_empty():
+		npc_hint_label.text = ""
+	else:
+		npc_hint_label.text = "E 交互  ·  %s（%s）" % [str(npc_focus_agent["display_name"]), str(npc_focus_agent["district"])]
+
+
+func _interact_with_focused_npc() -> void:
+	if npc_focus_agent.is_empty() or npc_detail_label == null:
+		return
+	var npc_name := str(npc_focus_agent.get("display_name", "无名阴差"))
+	var npc_id := str(npc_focus_agent.get("npc_id", "unknown"))
+	var message := ""
+	match str(npc_focus_agent.get("interaction_type", "none")):
+		"trade": message = "%s：鬼市夜市已开。货物、魂钱与交易功能将在商店系统接入后开放。" % npc_name
+		"registration": message = "%s：请准备好魂籍凭证，先登记来处，再按引导前往分流处。" % npc_name
+		"queue_info": message = "%s：请依次候登记，不要越过前方魂灵。" % npc_name
+		"dispatch": message = "%s：巡防事务请报明来意。此处暂未开放军令与治安任务。" % npc_name
+		"talk": message = "%s：魂坊今日安宁，若有闲暇，不妨去茶亭坐坐。" % npc_name
+		_: message = "%s 暂无可用交互。" % npc_name
+	npc_detail_label.text = message
+	print("[FengduNPC] interact id=%s type=%s" % [npc_id, str(npc_focus_agent.get("interaction_type", "none"))])
 
 
 func _box(node_name: String, center: Vector3, size: Vector3, material_key: String, collision: bool) -> Node3D:
