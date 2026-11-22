@@ -30,6 +30,7 @@ type Member struct {
  CharacterName string `json:"character_name"`
  Role string `json:"role"`
  Online bool `json:"online"`
+ IsSelf bool `json:"is_self"`
  JoinedAt time.Time `json:"joined_at"`
 }
 type Invitation struct {
@@ -223,11 +224,11 @@ func (s *Service) Get(ctx context.Context, accountID string) (Party,error) {
  if errors.Is(err,sql.ErrNoRows){return Party{},ErrNotFound};if err!=nil{return Party{},fmt.Errorf("load current party: %w",err)}
  rows,err:=s.db.QueryContext(ctx,`SELECT m.account_id::text,a.username,m.character_id::text,c.name,m.role,
  EXISTS(SELECT 1 FROM world_sessions ws WHERE ws.character_id=m.character_id AND ws.session_state='active'),
- m.joined_at FROM party_members m JOIN accounts a ON a.id=m.account_id JOIN characters c ON c.id=m.character_id
- WHERE m.party_id=$1 ORDER BY CASE m.role WHEN 'leader' THEN 0 ELSE 1 END,m.joined_at`,p.ID)
+ m.account_id=$2::uuid,m.joined_at FROM party_members m JOIN accounts a ON a.id=m.account_id JOIN characters c ON c.id=m.character_id
+ WHERE m.party_id=$1 ORDER BY CASE m.role WHEN 'leader' THEN 0 ELSE 1 END,m.joined_at`,p.ID,accountID)
  if err!=nil{return Party{},fmt.Errorf("list party members: %w",err)}
  defer rows.Close();p.Members=make([]Member,0)
- for rows.Next(){var m Member;if err:=rows.Scan(&m.AccountID,&m.Username,&m.CharacterID,&m.CharacterName,&m.Role,&m.Online,&m.JoinedAt);err!=nil{return Party{},fmt.Errorf("scan party member: %w",err)};p.Members=append(p.Members,m)}
+ for rows.Next(){var m Member;if err:=rows.Scan(&m.AccountID,&m.Username,&m.CharacterID,&m.CharacterName,&m.Role,&m.Online,&m.IsSelf,&m.JoinedAt);err!=nil{return Party{},fmt.Errorf("scan party member: %w",err)};p.Members=append(p.Members,m)}
  if err:=rows.Err();err!=nil{return Party{},fmt.Errorf("iterate party members: %w",err)}
  return p,nil
 }
