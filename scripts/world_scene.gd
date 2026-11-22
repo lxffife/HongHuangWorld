@@ -4116,6 +4116,8 @@ func _on_reconnected_welcomed(snapshot: Dictionary) -> void:
 	local_player.position = local_target_position
 	soul_essence_profile.clear()
 	_apply_world_player_form()
+	_update_hud()
+	_update_vitals(int(snapshot.get("health", 0)), int(snapshot.get("max_health", 0)))
 	_request_soul_essence()
 	for character_id in remote_players.keys():
 		remote_players[character_id].queue_free()
