@@ -110,6 +110,15 @@ if(BUILD_TESTING)
     target_link_libraries(durable_outbox_test PRIVATE SQLite::SQLite3 Threads::Threads)
     add_test(NAME durable_outbox_test COMMAND durable_outbox_test)
 
+    add_executable(monster_runtime_checkpoint_writer_test
+        tests/monster_runtime_checkpoint_writer_test.cpp
+        src/monster_runtime_checkpoint_writer.cpp
+        src/durable_outbox.cpp
+    )
+    target_include_directories(monster_runtime_checkpoint_writer_test PRIVATE include)
+    target_link_libraries(monster_runtime_checkpoint_writer_test PRIVATE SQLite::SQLite3 Threads::Threads)
+    add_test(NAME monster_runtime_checkpoint_writer_test COMMAND monster_runtime_checkpoint_writer_test)
+
     add_executable(monster_contribution_writer_test
         tests/monster_contribution_writer_test.cpp
         src/monster_contribution_writer.cpp
