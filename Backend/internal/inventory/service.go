@@ -109,7 +109,12 @@ type PickupRequest struct {
 	CharacterID string
 }
 
-type Result struct { Applied bool `json:"applied"` }
+type Result struct {
+	Applied bool `json:"applied"`
+	ItemID string `json:"item_id,omitempty"`
+	ItemInstanceID string `json:"item_instance_id,omitempty"`
+	Quantity int `json:"quantity,omitempty"`
+}
 
 type Service struct { db *sql.DB }
 
@@ -183,6 +188,31 @@ func (s *Service) CurrentInventory(ctx context.Context, accountID string) ([]Ite
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate inventory: %w", err) }
+	instanceRows, err := s.db.QueryContext(ctx, `SELECT ii.id::text,i.id,i.name,i.category,ii.quality,i.max_stack,i.icon_key,i.description,
+		i.item_type,COALESCE(i.equipment_slot,''),COALESCE(i.weapon_type,''),i.base_stats,ii.rolled_stats,ii.affixes,
+		COALESCE(es.id,''),COALESCE(es.name,''),COALESCE(es.description,''),COALESCE(es.bonus_tiers,'{}'::jsonb)
+		FROM souls soul JOIN characters c ON c.id=soul.current_character_id
+		JOIN character_item_instances ci ON ci.character_id=c.id
+		JOIN item_instances ii ON ii.id=ci.item_instance_id
+		JOIN item_definitions i ON i.id=ii.item_id
+		LEFT JOIN equipment_sets es ON es.id=i.equipment_set_id
+		WHERE soul.account_id=$1 AND c.status='alive' ORDER BY ii.quality DESC,i.name,ii.id`,accountID)
+	if err!=nil{return nil,fmt.Errorf("load current equipment instances: %w",err)}
+	defer instanceRows.Close()
+	for instanceRows.Next(){
+		var item ItemStack;var baseRaw,rolledRaw,affixesRaw,setTiers []byte
+		if err:=instanceRows.Scan(&item.InstanceID,&item.ItemID,&item.Name,&item.Category,&item.Quality,&item.MaxStack,&item.IconKey,&item.Description,
+			&item.ItemType,&item.EquipmentSlot,&item.WeaponType,&baseRaw,&rolledRaw,&affixesRaw,&item.SetID,&item.SetName,&item.SetDescription,&setTiers);err!=nil{
+			return nil,fmt.Errorf("scan equipment item instance: %w",err)
+		}
+		item.Quantity=1;item.BaseStats=map[string]int{};item.RolledStats=map[string]int{};item.Affixes=[]EquipmentAffix{}
+		if len(baseRaw)>0{if err:=json.Unmarshal(baseRaw,&item.BaseStats);err!=nil{return nil,fmt.Errorf("decode equipment instance base stats: %w",err)}}
+		if len(rolledRaw)>0{if err:=json.Unmarshal(rolledRaw,&item.RolledStats);err!=nil{return nil,fmt.Errorf("decode equipment instance rolled stats: %w",err)}}
+		if len(affixesRaw)>0{if err:=json.Unmarshal(affixesRaw,&item.Affixes);err!=nil{return nil,fmt.Errorf("decode equipment instance affixes: %w",err)}}
+		if len(setTiers)>0{if err:=json.Unmarshal(setTiers,&item.SetBonusTiers);err!=nil{return nil,fmt.Errorf("decode equipment instance set tiers: %w",err)}}
+		items=append(items,item)
+	}
+	if err:=instanceRows.Err();err!=nil{return nil,fmt.Errorf("iterate equipment instances: %w",err)}
 	return items, nil
 }
 
@@ -366,29 +396,32 @@ func (s *Service) PickupDrop(ctx context.Context, nodeKey string, request Pickup
 	}
 	if !validSession { return Result{}, ErrSessionInvalid }
 	var itemID string
+	var itemInstanceID sql.NullString
 	var quantity int
-	err = tx.QueryRowContext(ctx, `SELECT item_id, quantity FROM ground_drops
-		WHERE id = $1::uuid AND server_id = $2
-		  AND owner_character_id = $3::uuid AND status = 'available' AND expires_at > now()
-		FOR UPDATE`, request.DropID, serverID, request.CharacterID).Scan(&itemID, &quantity)
-	if errors.Is(err, sql.ErrNoRows) { return Result{}, ErrDropUnavailable }
-	if err != nil { return Result{}, fmt.Errorf("lock ground drop: %w", err) }
-	var maxStack int
-	if err := tx.QueryRowContext(ctx, `SELECT max_stack FROM item_definitions WHERE id = $1 AND enabled`, itemID).Scan(&maxStack); err != nil {
-		return Result{}, fmt.Errorf("load pickup item definition: %w", err)
+	err = tx.QueryRowContext(ctx, `SELECT item_id,item_instance_id::text,quantity FROM ground_drops
+		WHERE id=$1::uuid AND server_id=$2 AND owner_character_id=$3::uuid
+		  AND status='available' AND expires_at>now() FOR UPDATE`,
+		request.DropID,serverID,request.CharacterID).Scan(&itemID,&itemInstanceID,&quantity)
+	if errors.Is(err,sql.ErrNoRows){return Result{},ErrDropUnavailable}
+	if err!=nil{return Result{},fmt.Errorf("lock ground drop: %w",err)}
+	if itemInstanceID.Valid {
+		if _,err:=tx.ExecContext(ctx,`INSERT INTO character_item_instances(character_id,item_instance_id)
+			VALUES($1::uuid,$2::uuid)`,request.CharacterID,itemInstanceID.String);err!=nil{
+			return Result{},fmt.Errorf("transfer equipment instance to inventory: %w",err)
+		}
+	} else {
+		var maxStack int
+		if err:=tx.QueryRowContext(ctx,`SELECT max_stack FROM item_definitions WHERE id=$1 AND enabled`,itemID).Scan(&maxStack);err!=nil{
+			return Result{},fmt.Errorf("load pickup item definition: %w",err)
+		}
+		stackResult,err:=tx.ExecContext(ctx,`INSERT INTO character_inventory(character_id,item_id,quantity)
+			VALUES($1::uuid,$2,$3) ON CONFLICT(character_id,item_id) DO UPDATE
+			SET quantity=character_inventory.quantity+EXCLUDED.quantity,updated_at=now()
+			WHERE character_inventory.quantity+EXCLUDED.quantity<=$4`,request.CharacterID,itemID,quantity,maxStack)
+		if err!=nil{return Result{},fmt.Errorf("apply inventory stack: %w",err)}
+		affected,err:=stackResult.RowsAffected();if err!=nil{return Result{},fmt.Errorf("check inventory stack update: %w",err)}
+		if affected==0{return Result{},ErrInventoryFull}
 	}
-	// The conditional upsert enforces max_stack atomically, including the
-	// first-insert race where SELECT FOR UPDATE cannot lock a missing row.
-	stackResult, err := tx.ExecContext(ctx, `INSERT INTO character_inventory (character_id, item_id, quantity)
-		VALUES ($1::uuid, $2, $3)
-		ON CONFLICT (character_id, item_id) DO UPDATE
-		SET quantity = character_inventory.quantity + EXCLUDED.quantity, updated_at = now()
-		WHERE character_inventory.quantity + EXCLUDED.quantity <= $4`,
-		request.CharacterID, itemID, quantity, maxStack)
-	if err != nil { return Result{}, fmt.Errorf("apply inventory stack: %w", err) }
-	affected, err := stackResult.RowsAffected()
-	if err != nil { return Result{}, fmt.Errorf("check inventory stack update: %w", err) }
-	if affected == 0 { return Result{}, ErrInventoryFull }
 	if _, err := tx.ExecContext(ctx, `UPDATE ground_drops SET status = 'picked', picked_by_character_id = $1::uuid, picked_at = now(), updated_at = now()
 		WHERE id = $2::uuid AND server_id = $3 AND status = 'available'`, request.CharacterID, request.DropID, serverID); err != nil {
 		return Result{}, fmt.Errorf("consume ground drop: %w", err)
@@ -398,7 +431,7 @@ func (s *Service) PickupDrop(ctx context.Context, nodeKey string, request Pickup
 		return Result{}, fmt.Errorf("record pickup event: %w", err)
 	}
 	if err := tx.Commit(); err != nil { return Result{}, fmt.Errorf("commit item pickup: %w", err) }
-	return Result{Applied: true}, nil
+	return Result{Applied:true,ItemID:itemID,ItemInstanceID:itemInstanceID.String,Quantity:quantity},nil
 }
 
 func validUUID(value string) bool {
