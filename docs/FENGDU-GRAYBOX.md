@@ -430,7 +430,10 @@
 - `update_case_party_procedural_status()` 记录送达通知、到场、无法联系或拒绝陈述等程序状态，并要求填写原因。`record_case_party_defense_statement()` 记录当事人申辩原文和时间；申辩不会自动改变物证审查结论。
 - `begin_case_hearing()` 开庭后，`present_case_evidence_at_hearing()` 只能出示已被判官司采信的物证，且每件物证只能出示一次。`close_case_hearing()` 要求至少出示一件物证并填写庭审记录，随后进入 `hearing_closed_pending_judgment`，等待独立判决。
 - `get_case_hearing_record()` 返回涉案人员程序状态、申辩记录、庭审举证记录及复核数据。当前庭审为流程数据原型，不包含真实玩家在线法庭、辩护人、检察官、证人出庭动画或司法权限系统。
-- 巡防历史记录清理会跳过所有尚未完成的司法卷宗（退回补充、已移交、复核中、候审、庭审中、庭审结束待判决），避免巡防记录达到数量上限时误删仍在审理的案件；未提交且已关闭的普通巡防记录仍可按旧规则清理。
+- 巡防历史记录清理会跳过所有尚未完成或仍可申诉的司法卷宗（退回补充、已移交、复核中、候审、庭审中、庭审结束待判决、已判决、申诉待处理），避免巡防记录达到数量上限时误删仍在审理的案件；未提交且已关闭的普通巡防记录仍可按旧规则清理。
 - 所有接口都返回明确的失败原因，例如案件不存在、现场调查未完成、卷宗未移交、复核未开始或处置类型无效。案件档案接口返回卷宗状态、复核状态、退回原因、待补材料和移交快照。
-- `get_judge_bureau_case_queue()` 返回判官司待处理、复核中和候审案件摘要，按移交时间排序；`get_patrol_case_supplement_queue()` 返回退回巡城司补充的案件摘要，包含退回原因、待补材料和退回时间。两类队列互相独立，供后续两个衙门的工作台界面接入。
-- 通过形式复核不等于事实认定或定罪。`judicial_conclusion` 始终为 `not_determined`；当前没有判官、证据采信、当事人申辩、实体审理、判决或申诉机制。上述接口是客户端流程原型，不是权限安全的司法服务；正式联机需迁移到服务端并验证办案权限、审计日志和不可篡改卷宗。
+- `get_judge_bureau_case_queue()` 返回判官司待处理、复核中、候审、庭审中、待判决、已判决和申诉待处理案件摘要，按移交时间排序；`get_judge_bureau_appeal_queue()` 单独返回待处理申诉；`get_patrol_case_supplement_queue()` 返回退回巡城司补充的案件摘要，包含退回原因、待补材料和退回时间。两类队列互相独立，供后续两个衙门的工作台界面接入。
+- **判决**：庭审结束后，`record_case_party_judgment(incident_id, party_id, outcome, reason, cited_evidence_tags)` 为每名涉案人员分别记录 `acquitted`（无罪）、`insufficient_evidence`（证据不足）、`responsible`（承担责任）或 `mitigated`（从轻处理）。引用的物证必须已经在庭审中出示且被判官司采信；承担责任/从轻处理必须至少引用一件这样的物证。判决理由必填，并记录是否考虑当事人申辩。
+- 没有涉案人员的案件使用 `record_case_judgment()` 记录案件级结论；存在涉案人员时禁止绕过逐人判决。`finalize_case_judgment()` 要求所有涉案人员均有独立判决，才将案件转为 `judgment_issued`；不同人员判决不一致时案件总结果为 `mixed_outcomes`。
+- **申诉**：`submit_case_appeal()` 允许已作出判决的当事人提交理由，并且只能挑战原判决引用过的证据；`get_judge_bureau_appeal_queue()` 提供待处理申诉队列。`review_case_appeal()` 支持 `uphold`（维持原判）、`revise_judgment`（修改判决）和 `reopen_hearing`（发回重审），均必须填写处理理由。发回重审会保存旧庭审/判决历史，清空当前轮次判决并重新进入候审；同一案件的其他待处理申诉并入重审，避免旧申诉悬挂。
+- `get_case_judgment_and_appeals()` 与案件档案接口提供判决、历次判决、申诉及处理结果。判决签发和申诉处理不等于真实司法权威；当前均为客户端流程原型，正式联机需迁移到服务端，补齐办案权限、申诉时限、复核人员隔离、审计日志和不可篡改卷宗。
