@@ -3098,7 +3098,9 @@ func _on_combat_event(event: Dictionary) -> void:
 		_update_compact_hud()
 		var spell_id := str(event.get("spell_id", ""))
 		var spell_name := "冰锥术" if spell_id == "ice_bolt" else ("火球术" if spell_id == "fireball" else "法术")
-		if bool(event.get("accepted", false)) and str(event.get("phase", "")) == "casting" and spell_cooldown_remaining.has(spell_id):
+		# Mirror the server: cooldown starts on successful release, not when
+		# the cast begins. An interrupted cast refunds mana and remains ready.
+		if bool(event.get("accepted", false)) and str(event.get("phase", "")) == "released" and spell_cooldown_remaining.has(spell_id):
 			spell_cooldown_remaining[spell_id] = maxf(float(event.get("cooldown_ms", 0)) / 1000.0, 0.0)
 			_update_spell_cooldown_hud()
 		if not bool(event.get("accepted", false)):
