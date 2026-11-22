@@ -284,7 +284,10 @@ func _gate(title: String, center: Vector3, outward: Vector3, destination: String
 		leaf.rotation.y = deg_to_rad(-side * 58.0)
 		for row in range(4):
 			var stud_offset := Vector3(side * (1.8 + float(row) * 0.9), 0, -0.42) if axis_x else Vector3(-0.42, 0, side * (1.8 + float(row) * 0.9))
-			_box(title + "GateDoorStud", center + door_offset + stud_offset, Vector3(0.22, 0.22, 0.22), "gold", false)
+			var stud := _box(title + "GateDoorStud", center + door_offset + stud_offset, Vector3(0.22, 0.22, 0.22), "gold", false)
+			remove_child(stud)
+			leaf.add_child(stud)
+			stud.position = stud_offset
 	_box(title + "GateRoad", center + outward * 8.0 + Vector3(0, 0.2, 0), Vector3(17, 0.4, 17), "bridge", true)
 	_label(title, center + Vector3(0, 23, 0), 34, Color("#e6c58d"))
 	_label("通往：" + destination, center + Vector3(0, 20.5, 0), 18, Color("#c4cbd4"))
