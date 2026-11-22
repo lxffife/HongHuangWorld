@@ -18,12 +18,14 @@ struct AttackProfile {
     std::int32_t power_basis_points{10000};
     // 0 = no penetration; 10000 = ignore all defense.
     std::int32_t defense_penetration_basis_points{};
+    bool critical{};
 };
 
 struct DamageResult {
     std::int64_t damage{};
     std::int64_t remaining_health{};
     bool defeated{};
+    bool critical{};
 };
 
 // Deterministic server-side damage calculation. This function is deliberately
@@ -48,11 +50,13 @@ inline bool calculate_damage(const CombatantStats& attacker,
 
     const auto remaining_defense = 10'000LL - profile.defense_penetration_basis_points;
     const auto effective_defense = defender.defense * remaining_defense / 10'000LL;
-    const auto scaled_attack = attacker.attack * profile.power_basis_points / 10'000LL;
+    auto scaled_attack = attacker.attack * profile.power_basis_points / 10'000LL;
+    if (profile.critical) scaled_attack = scaled_attack * 15'000LL / 10'000LL;
     const auto damage = std::max<std::int64_t>(1, scaled_attack - effective_defense);
     result.damage = std::min(damage, defender.current_health);
     result.remaining_health = defender.current_health - result.damage;
     result.defeated = result.remaining_health == 0;
+    result.critical = profile.critical;
     return true;
 }
 
