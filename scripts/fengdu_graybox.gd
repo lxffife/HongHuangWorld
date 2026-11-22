@@ -4,11 +4,11 @@ const WORLD_LAYOUT = preload("res://scripts/fengdu_world_layout.gd")
 ## Walkable Fengdu capital graybox. All dimensions in meters.
 ## This is a client-side art/navigation prototype; gates and permissions are not authoritative.
 
-const CITY_HALF := 96.0
-const MOAT_HALF := 108.0
-const WALL_HEIGHT := 13.0
-const WALL_THICKNESS := 5.0
-const GATE_WIDTH := 16.0
+const CITY_HALF := WORLD_LAYOUT.CITY_HALF
+const MOAT_HALF := WORLD_LAYOUT.MOAT_HALF
+const WALL_HEIGHT := WORLD_LAYOUT.WALL_HEIGHT
+const WALL_THICKNESS := WORLD_LAYOUT.WALL_THICKNESS
+const GATE_WIDTH := WORLD_LAYOUT.GATE_WIDTH
 const PLAYER_SPEED := 8.0
 const MOUSE_SENSITIVITY := 0.0025
 const NPC_DAY_SECONDS_PER_MINUTE := 1.0
