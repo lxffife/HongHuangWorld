@@ -3552,7 +3552,7 @@ func _capture_incident_nearby_activity(target_position: Vector3) -> Array[Dictio
 	var snapshots: Array[Dictionary] = []
 	for agent in npc_agents:
 		var role := str(agent.get("role", ""))
-		if role in ["patrol_guard", "gate_guard"] or str(agent.get("importance", "")) == "ambient":
+		if role in ["patrol_guard", "gate_guard"]:
 			continue
 		var actor_root: Node3D = agent.get("root")
 		if actor_root == null or not is_instance_valid(actor_root) or not actor_root.visible:
