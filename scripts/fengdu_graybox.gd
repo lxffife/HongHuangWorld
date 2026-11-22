@@ -3445,8 +3445,9 @@ func _interact_with_patrol_incident(incident_id: String) -> void:
 		npc_detail_label.text = "巡防事件记录已更新，请稍后再查看。"
 		return
 	var record: Dictionary = patrol_incident_records[record_index]
-	if str(record.get("state", "")) != "investigating":
-		npc_detail_label.text = "%s：巡城卫尚未全部到场，暂不能开始现场调查。" % str(record.get("title", "巡防事件"))
+	var can_supplement_closed_case := str(record.get("case_workflow_state", "")) == "returned_for_supplement"
+	if str(record.get("state", "")) != "investigating" and not can_supplement_closed_case:
+		npc_detail_label.text = "%s：巡城卫尚未全部到场，或案件当前不接受现场调查。" % str(record.get("title", "巡防事件"))
 		return
 	if player == null:
 		return
@@ -3487,6 +3488,8 @@ func _interact_with_patrol_incident(incident_id: String) -> void:
 		evidence_log.append({"action_id": clue_id, "label": clue_label, "at": npc_simulation_time})
 		record["player_contribution_log"] = evidence_log
 		_append_incident_timeline_entry(record, "evidence", clue_label, "player")
+		if can_supplement_closed_case:
+			_append_incident_timeline_entry(record, "case_supplement", "补充卷宗物证：" + clue_label, "patrol_office")
 		patrol_incident_records[record_index] = record
 		npc_detail_label.text = "现场物证已收录 · %s\n%s\n玩家已收集物证：%d 件" % [
 			str(record.get("title", "巡防事件")),
@@ -3514,6 +3517,8 @@ func _interact_with_patrol_incident(incident_id: String) -> void:
 			witness_log.append({"action_id": witness_id, "label": "首次询问：" + witness_name, "at": npc_simulation_time})
 			record["player_contribution_log"] = witness_log
 			_append_incident_timeline_entry(record, "testimony", "首次证词：" + witness_name, "witness")
+			if can_supplement_closed_case:
+				_append_incident_timeline_entry(record, "case_supplement", "补充卷宗证人陈述", "patrol_office")
 			patrol_incident_records[record_index] = record
 			npc_detail_label.text = "%s：事发时我看见一道黑影从巷口经过，随后听到争执声。\n\n先记录这份证词。找到物证后，可以回来追问细节。" % witness_name
 			print("[FengduPatrol] player recorded first testimony for %s" % incident_id)
