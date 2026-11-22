@@ -105,7 +105,7 @@ func (h *inventoryHandlers) pickupDrop(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, inventory.ErrInvalidRequest): http.Error(w, "invalid item pickup payload", http.StatusBadRequest)
 	case errors.Is(err, inventory.ErrSessionInvalid): http.Error(w, "active character session not found on this server", http.StatusConflict)
 	case errors.Is(err, inventory.ErrDropUnavailable): http.Error(w, "ground drop is unavailable", http.StatusConflict)
-	case errors.Is(err, inventory.ErrInventoryFull): http.Error(w, "inventory stack is full", http.StatusConflict)
+	case errors.Is(err, inventory.ErrInventoryFull): http.Error(w, "inventory is full", http.StatusConflict)
 	case errors.Is(err, inventory.ErrCharacterInWorld): http.Error(w, "character is changing world sessions; retry shortly", http.StatusConflict)
 	default: h.logger.Error("pickup ground drop failed", "error", err); http.Error(w, "internal server error", http.StatusInternalServerError)
 	}
