@@ -421,6 +421,7 @@
 - 案件创建时初始化独立的卷宗流转状态：unsubmitted。巡防现场处置生命周期（queued / enroute / investigating / resolved / closed）与司法卷宗状态分离，避免巡防人员归队状态覆盖司法流程。
 - `submit_patrol_case_to_judge_bureau(incident_id)` 仅允许已完成现场调查（resolved / closed）的案件提交。当前原型的形式移交门槛为：至少两件玩家收录物证，或至少一件物证加一份证人陈述。材料不足时返回 `insufficient_case_material`，卷宗状态改为 `returned_for_supplement`，并列出待补材料；不会伪造物证或证词。
 - 达到门槛后生成移交卷宗快照，包含移交编号、来源巡城司、目标判官司、移交时间、物证标签/数量、证词标签/数量、轨迹线索评估、初步推断和证词矛盾标记。`requires_conflict_review` 提醒判官司重点复核证词矛盾。
+- 卷宗被退回补充后，原案发现场仍允许玩家继续收录尚未采集的物证、完成证人追问；新增材料会写入原案件贡献日志和时间线，然后可以再次提交。该补充窗口不重启巡防派遣，也不篡改现场处置状态。
 - `begin_judge_bureau_case_review(incident_id)` 将已移交且待受理的卷宗转为 `under_judicial_review`。`record_judge_bureau_case_disposition(incident_id, disposition)` 当前支持 `request_supplement`（退回补充调查）和 `accept_for_hearing`（通过形式复核、进入候审）。
 - 所有接口都返回明确的失败原因，例如案件不存在、现场调查未完成、卷宗未移交、复核未开始或处置类型无效。案件档案接口返回卷宗状态、复核状态、退回原因、待补材料和移交快照。
 - 通过形式复核不等于事实认定或定罪。`judicial_conclusion` 始终为 `not_determined`；当前没有判官、证据采信、当事人申辩、实体审理、判决或申诉机制。上述接口是客户端流程原型，不是权限安全的司法服务；正式联机需迁移到服务端并验证办案权限、审计日志和不可篡改卷宗。
