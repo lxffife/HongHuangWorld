@@ -4543,6 +4543,10 @@ func get_judge_bureau_case_queue() -> Array[Dictionary]:
 		if workflow_state not in ["transferred_to_judge_bureau", "under_judicial_review", "hearing_pending", "hearing_in_progress", "hearing_closed_pending_judgment", "judgment_issued", "appeal_pending"]:
 			continue
 		var submission: Dictionary = record.get("case_submission", {})
+		var pending_appeal_count := 0
+		for appeal_value in record.get("appeal_records", []):
+			if str(appeal_value.get("status", "")) == "pending":
+				pending_appeal_count += 1
 		queue.append({
 			"incident_id": str(record.get("incident_id", "")),
 			"title": str(record.get("title", "巡防案件")),
@@ -4553,6 +4557,9 @@ func get_judge_bureau_case_queue() -> Array[Dictionary]:
 			"evidence_count": int(submission.get("evidence_count", 0)),
 			"witness_count": int(submission.get("witness_count", 0)),
 			"testimony_conflict": bool(submission.get("testimony_conflict", false)),
+			"party_count": submission.get("case_parties", []).size(),
+			"judicial_conclusion": str(record.get("judicial_conclusion", "not_determined")),
+			"pending_appeal_count": pending_appeal_count,
 			"deduction_label": str(submission.get("deduction_label", "尚无推断"))
 		})
 	queue.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
