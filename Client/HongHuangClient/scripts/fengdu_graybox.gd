@@ -691,6 +691,7 @@ func _build_npc_population() -> void:
 		agent["facing"] = float(point["facing"])
 		agent["gesture_rate"] = 0.72 + float(npc_agents.size() % 5) * 0.13
 		agent["update_accumulator"] = 0.0
+		_initialize_npc_behavior(agent)
 		npc_root.rotation.y = float(point["facing"])
 		npc_agents.append(agent)
 
@@ -715,9 +716,134 @@ func _build_npc_population() -> void:
 		patrol_agent["route_progress"] = 0.0
 		patrol_agent["move_speed"] = 2.6
 		patrol_agent["update_accumulator"] = 0.0
+		_initialize_npc_behavior(patrol_agent)
 		npc_agents.append(patrol_agent)
 	_rebuild_npc_population_index()
 	_apply_npc_schedules()
+
+
+
+func _initialize_npc_behavior(agent: Dictionary) -> void:
+	var role := str(agent.get("role", ""))
+	var states: Array = _npc_behavior_states(role)
+	agent["behavior_states"] = states
+	agent["state_cycle_index"] = 0
+	agent["state"] = str(states[0]) if not states.is_empty() else "idle"
+	agent["state_elapsed"] = fposmod(float(agent.get("phase", 0.0)), 3.0)
+	agent["state_duration"] = _npc_behavior_duration(role, str(agent["state"]), float(agent.get("phase", 0.0)))
+
+
+func _npc_behavior_states(role: String) -> Array:
+	match role:
+		"merchant":
+			return ["trade_idle", "greet", "arrange_goods", "trade_idle", "close_shop"]
+		"resident":
+			return ["square_chat", "tea_social", "well_idle", "home_idle"]
+		"soldier":
+			return ["formation_ready", "drill", "formation_ready", "rest"]
+		"guide":
+			return ["check_ledger", "direct_souls", "registration"]
+		"waiting_soul":
+			return ["queue_wait", "queue_glance"]
+		"patrol_guard":
+			return ["patrol_walk", "patrol_watch"]
+	return ["idle"]
+
+
+func _npc_behavior_duration(role: String, state: String, phase: float) -> float:
+	var base := 5.0
+	match state:
+		"greet", "direct_souls", "queue_glance":
+			base = 3.2
+		"arrange_goods", "check_ledger", "well_idle":
+			base = 6.0
+		"close_shop", "rest", "home_idle":
+			base = 8.0
+		"tea_social", "square_chat", "trade_idle", "drill":
+			base = 5.5
+		"patrol_walk", "patrol_watch":
+			base = 10.0
+	return base + fposmod(phase * 1.73, 2.2)
+
+
+func _advance_npc_behavior(agent: Dictionary, elapsed: float) -> void:
+	var states: Array = agent.get("behavior_states", [])
+	if states.is_empty():
+		return
+	var state_elapsed := float(agent.get("state_elapsed", 0.0)) + elapsed
+	var duration := float(agent.get("state_duration", 5.0))
+	var cycle_index := int(agent.get("state_cycle_index", 0))
+	var role := str(agent.get("role", ""))
+	while state_elapsed >= duration:
+		state_elapsed -= duration
+		cycle_index = (cycle_index + 1) % states.size()
+		var next_state := str(states[cycle_index])
+		duration = _npc_behavior_duration(role, next_state, float(agent.get("phase", 0.0)) + float(cycle_index))
+		agent["state"] = next_state
+	agent["state_elapsed"] = state_elapsed
+	agent["state_duration"] = duration
+	agent["state_cycle_index"] = cycle_index
+
+
+func _apply_npc_behavior_pose(agent: Dictionary, phase: float) -> void:
+	var state := str(agent.get("state", "idle"))
+	var root: Node3D = agent["root"]
+	var left_arm: MeshInstance3D = agent["left_arm"]
+	var right_arm: MeshInstance3D = agent["right_arm"]
+	var body: MeshInstance3D = agent["body"]
+	var facing := float(agent.get("facing", 0.0))
+	var gesture := sin(phase * 1.25)
+	match state:
+		"trade_idle":
+			left_arm.rotation.z = deg_to_rad(-18.0) + gesture * 0.07
+			right_arm.rotation.z = deg_to_rad(18.0) + sin(phase * 0.9) * 0.1
+		"greet":
+			root.rotation.y = facing + sin(phase * 0.22) * 0.08
+			left_arm.rotation.z = deg_to_rad(-18.0)
+			right_arm.rotation.z = deg_to_rad(-52.0) + sin(phase * 2.2) * 0.28
+		"arrange_goods":
+			body.rotation.x = deg_to_rad(7.0) + absf(gesture) * 0.035
+			left_arm.rotation.z = deg_to_rad(-42.0) + gesture * 0.08
+			right_arm.rotation.z = deg_to_rad(42.0) - gesture * 0.08
+		"close_shop":
+			left_arm.rotation.z = deg_to_rad(-12.0) + gesture * 0.04
+			right_arm.rotation.z = deg_to_rad(12.0) - gesture * 0.04
+		"square_chat", "tea_social":
+			root.rotation.y = facing + sin(phase * 0.38) * (0.24 if state == "square_chat" else 0.12)
+			left_arm.rotation.z = deg_to_rad(-28.0) + gesture * 0.08
+			right_arm.rotation.z = deg_to_rad(28.0) - sin(phase * 0.85 + 0.7) * 0.09
+		"well_idle", "home_idle":
+			root.rotation.y = facing + sin(phase * 0.2) * 0.1
+			left_arm.rotation.z = deg_to_rad(-18.0) + gesture * 0.025
+			right_arm.rotation.z = deg_to_rad(18.0) - gesture * 0.025
+		"formation_ready":
+			left_arm.rotation.z = deg_to_rad(-10.0)
+			right_arm.rotation.z = deg_to_rad(10.0)
+		"drill":
+			var drill_swing := sin(phase * 2.0) * 0.28
+			left_arm.rotation.z = deg_to_rad(-18.0) + drill_swing
+			right_arm.rotation.z = deg_to_rad(18.0) - drill_swing
+		"rest":
+			left_arm.rotation.z = deg_to_rad(-18.0) + sin(phase * 0.35) * 0.025
+			right_arm.rotation.z = deg_to_rad(18.0) - sin(phase * 0.35) * 0.025
+		"check_ledger":
+			left_arm.rotation.z = deg_to_rad(-30.0)
+			right_arm.rotation.z = deg_to_rad(42.0) + sin(phase * 0.7) * 0.05
+			var ledger: MeshInstance3D = agent.get("ledger")
+			if ledger != null:
+				ledger.rotation.x = deg_to_rad(-28.0) + sin(phase * 0.5) * 0.04
+		"direct_souls", "registration":
+			left_arm.rotation.z = deg_to_rad(-18.0) + maxf(gesture, 0.0) * 0.18
+			right_arm.rotation.z = deg_to_rad(18.0) - maxf(-gesture, 0.0) * 0.34
+		"queue_wait", "queue_glance":
+			root.rotation.y = facing + (sin(phase * 0.28) * 0.08 if state == "queue_glance" else 0.0)
+			left_arm.rotation.z = deg_to_rad(-18.0)
+			right_arm.rotation.z = deg_to_rad(18.0) + sin(phase * 0.4) * 0.035
+		_:
+			left_arm.rotation.z = deg_to_rad(-18.0)
+			right_arm.rotation.z = deg_to_rad(18.0)
+	if state != "arrange_goods":
+		body.rotation.x = 0.0
 
 
 func _rebuild_npc_population_index() -> void:
@@ -901,6 +1027,7 @@ func _update_npc_agents(delta: float) -> void:
 		var right_arm: MeshInstance3D = agent["right_arm"]
 		var phase := npc_simulation_time * 1.8 * float(agent.get("gesture_rate", 1.0)) + float(agent["phase"])
 		var activity := str(agent["activity"])
+		_advance_npc_behavior(agent, elapsed)
 		if bool(agent["moving"]):
 			var route_index := int(agent["route_index"])
 			var route_progress := float(agent["route_progress"])
@@ -959,6 +1086,7 @@ func _update_npc_agents(delta: float) -> void:
 			else:
 				left_arm.rotation.z = deg_to_rad(-18.0)
 				right_arm.rotation.z = deg_to_rad(18.0)
+			_apply_npc_behavior_pose(agent, phase)
 
 
 func _apply_npc_schedules() -> void:
