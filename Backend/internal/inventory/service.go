@@ -2,11 +2,13 @@ package inventory
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
-	"encoding/json"
+	"math/big"
 	"strings"
 )
 
@@ -19,6 +21,9 @@ var (
 )
 
 type ItemStack struct {
+	InstanceID string `json:"instance_id,omitempty"`
+	RolledStats map[string]int `json:"rolled_stats,omitempty"`
+	Affixes []EquipmentAffix `json:"affixes,omitempty"`
 	ItemID string `json:"item_id"`
 	Name string `json:"name"`
 	Category string `json:"category"`
@@ -50,8 +55,19 @@ type LootEntry struct {
 	IconKey string `json:"icon_key"`
 }
 
+type EquipmentAffix struct {
+	ID string `json:"id"`
+	Name string `json:"name"`
+	StatKey string `json:"stat_key"`
+	Value int `json:"value"`
+}
+
 type GroundDrop struct {
 	ID string `json:"id"`
+	ItemInstanceID string `json:"item_instance_id,omitempty"`
+	Quality int `json:"quality"`
+	RolledStats map[string]int `json:"rolled_stats,omitempty"`
+	Affixes []EquipmentAffix `json:"affixes,omitempty"`
 	ItemID string `json:"item_id"`
 	Quantity int `json:"quantity"`
 	PositionX float64 `json:"position_x"`
@@ -62,6 +78,9 @@ type GroundDrop struct {
 
 type GroundDropSnapshot struct {
 	ID string `json:"id"`
+	ItemInstanceID string `json:"item_instance_id,omitempty"`
+	RolledStats map[string]int `json:"rolled_stats,omitempty"`
+	Affixes []EquipmentAffix `json:"affixes,omitempty"`
 	SessionID string `json:"session_id"`
 	OwnerCharacterID string `json:"owner_character_id"`
 	ItemID string `json:"item_id"`
@@ -178,11 +197,13 @@ func (s *Service) ListGroundDrops(ctx context.Context, nodeKey string) ([]Ground
 		return nil, fmt.Errorf("expire old ground drops: %w", err)
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT d.id::text, d.session_id::text, d.owner_character_id::text,
-		d.item_id, i.name, i.quality, d.quantity, d.position_x, d.position_z,
-		GREATEST(0, CEIL(EXTRACT(EPOCH FROM (d.expires_at - now()))))::integer
+		d.item_id, i.name, COALESCE(ii.quality, i.quality), d.quantity, d.position_x, d.position_z,
+		GREATEST(0, CEIL(EXTRACT(EPOCH FROM (d.expires_at - now()))))::integer,
+		COALESCE(ii.id::text, ''), COALESCE(ii.rolled_stats, '{}'::jsonb), COALESCE(ii.affixes, '[]'::jsonb)
 		FROM ground_drops d
 		JOIN server_registry s ON s.id = d.server_id
 		JOIN item_definitions i ON i.id = d.item_id
+		LEFT JOIN item_instances ii ON ii.id = d.item_instance_id
 		WHERE s.node_key = $1 AND d.status = 'available' AND d.expires_at > now()
 		ORDER BY d.created_at`, nodeKey)
 	if err != nil { return nil, fmt.Errorf("list persisted ground drops: %w", err) }
@@ -190,15 +211,71 @@ func (s *Service) ListGroundDrops(ctx context.Context, nodeKey string) ([]Ground
 	drops := make([]GroundDropSnapshot, 0)
 	for rows.Next() {
 		var drop GroundDropSnapshot
+		var rolledRaw, affixesRaw []byte
 		if err := rows.Scan(&drop.ID, &drop.SessionID, &drop.OwnerCharacterID, &drop.ItemID,
 			&drop.ItemName, &drop.Quality, &drop.Quantity, &drop.PositionX, &drop.PositionZ,
-			&drop.RemainingSeconds); err != nil {
+			&drop.RemainingSeconds, &drop.ItemInstanceID, &rolledRaw, &affixesRaw); err != nil {
 			return nil, fmt.Errorf("scan persisted ground drop: %w", err)
 		}
+		drop.RolledStats = map[string]int{}
+		drop.Affixes = []EquipmentAffix{}
+		if len(rolledRaw)>0 { if err:=json.Unmarshal(rolledRaw,&drop.RolledStats); err!=nil{return nil,fmt.Errorf("decode ground drop stats: %w",err)} }
+		if len(affixesRaw)>0 { if err:=json.Unmarshal(affixesRaw,&drop.Affixes); err!=nil{return nil,fmt.Errorf("decode ground drop affixes: %w",err)} }
 		drops = append(drops, drop)
 	}
 	if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate persisted ground drops: %w", err) }
 	return drops, nil
+}
+
+
+func scanGroundDrop(row interface{ Scan(...any) error }, drop *GroundDrop) error {
+	var statsRaw, affixesRaw []byte
+	if err:=row.Scan(&drop.ID,&drop.ItemID,&drop.Quantity,&drop.PositionX,&drop.PositionZ,&drop.ExpiresAt,
+		&drop.ItemInstanceID,&drop.Quality,&statsRaw,&affixesRaw);err!=nil{return err}
+	drop.RolledStats=map[string]int{};drop.Affixes=[]EquipmentAffix{}
+	if len(statsRaw)>0{if err:=json.Unmarshal(statsRaw,&drop.RolledStats);err!=nil{return fmt.Errorf("decode item instance stats: %w",err)}}
+	if len(affixesRaw)>0{if err:=json.Unmarshal(affixesRaw,&drop.Affixes);err!=nil{return fmt.Errorf("decode item instance affixes: %w",err)}}
+	return nil
+}
+
+func secureRandomInt(max int64)(int64,error){
+	if max<=0{return 0,ErrInvalidRequest}
+	value,err:=rand.Int(rand.Reader,big.NewInt(max));if err!=nil{return 0,fmt.Errorf("generate equipment affix roll: %w",err)}
+	return value.Int64(),nil
+}
+
+func createGroundDropInstance(ctx context.Context,tx *sql.Tx,request DropRequest)(GroundDrop,error){
+	result:=GroundDrop{ID:request.DropID,ItemID:request.ItemID,Quantity:request.Quantity,PositionX:request.PositionX,PositionZ:request.PositionZ,
+		RolledStats:map[string]int{},Affixes:[]EquipmentAffix{}}
+	var itemType,slot string;var quality int
+	if err:=tx.QueryRowContext(ctx,`SELECT item_type,COALESCE(equipment_slot,''),quality FROM item_definitions WHERE id=$1 AND enabled`,request.ItemID).Scan(&itemType,&slot,&quality);err!=nil{
+		if errors.Is(err,sql.ErrNoRows){return GroundDrop{},ErrInvalidRequest};return GroundDrop{},fmt.Errorf("load dropped item type: %w",err)
+	}
+	result.Quality=quality
+	if itemType!="equipment"{return result,nil}
+	rows,err:=tx.QueryContext(ctx,`SELECT id,name,stat_key,min_value,max_value,weight FROM equipment_affix_definitions
+		WHERE enabled AND min_quality<=$1 AND equipment_slot IN ('any',$2) ORDER BY id`,quality,slot)
+	if err!=nil{return GroundDrop{},fmt.Errorf("load equipment affix pool: %w",err)}
+	type candidate struct{id,name,key string;min,max,weight int}
+	pool:=make([]candidate,0)
+	for rows.Next(){var a candidate;if err:=rows.Scan(&a.id,&a.name,&a.key,&a.min,&a.max,&a.weight);err!=nil{rows.Close();return GroundDrop{},fmt.Errorf("scan equipment affix: %w",err)};pool=append(pool,a)}
+	if err:=rows.Err();err!=nil{rows.Close();return GroundDrop{},fmt.Errorf("iterate equipment affixes: %w",err)};rows.Close()
+	rollCount:=1;if quality>=4{rollCount=2}
+	for n:=0;n<rollCount&&len(pool)>0;n++{
+		total:=int64(0);for _,a:=range pool{total+=int64(a.weight)}
+		pick,err:=secureRandomInt(total);if err!=nil{return GroundDrop{},err}
+		chosen:=0;for i,a:=range pool{pick-=int64(a.weight);if pick<0{chosen=i;break}}
+		a:=pool[chosen];v,err:=secureRandomInt(int64(a.max-a.min+1));if err!=nil{return GroundDrop{},err};value:=a.min+int(v)
+		result.Affixes=append(result.Affixes,EquipmentAffix{ID:a.id,Name:a.name,StatKey:a.key,Value:value})
+		result.RolledStats[a.key]+=value
+		pool=append(pool[:chosen],pool[chosen+1:]...)
+	}
+	statsRaw,err:=json.Marshal(result.RolledStats);if err!=nil{return GroundDrop{},fmt.Errorf("encode rolled equipment stats: %w",err)}
+	affixesRaw,err:=json.Marshal(result.Affixes);if err!=nil{return GroundDrop{},fmt.Errorf("encode rolled equipment affixes: %w",err)}
+	if _,err:=tx.ExecContext(ctx,`INSERT INTO item_instances(id,item_id,quality,rolled_stats,affixes) VALUES($1::uuid,$2,$3,$4::jsonb,$5::jsonb)`,
+		request.DropID,request.ItemID,quality,string(statsRaw),string(affixesRaw));err!=nil{return GroundDrop{},fmt.Errorf("persist equipment instance: %w",err)}
+	result.ItemInstanceID=request.DropID
+	return result,nil
 }
 
 func (s *Service) CreateDrop(ctx context.Context, nodeKey string, request DropRequest) (GroundDrop, error) {
@@ -223,23 +300,21 @@ func (s *Service) CreateDrop(ctx context.Context, nodeKey string, request DropRe
 		return GroundDrop{}, fmt.Errorf("load drop item: %w", err)
 	}
 	if request.Quantity > maxStack { return GroundDrop{}, ErrInvalidRequest }
-	// Recover a previously committed drop before checking whether its original
-	// session is still active. This covers a lost HTTP response followed by a
-	// player disconnect; the stable drop ID makes the retry safe.
+	// The drop UUID is also the item-instance UUID, making retries stable.
 	var existing GroundDrop
-	err = tx.QueryRowContext(ctx, `SELECT id::text, item_id, quantity, position_x, position_z, expires_at::text
-		FROM ground_drops
-		WHERE id = $1::uuid AND server_id = $2 AND session_id = $3::uuid
-		  AND owner_character_id = $4::uuid AND item_id = $5 AND quantity = $6
-		  AND position_x = $7 AND position_z = $8 AND status = 'available' AND expires_at > now()`,
-		request.DropID, serverID, request.SessionID, request.CharacterID, request.ItemID,
-		request.Quantity, request.PositionX, request.PositionZ).
-		Scan(&existing.ID, &existing.ItemID, &existing.Quantity, &existing.PositionX, &existing.PositionZ, &existing.ExpiresAt)
+	err = scanGroundDrop(tx.QueryRowContext(ctx, `SELECT d.id::text, d.item_id, d.quantity, d.position_x, d.position_z, d.expires_at::text,
+		COALESCE(ii.id::text, ''), COALESCE(ii.quality, i.quality), COALESCE(ii.rolled_stats, '{}'::jsonb), COALESCE(ii.affixes, '[]'::jsonb)
+		FROM ground_drops d JOIN item_definitions i ON i.id=d.item_id
+		LEFT JOIN item_instances ii ON ii.id=d.item_instance_id
+		WHERE d.id=$1::uuid AND d.server_id=$2 AND d.session_id=$3::uuid
+		  AND d.owner_character_id=$4::uuid AND d.item_id=$5 AND d.quantity=$6
+		  AND d.position_x=$7 AND d.position_z=$8 AND d.status='available' AND d.expires_at>now()`,
+		request.DropID,serverID,request.SessionID,request.CharacterID,request.ItemID,request.Quantity,request.PositionX,request.PositionZ), &existing)
 	if err == nil {
-		if err := tx.Commit(); err != nil { return GroundDrop{}, fmt.Errorf("commit recovered ground drop: %w", err) }
-		return existing, nil
+		if err:=tx.Commit();err!=nil{return GroundDrop{},fmt.Errorf("commit recovered ground drop: %w",err)}
+		return existing,nil
 	}
-	if !errors.Is(err, sql.ErrNoRows) { return GroundDrop{}, fmt.Errorf("recover existing ground drop: %w", err) }
+	if !errors.Is(err,sql.ErrNoRows){return GroundDrop{},fmt.Errorf("recover existing ground drop: %w",err)}
 	var valid bool
 	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (
 		SELECT 1 FROM world_sessions WHERE id = $1::uuid AND server_id = $2 AND character_id = $3::uuid AND session_state = 'active'
@@ -247,28 +322,15 @@ func (s *Service) CreateDrop(ctx context.Context, nodeKey string, request DropRe
 		return GroundDrop{}, fmt.Errorf("verify drop session: %w", err)
 	}
 	if !valid { return GroundDrop{}, ErrSessionInvalid }
-	var result GroundDrop
-	err = tx.QueryRowContext(ctx, `INSERT INTO ground_drops
-		(id, server_id, session_id, owner_character_id, item_id, quantity, position_x, position_z, expires_at)
-		VALUES ($1::uuid, $2, $3::uuid, $4::uuid, $5, $6, $7, $8, now() + INTERVAL '15 minutes')
-		ON CONFLICT (server_id, id) DO NOTHING
-		RETURNING id::text, item_id, quantity, position_x, position_z, expires_at::text`,
-		request.DropID, serverID, request.SessionID, request.CharacterID, request.ItemID, request.Quantity, request.PositionX, request.PositionZ).
-		Scan(&result.ID, &result.ItemID, &result.Quantity, &result.PositionX, &result.PositionZ, &result.ExpiresAt)
-	if errors.Is(err, sql.ErrNoRows) {
-		// A retry after a lost HTTP response must return the same persisted drop,
-		// but reusing an ID with different contents must never mutate it.
-		err = tx.QueryRowContext(ctx, `SELECT id::text, item_id, quantity, position_x, position_z, expires_at::text
-			FROM ground_drops
-			WHERE id = $1::uuid AND server_id = $2 AND session_id = $3::uuid
-			  AND owner_character_id = $4::uuid AND item_id = $5 AND quantity = $6
-			  AND position_x = $7 AND position_z = $8 AND status = 'available' AND expires_at > now()`,
-			request.DropID, serverID, request.SessionID, request.CharacterID, request.ItemID,
-			request.Quantity, request.PositionX, request.PositionZ).
-			Scan(&result.ID, &result.ItemID, &result.Quantity, &result.PositionX, &result.PositionZ, &result.ExpiresAt)
-		if errors.Is(err, sql.ErrNoRows) { return GroundDrop{}, ErrDropUnavailable }
-	}
-	if err != nil { return GroundDrop{}, fmt.Errorf("create or recover ground drop: %w", err) }
+	result,err:=createGroundDropInstance(ctx,tx,request)
+	if err!=nil{return GroundDrop{},err}
+	err=tx.QueryRowContext(ctx,`INSERT INTO ground_drops
+		(id,server_id,session_id,owner_character_id,item_id,item_instance_id,quantity,position_x,position_z,expires_at)
+		VALUES($1::uuid,$2,$3::uuid,$4::uuid,$5,NULLIF($6,'')::uuid,$7,$8,$9,now()+INTERVAL '15 minutes')
+		RETURNING id::text,item_id,quantity,position_x,position_z,expires_at::text`,
+		request.DropID,serverID,request.SessionID,request.CharacterID,request.ItemID,result.ItemInstanceID,
+		request.Quantity,request.PositionX,request.PositionZ).Scan(&result.ID,&result.ItemID,&result.Quantity,&result.PositionX,&result.PositionZ,&result.ExpiresAt)
+	if err!=nil{return GroundDrop{},fmt.Errorf("create ground drop: %w",err)}
 	if err := tx.Commit(); err != nil { return GroundDrop{}, fmt.Errorf("commit ground drop: %w", err) }
 	return result, nil
 }
