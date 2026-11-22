@@ -1498,7 +1498,7 @@ func _training_dummy(center: Vector3) -> void:
 	_box("TrainingDummyTarget", center + Vector3(0, 2.0, 0), Vector3(0.55, 0.55, 0.55), "palace", false)
 
 
-func _market_display_items_for_type(stall_type: String) -> Array[String]:
+func _market_display_items_for_type(stall_type: String) -> Array:
 	match stall_type:
 		"魂珠铺": return ["青魂珠", "紫魂珠", "金魂珠"]
 		"魂籍铺": return ["魂籍卷册", "登记簿"]
