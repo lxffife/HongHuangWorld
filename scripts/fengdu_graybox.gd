@@ -5108,6 +5108,7 @@ func _build_judge_bureau_workbench() -> void:
 	_add_judge_action_button(action_row, "开始复核", _judge_action_begin_review)
 	_add_judge_action_button(action_row, "完成材料复核", _judge_action_complete_review)
 	_add_judge_action_button(action_row, "接纳候审", _judge_action_accept_hearing)
+	_add_judge_action_button(action_row, "传唤涉案人员", _judge_action_summon_parties)
 	_add_judge_action_button(action_row, "开始庭审", _judge_action_begin_hearing)
 	_add_judge_action_button(action_row, "结庭", _judge_action_close_hearing)
 	_add_judge_action_button(action_row, "签发判决", _judge_action_finalize)
@@ -5220,6 +5221,14 @@ func _show_judge_case_detail(incident_id: String) -> void:
 			str(party.get("procedural_status", "notice_pending")),
 			"已记录" if not str(party.get("defense_statement", "")).is_empty() else "未记录"
 		])
+	lines.append("\n[b][color=#a9bdcf]出庭状态[/color][/b]")
+	for attendance_value in get_case_party_attendance(incident_id):
+		var attendance: Dictionary = attendance_value
+		lines.append("• %s — 程序：%s；移动：%s" % [
+			str(attendance.get("display_name", "未知人员")),
+			str(attendance.get("procedural_status", "")),
+			str(attendance.get("attendance_state", "not_summoned"))
+		])
 	lines.append("\n[b][color=#a9bdcf]庭审记录[/color][/b]")
 	lines.append("庭审：%s  |  已出示物证：%d  |  程序记录：%d" % [
 		str(hearing.get("state", "未开庭")),
@@ -5314,6 +5323,19 @@ func _judge_action_accept_hearing() -> void:
 	if judge_selected_incident_id.is_empty():
 		return
 	_run_judge_action(record_judge_bureau_case_disposition(judge_selected_incident_id, "accept_for_hearing"), "案件已接纳候审。")
+
+
+func _judge_action_summon_parties() -> void:
+	if judge_selected_incident_id.is_empty():
+		return
+	var result := summon_case_parties_to_judge_bureau(judge_selected_incident_id)
+	if bool(result.get("ok", false)):
+		_run_judge_action(result, "已发出传唤：%d 人开始沿道路前往候审区；无法移动：%d 人。" % [
+			int(result.get("summoned_count", 0)),
+			int(result.get("unavailable_count", 0))
+		])
+	else:
+		_run_judge_action(result, "")
 
 
 func _judge_action_begin_hearing() -> void:
