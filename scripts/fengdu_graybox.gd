@@ -1369,6 +1369,30 @@ func _market_stall(center: Vector3, facing: float) -> void:
 		for z_side in [-1.0, 1.0]:
 			_box("GhostMarketStallPost", center + Vector3(side * 2.0, 1.55, z_side * 2.0), Vector3(0.22, 3.0, 0.22), "gold", false)
 	_box("GhostMarketStallSign", center + Vector3(facing * 2.15, 2.55, 0), Vector3(0.18, 0.9, 1.6), "gold", false)
+	# Three small display groups sit on the aisle-facing counter; the center aisle remains clear.
+	var counter_front := center + Vector3(facing * 0.85, 1.26, 0)
+	_market_display_orb(counter_front + Vector3(0, 0.22, -1.22), 0.22, Color("#83b9d2"))
+	_market_display_orb(counter_front + Vector3(0, 0.22, 1.22), 0.22, Color("#b99bdc"))
+	_box("GhostMarketScrollDisplay", counter_front + Vector3(0, 0.10, 0), Vector3(0.48, 0.16, 0.78), "gold", false)
+	_box("GhostMarketHerbBundleDisplay", counter_front + Vector3(-facing * 0.30, 0.14, 0.58), Vector3(0.32, 0.22, 0.42), "district", false)
+
+
+func _market_display_orb(position: Vector3, radius: float, tint: Color) -> void:
+	var mesh := SphereMesh.new()
+	mesh.radius = radius
+	mesh.height = radius * 2.0
+	var material := StandardMaterial3D.new()
+	material.albedo_color = tint
+	material.roughness = 0.28
+	material.emission_enabled = true
+	material.emission = tint
+	material.emission_energy_multiplier = 0.7
+	var instance := MeshInstance3D.new()
+	instance.name = "GhostMarketSoulOrbDisplay"
+	instance.mesh = mesh
+	instance.material_override = material
+	instance.position = position
+	add_child(instance)
 
 
 func _soulward_house(center: Vector3, entrance_side: float) -> void:
