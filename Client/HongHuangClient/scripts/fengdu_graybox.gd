@@ -825,12 +825,17 @@ func _advance_npc_behavior(agent: Dictionary, elapsed: float) -> void:
 
 
 func _sync_waystation_call(agent: Dictionary) -> void:
-	# A shared presentation clock keeps the desk guide and front soul in sync.
-	# This is deliberately local-only; a future queue service must own real call state.
+	# Three fixed queue slots are processed front-to-back on a shared local demo clock.
+	# This is presentation-only: the narrow rail/desk geometry is not safe for fake locomotion.
 	var role := str(agent.get("role", ""))
+	var cycle_index := int(npc_simulation_time / 28.0)
 	var call_phase := fposmod(npc_simulation_time, 28.0)
+	var served_count := mini(cycle_index, 3)
+	var active_queue_order := 2 - served_count
 	if bool(agent.get("waystation_desk_guide", false)):
-		if call_phase < 9.0:
+		if served_count >= 3:
+			agent["state"] = "check_ledger"
+		elif call_phase < 9.0:
 			agent["state"] = "check_ledger"
 		elif call_phase < 13.0:
 			agent["state"] = "direct_souls"
@@ -838,12 +843,18 @@ func _sync_waystation_call(agent: Dictionary) -> void:
 			agent["state"] = "registration"
 		else:
 			agent["state"] = "check_ledger"
-	elif role == "waiting_soul" and int(agent.get("queue_order", -1)) == 2:
-		if call_phase >= 9.0 and call_phase < 13.0:
-			agent["state"] = "queue_called"
-		elif call_phase >= 13.0 and call_phase < 16.0:
-			agent["state"] = "queue_glance"
-		else:
+	elif role == "waiting_soul":
+		var queue_order := int(agent.get("queue_order", -1))
+		if queue_order > active_queue_order:
+			agent["state"] = "queue_registered"
+		elif queue_order == active_queue_order:
+			if call_phase < 9.0:
+				agent["state"] = "queue_wait"
+			elif call_phase < 13.0:
+				agent["state"] = "queue_called"
+			elif call_phase < 16.0:
+				agent["state"] = "queue_glance"
+		elif queue_order < active_queue_order:
 			agent["state"] = "queue_wait"
 
 
@@ -918,10 +929,16 @@ func _apply_npc_behavior_pose(agent: Dictionary, phase: float) -> void:
 			left_arm.rotation.z = deg_to_rad(-25.0) + sin(phase * 0.8) * 0.025
 			right_arm.rotation.z = deg_to_rad(34.0) + sin(phase * 1.1) * 0.045
 			body.rotation.x = deg_to_rad(5.0) + absf(sin(phase * 0.7)) * 0.025
+		"queue_registered":
+			# The soul remains in its slot; registration is acknowledged without crossing the rails.
+			root.rotation.y = facing
+			left_arm.rotation.z = deg_to_rad(-12.0)
+			right_arm.rotation.z = deg_to_rad(12.0)
+			body.rotation.x = deg_to_rad(3.0)
 		_:
 			left_arm.rotation.z = deg_to_rad(-18.0)
 			right_arm.rotation.z = deg_to_rad(18.0)
-	if state not in ["arrange_goods", "queue_called"]:
+	if state not in ["arrange_goods", "queue_called", "queue_registered"]:
 		body.rotation.x = 0.0
 
 
@@ -1519,7 +1536,12 @@ func _interact_with_focused_npc() -> void:
 	match str(npc_focus_agent.get("interaction_type", "none")):
 		"trade": message = "%s：鬼市夜市已开。货物、魂钱与交易功能将在商店系统接入后开放。" % npc_name
 		"registration": message = "%s：请准备好魂籍凭证，先登记来处，再按引导前往分流处。" % npc_name
-		"queue_info": message = "%s：请依次候登记，不要越过前方魂灵。" % npc_name
+		"queue_info":
+			var queue_state := str(npc_focus_agent.get("state", "queue_wait"))
+			match queue_state:
+				"queue_registered": message = "%s：魂籍登记已完成，请留在原位等待分流引导（当前为本地演示）。" % npc_name
+				"queue_called", "queue_glance": message = "%s：引魂使正在叫号，请回应并准备登记。" % npc_name
+				_: message = "%s：请依次候登记，不要越过前方魂灵。" % npc_name
 		"dispatch": message = "%s：巡防事务请报明来意。此处暂未开放军令与治安任务。" % npc_name
 		"talk": message = "%s：魂坊今日安宁，若有闲暇，不妨去茶亭坐坐。" % npc_name
 		_: message = "%s 暂无可用交互。" % npc_name
