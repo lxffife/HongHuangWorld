@@ -357,3 +357,26 @@ func TestEquipmentSalvageYieldScalesWithQuality(t *testing.T) {
 		if got!=test.want||valid!=test.valid{t.Fatalf("yield=(%d,%t), want (%d,%t)",got,valid,test.want,test.valid)}
 	})}
 }
+
+func TestEquipmentEnhancementQualityCaps(t *testing.T) {
+	want := []int{0, 3, 5, 8, 10, 12}
+	for quality := 0; quality <= 5; quality++ {
+		if got := enhancementMaxLevel(quality); got != want[quality] {
+			t.Errorf("quality %d cap = %d, want %d", quality, got, want[quality])
+		}
+	}
+}
+
+func TestEquipmentEnhancementCombatBonuses(t *testing.T) {
+	weapon := enhancementStatBonus(4, "weapon")
+	if weapon["attack"] != 8 || len(weapon) != 1 {
+		t.Fatalf("weapon enhancement bonus = %v, want +8 attack", weapon)
+	}
+	armor := enhancementStatBonus(4, "chest")
+	if armor["defense"] != 4 || len(armor) != 1 {
+		t.Fatalf("armor enhancement bonus = %v, want +4 defense", armor)
+	}
+	if len(enhancementStatBonus(0, "weapon")) != 0 {
+		t.Fatal("unenhanced equipment should not add combat bonuses")
+	}
+}
