@@ -16,6 +16,7 @@ CREATE TABLE equipment_enhancement_events (
  equipment_item_id VARCHAR(64) NOT NULL REFERENCES item_definitions(id),
  old_level SMALLINT NOT NULL CHECK (old_level BETWEEN 0 AND 11),
  target_level SMALLINT NOT NULL CHECK (target_level BETWEEN 1 AND 12),
+ equipment_quality SMALLINT NOT NULL CHECK (equipment_quality BETWEEN 1 AND 5),
  material_item_id VARCHAR(64) NOT NULL REFERENCES item_definitions(id),
  material_quantity INTEGER NOT NULL CHECK (material_quantity > 0),
  success_rate_bp INTEGER NOT NULL CHECK (success_rate_bp BETWEEN 0 AND 10000),
