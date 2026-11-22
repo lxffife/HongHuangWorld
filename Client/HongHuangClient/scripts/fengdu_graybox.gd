@@ -840,11 +840,13 @@ func _apply_npc_behavior_pose(agent: Dictionary, phase: float) -> void:
 			left_arm.rotation.z = deg_to_rad(-24.0) + sin(phase * 2.4) * 0.14
 			right_arm.rotation.z = deg_to_rad(24.0) - sin(phase * 2.4) * 0.14
 		"square_chat", "tea_social":
-			root.rotation.y = facing + sin(phase * 0.38) * (0.24 if state == "square_chat" else 0.12)
+			if not bool(agent.get("moving", false)):
+				root.rotation.y = facing + sin(phase * 0.38) * (0.24 if state == "square_chat" else 0.12)
 			left_arm.rotation.z = deg_to_rad(-28.0) + gesture * 0.08
 			right_arm.rotation.z = deg_to_rad(28.0) - sin(phase * 0.85 + 0.7) * 0.09
 		"well_idle", "home_idle":
-			root.rotation.y = facing + sin(phase * 0.2) * 0.1
+			if not bool(agent.get("moving", false)):
+				root.rotation.y = facing + sin(phase * 0.2) * 0.1
 			left_arm.rotation.z = deg_to_rad(-18.0) + gesture * 0.025
 			right_arm.rotation.z = deg_to_rad(18.0) - gesture * 0.025
 		"formation_ready":
@@ -870,7 +872,8 @@ func _apply_npc_behavior_pose(agent: Dictionary, phase: float) -> void:
 			left_arm.rotation.z = deg_to_rad(-28.0) + sin(phase * 2.4) * 0.18
 			right_arm.rotation.z = deg_to_rad(28.0) - sin(phase * 2.4) * 0.18
 		"patrol_watch":
-			root.rotation.y = facing + sin(phase * 0.25) * 0.12
+			if not bool(agent.get("moving", false)):
+				root.rotation.y = facing + sin(phase * 0.25) * 0.12
 		"queue_wait", "queue_glance":
 			root.rotation.y = facing + (sin(phase * 0.28) * 0.08 if state == "queue_glance" else 0.0)
 			left_arm.rotation.z = deg_to_rad(-18.0)
