@@ -39,6 +39,14 @@ int main() {
     assert(staff.range == sword.range);
     assert(focus.range == sword.range);
 
+    // Agility grants 0.1% critical chance per point, capped at 15%.
+    assert(critical_chance_basis_points(0) == 0);
+    assert(critical_chance_basis_points(1) == 10);
+    assert(critical_chance_basis_points(100) == 1000);
+    assert(critical_chance_basis_points(150) == 1500);
+    assert(critical_chance_basis_points(100000) == 1500);
+    assert(critical_chance_basis_points(-10) == 0);
+
     // Agility improves attack cadence by 0.1% per point, with a 20% cap.
     assert(agility_adjusted_attack_cooldown(std::chrono::milliseconds(1000), 0).count() == 1000);
     assert(agility_adjusted_attack_cooldown(std::chrono::milliseconds(1000), 50).count() == 950);
