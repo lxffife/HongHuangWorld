@@ -696,6 +696,8 @@ func _build_npc_population() -> void:
 		agent["importance"] = "critical" if role == "guide" else ("regional" if role in ["merchant", "soldier", "patrol_guard"] else "ambient")
 		agent["root"] = npc_root
 		agent["role"] = role
+		if role == "waiting_soul":
+			agent["queue_order"] = role_index
 		agent["activity"] = str(point["activity"])
 		agent["schedule_tag"] = str(point["schedule_tag"])
 		agent["phase"] = float(npc_agents.size()) * 1.37
@@ -747,6 +749,9 @@ func _initialize_npc_behavior(agent: Dictionary) -> void:
 	var states: Array = _npc_behavior_states(role)
 	if role == "resident" and not bool(agent.get("moving", false)):
 		states = ["tea_social", "well_idle", "home_idle"]
+	elif role == "waiting_soul" and int(agent.get("queue_order", -1)) == 2:
+		# Only the front soul is called forward; no actor crosses the desk or queue rails.
+		states = ["queue_wait", "queue_glance", "queue_called", "queue_wait"]
 	agent["behavior_states"] = states
 	agent["state_cycle_index"] = 0
 	agent["state"] = str(states[0]) if not states.is_empty() else "idle"
@@ -780,6 +785,8 @@ func _npc_behavior_duration(role: String, state: String, phase: float) -> float:
 			base = 6.0
 		"close_shop", "rest", "home_idle":
 			base = 8.0
+		"queue_called":
+			base = 3.8
 		"tea_social", "square_chat", "square_walk", "trade_idle", "drill":
 			base = 5.5
 		"patrol_walk", "patrol_watch":
@@ -880,10 +887,16 @@ func _apply_npc_behavior_pose(agent: Dictionary, phase: float) -> void:
 			root.rotation.y = facing + (sin(phase * 0.28) * 0.08 if state == "queue_glance" else 0.0)
 			left_arm.rotation.z = deg_to_rad(-18.0)
 			right_arm.rotation.z = deg_to_rad(18.0) + sin(phase * 0.4) * 0.035
+		"queue_called":
+			# A restrained acknowledgement gesture keeps the front position clear of the desk.
+			root.rotation.y = facing + sin(phase * 0.45) * 0.035
+			left_arm.rotation.z = deg_to_rad(-25.0) + sin(phase * 0.8) * 0.025
+			right_arm.rotation.z = deg_to_rad(34.0) + sin(phase * 1.1) * 0.045
+			body.rotation.x = deg_to_rad(5.0) + absf(sin(phase * 0.7)) * 0.025
 		_:
 			left_arm.rotation.z = deg_to_rad(-18.0)
 			right_arm.rotation.z = deg_to_rad(18.0)
-	if state != "arrange_goods":
+	if state not in ["arrange_goods", "queue_called"]:
 		body.rotation.x = 0.0
 
 
