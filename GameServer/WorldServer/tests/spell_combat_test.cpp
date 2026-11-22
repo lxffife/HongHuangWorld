@@ -63,7 +63,7 @@ int main() {
     assert(effective_spell_power_basis_points(10000, 0, 1) == 10000);
     assert(effective_spell_power_basis_points(10000, 0, 2) == 10100);
     assert(effective_spell_power_basis_points(10000, 20, 3) == 10710);
-    assert(effective_spell_power_basis_points(12500, 100, 10) == 13625);
+    assert(effective_spell_power_basis_points(12500, 100, 10) == 17031);
     assert(effective_spell_power_basis_points(0, 100, 10) == 0);
     assert(effective_spell_power_basis_points(10000, -1, 99) == 10900);
 
