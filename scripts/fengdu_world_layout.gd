@@ -148,6 +148,80 @@ static func get_wall_merlons() -> Array[Dictionary]:
 	return result
 
 
+
+static func get_npc_activity_points() -> Array[Dictionary]:
+	# Stable prototype placements; renderers may replace these coordinates after terrain sampling.
+	var points: Array[Dictionary] = []
+	var market_positions := [
+		Vector3(44.5, 0, -59.5), Vector3(44.5, 0, -53.0),
+		Vector3(65.5, 0, -53.0), Vector3(65.5, 0, -46.5),
+		Vector3(55.0, 0, -63.0), Vector3(55.0, 0, -48.0)
+	]
+	for i in range(market_positions.size()):
+		points.append(_npc_point("ghost_market.merchant.%02d" % (i + 1), "万魂鬼市", "merchant", "trade_idle", market_positions[i], PI * 0.5 if i % 2 == 0 else -PI * 0.5, "night", 1, 1.4))
+	var soulward_positions := [
+		Vector3(-59, 0, -55), Vector3(-51, 0, -55),
+		Vector3(-59, 0, -50), Vector3(-51, 0, -50),
+		Vector3(-55, 0, -42.5)
+	]
+	var resident_routines := ["square_walk", "carry_goods", "well_idle", "home_idle", "tea_social"]
+	for i in range(soulward_positions.size()):
+		var point := _npc_point("soul_ward.resident.%02d" % (i + 1), "万家魂坊", "resident", "social_idle", soulward_positions[i], atan2(-(Vector3(-55, 0, -53) - soulward_positions[i]).x, -(Vector3(-55, 0, -53) - soulward_positions[i]).z), "day_night", 1, 1.4)
+		point["resident_activity"] = resident_routines[i]
+		if i < 2:
+			point["waypoints"] = [Vector3(-59, 0, -55), Vector3(-51, 0, -55), Vector3(-51, 0, -50), Vector3(-59, 0, -50)]
+		points.append(point)
+	var soldier_positions := [Vector3(-80, 0, -5.5), Vector3(-74, 0, -5.5), Vector3(-80, 0, 2), Vector3(-74, 0, 2), Vector3(-77, 0, 7)]
+	for i in range(soldier_positions.size()):
+		points.append(_npc_point("barracks.soldier.%02d" % (i + 1), "阴兵大营", "soldier", "drill", soldier_positions[i], -PI * 0.5, "always", 1, 1.4))
+	var guide_positions := [Vector3(75, 0, -9), Vector3(79, 0, -9), Vector3(75, 0, 3), Vector3(79, 0, 3), Vector3(77, 0, 8.5)]
+	for i in range(guide_positions.size()):
+		points.append(_npc_point("waystation.guide.%02d" % (i + 1), "引魂驿站", "guide", "registration", guide_positions[i], PI * 0.5, "always", 1, 1.4))
+	var patrol_positions := [Vector3(-7, 0, 12), Vector3(7, 0, 12), Vector3(0, 0, 3), Vector3(0, 0, 15)]
+	for i in range(patrol_positions.size()):
+		points.append(_npc_point("patrol_office.guard.%02d" % (i + 1), "巡城司", "patrol_guard", "patrol_watch", patrol_positions[i], PI if i % 2 == 0 else 0.0, "always", 1, 1.4))
+	var queue_positions := [Vector3(77, 0, -6), Vector3(77, 0, -3.5), Vector3(77, 0, -1)]
+	for i in range(queue_positions.size()):
+		points.append(_npc_point("waystation.waiting_soul.%02d" % (i + 1), "引魂驿站", "waiting_soul", "queue_wait", queue_positions[i], PI, "always", 1, 0.8))
+	return points
+
+
+static func get_patrol_routes() -> Array[Dictionary]:
+	var node_positions := [
+		Vector3(0, 0, 12), Vector3(0, 0, 32), Vector3(0, 0, 78),
+		Vector3(34, 0, 78), Vector3(34, 0, 32), Vector3(34, 0, -32),
+		Vector3(34, 0, -78), Vector3(0, 0, -78), Vector3(-34, 0, -78),
+		Vector3(-34, 0, -32), Vector3(-34, 0, 32), Vector3(-34, 0, 78),
+		Vector3(0, 0, 78), Vector3(0, 0, 32), Vector3(0, 0, 12)
+	]
+	var node_ids: Array[String] = []
+	for i in range(node_positions.size()):
+		node_ids.append("patrol.route.node.%02d" % (i + 1))
+	return [{
+		"route_id": "fengdu.patrol.perimeter_loop",
+		"district": "巡城司",
+		"role": "patrol_guard",
+		"node_ids": node_ids,
+		"nodes": node_positions,
+		"schedule_tag": "night",
+		"client_visual_only": true
+	}]
+
+
+static func _npc_point(point_id: String, district: String, role: String, activity: String, position: Vector3, facing: float, schedule_tag: String, capacity: int, radius: float) -> Dictionary:
+	return {
+		"point_id": point_id,
+		"district": district,
+		"role": role,
+		"activity": activity,
+		"position": position,
+		"facing": facing,
+		"schedule_tag": schedule_tag,
+		"capacity": capacity,
+		"radius": radius
+	}
+
+
 static func get_districts() -> Array[Dictionary]:
 	return [
 		{"id": "soul_ward", "name": "万家魂坊", "center": Vector3(-55, 0, -53), "footprint": Vector2(34, 26), "subtitle": "居住 · 工匠 · 社区", "building_count": 5, "accent": "#a9b9c4"},
