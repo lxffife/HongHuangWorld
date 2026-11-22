@@ -698,7 +698,7 @@ func _build_npc_population() -> void:
 		add_child(patrol_root)
 		var patrol_agent := _create_npc_figure(patrol_root, "patrol_guard")
 		patrol_agent["npc_id"] = "patrol.guard.walker.01"
-		patrol_agent["display_name"] = "巡城卫·陈肃"
+		patrol_agent["display_name"] = "巡城卫·巡夜"
 		patrol_agent["district"] = "巡城司"
 		patrol_agent["interaction_type"] = "dispatch"
 		patrol_agent["importance"] = "regional"
