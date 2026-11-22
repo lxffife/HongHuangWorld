@@ -15,7 +15,7 @@ var camera: Camera3D
 var camera_pitch := deg_to_rad(-18.0)
 var mouse_captured := false
 var status_label: Label
-var district_markers: Dictionary = {}
+var district_markers: Dictionary = {}\nvar npc_spawn_points: Dictionary = {}
 
 var mats: Dictionary = {}
 
@@ -310,20 +310,22 @@ func _district(title: String, center: Vector3, footprint: Vector2, subtitle: Str
 	var base_size := Vector3(footprint.x, 0.45, footprint.y)
 	_box(title + "Foundation", center + Vector3(0, 0.22, 0), base_size, "district", false)
 	_build_district_compound(title, center, footprint)
-	var count := maxi(building_count, 1)
-	var columns := ceili(sqrt(float(count)))
-	for i in range(count):
-		var col := i % columns
-		var row := i / columns
-		var spacing_x := footprint.x / float(columns + 1)
-		var spacing_z := footprint.y / float(columns + 1)
-		var pos := center + Vector3((float(col) - float(columns - 1) * 0.5) * spacing_x, 0, (float(row) - float(columns - 1) * 0.5) * spacing_z)
-		var scale_factor := 1.0 if i == 0 else 0.68
-		var w := (5.0 if i == 0 else 3.8) * scale_factor
-		var h := (7.0 if i == 0 else 4.5) * scale_factor
-		_box(title + "Hall", pos + Vector3(0, h * 0.5, 0), Vector3(w, h, w * 0.8), "palace", true)
-		_roof_tier(pos + Vector3(0, h + 0.7, 0), w * 1.45, 2.2)
-		_box(title + "Sign", pos + Vector3(0, h + 3.0, 0), Vector3(0.24, 1.0, 0.24), "gold", false)
+	# Market and residential quarters use their own spatial layouts instead of generic bureau halls.
+	if title != "万魂鬼市" and title != "万家魂坊":
+		var count := maxi(building_count, 1)
+		var columns := ceili(sqrt(float(count)))
+		for i in range(count):
+			var col := i % columns
+			var row := i / columns
+			var spacing_x := footprint.x / float(columns + 1)
+			var spacing_z := footprint.y / float(columns + 1)
+			var pos := center + Vector3((float(col) - float(columns - 1) * 0.5) * spacing_x, 0, (float(row) - float(columns - 1) * 0.5) * spacing_z)
+			var scale_factor := 1.0 if i == 0 else 0.68
+			var w := (5.0 if i == 0 else 3.8) * scale_factor
+			var h := (7.0 if i == 0 else 4.5) * scale_factor
+			_box(title + "Hall", pos + Vector3(0, h * 0.5, 0), Vector3(w, h, w * 0.8), "palace", true)
+			_roof_tier(pos + Vector3(0, h + 0.7, 0), w * 1.45, 2.2)
+			_box(title + "Sign", pos + Vector3(0, h + 3.0, 0), Vector3(0.24, 1.0, 0.24), "gold", false)
 	_build_district_landmark(title, center, footprint)
 	_label(title, center + Vector3(0, 13, 0), 26, accent)
 	_label(subtitle, center + Vector3(0, 10.5, 0), 15, Color("#d2d6dc"))
@@ -389,18 +391,50 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 			_roof_tier(center + Vector3(0, 12.0, 4.0), 21.0, 3.5)
 			_box("ReincarnationThreshold", center + Vector3(0, 0.22, 4.0), Vector3(17.0, 0.44, 2.5), "gold", false)
 		"万魂鬼市":
-			# Dense low stalls contrast with the formal government compounds.
-			for x in [-10.0, -5.0, 5.0, 10.0]:
-				for z in [-7.0, 7.0]:
-					_box("GhostMarketStall", center + Vector3(x, 1.6, z), Vector3(3.6, 3.2, 3.2), "palace", false)
-					_roof_tier(center + Vector3(x, 3.7, z), 4.6, 1.4)
+			# A broad central trading aisle runs from the southern compound gate to the auction dais.
+			_box("GhostMarketMainAisle", center + Vector3(0, 0.12, 0), Vector3(9.0, 0.18, 21.0), "road_edge", false)
+			_box("GhostMarketAuctionDais", center + Vector3(0, 0.55, 8.0), Vector3(7.0, 1.1, 4.5), "dark_stone", false)
+			_box("GhostMarketAuctionDesk", center + Vector3(0, 1.45, 8.0), Vector3(4.2, 0.7, 1.2), "gold", false)
+			_roof_tier(center + Vector3(0, 3.1, 8.0), 8.0, 2.0)
+			for side in [-1.0, 1.0]:
+				for z in [-6.5, 0.0, 6.5]:
+					_market_stall(center + Vector3(side * 10.5, 0, z), -side)
+				_box("GhostMarketBackLane", center + Vector3(side * 15.0, 0.08, 0), Vector3(2.0, 0.16, 20.0), "bridge", false)
+			_notice_board(center + Vector3(-5.5, 0, -9.5), "鬼市告示")
+			_notice_board(center + Vector3(5.5, 0, -9.5), "悬赏榜")
+			for z in [-8.0, 0.0, 8.0]:
+				_hanging_lantern(center + Vector3(-4.5, 0, z))
+				_hanging_lantern(center + Vector3(4.5, 0, z))
+			npc_spawn_points["万魂鬼市"] = [
+				center + Vector3(-10.5, 0, -6.5), center + Vector3(-10.5, 0, 0),
+				center + Vector3(10.5, 0, 0), center + Vector3(10.5, 0, 6.5),
+				center + Vector3(0, 0, -10.0), center + Vector3(0, 0, 5.0)
+			]
 		"万家魂坊":
-			# Small domestic courtyards, low walls and compact tiled houses.
-			for x in [-10.0, 0.0, 10.0]:
-				for z in [-6.0, 6.0]:
-					_box("SoulWardHouse", center + Vector3(x, 2.0, z), Vector3(5.0, 4.0, 4.5), "stone", false)
-					_roof_tier(center + Vector3(x, 4.6, z), 6.0, 1.6)
-					_box("SoulWardCourtyardWall", center + Vector3(x + 3.2, 0.9, z), Vector3(0.35, 1.8, 5.5), "dark_stone", false)
+			# Four irregular family courtyards leave a shared lane and a public gathering square.
+			for data in [
+				{"offset": Vector3(-10.0, 0, -6.0), "turn": -1.0},
+				{"offset": Vector3(10.0, 0, -6.0), "turn": 1.0},
+				{"offset": Vector3(-10.0, 0, 7.0), "turn": 1.0},
+				{"offset": Vector3(10.0, 0, 7.0), "turn": -1.0}
+			]:
+				_soulward_house(center + data["offset"], float(data["turn"]))
+			_box("SoulWardCommonSquare", center + Vector3(0, 0.12, 0), Vector3(9.0, 0.18, 8.0), "road_edge", false)
+			_box("SoulWardOldWellRim", center + Vector3(0, 0.65, 0), Vector3(1.8, 1.3, 1.8), "stone", false)
+			_box("SoulWardWellOpening", center + Vector3(0, 1.32, 0), Vector3(0.9, 0.08, 0.9), "dark_stone", false)
+			# A small tea pavilion is the neighborhood's social anchor, not a blocking building.
+			_box("SoulWardTeaPavilionFloor", center + Vector3(0, 0.3, 8.5), Vector3(7.0, 0.6, 4.0), "stone", false)
+			for x in [-3.0, 3.0]:
+				for z in [7.0, 10.0]:
+					_box("SoulWardTeaPavilionPost", center + Vector3(x, 2.0, z), Vector3(0.35, 3.4, 0.35), "gold", false)
+			_roof_tier(center + Vector3(0, 4.0, 8.5), 9.0, 2.0)
+			_hanging_lantern(center + Vector3(-3.2, 0, 4.5))
+			_hanging_lantern(center + Vector3(3.2, 0, 4.5))
+			npc_spawn_points["万家魂坊"] = [
+				center + Vector3(-4.0, 0, -2.0), center + Vector3(4.0, 0, -2.0),
+				center + Vector3(-4.0, 0, 3.0), center + Vector3(4.0, 0, 3.0),
+				center + Vector3(0, 0, 10.5)
+			]
 		"阴兵大营":
 			# Barracks and watch posts use a strict military rhythm.
 			for side in [-1.0, 1.0]:
@@ -419,6 +453,40 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 			# A watchtower and signal platform dominate the patrol headquarters.
 			_box("PatrolSignalTower", center + Vector3(0, 7.0, 3.0), Vector3(5.0, 14.0, 5.0), "dark_stone", false)
 			_roof_tier(center + Vector3(0, 14.5, 3.0), 7.0, 2.2)
+
+
+func _market_stall(center: Vector3, facing: float) -> void:
+	# Stall front faces the central aisle; rear stock remains tucked against the compound edge.
+	_box("GhostMarketStallCounter", center + Vector3(facing * 0.85, 0.72, 0), Vector3(1.25, 1.05, 3.8), "palace", false)
+	_box("GhostMarketStallStock", center + Vector3(-facing * 0.9, 1.05, 0), Vector3(1.7, 2.1, 3.8), "dark_stone", false)
+	_box("GhostMarketStallAwning", center + Vector3(0, 3.0, 0), Vector3(4.8, 0.28, 4.8), "roof", false)
+	for side in [-1.0, 1.0]:
+		for z_side in [-1.0, 1.0]:
+			_box("GhostMarketStallPost", center + Vector3(side * 2.0, 1.55, z_side * 2.0), Vector3(0.22, 3.0, 0.22), "gold", false)
+	_box("GhostMarketStallSign", center + Vector3(facing * 2.15, 2.55, 0), Vector3(0.18, 0.9, 1.6), "gold", false)
+
+
+func _soulward_house(center: Vector3, entrance_side: float) -> void:
+	_box("SoulWardHouseBody", center + Vector3(0, 2.0, 0), Vector3(5.6, 4.0, 4.8), "stone", false)
+	_roof_tier(center + Vector3(0, 4.6, 0), 7.0, 1.8)
+	# Three low courtyard walls leave a deliberate doorway toward the shared lane.
+	_box("SoulWardCourtyardSideWall", center + Vector3(-3.8, 0.9, 0), Vector3(0.4, 1.8, 7.2), "dark_stone", false)
+	_box("SoulWardCourtyardSideWall", center + Vector3(3.8, 0.9, 0), Vector3(0.4, 1.8, 7.2), "dark_stone", false)
+	_box("SoulWardCourtyardRearWall", center + Vector3(0, 0.9, 3.6), Vector3(7.6, 1.8, 0.4), "dark_stone", false)
+	_box("SoulWardDoorPost", center + Vector3(entrance_side * 3.8, 1.1, -3.0), Vector3(0.45, 2.2, 0.45), "gold", false)
+	_box("SoulWardHouseStep", center + Vector3(0, 0.18, -2.7), Vector3(2.2, 0.36, 1.0), "road_edge", false)
+
+
+func _notice_board(center: Vector3, board_title: String) -> void:
+	_box("DistrictNoticeBoardPost", center + Vector3(0, 1.35, 0), Vector3(0.24, 2.7, 0.24), "gold", false)
+	_box("DistrictNoticeBoard", center + Vector3(0, 2.25, 0), Vector3(2.2, 1.5, 0.24), "palace", false)
+	_label(board_title, center + Vector3(0, 3.25, 0), 14, Color("#e7c995"))
+
+
+func _hanging_lantern(center: Vector3) -> void:
+	_box("DistrictLanternStem", center + Vector3(0, 3.4, 0), Vector3(0.16, 1.2, 0.16), "gold", false)
+	_box("DistrictHangingLantern", center + Vector3(0, 2.55, 0), Vector3(0.85, 0.95, 0.85), "lantern", false)
+	_box("DistrictLanternCap", center + Vector3(0, 3.12, 0), Vector3(1.1, 0.18, 1.1), "roof", false)
 
 
 func _build_palace_axis() -> void:
