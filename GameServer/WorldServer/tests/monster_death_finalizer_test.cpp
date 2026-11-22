@@ -1,4 +1,5 @@
 #include "persistence/monster_death_finalizer.hpp"
+#include "persistence/monster_reward_distribution.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -9,7 +10,56 @@
 
 using namespace std::chrono_literals;
 
+void test_monster_combat_reward_distribution() {
+    using honghuang::persistence::MonsterContributionRecord;
+    using honghuang::persistence::allocate_monster_combat_rewards;
+
+    std::vector<MonsterContributionRecord> records(3);
+    records[0].session_id = "session-a";
+    records[0].character_id = "character-a";
+    records[0].total_damage = 60;
+    records[0].hit_count = 3;
+    records[1].session_id = "session-b";
+    records[1].character_id = "character-b";
+    records[1].total_damage = 30;
+    records[1].hit_count = 2;
+    records[2].session_id = "session-c";
+    records[2].character_id = "character-c";
+    records[2].total_damage = 10;
+    records[2].hit_count = 1;
+
+    const auto shares = allocate_monster_combat_rewards(records, 120, 60);
+    assert(shares.size() == 3);
+    assert(shares[0].character_id == "character-a");
+    assert(shares[0].experience == 72 && shares[0].cultivation == 36);
+    assert(shares[1].experience == 36 && shares[1].cultivation == 18);
+    assert(shares[2].experience == 12 && shares[2].cultivation == 6);
+    std::int64_t experience_sum = 0;
+    std::int64_t cultivation_sum = 0;
+    for (const auto& share : shares) {
+        experience_sum += share.experience;
+        cultivation_sum += share.cultivation;
+    }
+    assert(experience_sum == 120);
+    assert(cultivation_sum == 60);
+
+    records[0].total_damage = 1;
+    records[1].total_damage = 1;
+    records[2].total_damage = 1;
+    const auto rounded = allocate_monster_combat_rewards(records, 20, 10);
+    assert(rounded.size() == 3);
+    assert(rounded[0].experience == 7 && rounded[1].experience == 7 && rounded[2].experience == 6);
+    assert(rounded[0].cultivation == 4 && rounded[1].cultivation == 3 && rounded[2].cultivation == 3);
+
+    records[0].session_id.clear();
+    records[1].total_damage = 0;
+    records[2].hit_count = 0;
+    assert(allocate_monster_combat_rewards(records, 20, 10).empty());
+    assert(allocate_monster_combat_rewards(records, 0, 0).empty());
+}
+
 int main() {
+    test_monster_combat_reward_distribution();
     const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
     const auto path = std::filesystem::temp_directory_path() /
         ("hh_monster_death_finalizer_" + std::to_string(stamp) + ".sqlite");
