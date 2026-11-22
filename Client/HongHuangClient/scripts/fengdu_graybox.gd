@@ -693,7 +693,7 @@ func _build_npc_population() -> void:
 		agent["display_name"] = _npc_display_name(role, role_index)
 		agent["district"] = str(point["district"])
 		agent["interaction_type"] = _interaction_type_for_role(role)
-		agent["importance"] = "critical" if role == "guide" else ("regional" if role in ["merchant", "soldier", "patrol_guard"] else "ambient"
+		agent["importance"] = "critical" if role == "guide" else ("regional" if role in ["merchant", "soldier", "patrol_guard"] else "ambient")
 		agent["root"] = npc_root
 		agent["role"] = role
 		agent["activity"] = str(point["activity"])
