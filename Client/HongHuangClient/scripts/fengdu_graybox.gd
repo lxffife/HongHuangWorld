@@ -223,10 +223,8 @@ func _build_outer_landscape() -> void:
 		_box("DistantMountainRidge", center + Vector3(0, 19, 0), Vector3(width * 0.68, 12, width * 0.55), "stone", false)
 		_box("DistantMountainPeak", center + Vector3(0, 29, 0), Vector3(width * 0.36, 10, width * 0.3), "dark_stone", false)
 	# Four processional causeways extend beyond the moat toward the outer roads.
-	_box("NorthApproachRoad", Vector3(0, 0.02, 151), Vector3(11, 0.12, 72), "road", false)
-	_box("SouthApproachRoad", Vector3(0, 0.02, -151), Vector3(11, 0.12, 72), "road", false)
-	_box("EastApproachRoad", Vector3(151, 0.02, 0), Vector3(72, 0.12, 11), "road", false)
-	_box("WestApproachRoad", Vector3(-151, 0.02, 0), Vector3(72, 0.12, 11), "road", false)
+	for road_data in WORLD_LAYOUT.get_approach_roads():
+		_box(str(road_data.get("id", "ApproachRoad")), road_data.get("center", Vector3.ZERO), road_data.get("size", Vector3.ONE), str(road_data.get("surface", "road")), false)
 
 
 func _build_street_furnishings() -> void:
@@ -257,21 +255,9 @@ func _lantern_post(position: Vector3) -> void:
 
 func _build_ground_and_roads() -> void:
 	_box("CityGround", Vector3(0, -0.55, 0), Vector3(600, 1, 600), "ground", true)
-	# Tier 1: ceremonial north-south and east-west axes.
-	_box("NorthSouthMainRoad", Vector3(0, 0.03, 0), Vector3(13, 0.12, 190), "road", false)
-	_box("EastWestMainRoad", Vector3(0, 0.04, 0), Vector3(190, 0.12, 13), "road", false)
-	_box("CentralProcessionalWay", Vector3(0, 0.06, 38), Vector3(20, 0.14, 100), "road_edge", false)
-	# Tier 2: district distributors. Their alignment follows the compound edges.
-	for x in [-34.0, 34.0]:
-		_box("DistrictNorthSouthStreet", Vector3(x, 0.025, 0), Vector3(6.0, 0.1, 176.0), "road", false)
-	for z in [-32.0, 32.0]:
-		_box("DistrictCrossStreet", Vector3(0, 0.035, z), Vector3(176.0, 0.1, 6.0), "road", false)
-	# Tier 3: quieter perimeter lanes connecting the residential and service quarters.
-	for z in [-78.0, 78.0]:
-		_box("PerimeterLane", Vector3(0, 0.02, z), Vector3(160.0, 0.08, 4.0), "bridge", false)
-	# Palace approach remains a pedestrian-scale pair of parallel stone paths.
-	for x in [-27.0, 27.0]:
-		_box("PalaceApproach", Vector3(x, 0.035, 34), Vector3(5, 0.1, 90), "road", false)
+	# Road geometry is generated from stable layout records, not embedded in this scene adapter.
+	for road_data in WORLD_LAYOUT.get_roads():
+		_box(str(road_data.get("id", "Road")), road_data.get("center", Vector3.ZERO), road_data.get("size", Vector3.ONE), str(road_data.get("surface", "road")), false)
 
 
 func _build_moat_and_bridges() -> void:
