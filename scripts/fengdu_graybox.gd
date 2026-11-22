@@ -745,6 +745,8 @@ func _build_npc_population() -> void:
 func _initialize_npc_behavior(agent: Dictionary) -> void:
 	var role := str(agent.get("role", ""))
 	var states: Array = _npc_behavior_states(role)
+	if role == "resident" and not bool(agent.get("moving", false)):
+		states = ["tea_social", "well_idle", "home_idle"]
 	agent["behavior_states"] = states
 	agent["state_cycle_index"] = 0
 	agent["state"] = str(states[0]) if not states.is_empty() else "idle"
