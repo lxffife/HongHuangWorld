@@ -12,7 +12,7 @@ const MOUSE_SENSITIVITY := 0.0025
 const NPC_DAY_SECONDS_PER_MINUTE := 1.0
 const NPC_NEAR_UPDATE_DISTANCE := 60.0
 const NPC_FAR_UPDATE_DISTANCE := 110.0
-const NPC_REGION_CULL_DISTANCE := 220.0
+const NPC_VERY_FAR_DISTANCE := 220.0
 
 var player: CharacterBody3D
 var camera: Camera3D
@@ -764,7 +764,7 @@ func _npc_lod_interval(agent: Dictionary, distance_to_player: float, region_lod:
 	match str(agent.get("importance", "ambient")):
 		"critical": interval *= 0.5
 		"ambient": interval *= 1.5
-	if distance_to_player > NPC_REGION_CULL_DISTANCE:
+	if distance_to_player > NPC_VERY_FAR_DISTANCE:
 		interval = maxf(interval, 1.2)
 	return interval
 
