@@ -446,6 +446,7 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 			_market_wayfinding(center)
 			for side in [-1.0, 1.0]:
 				_market_audience_bench(center + Vector3(side * 6.25, 0, 7.6), -side)
+				_market_auction_pedestal(center + Vector3(side * 4.95, 0, 7.8), Color("#d9b879") if side < 0.0 else Color("#83c7e4"))
 			for z in [-8.0, 0.0, 8.0]:
 				_hanging_lantern(center + Vector3(-4.5, 0, z))
 				_hanging_lantern(center + Vector3(4.5, 0, z))
@@ -1542,6 +1543,13 @@ func _market_audience_bench(center: Vector3, facing: float) -> void:
 		_box("GhostMarketAudienceSupport", center + Vector3(0.0, 0.35, z_offset), Vector3(1.1, 0.7, 0.24), "stone", false)
 	_box("GhostMarketAudienceFootRail", center + Vector3(facing * 0.58, 0.2, 0.0), Vector3(0.16, 0.16, 3.5), "roof_edge", false)
 
+
+func _market_auction_pedestal(center: Vector3, accent: Color) -> void:
+	# Paired low-poly standards frame the dais without narrowing the walkable aisle.
+	_box("GhostMarketAuctionPedestalBase", center + Vector3(0.0, 0.28, 0.0), Vector3(0.72, 0.56, 0.72), "dark_stone", false)
+	_box("GhostMarketAuctionPedestalShaft", center + Vector3(0.0, 1.0, 0.0), Vector3(0.38, 1.0, 0.38), "gold", false)
+	_box("GhostMarketAuctionPedestalCap", center + Vector3(0.0, 1.58, 0.0), Vector3(0.82, 0.2, 0.82), "roof_edge", false)
+	_market_display_orb(center + Vector3(0.0, 1.92, 0.0), 0.18, accent)
 
 func _market_wayfinding(center: Vector3) -> void:
 	# Ground inlays guide visitors from the southern gate toward the auction.
