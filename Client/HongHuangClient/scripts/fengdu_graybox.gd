@@ -3738,6 +3738,7 @@ func submit_patrol_case_to_judge_bureau(incident_id: String) -> Dictionary:
 		required_material.append("建议补充第二件独立物证")
 	if not enough_material:
 		record["case_workflow_state"] = "returned_for_supplement"
+		record["case_returned_at"] = npc_simulation_time
 		record["case_return_reason"] = "卷宗材料不足，暂不具备移交条件"
 		record["case_required_material"] = required_material
 		_append_incident_timeline_entry(record, "case_returned", "卷宗退回巡城司：材料不足，需补充调查", "judge_bureau")
@@ -3945,6 +3946,7 @@ func record_judge_bureau_case_disposition(incident_id: String, disposition: Stri
 	if disposition == "request_supplement":
 		record["case_workflow_state"] = "returned_for_supplement"
 		record["judge_review_state"] = "supplement_requested"
+		record["case_returned_at"] = npc_simulation_time
 		record["case_return_reason"] = "判官司要求补充调查材料"
 		_append_incident_timeline_entry(record, "supplement_requested", "判官司退回补充调查，尚未作出实体判决", "judge_bureau")
 	else:
@@ -3963,6 +3965,53 @@ func record_judge_bureau_case_disposition(incident_id: String, disposition: Stri
 		"judge_review_state": str(record.get("judge_review_state", "")),
 		"judicial_conclusion": "not_determined"
 	}
+
+
+func get_judge_bureau_case_queue() -> Array[Dictionary]:
+	var queue: Array[Dictionary] = []
+	for record_value in patrol_incident_records:
+		var record: Dictionary = record_value
+		var workflow_state := str(record.get("case_workflow_state", ""))
+		if workflow_state not in ["transferred_to_judge_bureau", "under_judicial_review", "hearing_pending"]:
+			continue
+		var submission: Dictionary = record.get("case_submission", {})
+		queue.append({
+			"incident_id": str(record.get("incident_id", "")),
+			"title": str(record.get("title", "巡防案件")),
+			"severity": str(record.get("severity_label", "一般")),
+			"workflow_state": workflow_state,
+			"review_state": str(record.get("judge_review_state", "pending")),
+			"submitted_at": float(submission.get("submitted_at", -1.0)),
+			"evidence_count": int(submission.get("evidence_count", 0)),
+			"witness_count": int(submission.get("witness_count", 0)),
+			"testimony_conflict": bool(submission.get("testimony_conflict", false)),
+			"deduction_label": str(submission.get("deduction_label", "尚无推断"))
+		})
+	queue.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a.get("submitted_at", 0.0)) < float(b.get("submitted_at", 0.0))
+	)
+	return queue
+
+
+func get_patrol_case_supplement_queue() -> Array[Dictionary]:
+	var queue: Array[Dictionary] = []
+	for record_value in patrol_incident_records:
+		var record: Dictionary = record_value
+		if str(record.get("case_workflow_state", "")) != "returned_for_supplement":
+			continue
+		queue.append({
+			"incident_id": str(record.get("incident_id", "")),
+			"title": str(record.get("title", "巡防案件")),
+			"return_reason": str(record.get("case_return_reason", "")),
+			"required_material": record.get("case_required_material", []).duplicate(),
+			"evidence_count": int(record.get("player_evidence_count", 0)),
+			"witness_count": int(record.get("player_witness_count", 0)),
+			"returned_at": float(record.get("case_returned_at", -1.0))
+		})
+	queue.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a.get("returned_at", 0.0)) < float(b.get("returned_at", 0.0))
+	)
+	return queue
 
 
 func get_patrol_case_dossier(incident_id: String) -> Dictionary:
