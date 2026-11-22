@@ -164,6 +164,30 @@ func (s *Service) ListLootTable(ctx context.Context) ([]LootEntry, error) {
 	return entries, nil
 }
 
+type InventoryCapacity struct {
+	UsedSlots int `json:"used_slots"`
+	MaxSlots int `json:"max_slots"`
+	FreeSlots int `json:"free_slots"`
+}
+
+func inventorySlotAvailable(usedSlots,maxSlots int,needsNewSlot bool)bool{
+	return usedSlots>=0&&maxSlots>=1&&(!needsNewSlot||usedSlots<maxSlots)
+}
+
+func (s *Service) CurrentCapacity(ctx context.Context,accountID string)(InventoryCapacity,error){
+	var result InventoryCapacity
+	err:=s.db.QueryRowContext(ctx,`SELECT
+		(SELECT count(*) FROM character_inventory ci WHERE ci.character_id=c.id)+
+		(SELECT count(*) FROM character_item_instances ii WHERE ii.character_id=c.id),
+		COALESCE((SELECT cap.max_slots FROM character_inventory_capacity cap WHERE cap.character_id=c.id),40)
+		FROM souls soul JOIN characters c ON c.id=soul.current_character_id
+		WHERE soul.account_id=$1 AND c.status='alive'`,accountID).Scan(&result.UsedSlots,&result.MaxSlots)
+	if errors.Is(err,sql.ErrNoRows){return InventoryCapacity{},ErrInvalidRequest}
+	if err!=nil{return InventoryCapacity{},fmt.Errorf("load current inventory capacity: %w",err)}
+	result.FreeSlots=max(0,result.MaxSlots-result.UsedSlots)
+	return result,nil
+}
+
 func (s *Service) CurrentInventory(ctx context.Context, accountID string) ([]ItemStack, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT i.id, i.name, i.category, i.quality, ci.quantity, i.max_stack, i.icon_key, i.description, i.item_type, COALESCE(i.equipment_slot, ''), COALESCE(i.weapon_type, ''), i.base_stats, COALESCE(es.id, ''), COALESCE(es.name, ''), COALESCE(es.description, ''), COALESCE(es.bonus_tiers, '{}'::jsonb)
 		FROM souls soul
@@ -421,13 +445,21 @@ func (s *Service) PickupDrop(ctx context.Context, nodeKey string, request Pickup
 		if err := tx.Commit(); err != nil { return Result{}, fmt.Errorf("commit duplicate pickup: %w", err) }
 		return Result{Applied: false}, nil
 	}
-	var validSession bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (
-		SELECT 1 FROM world_sessions WHERE id = $1::uuid AND server_id = $2 AND character_id = $3::uuid AND session_state = 'active'
-	)`, request.SessionID, serverID, request.CharacterID).Scan(&validSession); err != nil {
-		return Result{}, fmt.Errorf("verify pickup session: %w", err)
-	}
-	if !validSession { return Result{}, ErrSessionInvalid }
+	var lockedCharacter string
+	err=tx.QueryRowContext(ctx,`SELECT c.id::text FROM world_sessions ws
+		JOIN characters c ON c.id=ws.character_id
+		WHERE ws.id=$1::uuid AND ws.server_id=$2 AND ws.character_id=$3::uuid
+		  AND ws.session_state='active' AND c.status='alive'
+		FOR UPDATE OF c`,request.SessionID,serverID,request.CharacterID).Scan(&lockedCharacter)
+	if errors.Is(err,sql.ErrNoRows){return Result{},ErrSessionInvalid}
+	if err!=nil{return Result{},fmt.Errorf("lock active pickup character: %w",err)}
+	var usedSlots,maxSlots int
+	err=tx.QueryRowContext(ctx,`SELECT
+		(SELECT count(*) FROM character_inventory ci WHERE ci.character_id=c.id)+
+		(SELECT count(*) FROM character_item_instances ii WHERE ii.character_id=c.id),
+		COALESCE((SELECT cap.max_slots FROM character_inventory_capacity cap WHERE cap.character_id=c.id),40)
+		FROM characters c WHERE c.id=$1::uuid`,lockedCharacter).Scan(&usedSlots,&maxSlots)
+	if err!=nil{return Result{},fmt.Errorf("load pickup inventory capacity: %w",err)}
 	var itemID string
 	var itemInstanceID sql.NullString
 	var quantity int
@@ -438,11 +470,17 @@ func (s *Service) PickupDrop(ctx context.Context, nodeKey string, request Pickup
 	if errors.Is(err,sql.ErrNoRows){return Result{},ErrDropUnavailable}
 	if err!=nil{return Result{},fmt.Errorf("lock ground drop: %w",err)}
 	if itemInstanceID.Valid {
+		if !inventorySlotAvailable(usedSlots,maxSlots,true){return Result{},ErrInventoryFull}
 		if _,err:=tx.ExecContext(ctx,`INSERT INTO character_item_instances(character_id,item_instance_id)
 			VALUES($1::uuid,$2::uuid)`,request.CharacterID,itemInstanceID.String);err!=nil{
 			return Result{},fmt.Errorf("transfer equipment instance to inventory: %w",err)
 		}
 	} else {
+		var existingStack bool
+		if err:=tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2)`,request.CharacterID,itemID).Scan(&existingStack);err!=nil{
+			return Result{},fmt.Errorf("check existing inventory stack: %w",err)
+		}
+		if !inventorySlotAvailable(usedSlots,maxSlots,!existingStack){return Result{},ErrInventoryFull}
 		var maxStack int
 		if err:=tx.QueryRowContext(ctx,`SELECT max_stack FROM item_definitions WHERE id=$1 AND enabled`,itemID).Scan(&maxStack);err!=nil{
 			return Result{},fmt.Errorf("load pickup item definition: %w",err)
