@@ -443,9 +443,13 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 			_market_notice_board(center + Vector3(-5.5, 0, -9.5), "鬼市告示", Color("#83c7e4"))
 			_market_notice_board(center + Vector3(5.5, 0, -9.5), "悬赏榜", Color("#d27d68"))
 			_market_wayfinding(center)
-			for side in [-1.0, 1.0]:
-				_market_audience_bench(center + Vector3(side * 6.25, 0, 7.6), -side)
-				_market_auction_pedestal(center + Vector3(side * 4.95, 0, 7.8), Color("#d9b879") if side < 0.0 else Color("#83c7e4"))
+			for seat in auction_layout["audience_seats"]:
+				var seat_position: Vector3 = center + seat["offset"]
+				_market_audience_bench(seat_position + Vector3(0.0, 0.0, -0.2), -1.0 if float(seat["facing"]) > 0.0 else 1.0)
+			for pedestal in auction_layout["pedestals"]:
+				var pedestal_position: Vector3 = center + pedestal["offset"]
+				var pedestal_accent := Color("#d9b879") if str(pedestal["point_id"]).ends_with("left") else Color("#83c7e4")
+				_market_auction_pedestal(pedestal_position, pedestal_accent)
 			for z in [-8.0, 0.0, 8.0]:
 				_hanging_lantern(center + Vector3(-4.5, 0, z))
 				_hanging_lantern(center + Vector3(4.5, 0, z))
