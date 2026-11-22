@@ -1797,15 +1797,17 @@ func _update_market_gate_inspection(delta: float) -> void:
 		if not guard_root.visible:
 			continue
 		var phase := market_ambience_time * 1.3 + float(guard_data["phase"])
+		var left_arm: MeshInstance3D = guard_data["left_arm"]
+		var right_arm: MeshInstance3D = guard_data["right_arm"]
 		if inspecting:
 			var side := -1.0 if index == 0 else 1.0
 			guard_root.rotation.y = float(guard_data["base_yaw"]) + side * 0.32
-			(guard_data["left_arm"] as MeshInstance3D).rotation.z = deg_to_rad(-52.0) + sin(phase) * 0.035
-			(guard_data["right_arm"] as MeshInstance3D).rotation.z = deg_to_rad(52.0) - sin(phase) * 0.035
+			left_arm.rotation.z = deg_to_rad(-52.0) + sin(phase) * 0.035
+			right_arm.rotation.z = deg_to_rad(52.0) - sin(phase) * 0.035
 		else:
 			guard_root.rotation.y = float(guard_data["base_yaw"]) + sin(phase * 0.2) * 0.025
-			(guard_data["left_arm"] as MeshInstance3D).rotation.z = deg_to_rad(-18.0) + sin(phase * 0.6) * 0.018
-			(guard_data["right_arm"] as MeshInstance3D).rotation.z = deg_to_rad(18.0) - sin(phase * 0.6 + 0.8) * 0.018
+			left_arm.rotation.z = deg_to_rad(-18.0) + sin(phase * 0.6) * 0.018
+			right_arm.rotation.z = deg_to_rad(18.0) - sin(phase * 0.6 + 0.8) * 0.018
 	for light in market_lights:
 		light.light_energy = 0.82 if inspecting else (0.48 + 0.08 * (0.5 + 0.5 * sin(market_ambience_time)))
 
