@@ -161,8 +161,6 @@ static func get_navigation_network() -> Dictionary:
 			{"id": "patrol.edge.10", "from": "junction.west.south", "to": "junction.west.north", "width": 6.0, "two_way": true},
 			{"id": "patrol.edge.11", "from": "junction.west.north", "to": "patrol.route.west_north", "width": 6.0, "two_way": true},
 			{"id": "patrol.edge.12", "from": "patrol.route.west_north", "to": "patrol.route.north_west", "width": 6.0, "two_way": true},
-			{"id": "patrol.edge.13", "from": "patrol.route.north_west", "to": "junction.north", "width": 6.0, "two_way": true},
-			{"id": "patrol.edge.14", "from": "junction.north", "to": "patrol.route.south_gate", "width": 6.0, "two_way": true}
 		],
 		"routes": [
 			{"id": "route.south_gate_to_reincarnation", "from": "gate.south", "to": "district.reincarnation.entry", "waypoints": ["gate.south", "junction.south", "district.reincarnation.entry"], "purpose": "忘川与轮回方向"},
@@ -170,7 +168,7 @@ static func get_navigation_network() -> Dictionary:
 			{"id": "route.registry_to_judgment", "from": "district.soul_registry.entry", "to": "district.ten_kings.entry", "waypoints": ["district.soul_registry.entry", "junction.west.registry", "junction.west", "junction.west.north", "junction.north", "junction.palace.west", "junction.ten_kings.connector", "district.ten_kings.entry"], "purpose": "鬼籍核验后进入审判"},
 			{"id": "route.registry_to_judge_review", "from": "district.soul_registry.entry", "to": "district.judge_bureau.entry", "waypoints": ["district.soul_registry.entry", "junction.west.registry", "junction.west", "junction.center", "junction.east", "junction.east.north", "junction.north", "junction.palace.east", "junction.judge.connector", "district.judge_bureau.entry"], "purpose": "档案复核与文书交接"},
 			{"id": "route.judgment_to_reincarnation", "from": "district.ten_kings.entry", "to": "district.reincarnation.entry", "waypoints": ["district.ten_kings.entry", "junction.ten_kings.connector", "junction.palace.west", "junction.north", "junction.center", "junction.south", "district.reincarnation.entry"], "purpose": "判决后前往轮回司"},
-			{"id": "route.patrol.perimeter_loop", "from": "patrol.route.south_gate", "to": "patrol.route.south_gate", "waypoints": ["patrol.route.south_gate", "junction.north", "patrol.route.north_west", "patrol.route.east_north", "junction.east.north", "junction.east.south", "patrol.route.east_south", "district.reincarnation.entry", "patrol.route.west_south", "junction.west.south", "junction.west.north", "patrol.route.west_north", "patrol.route.north_west", "junction.north", "patrol.route.south_gate"], "purpose": "巡城司闭环巡防"}
+			{"id": "route.patrol.perimeter_loop", "from": "patrol.route.south_gate", "to": "patrol.route.south_gate", "waypoints": ["patrol.route.south_gate", "junction.north", "patrol.route.north_west", "patrol.route.east_north", "junction.east.north", "junction.east.south", "patrol.route.east_south", "district.reincarnation.entry", "patrol.route.west_south", "junction.west.south", "junction.west.north", "patrol.route.west_north", "patrol.route.north_west", "junction.north"], "purpose": "巡城司闭环巡防"}
 		]
 	}
 
