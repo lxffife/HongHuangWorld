@@ -15,7 +15,8 @@ var camera: Camera3D
 var camera_pitch := deg_to_rad(-18.0)
 var mouse_captured := false
 var status_label: Label
-var district_markers: Dictionary = {}\nvar npc_spawn_points: Dictionary = {}
+var district_markers: Dictionary = {}
+var npc_spawn_points: Dictionary = {}
 
 var mats: Dictionary = {}
 
@@ -311,7 +312,7 @@ func _district(title: String, center: Vector3, footprint: Vector2, subtitle: Str
 	_box(title + "Foundation", center + Vector3(0, 0.22, 0), base_size, "district", false)
 	_build_district_compound(title, center, footprint)
 	# Market and residential quarters use their own spatial layouts instead of generic bureau halls.
-	if title != "万魂鬼市" and title != "万家魂坊":
+	if title not in ["万魂鬼市", "万家魂坊", "阴兵大营", "引魂驿站", "巡城司"]:
 		var count := maxi(building_count, 1)
 		var columns := ceili(sqrt(float(count)))
 		for i in range(count):
@@ -436,23 +437,72 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 				center + Vector3(0, 0, 10.5)
 			]
 		"阴兵大营":
-			# Barracks and watch posts use a strict military rhythm.
+			# The parade yard stays open; barracks and equipment line the perimeter.
+			_box("UnderworldDrillYard", center + Vector3(0, 0.12, -1.0), Vector3(9.0, 0.18, 11.0), "road_edge", false)
 			for side in [-1.0, 1.0]:
-				_box("UnderworldBarracks", center + Vector3(side * 5.0, 2.0, -7.0), Vector3(6.0, 4.0, 12.0), "dark_stone", false)
-				_roof_tier(center + Vector3(side * 5.0, 4.8, -7.0), 7.0, 1.8)
-				_box("BarracksWatchPost", center + Vector3(side * 6.0, 4.0, 8.0), Vector3(3.0, 8.0, 3.0), "stone", false)
-			_roof_tier(center + Vector3(side * 6.0, 8.5, 8.0), 4.5, 1.8)
+				_box("UnderworldBarracks", center + Vector3(side * 5.7, 2.0, 8.0), Vector3(5.0, 4.0, 7.0), "dark_stone", true)
+				_roof_tier(center + Vector3(side * 5.7, 4.8, 8.0), 6.2, 1.8)
+				_box("BarracksWatchPost", center + Vector3(side * 7.0, 3.5, -9.0), Vector3(2.6, 7.0, 2.6), "stone", true)
+				_roof_tier(center + Vector3(side * 7.0, 7.5, -9.0), 4.0, 1.6)
+				_weapon_rack(center + Vector3(side * 5.7, 0, -2.0))
+			for i in range(3):
+				_training_dummy(center + Vector3(float(i - 1) * 2.5, 0, 4.0))
+			_box("UnderworldCommandTable", center + Vector3(0, 0.75, 10.8), Vector3(3.8, 1.5, 1.1), "gold", false)
+			npc_spawn_points["阴兵大营"] = [
+				center + Vector3(-3.0, 0, -5.5), center + Vector3(3.0, 0, -5.5),
+				center + Vector3(-3.0, 0, 2.0), center + Vector3(3.0, 0, 2.0),
+				center + Vector3(0, 0, 10.0)
+			]
 		"引魂驿站":
-			# Arrival canopy and paired waiting pavilions orient incoming souls.
-			_box("SoulWaystationCanopy", center + Vector3(0, 5.0, 0), Vector3(14.0, 1.0, 9.0), "gold", false)
-			_roof_tier(center + Vector3(0, 6.0, 0), 17.0, 3.0)
+			# A clear arrival-to-registration-to-dispatch sequence guides newly arrived souls.
+			_box("SoulWaystationArrivalLane", center + Vector3(0, 0.1, -7.0), Vector3(7.0, 0.16, 11.0), "road_edge", false)
+			_box("SoulWaystationCanopy", center + Vector3(0, 4.0, -2.0), Vector3(12.0, 0.8, 6.0), "gold", false)
+			_roof_tier(center + Vector3(0, 5.0, -2.0), 15.0, 2.6)
+			_box("SoulRegistrationDesk", center + Vector3(0, 1.0, 0.5), Vector3(5.0, 1.8, 1.2), "palace", false)
+			_box("SoulRegistrationLedger", center + Vector3(0, 2.05, 0.5), Vector3(2.4, 0.18, 0.8), "gold", false)
 			for side in [-1.0, 1.0]:
-				_box("WaystationWaitingPavilion", center + Vector3(side * 7.0, 2.0, 8.0), Vector3(4.0, 4.0, 4.0), "palace", false)
-				_roof_tier(center + Vector3(side * 7.0, 4.7, 8.0), 5.5, 1.7)
+				_box("WaystationWaitingPavilion", center + Vector3(side * 6.5, 1.8, 8.0), Vector3(4.0, 3.6, 4.0), "palace", false)
+				_roof_tier(center + Vector3(side * 6.5, 4.3, 8.0), 5.5, 1.7)
+				_box("WaystationQueueRail", center + Vector3(side * 3.5, 0.8, -7.0), Vector3(0.22, 1.6, 8.0), "gold", false)
+			_box("SoulDispatchGateLeft", center + Vector3(-3.5, 2.8, 10.5), Vector3(0.7, 5.6, 0.7), "dark_stone", false)
+			_box("SoulDispatchGateRight", center + Vector3(3.5, 2.8, 10.5), Vector3(0.7, 5.6, 0.7), "dark_stone", false)
+			_box("SoulDispatchGateLintel", center + Vector3(0, 5.3, 10.5), Vector3(7.5, 0.8, 0.8), "gold", false)
+			_label("分流通道", center + Vector3(0, 6.3, 10.5), 16, Color("#d7bd98"))
+			npc_spawn_points["引魂驿站"] = [
+				center + Vector3(-2.0, 0, -9.0), center + Vector3(2.0, 0, -9.0),
+				center + Vector3(-2.0, 0, 3.0), center + Vector3(2.0, 0, 3.0),
+				center + Vector3(0, 0, 8.5)
+			]
 		"巡城司":
-			# A watchtower and signal platform dominate the patrol headquarters.
-			_box("PatrolSignalTower", center + Vector3(0, 7.0, 3.0), Vector3(5.0, 14.0, 5.0), "dark_stone", false)
-			_roof_tier(center + Vector3(0, 14.5, 3.0), 7.0, 2.2)
+			# Patrol headquarters combines a dispatch room, route table and three visible street posts.
+			_box("PatrolSignalTower", center + Vector3(0, 5.0, 5.5), Vector3(4.5, 10.0, 4.5), "dark_stone", true)
+			_roof_tier(center + Vector3(0, 10.8, 5.5), 6.5, 2.0)
+			_box("PatrolDispatchHall", center + Vector3(0, 2.0, -6.0), Vector3(9.0, 4.0, 5.0), "palace", true)
+			_roof_tier(center + Vector3(0, 4.8, -6.0), 11.0, 2.0)
+			_box("PatrolRouteTable", center + Vector3(0, 1.0, -2.0), Vector3(4.0, 1.8, 2.2), "gold", false)
+			for side in [-1.0, 1.0]:
+				_box("PatrolGatePost", center + Vector3(side * 8.5, 1.8, -2.0), Vector3(2.0, 3.6, 2.0), "stone", true)
+				_roof_tier(center + Vector3(side * 8.5, 4.2, -2.0), 3.5, 1.4)
+			_box("PatrolNoticePillar", center + Vector3(0, 1.5, -9.5), Vector3(1.0, 3.0, 1.0), "gold", false)
+			npc_spawn_points["巡城司"] = [
+				center + Vector3(-7.0, 0, 0), center + Vector3(7.0, 0, 0),
+				center + Vector3(0, 0, -9.0), center + Vector3(0, 0, 3.0)
+			]
+
+
+func _weapon_rack(center: Vector3) -> void:
+	_box("UnderworldWeaponRackBase", center + Vector3(0, 0.75, 0), Vector3(2.8, 0.25, 0.8), "dark_stone", false)
+	for x in [-1.0, 1.0]:
+		_box("UnderworldWeaponRackPost", center + Vector3(x, 1.55, 0), Vector3(0.18, 1.6, 0.18), "gold", false)
+	for i in range(3):
+		var weapon := _box("TrainingSpear", center + Vector3(float(i - 1) * 0.65, 2.0, 0), Vector3(0.12, 2.2, 0.12), "stone", false)
+		weapon.rotation.z = deg_to_rad(-8.0 + float(i) * 8.0)
+
+
+func _training_dummy(center: Vector3) -> void:
+	_box("TrainingDummyPost", center + Vector3(0, 1.0, 0), Vector3(0.3, 2.0, 0.3), "dark_stone", false)
+	_box("TrainingDummyCrossbar", center + Vector3(0, 1.55, 0), Vector3(1.2, 0.18, 0.18), "gold", false)
+	_box("TrainingDummyTarget", center + Vector3(0, 2.0, 0), Vector3(0.55, 0.55, 0.55), "palace", false)
 
 
 func _market_stall(center: Vector3, facing: float) -> void:
