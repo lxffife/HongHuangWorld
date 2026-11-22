@@ -751,15 +751,21 @@ func _update_npc_population_manager() -> void:
 			npc_region_lod[district] = "far"
 
 
-func _npc_lod_interval(agent: Dictionary, region_lod: String) -> float:
+func _npc_lod_interval(agent: Dictionary, distance_to_player: float, region_lod: String) -> float:
+	# The region tier is shared, while exact distance keeps far-edge NPCs from
+	# inheriting the near player's full update rate.
 	var interval := 0.0
-	match region_lod:
-		"mid": interval = 0.32
-		"far": interval = 0.8
-		_: interval = 0.0
+	if distance_to_player > NPC_FAR_UPDATE_DISTANCE:
+		interval = 0.8
+	elif distance_to_player > NPC_NEAR_UPDATE_DISTANCE:
+		interval = 0.32
+	if region_lod == "far" and distance_to_player > NPC_FAR_UPDATE_DISTANCE:
+		interval = maxf(interval, 0.8)
 	match str(agent.get("importance", "ambient")):
 		"critical": interval *= 0.5
 		"ambient": interval *= 1.5
+	if distance_to_player > NPC_REGION_CULL_DISTANCE:
+		interval = maxf(interval, 1.2)
 	return interval
 
 
@@ -880,11 +886,7 @@ func _update_npc_agents(delta: float) -> void:
 			distance_to_player = root.global_position.distance_to(player.global_position)
 		var district := str(agent.get("district", "未归类"))
 		var region_lod := str(npc_region_lod.get(district, "far"))
-		var update_interval := _npc_lod_interval(agent, region_lod)
-		if distance_to_player <= NPC_NEAR_UPDATE_DISTANCE:
-			update_interval = 0.0
-		elif distance_to_player > NPC_REGION_CULL_DISTANCE:
-			update_interval = maxf(update_interval, 1.2)
+		var update_interval := _npc_lod_interval(agent, distance_to_player, region_lod)
 		var elapsed := delta
 		if update_interval > 0.0:
 			var accumulated := float(agent.get("update_accumulator", 0.0)) + delta
