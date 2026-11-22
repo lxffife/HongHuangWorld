@@ -698,6 +698,9 @@ func _build_npc_population() -> void:
 		agent["role"] = role
 		if role == "waiting_soul":
 			agent["queue_order"] = role_index
+		elif role == "guide" and role_index == 2:
+			# This guide stands beside the registration desk and shares the call cycle with the front soul.
+			agent["waystation_desk_guide"] = true
 		agent["activity"] = str(point["activity"])
 		agent["schedule_tag"] = str(point["schedule_tag"])
 		agent["phase"] = float(npc_agents.size()) * 1.37
@@ -749,9 +752,8 @@ func _initialize_npc_behavior(agent: Dictionary) -> void:
 	var states: Array = _npc_behavior_states(role)
 	if role == "resident" and not bool(agent.get("moving", false)):
 		states = ["tea_social", "well_idle", "home_idle"]
-	elif role == "waiting_soul" and int(agent.get("queue_order", -1)) == 2:
-		# Only the front soul is called forward; no actor crosses the desk or queue rails.
-		states = ["queue_wait", "queue_glance", "queue_called", "queue_wait"]
+	elif role == "waiting_soul":
+		states = ["queue_wait", "queue_glance"]
 	agent["behavior_states"] = states
 	agent["state_cycle_index"] = 0
 	agent["state"] = str(states[0]) if not states.is_empty() else "idle"
@@ -820,6 +822,29 @@ func _advance_npc_behavior(agent: Dictionary, elapsed: float) -> void:
 	agent["state_elapsed"] = state_elapsed
 	agent["state_duration"] = duration
 	agent["state_cycle_index"] = cycle_index
+
+
+func _sync_waystation_call(agent: Dictionary) -> void:
+	# A shared presentation clock keeps the desk guide and front soul in sync.
+	# This is deliberately local-only; a future queue service must own real call state.
+	var role := str(agent.get("role", ""))
+	var call_phase := fposmod(npc_simulation_time, 28.0)
+	if bool(agent.get("waystation_desk_guide", false)):
+		if call_phase < 9.0:
+			agent["state"] = "check_ledger"
+		elif call_phase < 13.0:
+			agent["state"] = "direct_souls"
+		elif call_phase < 18.0:
+			agent["state"] = "registration"
+		else:
+			agent["state"] = "check_ledger"
+	elif role == "waiting_soul" and int(agent.get("queue_order", -1)) == 2:
+		if call_phase >= 9.0 and call_phase < 13.0:
+			agent["state"] = "queue_called"
+		elif call_phase >= 13.0 and call_phase < 16.0:
+			agent["state"] = "queue_glance"
+		else:
+			agent["state"] = "queue_wait"
 
 
 func _apply_npc_behavior_pose(agent: Dictionary, phase: float) -> void:
@@ -1082,6 +1107,7 @@ func _update_npc_agents(delta: float) -> void:
 		var phase := npc_simulation_time * 1.8 * float(agent.get("gesture_rate", 1.0)) + float(agent["phase"])
 		var activity := str(agent["activity"])
 		_advance_npc_behavior(agent, elapsed)
+		_sync_waystation_call(agent)
 		if bool(agent["moving"]):
 			var route_index := int(agent["route_index"])
 			var route_progress := float(agent["route_progress"])
