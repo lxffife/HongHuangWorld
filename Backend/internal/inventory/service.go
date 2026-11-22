@@ -727,12 +727,14 @@ func (s *Service) EnhanceEquipment(ctx context.Context, accountID string, reques
 		if errors.Is(err,sql.ErrNoRows){return EnhancementResult{},ErrInvalidRequest};return EnhancementResult{},fmt.Errorf("resolve enhancement character: %w",err)
 	}
 	if err:=ensureEquipmentSessionStable(ctx,tx,characterID);err!=nil{return EnhancementResult{},err}
-	var replay EnhancementResult; var replayInstance string
+	var replay EnhancementResult; var replayInstance string; var replayTarget int
 	err=tx.QueryRowContext(ctx, "SELECT item_instance_id::text,succeeded,old_level,target_level,material_quantity,success_rate_bp,(SELECT name FROM item_definitions WHERE id=material_item_id) FROM equipment_enhancement_events WHERE character_id=$1::uuid AND request_id=$2::uuid",characterID,request.RequestID).
-		Scan(&replayInstance,&replay.Succeeded,&replay.OldLevel,&replay.EnhancementLevel,&replay.MaterialQuantity,&replay.SuccessRateBP,&replay.MaterialName)
+		Scan(&replayInstance,&replay.Succeeded,&replay.OldLevel,&replayTarget,&replay.MaterialQuantity,&replay.SuccessRateBP,&replay.MaterialName)
 	if err==nil{
 		if replayInstance!=request.InstanceID{return EnhancementResult{},ErrIdempotencyConflict}
 		replay.Applied=false
+		replay.EnhancementLevel=replay.OldLevel
+		if replay.Succeeded { replay.EnhancementLevel=replayTarget }
 		var quality int
 		if err:=tx.QueryRowContext(ctx,"SELECT quality FROM item_instances WHERE id=$1::uuid",request.InstanceID).Scan(&quality);err!=nil{return EnhancementResult{},fmt.Errorf("load replay equipment quality: %w",err)}
 		replay.MaxLevel=enhancementMaxLevel(quality)
