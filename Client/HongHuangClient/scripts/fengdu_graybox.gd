@@ -2154,6 +2154,9 @@ func _begin_patrol_dispatch(target_position: Vector3, incident_profile: Dictiona
 	incident["created_order"] = patrol_alert_sequence
 	incident["state"] = "queued"
 	incident["created_at"] = npc_simulation_time
+	incident["case_workflow_state"] = "unsubmitted"
+	incident["case_submission"] = {}
+	incident["judge_review_state"] = "not_submitted"
 	incident["assigned_guard_ids"] = []
 	incident["arrived_guard_ids"] = []
 	incident["returned_guard_ids"] = []
@@ -3707,6 +3710,123 @@ func _assess_incident_activity_leads(record: Dictionary) -> Array[Dictionary]:
 	return assessments
 
 
+func submit_patrol_case_to_judge_bureau(incident_id: String) -> Dictionary:
+	var record_index := _find_patrol_incident_record(incident_id)
+	if record_index < 0:
+		return {"ok": false, "reason": "case_not_found"}
+	var record: Dictionary = patrol_incident_records[record_index]
+	var workflow_state := str(record.get("case_workflow_state", "unsubmitted"))
+	if workflow_state in ["transferred_to_judge_bureau", "under_judicial_review", "hearing_pending"]:
+		return {"ok": false, "reason": "already_submitted", "case_workflow_state": workflow_state}
+	var patrol_state := str(record.get("state", ""))
+	if patrol_state not in ["resolved", "closed"]:
+		return {"ok": false, "reason": "patrol_investigation_not_complete", "patrol_state": patrol_state}
+	var evidence_count := int(record.get("player_evidence_count", 0))
+	var witness_count := int(record.get("player_witness_count", 0))
+	var enough_material := evidence_count >= 2 or (evidence_count >= 1 and witness_count >= 1)
+	var required_material: Array[String] = []
+	if evidence_count < 1:
+		required_material.append("至少收集一件现场物证")
+	if witness_count < 1:
+		required_material.append("至少取得一份证人陈述")
+	if evidence_count < 2 and witness_count < 1:
+		required_material.append("建议补充第二件独立物证")
+	if not enough_material:
+		record["case_workflow_state"] = "returned_for_supplement"
+		record["case_return_reason"] = "卷宗材料不足，暂不具备移交条件"
+		record["case_required_material"] = required_material
+		_append_incident_timeline_entry(record, "case_returned", "卷宗退回巡城司：材料不足，需补充调查", "judge_bureau")
+		patrol_incident_records[record_index] = record
+		return {
+			"ok": false,
+			"reason": "insufficient_case_material",
+			"case_workflow_state": "returned_for_supplement",
+			"required_material": required_material
+		}
+	var conflict := bool(record.get("witness_revised", false))
+	var transfer_id := incident_id + ".transfer"
+	var submission := {
+		"transfer_id": transfer_id,
+		"incident_id": incident_id,
+		"source_office": "patrol_office",
+		"target_office": "judge_bureau",
+		"submitted_at": npc_simulation_time,
+		"evidence_tags": record.get("player_clue_tags", []).duplicate(),
+		"evidence_count": evidence_count,
+		"witness_count": witness_count,
+		"testimony_tag": str(record.get("witness_testimony_tag", "")),
+		"testimony_conflict": conflict,
+		"deduction_code": str(record.get("deduction_code", "inconclusive")),
+		"deduction_label": str(record.get("deduction_label", "尚无推断")),
+		"lead_assessments": _assess_incident_activity_leads(record),
+		"requires_conflict_review": conflict,
+		"judicial_conclusion": "not_determined"
+	}
+	record["case_submission"] = submission
+	record["case_workflow_state"] = "transferred_to_judge_bureau"
+	record["judge_review_state"] = "pending"
+	record["case_return_reason"] = ""
+	record["case_required_material"] = []
+	_append_incident_timeline_entry(record, "case_transferred", "巡城司已将案件卷宗移交判官司", "patrol_office")
+	patrol_incident_records[record_index] = record
+	return {
+		"ok": true,
+		"transfer_id": transfer_id,
+		"case_workflow_state": "transferred_to_judge_bureau",
+		"judge_review_state": "pending",
+		"requires_conflict_review": conflict,
+		"judicial_conclusion": "not_determined"
+	}
+
+
+func begin_judge_bureau_case_review(incident_id: String) -> Dictionary:
+	var record_index := _find_patrol_incident_record(incident_id)
+	if record_index < 0:
+		return {"ok": false, "reason": "case_not_found"}
+	var record: Dictionary = patrol_incident_records[record_index]
+	if str(record.get("case_workflow_state", "")) != "transferred_to_judge_bureau":
+		return {"ok": false, "reason": "case_not_transferred"}
+	if str(record.get("judge_review_state", "")) != "pending":
+		return {"ok": false, "reason": "review_not_pending"}
+	record["case_workflow_state"] = "under_judicial_review"
+	record["judge_review_state"] = "reviewing"
+	_append_incident_timeline_entry(record, "judge_review_started", "判官司已受理卷宗并开始复核", "judge_bureau")
+	patrol_incident_records[record_index] = record
+	return {"ok": true, "case_workflow_state": "under_judicial_review", "judge_review_state": "reviewing"}
+
+
+func record_judge_bureau_case_disposition(incident_id: String, disposition: String) -> Dictionary:
+	var record_index := _find_patrol_incident_record(incident_id)
+	if record_index < 0:
+		return {"ok": false, "reason": "case_not_found"}
+	var record: Dictionary = patrol_incident_records[record_index]
+	if str(record.get("case_workflow_state", "")) != "under_judicial_review":
+		return {"ok": false, "reason": "case_not_under_review"}
+	if disposition not in ["request_supplement", "accept_for_hearing"]:
+		return {"ok": false, "reason": "invalid_disposition"}
+	if disposition == "request_supplement":
+		record["case_workflow_state"] = "returned_for_supplement"
+		record["judge_review_state"] = "supplement_requested"
+		record["case_return_reason"] = "判官司要求补充调查材料"
+		_append_incident_timeline_entry(record, "supplement_requested", "判官司退回补充调查，尚未作出实体判决", "judge_bureau")
+	else:
+		record["case_workflow_state"] = "hearing_pending"
+		record["judge_review_state"] = "accepted_for_hearing"
+		record["case_return_reason"] = ""
+		_append_incident_timeline_entry(record, "hearing_accepted", "卷宗材料已通过形式复核，进入候审阶段", "judge_bureau")
+	var submission: Dictionary = record.get("case_submission", {})
+	submission["last_disposition"] = disposition
+	submission["disposition_at"] = npc_simulation_time
+	record["case_submission"] = submission
+	patrol_incident_records[record_index] = record
+	return {
+		"ok": true,
+		"case_workflow_state": str(record.get("case_workflow_state", "")),
+		"judge_review_state": str(record.get("judge_review_state", "")),
+		"judicial_conclusion": "not_determined"
+	}
+
+
 func get_patrol_case_dossier(incident_id: String) -> Dictionary:
 	var record_index := _find_patrol_incident_record(incident_id)
 	if record_index < 0:
@@ -3722,6 +3842,11 @@ func get_patrol_case_dossier(incident_id: String) -> Dictionary:
 		"incident_id": incident_id,
 		"title": str(record.get("title", "巡防案件")),
 		"state": str(record.get("state", "")),
+		"case_workflow_state": str(record.get("case_workflow_state", "unsubmitted")),
+		"judge_review_state": str(record.get("judge_review_state", "not_submitted")),
+		"case_return_reason": str(record.get("case_return_reason", "")),
+		"case_required_material": record.get("case_required_material", []).duplicate(),
+		"case_submission": record.get("case_submission", {}).duplicate(true),
 		"severity": str(record.get("severity_label", "一般")),
 		"created_at": float(record.get("created_at", 0.0)),
 		"resolved_at": float(record.get("resolved_at", -1.0)),
