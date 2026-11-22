@@ -121,6 +121,7 @@ func (h *inventoryHandlers) authorizeServer(w http.ResponseWriter, r *http.Reque
 
 type equipmentActionRequest struct {
 	ItemID string `json:"item_id"`
+	InstanceID string `json:"instance_id"`
 	Slot string `json:"slot"`
 }
 
@@ -137,7 +138,7 @@ func (h *inventoryHandlers) equip(w http.ResponseWriter, r *http.Request) {
 	if !ok { return }
 	var request equipmentActionRequest
 	if err := decodeJSON(w, r, &request); err != nil { http.Error(w, "invalid request body", http.StatusBadRequest); return }
-	err := h.service.Equip(r.Context(), account.ID, inventory.EquipmentRequest{ItemID: request.ItemID, Slot: request.Slot})
+	err := h.service.Equip(r.Context(), account.ID, inventory.EquipmentRequest{ItemID: request.ItemID, InstanceID: request.InstanceID, Slot: request.Slot})
 	h.writeEquipmentResult(w, "equip item failed", err)
 }
 
