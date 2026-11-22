@@ -4175,7 +4175,18 @@ func _on_equipment_request_completed(result: int, response_code: int, _headers: 
 		inventory_equipment.add_child(row)
 		var label := Label.new()
 		var item: Dictionary = equipped.get(slot, {})
-		label.text = str(labels[slot]) + "：" + (str(item.get("name", "未装备")) if not item.is_empty() else "未装备")
+		if item.is_empty():
+			label.text = str(labels[slot]) + "：未装备"
+		else:
+			var quality_names := ["普通", "优秀", "精良", "稀有", "传说"]
+			var quality := int(item.get("quality", 1))
+			var quality_name: String = quality_names[clampi(quality - 1, 0, quality_names.size() - 1)]
+			var affix_names: Array[String] = []
+			for affix in item.get("affixes", []):
+				if affix is Dictionary:
+					affix_names.append(str(affix.get("name", "词缀")) + "+" + str(affix.get("value", 0)))
+			var affix_suffix := " · " + "、".join(affix_names) if not affix_names.is_empty() else ""
+			label.text = str(labels[slot]) + "：" + str(item.get("name", "未知装备")) + " · " + quality_name + affix_suffix
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(label)
 		if not item.is_empty():
