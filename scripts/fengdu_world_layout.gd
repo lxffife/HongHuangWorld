@@ -248,6 +248,54 @@ static func get_market_stalls() -> Array[Dictionary]:
 	return result
 
 
+static func get_administrative_layout() -> Dictionary:
+	# Semantic service spaces for registration, judgment, records, and reincarnation.
+	return {
+		"ten_kings_court": {
+			"hearing_courts": [
+				{"point_id": "ten_kings.court.left.01", "offset": Vector3(-11.0, 3.5, -5.2), "wall_offset": Vector3(-11.0, 1.1, -5.2), "roof_offset": Vector3(-11.0, 6.4, -5.2)},
+				{"point_id": "ten_kings.court.left.02", "offset": Vector3(-11.0, 3.5, 0.0), "wall_offset": Vector3(-11.0, 1.1, 0.0), "roof_offset": Vector3(-11.0, 6.4, 0.0)},
+				{"point_id": "ten_kings.court.left.03", "offset": Vector3(-11.0, 3.5, 5.2), "wall_offset": Vector3(-11.0, 1.1, 5.2), "roof_offset": Vector3(-11.0, 6.4, 5.2)},
+				{"point_id": "ten_kings.court.right.01", "offset": Vector3(11.0, 3.5, -5.2), "wall_offset": Vector3(11.0, 1.1, -5.2), "roof_offset": Vector3(11.0, 6.4, -5.2)},
+				{"point_id": "ten_kings.court.right.02", "offset": Vector3(11.0, 3.5, 0.0), "wall_offset": Vector3(11.0, 1.1, 0.0), "roof_offset": Vector3(11.0, 6.4, 0.0)},
+				{"point_id": "ten_kings.court.right.03", "offset": Vector3(11.0, 3.5, 5.2), "wall_offset": Vector3(11.0, 1.1, 5.2), "roof_offset": Vector3(11.0, 6.4, 5.2)}
+			],
+			"judgment_steps": {"point_id": "ten_kings.judgment.steps", "offset": Vector3(0.0, 0.35, -8.0), "size": Vector3(15.0, 0.7, 2.0)},
+			"hearing_approach": {"point_id": "ten_kings.hearing.approach", "offset": Vector3(0.0, 0.0, -10.0)}
+		},
+		"judge_bureau": {
+			"archive_tower": {"point_id": "judge.archive.tower", "offset": Vector3(-9.0, 6.0, 2.0), "size": Vector3(5.0, 12.0, 5.0), "roof_base": Vector3(-9.0, 12.5, 2.0)},
+			"galleries": [
+				{"point_id": "judge.gallery.left", "offset": Vector3(-9.0, 2.0, -7.0), "size": Vector3(7.0, 4.0, 3.0)},
+				{"point_id": "judge.gallery.right", "offset": Vector3(9.0, 2.0, -7.0), "size": Vector3(7.0, 4.0, 3.0)}
+			],
+			"review_station": {"point_id": "judge.review.station", "offset": Vector3(0.0, 0.0, 0.0)},
+			"document_dispatch": {"point_id": "judge.document.dispatch", "offset": Vector3(0.0, 0.0, 9.0)}
+		},
+		"soul_registry": {
+			"archive_tower": {"point_id": "soul_registry.archive.tower", "offset": Vector3(0.0, 7.0, 2.0), "size": Vector3(8.0, 14.0, 7.0)},
+			"floor_bands": [
+				{"point_id": "soul_registry.archive.floor.01", "offset": Vector3(0.0, 3.5, 2.0)},
+				{"point_id": "soul_registry.archive.floor.02", "offset": Vector3(0.0, 7.0, 2.0)},
+				{"point_id": "soul_registry.archive.floor.03", "offset": Vector3(0.0, 10.5, 2.0)}
+			],
+			"archive_roof_base": Vector3(0.0, 14.9, 2.0),
+			"identity_verification": {"point_id": "soul_registry.identity.verification", "offset": Vector3(0.0, 0.0, -8.0)},
+			"record_lookup": {"point_id": "soul_registry.record.lookup", "offset": Vector3(0.0, 0.0, 7.0)}
+		},
+		"reincarnation_bureau": {
+			"portal_pillars": [
+				{"point_id": "reincarnation.portal.left", "offset": Vector3(-8.0, 6.0, 4.0), "size": Vector3(2.0, 12.0, 2.0)},
+				{"point_id": "reincarnation.portal.right", "offset": Vector3(8.0, 6.0, 4.0), "size": Vector3(2.0, 12.0, 2.0)}
+			],
+			"portal_roof": {"point_id": "reincarnation.portal.roof", "offset": Vector3(0.0, 12.0, 4.0), "width": 21.0, "height": 3.5},
+			"threshold": {"point_id": "reincarnation.portal.threshold", "offset": Vector3(0.0, 0.22, 4.0), "size": Vector3(17.0, 0.44, 2.5)},
+			"document_check": {"point_id": "reincarnation.document.check", "offset": Vector3(0.0, 0.0, -7.0)},
+			"departure_lane": {"point_id": "reincarnation.departure.lane", "offset": Vector3(0.0, 0.0, 10.0)}
+		}
+	}
+
+
 static func get_waystation_layout() -> Dictionary:
 	# Arrival, registration, waiting, and dispatch are authored as semantic local-space points.
 	return {
