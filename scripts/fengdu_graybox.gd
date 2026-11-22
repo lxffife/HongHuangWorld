@@ -413,9 +413,8 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 			_market_auction_steps(center + auction_layout["step_center_offset"])
 			_roof_tier(center + auction_layout["roof_offset"], float(auction_layout["roof_width"]), float(auction_layout["roof_height"]))
 			_label("万魂竞宝台", center + auction_layout["label_offset"], 22, Color("#f0d29a"))
-			_market_display_orb(center + Vector3(-1.15, 2.0, 8.0), 0.18, Color("#83c7e4"))
-			_market_display_orb(center + Vector3(0.0, 2.0, 8.0), 0.22, Color("#e8c477"))
-			_market_display_orb(center + Vector3(1.15, 2.0, 8.0), 0.18, Color("#b99bdc"))
+			for showcase in auction_layout["showcase_orbs"]:
+				_market_display_orb(center + showcase["offset"], float(showcase["radius"]), Color(str(showcase["tint"])))
 			market_stall_registry.clear()
 			for stall_data in WORLD_LAYOUT.get_market_stalls():
 				var stall_position: Vector3 = stall_data["position"]
@@ -818,8 +817,9 @@ func _build_market_customers() -> void:
 			base_position + Vector3(local_side * 0.55, 0.0, -1.0),
 			base_position + Vector3(local_side * 0.55, 0.0, 1.0)
 		]
-		var market_side := -1.0 if index % 2 == 0 else 1.0
-		var event_position := market_center + Vector3(market_side * 10.8, 0.0, 4.2 if index < 2 else 7.2)
+		var auction_layout: Dictionary = WORLD_LAYOUT.get_market_auction_layout()
+		var event_points: Array = auction_layout["audience_event_points"]
+		var event_position: Vector3 = market_center + event_points[index]["offset"]
 		market_customers.append({
 			"customer_id": "ghost_market.customer.%02d" % (index + 1),
 			"root": customer_root,
@@ -1319,19 +1319,24 @@ func _update_market_ambience(delta: float) -> void:
 			continue
 		# 44-second local loop: arrive, stop and unload, depart, then circle back outside the market.
 		var route_time := fposmod(market_ambience_time + float(caravan_data["phase"]), 44.0)
-		var stop_offset := 0.0
+		var route_offsets: Array = caravan_data["route_offsets"]
+		var arrival_offset: Vector3 = route_offsets[0]
+		var dock_offset: Vector3 = route_offsets[1]
+		var departure_offset: Vector3 = route_offsets[2]
+		var return_offset: Vector3 = route_offsets[3]
+		var route_offset := dock_offset
 		var caravan_state := "驶入"
 		if route_time < 8.0:
-			stop_offset = lerpf(-5.0, 0.0, smoothstep(0.0, 8.0, route_time))
+			route_offset = arrival_offset.lerp(dock_offset, smoothstep(0.0, 8.0, route_time))
 		elif route_time < 23.0:
 			caravan_state = "卸货中"
 		elif route_time < 31.0:
 			caravan_state = "离场"
-			stop_offset = lerpf(0.0, 5.0, smoothstep(23.0, 31.0, route_time))
+			route_offset = dock_offset.lerp(departure_offset, smoothstep(23.0, 31.0, route_time))
 		else:
 			caravan_state = "绕行返回"
-			stop_offset = lerpf(5.0, -5.0, smoothstep(31.0, 44.0, route_time))
-		caravan_root.position = Vector3(float(caravan_data["base_x"]), 0.0, float(caravan_data["base_z"]) + stop_offset)
+			route_offset = departure_offset.lerp(return_offset, smoothstep(31.0, 44.0, route_time))
+		caravan_root.position = Vector3(float(caravan_data["base_x"]), 0.0, float(caravan_data["base_z"])) + route_offset
 		var travel_direction := -1.0 if route_time < 8.0 else (1.0 if route_time >= 23.0 and route_time < 31.0 else 0.0)
 		if travel_direction != 0.0:
 			caravan_root.rotation.y = PI if travel_direction < 0.0 else 0.0
@@ -2257,17 +2262,22 @@ func _create_market_stall_catalog_label(stall_position: Vector3, facing: float, 
 	return catalog
 
 
-func _market_restock_destination(cargo_type: String, caravan_id: String) -> Vector3:
-	# Alternate between the two matching stalls; use each stall's facing, not world origin.
-	var target_group := "soul_goods" if cargo_type == "魂珠与魂籍" else "herb_goods"
-	var matching_stalls: Array[Dictionary] = []
-	for stall in market_stall_registry:
-		if str(stall.get("restock_group", "")) == target_group:
-			matching_stalls.append(stall)
-	if matching_stalls.is_empty():
+func _market_restock_destination(_cargo_type: String, caravan_id: String) -> Vector3:
+	# The caravan's stable layout record selects its unloading stall explicitly.
+	var target_stall_id := ""
+	for caravan in WORLD_LAYOUT.get_market_caravans():
+		if str(caravan["caravan_id"]) == caravan_id:
+			target_stall_id = str(caravan["restock_stall_id"])
+			break
+	if target_stall_id.is_empty():
 		return Vector3.ZERO
-	var target_index := 1 if caravan_id.ends_with(".02") and matching_stalls.size() > 1 else 0
-	var target_stall: Dictionary = matching_stalls[target_index]
+	var target_stall: Dictionary = {}
+	for stall in market_stall_registry:
+		if str(stall.get("stall_id", "")) == target_stall_id:
+			target_stall = stall
+			break
+	if target_stall.is_empty():
+		return Vector3.ZERO
 	var stall_position: Vector3 = target_stall.get("position", Vector3.ZERO)
 	var facing := float(target_stall.get("facing", 0.0))
 	var rear_direction := Vector3(sin(facing), 0.0, cos(facing))
@@ -2565,14 +2575,13 @@ func _market_audience_bench(center: Vector3, facing: float) -> void:
 
 
 func _market_auction_steps(center: Vector3) -> void:
-	# Three shallow ceremonial steps approach the south face of the dais.
-	for index in range(3):
-		var step_height := 0.18 * float(index + 1)
-		var step_z := 5.48 - float(index) * 0.48
-		_box("GhostMarketAuctionStep", center + Vector3(0.0, step_height * 0.5, step_z), Vector3(5.2 - float(index) * 0.35, step_height, 0.48), "road_edge", false)
-	for side in [-1.0, 1.0]:
-		_box("GhostMarketAuctionStepRailBase", center + Vector3(side * 2.92, 0.32, 5.35), Vector3(0.24, 0.64, 1.35), "dark_stone", false)
-		_box("GhostMarketAuctionStepRailCap", center + Vector3(side * 2.92, 0.72, 5.35), Vector3(0.38, 0.16, 1.45), "gold", false)
+	# Stable step and rail IDs stay in layout data; this adapter only creates geometry.
+	var auction_layout: Dictionary = WORLD_LAYOUT.get_market_auction_layout()
+	for step in auction_layout["steps"]:
+		_box("GhostMarketAuctionStep", center + step["offset"], step["size"], "road_edge", false)
+	for rail in auction_layout["step_rails"]:
+		_box("GhostMarketAuctionStepRailBase", center + rail["offset"], rail["base_size"], "dark_stone", false)
+		_box("GhostMarketAuctionStepRailCap", center + rail["offset"] + rail["cap_offset"], rail["cap_size"], "gold", false)
 
 func _market_auction_pedestal(center: Vector3, accent: Color) -> void:
 	# Paired low-poly standards frame the dais without narrowing the walkable aisle.
