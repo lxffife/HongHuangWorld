@@ -1954,7 +1954,7 @@ func _update_npc_agents(delta: float) -> void:
 		if root == null or not is_instance_valid(root):
 			continue
 		_record_npc_activity_sample(agent, root)
-		if str(agent.get("judicial_attendance_state", "")) == "en_route":
+		if str(agent.get("judicial_attendance_state", "")) in ["en_route", "called_to_hearing"]:
 			_advance_judicial_attendance(agent, delta)
 			continue
 		if not root.visible:
@@ -1987,11 +1987,12 @@ func _update_npc_agents(delta: float) -> void:
 			_update_merchant_proximity_behavior(agent, distance_to_player)
 			_update_merchant_market_activity(agent)
 		var dispatch_state := str(agent.get("dispatch_state", ""))
-		if str(agent.get("judicial_attendance_state", "")) == "waiting":
+		if str(agent.get("judicial_attendance_state", "")) in ["waiting", "in_hearing"]:
 			root.position = agent.get("judicial_destination", Vector3(51.0, 0.0, 36.5))
 			root.rotation.y = PI
 			left_arm.rotation.z = deg_to_rad(-18.0)
 			right_arm.rotation.z = deg_to_rad(18.0)
+			agent["state"] = "judicial_" + str(agent.get("judicial_attendance_state", "waiting"))
 		elif str(agent.get("role", "")) == "patrol_guard" and dispatch_state != "":
 			_advance_patrol_dispatch(agent, elapsed, phase)
 		elif bool(agent["moving"]):
@@ -5303,6 +5304,10 @@ func _show_judge_case_detail(incident_id: String) -> void:
 		hearing.get("presented_evidence_tags", []).size(),
 		hearing.get("proceedings", []).size()
 	])
+	var proceedings: Array = hearing.get("proceedings", [])
+	for entry_value in proceedings.slice(maxi(0, proceedings.size() - 8), proceedings.size()):
+		var entry: Dictionary = entry_value
+		lines.append("  · %s：%s" % [str(entry.get("entry_type", "记录")), str(entry.get("statement", entry.get("reason", entry.get("challenge", entry.get("evidence_tag", entry.get("party_id", ""))))))])
 	lines.append("\n[b][color=#a9bdcf]判决与申诉[/color][/b]")
 	lines.append("判决：%s  |  待处理申诉：%d" % [
 		str(dossier.get("judicial_conclusion", "not_determined")),
