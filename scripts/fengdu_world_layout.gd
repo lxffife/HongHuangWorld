@@ -31,6 +31,33 @@ static func get_gates() -> Array[Dictionary]:
 	]
 
 
+
+static func get_roads() -> Array[Dictionary]:
+	# Presentation-independent road footprints; surface keys are resolved by the graybox adapter.
+	return [
+		{"id": "north_south_main_axis", "tier": 1, "center": Vector3(0, 0.03, 0), "size": Vector3(13, 0.12, 190), "surface": "road"},
+		{"id": "east_west_main_axis", "tier": 1, "center": Vector3(0, 0.04, 0), "size": Vector3(190, 0.12, 13), "surface": "road"},
+		{"id": "central_processional_way", "tier": 1, "center": Vector3(0, 0.06, 38), "size": Vector3(20, 0.14, 100), "surface": "road_edge"},
+		{"id": "district_street_west", "tier": 2, "center": Vector3(-34, 0.025, 0), "size": Vector3(6, 0.1, 176), "surface": "road"},
+		{"id": "district_street_east", "tier": 2, "center": Vector3(34, 0.025, 0), "size": Vector3(6, 0.1, 176), "surface": "road"},
+		{"id": "district_cross_street_south", "tier": 2, "center": Vector3(0, 0.035, -32), "size": Vector3(176, 0.1, 6), "surface": "road"},
+		{"id": "district_cross_street_north", "tier": 2, "center": Vector3(0, 0.035, 32), "size": Vector3(176, 0.1, 6), "surface": "road"},
+		{"id": "perimeter_lane_south", "tier": 3, "center": Vector3(0, 0.02, -78), "size": Vector3(160, 0.08, 4), "surface": "bridge"},
+		{"id": "perimeter_lane_north", "tier": 3, "center": Vector3(0, 0.02, 78), "size": Vector3(160, 0.08, 4), "surface": "bridge"},
+		{"id": "palace_approach_west", "tier": "palace", "center": Vector3(-27, 0.035, 34), "size": Vector3(5, 0.1, 90), "surface": "road"},
+		{"id": "palace_approach_east", "tier": "palace", "center": Vector3(27, 0.035, 34), "size": Vector3(5, 0.1, 90), "surface": "road"}
+	]
+
+
+static func get_approach_roads() -> Array[Dictionary]:
+	return [
+		{"id": "north_approach", "center": Vector3(0, 0.02, 151), "size": Vector3(11, 0.12, 72), "surface": "road"},
+		{"id": "south_approach", "center": Vector3(0, 0.02, -151), "size": Vector3(11, 0.12, 72), "surface": "road"},
+		{"id": "east_approach", "center": Vector3(151, 0.02, 0), "size": Vector3(72, 0.12, 11), "surface": "road"},
+		{"id": "west_approach", "center": Vector3(-151, 0.02, 0), "size": Vector3(72, 0.12, 11), "surface": "road"}
+	]
+
+
 static func get_districts() -> Array[Dictionary]:
 	return [
 		{"id": "soul_ward", "name": "万家魂坊", "center": Vector3(-55, 0, -53), "footprint": Vector2(34, 26), "subtitle": "居住 · 工匠 · 社区", "building_count": 5, "accent": "#a9b9c4"},
