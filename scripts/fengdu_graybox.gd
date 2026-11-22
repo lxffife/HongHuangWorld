@@ -407,11 +407,12 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 		"万魂鬼市":
 			# A broad central trading aisle runs from the southern compound gate to the auction dais.
 			_box("GhostMarketMainAisle", center + Vector3(0, 0.12, 0), Vector3(9.0, 0.18, 21.0), "road_edge", false)
-			_box("GhostMarketAuctionDais", center + Vector3(0, 0.55, 8.0), Vector3(7.0, 1.1, 4.5), "dark_stone", false)
-			_box("GhostMarketAuctionDesk", center + Vector3(0, 1.45, 8.0), Vector3(4.2, 0.7, 1.2), "gold", false)
-			_market_auction_steps(center)
-			_roof_tier(center + Vector3(0, 3.1, 8.0), 8.0, 2.0)
-			_label("万魂竞宝台", center + Vector3(0, 5.65, 8.0), 22, Color("#f0d29a"))
+			var auction_layout: Dictionary = WORLD_LAYOUT.get_market_auction_layout()
+			_box("GhostMarketAuctionDais", center + auction_layout["dais_offset"], auction_layout["dais_size"], "dark_stone", false)
+			_box("GhostMarketAuctionDesk", center + auction_layout["desk_offset"], auction_layout["desk_size"], "gold", false)
+			_market_auction_steps(center + auction_layout["step_center_offset"])
+			_roof_tier(center + auction_layout["roof_offset"], float(auction_layout["roof_width"]), float(auction_layout["roof_height"]))
+			_label("万魂竞宝台", center + auction_layout["label_offset"], 22, Color("#f0d29a"))
 			_market_display_orb(center + Vector3(-1.15, 2.0, 8.0), 0.18, Color("#83c7e4"))
 			_market_display_orb(center + Vector3(0.0, 2.0, 8.0), 0.22, Color("#e8c477"))
 			_market_display_orb(center + Vector3(1.15, 2.0, 8.0), 0.18, Color("#b99bdc"))
@@ -900,12 +901,15 @@ func _market_customer_face_target(customer_root: Node3D, stall_id: String) -> vo
 func _build_market_caravans() -> void:
 	# Two small supply carts use the rear service lanes, never the central 9m aisle.
 	var market_center: Vector3 = district_markers.get("万魂鬼市", Vector3(55.0, 0.0, -53.0))
-	for index in range(2):
-		var side := -1.0 if index == 0 else 1.0
+	for caravan_data in WORLD_LAYOUT.get_market_caravans():
+		var index := market_caravans.size()
+		var caravan_id := str(caravan_data["caravan_id"])
+		var cargo_type := str(caravan_data["cargo_type"])
+		var cargo_palette := Color(str(caravan_data["cargo_palette"]))
 		var root := Node3D.new()
 		root.name = "AmbientMarketCaravan_%02d" % (index + 1)
-		root.position = market_center + Vector3(side * 15.3, 0.0, -7.0 if index == 0 else 7.0)
-		root.rotation.y = PI if index == 0 else 0.0
+		root.position = market_center + caravan_data["offset"]
+		root.rotation.y = float(caravan_data["facing"])
 		add_child(root)
 		var driver := _create_npc_figure(root, "market_customer")
 		var driver_material := driver["body"].material_override as StandardMaterial3D
@@ -947,8 +951,6 @@ func _build_market_caravans() -> void:
 			pack_material.roughness = 0.9
 			pack.material_override = pack_material
 			cart.add_child(pack)
-		var cargo_type := "魂珠与魂籍" if index == 0 else "药材与法器"
-		var cargo_palette := Color("#8d789e") if index == 0 else Color("#718d70")
 		var cargo_label := Label3D.new()
 		cargo_label.name = "SupplyCargoLabel"
 		cargo_label.text = cargo_type
@@ -999,7 +1001,7 @@ func _build_market_caravans() -> void:
 			add_child(storage_crate)
 			storage_crates.append(storage_crate)
 		market_caravans.append({
-			"caravan_id": "ghost_market.caravan.%02d" % (index + 1),
+			"caravan_id": caravan_id,
 			"cargo_type": cargo_type,
 			"cargo_palette": cargo_palette,
 			"root": root,
@@ -1013,7 +1015,7 @@ func _build_market_caravans() -> void:
 			"last_unload_cycle": -1,
 			"base_x": root.position.x,
 			"base_z": root.position.z,
-			"phase": float(index) * 17.0
+			"phase": float(caravan_data["phase"])
 		})
 
 
@@ -1114,18 +1116,18 @@ func _build_market_ambience() -> void:
 func _build_market_audience() -> void:
 	# Four ambient spectators frame the auction seating; they are not interactive NPCs.
 	var market_center: Vector3 = district_markers.get("万魂鬼市", Vector3(55.0, 0.0, -53.0))
-	var audience_positions: Array[Vector3] = [
-		market_center + Vector3(-8.0, 0.0, 5.8),
-		market_center + Vector3(-8.0, 0.0, 9.4),
-		market_center + Vector3(8.0, 0.0, 5.8),
-		market_center + Vector3(8.0, 0.0, 9.4)
-	]
+	var auction_layout: Dictionary = WORLD_LAYOUT.get_market_auction_layout()
+	var audience_positions: Array[Vector3] = []
+	var audience_facings: Array[float] = []
+	for seat in auction_layout["audience_seats"]:
+		audience_positions.append(market_center + seat["offset"])
+		audience_facings.append(float(seat["facing"]))
 	var robes: Array[Color] = [Color("#7e899d"), Color("#9c806e"), Color("#718b82"), Color("#8d789e")]
 	for index in range(audience_positions.size()):
 		var root := Node3D.new()
 		root.name = "AmbientAuctionSpectator_%02d" % (index + 1)
 		root.position = audience_positions[index]
-		root.rotation.y = PI if index < 2 else 0.0
+		root.rotation.y = audience_facings[index]
 		add_child(root)
 		var figure := _create_npc_figure(root, "market_customer")
 		var robe := figure["body"].material_override as StandardMaterial3D
