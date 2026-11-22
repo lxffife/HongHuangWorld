@@ -61,6 +61,7 @@ var patrol_alert_remaining := 0.0
 var patrol_alert_position := Vector3(0.0, 0.0, 12.0)
 var patrol_alert_sequence := 0
 var patrol_incident_queue: Array[Dictionary] = []
+var patrol_incident_records: Array[Dictionary] = []
 var patrol_dispatch_queue_elapsed := 0.0
 
 var mats: Dictionary = {}
@@ -2147,6 +2148,15 @@ func _begin_patrol_dispatch(target_position: Vector3, incident_profile: Dictiona
 	incident["incident_id"] = "fengdu.incident.%04d" % patrol_alert_sequence
 	incident["target_position"] = target_position
 	incident["created_order"] = patrol_alert_sequence
+	incident["state"] = "queued"
+	incident["created_at"] = npc_simulation_time
+	incident["assigned_guard_ids"] = []
+	incident["arrived_guard_ids"] = []
+	incident["returned_guard_ids"] = []
+	incident["investigation_remaining"] = float(incident.get("scene_duration", 6.0))
+	incident["evidence_count"] = 0
+	incident["witness_count"] = 0
+	patrol_incident_records.append(incident.duplicate(true))
 	patrol_incident_queue.append(incident)
 	patrol_incident_queue.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		var a_priority := int(a.get("priority", 0))
@@ -2205,6 +2215,15 @@ func _process_patrol_dispatch_queue() -> void:
 		if route_failed:
 			return
 
+		var assigned_guard_ids: Array[String] = []
+		for dispatch_data in dispatch_batch:
+			var assigned_agent: Dictionary = dispatch_data["agent"]
+			assigned_guard_ids.append(str(assigned_agent.get("npc_id", "")))
+		_update_patrol_incident_record(str(incident.get("incident_id", "")), {
+			"state": "assigned",
+			"assigned_guard_ids": assigned_guard_ids,
+			"assigned_at": npc_simulation_time
+		})
 		patrol_incident_queue.pop_front()
 		for dispatch_data in dispatch_batch:
 			_start_patrol_guard_dispatch(
@@ -2248,6 +2267,114 @@ func _start_patrol_guard_dispatch(agent: Dictionary, dispatch_path: Dictionary, 
 	])
 
 
+func _find_patrol_incident_record(incident_id: String) -> int:
+	for index in range(patrol_incident_records.size()):
+		if str(patrol_incident_records[index].get("incident_id", "")) == incident_id:
+			return index
+	return -1
+
+
+func _update_patrol_incident_record(incident_id: String, changes: Dictionary) -> void:
+	var record_index := _find_patrol_incident_record(incident_id)
+	if record_index < 0:
+		return
+	var record: Dictionary = patrol_incident_records[record_index]
+	for key in changes:
+		record[key] = changes[key]
+	patrol_incident_records[record_index] = record
+
+
+func _mark_patrol_guard_arrived(agent: Dictionary) -> void:
+	var incident_id := str(agent.get("dispatch_incident_id", ""))
+	var record_index := _find_patrol_incident_record(incident_id)
+	if record_index < 0:
+		return
+	var record: Dictionary = patrol_incident_records[record_index]
+	var arrived: Array = record.get("arrived_guard_ids", [])
+	var guard_id := str(agent.get("npc_id", ""))
+	if not arrived.has(guard_id):
+		arrived.append(guard_id)
+	record["arrived_guard_ids"] = arrived
+	var assigned: Array = record.get("assigned_guard_ids", [])
+	if arrived.size() >= assigned.size() and not assigned.is_empty():
+		record["state"] = "investigating"
+		record["investigation_started_at"] = npc_simulation_time
+		record["investigation_remaining"] = float(record.get("scene_duration", 6.0))
+		print("[FengduPatrol] incident %s investigation started; %d guards on scene" % [incident_id, arrived.size()])
+	patrol_incident_records[record_index] = record
+
+
+func _update_patrol_incident_lifecycle(delta: float) -> void:
+	for index in range(patrol_incident_records.size()):
+		var record: Dictionary = patrol_incident_records[index]
+		if str(record.get("state", "")) != "investigating":
+			continue
+		var remaining := maxf(0.0, float(record.get("investigation_remaining", 0.0)) - delta)
+		record["investigation_remaining"] = remaining
+		if remaining <= 0.0:
+			var incident_type := str(record.get("type", ""))
+			var evidence_count := 1 if incident_type == "suspicious_activity" else (2 if incident_type == "crowd_disorder" else 3)
+			var witness_count := 1 if incident_type == "suspicious_activity" else (2 if incident_type == "crowd_disorder" else 4)
+			var result_code := "cleared" if incident_type == "suspicious_activity" else ("mediated" if incident_type == "crowd_disorder" else "secured")
+			var result_label := "排除异常" if result_code == "cleared" else ("纠纷调解" if result_code == "mediated" else "现场控制")
+			record["state"] = "resolved"
+			record["result_code"] = result_code
+			record["result_label"] = result_label
+			record["evidence_count"] = evidence_count
+			record["witness_count"] = witness_count
+			record["resolved_at"] = npc_simulation_time
+			print("[FengduPatrol] incident %s resolved: %s; evidence %d, witnesses %d" % [
+				str(record.get("incident_id", "")), result_label, evidence_count, witness_count
+			])
+		patrol_incident_records[index] = record
+	_prune_patrol_incident_history()
+
+
+func _mark_patrol_guard_returned(agent: Dictionary) -> void:
+	var incident_id := str(agent.get("dispatch_incident_id", ""))
+	var record_index := _find_patrol_incident_record(incident_id)
+	if record_index < 0:
+		return
+	var record: Dictionary = patrol_incident_records[record_index]
+	var returned: Array = record.get("returned_guard_ids", [])
+	var guard_id := str(agent.get("npc_id", ""))
+	if not returned.has(guard_id):
+		returned.append(guard_id)
+	record["returned_guard_ids"] = returned
+	var assigned: Array = record.get("assigned_guard_ids", [])
+	if not assigned.is_empty() and returned.size() >= assigned.size():
+		record["state"] = "closed"
+		record["closed_at"] = npc_simulation_time
+		print("[FengduPatrol] incident %s archived; all assigned guards returned" % incident_id)
+	patrol_incident_records[record_index] = record
+
+
+func _prune_patrol_incident_history() -> void:
+	while patrol_incident_records.size() > 20:
+		var removable_index := -1
+		for index in range(patrol_incident_records.size()):
+			var state := str(patrol_incident_records[index].get("state", ""))
+			if state == "closed" or state == "resolved":
+				removable_index = index
+				break
+		if removable_index < 0:
+			return
+		patrol_incident_records.remove_at(removable_index)
+
+
+func _begin_patrol_guard_return(agent: Dictionary) -> void:
+	var root: Node3D = agent["root"]
+	var resume_position: Vector3 = agent.get("dispatch_resume_position", root.position)
+	var return_path := _build_patrol_dispatch_path(root.position, resume_position)
+	if bool(return_path.get("found", false)):
+		agent["dispatch_waypoints"] = return_path.get("points", [])
+		agent["dispatch_waypoint_index"] = 1
+		agent["dispatch_state"] = "returning"
+		agent["state"] = "patrol_return"
+	else:
+		_finish_patrol_dispatch(agent)
+
+
 func _build_patrol_dispatch_path(origin: Vector3, destination: Vector3) -> Dictionary:
 	# Connect arbitrary incident/actor positions to the nearest stable road nodes.
 	var start_node := WORLD_NAVIGATION.find_nearest_node(navigation_network_data, origin)
@@ -2287,24 +2414,18 @@ func _advance_patrol_dispatch(agent: Dictionary, elapsed: float, phase: float) -
 	var right_arm: MeshInstance3D = agent["right_arm"]
 	var dispatch_state := str(agent.get("dispatch_state", ""))
 	if dispatch_state == "on_scene":
-		var wait_remaining := maxf(0.0, float(agent.get("dispatch_wait_remaining", 0.0)) - elapsed)
-		agent["dispatch_wait_remaining"] = wait_remaining
 		root.rotation.y = float(agent.get("alert_facing", root.rotation.y))
-		agent["state"] = "alert_watch"
+		agent["state"] = "investigating"
 		body.position.y = 0.92 + sin(phase * 1.4) * 0.018
 		left_arm.rotation.z = deg_to_rad(-58.0) + sin(phase * 1.6) * 0.08
 		right_arm.rotation.z = deg_to_rad(58.0) - sin(phase * 1.6) * 0.08
-		if wait_remaining <= 0.0:
-			var resume_position: Vector3 = agent.get("dispatch_resume_position", root.position)
-			var return_path := _build_patrol_dispatch_path(root.position, resume_position)
-			if bool(return_path.get("found", false)):
-				agent["dispatch_waypoints"] = return_path.get("points", [])
-				agent["dispatch_waypoint_index"] = 1
-				agent["dispatch_state"] = "returning"
-				agent["state"] = "patrol_return"
-				print("[FengduPatrol] incident %s cleared; guard returning to patrol route" % str(agent.get("dispatch_incident_id", "unknown")))
-			else:
-				_finish_patrol_dispatch(agent)
+		var incident_index := _find_patrol_incident_record(str(agent.get("dispatch_incident_id", "")))
+		if incident_index >= 0:
+			var incident_record: Dictionary = patrol_incident_records[incident_index]
+			if str(incident_record.get("state", "")) == "resolved" or str(incident_record.get("state", "")) == "closed":
+				_begin_patrol_guard_return(agent)
+		else:
+			_begin_patrol_guard_return(agent)
 		return
 
 	var waypoints: Array = agent.get("dispatch_waypoints", [])
@@ -2312,9 +2433,9 @@ func _advance_patrol_dispatch(agent: Dictionary, elapsed: float, phase: float) -
 	if waypoints.is_empty() or waypoint_index >= waypoints.size():
 		if dispatch_state == "enroute":
 			agent["dispatch_state"] = "on_scene"
-			agent["dispatch_wait_remaining"] = float(agent.get("dispatch_scene_duration", 6.0))
 			agent["alert_facing"] = root.rotation.y
-			agent["state"] = "alert_watch"
+			agent["state"] = "investigating"
+			_mark_patrol_guard_arrived(agent)
 			print("[FengduPatrol] guard arrived at incident %s" % str(agent.get("dispatch_incident_id", "unknown")))
 		elif dispatch_state == "returning":
 			_finish_patrol_dispatch(agent)
@@ -2331,10 +2452,10 @@ func _advance_patrol_dispatch(agent: Dictionary, elapsed: float, phase: float) -
 		if waypoint_index >= waypoints.size():
 			if dispatch_state == "enroute":
 				agent["dispatch_state"] = "on_scene"
-				agent["dispatch_wait_remaining"] = float(agent.get("dispatch_scene_duration", 6.0))
 				agent["alert_facing"] = root.rotation.y
-				agent["state"] = "alert_watch"
-				print("[FengduPatrol] guard arrived at incident #%d" % int(agent.get("dispatch_incident_sequence", 0)))
+				agent["state"] = "investigating"
+				_mark_patrol_guard_arrived(agent)
+				print("[FengduPatrol] guard arrived at incident %s" % str(agent.get("dispatch_incident_id", "unknown")))
 			else:
 				_finish_patrol_dispatch(agent)
 	else:
@@ -2351,6 +2472,7 @@ func _advance_patrol_dispatch(agent: Dictionary, elapsed: float, phase: float) -
 
 func _finish_patrol_dispatch(agent: Dictionary) -> void:
 	var root: Node3D = agent["root"]
+	_mark_patrol_guard_returned(agent)
 	var resume_index := int(agent.get("dispatch_resume_route_index", 0))
 	if not patrol_route.is_empty():
 		resume_index = posmod(resume_index, patrol_route.size())
@@ -2375,6 +2497,7 @@ func _patrol_dispatch_status_text() -> String:
 	var enroute_count := 0
 	var on_scene_count := 0
 	var returning_count := 0
+	var investigating_count := 0
 	var active_severity := ""
 	for agent in npc_agents:
 		if str(agent.get("role", "")) != "patrol_guard":
@@ -2384,7 +2507,6 @@ func _patrol_dispatch_status_text() -> String:
 			continue
 		if active_severity == "":
 			active_severity = str(agent.get("dispatch_severity", ""))
-	var severity_label := "高级" if active_severity == "high" else ("中级" if active_severity == "medium" else "低级")
 		match state:
 			"enroute":
 				enroute_count += 1
@@ -2392,11 +2514,14 @@ func _patrol_dispatch_status_text() -> String:
 				on_scene_count += 1
 			"returning":
 				returning_count += 1
+			"investigating":
+				investigating_count += 1
+	var severity_label := "高级" if active_severity == "high" else ("中级" if active_severity == "medium" else "低级")
 	var queued_count := patrol_incident_queue.size()
 	if enroute_count > 0:
 		return "巡防增援 · %s事件 · %d 名巡城卫赶赴现场 · 待处理 %d" % [severity_label, enroute_count, queued_count]
-	if on_scene_count > 0:
-		return "现场处置 · %s事件 · %d 名巡城卫警戒 · 待处理 %d" % [severity_label, on_scene_count, queued_count]
+	if investigating_count > 0 or on_scene_count > 0:
+		return "现场调查 · %s事件 · %d 名巡城卫调查取证 · 待处理 %d" % [severity_label, investigating_count + on_scene_count, queued_count]
 	if returning_count > 0:
 		return "巡防归队 · %s事件 · %d 名巡城卫返回 · 待处理 %d" % [severity_label, returning_count, queued_count]
 	if queued_count > 0:
@@ -2416,6 +2541,7 @@ func _update_patrol_alert(delta: float) -> void:
 	if patrol_dispatch_queue_elapsed >= 0.5:
 		patrol_dispatch_queue_elapsed = 0.0
 		_process_patrol_dispatch_queue()
+	_update_patrol_incident_lifecycle(delta)
 
 
 func _sync_soldier_formation(agent: Dictionary) -> void:
