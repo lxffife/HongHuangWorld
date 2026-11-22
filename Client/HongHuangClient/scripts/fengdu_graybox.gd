@@ -2512,7 +2512,7 @@ func _interact_with_focused_npc() -> void:
 			if merchant_state == "greet":
 				message = "%s（%s）\n%s · %s\n经营：%s\n陈列：%s\n服务标识：%s\n摊位编号：%s\n\n%s。" % [npc_name, str(npc_focus_agent.get("merchant_title", "掌柜")), stall_type, business_state, stall_type, goods_text, service, stall_id, service_note]
 			else:
-				message = "%s · %s\n经营：%s\n陈列：%s\n服务标识：%s\n摊位编号：%s\n\n当前仅为场景展示，真实库存与交易尚未开放。" % [npc_name, business_state, stall_type, goods_text, service, stall_id]
+				message = "%s · %s\n经营：%s\n陈列：%s\n服务标识：%s\n摊位编号：%s\n\n%s；当前仅为场景展示，真实库存与交易尚未开放。" % [npc_name, business_state, stall_type, goods_text, service, stall_id, service_note]
 		"registration": message = "%s：请准备好魂籍凭证，先登记来处，再按引导前往分流处。" % npc_name
 		"queue_info":
 			var queue_state := str(npc_focus_agent.get("state", "queue_wait"))
