@@ -18,6 +18,7 @@ var (
 	ErrDropUnavailable = errors.New("drop is unavailable")
 	ErrInventoryFull = errors.New("inventory is full")
 	ErrCharacterInWorld = errors.New("character has an active world session")
+	ErrIdempotencyConflict = errors.New("request id was already used for another operation")
 )
 
 type ItemStack struct {
@@ -553,6 +554,20 @@ type EquippedItem struct {
 	SetDescription string `json:"set_description,omitempty"`
 	SetBonusTiers map[int]map[string]int `json:"set_bonus_tiers,omitempty"`
 }
+type SalvageRequest struct {
+	RequestID string
+	InstanceID string
+}
+
+type SalvageResult struct {
+	Applied bool `json:"applied"`
+	EquipmentItemID string `json:"equipment_item_id"`
+	MaterialItemID string `json:"material_item_id"`
+	MaterialName string `json:"material_name"`
+	MaterialQuantity int `json:"material_quantity"`
+	EquipmentQuality int `json:"equipment_quality"`
+}
+
 type EquipmentRequest struct { ItemID string; InstanceID string; Slot string }
 var validEquipmentSlots = map[string]bool{"weapon":true,"head":true,"chest":true,"legs":true,"boots":true,"accessory":true}
 
@@ -679,6 +694,84 @@ func (s *Service) Equip(ctx context.Context,accountID string,request EquipmentRe
 	if err:=tx.Commit();err!=nil{return fmt.Errorf("commit equipped item: %w",err)}
 	return nil
 }
+
+func (s *Service) SalvageEquipment(ctx context.Context,accountID string,request SalvageRequest)(SalvageResult,error){
+	if strings.TrimSpace(accountID)==""||!validUUID(request.RequestID)||!validUUID(request.InstanceID){return SalvageResult{},ErrInvalidRequest}
+	tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return SalvageResult{},fmt.Errorf("begin equipment salvage: %w",err)};defer tx.Rollback()
+	var characterID string
+	if err:=tx.QueryRowContext(ctx,`SELECT c.id::text FROM souls soul JOIN characters c ON c.id=soul.current_character_id
+		WHERE soul.account_id=$1 AND c.status='alive' FOR UPDATE OF c`,accountID).Scan(&characterID);err!=nil{
+		if errors.Is(err,sql.ErrNoRows){return SalvageResult{},ErrInvalidRequest}
+		return SalvageResult{},fmt.Errorf("resolve salvage character: %w",err)
+	}
+	var activeSession bool
+	if err:=tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM world_sessions WHERE character_id=$1::uuid AND session_state IN ('connecting','active','saving'))`,characterID).Scan(&activeSession);err!=nil{
+		return SalvageResult{},fmt.Errorf("check active session before salvage: %w",err)
+	}
+	if activeSession{return SalvageResult{},ErrCharacterInWorld}
+	var existing SalvageResult
+	var existingInstance string
+	err=tx.QueryRowContext(ctx,`SELECT item_instance_id::text,equipment_item_id,material_item_id,
+		(SELECT name FROM item_definitions WHERE id=material_item_id),material_quantity,equipment_quality
+		FROM equipment_salvage_events WHERE character_id=$1::uuid AND request_id=$2::uuid`,characterID,request.RequestID).
+		Scan(&existingInstance,&existing.EquipmentItemID,&existing.MaterialItemID,&existing.MaterialName,&existing.MaterialQuantity,&existing.EquipmentQuality)
+	if err==nil{
+		if existingInstance!=request.InstanceID{return SalvageResult{},ErrIdempotencyConflict}
+		existing.Applied=false
+		if err:=tx.Commit();err!=nil{return SalvageResult{},fmt.Errorf("commit recovered salvage request: %w",err)}
+		return existing,nil
+	}
+	if !errors.Is(err,sql.ErrNoRows){return SalvageResult{},fmt.Errorf("check salvage idempotency: %w",err)}
+	var itemID,materialID,materialName string
+	var quality,baseQuantity,perQualityBonus,maxStack int
+	err=tx.QueryRowContext(ctx,`SELECT ii.item_id,ii.quality,r.material_item_id,m.name,
+		r.base_quantity,r.per_quality_bonus,m.max_stack
+		FROM character_item_instances owned
+		JOIN item_instances ii ON ii.id=owned.item_instance_id
+		JOIN item_definitions i ON i.id=ii.item_id AND i.enabled AND i.item_type='equipment'
+		JOIN equipment_salvage_recipes r ON r.equipment_item_id=i.id AND r.enabled
+		JOIN item_definitions m ON m.id=r.material_item_id AND m.enabled AND m.item_type='material'
+		WHERE owned.character_id=$1::uuid AND ii.id=$2::uuid
+		FOR UPDATE OF owned,ii`,characterID,request.InstanceID).
+		Scan(&itemID,&quality,&materialID,&materialName,&baseQuantity,&perQualityBonus,&maxStack)
+	if errors.Is(err,sql.ErrNoRows){return SalvageResult{},ErrInvalidRequest}
+	if err!=nil{return SalvageResult{},fmt.Errorf("lock salvage equipment and recipe: %w",err)}
+	var equipped bool
+	if err:=tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM character_equipment WHERE item_instance_id=$1::uuid)`,request.InstanceID).Scan(&equipped);err!=nil{
+		return SalvageResult{},fmt.Errorf("check equipped salvage instance: %w",err)
+	}
+	if equipped{return SalvageResult{},ErrInvalidRequest}
+	quantity:=baseQuantity+max(0,quality-1)*perQualityBonus
+	if quantity<1||quantity>maxStack{return SalvageResult{},ErrInvalidRequest}
+	result:=SalvageResult{Applied:true,EquipmentItemID:itemID,MaterialItemID:materialID,MaterialName:materialName,MaterialQuantity:quantity,EquipmentQuality:quality}
+	_,err=tx.ExecContext(ctx,`INSERT INTO character_inventory(character_id,item_id,quantity)
+		VALUES($1::uuid,$2,$3)
+		ON CONFLICT(character_id,item_id) DO UPDATE
+		SET quantity=character_inventory.quantity+EXCLUDED.quantity,updated_at=now()
+		WHERE character_inventory.quantity+EXCLUDED.quantity<=$4`,characterID,materialID,quantity,maxStack)
+	if err!=nil{return SalvageResult{},fmt.Errorf("grant salvage material: %w",err)}
+	var ownedQuantity int
+	if err:=tx.QueryRowContext(ctx,`SELECT quantity FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2`,characterID,materialID).Scan(&ownedQuantity);err!=nil{
+		return SalvageResult{},fmt.Errorf("verify salvage material grant: %w",err)
+	}
+	if ownedQuantity<quantity{return SalvageResult{},ErrInventoryFull}
+	if _,err:=tx.ExecContext(ctx,`INSERT INTO equipment_salvage_events(character_id,request_id,item_instance_id,equipment_item_id,material_item_id,material_quantity,equipment_quality)
+		VALUES($1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7)`,characterID,request.RequestID,request.InstanceID,itemID,materialID,quantity,quality);err!=nil{
+		return SalvageResult{},fmt.Errorf("record equipment salvage: %w",err)
+	}
+	if _,err:=tx.ExecContext(ctx,`UPDATE ground_drops SET item_instance_id=NULL WHERE item_instance_id=$1::uuid AND status='picked'`,request.InstanceID);err!=nil{
+		return SalvageResult{},fmt.Errorf("detach picked ground drop history: %w",err)
+	}
+	if _,err:=tx.ExecContext(ctx,`DELETE FROM character_item_instances WHERE character_id=$1::uuid AND item_instance_id=$2::uuid`,characterID,request.InstanceID);err!=nil{
+		return SalvageResult{},fmt.Errorf("consume salvaged equipment ownership: %w",err)
+	}
+	if _,err:=tx.ExecContext(ctx,`DELETE FROM item_instances WHERE id=$1::uuid`,request.InstanceID);err!=nil{
+		return SalvageResult{},fmt.Errorf("delete salvaged equipment instance: %w",err)
+	}
+	if err:=tx.Commit();err!=nil{return SalvageResult{},fmt.Errorf("commit equipment salvage: %w",err)}
+	return result,nil
+}
+
 func (s *Service) Unequip(ctx context.Context,accountID,slot string)error{
 	if strings.TrimSpace(accountID)==""||!validEquipmentSlots[slot]{return ErrInvalidRequest}
 	tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return fmt.Errorf("begin unequip item: %w",err)};defer tx.Rollback()
