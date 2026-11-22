@@ -422,11 +422,45 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 
 
 func _build_palace_axis() -> void:
-	# The palace is the city's visual anchor, intentionally larger than every bureau.
+	# A walled northern palace precinct with two ceremonial gates and a layered court axis.
 	var center := Vector3(0, 0, 72)
 	district_markers["酆都皇城"] = center
-	_label("酆都皇城", center + Vector3(0, 34, 0), 30, Color("#e0c08b"))
+	_label("酆都皇城", center + Vector3(0, 38, 0), 30, Color("#e0c08b"))
 	_box("ImperialPalaceTerrace", center + Vector3(0, 0.55, 0), Vector3(43, 1.1, 28), "gold", false)
+
+	# Outer palace wall: the southern entrance remains a broad, walkable opening.
+	for side in [-1.0, 1.0]:
+		_box("ImperialOuterSideWall", center + Vector3(side * 31.0, 4.0, 0), Vector3(1.8, 8.0, 48.0), "wall", true)
+		_box("ImperialOuterSouthWall", center + Vector3(side * 19.5, 4.0, -24.0), Vector3(23.0, 8.0, 1.8), "wall", true)
+	_box("ImperialOuterNorthWall", center + Vector3(0, 4.0, 24.0), Vector3(63.0, 8.0, 1.8), "wall", true)
+	for side in [-1.0, 1.0]:
+		_box("ImperialSouthGatePier", center + Vector3(side * 8.5, 5.0, -24.0), Vector3(2.2, 10.0, 2.4), "dark_stone", true)
+		_roof_tier(center + Vector3(side * 8.5, 10.5, -24.0), 5.5, 2.0)
+	_box("ImperialSouthGateLintel", center + Vector3(0, 10.0, -24.0), Vector3(18.0, 1.2, 2.4), "gold", false)
+	_label("午门", center + Vector3(0, 13.0, -24.0), 24, Color("#f1d49d"))
+
+	# Inner court wall and second ceremonial gate create a clear progression to the throne hall.
+	for side in [-1.0, 1.0]:
+		_box("ImperialInnerWall", center + Vector3(side * 25.0, 3.2, -8.0), Vector3(1.4, 6.4, 20.0), "wall", true)
+		_box("ImperialInnerGatePier", center + Vector3(side * 7.0, 4.5, -8.0), Vector3(1.8, 9.0, 2.0), "dark_stone", true)
+		_roof_tier(center + Vector3(side * 7.0, 9.5, -8.0), 4.8, 1.8)
+	_box("ImperialInnerGateLintel", center + Vector3(0, 9.0, -8.0), Vector3(15.0, 1.0, 2.0), "gold", false)
+	_label("承天门", center + Vector3(0, 12.0, -8.0), 21, Color("#e4c58e"))
+
+	# Front court, side halls and rear residence establish a palace rather than a lone hall.
+	_box("ImperialFrontCourt", center + Vector3(0, 0.12, -16.0), Vector3(35.0, 0.18, 12.0), "road_edge", false)
+	for side in [-1.0, 1.0]:
+		var side_center := center + Vector3(side * 20.0, 0, 5.0)
+		_box("ImperialSideHall", side_center + Vector3(0, 4.0, 0), Vector3(8.0, 8.0, 9.0), "palace", true)
+		_dougong_band(side_center + Vector3(0, 7.5, 0), 8.5, 9.0)
+		_roof_tier(side_center + Vector3(0, 9.0, 0), 12.0, 2.8)
+		_box("ImperialRearGallery", center + Vector3(side * 13.0, 2.0, 17.0), Vector3(12.0, 4.0, 3.0), "dark_stone", true)
+		_box("ImperialGardenPool", center + Vector3(side * 20.0, 0.08, 17.0), Vector3(8.0, 0.16, 5.0), "water", false)
+	_box("ImperialRearHall", center + Vector3(0, 4.0, 18.0), Vector3(15.0, 8.0, 9.0), "palace", true)
+	_roof_tier(center + Vector3(0, 9.0, 18.0), 20.0, 3.2)
+	_label("后殿", center + Vector3(0, 13.0, 18.0), 20, Color("#d7bd98"))
+
+	# Main throne hall remains the tallest and most prominent structure.
 	_box("ImperialMainHall", center + Vector3(0, 9, 0), Vector3(23, 17, 15), "palace", true)
 	for x in [-9.0, -4.5, 0.0, 4.5, 9.0]:
 		_box("PalacePillar", center + Vector3(x, 7.0, 8.0), Vector3(0.9, 14, 0.9), "gold", true)
