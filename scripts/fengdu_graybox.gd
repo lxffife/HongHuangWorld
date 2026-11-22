@@ -713,6 +713,38 @@ func _bind_market_merchant(agent: Dictionary, point: Dictionary) -> void:
 	agent["interaction_type"] = "trade"
 
 
+func _update_merchant_market_activity(agent: Dictionary) -> void:
+	# Restocking takes priority over customer greetings and the auction glance.
+	if not agent.has("market_stall_id"):
+		return
+	var business_state := str(agent.get("market_business_state", "closed"))
+	var previous_state := str(agent.get("state", "trade_idle"))
+	if business_state == "restocking":
+		agent["player_greeting"] = false
+		var restock_phase := fposmod(market_ambience_time + float(agent.get("phase", 0.0)), 5.0)
+		agent["state"] = "restock_receive" if restock_phase < 2.35 else "restock_sort"
+		agent["market_activity"] = "receive_cargo" if restock_phase < 2.35 else "sort_goods"
+		return
+	if previous_state == "restock_receive" or previous_state == "restock_sort":
+		agent["market_activity"] = "open_for_business"
+		agent["state"] = "trade_idle"
+		agent["state_elapsed"] = 0.0
+		agent["state_cycle_index"] = 0
+		agent["player_greeting"] = false
+		return
+	if business_state != "open" or bool(agent.get("player_greeting", false)):
+		return
+	if _is_market_auction_time():
+		var glance_phase := fposmod(market_ambience_time + float(agent.get("phase", 0.0)), 18.0)
+		if glance_phase < 2.8:
+			agent["state"] = "auction_watch"
+			agent["market_activity"] = "watch_auction"
+			return
+	if previous_state == "auction_watch":
+		agent["state"] = "trade_idle"
+		agent["market_activity"] = "open_for_business"
+
+
 func _market_merchant_profile(stall_type: String) -> Dictionary:
 	match stall_type:
 		"魂珠铺": return {"name": "孟照夜", "title": "魂珠掌柜"}
@@ -1307,7 +1339,7 @@ func _update_market_ambience(delta: float) -> void:
 		if unload_crate.visible:
 			var transfer_elapsed := fposmod(route_time - 8.0, 5.0)
 			var source_position := caravan_root.global_position + caravan_root.global_transform.basis * Vector3(0.0, 1.05, 1.45)
-			var target_position := _market_restock_destination(str(caravan_data["cargo_type"]))
+			var target_position := _market_restock_destination(str(caravan_data["cargo_type"]), str(caravan_data["caravan_id"]))
 			var transfer_weight := smoothstep(0.0, 2.2, transfer_elapsed)
 			unload_crate.global_position = source_position.lerp(target_position, transfer_weight)
 			unload_crate.rotation.y = sin(transfer_elapsed * 2.4) * 0.08
@@ -1512,6 +1544,19 @@ func _apply_npc_behavior_pose(agent: Dictionary, phase: float) -> void:
 			body.rotation.x = deg_to_rad(7.0) + absf(gesture) * 0.035
 			left_arm.rotation.z = deg_to_rad(-42.0) + gesture * 0.08
 			right_arm.rotation.z = deg_to_rad(42.0) - gesture * 0.08
+		"restock_receive":
+			body.rotation.x = deg_to_rad(12.0) + absf(gesture) * 0.025
+			left_arm.rotation.z = deg_to_rad(-62.0) + sin(phase * 1.4) * 0.045
+			right_arm.rotation.z = deg_to_rad(62.0) - sin(phase * 1.4 + 0.6) * 0.045
+		"restock_sort":
+			body.rotation.x = deg_to_rad(8.0) + absf(gesture) * 0.03
+			left_arm.rotation.z = deg_to_rad(-48.0) + sin(phase * 1.7) * 0.12
+			right_arm.rotation.z = deg_to_rad(48.0) - sin(phase * 1.7 + 0.8) * 0.12
+		"auction_watch":
+			root.rotation.y = facing + sin(phase * 0.2) * 0.035
+			body.rotation.x = deg_to_rad(-3.0) + sin(phase * 0.7) * deg_to_rad(1.0)
+			left_arm.rotation.z = deg_to_rad(-18.0)
+			right_arm.rotation.z = deg_to_rad(18.0)
 		"close_shop":
 			left_arm.rotation.z = deg_to_rad(-12.0) + gesture * 0.04
 			right_arm.rotation.z = deg_to_rad(12.0) - gesture * 0.04
@@ -1791,6 +1836,7 @@ func _update_npc_agents(delta: float) -> void:
 			_sync_soldier_formation(agent)
 		if str(agent.get("role", "")) == "merchant":
 			_update_merchant_proximity_behavior(agent, distance_to_player)
+			_update_merchant_market_activity(agent)
 		var patrol_alert_override := false
 		if str(agent.get("role", "")) == "patrol_guard":
 			var should_alert := patrol_alert_remaining > 0.0 and root.global_position.distance_to(patrol_alert_position) <= 24.0
@@ -2150,15 +2196,21 @@ func _create_market_stall_status_label(stall_position: Vector3, facing: float) -
 	return status
 
 
-func _market_restock_destination(cargo_type: String) -> Vector3:
-	# Deliveries stop beside the rear edge of a matching stall, outside the central aisle.
+func _market_restock_destination(cargo_type: String, caravan_id: String) -> Vector3:
+	# Alternate between the two matching stalls; use each stall's facing, not world origin.
 	var target_group := "soul_goods" if cargo_type == "魂珠与魂籍" else "herb_goods"
+	var matching_stalls: Array[Dictionary] = []
 	for stall in market_stall_registry:
 		if str(stall.get("restock_group", "")) == target_group:
-			var stall_position: Vector3 = stall.get("position", Vector3.ZERO)
-			var side := -1.0 if stall_position.x < 0.0 else 1.0
-			return stall_position + Vector3(side * 1.7, 0.28, -1.8)
-	return Vector3.ZERO
+			matching_stalls.append(stall)
+	if matching_stalls.is_empty():
+		return Vector3.ZERO
+	var target_index := 1 if caravan_id.ends_with(".02") and matching_stalls.size() > 1 else 0
+	var target_stall: Dictionary = matching_stalls[target_index]
+	var stall_position: Vector3 = target_stall.get("position", Vector3.ZERO)
+	var facing := float(target_stall.get("facing", 0.0))
+	var rear_direction := Vector3(sin(facing), 0.0, cos(facing))
+	return stall_position - rear_direction * 1.7 + Vector3(0.0, 0.28, -0.9)
 
 
 func _market_stall_is_restocking(stall_id: String) -> bool:
@@ -2656,7 +2708,11 @@ func _interact_with_focused_npc() -> void:
 			var stall_id := str(npc_focus_agent.get("market_stall_id", "待绑定"))
 			var service := str(npc_focus_agent.get("market_service", "unavailable"))
 			var service_note := "商队正在卸货，掌柜暂缓接待" if business_code == "restocking" else "交易功能接入后可查看实时货单"
-			if merchant_state == "greet":
+			if merchant_state == "restock_receive" or merchant_state == "restock_sort":
+				message = "%s（%s）\n%s · 补货中\n正在接收并整理%s，暂缓交易接待。\n摊位编号：%s\n\n当前为本地场景演示，不会修改真实库存。" % [npc_name, str(npc_focus_agent.get("merchant_title", "掌柜")), stall_type, goods_text, stall_id]
+			elif merchant_state == "auction_watch":
+				message = "%s（%s）\n%s · 正在关注万魂竞宝\n掌柜暂时留意台上拍品，稍后继续经营。\n陈列：%s\n摊位编号：%s" % [npc_name, str(npc_focus_agent.get("merchant_title", "掌柜")), stall_type, goods_text, stall_id]
+			elif merchant_state == "greet":
 				message = "%s（%s）\n%s · %s\n经营：%s\n陈列：%s\n服务标识：%s\n摊位编号：%s\n\n%s。" % [npc_name, str(npc_focus_agent.get("merchant_title", "掌柜")), stall_type, business_state, stall_type, goods_text, service, stall_id, service_note]
 			else:
 				message = "%s · %s\n经营：%s\n陈列：%s\n服务标识：%s\n摊位编号：%s\n\n%s；当前仅为场景展示，真实库存与交易尚未开放。" % [npc_name, business_state, stall_type, goods_text, service, stall_id, service_note]
