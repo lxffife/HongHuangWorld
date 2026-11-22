@@ -103,11 +103,18 @@ func (s *Service) Invite(ctx context.Context, accountID, username string) (Invit
  var max int
  if err=tx.QueryRowContext(ctx,`SELECT max_members FROM parties WHERE id=$1`,partyID).Scan(&max);err!=nil{return Invitation{},fmt.Errorf("read party capacity: %w",err)}
  if count>=max{return Invitation{},ErrPartyFull}
+ // Expire stale invitations before checking the partial unique pending-invite index.
+ if _,err=tx.ExecContext(ctx,`UPDATE party_invitations SET status='expired',responded_at=now()
+ WHERE party_id=$1 AND invitee_account_id=$2 AND status='pending' AND expires_at<=now()`,partyID,inviteeID);err!=nil{return Invitation{},fmt.Errorf("expire stale party invitations: %w",err)}
  var result Invitation
- err=tx.QueryRowContext(ctx,`INSERT INTO party_invitations(party_id,inviter_account_id,invitee_account_id,expires_at)
- VALUES($1,$2,$3,now()+interval '5 minutes')
- RETURNING id::text,party_id::text,expires_at`,partyID,accountID,inviteeID).Scan(&result.ID,&result.PartyID,&result.ExpiresAt)
- if err!=nil{return Invitation{},fmt.Errorf("create party invitation: %w",err)}
+ err=tx.QueryRowContext(ctx,`SELECT id::text,party_id::text,expires_at FROM party_invitations
+ WHERE party_id=$1 AND invitee_account_id=$2 AND status='pending' AND expires_at>now()`,partyID,inviteeID).Scan(&result.ID,&result.PartyID,&result.ExpiresAt)
+ if errors.Is(err,sql.ErrNoRows) {
+  err=tx.QueryRowContext(ctx,`INSERT INTO party_invitations(party_id,inviter_account_id,invitee_account_id,expires_at)
+  VALUES($1,$2,$3,now()+interval '5 minutes') RETURNING id::text,party_id::text,expires_at`,
+  partyID,accountID,inviteeID).Scan(&result.ID,&result.PartyID,&result.ExpiresAt)
+ }
+ if err!=nil{return Invitation{},fmt.Errorf("create or reuse party invitation: %w",err)}
  result.PartyWorldID=worldID
  if err=tx.Commit();err!=nil{return Invitation{},fmt.Errorf("commit party invitation: %w",err)}
  return result,nil
