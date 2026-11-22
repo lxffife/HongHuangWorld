@@ -4346,7 +4346,7 @@ struct EnetServer::Impl {
                     if (!enqueue_durable_event(mastery_payload.at("event_id").get<std::string>(),
                                                "spell_mastery_reward", mastery_payload, mastery_error)) {
                         std::cerr << "[SpellMastery] confirmed hit XP could not be queued: "
-                                  << mastery_error << std::endl;
+                                      << player.character_id << ": " << mastery_error << '\n';
                     } else {
                         auto& mastery = owner->second.spell_mastery[projectile->spell_id];
                         if (mastery.spell_id.empty())
