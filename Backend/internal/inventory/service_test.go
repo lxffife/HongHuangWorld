@@ -325,3 +325,20 @@ func TestRolledEquipmentBonusesUseAuthoritativeCombatStatPipeline(t *testing.T) 
 		t.Fatalf("rolled movement speed = %v, want 6.0", stats.MovementSpeed)
 	}
 }
+
+
+func TestInventorySlotAvailability(t *testing.T) {
+	tests:=[]struct{name string;used,max int;needsNew,want bool}{
+		{"free slot",39,40,true,true},
+		{"last slot",40,40,true,false},
+		{"stack merge at capacity",40,40,false,true},
+		{"zero capacity",0,0,true,false},
+		{"negative used", -1,40,false,false},
+		{"expanded inventory",40,60,true,true},
+	}
+	for _,test:=range tests{t.Run(test.name,func(t *testing.T){
+		if got:=inventorySlotAvailable(test.used,test.max,test.needsNew);got!=test.want{
+			t.Fatalf("inventorySlotAvailable(%d,%d,%t)=%t want %t",test.used,test.max,test.needsNew,got,test.want)
+		}
+	})}
+}
