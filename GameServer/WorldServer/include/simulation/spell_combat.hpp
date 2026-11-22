@@ -86,9 +86,8 @@ inline bool valid_spell_definition(const SpellDefinition& spell) {
 // resolution remains deterministic across platforms.
 inline std::int32_t spell_power_basis_points(std::int32_t base_power_basis_points,
                                              std::int32_t spirit) {
-    if (base_power_basis_points <= 0 || base_power_basis_points > 100000 || spirit < 0) {
-        return std::max(0, base_power_basis_points);
-    }
+    if (base_power_basis_points <= 0 || base_power_basis_points > 100000) return 0;
+    if (spirit < 0) return base_power_basis_points;
     const auto bonus_basis_points = std::min<std::int64_t>(
         static_cast<std::int64_t>(spirit) * 25, 2500);
     const auto scaled = static_cast<std::int64_t>(base_power_basis_points) *
