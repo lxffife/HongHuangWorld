@@ -2510,7 +2510,7 @@ func _seed_autonomous_case_material(record: Dictionary) -> void:
 			break
 		if not tags.has(tag_value):
 			tags.append(tag_value)
-	record["player_clue_tags"] = tags
+	record["autonomous_evidence_tags"] = tags
 	if str(record.get("witness_testimony_tag", "")).is_empty():
 		var incident_type := str(record.get("type", ""))
 		record["witness_testimony_tag"] = "witness_dispute" if incident_type == "crowd_disorder" else ("witness_violence" if incident_type == "hostile_encounter" else "witness_shadow")
@@ -3915,13 +3915,17 @@ func submit_patrol_case_to_judge_bureau(incident_id: String) -> Dictionary:
 				"defense_statement": "",
 				"response_at": -1.0
 			})
+	var submission_evidence_tags: Array = record.get("player_clue_tags", []).duplicate()
+	for autonomous_tag in record.get("autonomous_evidence_tags", []):
+		if not submission_evidence_tags.has(autonomous_tag):
+			submission_evidence_tags.append(autonomous_tag)
 	var submission := {
 		"transfer_id": transfer_id,
 		"incident_id": incident_id,
 		"source_office": "patrol_office",
 		"target_office": "judge_bureau",
 		"submitted_at": npc_simulation_time,
-		"evidence_tags": record.get("player_clue_tags", []).duplicate(),
+		"evidence_tags": submission_evidence_tags,
 		"evidence_count": evidence_count,
 		"witness_count": witness_count,
 		"testimony_tag": str(record.get("witness_testimony_tag", "")),
