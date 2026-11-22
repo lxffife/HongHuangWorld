@@ -1521,6 +1521,39 @@ func _market_stall(center: Vector3, facing: float, stall_type: String) -> void:
 			_box("GhostMarketBountyScroll", counter_front + Vector3(0, 0.2, -0.82), Vector3(0.58, 0.26, 0.8), "gold", false)
 			_box("GhostMarketTradeToken", counter_front + Vector3(-facing * 0.16, 0.18, 0.55), Vector3(0.38, 0.28, 0.38), "road_edge", false)
 			_market_display_orb(counter_front + Vector3(0, 0.26, 1.25), 0.18, Color("#d4a96d"))
+	_market_stall_architecture(center, facing, stall_type, sign_accent)
+
+
+func _market_stall_architecture(center: Vector3, facing: float, stall_type: String, accent: Color) -> void:
+	# Small silhouette changes make the six shop families readable before their signs are legible.
+	match stall_type:
+		"魂珠铺":
+			_market_display_orb(center + Vector3(0.0, 3.38, 0.0), 0.2, accent)
+			for z_offset in [-1.45, 1.45]:
+				_box("GhostMarketOrbShopEaveBrace", center + Vector3(facing * 1.95, 2.72, z_offset), Vector3(0.34, 0.22, 0.72), "gold", false)
+		"魂籍铺":
+			for level in [1.55, 2.05]:
+				_box("GhostMarketArchiveShelf", center + Vector3(-facing * 1.78, level, 0.0), Vector3(0.42, 0.12, 3.25), "gold", false)
+			for z_offset in [-1.15, 0.0, 1.15]:
+				_box("GhostMarketArchiveSpine", center + Vector3(-facing * 1.76, 1.82, z_offset), Vector3(0.3, 0.48, 0.22), "road_edge", false)
+		"药材铺":
+			for z_offset in [-1.25, 0.0, 1.25]:
+				_box("GhostMarketHerbHanger", center + Vector3(facing * 1.72, 2.42, z_offset), Vector3(0.1, 0.72, 0.1), "district", false)
+				_market_display_orb(center + Vector3(facing * 1.72, 2.0, z_offset), 0.14, accent)
+		"法器铺":
+			for z_offset in [-1.65, 1.65]:
+				_box("GhostMarketRitualCornerFinial", center + Vector3(facing * 1.82, 3.42, z_offset), Vector3(0.42, 0.42, 0.42), "gold", false)
+				_market_display_orb(center + Vector3(facing * 1.82, 3.72, z_offset), 0.1, accent)
+		"魂器铺":
+			for z_offset in [-1.35, 1.35]:
+				_box("GhostMarketVesselStand", center + Vector3(-facing * 1.68, 1.48, z_offset), Vector3(0.42, 0.82, 0.42), "palace", false)
+				_market_display_orb(center + Vector3(-facing * 1.68, 1.98, z_offset), 0.16, accent)
+		"悬赏交易":
+			_box("GhostMarketBountyPennantBeam", center + Vector3(0.0, 3.35, 0.0), Vector3(3.5, 0.16, 0.16), "gold", false)
+			for z_offset in [-1.2, 0.0, 1.2]:
+				var pennant := _box("GhostMarketBountyPennant", center + Vector3(facing * 1.92, 2.95, z_offset), Vector3(0.08, 0.62, 0.48), "district", false)
+				pennant.rotation.z = deg_to_rad(-8.0 if z_offset < 0.0 else 8.0)
+
 
 func _market_notice_board(center: Vector3, board_title: String, accent: Color) -> void:
 	# Framed boards remain outside the central trading aisle.
@@ -1533,6 +1566,13 @@ func _market_notice_board(center: Vector3, board_title: String, accent: Color) -
 		var notice_strip := _box("GhostMarketNoticeSlip", center + Vector3(-0.62 + float(index) * 0.62, 2.18, -0.19), Vector3(0.38, 0.62, 0.06), "gold", false)
 		notice_strip.rotation.z = deg_to_rad(-7.0 + float(index) * 7.0)
 	_market_display_orb(center + Vector3(0.0, 3.42, -0.05), 0.12, accent)
+	if board_title == "悬赏榜":
+		var tier_colors := [Color("#8dbb86"), Color("#d6bd8b"), Color("#d27d68")]
+		for index in range(3):
+			var tier_x := -0.62 + float(index) * 0.62
+			_box("GhostMarketBountyTierPlate", center + Vector3(tier_x, 1.72, -0.205), Vector3(0.46, 0.12, 0.08), "dark_stone", false)
+			_market_display_orb(center + Vector3(tier_x, 2.62, -0.24), 0.1, tier_colors[index])
+			_box("GhostMarketBountyTierMark", center + Vector3(tier_x, 2.35, -0.23), Vector3(0.28, 0.1, 0.08), "gold", false)
 
 
 func _market_audience_bench(center: Vector3, facing: float) -> void:
