@@ -854,6 +854,8 @@ func _sync_waystation_call(agent: Dictionary) -> void:
 				agent["state"] = "queue_called"
 			elif call_phase < 16.0:
 				agent["state"] = "queue_glance"
+			else:
+				agent["state"] = "queue_registering"
 		elif queue_order < active_queue_order:
 			agent["state"] = "queue_wait"
 
@@ -935,10 +937,16 @@ func _apply_npc_behavior_pose(agent: Dictionary, phase: float) -> void:
 			left_arm.rotation.z = deg_to_rad(-12.0)
 			right_arm.rotation.z = deg_to_rad(12.0)
 			body.rotation.x = deg_to_rad(3.0)
+		"queue_registering":
+			# A short, restrained bow communicates desk-side processing without moving position.
+			root.rotation.y = facing
+			left_arm.rotation.z = deg_to_rad(-20.0)
+			right_arm.rotation.z = deg_to_rad(20.0)
+			body.rotation.x = deg_to_rad(7.0)
 		_:
 			left_arm.rotation.z = deg_to_rad(-18.0)
 			right_arm.rotation.z = deg_to_rad(18.0)
-	if state not in ["arrange_goods", "queue_called", "queue_registered"]:
+	if state not in ["arrange_goods", "queue_called", "queue_registering", "queue_registered"]:
 		body.rotation.x = 0.0
 
 
@@ -1541,6 +1549,7 @@ func _interact_with_focused_npc() -> void:
 			match queue_state:
 				"queue_registered": message = "%s：魂籍登记已完成，请留在原位等待分流引导（当前为本地演示）。" % npc_name
 				"queue_called", "queue_glance": message = "%s：引魂使正在叫号，请回应并准备登记。" % npc_name
+				"queue_registering": message = "%s：引魂使正在核验魂籍，请稍候。" % npc_name
 				_: message = "%s：请依次候登记，不要越过前方魂灵。" % npc_name
 		"dispatch": message = "%s：巡防事务请报明来意。此处暂未开放军令与治安任务。" % npc_name
 		"talk": message = "%s：魂坊今日安宁，若有闲暇，不妨去茶亭坐坐。" % npc_name
