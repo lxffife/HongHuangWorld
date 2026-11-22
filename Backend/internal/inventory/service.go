@@ -749,16 +749,15 @@ func (s *Service) CraftEquipment(ctx context.Context,accountID string,request Cr
 	err=tx.QueryRowContext(ctx,`SELECT r.output_item_id,i.name,i.item_type FROM equipment_crafting_recipes r
 		JOIN item_definitions i ON i.id=r.output_item_id AND i.enabled
 		WHERE r.id=$1 AND r.enabled FOR SHARE OF r`,request.RecipeID).Scan(&outputID,&outputName,&outputType)
-	if errors.Is(err,sql.ErrNoRows)||outputType!="equipment"{return CraftResult{},ErrInvalidRequest}
+	if errors.Is(err,sql.ErrNoRows){return CraftResult{},ErrInvalidRequest}
 	if err!=nil{return CraftResult{},fmt.Errorf("load equipment crafting recipe: %w",err)}
+	if outputType!="equipment"{return CraftResult{},ErrInvalidRequest}
 	type ingredient struct{itemID string;quantity,available int}
-	rows,err:=tx.QueryContext(ctx,`SELECT ri.item_id,ri.quantity,COALESCE(ci.quantity,0)
-		FROM equipment_crafting_ingredients ri
-		LEFT JOIN character_inventory ci ON ci.character_id=$2::uuid AND ci.item_id=ri.item_id
-		WHERE ri.recipe_id=$1 ORDER BY ri.item_id`,request.RecipeID,characterID)
+	rows,err:=tx.QueryContext(ctx,`SELECT item_id,quantity
+		FROM equipment_crafting_ingredients WHERE recipe_id=$1 ORDER BY item_id`,request.RecipeID)
 	if err!=nil{return CraftResult{},fmt.Errorf("load crafting ingredients: %w",err)}
 	ingredients:=make([]ingredient,0)
-	for rows.Next(){var v ingredient;if err:=rows.Scan(&v.itemID,&v.quantity,&v.available);err!=nil{rows.Close();return CraftResult{},fmt.Errorf("scan crafting ingredient: %w",err)};ingredients=append(ingredients,v)}
+	for rows.Next(){var v ingredient;if err:=rows.Scan(&v.itemID,&v.quantity);err!=nil{rows.Close();return CraftResult{},fmt.Errorf("scan crafting ingredient: %w",err)};ingredients=append(ingredients,v)}
 	if err:=rows.Err();err!=nil{rows.Close();return CraftResult{},fmt.Errorf("iterate crafting ingredients: %w",err)}
 	if err:=rows.Close();err!=nil{return CraftResult{},fmt.Errorf("close crafting ingredients: %w",err)}
 	if len(ingredients)==0{return CraftResult{},ErrInvalidRequest}
