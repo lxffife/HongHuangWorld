@@ -127,9 +127,30 @@ type equipmentActionRequest struct {
 	Slot string `json:"slot"`
 }
 
+type craftEquipmentRequest struct {
+ RequestID string `json:"request_id"`
+ RecipeID string `json:"recipe_id"`
+}
+
 type salvageEquipmentRequest struct {
 	RequestID string `json:"request_id"`
 	InstanceID string `json:"instance_id"`
+}
+
+func (h *inventoryHandlers) craftEquipment(w http.ResponseWriter,r *http.Request){
+	account,ok:=h.authenticateAccount(w,r);if !ok{return}
+	var request craftEquipmentRequest
+	if err:=decodeJSON(w,r,&request);err!=nil{http.Error(w,"invalid request body",http.StatusBadRequest);return}
+	result,err:=h.service.CraftEquipment(r.Context(),account.ID,inventory.CraftRequest{RequestID:request.RequestID,RecipeID:request.RecipeID})
+	switch{
+	case err==nil:writeJSON(w,http.StatusOK,result)
+	case errors.Is(err,inventory.ErrInvalidRequest):http.Error(w,"crafting recipe is unavailable or invalid",http.StatusBadRequest)
+	case errors.Is(err,inventory.ErrInsufficientMaterials):http.Error(w,"not enough crafting materials",http.StatusConflict)
+	case errors.Is(err,inventory.ErrInventoryFull):http.Error(w,"inventory is full",http.StatusConflict)
+	case errors.Is(err,inventory.ErrCharacterInWorld):http.Error(w,"character is changing world sessions; retry shortly",http.StatusConflict)
+	case errors.Is(err,inventory.ErrIdempotencyConflict):http.Error(w,"request id was already used",http.StatusConflict)
+	default:h.logger.Error("craft equipment failed","account_id",account.ID,"error",err);http.Error(w,"internal server error",http.StatusInternalServerError)
+	}
 }
 
 func (h *inventoryHandlers) salvageEquipment(w http.ResponseWriter,r *http.Request){
