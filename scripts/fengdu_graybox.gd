@@ -2485,9 +2485,9 @@ func _process_autonomous_judicial_cases(delta: float) -> void:
 			for tag_value in current_submission.get("evidence_tags", []):
 				var tag := str(tag_value)
 				if not record.get("hearing_record", {}).get("presented_evidence_tags", []).has(tag):
-					present_case_evidence_at_hearing(incident_id, tag)
+					present_case_evidence_at_hearing(incident_id, tag, "NPC 判官出示巡城司勘验物证：" + tag)
 			if not str(current_submission.get("testimony_tag", "")).is_empty() and str(record.get("judicial_review", {}).get("testimony_assessment", {}).get("assessment", "")) == "credible" and not bool(record.get("hearing_record", {}).get("testimony_presented", false)):
-				present_case_testimony_at_hearing(incident_id)
+				present_case_testimony_at_hearing(incident_id, "NPC 判官宣读巡防记录中的证人陈述。")
 			close_case_hearing(incident_id, "NPC 判官已完成常规案件审理；玩家未参与，案件按现有材料自动归档。")
 			record = patrol_incident_records[index]
 		if str(record.get("case_workflow_state", "")) == "hearing_closed_pending_judgment":
