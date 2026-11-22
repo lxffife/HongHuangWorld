@@ -342,3 +342,18 @@ func TestInventorySlotAvailability(t *testing.T) {
 		}
 	})}
 }
+
+func TestEquipmentSalvageYieldScalesWithQuality(t *testing.T) {
+	tests:=[]struct{name string;base,quality,bonus,max,want int;valid bool}{
+		{"base quality",2,1,1,99,2,true},
+		{"higher quality",2,3,1,99,4,true},
+		{"top quality",2,5,1,99,6,true},
+		{"stack overflow",2,5,1,5,0,false},
+		{"invalid quality",2,6,1,99,0,false},
+		{"zero base",0,2,1,99,0,false},
+	}
+	for _,test:=range tests{t.Run(test.name,func(t *testing.T){
+		got,valid:=equipmentSalvageYield(test.base,test.quality,test.bonus,test.max)
+		if got!=test.want||valid!=test.valid{t.Fatalf("yield=(%d,%t), want (%d,%t)",got,valid,test.want,test.valid)}
+	})}
+}
