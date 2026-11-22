@@ -441,8 +441,11 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 					_market_stall(center + Vector3(side * 10.5, 0, z), -side, stall_types[stall_index])
 					stall_index += 1
 				_box("GhostMarketBackLane", center + Vector3(side * 15.0, 0.08, 0), Vector3(2.0, 0.16, 20.0), "bridge", false)
-			_notice_board(center + Vector3(-5.5, 0, -9.5), "鬼市告示")
-			_notice_board(center + Vector3(5.5, 0, -9.5), "悬赏榜")
+			_market_notice_board(center + Vector3(-5.5, 0, -9.5), "鬼市告示", Color("#83c7e4"))
+			_market_notice_board(center + Vector3(5.5, 0, -9.5), "悬赏榜", Color("#d27d68"))
+			_market_wayfinding(center)
+			for side in [-1.0, 1.0]:
+				_market_audience_bench(center + Vector3(side * 6.25, 0, 7.6), -side)
 			for z in [-8.0, 0.0, 8.0]:
 				_hanging_lantern(center + Vector3(-4.5, 0, z))
 				_hanging_lantern(center + Vector3(4.5, 0, z))
@@ -1517,6 +1520,38 @@ func _market_stall(center: Vector3, facing: float, stall_type: String) -> void:
 			_box("GhostMarketBountyScroll", counter_front + Vector3(0, 0.2, -0.82), Vector3(0.58, 0.26, 0.8), "gold", false)
 			_box("GhostMarketTradeToken", counter_front + Vector3(-facing * 0.16, 0.18, 0.55), Vector3(0.38, 0.28, 0.38), "road_edge", false)
 			_market_display_orb(counter_front + Vector3(0, 0.26, 1.25), 0.18, Color("#d4a96d"))
+
+func _market_notice_board(center: Vector3, board_title: String, accent: Color) -> void:
+	# Framed boards remain outside the central trading aisle.
+	_notice_board(center, board_title)
+	for side in [-1.0, 1.0]:
+		_box("GhostMarketNoticeFramePost", center + Vector3(side * 1.24, 2.25, 0.0), Vector3(0.16, 2.0, 0.34), "gold", false)
+	_box("GhostMarketNoticeHeader", center + Vector3(0.0, 3.12, 0.0), Vector3(2.75, 0.2, 0.36), "roof_edge", false)
+	_box("GhostMarketNoticeBase", center + Vector3(0.0, 0.22, 0.0), Vector3(2.7, 0.24, 0.62), "dark_stone", false)
+	for index in range(3):
+		var notice_strip := _box("GhostMarketNoticeSlip", center + Vector3(-0.62 + float(index) * 0.62, 2.18, -0.19), Vector3(0.38, 0.62, 0.06), "gold", false)
+		notice_strip.rotation.z = deg_to_rad(-7.0 + float(index) * 7.0)
+	_market_display_orb(center + Vector3(0.0, 3.42, -0.05), 0.12, accent)
+
+
+func _market_audience_bench(center: Vector3, facing: float) -> void:
+	# Low-cost, non-colliding benches flank the auction dais.
+	_box("GhostMarketAudienceSeat", center + Vector3(0.0, 0.72, 0.0), Vector3(1.25, 0.34, 4.0), "dark_stone", false)
+	_box("GhostMarketAudienceBack", center + Vector3(-facing * 0.52, 1.18, 0.0), Vector3(0.22, 0.82, 4.0), "gold", false)
+	for z_offset in [-1.55, 1.55]:
+		_box("GhostMarketAudienceSupport", center + Vector3(0.0, 0.35, z_offset), Vector3(1.1, 0.7, 0.24), "stone", false)
+	_box("GhostMarketAudienceFootRail", center + Vector3(facing * 0.58, 0.2, 0.0), Vector3(0.16, 0.16, 3.5), "roof_edge", false)
+
+
+func _market_wayfinding(center: Vector3) -> void:
+	# Ground inlays guide visitors from the southern gate toward the auction.
+	for index in range(5):
+		var z_offset := -7.2 + float(index) * 2.8
+		var marker := _box("GhostMarketWayfindingInlay", center + Vector3(0.0, 0.25, z_offset), Vector3(0.82, 0.07, 0.82), "gold", false)
+		marker.rotation.y = deg_to_rad(45.0)
+	for side in [-1.0, 1.0]:
+		for z_offset in [-6.0, -2.0, 2.0]:
+			_box("GhostMarketAisleEdgeStud", center + Vector3(side * 4.12, 0.27, z_offset), Vector3(0.16, 0.08, 0.48), "roof_edge", false)
 
 func _market_display_orb(position: Vector3, radius: float, tint: Color) -> void:
 	var mesh := SphereMesh.new()
