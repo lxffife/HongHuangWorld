@@ -2607,6 +2607,29 @@ struct EnetServer::Impl {
         persistence_cv.notify_one();
     }
 
+    void handle_player_defeat(ENetPeer* peer) {
+        const auto found = players.find(peer);
+        if (found == players.end() || found->second.health > 0) return;
+        auto& player = found->second;
+        honghuang::simulation::clear_negative_statuses(
+            player.slow_effect, player.freeze_effect, player.poison_effect);
+        player.poison_source_entity_id.clear();
+        if (player.pending_spell.has_value()) {
+            const auto pending = *player.pending_spell;
+            player.pending_spell.reset();
+            const auto* spell = honghuang::simulation::find_spell_definition(pending.spell_id);
+            if (spell != nullptr)
+                player.mana = std::min(player.max_mana, player.mana + spell->mana_cost);
+            player.last_mana_regen_at = Clock::now();
+            send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                Json{{"accepted", false}, {"action", "spell_cast"},
+                     {"phase", "interrupted"}, {"spell_id", pending.spell_id},
+                     {"reason", "角色倒地，施法中断，已返还灵力。"},
+                     {"mana", player.mana}, {"max_mana", player.max_mana}});
+        }
+        enqueue_death_snapshot(peer);
+    }
+
     void drain_death_snapshot_results() {
         std::deque<std::string> completed;
         {
@@ -4134,10 +4157,7 @@ struct EnetServer::Impl {
                              {"damage", applied_damage}, {"health", player.health},
                              {"max_health", player.max_health}, {"defeated", poison_defeated}});
                     if (poison_defeated) {
-                        player.poison_effect = {};
-                        player.poison_source_entity_id.clear();
-                        player.slow_effect = {};
-                        enqueue_death_snapshot(peer);
+                        handle_player_defeat(peer);
                     }
                 } else if (!honghuang::simulation::periodic_damage_is_active(
                                player.poison_effect, effect_now_ms)) {
@@ -4806,10 +4826,7 @@ struct EnetServer::Impl {
                     target_player.health = damage.remaining_health;
                     target_player.last_combat_at = now;
                     if (damage.defeated) {
-                        target_player.slow_effect = {};
-                        target_player.poison_effect = {};
-                        target_player.poison_source_entity_id.clear();
-                        enqueue_death_snapshot(target_peer);
+                        handle_player_defeat(target_peer);
                     }
                     broadcast_player_action_event(target_player, "hit", monster.runtime_id, "heavy_slam", target_peer);
                     send_json(target_peer, honghuang::protocol::MessageType::CombatEvent,
@@ -4836,9 +4853,7 @@ struct EnetServer::Impl {
                 player.health = damage.remaining_health;
                 player.last_combat_at = now;
                 if (damage.defeated) {
-                    honghuang::simulation::clear_negative_statuses(player.slow_effect,player.freeze_effect,player.poison_effect);
-                    player.poison_source_entity_id.clear();
-                    enqueue_death_snapshot(victim->first);
+                    handle_player_defeat(victim->first);
                 }
                 bool applied_slow = false;
                 bool applied_poison = false;
