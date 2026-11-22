@@ -4,6 +4,7 @@
 #undef NDEBUG
 #endif
 #include <cassert>
+#include <string>
 
 int main() {
     using namespace honghuang::simulation;
