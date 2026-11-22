@@ -370,27 +370,32 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 	# Each bureau receives one unmistakable silhouette beyond the shared hall grammar.
 	match title:
 		"十王府":
-			# A formal ten-court axis: paired judgment courts flank the central hall.
-			for side in [-1.0, 1.0]:
-				for i in range(3):
-					var z := center.z + float(i - 1) * 5.2
-					_box("TenKingsCourtWall", Vector3(center.x + side * 11.0, 1.1, z), Vector3(0.8, 2.2, 4.2), "stone", false)
-					_box("TenKingsCourtPavilion", Vector3(center.x + side * 11.0, 3.5, z), Vector3(4.0, 5.0, 3.6), "palace", false)
-					_roof_tier(Vector3(center.x + side * 11.0, 6.4, z), 5.2, 1.8)
-			_box("TenKingsJudgmentSteps", center + Vector3(0, 0.35, -8.0), Vector3(15, 0.7, 2.0), "road_edge", false)
+			# The paired hearing courts and central judgment approach are authored in layout data.
+			var admin_layout: Dictionary = WORLD_LAYOUT.get_administrative_layout()["ten_kings_court"]
+			for court in admin_layout["hearing_courts"]:
+				_box("TenKingsCourtWall", center + court["wall_offset"], Vector3(0.8, 2.2, 4.2), "stone", false)
+				_box("TenKingsCourtPavilion", center + court["offset"], Vector3(4.0, 5.0, 3.6), "palace", false)
+				_roof_tier(center + court["roof_offset"], 5.2, 1.8)
+			var steps: Dictionary = admin_layout["judgment_steps"]
+			_box("TenKingsJudgmentSteps", center + steps["offset"], steps["size"], "road_edge", false)
 		"判官司":
-			# Archive tower and side galleries distinguish the civil judicial bureau.
-			_box("JudgeArchiveTower", center + Vector3(-9.0, 6.0, 2.0), Vector3(5.0, 12.0, 5.0), "dark_stone", false)
+			# Archive and review galleries use stable spatial identities.
+			var admin_layout: Dictionary = WORLD_LAYOUT.get_administrative_layout()["judge_bureau"]
+			var archive: Dictionary = admin_layout["archive_tower"]
+			_box("JudgeArchiveTower", center + archive["offset"], archive["size"], "dark_stone", false)
 			for level in range(3):
-				_roof_tier(center + Vector3(-9.0, 12.5 + float(level) * 3.0, 2.0), 6.2 - float(level) * 0.8, 1.5)
-			for side in [-1.0, 1.0]:
-				_box("JudgeGallery", center + Vector3(side * 9.0, 2.0, -7.0), Vector3(7.0, 4.0, 3.0), "palace", false)
+				_roof_tier(center + archive["roof_base"] + Vector3(0.0, float(level) * 3.0, 0.0), 6.2 - float(level) * 0.8, 1.5)
+			for gallery in admin_layout["galleries"]:
+				_box("JudgeGallery", center + gallery["offset"], gallery["size"], "palace", false)
 		"鬼籍司":
-			# Tall register library with repeated horizontal archive floors.
-			_box("SoulRegisterLibrary", center + Vector3(0, 7.0, 2.0), Vector3(8.0, 14.0, 7.0), "dark_stone", false)
-			for level in range(1, 4):
-				_box("SoulRegisterFloorBand", center + Vector3(0, float(level) * 3.5, 2.0), Vector3(9.0, 0.42, 8.0), "gold", false)
-				_roof_tier(center + Vector3(0, 14.5 + float(level) * 0.4, 2.0), 9.0 - float(level) * 0.8, 1.5)
+			# The archive tower, its floor bands, and roof line are data-driven.
+			var admin_layout: Dictionary = WORLD_LAYOUT.get_administrative_layout()["soul_registry"]
+			var archive: Dictionary = admin_layout["archive_tower"]
+			_box("SoulRegisterLibrary", center + archive["offset"], archive["size"], "dark_stone", false)
+			for band in admin_layout["floor_bands"]:
+				_box("SoulRegisterFloorBand", center + band["offset"], Vector3(9.0, 0.42, 8.0), "gold", false)
+				var band_index := int(str(band["point_id"]).get_slice(".", -1))
+				_roof_tier(center + admin_layout["archive_roof_base"] + Vector3(0.0, float(band_index) * 0.4, 0.0), 9.0 - float(band_index) * 0.8, 1.5)
 		"功过司":
 			# Two balanced halls represent merit and transgression records.
 			for side in [-1.0, 1.0]:
@@ -399,11 +404,14 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 			_box("MeritFaultBalanceBeam", center + Vector3(0, 5.0, -7.0), Vector3(15.0, 0.5, 0.5), "gold", false)
 			_box("MeritFaultBalancePost", center + Vector3(0, 2.8, -7.0), Vector3(0.6, 4.5, 0.6), "gold", false)
 		"轮回司":
-			# A monumental gate marks the transition toward the reincarnation route.
-			for side in [-1.0, 1.0]:
-				_box("ReincarnationPortalPillar", center + Vector3(side * 8.0, 6.0, 4.0), Vector3(2.0, 12.0, 2.0), "dark_stone", false)
-			_roof_tier(center + Vector3(0, 12.0, 4.0), 21.0, 3.5)
-			_box("ReincarnationThreshold", center + Vector3(0, 0.22, 4.0), Vector3(17.0, 0.44, 2.5), "gold", false)
+			# Portal pillars, roof, and threshold are authored in the service layout.
+			var admin_layout: Dictionary = WORLD_LAYOUT.get_administrative_layout()["reincarnation_bureau"]
+			for pillar in admin_layout["portal_pillars"]:
+				_box("ReincarnationPortalPillar", center + pillar["offset"], pillar["size"], "dark_stone", false)
+			var portal_roof: Dictionary = admin_layout["portal_roof"]
+			_roof_tier(center + portal_roof["offset"], float(portal_roof["width"]), float(portal_roof["height"]))
+			var threshold: Dictionary = admin_layout["threshold"]
+			_box("ReincarnationThreshold", center + threshold["offset"], threshold["size"], "gold", false)
 		"万魂鬼市":
 			# A broad central trading aisle runs from the southern compound gate to the auction dais.
 			_box("GhostMarketMainAisle", center + Vector3(0, 0.12, 0), Vector3(9.0, 0.18, 21.0), "road_edge", false)
