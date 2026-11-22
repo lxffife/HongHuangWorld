@@ -586,7 +586,7 @@ func _build_npc_population() -> void:
 		npc_root.name = "LocalNPC_" + str(point["role"])
 		npc_root.position = point["position"]
 		add_child(npc_root)
-		var agent := _create_npc_figure(npc_root, str(point["role"]), str(point["activity"]))
+		var agent := _create_npc_figure(npc_root, str(point["role"]))
 		agent["root"] = npc_root
 		agent["role"] = str(point["role"])
 		agent["activity"] = str(point["activity"])
@@ -601,7 +601,7 @@ func _build_npc_population() -> void:
 		patrol_root.name = "LocalNPC_PatrolWalker"
 		patrol_root.position = patrol_route[0]
 		add_child(patrol_root)
-		var patrol_agent := _create_npc_figure(patrol_root, "patrol_guard", "patrol_route")
+		var patrol_agent := _create_npc_figure(patrol_root, "patrol_guard")
 		patrol_agent["root"] = patrol_root
 		patrol_agent["role"] = "patrol_guard"
 		patrol_agent["activity"] = "patrol_route"
@@ -613,7 +613,7 @@ func _build_npc_population() -> void:
 		npc_agents.append(patrol_agent)
 
 
-func _create_npc_figure(root: Node3D, role: String, activity: String) -> Dictionary:
+func _create_npc_figure(root: Node3D, role: String) -> Dictionary:
 	var tint := _activity_color(role)
 	var robe_material := StandardMaterial3D.new()
 	robe_material.albedo_color = tint
