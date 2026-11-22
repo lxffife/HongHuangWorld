@@ -423,5 +423,8 @@
 - 达到门槛后生成移交卷宗快照，包含移交编号、来源巡城司、目标判官司、移交时间、物证标签/数量、证词标签/数量、轨迹线索评估、初步推断和证词矛盾标记。`requires_conflict_review` 提醒判官司重点复核证词矛盾。
 - 卷宗被退回补充后，原案发现场仍允许玩家继续收录尚未采集的物证、完成证人追问；新增材料会写入原案件贡献日志和时间线，然后可以再次提交。该补充窗口不重启巡防派遣，也不篡改现场处置状态。
 - `begin_judge_bureau_case_review(incident_id)` 将已移交且待受理的卷宗转为 `under_judicial_review`。`record_judge_bureau_case_disposition(incident_id, disposition)` 当前支持 `request_supplement`（退回补充调查）和 `accept_for_hearing`（通过形式复核、进入候审）。
+- 判官司开始复核后，必须逐项审查卷宗中的每个物证标签：`record_judicial_evidence_assessment(incident_id, evidence_tag, assessment, reason)` 支持 `accepted`、`needs_verification`、`rejected`；只能审查移交卷宗已有的物证标签，且必须填写理由。证词通过 `record_judicial_testimony_assessment(incident_id, assessment, reason)` 审查，状态为 `credible`、`disputed`、`insufficient`；存在前后矛盾的证词不能被直接标记为可信。
+- `complete_judge_bureau_review(incident_id)` 要求所有物证标签和已有证词均完成审查。只有至少一件物证被采信、没有待核验物证、证词没有被标记为争议或不足，才允许进入候审；否则只能退回补充或继续核验。`accept_for_hearing` 会再次检查复核完成标记和候审资格，不能绕过审查步骤。
+- 证据采信只代表本原型中判官司对材料的审阅意见，不代表事实已经成立；`judicial_conclusion` 仍为 `not_determined`，没有自动定罪。
 - 所有接口都返回明确的失败原因，例如案件不存在、现场调查未完成、卷宗未移交、复核未开始或处置类型无效。案件档案接口返回卷宗状态、复核状态、退回原因、待补材料和移交快照。
 - 通过形式复核不等于事实认定或定罪。`judicial_conclusion` 始终为 `not_determined`；当前没有判官、证据采信、当事人申辩、实体审理、判决或申诉机制。上述接口是客户端流程原型，不是权限安全的司法服务；正式联机需迁移到服务端并验证办案权限、审计日志和不可篡改卷宗。
