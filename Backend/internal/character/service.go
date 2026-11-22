@@ -816,7 +816,7 @@ func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward 
 		 ON CONFLICT (server_id, event_id) DO NOTHING
 		 RETURNING id::text`,
 		serverID, reward.CharacterID, reward.EventID,
-		reward.Experience, reward.Cultivation, reward.AttributePoints,
+		appliedExperience, appliedCultivation, reward.AttributePoints,
 	).Scan(&eventRecordID)
 	if errors.Is(err, sql.ErrNoRows) {
 		if err := tx.Commit(); err != nil {
@@ -835,7 +835,7 @@ func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward 
 		     unspent_attribute_points = unspent_attribute_points + $3,
 		     updated_at = now()
 		 WHERE character_id = $4`,
-		reward.Experience, reward.Cultivation, reward.AttributePoints, reward.CharacterID,
+		appliedExperience, appliedCultivation, reward.AttributePoints, reward.CharacterID,
 	)
 	if err != nil {
 		return RewardResult{}, fmt.Errorf("apply character reward values: %w", err)
