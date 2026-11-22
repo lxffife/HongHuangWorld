@@ -52,7 +52,7 @@ type Party struct {
 type currentCharacter struct { id, worldID, instanceID, name string }
 func currentForAccount(ctx context.Context, q interface{ QueryRowContext(context.Context,string,...any)*sql.Row }, accountID string) (currentCharacter,error) {
  var c currentCharacter
- err:=q.QueryRowContext(ctx,`SELECT c.id::text,c.world_id,c.world_instance_id::text,c.name
+ err:=q.QueryRowContext(ctx,`SELECT c.id::text,c.world_id,ws.instance_id::text,c.name
  FROM souls s JOIN characters c ON c.id=s.current_character_id
  JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
  WHERE s.account_id=$1 AND c.status='alive' ORDER BY ws.connected_at DESC NULLS LAST LIMIT 1`,accountID).Scan(&c.id,&c.worldID,&c.instanceID,&c.name)
