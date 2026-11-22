@@ -149,6 +149,30 @@ static func get_wall_merlons() -> Array[Dictionary]:
 
 
 
+
+static func get_market_stalls() -> Array[Dictionary]:
+	# Stable stall identity and placement; stall visuals/catalogs remain adapter-owned.
+	var market_center := Vector3(55.0, 0.0, -53.0)
+	var types := ["魂珠铺", "魂籍铺", "药材铺", "法器铺", "魂器铺", "悬赏交易"]
+	var result: Array[Dictionary] = []
+	var index := 0
+	for side in [-1.0, 1.0]:
+		for z in [-6.5, 0.0, 6.5]:
+			var stall_type: String = types[index]
+			result.append({
+				"stall_id": "ghost_market.stall.%02d" % (index + 1),
+				"stall_type": stall_type,
+				"district": "万魂鬼市",
+				"position": market_center + Vector3(side * 10.5, 0.0, z),
+				"facing": -side,
+				"restock_group": "soul_goods" if index < 2 else ("herb_goods" if index < 4 else ""),
+				"open_schedule": "18:00-06:00",
+				"presentation_state": "client_visual_only"
+			})
+			index += 1
+	return result
+
+
 static func get_npc_activity_points() -> Array[Dictionary]:
 	# Stable prototype placements; renderers may replace these coordinates after terrain sampling.
 	var points: Array[Dictionary] = []
