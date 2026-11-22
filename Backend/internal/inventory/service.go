@@ -564,6 +564,18 @@ type EquippedItem struct {
 	SetDescription string `json:"set_description,omitempty"`
 	SetBonusTiers map[int]map[string]int `json:"set_bonus_tiers,omitempty"`
 }
+type CraftRequest struct { RequestID string; RecipeID string }
+type CraftResult struct {
+ Applied bool `json:"applied"`
+ RecipeID string `json:"recipe_id"`
+ ItemInstanceID string `json:"item_instance_id"`
+ ItemID string `json:"item_id"`
+ ItemName string `json:"item_name"`
+ Quality int `json:"quality"`
+ RolledStats map[string]int `json:"rolled_stats"`
+ Affixes []EquipmentAffix `json:"affixes"`
+}
+
 type EnhancementRequest struct { RequestID string; InstanceID string }
 type EnhancementResult struct { Applied bool `json:"applied"`; Succeeded bool `json:"succeeded"`; OldLevel int `json:"old_level"`; EnhancementLevel int `json:"enhancement_level"`; MaxLevel int `json:"max_level"`; MaterialName string `json:"material_name"`; MaterialQuantity int `json:"material_quantity"`; SuccessRateBP int `json:"success_rate_bp"` }
 
@@ -708,6 +720,65 @@ func (s *Service) Equip(ctx context.Context,accountID string,request EquipmentRe
 	return nil
 }
 
+
+
+func (s *Service) CraftEquipment(ctx context.Context,accountID string,request CraftRequest)(CraftResult,error){
+	if strings.TrimSpace(accountID)==""||!validUUID(request.RequestID)||strings.TrimSpace(request.RecipeID)==""||len(request.RecipeID)>64{return CraftResult{},ErrInvalidRequest}
+	tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return CraftResult{},fmt.Errorf("begin equipment crafting: %w",err)};defer tx.Rollback()
+	var characterID string
+	if err:=tx.QueryRowContext(ctx,`SELECT c.id::text FROM souls soul JOIN characters c ON c.id=soul.current_character_id WHERE soul.account_id=$1 AND c.status='alive' FOR UPDATE OF c`,accountID).Scan(&characterID);err!=nil{
+		if errors.Is(err,sql.ErrNoRows){return CraftResult{},ErrInvalidRequest};return CraftResult{},fmt.Errorf("resolve crafting character: %w",err)
+	}
+	if err:=ensureEquipmentSessionStable(ctx,tx,characterID);err!=nil{return CraftResult{},err}
+	var replay CraftResult;var replayRecipe string;var replayStatsRaw,replayAffixesRaw []byte
+	err=tx.QueryRowContext(ctx,`SELECT e.recipe_id,e.output_instance_id::text,e.output_item_id,i.name,e.output_quality,ii.rolled_stats,ii.affixes
+		FROM equipment_crafting_events e JOIN item_definitions i ON i.id=e.output_item_id
+		JOIN item_instances ii ON ii.id=e.output_instance_id
+		WHERE e.character_id=$1::uuid AND e.request_id=$2::uuid`,characterID,request.RequestID).
+		Scan(&replayRecipe,&replay.ItemInstanceID,&replay.ItemID,&replay.ItemName,&replay.Quality,&replayStatsRaw,&replayAffixesRaw)
+	if err==nil{
+		if replayRecipe!=request.RecipeID{return CraftResult{},ErrIdempotencyConflict}
+		replay.Applied=false;replay.RecipeID=replayRecipe;replay.RolledStats=map[string]int{};replay.Affixes=[]EquipmentAffix{}
+		if len(replayStatsRaw)>0{if err:=json.Unmarshal(replayStatsRaw,&replay.RolledStats);err!=nil{return CraftResult{},fmt.Errorf("decode crafted replay stats: %w",err)}}
+		if len(replayAffixesRaw)>0{if err:=json.Unmarshal(replayAffixesRaw,&replay.Affixes);err!=nil{return CraftResult{},fmt.Errorf("decode crafted replay affixes: %w",err)}}
+		if err:=tx.Commit();err!=nil{return CraftResult{},fmt.Errorf("commit crafting replay: %w",err)}
+		return replay,nil
+	}
+	if !errors.Is(err,sql.ErrNoRows){return CraftResult{},fmt.Errorf("check crafting idempotency: %w",err)}
+	var outputID,outputName,outputType string
+	err=tx.QueryRowContext(ctx,`SELECT r.output_item_id,i.name,i.item_type FROM equipment_crafting_recipes r
+		JOIN item_definitions i ON i.id=r.output_item_id AND i.enabled
+		WHERE r.id=$1 AND r.enabled FOR SHARE OF r`,request.RecipeID).Scan(&outputID,&outputName,&outputType)
+	if errors.Is(err,sql.ErrNoRows)||outputType!="equipment"{return CraftResult{},ErrInvalidRequest}
+	if err!=nil{return CraftResult{},fmt.Errorf("load equipment crafting recipe: %w",err)}
+	type ingredient struct{itemID string;quantity,available int}
+	rows,err:=tx.QueryContext(ctx,`SELECT ri.item_id,ri.quantity,COALESCE(ci.quantity,0)
+		FROM equipment_crafting_ingredients ri
+		LEFT JOIN character_inventory ci ON ci.character_id=$2::uuid AND ci.item_id=ri.item_id
+		WHERE ri.recipe_id=$1 ORDER BY ri.item_id FOR UPDATE OF ci`,request.RecipeID,characterID)
+	if err!=nil{return CraftResult{},fmt.Errorf("load crafting ingredients: %w",err)}
+	ingredients:=make([]ingredient,0)
+	for rows.Next(){var v ingredient;if err:=rows.Scan(&v.itemID,&v.quantity,&v.available);err!=nil{rows.Close();return CraftResult{},fmt.Errorf("scan crafting ingredient: %w",err)};ingredients=append(ingredients,v)}
+	if err:=rows.Err();err!=nil{rows.Close();return CraftResult{},fmt.Errorf("iterate crafting ingredients: %w",err)}
+	if err:=rows.Close();err!=nil{return CraftResult{},fmt.Errorf("close crafting ingredients: %w",err)}
+	if len(ingredients)==0{return CraftResult{},ErrInvalidRequest}
+	for _,v:=range ingredients{if v.available<v.quantity{return CraftResult{},ErrInsufficientMaterials}}
+	if err:=ensureInventorySlot(ctx,tx,characterID,true);err!=nil{return CraftResult{},err}
+	for _,v:=range ingredients{
+		if _,err:=tx.ExecContext(ctx,`UPDATE character_inventory SET quantity=quantity-$3,updated_at=now() WHERE character_id=$1::uuid AND item_id=$2 AND quantity >= $3`,characterID,v.itemID,v.quantity);err!=nil{return CraftResult{},fmt.Errorf("consume crafting material %s: %w",v.itemID,err)}
+		if _,err:=tx.ExecContext(ctx,`DELETE FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2 AND quantity<=0`,characterID,v.itemID);err!=nil{return CraftResult{},fmt.Errorf("remove empty crafting stack %s: %w",v.itemID,err)}
+	}
+	var instanceID string
+	if err:=tx.QueryRowContext(ctx,`SELECT gen_random_uuid()::text`).Scan(&instanceID);err!=nil{return CraftResult{},fmt.Errorf("allocate crafted equipment id: %w",err)}
+	drop,err:=createGroundDropInstance(ctx,tx,DropRequest{DropID:instanceID,ItemID:outputID,Quantity:1})
+	if err!=nil{return CraftResult{},fmt.Errorf("roll crafted equipment affixes: %w",err)}
+	if _,err:=tx.ExecContext(ctx,`INSERT INTO character_item_instances(character_id,item_instance_id) VALUES($1::uuid,$2::uuid)`,characterID,instanceID);err!=nil{return CraftResult{},fmt.Errorf("grant crafted equipment: %w",err)}
+	if _,err:=tx.ExecContext(ctx,`INSERT INTO equipment_crafting_events(character_id,request_id,recipe_id,output_instance_id,output_item_id,output_quality)
+		VALUES($1::uuid,$2::uuid,$3,$4::uuid,$5,$6)`,characterID,request.RequestID,request.RecipeID,instanceID,outputID,drop.Quality);err!=nil{return CraftResult{},fmt.Errorf("record equipment crafting event: %w",err)}
+	result:=CraftResult{Applied:true,RecipeID:request.RecipeID,ItemInstanceID:instanceID,ItemID:outputID,ItemName:outputName,Quality:drop.Quality,RolledStats:drop.RolledStats,Affixes:drop.Affixes}
+	if err:=tx.Commit();err!=nil{return CraftResult{},fmt.Errorf("commit equipment crafting: %w",err)}
+	return result,nil
+}
 
 func enhancementMaxLevel(quality int) int {
 	switch quality { case 1: return 3; case 2: return 5; case 3: return 8; case 4: return 10; case 5: return 12; default: return 0 }
