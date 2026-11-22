@@ -737,6 +737,10 @@ func _update_merchant_market_activity(agent: Dictionary) -> void:
 	if _is_market_auction_time():
 		var glance_phase := fposmod(market_ambience_time + float(agent.get("phase", 0.0)), 18.0)
 		if glance_phase < 2.8:
+			var market_center: Vector3 = district_markers.get("万魂鬼市", Vector3(55.0, 0.0, -53.0))
+			var stage_position := market_center + Vector3(0.0, 0.0, 10.35)
+			var stage_direction := stage_position - (agent["root"] as Node3D).global_position
+			agent["auction_facing"] = atan2(-stage_direction.x, -stage_direction.z)
 			agent["state"] = "auction_watch"
 			agent["market_activity"] = "watch_auction"
 			return
@@ -1553,7 +1557,7 @@ func _apply_npc_behavior_pose(agent: Dictionary, phase: float) -> void:
 			left_arm.rotation.z = deg_to_rad(-48.0) + sin(phase * 1.7) * 0.12
 			right_arm.rotation.z = deg_to_rad(48.0) - sin(phase * 1.7 + 0.8) * 0.12
 		"auction_watch":
-			root.rotation.y = facing + sin(phase * 0.2) * 0.035
+			root.rotation.y = float(agent.get("auction_facing", facing)) + sin(phase * 0.2) * 0.035
 			body.rotation.x = deg_to_rad(-3.0) + sin(phase * 0.7) * deg_to_rad(1.0)
 			left_arm.rotation.z = deg_to_rad(-18.0)
 			right_arm.rotation.z = deg_to_rad(18.0)
@@ -2210,7 +2214,7 @@ func _market_restock_destination(cargo_type: String, caravan_id: String) -> Vect
 	var stall_position: Vector3 = target_stall.get("position", Vector3.ZERO)
 	var facing := float(target_stall.get("facing", 0.0))
 	var rear_direction := Vector3(sin(facing), 0.0, cos(facing))
-	return stall_position - rear_direction * 1.7 + Vector3(0.0, 0.28, -0.9)
+	return stall_position + rear_direction * 1.7 + Vector3(0.0, 0.28, -0.9)
 
 
 func _market_stall_is_restocking(stall_id: String) -> bool:
