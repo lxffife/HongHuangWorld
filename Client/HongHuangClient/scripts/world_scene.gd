@@ -2460,10 +2460,11 @@ func _build_party_ui() -> void:
 	party_button.text = "队伍"
 	party_button.custom_minimum_size = Vector2(92.0, 40.0)
 	party_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	party_button.offset_left = -222.0
-	party_button.offset_top = 18.0
-	party_button.offset_right = -124.0
-	party_button.offset_bottom = 58.0
+	# Place below the minimap and inventory shortcut so all top-right controls remain clickable.
+	party_button.offset_left = -118.0
+	party_button.offset_top = 326.0
+	party_button.offset_right = -18.0
+	party_button.offset_bottom = 366.0
 	_apply_button_theme(party_button, true)
 	party_button.pressed.connect(_toggle_party_panel)
 	hud.add_child(party_button)
