@@ -2329,7 +2329,8 @@ func _update_patrol_incident_lifecycle(delta: float) -> void:
 			record["patrol_witness_count"] = witness_count
 			record["evidence_count"] = evidence_count + player_evidence
 			record["witness_count"] = witness_count + player_witnesses
-			record["player_contribution_count"] = (record.get("player_action_ids", []) as Array).size()
+			var completed_player_actions: Array = record.get("player_action_ids", [])
+			record["player_contribution_count"] = completed_player_actions.size()
 			if player_evidence + player_witnesses > 0:
 				result_label = "玩家补充线索 · " + result_label
 			record["state"] = "resolved"
@@ -3341,9 +3342,10 @@ func _update_npc_interaction_hint() -> void:
 		if str(nearest_incident.get("state", "")) == "investigating":
 			var actions: Array = nearest_incident.get("player_action_ids", [])
 			var remaining_actions := 3 - actions.size()
-			npc_hint_label.text = "E 参与现场调查 · %s（还可调查 %d 项）" % [
+			var investigation_hint := "调查已完成" if remaining_actions <= 0 else "还可调查 %d 项" % remaining_actions
+			npc_hint_label.text = "E 参与现场调查 · %s（%s）" % [
 				str(nearest_incident.get("title", "巡防事件")),
-				maxi(remaining_actions, 0)
+				investigation_hint
 			]
 		else:
 			npc_hint_label.text = "巡城卫正在赶赴现场 · %s" % str(nearest_incident.get("title", "巡防事件"))
