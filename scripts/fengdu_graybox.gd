@@ -106,6 +106,10 @@ func _process(delta: float) -> void:
 			_show_judge_case_detail(judge_selected_incident_id)
 	if player == null:
 		return
+	if judge_workbench_open:
+		_update_camera()
+		_update_hud()
+		return
 	var input_dir := Vector2.ZERO
 	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
 		input_dir.y -= 1.0
