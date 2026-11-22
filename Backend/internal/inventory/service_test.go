@@ -299,3 +299,29 @@ func TestSecureRandomIntStaysWithinExclusiveUpperBound(t *testing.T) {
 	}
 	if _, err := secureRandomInt(0); err == nil { t.Fatal("zero upper bound must be rejected") }
 }
+
+
+func TestEquipmentAffixCountScalesWithQuality(t *testing.T) {
+	tests := []struct{ quality, want int }{
+		{0, 0}, {1, 1}, {2, 1}, {3, 2}, {4, 2}, {5, 3}, {6, 3},
+	}
+	for _, test := range tests {
+		if got := equipmentAffixRollCount(test.quality); got != test.want {
+			t.Errorf("equipmentAffixRollCount(%d) = %d, want %d", test.quality, got, test.want)
+		}
+	}
+}
+
+func TestRolledEquipmentBonusesUseAuthoritativeCombatStatPipeline(t *testing.T) {
+	stats := CombatStats{Attack: 20, Defense: 5, MaxHealth: 100, MaxMana: 30, MovementSpeed: 5}
+	rolled := map[string]int{"attack": 4, "strength": 2, "vitality": 1, "spirit": 2, "movement_speed": 1}
+	if err := applyEquipmentStatBonuses(&stats, rolled); err != nil {
+		t.Fatalf("apply rolled affixes: %v", err)
+	}
+	if stats.Attack != 28 || stats.Defense != 6 || stats.MaxHealth != 115 || stats.MaxMana != 50 {
+		t.Fatalf("rolled combat stats = %+v", stats)
+	}
+	if stats.MovementSpeed < 5.0999 || stats.MovementSpeed > 5.1001 {
+		t.Fatalf("rolled movement speed = %v, want 5.1", stats.MovementSpeed)
+	}
+}
