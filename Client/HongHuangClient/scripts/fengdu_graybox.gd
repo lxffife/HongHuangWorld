@@ -469,9 +469,9 @@ func _build_district_landmark(title: String, center: Vector3, footprint: Vector2
 						"restock_label": _create_market_stall_status_label(stall_position, stall_facing),
 						"business_state": "closed",
 						"open_schedule": "18:00-06:00",
-					"interaction_type": _market_interaction_for_type(stall_type),
-					"presentation_state": "client_visual_only"
-				})
+						"interaction_type": _market_interaction_for_type(stall_type),
+						"presentation_state": "client_visual_only"
+					})
 					stall_index += 1
 				_box("GhostMarketBackLane", center + Vector3(side * 15.0, 0.08, 0), Vector3(2.0, 0.16, 20.0), "bridge", false)
 			_market_notice_board(center + Vector3(-5.5, 0, -9.5), "鬼市告示", Color("#83c7e4"))
