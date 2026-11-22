@@ -294,3 +294,10 @@ Lethal hits use the same transaction boundary as the pending death intent: the c
 The table is created automatically for existing SQLite files. Existing pending death records are consulted while initializing life state, preserving their old instance ID and zero-health status. A definition-ID mismatch is rejected at damage admission rather than mixing contribution rows from two monster definitions.
 
 This closes the prior crash interval between durable contribution admission and the in-memory health mutation for the covered combat paths. It does not make the entire world simulation (movement, AI, aggro, status timers, and position) durable; those remain runtime state and are reconstructed from world configuration.
+
+
+### Durable monster runtime checkpoints (storage layer)
+
+The SQLite outbox now creates `monster_runtime_checkpoints` for bounded, batch-oriented world-state snapshots. Each row stores the stable spawn runtime ID, current life instance and definition IDs, X/Z position, yaw, compact monster mode, respawn wall-clock deadline, and checkpoint timestamp. Checkpoint writes are transactional per batch and are accepted only when the same runtime/life/definition tuple is still present in `monster_life_states`; a delayed snapshot from a prior life cannot overwrite a respawned monster. Reads join against the authoritative life table and ignore stale rows left by a life rotation. The table is created automatically for existing SQLite files.
+
+This commit adds the persistence contract and focused storage tests only. It does not yet connect periodic dirty-state collection or startup position restoration to the live simulation loop. The next integration step must use a bounded asynchronous checkpoint writer, coalesce dirty runtime IDs, flush on shutdown/death/respawn, and restore only finite positions inside the monster leash. Player target IDs and transient aggro are intentionally not checkpointed; they must be reacquired from currently online players after restart.
