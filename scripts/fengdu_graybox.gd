@@ -1940,6 +1940,9 @@ func _update_npc_agents(delta: float) -> void:
 		if root == null or not is_instance_valid(root):
 			continue
 		_record_npc_activity_sample(agent, root)
+		if str(agent.get("judicial_attendance_state", "")) == "en_route":
+			_advance_judicial_attendance(agent, delta)
+			continue
 		if not root.visible:
 			continue
 		var distance_to_player := 0.0
@@ -1970,7 +1973,12 @@ func _update_npc_agents(delta: float) -> void:
 			_update_merchant_proximity_behavior(agent, distance_to_player)
 			_update_merchant_market_activity(agent)
 		var dispatch_state := str(agent.get("dispatch_state", ""))
-		if str(agent.get("role", "")) == "patrol_guard" and dispatch_state != "":
+		if str(agent.get("judicial_attendance_state", "")) == "waiting":
+			root.position = agent.get("judicial_destination", Vector3(51.0, 0.0, 36.5))
+			root.rotation.y = PI
+			left_arm.rotation.z = deg_to_rad(-18.0)
+			right_arm.rotation.z = deg_to_rad(18.0)
+		elif str(agent.get("role", "")) == "patrol_guard" and dispatch_state != "":
 			_advance_patrol_dispatch(agent, elapsed, phase)
 		elif bool(agent["moving"]):
 			var route_index := int(agent["route_index"])
@@ -4836,6 +4844,132 @@ func _spawn_patrol_incident_clues(incident: Dictionary) -> Dictionary:
 	witness_label.modulate = Color("#e6c58d")
 	witness_root.add_child(witness_label)
 	return {"evidence_nodes": evidence_nodes, "witness_root": witness_root, "witness_name": "坊民证人"}
+
+func summon_case_parties_to_judge_bureau(incident_id: String) -> Dictionary:
+	var record_index := _find_patrol_incident_record(incident_id)
+	if record_index < 0:
+		return {"ok": false, "reason": "case_not_found"}
+	var record: Dictionary = patrol_incident_records[record_index]
+	if str(record.get("case_workflow_state", "")) not in ["hearing_pending", "hearing_in_progress"]:
+		return {"ok": false, "reason": "case_not_in_hearing_phase"}
+	var submission: Dictionary = record.get("case_submission", {}).duplicate(true)
+	var parties: Array = submission.get("case_parties", []).duplicate(true)
+	var summoned := 0
+	var unavailable := 0
+	for party_index in range(parties.size()):
+		var party: Dictionary = parties[party_index]
+		var party_id := str(party.get("party_id", ""))
+		var current_status := str(party.get("procedural_status", "notice_pending"))
+		if current_status != "notice_pending":
+			continue
+		var notice_result := update_case_party_procedural_status(incident_id, party_id, "notice_served", "判官司工作台发出到庭通知。")
+		if not bool(notice_result.get("ok", false)):
+			continue
+		var agent_index := -1
+		for index in range(npc_agents.size()):
+			if str(npc_agents[index].get("npc_id", "")) == str(party.get("actor_id", party_id)):
+				agent_index = index
+				break
+		if agent_index < 0:
+			update_case_party_procedural_status(incident_id, party_id, "unavailable", "本地场景未找到对应 NPC 代理，无法执行到庭移动。")
+			unavailable += 1
+			continue
+		var agent: Dictionary = npc_agents[agent_index]
+		var root: Node3D = agent.get("root")
+		if root == null or not is_instance_valid(root):
+			update_case_party_procedural_status(incident_id, party_id, "unavailable", "涉案 NPC 场景实例已失效，无法执行到庭移动。")
+			unavailable += 1
+			continue
+		var destination := Vector3(51.0 + float(summoned % 3 - 1) * 1.8, 0.0, 42.0 + float(summoned / 3) * 1.8)
+		var route_result := get_navigation_route_between_positions(root.global_position, destination)
+		if not bool(route_result.get("found", false)):
+			update_case_party_procedural_status(incident_id, party_id, "unavailable", "无法规划前往判官司的道路路线：" + str(route_result.get("reason", "no_route")))
+			unavailable += 1
+			continue
+		var waypoints: Array = route_result.get("points", []).duplicate()
+		if waypoints.is_empty() or waypoints[waypoints.size() - 1].distance_to(destination) > 0.5:
+			waypoints.append(destination)
+		elif waypoints.size() == 1:
+			waypoints.append(destination)
+		agent["judicial_attendance_state"] = "en_route"
+		agent["judicial_incident_id"] = incident_id
+		agent["judicial_party_id"] = party_id
+		agent["judicial_waypoints"] = waypoints
+		agent["judicial_route_index"] = 0
+		agent["judicial_route_progress"] = 0.0
+		agent["judicial_destination"] = destination
+		agent["judicial_move_speed"] = 3.2
+		agent["moving"] = false
+		agent["base_position"] = root.position
+		npc_agents[agent_index] = agent
+		summoned += 1
+	patrol_incident_records[record_index] = record
+	return {"ok": true, "summoned_count": summoned, "unavailable_count": unavailable}
+
+
+func _advance_judicial_attendance(agent: Dictionary, delta: float) -> void:
+	var root: Node3D = agent.get("root")
+	if root == null or not is_instance_valid(root):
+		return
+	var waypoints: Array = agent.get("judicial_waypoints", [])
+	if waypoints.size() < 2:
+		return
+	var route_index := int(agent.get("judicial_route_index", 0))
+	var progress := float(agent.get("judicial_route_progress", 0.0))
+	var start: Vector3 = waypoints[route_index]
+	var next_index := mini(route_index + 1, waypoints.size() - 1)
+	var finish: Vector3 = waypoints[next_index]
+	var segment_length := maxf(start.distance_to(finish), 0.01)
+	progress += float(agent.get("judicial_move_speed", 3.2)) * delta / segment_length
+	while progress >= 1.0 and next_index < waypoints.size() - 1:
+		progress -= 1.0
+		route_index = next_index
+		next_index = mini(route_index + 1, waypoints.size() - 1)
+		start = waypoints[route_index]
+		finish = waypoints[next_index]
+		segment_length = maxf(start.distance_to(finish), 0.01)
+	if next_index == waypoints.size() - 1 and progress >= 1.0:
+		var destination: Vector3 = agent.get("judicial_destination", finish)
+		root.position = destination
+		agent["judicial_attendance_state"] = "waiting"
+		agent["judicial_route_progress"] = 1.0
+		var incident_id := str(agent.get("judicial_incident_id", ""))
+		var party_id := str(agent.get("judicial_party_id", ""))
+		var arrival_result := update_case_party_procedural_status(incident_id, party_id, "appeared", "涉案人员已沿判官司路网抵达候审区。")
+		if not bool(arrival_result.get("ok", false)):
+			agent["judicial_attendance_state"] = "arrival_record_failed"
+			print("[JudgeBureau] arrival status failed party=%s reason=%s" % [party_id, str(arrival_result.get("reason", ""))])
+		return
+	root.position = start.lerp(finish, progress)
+	var direction := finish - start
+	if direction.length_squared() > 0.01:
+		root.rotation.y = atan2(-direction.x, -direction.z)
+	agent["judicial_route_index"] = route_index
+	agent["judicial_route_progress"] = progress
+
+
+func get_case_party_attendance(incident_id: String) -> Array[Dictionary]:
+	var attendance: Array[Dictionary] = []
+	var record_index := _find_patrol_incident_record(incident_id)
+	if record_index < 0:
+		return attendance
+	var parties: Array = patrol_incident_records[record_index].get("case_submission", {}).get("case_parties", [])
+	for party_value in parties:
+		var party: Dictionary = party_value
+		var state := "not_summoned"
+		for agent_value in npc_agents:
+			var agent: Dictionary = agent_value
+			if str(agent.get("npc_id", "")) == str(party.get("actor_id", party.get("party_id", ""))):
+				state = str(agent.get("judicial_attendance_state", "not_summoned"))
+				break
+		attendance.append({
+			"party_id": str(party.get("party_id", "")),
+			"display_name": str(party.get("display_name", "未知人员")),
+			"procedural_status": str(party.get("procedural_status", "notice_pending")),
+			"attendance_state": state
+		})
+	return attendance
+
 
 func _interact_with_focused_npc() -> void:
 	if npc_detail_label == null:
