@@ -75,6 +75,10 @@ if(BUILD_TESTING)
     target_include_directories(spell_combat_test PRIVATE include)
     add_test(NAME spell_combat_test COMMAND spell_combat_test)
 
+    add_executable(spell_mastery_test tests/spell_mastery_test.cpp)
+    target_include_directories(spell_mastery_test PRIVATE include)
+    add_test(NAME spell_mastery_test COMMAND spell_mastery_test)
+
     add_executable(player_resources_test tests/player_resources_test.cpp)
     target_include_directories(player_resources_test PRIVATE include)
     add_test(NAME player_resources_test COMMAND player_resources_test)
