@@ -2419,8 +2419,18 @@ func _prune_patrol_incident_history() -> void:
 	while patrol_incident_records.size() > 20:
 		var removable_index := -1
 		for index in range(patrol_incident_records.size()):
-			var state := str(patrol_incident_records[index].get("state", ""))
-			if state == "closed":
+			var candidate: Dictionary = patrol_incident_records[index]
+			var state := str(candidate.get("state", ""))
+			var case_state := str(candidate.get("case_workflow_state", "unsubmitted"))
+			var legal_case_active := case_state in [
+				"returned_for_supplement",
+				"transferred_to_judge_bureau",
+				"under_judicial_review",
+				"hearing_pending",
+				"hearing_in_progress",
+				"hearing_closed_pending_judgment"
+			]
+			if state == "closed" and not legal_case_active:
 				removable_index = index
 				break
 		if removable_index < 0:
