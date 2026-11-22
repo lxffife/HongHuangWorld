@@ -43,6 +43,7 @@ var market_customers: Array[Dictionary] = []
 var market_stall_registry: Array[Dictionary] = []
 var market_stage_actor: Dictionary = {}
 var market_caravans: Array[Dictionary] = []
+var market_guards: Array[Dictionary] = []
 var market_event_label: Label3D
 
 var mats: Dictionary = {}
@@ -761,6 +762,7 @@ func _build_npc_population() -> void:
 	# Ambient customers and the auction host are visual actors, not server-owned NPCs.
 	_build_market_customers()
 	_build_market_caravans()
+	_build_market_guards()
 	_build_market_auction_host()
 	_build_market_event_sign()
 
@@ -893,6 +895,30 @@ func _build_market_caravans() -> void:
 		})
 
 
+func _build_market_guards() -> void:
+	# Gate sentries frame the entrance while staying outside the central passage.
+	var market_center: Vector3 = district_markers.get("万魂鬼市", Vector3(55.0, 0.0, -53.0))
+	for index in range(2):
+		var side := -1.0 if index == 0 else 1.0
+		var root := Node3D.new()
+		root.name = "AmbientMarketGateGuard_%02d" % (index + 1)
+		root.position = market_center + Vector3(side * 7.4, 0.0, -10.4)
+		root.rotation.y = PI
+		add_child(root)
+		var figure := _create_npc_figure(root, "soldier")
+		var uniform := figure["body"].material_override as StandardMaterial3D
+		if uniform != null:
+			uniform.albedo_color = Color("#596c7a") if index == 0 else Color("#6b667a")
+		market_guards.append({
+			"root": root,
+			"body": figure["body"],
+			"left_arm": figure["left_arm"],
+			"right_arm": figure["right_arm"],
+			"phase": float(index) * 1.9,
+			"base_yaw": PI
+		})
+
+
 func _build_market_event_sign() -> void:
 	var market_center: Vector3 = district_markers.get("万魂鬼市", Vector3(55.0, 0.0, -53.0))
 	market_event_label = Label3D.new()
@@ -975,6 +1001,19 @@ func _update_market_ambience(delta: float) -> void:
 		left_arm.rotation.z = deg_to_rad(-18.0) + sin(phase * 0.8) * 0.035
 		right_arm.rotation.z = deg_to_rad(18.0) - sin(phase * 0.8 + 1.1) * 0.045
 		customer_root.rotation.y = float(customer_data["base_yaw"]) + sin(phase * 0.24) * 0.035
+	for guard_data in market_guards:
+		var guard_root: Node3D = guard_data["root"]
+		guard_root.visible = npc_schedule_night
+		if not npc_schedule_night:
+			continue
+		var guard_phase := market_ambience_time * 0.55 + float(guard_data["phase"])
+		var guard_body: MeshInstance3D = guard_data["body"]
+		var guard_left: MeshInstance3D = guard_data["left_arm"]
+		var guard_right: MeshInstance3D = guard_data["right_arm"]
+		guard_body.position.y = 0.92 + sin(guard_phase) * 0.012
+		guard_left.rotation.z = deg_to_rad(-18.0) + sin(guard_phase * 0.6) * 0.018
+		guard_right.rotation.z = deg_to_rad(18.0) - sin(guard_phase * 0.6 + 0.8) * 0.018
+		guard_root.rotation.y = float(guard_data["base_yaw"]) + sin(guard_phase * 0.25) * 0.025
 	for caravan_data in market_caravans:
 		var caravan_root: Node3D = caravan_data["root"]
 		caravan_root.visible = npc_schedule_night
