@@ -265,6 +265,7 @@ func _gate(title: String, center: Vector3, outward: Vector3, destination: String
 	for side in [-1.0, 1.0]:
 		var offset := Vector3(8.5 * side, 0, 0) if axis_x else Vector3(0, 0, 8.5 * side)
 		_box(title + "GatePier", center + offset + Vector3(0, 8.5, 0), post_size, "dark_stone", true)
+		_dougong_band(center + offset + Vector3(0, 15.0, 0), 8.0, 6.0)
 		_roof_tier(center + offset + Vector3(0, 17.5, 0), 10.0, 3.0)
 	_box(title + "GateLintel", center + Vector3(0, 16.5, 0), Vector3(23, 3.5, 7), "gold", true)
 	_box(title + "GateRoad", center + outward * 8.0 + Vector3(0, 0.2, 0), Vector3(17, 0.4, 17), "bridge", true)
@@ -316,6 +317,7 @@ func _build_palace_axis() -> void:
 	_box("ImperialMainHall", center + Vector3(0, 9, 0), Vector3(23, 17, 15), "palace", true)
 	for x in [-9.0, -4.5, 0.0, 4.5, 9.0]:
 		_box("PalacePillar", center + Vector3(x, 7.0, 8.0), Vector3(0.9, 14, 0.9), "gold", true)
+	_dougong_band(center + Vector3(0, 15.0, 0), 24.0, 15.0)
 	_roof_tier(center + Vector3(0, 19, 0), 31, 5)
 	_roof_tier(center + Vector3(0, 25, 0), 23, 4)
 	_label("酆都大帝 · 皇城正殿", center + Vector3(0, 32, 0), 38, Color("#f1d49d"))
@@ -324,9 +326,42 @@ func _build_palace_axis() -> void:
 
 
 func _roof_tier(center: Vector3, width: float, height: float) -> void:
-	_box("RoofTierBase", center + Vector3(0, height * 0.25, 0), Vector3(width, height * 0.5, width * 0.72), "roof", false)
-	_box("RoofTierEave", center + Vector3(0, height * 0.52, 0), Vector3(width * 1.18, 0.32, width * 0.9), "roof_edge", false)
-	_box("RoofTierCap", center + Vector3(0, height * 0.75, 0), Vector3(width * 0.72, height * 0.42, width * 0.55), "roof", false)
+	# Four sloped planes form a compact hip roof; raised corners suggest Chinese flying eaves.
+	var roof_y := height * 0.48
+	_box("RoofUnderstructure", center + Vector3(0, height * 0.18, 0), Vector3(width * 0.76, height * 0.36, width * 0.56), "dark_stone", false)
+	var side_panel := Vector3(width * 0.58, maxf(0.28, height * 0.12), width * 0.88)
+	var front_panel := Vector3(width * 0.82, maxf(0.28, height * 0.12), width * 0.42)
+	var slope := 17.0
+	var left := _box("HipRoofLeft", center + Vector3(-width * 0.22, roof_y, 0), side_panel, "roof", false)
+	left.rotation_degrees.z = -slope
+	var right := _box("HipRoofRight", center + Vector3(width * 0.22, roof_y, 0), side_panel, "roof", false)
+	right.rotation_degrees.z = slope
+	var front := _box("HipRoofFront", center + Vector3(0, roof_y, -width * 0.22), front_panel, "roof", false)
+	front.rotation_degrees.x = -slope
+	var back := _box("HipRoofBack", center + Vector3(0, roof_y, width * 0.22), front_panel, "roof", false)
+	back.rotation_degrees.x = slope
+	# Continuous eave bands and lifted corner tips make the silhouette readable at distance.
+	var eave_front := _box("RoofEaveFront", center + Vector3(0, height * 0.30, -width * 0.43), Vector3(width * 1.12, 0.28, 0.48), "roof_edge", false)
+	var eave_back := _box("RoofEaveBack", center + Vector3(0, height * 0.30, width * 0.43), Vector3(width * 1.12, 0.28, 0.48), "roof_edge", false)
+	var eave_left := _box("RoofEaveLeft", center + Vector3(-width * 0.43, height * 0.30, 0), Vector3(0.48, 0.28, width * 0.86), "roof_edge", false)
+	var eave_right := _box("RoofEaveRight", center + Vector3(width * 0.43, height * 0.30, 0), Vector3(0.48, 0.28, width * 0.86), "roof_edge", false)
+	eave_front.rotation_degrees.x = -4.0
+	eave_back.rotation_degrees.x = 4.0
+	eave_left.rotation_degrees.z = 4.0
+	eave_right.rotation_degrees.z = -4.0
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			_box("FlyingEaveTip", center + Vector3(sx * width * 0.49, height * 0.39, sz * width * 0.40), Vector3(0.72, 0.34, 0.72), "gold", false)
+
+
+func _dougong_band(center: Vector3, width: float, depth: float) -> void:
+	# Simplified bracket-set silhouette: bearing blocks, projecting arms and tie beam.
+	var y := center.y
+	_box("DougongBearingBlock", Vector3(center.x, y, center.z), Vector3(width * 0.72, 0.42, depth * 0.72), "gold", false)
+	for side in [-1.0, 1.0]:
+		_box("DougongCrossArm", Vector3(center.x + side * width * 0.22, y - 0.12, center.z), Vector3(width * 0.38, 0.28, depth * 0.34), "roof_edge", false)
+		_box("DougongProjectingArm", Vector3(center.x, y - 0.28, center.z + side * depth * 0.20), Vector3(width * 0.34, 0.24, depth * 0.42), "gold", false)
+	_box("DougongTieBeam", Vector3(center.x, y - 0.48, center.z), Vector3(width, 0.32, depth * 0.62), "dark_stone", false)
 
 
 func _build_player() -> void:
