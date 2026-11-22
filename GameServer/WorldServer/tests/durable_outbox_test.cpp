@@ -608,9 +608,9 @@ int main() {
         assert(restored.front().x == 12.25);
         assert(reopened.respawn_monster_life("checkpoint-life-1",
             {"checkpoint-spawn", "checkpoint-life-2", "wolf", 100.0}, error));
-        assert(!reopened.save_monster_runtime_checkpoints({
+        assert(reopened.save_monster_runtime_checkpoints({
             {"checkpoint-spawn", "checkpoint-life-1", "wolf",
-             99.0, 99.0, 0.0, 0, 0, 3000}}, error));
+             99.0, 99.0, 0.0, 0, 0, 3000}}, error)); // Stale life snapshots are ignored safely.
         assert(reopened.save_monster_runtime_checkpoints({
             {"checkpoint-spawn", "checkpoint-life-2", "wolf",
              2.0, 3.0, 0.5, 0, 0, 4000}}, error));
