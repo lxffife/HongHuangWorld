@@ -87,7 +87,7 @@
 
 
 - Prefer readable, role-specific short behavior loops over synchronized idle animation. Each local actor cycles through small state sets with per-agent phase offsets and state durations.
-- Merchants alternate between serving, greeting and arranging-stock gestures; residents use subtle conversation, tea-house and quiet-idle poses; soldiers keep drill and rest visually distinct; guides alternate ledger inspection and directing gestures.
+- Merchants alternate between serving, greeting and arranging-stock gestures. When a player approaches within roughly 5m, the nearby merchant prioritizes a readable greeting pose while remaining at the stall anchor; after the player leaves, the normal idle cycle resumes. Do not animate a greeting by walking through counters or across the aisle. Residents use subtle conversation, tea-house and quiet-idle poses; soldiers keep drill and rest visually distinct; guides alternate ledger inspection and directing gestures.
 - Keep the current prototype motions within each actor's assigned activity point until safe walkable waypoints and obstacle avoidance are implemented. Do not fake long-distance navigation by moving actors through walls, stalls or queue rails.
 - The state machine is a client presentation layer. Authoritative schedules, actor state, queue order, shop inventory and interaction outcomes must come from services in the production game.
 
