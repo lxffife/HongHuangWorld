@@ -640,9 +640,9 @@ func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessio
 		nodeKey,sessionID,characterID).Scan(&result.Health,&result.Mana,&result.Attack,&result.Defense,&result.Strength,&result.Constitution,&result.Agility,&result.Spirit,&result.Vitality,&result.MovementSpeed,&result.MaxHealth,&result.MaxMana)
 	if errors.Is(err,sql.ErrNoRows) { return CombatStats{},ErrSessionInvalid }
 	if err!=nil { return CombatStats{},fmt.Errorf("load session combat attributes: %w",err) }
-	rows,err:=tx.QueryContext(ctx,`SELECT i.base_stats, COALESCE(i.equipment_set_id, ''), COALESCE(es.bonus_tiers, '{}'::jsonb)
-		FROM character_equipment e
-		JOIN item_definitions i ON i.id=e.item_id
+	rows,err:=tx.QueryContext(ctx,`SELECT i.base_stats,COALESCE(ii.rolled_stats,'{}'::jsonb),COALESCE(i.equipment_set_id,''),COALESCE(es.bonus_tiers,'{}'::jsonb)
+		FROM character_equipment e JOIN item_definitions i ON i.id=e.item_id
+		LEFT JOIN item_instances ii ON ii.id=e.item_instance_id
 		LEFT JOIN equipment_sets es ON es.id=i.equipment_set_id AND es.enabled
 		WHERE e.character_id=$1::uuid AND i.enabled`,characterID)
 	if err!=nil { return CombatStats{},fmt.Errorf("load equipped combat bonuses: %w",err) }
@@ -650,12 +650,15 @@ func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessio
 	setCounts:=map[string]int{}
 	setTiers:=map[string]map[int]map[string]int{}
 	for rows.Next() {
-		var raw, tierRaw []byte
+		var raw, rolledRaw, tierRaw []byte
 		var setID string
-		if err:=rows.Scan(&raw,&setID,&tierRaw); err!=nil { return CombatStats{},fmt.Errorf("scan equipped combat bonuses: %w",err) }
+		if err:=rows.Scan(&raw,&rolledRaw,&setID,&tierRaw); err!=nil { return CombatStats{},fmt.Errorf("scan equipped combat bonuses: %w",err) }
 		bonuses:=map[string]int{}
 		if len(raw)>0 { if err:=json.Unmarshal(raw,&bonuses); err!=nil { return CombatStats{},fmt.Errorf("decode equipped combat bonuses: %w",err) } }
 		if err := applyEquipmentStatBonuses(&result, bonuses); err != nil { return CombatStats{}, err }
+		rolledBonuses:=map[string]int{}
+		if len(rolledRaw)>0 { if err:=json.Unmarshal(rolledRaw,&rolledBonuses); err!=nil { return CombatStats{},fmt.Errorf("decode rolled equipment bonuses: %w",err) } }
+		if err:=applyEquipmentStatBonuses(&result,rolledBonuses);err!=nil{return CombatStats{},err}
 		if setID!="" {
 			setCounts[setID]++
 			if _,exists:=setTiers[setID]; !exists {
@@ -680,26 +683,31 @@ func (s *Service) CurrentSessionCombatStats(ctx context.Context, nodeKey, sessio
 	result.MovementSpeed = math.Max(1.0, math.Min(10.0, result.MovementSpeed))
 	// Return the authoritative equipment list with combat stats so WorldServer
 	// can refresh weapon behavior and replicated appearance in the same update.
-	equipmentRows, err := tx.QueryContext(ctx, `SELECT e.slot, i.id, i.name, i.quality, COALESCE(i.weapon_type, ''), i.icon_key, i.description, i.base_stats, COALESCE(es.id, ''), COALESCE(es.name, ''), COALESCE(es.description, ''), COALESCE(es.bonus_tiers, '{}'::jsonb)
-		FROM world_sessions ws
-		JOIN server_registry sr ON sr.id=ws.server_id
+	equipmentRows, err := tx.QueryContext(ctx, `SELECT e.slot,i.id,i.name,COALESCE(ii.quality,i.quality),COALESCE(ii.id::text,''),COALESCE(i.weapon_type,''),i.icon_key,i.description,
+		i.base_stats,COALESCE(ii.rolled_stats,'{}'::jsonb),COALESCE(ii.affixes,'[]'::jsonb),
+		COALESCE(es.id,''),COALESCE(es.name,''),COALESCE(es.description,''),COALESCE(es.bonus_tiers,'{}'::jsonb)
+		FROM world_sessions ws JOIN server_registry sr ON sr.id=ws.server_id
 		JOIN character_equipment e ON e.character_id=ws.character_id
 		JOIN item_definitions i ON i.id=e.item_id
+		LEFT JOIN item_instances ii ON ii.id=e.item_instance_id
 		LEFT JOIN equipment_sets es ON es.id=i.equipment_set_id AND es.enabled
 		WHERE sr.node_key=$1 AND ws.id=$2::uuid AND ws.character_id=$3::uuid AND ws.session_state='active' AND i.enabled
-		ORDER BY e.slot`, nodeKey, sessionID, characterID)
+		ORDER BY e.slot`,nodeKey,sessionID,characterID)
 	if err != nil { return CombatStats{}, fmt.Errorf("load session equipment: %w", err) }
 	defer equipmentRows.Close()
 	result.Equipment = make([]EquippedItem, 0)
 	for equipmentRows.Next() {
 		var item EquippedItem
-		var rawStats, rawTiers []byte
-		if err := equipmentRows.Scan(&item.Slot, &item.ItemID, &item.Name, &item.Quality, &item.WeaponType, &item.IconKey, &item.Description, &rawStats, &item.SetID, &item.SetName, &item.SetDescription, &rawTiers); err != nil {
-			return CombatStats{}, fmt.Errorf("scan session equipment: %w", err)
+		var rawStats,rawRolled,rawAffixes,rawTiers []byte
+		if err:=equipmentRows.Scan(&item.Slot,&item.ItemID,&item.Name,&item.Quality,&item.InstanceID,&item.WeaponType,&item.IconKey,&item.Description,
+			&rawStats,&rawRolled,&rawAffixes,&item.SetID,&item.SetName,&item.SetDescription,&rawTiers);err!=nil{
+			return CombatStats{},fmt.Errorf("scan session equipment: %w",err)
 		}
-		item.BaseStats = map[string]int{}
-		if len(rawStats) > 0 { if err := json.Unmarshal(rawStats, &item.BaseStats); err != nil { return CombatStats{}, fmt.Errorf("decode session equipment stats: %w", err) } }
-		if len(rawTiers) > 0 { if err := json.Unmarshal(rawTiers, &item.SetBonusTiers); err != nil { return CombatStats{}, fmt.Errorf("decode session equipment set tiers: %w", err) } }
+		item.BaseStats=map[string]int{};item.RolledStats=map[string]int{};item.Affixes=[]EquipmentAffix{}
+		if len(rawStats)>0{if err:=json.Unmarshal(rawStats,&item.BaseStats);err!=nil{return CombatStats{},fmt.Errorf("decode session equipment stats: %w",err)}}
+		if len(rawRolled)>0{if err:=json.Unmarshal(rawRolled,&item.RolledStats);err!=nil{return CombatStats{},fmt.Errorf("decode session equipment rolled stats: %w",err)}}
+		if len(rawAffixes)>0{if err:=json.Unmarshal(rawAffixes,&item.Affixes);err!=nil{return CombatStats{},fmt.Errorf("decode session equipment affixes: %w",err)}}
+		if len(rawTiers)>0{if err:=json.Unmarshal(rawTiers,&item.SetBonusTiers);err!=nil{return CombatStats{},fmt.Errorf("decode session equipment set tiers: %w",err)}}
 		result.Equipment = append(result.Equipment, item)
 	}
 	if err := equipmentRows.Err(); err != nil { return CombatStats{}, fmt.Errorf("iterate session equipment: %w", err) }
