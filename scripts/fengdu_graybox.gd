@@ -536,7 +536,7 @@ func _build_activity_registry() -> void:
 				"role": role,
 				"activity": activity,
 				"position": positions[index],
-				"facing": 0.0,
+				"facing": _activity_facing(str(district_name), positions[index], index),
 				"schedule_tag": schedule_tag,
 				"capacity": 1,
 				"radius": 1.4
@@ -575,6 +575,23 @@ func _build_activity_registry() -> void:
 		})
 
 
+func _activity_facing(district_name: String, point_position: Vector3, index: int) -> float:
+	# Godot's local forward is -Z. Face each post toward its actual work area.
+	match district_name:
+		"阴兵大营":
+			return -PI * 0.5
+		"引魂驿站":
+			return PI * 0.5
+		"万魂鬼市":
+			return PI * 0.5 if index % 2 == 0 else -PI * 0.5
+		"万家魂坊":
+			var toward_square := Vector3(-55.0, 0.0, -53.0) - point_position
+			return atan2(-toward_square.x, -toward_square.z)
+		"巡城司":
+			return PI if index % 2 == 0 else 0.0
+	return 0.0
+
+
 func _build_npc_population() -> void:
 	# These are lightweight client-side visual stand-ins. They have no collision,
 	# gameplay authority, network identity, dialogue or interaction yet.
@@ -593,6 +610,9 @@ func _build_npc_population() -> void:
 		agent["phase"] = float(npc_agents.size()) * 1.37
 		agent["moving"] = false
 		agent["base_position"] = point["position"]
+		agent["facing"] = float(point["facing"])
+		agent["gesture_rate"] = 0.72 + float(npc_agents.size() % 5) * 0.13
+		npc_root.rotation.y = float(point["facing"])
 		npc_agents.append(agent)
 
 	# One visible patrol guard follows the closed route; the other guards remain at posts.
@@ -698,7 +718,18 @@ func _create_npc_figure(root: Node3D, role: String) -> Dictionary:
 		lantern.material_override = accent_material
 		root.add_child(lantern)
 
-	return {"body": body, "left_arm": left_arm, "right_arm": right_arm}
+	var ledger: MeshInstance3D
+	if role == "guide":
+		ledger = MeshInstance3D.new()
+		var ledger_mesh := BoxMesh.new()
+		ledger_mesh.size = Vector3(0.38, 0.045, 0.28)
+		ledger.mesh = ledger_mesh
+		ledger.position = Vector3(0.0, 1.18, -0.28)
+		ledger.rotation.x = deg_to_rad(-18.0)
+		ledger.material_override = accent_material
+		root.add_child(ledger)
+
+	return {"body": body, "left_arm": left_arm, "right_arm": right_arm, "ledger": ledger}
 
 
 func _update_npc_agents(delta: float) -> void:
@@ -708,7 +739,7 @@ func _update_npc_agents(delta: float) -> void:
 		var body: MeshInstance3D = agent["body"]
 		var left_arm: MeshInstance3D = agent["left_arm"]
 		var right_arm: MeshInstance3D = agent["right_arm"]
-		var phase := npc_simulation_time * 1.8 + float(agent["phase"])
+		var phase := npc_simulation_time * 1.8 * float(agent.get("gesture_rate", 1.0)) + float(agent["phase"])
 		var activity := str(agent["activity"])
 		if bool(agent["moving"]):
 			var route_index := int(agent["route_index"])
@@ -738,16 +769,32 @@ func _update_npc_agents(delta: float) -> void:
 			var base_position: Vector3 = agent["base_position"]
 			root.position = base_position + Vector3(0, absf(sin(phase)) * 0.035, 0)
 			body.position.y = 0.92 + sin(phase) * 0.025
+			root.rotation.y = float(agent["facing"])
 			if activity == "drill":
-				left_arm.rotation.z = deg_to_rad(-18.0) + sin(phase * 2.0) * 0.28
-				right_arm.rotation.z = deg_to_rad(18.0) - sin(phase * 2.0) * 0.28
+				# Alternating spear-ready motions; each soldier has a slightly different cadence.
+				var drill_swing := sin(phase * 2.0) * 0.28
+				left_arm.rotation.z = deg_to_rad(-18.0) + drill_swing
+				right_arm.rotation.z = deg_to_rad(18.0) - drill_swing
 			elif activity == "trade_idle":
+				# Merchants make small, unsynchronized welcoming gestures.
 				left_arm.rotation.z = deg_to_rad(-18.0) + sin(phase * 0.8) * 0.08
-				right_arm.rotation.z = deg_to_rad(18.0) + sin(phase * 0.8 + 1.0) * 0.08
+				right_arm.rotation.z = deg_to_rad(18.0) + sin(phase * 0.8 + float(agent["phase"])) * 0.13
 			elif activity == "social_idle":
-				root.rotation.y = sin(phase * 0.45) * 0.35
+				# Residents turn toward one another in short conversational beats.
+				root.rotation.y = float(agent["facing"]) + sin(phase * 0.45) * 0.22
+				left_arm.rotation.z = deg_to_rad(-18.0) + sin(phase * 0.9) * 0.06
+				right_arm.rotation.z = deg_to_rad(18.0) - sin(phase * 0.9 + 0.8) * 0.06
+			elif activity == "registration":
+				# The guide checks a small ledger, then raises a hand to direct the next soul.
+				var gesture := sin(phase * 0.62)
+				left_arm.rotation.z = deg_to_rad(-18.0) + maxf(gesture, 0.0) * 0.18
+				right_arm.rotation.z = deg_to_rad(18.0) - maxf(-gesture, 0.0) * 0.34
+				var ledger: MeshInstance3D = agent.get("ledger")
+				if ledger != null:
+					ledger.rotation.x = deg_to_rad(-18.0) + maxf(gesture, 0.0) * 0.24
 			else:
-				root.rotation.y = float(agent.get("facing", 0.0))
+				left_arm.rotation.z = deg_to_rad(-18.0)
+				right_arm.rotation.z = deg_to_rad(18.0)
 
 
 func _toggle_activity_debug() -> void:
