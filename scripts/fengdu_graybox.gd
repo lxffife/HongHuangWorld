@@ -28,6 +28,7 @@ var activity_points: Array[Dictionary] = []
 var navigation_network_data: Dictionary = {}
 var last_navigation_route: Dictionary = {}
 var patrol_route: Array[Vector3] = []
+var patrol_route_node_ids: Array[String] = []
 var activity_debug_root: Node3D
 var activity_debug_visible := false
 var npc_agents: Array[Dictionary] = []
@@ -563,15 +564,18 @@ func _build_activity_registry() -> void:
 		activity_points.append(bound_point)
 	var routes: Array = WORLD_LAYOUT.get_patrol_routes()
 	patrol_route.clear()
+	patrol_route_node_ids.clear()
 	if routes.is_empty():
 		return
 	var route: Dictionary = routes[0]
+	patrol_route_node_ids.assign(route.get("node_ids", []))
 	for node_position in route.get("nodes", []):
 		patrol_route.append(node_position)
 	for route_index in range(patrol_route.size()):
 		var route_position: Vector3 = patrol_route[route_index]
+		var route_node_id := str(patrol_route_node_ids[route_index]) if route_index < patrol_route_node_ids.size() else "missing"
 		var route_point := {
-			"point_id": "patrol.route.%02d" % (route_index + 1),
+			"point_id": route_node_id,
 			"district": str(route.get("district", "巡城司")),
 			"role": str(route.get("role", "patrol_guard")),
 			"activity": "patrol_route",
@@ -579,7 +583,8 @@ func _build_activity_registry() -> void:
 			"facing": 0.0,
 			"schedule_tag": str(route.get("schedule_tag", "night")),
 			"capacity": 1,
-			"radius": 1.0
+			"radius": 1.0,
+			"navigation_node_id": route_node_id
 		}
 		route_point.merge(WORLD_LAYOUT.get_spatial_binding_for_point(route_point, navigation_network_data), true)
 		activity_points.append(route_point)
@@ -820,6 +825,8 @@ func _build_npc_population() -> void:
 		patrol_agent["activity"] = "patrol_route"
 		patrol_agent["phase"] = 0.0
 		patrol_agent["moving"] = true
+		patrol_agent["route_node_ids"] = patrol_route_node_ids.duplicate()
+		patrol_agent["route_network_id"] = "route.patrol.perimeter_loop"
 		patrol_agent["route_index"] = 0
 		patrol_agent["route_progress"] = 0.0
 		patrol_agent["move_speed"] = 2.6
