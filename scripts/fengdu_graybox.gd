@@ -984,6 +984,18 @@ func _build_market_caravans() -> void:
 		cargo_status.outline_size = 4
 		cargo_status.outline_modulate = Color("#171d25")
 		cart.add_child(cargo_status)
+		# One reusable client-side crate visual travels from the cart to the matching stall.
+		var unload_crate := MeshInstance3D.new()
+		unload_crate.name = "CaravanUnloadingCrate"
+		var unload_crate_mesh := BoxMesh.new()
+		unload_crate_mesh.size = Vector3(0.52, 0.48, 0.52)
+		unload_crate.mesh = unload_crate_mesh
+		var unload_crate_material := StandardMaterial3D.new()
+		unload_crate_material.albedo_color = Color("#9c8063") if index == 0 else Color("#718d70")
+		unload_crate_material.roughness = 0.92
+		unload_crate.material_override = unload_crate_material
+		unload_crate.visible = false
+		add_child(unload_crate)
 		market_caravans.append({
 			"caravan_id": "ghost_market.caravan.%02d" % (index + 1),
 			"cargo_type": cargo_type,
@@ -993,6 +1005,7 @@ func _build_market_caravans() -> void:
 			"left_arm": driver["left_arm"],
 			"right_arm": driver["right_arm"],
 			"cargo_status": cargo_status,
+			"unload_crate": unload_crate,
 			"base_x": root.position.x,
 			"base_z": root.position.z,
 			"phase": float(index) * 17.0
@@ -1289,6 +1302,15 @@ func _update_market_ambience(delta: float) -> void:
 		driver_body.position.y = 0.92 + (absf(sin(caravan_phase * 2.0)) * 0.025 if not unloading else 0.0)
 		driver_left.rotation.z = deg_to_rad(-18.0) + (sin(caravan_phase * 2.0) * 0.04 if not unloading else -0.12)
 		driver_right.rotation.z = deg_to_rad(18.0) - (sin(caravan_phase * 2.0) * 0.04 if not unloading else 0.12)
+		var unload_crate: MeshInstance3D = caravan_data["unload_crate"]
+		unload_crate.visible = unloading and fposmod(route_time - 8.0, 5.0) < 2.2
+		if unload_crate.visible:
+			var transfer_elapsed := fposmod(route_time - 8.0, 5.0)
+			var source_position := caravan_root.global_position + caravan_root.global_transform.basis * Vector3(0.0, 1.05, 1.45)
+			var target_position := _market_restock_destination(str(caravan_data["cargo_type"]))
+			var transfer_weight := smoothstep(0.0, 2.2, transfer_elapsed)
+			unload_crate.global_position = source_position.lerp(target_position, transfer_weight)
+			unload_crate.rotation.y = sin(transfer_elapsed * 2.4) * 0.08
 	_update_market_stall_states()
 	_update_market_event_sign()
 	var auction_hour := int(npc_world_minutes / 60.0)
@@ -1323,9 +1345,32 @@ func _update_market_ambience(delta: float) -> void:
 			var host_body: MeshInstance3D = market_stage_actor["body"]
 			var host_left: MeshInstance3D = market_stage_actor["left_arm"]
 			var host_right: MeshInstance3D = market_stage_actor["right_arm"]
+			var auction_elapsed_minutes := fposmod(npc_world_minutes - 20.0 * 60.0, 20.0)
 			host_body.rotation.x = sin(host_phase * 0.7) * deg_to_rad(1.5)
-			host_left.rotation.z = deg_to_rad(-18.0) - maxf(sin(host_phase), 0.0) * 0.32
-			host_right.rotation.z = deg_to_rad(18.0) + maxf(sin(host_phase + 1.1), 0.0) * 0.3
+			match int(auction_elapsed_minutes):
+				0, 1, 2:
+					# Opening salute: both arms rise together, then settle.
+					var salute := sin(host_phase * 0.9) * 0.5 + 0.5
+					host_left.rotation.z = deg_to_rad(-18.0) - salute * 0.38
+					host_right.rotation.z = deg_to_rad(18.0) + salute * 0.38
+					host_body.rotation.x = deg_to_rad(5.0) + sin(host_phase) * deg_to_rad(1.0)
+				3, 4, 5, 6:
+					# Present the lot with one extended arm.
+					host_left.rotation.z = deg_to_rad(-18.0) - 0.08
+					host_right.rotation.z = deg_to_rad(18.0) + 0.42 + sin(host_phase) * 0.035
+				16, 17, 18:
+					# Invite bids with alternating raised hands.
+					host_left.rotation.z = deg_to_rad(-18.0) - maxf(sin(host_phase * 1.4), 0.0) * 0.34
+					host_right.rotation.z = deg_to_rad(18.0) + maxf(sin(host_phase * 1.4 + 1.4), 0.0) * 0.34
+				19:
+					# Close the round with a brief respectful bow.
+					host_left.rotation.z = deg_to_rad(-18.0) - 0.12
+					host_right.rotation.z = deg_to_rad(18.0) + 0.12
+					host_body.rotation.x = deg_to_rad(8.0)
+				_:
+					# Lot introduction: a restrained alternating presenter gesture.
+					host_left.rotation.z = deg_to_rad(-18.0) - maxf(sin(host_phase), 0.0) * 0.28
+					host_right.rotation.z = deg_to_rad(18.0) + maxf(sin(host_phase + 1.1), 0.0) * 0.28
 			host_root.rotation.y = sin(host_phase * 0.35) * 0.025
 
 
@@ -2103,6 +2148,17 @@ func _create_market_stall_status_label(stall_position: Vector3, facing: float) -
 	status.text = "休市"
 	add_child(status)
 	return status
+
+
+func _market_restock_destination(cargo_type: String) -> Vector3:
+	# Deliveries stop beside the rear edge of a matching stall, outside the central aisle.
+	var target_group := "soul_goods" if cargo_type == "魂珠与魂籍" else "herb_goods"
+	for stall in market_stall_registry:
+		if str(stall.get("restock_group", "")) == target_group:
+			var stall_position: Vector3 = stall.get("position", Vector3.ZERO)
+			var side := -1.0 if stall_position.x < 0.0 else 1.0
+			return stall_position + Vector3(side * 1.7, 0.28, -1.8)
+	return Vector3.ZERO
 
 
 func _market_stall_is_restocking(stall_id: String) -> bool:
