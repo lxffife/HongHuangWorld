@@ -36,6 +36,10 @@ var npc_simulation_time := 0.0
 var npc_world_minutes := 18.0 * 60.0
 var npc_schedule_bucket := -1
 var npc_schedule_night := true
+var market_ambience_time := 0.0
+var market_orbs: Array[MeshInstance3D] = []
+var market_lights: Array[OmniLight3D] = []
+var market_customers: Array[Node3D] = []
 
 var mats: Dictionary = {}
 
@@ -51,6 +55,8 @@ func _ready() -> void:
 	_build_districts()
 	_build_activity_registry()
 	_build_npc_population()
+	_build_market_ambience()
+	_apply_npc_schedules()
 	_build_palace_axis()
 	_build_street_furnishings()
 	_build_player()
@@ -777,6 +783,39 @@ func _build_market_customers() -> void:
 		parcel.material_override = parcel_material
 		parcel.position = Vector3(0.42, 0.42, 0.12)
 		customer_root.add_child(parcel)
+		market_customers.append(customer_root)
+
+
+func _build_market_ambience() -> void:
+	# Three shared, shadowless lights illuminate the six stalls without one light per stall.
+	var market_center: Vector3 = district_markers.get("万魂鬼市", Vector3(55.0, 0.0, -53.0))
+	for offset_x in [-8.0, 0.0, 8.0]:
+		var light := OmniLight3D.new()
+		light.name = "GhostMarketSharedLanternLight"
+		light.position = market_center + Vector3(offset_x, 4.0, 0.0)
+		light.light_color = Color("#e9b879")
+		light.light_energy = 0.0
+		light.omni_range = 12.0
+		light.shadow_enabled = false
+		add_child(light)
+		market_lights.append(light)
+	_update_market_ambience(0.0)
+
+
+func _update_market_ambience(delta: float) -> void:
+	market_ambience_time += delta
+	var night_factor := 1.0 if npc_schedule_night else 0.0
+	for index in range(market_lights.size()):
+		var pulse := 0.5 + 0.5 * sin(market_ambience_time * 1.35 + float(index) * 1.7)
+		market_lights[index].light_energy = night_factor * (0.48 + pulse * 0.16)
+	for index in range(market_orbs.size()):
+		var orb := market_orbs[index]
+		var material := orb.material_override as StandardMaterial3D
+		if material != null:
+			var pulse := 0.5 + 0.5 * sin(market_ambience_time * 1.8 + float(index) * 0.83)
+			material.emission_energy_multiplier = 0.16 + night_factor * (0.42 + pulse * 0.38)
+	for customer in market_customers:
+		customer.visible = npc_schedule_night
 
 
 func _initialize_npc_behavior(agent: Dictionary) -> void:
@@ -1137,6 +1176,7 @@ func _update_npc_agents(delta: float) -> void:
 	npc_simulation_time += delta
 	_update_npc_population_manager()
 	npc_world_minutes = fposmod(npc_world_minutes + delta / NPC_DAY_SECONDS_PER_MINUTE, 1440.0)
+	_update_market_ambience(delta)
 	var schedule_bucket := int(npc_world_minutes / 5.0)
 	if schedule_bucket != npc_schedule_bucket:
 		npc_schedule_bucket = schedule_bucket
@@ -1288,6 +1328,9 @@ func _apply_npc_schedules() -> void:
 			agent["activity"] = "registration"
 		elif role == "resident":
 			agent["activity"] = "social_idle"
+	for customer in market_customers:
+		customer.visible = npc_schedule_night
+	_update_market_ambience(0.0)
 	# Clock display is intentionally local to this graybox, not a server-authoritative world clock.
 
 
@@ -1425,6 +1468,7 @@ func _market_display_orb(position: Vector3, radius: float, tint: Color) -> void:
 	instance.material_override = material
 	instance.position = position
 	add_child(instance)
+	market_orbs.append(instance)
 
 
 func _soulward_house(center: Vector3, entrance_side: float) -> void:
