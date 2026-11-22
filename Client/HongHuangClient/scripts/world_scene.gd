@@ -2605,7 +2605,7 @@ func _render_inventory_items() -> void:
 			var equip_button := Button.new()
 			equip_button.text = "穿戴"
 			_apply_button_theme(equip_button, true)
-			equip_button.pressed.connect(_on_equip_item_pressed.bind(str(item.get("item_id", "")), str(item.get("equipment_slot", ""))))
+			equip_button.pressed.connect(_on_equip_item_pressed.bind(str(item.get("item_id", "")), str(item.get("equipment_slot", "")), str(item.get("instance_id", ""))))
 			row.add_child(equip_button)
 		elif str(item.get("item_type", "")) == "consumable":
 			var use_button := Button.new()
@@ -2625,7 +2625,14 @@ func _show_item_details(item: Dictionary) -> void:
 	details += "\n数量：" + str(item.get("quantity", 0)) + " / " + str(item.get("max_stack", 1))
 	var stats: Dictionary = item.get("base_stats", {})
 	if not stats.is_empty():
-		details += "\n属性加成：" + str(stats)
+		details += "\n基础属性：" + str(stats)
+	var rolled_stats: Dictionary = item.get("rolled_stats", {})
+	if not rolled_stats.is_empty():
+		details += "\n随机词缀属性：" + str(rolled_stats)
+	var affixes: Array = item.get("affixes", [])
+	for affix in affixes:
+		if affix is Dictionary:
+			details += "\n词缀：" + str(affix.get("name", "未知词缀")) + " +" + str(affix.get("value", 0))
 	if str(item.get("equipment_slot", "")) != "":
 		details += "\n装备部位：" + str(item.get("equipment_slot", ""))
 	dialog.dialog_text = details
@@ -4177,8 +4184,11 @@ func _on_equipment_request_completed(result: int, response_code: int, _headers: 
 			button.pressed.connect(_on_unequip_item_pressed.bind(slot))
 			row.add_child(button)
 
-func _on_equip_item_pressed(item_id: String, slot: String) -> void:
-	_submit_equipment_action("equip", {"item_id": item_id, "slot": slot})
+func _on_equip_item_pressed(item_id: String, slot: String, instance_id: String = "") -> void:
+	var payload := {"item_id": item_id, "slot": slot}
+	if not instance_id.is_empty():
+		payload["instance_id"] = instance_id
+	_submit_equipment_action("equip", payload)
 
 func _on_unequip_item_pressed(slot: String) -> void:
 	_submit_equipment_action("unequip", {"slot": slot})
