@@ -191,8 +191,8 @@ func _build_street_furnishings() -> void:
 	# Stone balustrades mark bridge edges and keep the causeway silhouette legible.
 	for sign in [-1.0, 1.0]:
 		for z in [-1.0, 1.0]:
-			_box("NorthSouthBridgeRail", Vector3(sign * 9.0, 1.0, z * (CITY_HALF + 7.5)), Vector3(0.7, 1.8, 17), "stone", true)
-			_box("EastWestBridgeRail", Vector3(z * (CITY_HALF + 7.5), 1.0, sign * 9.0), Vector3(17, 1.8, 0.7), "stone", true)
+			_box("NorthSouthBridgeRail", Vector3(sign * 7.2, 1.0, z * (CITY_HALF + 7.5)), Vector3(0.7, 1.8, 17), "stone", true)
+			_box("EastWestBridgeRail", Vector3(z * (CITY_HALF + 7.5), 1.0, sign * 7.2), Vector3(17, 1.8, 0.7), "stone", true)
 	# Small paved squares create breathing space at district entrances.
 	for center in [Vector3(-55, 0, -36), Vector3(55, 0, -36), Vector3(-52, 0, 20), Vector3(52, 0, 20)]:
 		_box("DistrictForecourt", center + Vector3(0, 0.06, 0), Vector3(15, 0.12, 8), "road_edge", false)
