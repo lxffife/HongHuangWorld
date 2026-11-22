@@ -3,24 +3,31 @@ extends RefCounted
 ## Coordinates are in meters in the current city-local X/Z plane.
 ## Keep gameplay identities and placements here; terrain and building art are replaceable adapters.
 
+const CITY_HALF := 96.0
+const MOAT_HALF := 108.0
+const WALL_HEIGHT := 13.0
+const WALL_THICKNESS := 5.0
+const GATE_WIDTH := 16.0
+const OUTER_LANDSCAPE_EXTENT := 600.0
+
 static func get_city_config() -> Dictionary:
 	return {
-		"city_half_extent": 96.0,
-		"moat_half_extent": 108.0,
-		"wall_height": 13.0,
-		"wall_thickness": 5.0,
-		"gate_width": 16.0,
+		"city_half_extent": CITY_HALF,
+		"moat_half_extent": MOAT_HALF,
+		"wall_height": WALL_HEIGHT,
+		"wall_thickness": WALL_THICKNESS,
+		"gate_width": GATE_WIDTH,
 		"imperial_palace_center": Vector3(0, 0, 72),
-		"outer_landscape_extent": 600.0
+		"outer_landscape_extent": OUTER_LANDSCAPE_EXTENT
 	}
 
 
 static func get_gates() -> Array[Dictionary]:
 	return [
-		{"id": "north_heaven_gate", "name": "北天门", "position": Vector3(0, 0, 96), "outward": Vector3(0, 0, 1), "destination": "罗酆山古道"},
-		{"id": "south_ghost_gate", "name": "南幽门", "position": Vector3(0, 0, -96), "outward": Vector3(0, 0, -1), "destination": "忘川与轮回渡口"},
-		{"id": "east_mystic_gate", "name": "东玄门", "position": Vector3(96, 0, 0), "outward": Vector3(1, 0, 0), "destination": "幽冥荒原远域官道"},
-		{"id": "west_dark_gate", "name": "西冥门", "position": Vector3(-96, 0, 0), "outward": Vector3(-1, 0, 0), "destination": "阴司军屯与古战场"}
+		{"id": "north_heaven_gate", "name": "北天门", "position": Vector3(0, 0, CITY_HALF), "outward": Vector3(0, 0, 1), "destination": "罗酆山古道"},
+		{"id": "south_ghost_gate", "name": "南幽门", "position": Vector3(0, 0, -CITY_HALF), "outward": Vector3(0, 0, -1), "destination": "忘川与轮回渡口"},
+		{"id": "east_mystic_gate", "name": "东玄门", "position": Vector3(CITY_HALF, 0, 0), "outward": Vector3(1, 0, 0), "destination": "幽冥荒原远域官道"},
+		{"id": "west_dark_gate", "name": "西冥门", "position": Vector3(-CITY_HALF, 0, 0), "outward": Vector3(-1, 0, 0), "destination": "阴司军屯与古战场"}
 	]
 
 
