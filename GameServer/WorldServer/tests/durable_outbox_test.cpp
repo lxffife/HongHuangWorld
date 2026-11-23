@@ -621,5 +621,47 @@ int main() {
     }
     remove_database(checkpoint_path);
 
+    const std::string hell_wave_path = "world_outbox_hell_wave_checkpoint_test.sqlite";
+    remove_database(hell_wave_path);
+    {
+        honghuang::persistence::DurableOutbox box(hell_wave_path, 8);
+        std::string error;
+        honghuang::persistence::HellTrialWaveCheckpoint checkpoint{
+            "fengdu-floor-01", 1, 2, false, 1000
+        };
+        assert(box.save_hell_trial_wave_checkpoint(checkpoint, error));
+        honghuang::persistence::HellTrialWaveCheckpoint restored;
+        bool found = false;
+        assert(box.load_hell_trial_wave_checkpoint("fengdu-floor-01", 1, restored, found, error));
+        assert(found && restored.stage == 2 && !restored.completed);
+
+        // Delayed/stale writes cannot roll the encounter back to an earlier wave.
+        checkpoint.stage = 1;
+        checkpoint.updated_at_ms = 900;
+        assert(box.save_hell_trial_wave_checkpoint(checkpoint, error));
+        assert(box.load_hell_trial_wave_checkpoint("fengdu-floor-01", 1, restored, found, error));
+        assert(found && restored.stage == 2);
+
+        checkpoint.stage = 4;
+        checkpoint.completed = true;
+        checkpoint.updated_at_ms = 1200;
+        assert(box.save_hell_trial_wave_checkpoint(checkpoint, error));
+        {
+            honghuang::persistence::DurableOutbox reopened(hell_wave_path, 8, false);
+            assert(reopened.load_hell_trial_wave_checkpoint(
+                "fengdu-floor-01", 1, restored, found, error));
+            assert(found && restored.stage == 4 && restored.completed);
+            assert(!reopened.load_hell_trial_wave_checkpoint(
+                "fengdu-floor-01", 19, restored, found, error));
+        }
+        assert(!box.save_hell_trial_wave_checkpoint(
+            {"", 1, 1, false, 1300}, error));
+        assert(!box.save_hell_trial_wave_checkpoint(
+            {"fengdu-floor-01", 1, 5, false, 1300}, error));
+        assert(!box.save_hell_trial_wave_checkpoint(
+            {"fengdu-floor-01", 1, 3, true, 1300}, error));
+    }
+    remove_database(hell_wave_path);
+
     return 0;
 }
