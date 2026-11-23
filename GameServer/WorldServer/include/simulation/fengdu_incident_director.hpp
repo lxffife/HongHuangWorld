@@ -1,11 +1,10 @@
 #pragma once
 
-#include <algorithm>
+#include <deque>
 #include <cstddef>
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 namespace honghuang::simulation {
 
@@ -83,7 +82,7 @@ public:
         return level;
     }
 
-    const std::vector<FengduIncident>& incidents() const { return incidents_; }
+    const std::deque<FengduIncident>& incidents() const { return incidents_; }
 
     const FengduIncident* find(std::string_view incident_id) const {
         for (const auto& incident : incidents_) {
@@ -101,7 +100,7 @@ private:
     }
 
     std::size_t next_id_{1};
-    std::vector<FengduIncident> incidents_;
+    std::deque<FengduIncident> incidents_;
 };
 
 } // namespace honghuang::simulation
