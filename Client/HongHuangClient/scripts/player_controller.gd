@@ -532,13 +532,22 @@ func play_hit_reaction(damage: int, attack_style: String = "") -> void:
 	hit_reaction_strength = maxf(hit_reaction_strength, style_strength + damage_strength)
 
 func play_attack_animation() -> void:
-	if hit_animation_time > 0.0 or soul_form_enabled or not is_instance_valid(player_humanoid):
+	if hit_animation_time > 0.0:
+		return
+	# The underworld avatar is a soul orb rather than a humanoid rig. It still
+	# needs a clear attack tell when the server accepts an attack command.
+	if not soul_form_enabled and not is_instance_valid(player_humanoid):
 		return
 	attack_animation_time = 0.34
 
 
 func _process(delta: float) -> void:
 	hit_reaction_time = maxf(hit_reaction_time - delta, 0.0)
+	if soul_form_enabled and is_instance_valid(visual):
+		attack_animation_time = maxf(attack_animation_time - delta, 0.0)
+		var soul_attack_progress: float = 1.0 - attack_animation_time / 0.34
+		var soul_attack_pulse: float = sin(clampf(soul_attack_progress, 0.0, 1.0) * PI) if attack_animation_time > 0.0 else 0.0
+		visual.scale = Vector3.ONE * soul_form_scale * (1.0 + soul_attack_pulse * 0.24)
 	if is_instance_valid(camera_pivot):
 		var shake_weight := hit_reaction_time / 0.32
 		var shake_time := 0.32 - hit_reaction_time
