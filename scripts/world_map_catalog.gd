@@ -203,6 +203,12 @@ static func get_underworld_atlas_node(node_id: String) -> Dictionary:
 	return {}
 
 
+static func get_eighteen_hell_layers() -> Array:
+	var hell_region := get_underworld_atlas_node("eighteen_hells")
+	var layers: Array = hell_region.get("layers", [])
+	return layers.duplicate(true)
+
+
 static func get_world_bounds(world_id: String) -> Vector4:
 	if world_id == "underworld_fengdu":
 		return Vector4(-128.0, 128.0, -128.0, 128.0)
