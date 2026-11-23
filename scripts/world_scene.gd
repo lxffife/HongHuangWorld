@@ -1162,9 +1162,18 @@ func _build_combat_hud() -> void:
 	_update_spell_cooldown_hud()
 	_update_spell_mastery_hud()
 	notification_panel = PanelContainer.new()
-	notification_panel.set_anchors_preset(Control.PRESET_CENTER)
-	notification_panel.position = Vector2(-230.0, 140.0)
-	notification_panel.custom_minimum_size = Vector2(460.0, 68.0)
+	# Use explicit center-X/top-Y anchors and all four offsets. Setting only
+	# Control.position after PRESET_CENTER leaves the opposite offsets at zero,
+	# which can collapse or misplace this toast on some viewport layouts.
+	notification_panel.anchor_left = 0.5
+	notification_panel.anchor_right = 0.5
+	notification_panel.anchor_top = 0.0
+	notification_panel.anchor_bottom = 0.0
+	notification_panel.offset_left = -230.0
+	notification_panel.offset_right = 230.0
+	notification_panel.offset_top = 140.0
+	notification_panel.offset_bottom = 220.0
+	notification_panel.custom_minimum_size = Vector2(460.0, 80.0)
 	notification_panel.visible = false
 	_apply_panel_theme(notification_panel)
 	hud.add_child(notification_panel)
@@ -1315,12 +1324,31 @@ func _show_notification(message: String, duration: float = 3.2) -> void:
 	if not is_instance_valid(notification_panel) or not is_instance_valid(notification_label):
 		return
 	notification_label.text = message
+	_layout_notification_panel()
 	notification_panel.visible = true
 	if is_instance_valid(notification_timer):
 		notification_timer.start(duration)
-	if is_instance_valid(notification_panel):
-		var viewport_size := get_viewport().get_visible_rect().size
-		notification_panel.position = Vector2(-230.0, viewport_size.y * 0.16)
+
+
+func _layout_notification_panel() -> void:
+	if not is_instance_valid(notification_panel):
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	var notice_width := minf(520.0, maxf(250.0, viewport_size.x - 32.0))
+	var notice_height := 80.0
+	# Pin the toast to the horizontal center using explicit anchors/offsets;
+	# do not rely on Control.position with a centered preset.
+	notification_panel.anchor_left = 0.5
+	notification_panel.anchor_right = 0.5
+	notification_panel.anchor_top = 0.0
+	notification_panel.anchor_bottom = 0.0
+	notification_panel.offset_left = -notice_width * 0.5
+	notification_panel.offset_right = notice_width * 0.5
+	notification_panel.offset_top = maxf(96.0, viewport_size.y * 0.22)
+	notification_panel.offset_bottom = notification_panel.offset_top + notice_height
+	notification_panel.custom_minimum_size = Vector2(notice_width, notice_height)
+	if is_instance_valid(notification_label):
+		notification_label.custom_minimum_size = Vector2(notice_width - 36.0, notice_height - 16.0)
 
 func _update_vitals(current_health: int, max_health: int) -> void:
 	if max_health <= 0 or current_health < 0:
@@ -2623,11 +2651,7 @@ func _layout_hud() -> void:
 		if is_instance_valid(target_health_bar):
 			target_health_bar.custom_minimum_size.x = target_width - 40.0
 	if is_instance_valid(notification_panel):
-		var notice_width := minf(520.0, maxf(250.0, viewport_size.x - 32.0))
-		notification_panel.position = Vector2(-notice_width * 0.5, 112.0)
-		notification_panel.custom_minimum_size = Vector2(notice_width, 88.0)
-		if is_instance_valid(notification_label):
-			notification_label.custom_minimum_size = Vector2(notice_width - 36.0, 64.0)
+		_layout_notification_panel()
 	if is_instance_valid(vitals_panel):
 		var vitals_width := minf(340.0, maxf(250.0, viewport_size.x - 36.0))
 		vitals_panel.custom_minimum_size = Vector2(vitals_width, 154.0)
