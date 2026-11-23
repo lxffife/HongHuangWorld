@@ -1367,6 +1367,22 @@ struct EnetServer::Impl {
         return stored;
     }
 
+    bool enqueue_durable_event_after(const std::string& event_id, const std::string& type,
+                                     const Json& payload, std::int64_t delay_ms,
+                                     std::string& error) {
+        if (!durable_outbox) { error = "durable outbox is not initialized"; return false; }
+        const auto now = wall_clock_ms();
+        const bool stored = durable_outbox->enqueue(
+            honghuang::persistence::OutboxEvent{
+                event_id, type, payload.dump(), 0, now + std::max<std::int64_t>(delay_ms, 0), now, {}
+            }, error);
+        if (stored) {
+            outbox_cv.notify_one();
+            chat_outbox_cv.notify_one();
+        }
+        return stored;
+    }
+
     bool enqueue_durable_events(const std::vector<honghuang::persistence::OutboxEvent>& events,
                                 std::string& error) {
         if (!durable_outbox) { error = "durable outbox is not initialized"; return false; }
@@ -1715,7 +1731,8 @@ struct EnetServer::Impl {
 
     void enqueue_hell_trial_entry(const PlayerState& player) {
         if (config.hell_floor < 1 || config.hell_floor > 18 ||
-            config.world_id != "underworld_fengdu" || player.character_id.empty()) return;
+            config.world_id != "underworld_fengdu" || player.character_id.empty() ||
+            player.session_id.empty()) return;
         hell_trial_participants[player.character_id] = player.session_id;
         const auto event_id = make_event_uuid();
         const Json payload{
@@ -1725,13 +1742,26 @@ struct EnetServer::Impl {
             {"floor", config.hell_floor}
         };
         std::string error;
-        if (!enqueue_durable_event(event_id, "hell_trial_entry", payload, error))
+        if (!enqueue_durable_event(event_id, "hell_trial_entry", payload, error)) {
             std::cerr << "Could not persist hell trial entry: " << error << '\n';
+            return;
+        }
+        // A player may join after this floor's encounter was already cleared.
+        // Record entry first, then defer completion delivery to preserve event order.
+        if (hell_trial_encounter.completed()) {
+            const auto* floor = hell_trial_encounter.spec();
+            const honghuang::simulation::HellTrialDeathResult completed{
+                false, false, true, hell_trial_encounter.objective_kills(),
+                floor ? floor->objective_required : 0, hell_trial_encounter.guardian_defeated()
+            };
+            enqueue_hell_trial_completion(player.session_id, player.character_id, completed, 5000);
+        }
     }
 
     void enqueue_hell_trial_completion(const std::string& session_id,
                                         const std::string& character_id,
-                                        const honghuang::simulation::HellTrialDeathResult& result) {
+                                        const honghuang::simulation::HellTrialDeathResult& result,
+                                        std::int64_t delay_ms = 0) {
         if (!result.completion_ready || character_id.empty() || session_id.empty() ||
             !hell_trial_encounter.enabled()) return;
         const auto* floor = hell_trial_encounter.spec();
@@ -1756,7 +1786,10 @@ struct EnetServer::Impl {
             {"objective_snapshot", snapshot}
         };
         std::string error;
-        if (!enqueue_durable_event(event_id, "hell_trial_completion", payload, error))
+        const bool stored = delay_ms > 0
+            ? enqueue_durable_event_after(event_id, "hell_trial_completion", payload, delay_ms, error)
+            : enqueue_durable_event(event_id, "hell_trial_completion", payload, error);
+        if (!stored)
             std::cerr << "Could not persist hell trial completion: character="
                       << character_id << " floor=" << hell_trial_encounter.floor()
                       << " reason=" << error << '\n';
