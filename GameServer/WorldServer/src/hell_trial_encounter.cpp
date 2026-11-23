@@ -92,7 +92,7 @@ HellTrialDeathResult HellTrialEncounter::record_monster_death(
         const auto found = std::find(spec_->objective_monster_ids.begin(),
                                      spec_->objective_monster_ids.end(), definition_id);
         if (found != spec_->objective_monster_ids.end()) {
-            const auto [_, inserted] = counted_runtime_ids_.emplace(life_id);
+            const auto [_, inserted] = counted_life_ids_.emplace(life_id);
             if (inserted && objective_kills_ < spec_->objective_required) {
                 ++objective_kills_;
                 result.objective_kill_recorded = true;
