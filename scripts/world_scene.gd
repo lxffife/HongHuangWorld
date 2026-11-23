@@ -2679,11 +2679,9 @@ func _build_party_ui() -> void:
 	party_refresh_timer.timeout.connect(func():
 		if party_request_context != "":
 			return
-		if is_instance_valid(party_panel) and party_panel.visible:
-			_party_request("GET", "/api/v1/party/current", {}, "current")
-		else:
-			# Keep the invitation inbox fresh even while the party panel is closed.
-			_party_request("GET", "/api/v1/party/invitations", {}, "background_invitations")
+		# Refresh the expiring shared focus marker and invitation inbox even while
+		# the panel is closed; the current-party response chains into invitations.
+		_party_request("GET", "/api/v1/party/current", {}, "current")
 	)
 	add_child(party_refresh_timer)
 	party_refresh_timer.start()
