@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cmath>
 #include <limits>
+#include <string>
 
 using honghuang::simulation::HellTrialBossPhaseController;
 
@@ -31,6 +32,31 @@ int main() {
     assert(!transition.changed && transition.phase == 3);
     transition = boss.update(1.0, 0.0);
     assert(!transition.changed && transition.phase == 3);
+    // Phase two uses a deterministic floor signature, while phase three
+    // becomes a larger area attack on every floor.
+    HellTrialBossPhaseController themed;
+    const honghuang::simulation::MonsterDefinition guardian{
+        "hell_f01_tongue_jailer", "拔舌判官", 11, 1000.0F, 40.0F, 10.0F,
+        2.0F, 16.0F, 40.0F, 0.0F, 0.0F, 1.8F
+    };
+    auto profile = themed.attack_profile(guardian, 1);
+    assert(std::string(profile.style) == "melee");
+    themed.update(650.0, 1000.0);
+    profile = themed.attack_profile(guardian, 1);
+    assert(std::string(profile.style) == "soul_bolt");
+    assert(profile.range == 7.0F && profile.windup_ms == 720);
+    const auto other_floor = themed.attack_profile(guardian, 2);
+    assert(std::string(other_floor.style) == "blade_slash");
+    assert(other_floor.range == 2.8F);
+    const auto invalid_floor = themed.attack_profile(guardian, 19);
+    assert(std::string(invalid_floor.style) == "melee");
+
+    themed.update(300.0, 1000.0);
+    profile = themed.attack_profile(guardian, 1);
+    assert(std::string(profile.style) == "heavy_slam");
+    assert(profile.splash_radius > 5.0F && profile.range == profile.splash_radius);
+    assert(profile.cooldown_ms == 2500);
+
     boss.reset();
     assert(boss.phase() == 0);
     assert(std::abs(boss.attack_multiplier() - 1.0) < 0.001);
