@@ -341,7 +341,7 @@ func _api(method: String, path: String, body: Dictionary = {}, authenticated: bo
 		var parser := JSON.new()
 		if parser.parse(trimmed_body) == OK:
 			parsed = parser.data
-			json_ok = parsed is Dictionary or parsed is Array
+			json_ok = parsed is Dictionary
 	return {
 		"code": code,
 		"body": body_text,
