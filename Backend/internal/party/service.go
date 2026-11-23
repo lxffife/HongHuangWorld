@@ -251,6 +251,10 @@ func (s *Service) Get(ctx context.Context, accountID string) (Party,error) {
  return p,nil
 }
 
+func validFocusTargetID(id string) bool {
+ return len(id) <= 96 && !strings.ContainsAny(id, "\r\n\t")
+}
+
 type FocusTarget struct {
  EntityID string `json:"target_entity_id"`
 }
@@ -259,7 +263,7 @@ type FocusTarget struct {
 // Any current member may update it; the server records the authenticated account.
 func (s *Service) SetFocusTarget(ctx context.Context, accountID, targetEntityID string) (Party, error) {
  targetEntityID = strings.TrimSpace(targetEntityID)
- if accountID == "" || len(targetEntityID) > 96 { return Party{}, ErrInvalid }
+ if accountID == "" || !validFocusTargetID(targetEntityID) { return Party{}, ErrInvalid }
  current, err := currentForAccount(ctx, s.db, accountID)
  if err != nil { return Party{}, err }
  tx, err := s.db.BeginTx(ctx, nil)
