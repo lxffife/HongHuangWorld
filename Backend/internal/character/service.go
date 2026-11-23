@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/liflife/HongHuangWorld/Backend/internal/economy"
 )
 
 var (
@@ -703,6 +705,8 @@ type Reward struct {
 	CharacterID    string `json:"character_id"`
 	Experience     int64  `json:"experience"`
 	Cultivation    int64  `json:"cultivation"`
+	GhostCash      int64  `json:"ghost_cash"`
+	NetherStone    int64  `json:"nether_stone"`
 	AttributePoints int   `json:"attribute_points"`
 }
 
@@ -765,16 +769,17 @@ func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward 
 		return RewardResult{Applied: false}, nil
 	}
 
-	var activeCharacterID string
+	var activeCharacterID, worldID, accountID string
 	err = tx.QueryRowContext(ctx,
-		`SELECT c.id::text
+		`SELECT c.id::text, c.world_id, soul.account_id::text
 		 FROM world_sessions ws
 		 JOIN characters c ON c.id = ws.character_id
+		 JOIN souls soul ON soul.current_character_id = c.id
 		 WHERE ws.id = $1::uuid AND ws.server_id = $2 AND c.id = $3::uuid
 		   AND c.status = 'alive'
 		   AND ws.session_state IN ('active', 'closed')
-		 FOR UPDATE OF ws, c`, reward.SessionID, serverID, reward.CharacterID,
-	).Scan(&activeCharacterID)
+		 FOR UPDATE OF ws, c, soul`, reward.SessionID, serverID, reward.CharacterID,
+	).Scan(&activeCharacterID, &worldID, &accountID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RewardResult{}, ErrRewardSession
 	}
@@ -843,6 +848,20 @@ func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward 
 	if rows, err := updated.RowsAffected(); err != nil || rows != 1 {
 		return RewardResult{}, fmt.Errorf("apply character reward values: expected one progression row, updated %d: %v", rows, err)
 	}
+	if reward.GhostCash > 0 {
+		if _, err := economy.NewService(s.db).ApplyIssuanceInTx(ctx, tx, accountID, worldID,
+			"ghost_cash", "monster_kill:"+reward.EventID+":ghost_cash", reward.GhostCash,
+			"monster_kill", reward.EventID, "怪物击杀奖励"); err != nil {
+			return RewardResult{}, fmt.Errorf("issue monster ghost cash: %w", err)
+		}
+	}
+	if reward.NetherStone > 0 {
+		if _, err := economy.NewService(s.db).ApplyIssuanceInTx(ctx, tx, accountID, worldID,
+			"nether_stone", "monster_kill:"+reward.EventID+":nether_stone", reward.NetherStone,
+			"monster_kill", reward.EventID, "精英怪物击杀奖励"); err != nil {
+			return RewardResult{}, fmt.Errorf("issue monster nether stone: %w", err)
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return RewardResult{}, fmt.Errorf("commit character reward: %w", err)
 	}
@@ -853,8 +872,10 @@ func validReward(nodeKey string, reward Reward) bool {
 	return nodeKey != "" && validUUID(reward.EventID) && validUUID(reward.SessionID) && validUUID(reward.CharacterID) &&
 		reward.Experience >= 0 && reward.Experience <= 1000000 &&
 		reward.Cultivation >= 0 && reward.Cultivation <= 1000000000 &&
+		reward.GhostCash >= 0 && reward.GhostCash <= 2000 &&
+		reward.NetherStone >= 0 && reward.NetherStone <= 5 &&
 		reward.AttributePoints >= 0 && reward.AttributePoints <= 1000 &&
-		(reward.Experience > 0 || reward.Cultivation > 0 || reward.AttributePoints > 0)
+		(reward.Experience > 0 || reward.Cultivation > 0 || reward.GhostCash > 0 || reward.NetherStone > 0 || reward.AttributePoints > 0)
 }
 
 func validUUID(value string) bool {
