@@ -110,6 +110,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/characters/current/attributes/allocate", characters.allocateAttributePoints)
 		partyAPI := &partyHandlers{authService: authService, service: party.NewService(db), logger: logger}
 		mux.HandleFunc("GET /api/v1/party/current", partyAPI.current)
+		mux.HandleFunc("PUT /api/v1/party/loot-rules", partyAPI.lootRules)
 		mux.HandleFunc("POST /api/v1/party", partyAPI.create)
 		mux.HandleFunc("POST /api/v1/party/invitations", partyAPI.invite)
 		mux.HandleFunc("GET /api/v1/party/invitations", partyAPI.invitations)
