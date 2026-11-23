@@ -275,7 +275,7 @@ static func _build_fire_soul_details(root: Node3D) -> void:
 	for side in [-1.0, 1.0]:
 		_part(root, "FlameHorn" + str(side), _capsule(0.075, 0.52), Vector3(side * 0.24, 1.30, 0.02), flame, Vector3(0.0, 0.0, side * -0.48), 2.0)
 		_part(root, "FlameOrb" + str(side), _sphere(0.085), Vector3(side * 0.42, 0.66, 0.04), gold, Vector3.ZERO, 2.6)
-	_part(root, "FlameTail" + str(side), _capsule(0.065, 0.42), Vector3(side * 0.25, 0.22, 0.30), flame, Vector3(side * 0.35, 0.0, side * 0.38), 1.8)
+		_part(root, "FlameTail" + str(side), _capsule(0.065, 0.42), Vector3(side * 0.25, 0.22, 0.30), flame, Vector3(side * 0.35, 0.0, side * 0.38), 1.8)
 	_part(root, "FlameCrest", _sphere(0.12), Vector3(0.0, 1.56, 0.02), gold, Vector3.ZERO, 3.0)
 
 
