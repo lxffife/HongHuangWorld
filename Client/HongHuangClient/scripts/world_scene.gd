@@ -1390,8 +1390,8 @@ func _update_compact_hud(progression: Dictionary = {}) -> void:
 			lines.append("来世资质 · " + "  ".join(PackedStringArray(progress_parts)))
 		# Underworld cards contain combat, soul-growth and attribute progress.
 		# Reserve enough vertical room so wrapped Chinese lines are never clipped.
-		compact_hud_panel.custom_minimum_size = Vector2(520.0, 240.0)
-		compact_hud_label.custom_minimum_size = Vector2(496.0, 220.0)
+		compact_hud_panel.custom_minimum_size = Vector2(520.0, 280.0)
+		compact_hud_label.custom_minimum_size = Vector2(496.0, 260.0)
 		compact_hud_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		compact_hud_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		compact_hud_label.clip_text = false
@@ -1409,10 +1409,11 @@ func _update_compact_hud(progression: Dictionary = {}) -> void:
 		compact_hud_label.clip_text = false
 		compact_hud_label.max_lines_visible = -1
 	compact_hud_label.text = "\n".join(PackedStringArray(lines))
-	# The character card can be wider on large monitors but must never keep its
-	# original 460px label width on a narrower viewport.
+	# Preserve the wider underworld character card; the previous unconditional
+	# 460px cap silently overrode its 520px layout and caused Chinese text wrapping.
 	var compact_viewport_size: Vector2 = get_viewport().get_visible_rect().size
-	var compact_width: float = minf(460.0, maxf(260.0, compact_viewport_size.x - 36.0))
+	var preferred_compact_width: float = 520.0 if world_id == "underworld_fengdu" else 360.0
+	var compact_width: float = minf(preferred_compact_width, maxf(260.0, compact_viewport_size.x - 36.0))
 	compact_hud_panel.custom_minimum_size.x = compact_width
 	compact_hud_label.custom_minimum_size.x = compact_width - 24.0
 	_layout_hud()
