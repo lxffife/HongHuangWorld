@@ -11,6 +11,7 @@
 #include "simulation/consumable.hpp"
 #include "simulation/status_effect.hpp"
 #include "simulation/revive.hpp"
+#include "simulation/hell_trial_encounter.hpp"
 #include "simulation/support_combat.hpp"
 #include "persistence/durable_outbox.hpp"
 #include "persistence/monster_contribution_writer.hpp"
@@ -1151,6 +1152,7 @@ bool deliver_chat_message(const ServerConfig& config, const ChatJob& job,
 
 struct EnetServer::Impl {
     ServerConfig config;
+    honghuang::simulation::HellTrialEncounter hell_trial_encounter;
     ENetHost* host{};
     std::unordered_map<ENetPeer*, PlayerState> players;
     std::vector<MonsterRuntime> monsters;
@@ -1242,7 +1244,7 @@ struct EnetServer::Impl {
     std::thread chat_outbox_thread;
     Clock::time_point last_chat_outbox_metrics_at{};
 
-    explicit Impl(ServerConfig value) : config(std::move(value)) {
+    explicit Impl(ServerConfig value) : config(std::move(value)), hell_trial_encounter(config.hell_floor) {
         const auto add_monster = [this](std::string runtime_id, std::string definition_id,
                                         std::string name, int level, float health,
                                         float attack, float defense, float speed,
@@ -1256,7 +1258,31 @@ struct EnetServer::Impl {
             monsters.push_back({std::move(definition), std::move(state), std::move(runtime_id), Clock::time_point{}});
             monsters.back().contribution_instance_id = make_event_uuid();
         };
-        if (config.world_id == "qingyun_human") {
+        if (config.world_id == "underworld_fengdu" && hell_trial_encounter.enabled()) {
+            const auto* floor = hell_trial_encounter.spec();
+            const float tier = static_cast<float>(floor->recommended_level);
+            const float mob_health = 90.0F + tier * 28.0F;
+            const float mob_attack = 12.0F + tier * 1.2F;
+            const float mob_defense = 4.0F + tier * 0.65F;
+            const std::array<std::array<float, 2>, 3> spawn_points{{
+                {{-22.0F, -12.0F}}, {{18.0F, -8.0F}}, {{0.0F, 22.0F}}
+            }};
+            for (std::size_t i = 0; i < floor->objective_monster_ids.size(); ++i) {
+                const auto& point = spawn_points[i];
+                const std::string suffix = "-0" + std::to_string(i + 1);
+                add_monster("hell-f" + std::to_string(config.hell_floor) + "-objective" + suffix,
+                            std::string(floor->objective_monster_ids[i]),
+                            std::string(floor->objective_monster_names[i]),
+                            floor->recommended_level,
+                            mob_health, mob_attack, mob_defense, 2.5F, 12.0F, 32.0F,
+                            point[0], point[1]);
+            }
+            add_monster("hell-f" + std::to_string(config.hell_floor) + "-guardian",
+                        std::string(floor->guardian_id), std::string(floor->guardian_name),
+                        floor->recommended_level + 3,
+                        420.0F + tier * 145.0F, 25.0F + tier * 2.4F,
+                        12.0F + tier * 1.5F, 2.0F, 16.0F, 40.0F, 0.0F, -28.0F);
+        } else if (config.world_id == "qingyun_human") {
             add_monster("wolf-001", "wilderness_wolf", "荒原狼", 3, 80.0F, 12.0F, 4.0F,
                         2.8F, 10.0F, 24.0F, -12.0F, -8.0F);
             add_monster("wolf-002", "wilderness_wolf", "荒原狼", 3, 80.0F, 12.0F, 4.0F,
@@ -1698,7 +1724,39 @@ struct EnetServer::Impl {
             std::cerr << "Could not persist hell trial entry: " << error << '\n';
     }
 
+    void enqueue_hell_trial_completion(const PlayerState& player,
+                                        const honghuang::simulation::HellTrialDeathResult& result) {
+        if (!result.completion_ready || player.character_id.empty() ||
+            !hell_trial_encounter.enabled()) return;
+        const auto* floor = hell_trial_encounter.spec();
+        const auto event_id = make_event_uuid();
+        const Json snapshot{
+            {"floor", hell_trial_encounter.floor()},
+            {"floor_name", floor ? floor->name : std::string_view{}},
+            {"objective_kills", result.objective_kills},
+            {"objective_required", result.objective_required},
+            {"objective_complete", result.objective_kills >= result.objective_required},
+            {"guardian_id", floor ? floor->guardian_id : std::string_view{}},
+            {"guardian_defeated", result.guardian_defeated},
+            {"source", "worldserver_authoritative_monster_death"}
+        };
+        const Json payload{
+            {"event_id", event_id},
+            {"character_id", player.character_id},
+            {"floor", hell_trial_encounter.floor()},
+            {"objective_complete", result.objective_kills >= result.objective_required},
+            {"guardian_defeated", result.guardian_defeated},
+            {"objective_snapshot", snapshot}
+        };
+        std::string error;
+        if (!enqueue_durable_event(event_id, "hell_trial_completion", payload, error))
+            std::cerr << "Could not persist hell trial completion: character="
+                      << player.character_id << " floor=" << hell_trial_encounter.floor()
+                      << " reason=" << error << '\\n';
+    }
+
     void enqueue_soul_reward(const PlayerState& player, std::int64_t experience,
+
                              const std::string& source) {
         if (experience <= 0 || source.empty()) return;
         const auto event_id = make_event_uuid();
@@ -2459,6 +2517,18 @@ struct EnetServer::Impl {
     void begin_monster_death(MonsterRuntime& monster, const PlayerState* killer) {
         if (!monster.contribution_closing) return;
         capture_monster_death_context(monster, killer);
+        if (hell_trial_encounter.enabled()) {
+            const auto encounter_result = hell_trial_encounter.record_monster_death(
+                monster.runtime_id, monster.death_definition_id);
+            if (encounter_result.completion_ready) {
+                // This WorldServer is dedicated to one floor. Every connected
+                // character on it has passed the server-issued floor ticket.
+                for (const auto& [peer, player] : players) {
+                    (void)peer;
+                    enqueue_hell_trial_completion(player, encounter_result);
+                }
+            }
+        }
         monster.state.target_id.clear();
         honghuang::simulation::clear_negative_statuses(
             monster.slow_effect, monster.freeze_effect, monster.burn_effect);
