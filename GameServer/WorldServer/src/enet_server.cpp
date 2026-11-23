@@ -181,6 +181,7 @@ struct MonsterRuntime {
     // Runtime-only threat ledger. Damage admission remains durable in the
     // contribution writer; threat is rebuilt naturally as players fight.
     std::unordered_map<std::string, ThreatEntry> threat_by_character;
+    Clock::time_point last_threat_warning_at{};
     std::string taunt_target_character_id;
     Clock::time_point taunt_expires_at{};
     bool rare_spawn{false};
@@ -1722,6 +1723,29 @@ struct EnetServer::Impl {
             monster, player.session_id, player.character_id, player.bounty_objectives, effective_damage);
     }
 
+    void record_monster_threat(MonsterRuntime& monster, const std::string& character_id,
+                               double threat_value) {
+        if (character_id.empty() || !std::isfinite(threat_value) || threat_value <= 0.0) return;
+        auto threat = monster.threat_by_character.find(character_id);
+        if (threat == monster.threat_by_character.end()) {
+            constexpr std::size_t kMaximumThreatTargets = 256;
+            if (monster.threat_by_character.size() >= kMaximumThreatTargets) {
+                auto weakest = std::min_element(monster.threat_by_character.begin(),
+                    monster.threat_by_character.end(), [](const auto& left, const auto& right) {
+                        if (left.second.value != right.second.value)
+                            return left.second.value < right.second.value;
+                        return left.first > right.first;
+                    });
+                if (weakest != monster.threat_by_character.end())
+                    monster.threat_by_character.erase(weakest);
+            }
+            threat = monster.threat_by_character.emplace(character_id,
+                MonsterRuntime::ThreatEntry{}).first;
+        }
+        threat->second.value = std::min(1.0e12, threat->second.value + threat_value);
+        threat->second.last_update = Clock::now();
+    }
+
     void record_monster_damage(MonsterRuntime& monster, const std::string& session_id,
                                const std::string& character_id,
                                const std::vector<BountyObjectiveSubscription>& subscriptions,
@@ -1779,26 +1803,7 @@ struct EnetServer::Impl {
             ++contribution.hit_count;
         contribution.last_hit_at = Clock::now();
         // Damage creates threat only after the durable contribution was admitted.
-        // Keep the ledger bounded and refresh recency for decay/target selection.
-        auto threat = monster.threat_by_character.find(character_id);
-        if (threat == monster.threat_by_character.end()) {
-            constexpr std::size_t kMaximumThreatTargets = 256;
-            if (monster.threat_by_character.size() >= kMaximumThreatTargets) {
-                auto weakest = std::min_element(monster.threat_by_character.begin(),
-                    monster.threat_by_character.end(), [](const auto& left, const auto& right) {
-                        if (left.second.value != right.second.value)
-                            return left.second.value < right.second.value;
-                        return left.first > right.first;
-                    });
-                if (weakest != monster.threat_by_character.end())
-                    monster.threat_by_character.erase(weakest);
-            }
-            threat = monster.threat_by_character.emplace(character_id,
-                MonsterRuntime::ThreatEntry{}).first;
-        }
-        threat->second.value = std::min(1.0e12, threat->second.value +
-            static_cast<double>(effective_damage));
-        threat->second.last_update = Clock::now();
+        record_monster_threat(monster, character_id, static_cast<double>(effective_damage));
     }
 
     void record_monster_damage(MonsterRuntime& monster, const PlayerState& player,
@@ -4658,6 +4663,7 @@ struct EnetServer::Impl {
                     monster.contribution_closing = false;
                     monster.damage_contributions.clear();
                     monster.threat_by_character.clear();
+                    monster.last_threat_warning_at = Clock::time_point{};
                     monster.taunt_target_character_id.clear();
                     monster.taunt_expires_at = Clock::time_point{};
                     monster.death_context_captured = false;
