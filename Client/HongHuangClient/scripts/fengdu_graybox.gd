@@ -696,6 +696,7 @@ func _npc_display_name(role: String, index: int) -> String:
 		"guide": names = ["引魂使·无咎", "引魂使·青灯", "引魂使·渡厄"]
 		"waiting_soul": names = ["新魂·甲", "新魂·乙", "新魂·丙"]
 		"patrol_guard": names = ["巡城卫·陈肃", "巡城卫·陆衡"]
+		"gate_guard": names = ["城门守卫·甲", "城门守卫·乙"]
 		_: names = ["无名阴差"]
 	return str(names[index % names.size()])
 
@@ -836,6 +837,12 @@ func _build_npc_population() -> void:
 		agent["importance"] = "critical" if role == "guide" else ("regional" if role in ["merchant", "soldier", "patrol_guard"] else "ambient")
 		agent["root"] = npc_root
 		agent["role"] = role
+		if role == "gate_guard":
+			agent["gate_id"] = str(point.get("gate_id", ""))
+			agent["gate_name"] = str(point.get("gate_name", "城门"))
+			agent["shift_tag"] = str(point.get("shift_tag", "day"))
+			agent["importance"] = "critical"
+			agent["moving"] = false
 		if role == "soldier":
 			agent["formation_slot"] = role_index
 		if role == "waiting_soul":
@@ -1613,6 +1620,8 @@ func _npc_behavior_states(role: String) -> Array:
 			return ["queue_wait", "queue_glance"]
 		"patrol_guard":
 			return ["patrol_walk", "patrol_watch"]
+		"gate_guard":
+			return ["gate_watch"]
 	return ["idle"]
 
 
@@ -1635,6 +1644,10 @@ func _npc_behavior_duration(role: String, state: String, phase: float) -> float:
 
 
 func _advance_npc_behavior(agent: Dictionary, elapsed: float) -> void:
+	if str(agent.get("role", "")) == "gate_guard":
+		var gate_id := str(agent.get("gate_id", ""))
+		agent["state"] = "gate_watch" if bool(local_gate_open_by_id.get(gate_id, true)) else "gate_sealed_watch"
+		return
 	var states: Array = agent.get("behavior_states", [])
 	if states.is_empty():
 		return
@@ -1707,6 +1720,11 @@ func _apply_npc_behavior_pose(agent: Dictionary, phase: float) -> void:
 	var facing := float(agent.get("facing", 0.0))
 	var gesture := sin(phase * 1.25)
 	match state:
+		"gate_watch", "gate_sealed_watch":
+			root.rotation.y = facing + sin(phase * 0.25) * 0.025
+			body.rotation.x = deg_to_rad(-2.0) + sin(phase * 0.55) * deg_to_rad(0.7)
+			left_arm.rotation.z = deg_to_rad(-18.0) + sin(phase * 0.4) * 0.02
+			right_arm.rotation.z = deg_to_rad(18.0) - sin(phase * 0.4) * 0.02
 		"trade_idle":
 			left_arm.rotation.z = deg_to_rad(-18.0) + gesture * 0.07
 			right_arm.rotation.z = deg_to_rad(18.0) + sin(phase * 0.9) * 0.1
@@ -2105,6 +2123,37 @@ func _update_npc_agents(delta: float) -> void:
 				left_arm.rotation.z = deg_to_rad(-18.0)
 				right_arm.rotation.z = deg_to_rad(18.0)
 		_apply_npc_behavior_pose(agent, phase)
+
+
+func _is_gate_guard_shift_active(shift_tag: String, hour: int) -> bool:
+	if shift_tag == "day":
+		return hour >= 6 and hour < 18
+	if shift_tag == "night":
+		return hour >= 18 or hour < 6
+	return false
+
+
+func get_gate_watch_status() -> Array[Dictionary]:
+	var status_rows: Array[Dictionary] = []
+	var shift_tag := "night" if npc_schedule_night else "day"
+	for gate in WORLD_LAYOUT.get_gate_guard_roster():
+		var gate_id := str(gate.get("gate_id", ""))
+		var guard_count := 0
+		for agent in npc_agents:
+			if str(agent.get("role", "")) != "gate_guard" or str(agent.get("gate_id", "")) != gate_id:
+				continue
+			var guard_root: Node3D = agent.get("root")
+			if guard_root != null and is_instance_valid(guard_root) and guard_root.visible:
+				guard_count += 1
+		status_rows.append({
+			"gate_id": gate_id,
+			"gate_name": str(gate.get("gate_name", "")),
+			"is_open": bool(local_gate_open_by_id.get(gate_id, true)),
+			"shift": shift_tag,
+			"guard_count": guard_count,
+			"status": "正常值守" if guard_count >= int(gate.get("guards_per_shift", 1)) else "守备不足"
+		})
+	return status_rows
 
 
 func _update_market_gate_inspection(delta: float) -> void:
@@ -2854,7 +2903,14 @@ func _apply_npc_schedules() -> void:
 		var root: Node3D = agent["root"]
 		if str(agent.get("schedule_tag", "")) == "night":
 			root.visible = npc_schedule_night
-		if role == "soldier":
+		if role == "gate_guard":
+			var shift_tag := str(agent.get("shift_tag", "day"))
+			var shift_active := _is_gate_guard_shift_active(shift_tag, hour)
+			root.visible = shift_active
+			agent["activity"] = "gate_watch" if shift_active else "off_duty"
+			if shift_active:
+				agent["state"] = "gate_watch" if bool(local_gate_open_by_id.get(str(agent.get("gate_id", "")), true)) else "gate_sealed_watch"
+		elif role == "soldier":
 			agent["activity"] = "drill" if hour >= 6 and hour < 22 else "rest"
 		elif role == "merchant":
 			agent["activity"] = "trade_idle"
