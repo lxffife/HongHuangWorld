@@ -117,3 +117,28 @@ func _test_fengdu_navigation() -> void:
 	var nearest := FengduNavigation.find_nearest_node(network, Vector3(0.0, 0.0, -81.36), ["palace", "court"])
 	assert(bool(nearest.get("found", false)))
 	assert(str(nearest.get("node_id", "")) == "imperial_palace")
+
+	var restricted_network: Dictionary = network.duplicate(true)
+	for edge_variant in restricted_network.get("edges", []):
+		var edge: Dictionary = edge_variant
+		if str(edge.get("gate_id", "")) == "north_gate":
+			edge["required_access"] = "north_gate_pass"
+	var denied_route := FengduNavigation.find_path(restricted_network, "imperial_palace", "north_gate")
+	assert(not bool(denied_route.get("found", false)))
+	var permitted_route := FengduNavigation.find_path(restricted_network, "imperial_palace", "north_gate", {"access_tags": ["north_gate_pass"]})
+	assert(bool(permitted_route.get("found", false)))
+
+	var district_route := FengduNavigation.find_path_to_district(
+		network, Vector3(0.0, 0.0, -81.36), "ghost_market",
+		[{"id": "market_main_entry", "district_id": "ghost_market", "navigation_node_id": "ghost_market", "service": "trade"}]
+	)
+	assert(bool(district_route.get("found", false)))
+	assert(str(district_route.get("destination_service", "")) == "trade")
+
+	var disabled_network: Dictionary = network.duplicate(true)
+	for node_variant in disabled_network.get("nodes", []):
+		var node: Dictionary = node_variant
+		if str(node.get("id", "")) == "imperial_palace":
+			node["enabled"] = false
+	var disabled_nearest := FengduNavigation.find_nearest_node(disabled_network, Vector3(0.0, 0.0, -81.36), ["palace", "court"])
+	assert(str(disabled_nearest.get("node_id", "")) != "imperial_palace")
