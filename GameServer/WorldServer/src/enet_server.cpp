@@ -1766,6 +1766,8 @@ struct EnetServer::Impl {
             {"objective_complete", result.objective_kills >= result.objective_required},
             {"guardian_id", floor ? std::string(floor->guardian_id) : std::string{}},
             {"guardian_defeated", result.guardian_defeated},
+            {"participant_damage", hell_trial_contributions.damage_for(character_id)},
+            {"minimum_contribution_damage", hell_trial_minimum_contribution_damage()},
             {"source", "worldserver_authoritative_monster_death"}
         };
         const Json payload{
