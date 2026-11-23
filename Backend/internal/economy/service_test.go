@@ -10,6 +10,8 @@ func TestValidDeltaRequest(t *testing.T) {
 		want bool
 	}{
 		{"grant", "account-1", "nether_stone", "event-1", "grant", 50, true},
+		{"trade debit", "account-1", "ghost_cash", "event-trade-buy", "trade", -120, true},
+		{"trade credit", "account-2", "ghost_cash", "event-trade-sell", "trade", 120, true},
 		{"spend", "account-1", "nether_stone", "event-2", "cultivation", -10, true},
 		{"zero delta", "account-1", "nether_stone", "event-3", "grant", 0, false},
 		{"missing account", "", "nether_stone", "event-4", "grant", 1, false},
