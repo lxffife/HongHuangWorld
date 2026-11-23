@@ -37,3 +37,19 @@ func TestFloorCountAndFinalBoundary(t *testing.T) {
 	if min(19,FloorCount)!=18 { t.Fatal("floor 18 must be the terminal floor") }
 	if min(4,FloorCount)!=4 { t.Fatal("intermediate floor unlock should be sequential") }
 }
+
+func TestValidateEntry(t *testing.T) {
+	valid := EntryRequest{
+		CharacterID: "123e4567-e89b-12d3-a456-426614174000",
+		Floor: 18,
+		EventID: "123e4567-e89b-12d3-a456-426614174001",
+	}
+	if err := validateEntry(valid); err != nil { t.Fatalf("valid floor entry rejected: %v", err) }
+	cases := []struct{name string; mutate func(*EntryRequest)}{
+		{"invalid character",func(r *EntryRequest){r.CharacterID="bad"}},
+		{"invalid event",func(r *EntryRequest){r.EventID="bad"}},
+		{"floor zero",func(r *EntryRequest){r.Floor=0}},
+		{"floor nineteen",func(r *EntryRequest){r.Floor=19}},
+	}
+	for _,tc:=range cases { t.Run(tc.name,func(t *testing.T){req:=valid;tc.mutate(&req);if err:=validateEntry(req);!errors.Is(err,ErrInvalid){t.Fatalf("got %v, want ErrInvalid",err)}}) }
+}
