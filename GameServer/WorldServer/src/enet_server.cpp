@@ -4864,6 +4864,7 @@ struct EnetServer::Impl {
                     if (monster.state.target_id == monster.taunt_target_character_id) {
                         monster.state.target_id.clear();
                         monster.state.mode = honghuang::simulation::MonsterMode::Idle;
+                        nearest_target = nullptr;
                     }
                     monster.taunt_target_character_id.clear();
                     monster.taunt_expires_at = Clock::time_point{};
