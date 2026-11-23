@@ -154,8 +154,18 @@ static func _add_city_walls(root: Node3D) -> void:
 	for side in [-1.0, 1.0]:
 		_add_wall(root, "NorthWall_" + str(side), Vector3(WALL_HALF_X - 6.0, 5.0, 1.8), Vector3(side * (WALL_HALF_X * 0.5 + 3.0), 2.5, CITY_CENTER_Z - WALL_HALF_Z), wall_color)
 		_add_wall(root, "SouthWall_" + str(side), Vector3(WALL_HALF_X - 6.0, 5.0, 1.8), Vector3(side * (WALL_HALF_X * 0.5 + 3.0), 2.5, CITY_CENTER_Z + WALL_HALF_Z), wall_color)
+	# East and west walls also leave a 12 m gate opening, matching server collision data.
 	for side in [-1.0, 1.0]:
-		_add_wall(root, "SideWall_" + str(side), Vector3(1.8, 5.0, WALL_HALF_Z * 2.0), Vector3(side * WALL_HALF_X, 2.5, CITY_CENTER_Z), wall_color)
+		for depth_side in [-1.0, 1.0]:
+			_add_wall(
+				root,
+				("WestWall_" if side < 0.0 else "EastWall_") + str(depth_side),
+				Vector3(1.8, 5.0, WALL_HALF_Z - 6.0),
+				Vector3(side * WALL_HALF_X, 2.5, CITY_CENTER_Z + depth_side * (WALL_HALF_Z * 0.5 + 3.0)),
+				wall_color
+			)
+	_add_city_landmark(root, "EastGateName", "東 玄 門", Vector3(WALL_HALF_X + 1.5, 7.0, CITY_CENTER_Z), Color("#c9b9d2"))
+	_add_city_landmark(root, "WestGateName", "西 冥 門", Vector3(-WALL_HALF_X - 1.5, 7.0, CITY_CENTER_Z), Color("#c9b9d2"))
 	_add_city_landmark(root, "SouthGateName", "南 幽 门", Vector3(0.0, 7.0, CITY_CENTER_Z + WALL_HALF_Z + 1.5), Color("#c9b9d2"))
 	_add_city_landmark(root, "NorthGateName", "北 天 门", Vector3(0.0, 7.0, CITY_CENTER_Z - WALL_HALF_Z - 1.5), Color("#c9b9d2"))
 
