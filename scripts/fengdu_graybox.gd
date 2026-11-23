@@ -738,7 +738,20 @@ func _cycle_city_alert_level() -> void:
 
 
 func get_city_alert_status() -> Dictionary:
-	return {"level": city_alert_level, "label": {"normal": "常态", "watch": "戒备", "lockdown": "战时封城"}.get(city_alert_level, "未知"), "closed_gate_count": _count_closed_gates()}
+	return {
+		"level": city_alert_level,
+		"label": {"normal": "常态", "watch": "戒备", "lockdown": "战时封城"}.get(city_alert_level, "未知"),
+		"closed_gate_count": _count_closed_gates(),
+		"active_incident_count": _count_active_patrol_incidents()
+	}
+
+
+func _count_active_patrol_incidents() -> int:
+	var count := 0
+	for incident in patrol_incident_records:
+		if str(incident.get("state", "")) in ["queued", "assigned", "investigating"]:
+			count += 1
+	return count
 
 
 func _count_closed_gates() -> int:
@@ -3752,8 +3765,10 @@ func _update_hud() -> void:
 			nearest_distance = distance
 			nearest = str(district_name)
 	var period := "夜" if npc_schedule_night else "昼"
-	var alert_label := str(get_city_alert_status().get("label", "常态"))
-	status_label.text = "%s %s  ·  城防：%s  ·  位置 %.1f, %.1f  ·  附近：%s" % [period, _format_npc_clock(), alert_label, p.x, p.z, nearest]
+	var alert_status := get_city_alert_status()
+	var alert_label := str(alert_status.get("label", "常态"))
+	var incident_count := int(alert_status.get("active_incident_count", 0))
+	status_label.text = "%s %s  ·  城防：%s  ·  巡防事件 %d  ·  位置 %.1f, %.1f  ·  附近：%s" % [period, _format_npc_clock(), alert_label, incident_count, p.x, p.z, nearest]
 	_update_npc_interaction_hint()
 
 
