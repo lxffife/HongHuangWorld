@@ -231,6 +231,15 @@ var npc_selected_id := ""
 var npc_request_busy := false
 
 func _ready() -> void:
+	# Keep the status text inside its HUD column at every viewport size.
+	# Long combat feedback belongs in the notification toast, not this compact status area.
+	if is_instance_valid(hud_label):
+		hud_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		hud_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		hud_label.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		hud_label.clip_text = false
+		hud_label.max_lines_visible = 4
+		hud_label.add_theme_font_size_override("font_size", 13)
 	_build_environment()
 	_build_terrain()
 	_build_player()
@@ -3631,14 +3640,15 @@ func _request_nearest_monster_attack(screen_position: Vector2 = Vector2(-1.0, -1
 	var target_name := str(monster_entities.get(target_id, {}).get("name", "怪物"))
 	var error: Error = network.send_attack(target_id)
 	if error != OK:
-		hud_label.text = "攻击指令发送失败：" + str(error)
-		_show_notification("攻击指令发送失败：" + str(error) + "。目标仍保持锁定。", 4.0)
+		hud_label.text = "攻击发送失败 · 错误码 " + str(error)
+		_show_notification("攻击指令发送失败（错误码 " + str(error) + "），目标仍保持锁定。", 4.0)
 		return
 	# Give immediate feedback for the click; damage and hit effects are still
 	# driven exclusively by the authoritative server combat event.
 	if local_player.has_method("play_attack_animation"):
 		local_player.call("play_attack_animation")
-	hud_label.text = "攻击指令已发送：" + target_name + " · 距离 %.1f m · 等待服务器判定" % target_distance
+	hud_label.text = "攻击已发送 · " + target_name + " · %.1f m" % target_distance
+	_show_notification("已向「" + target_name + "」发起攻击，正在等待服务器命中判定。", 3.0)
 	if is_instance_valid(target_info_label):
 		target_info_label.text += "\n攻击指令已发送 · 等待服务器判定"
 
@@ -4332,7 +4342,7 @@ func _on_combat_event(event: Dictionary) -> void:
 			var rejected_position: Vector3 = monster_targets[selected_monster_id]
 			var rejected_distance: float = _horizontal_distance_to_target(local_player.global_position, rejected_position)
 			rejection_detail = "距离目标太远（当前 %.1f m）。继续靠近后再次点击左键。" % rejected_distance
-		hud_label.text = "攻击失败：" + rejection_detail
+		hud_label.text = ("攻击未成功 · 距离 %.1f m" % _horizontal_distance_to_target(local_player.global_position, monster_targets[selected_monster_id])) if rejection_reason == "距离目标太远。" and monster_targets.has(selected_monster_id) and is_instance_valid(local_player) else "攻击未成功 · 请查看通知"
 		if is_instance_valid(target_info_label) and not selected_monster_id.is_empty():
 			_update_target_info()
 			target_info_label.text += "\n攻击未成功：" + rejection_detail
