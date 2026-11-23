@@ -128,6 +128,9 @@ var monster_targets: Dictionary = {}
 var monster_entities: Dictionary = {}
 var monster_animation_time := 0.0
 var selected_monster_id := ""
+var attack_button_held := false
+var attack_repeat_remaining := 0.0
+var attack_repeat_interval := 1.2
 var target_info_panel: PanelContainer
 var combat_reticle: Label
 var target_info_label: Label
@@ -2292,9 +2295,15 @@ func _input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton):
 		return
 	var mouse_event := event as InputEventMouseButton
-	if mouse_event.button_index != MOUSE_BUTTON_LEFT or not mouse_event.pressed:
+	if mouse_event.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if not mouse_event.pressed:
+		attack_button_held = false
 		return
 	if not is_instance_valid(local_player) or is_gameplay_input_blocked():
+		return
+	if bool(local_player.get("is_dead")):
+		attack_button_held = false
 		return
 	var viewport := get_viewport()
 	var was_captured := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
@@ -2305,6 +2314,7 @@ func _input(event: InputEvent) -> void:
 	var target_screen_position: Vector2 = viewport.get_visible_rect().size * 0.5 if was_captured else mouse_event.position
 	if not was_captured:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	attack_button_held = true
 	_request_nearest_monster_attack(target_screen_position)
 	viewport.set_input_as_handled()
 
@@ -3963,6 +3973,9 @@ func _request_nearest_monster_attack(screen_position: Vector2 = Vector2(-1.0, -1
 	var target_position: Vector3 = monster_targets[target_id]
 	var target_distance: float = _horizontal_distance_to_target(local_player.global_position, target_position)
 	var target_name := str(monster_entities.get(target_id, {}).get("name", "怪物"))
+	var server_interval_ms := int(HHSession.world_snapshot.get("attack_interval_ms", 1200))
+	attack_repeat_interval = clampf(float(server_interval_ms) / 1000.0, 0.45, 3.0)
+	attack_repeat_remaining = attack_repeat_interval
 	var error: Error = network.send_attack(target_id)
 	if error != OK:
 		_show_notification("攻击指令发送失败（错误码 " + str(error) + "），目标仍保持锁定。", 4.0)
@@ -3974,6 +3987,41 @@ func _request_nearest_monster_attack(screen_position: Vector2 = Vector2(-1.0, -1
 	_show_notification("攻击指令已发送  ·  " + target_name + "  ·  距离 %.1f m" % target_distance, 1.5)
 	if is_instance_valid(target_info_label):
 		target_info_label.text += "\n攻击指令已发送 · 等待服务器判定"
+
+
+func _process_held_monster_attack(delta: float) -> void:
+	if not attack_button_held:
+		return
+	if not is_instance_valid(local_player) or bool(local_player.get("is_dead")):
+		attack_button_held = false
+		return
+	if selected_monster_id.is_empty() or not monsters.has(selected_monster_id) or not monster_targets.has(selected_monster_id):
+		attack_button_held = false
+		return
+	attack_repeat_remaining = maxf(attack_repeat_remaining - delta, 0.0)
+	if attack_repeat_remaining > 0.0:
+		return
+	var network := HHSession.world_network
+	if network == null or not network.is_world_ready():
+		attack_repeat_remaining = 0.25
+		return
+	var target_position: Vector3 = monster_targets[selected_monster_id]
+	var distance := _horizontal_distance_to_target(local_player.global_position, target_position)
+	var attack_range := maxf(float(HHSession.world_snapshot.get("attack_range", 2.5)), 0.5)
+	if distance > attack_range + 0.2:
+		# Keep the target locked while the player closes the gap. Do not flood
+		# the server with out-of-range attacks or consume attack cooldown.
+		attack_repeat_remaining = 0.15
+		return
+	var send_error: Error = network.send_attack(selected_monster_id)
+	if send_error == OK:
+		if local_player.has_method("play_attack_animation"):
+			local_player.call("play_attack_animation")
+	else:
+		_show_notification("连续攻击发送失败（错误码 " + str(send_error) + "）。", 2.0)
+		attack_repeat_remaining = 0.5
+		return
+	attack_repeat_remaining = attack_repeat_interval
 
 
 func _update_spell_cooldown_hud() -> void:
@@ -4669,13 +4717,16 @@ func _on_combat_event(event: Dictionary) -> void:
 		var rejection_reason := str(event.get("reason", "攻击未命中。"))
 		if rejection_reason == "攻击间隔中，请稍后再试。":
 			var cooldown_seconds := maxf(float(event.get("cooldown_ms", 0)) / 1000.0, 0.0)
+			attack_repeat_remaining = maxf(cooldown_seconds, 0.15)
 			_show_notification("攻击冷却中 · 还需 %.1f 秒" % cooldown_seconds, 1.8)
 			return
 		var rejection_detail := rejection_reason
 		if rejection_reason == "距离目标太远。" and monster_targets.has(selected_monster_id) and is_instance_valid(local_player):
 			var rejected_position: Vector3 = monster_targets[selected_monster_id]
 			var rejected_distance: float = _horizontal_distance_to_target(local_player.global_position, rejected_position)
-			rejection_detail = "距离目标太远（当前 %.1f m）。继续靠近后再次点击左键。" % rejected_distance
+			rejection_detail = "距离目标太远（当前 %.1f m）。继续靠近后再次点击左键，按住左键会在进入攻击距离后自动继续攻击。" % rejected_distance
+			if attack_button_held:
+				attack_repeat_remaining = 0.15
 		if is_instance_valid(target_info_label) and not selected_monster_id.is_empty():
 			_update_target_info()
 			target_info_label.text += "\n攻击未成功：" + rejection_detail
@@ -4780,8 +4831,8 @@ func _on_combat_event(event: Dictionary) -> void:
 	var health_target_id := str(event.get("target_entity_id", ""))
 	if not selected_monster_id.is_empty() and health_target_id == selected_monster_id and monster_entities.has(selected_monster_id):
 		var selected_entity: Dictionary = monster_entities[selected_monster_id]
-		if event.has("health"):
-			selected_entity["health"] = int(event.get("health", 0))
+		if event.has("health") or event.has("remaining_health"):
+			selected_entity["health"] = int(event.get("health", event.get("remaining_health", 0)))
 		if event.has("max_health"):
 			selected_entity["max_health"] = int(event.get("max_health", 0))
 		monster_entities[selected_monster_id] = selected_entity
@@ -5046,6 +5097,7 @@ func _update_input_debug_hud() -> void:
 	input_debug_label.text = "按键：" + keys + "\n输入：" + movement_text + " (" + ("%.1f" % move_input.x) + ", " + ("%.1f" % move_input.y) + ")\n世界网络：" + network_text + " · " + send_text + "\n客户端坐标：" + ("%.1f, %.1f, %.1f" % [player_position.x, player_position.y, player_position.z])
 
 func _process(delta: float) -> void:
+	_process_held_monster_attack(delta)
 	if is_instance_valid(combat_reticle):
 		combat_reticle.visible = Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and hud_visible
 	if is_instance_valid(terrain_chunk_streamer) and is_instance_valid(local_player):
