@@ -4077,6 +4077,9 @@ struct EnetServer::Impl {
         };
         if (player.health <= 0) { reject("角色已倒地，无法施法。"); return; }
         if (player.pending_spell.has_value()) { reject("正在施法，请稍候。"); return; }
+        if (!player.revive_target_character_id.empty() && spell_id != "revive") {
+            reject("回魂术引导中，不能同时施展其他法术。"); return;
+        }
         // Rescue is a short server-authoritative channel. A death must be durably
         // recorded before another player can restore the downed character.
         if (spell_id == "revive") {
