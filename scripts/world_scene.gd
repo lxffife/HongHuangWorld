@@ -70,7 +70,7 @@ var local_player: Variant
 var terrain_chunk_streamer: Node
 var world_terrain_root: Node3D
 var hell_floor_visual_root: Node3D
-var hell_trial_panel: Control
+var hell_trial_panel: Variant
 var hell_trial_open_button: Button
 var hud_visible := true
 var death_panel: PanelContainer
