@@ -65,6 +65,7 @@ var chat_seen_ids: Dictionary = {}
 var selected_chat_channel := "nearby"
 
 var local_player: Variant
+var terrain_chunk_streamer: Node
 var hud_visible := true
 var death_panel: PanelContainer
 var death_message_label: Label
@@ -483,8 +484,6 @@ func _on_progression_request_completed(result: int, response_code: int, _headers
 func _build_environment() -> void:
 	var world_id := str(HHSession.world_snapshot.get("world_id", "qingyun_human"))
 	add_child(WorldEnvironmentBuilder.build(world_id))
-
-var terrain_chunk_streamer: Node
 
 func _build_terrain() -> void:
 	var world_id := str(HHSession.world_snapshot.get("world_id", "qingyun_human"))
