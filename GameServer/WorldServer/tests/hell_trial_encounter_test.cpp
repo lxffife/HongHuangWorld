@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <string>
+#include <unordered_set>
 
 using honghuang::simulation::HellTrialEncounter;
 using honghuang::simulation::hell_trial_floor_specs;
@@ -9,6 +10,15 @@ using honghuang::simulation::hell_trial_floor_specs;
 int main() {
     const auto& specs = hell_trial_floor_specs();
     assert(specs.size() == 18);
+    std::unordered_set<std::string> guardian_ids;
+    std::unordered_set<std::string> objective_ids;
+    int previous_recommended_level = 0;
+    for (const auto& spec : specs) {
+        assert(guardian_ids.emplace(spec.guardian_id).second);
+        assert(spec.recommended_level > previous_recommended_level);
+        previous_recommended_level = spec.recommended_level;
+        for (const auto id : spec.objective_monster_ids) assert(objective_ids.emplace(id).second);
+    }
     for (int floor = 1; floor <= HellTrialEncounter::floor_count; ++floor) {
         HellTrialEncounter encounter(floor);
         assert(encounter.enabled());
