@@ -1133,15 +1133,18 @@ func _build_combat_hud() -> void:
 	notification_panel = PanelContainer.new()
 	notification_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	notification_panel.position = Vector2(-260.0, 96.0)
-	notification_panel.custom_minimum_size = Vector2(520.0, 72.0)
+	notification_panel.custom_minimum_size = Vector2(520.0, 88.0)
 	notification_panel.visible = false
 	_apply_panel_theme(notification_panel)
 	hud.add_child(notification_panel)
 	notification_label = Label.new()
-	notification_label.custom_minimum_size = Vector2(480.0, 48.0)
+	notification_label.custom_minimum_size = Vector2(480.0, 64.0)
+	notification_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	notification_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	notification_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	notification_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	notification_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	notification_label.clip_text = false
 	notification_label.add_theme_color_override("font_color", Color("#f2e8d6"))
 	notification_label.add_theme_font_size_override("font_size", 14)
 	notification_panel.add_child(notification_label)
@@ -1387,6 +1390,13 @@ func _update_compact_hud(progression: Dictionary = {}) -> void:
 		compact_hud_panel.custom_minimum_size = Vector2(460.0, 160.0)
 		compact_hud_label.custom_minimum_size = Vector2(436.0, 140.0)
 	compact_hud_label.text = "\n".join(PackedStringArray(lines))
+	# The character card can be wider on large monitors but must never keep its
+	# original 460px label width on a narrower viewport.
+	var compact_viewport_size: Vector2 = get_viewport().get_visible_rect().size
+	var compact_width: float = minf(460.0, maxf(260.0, compact_viewport_size.x - 36.0))
+	compact_hud_panel.custom_minimum_size.x = compact_width
+	compact_hud_label.custom_minimum_size.x = compact_width - 24.0
+	_layout_hud()
 
 func _apply_world_player_form() -> void:
 	if not is_instance_valid(local_player):
@@ -2422,7 +2432,9 @@ func _layout_hud() -> void:
 	if is_instance_valid(notification_panel):
 		var notice_width := minf(520.0, maxf(250.0, viewport_size.x - 32.0))
 		notification_panel.position = Vector2(-notice_width * 0.5, 112.0)
-		notification_panel.custom_minimum_size.x = notice_width
+		notification_panel.custom_minimum_size = Vector2(notice_width, 88.0)
+		if is_instance_valid(notification_label):
+			notification_label.custom_minimum_size = Vector2(notice_width - 36.0, 64.0)
 	if is_instance_valid(vitals_panel):
 		var vitals_width := minf(340.0, maxf(250.0, viewport_size.x - 36.0))
 		vitals_panel.custom_minimum_size = Vector2(vitals_width, 154.0)
@@ -3608,15 +3620,19 @@ func _request_nearest_monster_attack(screen_position: Vector2 = Vector2(-1.0, -1
 
 	var target_position: Vector3 = monster_targets[target_id]
 	var target_distance: float = local_player.global_position.distance_to(target_position)
+	var target_name := str(monster_entities.get(target_id, {}).get("name", "怪物"))
 	var error: Error = network.send_attack(target_id)
 	if error != OK:
 		hud_label.text = "攻击指令发送失败：" + str(error)
-		_show_notification("攻击指令发送失败：" + str(error))
+		_show_notification("攻击指令发送失败：" + str(error) + "。目标仍保持锁定。", 4.0)
 		return
+	# Give immediate feedback for the click; damage and hit effects are still
+	# driven exclusively by the authoritative server combat event.
 	if local_player.has_method("play_attack_animation"):
 		local_player.call("play_attack_animation")
-	var target_name := str(monster_entities.get(target_id, {}).get("name", "怪物"))
-	hud_label.text = "正在攻击：" + target_name + " · 距离 %.1f m" % target_distance
+	hud_label.text = "攻击指令已发送：" + target_name + " · 距离 %.1f m · 等待服务器判定" % target_distance
+	if is_instance_valid(target_info_label):
+		target_info_label.text += "\n攻击指令已发送 · 等待服务器判定"
 
 
 func _update_spell_cooldown_hud() -> void:
