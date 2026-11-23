@@ -50,6 +50,18 @@ int main() {
     assert(other_floor.range == 2.8F);
     const auto invalid_floor = themed.attack_profile(guardian, 19);
     assert(std::string(invalid_floor.style) == "melee");
+    const char* expected_signatures[] = {
+        "soul_bolt", "blade_slash", "poison_bolt",
+        "frost_bolt", "heavy_slam", "blade_slash"
+    };
+    for (int floor = 1; floor <= 18; ++floor) {
+        const auto floor_profile = themed.attack_profile(guardian, floor);
+        assert(std::string(floor_profile.style) ==
+               expected_signatures[(floor - 1) % 6]);
+        assert(floor_profile.windup_ms > 0);
+        assert(floor_profile.recovery_ms > 0);
+        assert(floor_profile.cooldown_ms > 0);
+    }
 
     themed.update(300.0, 1000.0);
     profile = themed.attack_profile(guardian, 1);
