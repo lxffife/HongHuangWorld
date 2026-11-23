@@ -26,6 +26,8 @@ var stopping := false
 var input_sequence := 0
 var last_attack_msec := 0
 var last_party_poll_msec := 0
+var last_party_warning := ""
+var last_party_warning_msec := 0
 var last_input_msec := 0
 var connect_started_msec := 0
 var status_text := "starting"
@@ -73,6 +75,10 @@ func _main() -> void:
 			stopping = true
 	if network != null and network.has_method("close"):
 		network.close()
+		# Allow queued disconnect callbacks and deferred node cleanup to run
+		# before SceneTree exits and destroys the native ENet extension.
+		await create_timer(0.5).timeout
+	await process_frame
 	_log("AI 测试玩家已停止。")
 	quit(0)
 
@@ -185,6 +191,10 @@ func _on_combat_event(event: Dictionary) -> void:
 func _poll_and_accept_invites() -> void:
 	var result := await _api("GET", "/api/v1/party/invitations", {}, true)
 	if result.code < 200 or result.code >= 300:
+		_log_party_api_issue("读取组队邀请", result)
+		return
+	if not result.json_ok:
+		_log_party_api_issue("读取组队邀请（响应不是有效 JSON）", result)
 		return
 	var invitations: Array = result.data.get("invitations", [])
 	for invitation in invitations:
@@ -200,11 +210,26 @@ func _poll_and_accept_invites() -> void:
 			_log("接受组队邀请失败 HTTP " + str(response.code) + "：" + response.body)
 	var party_result := await _api("GET", "/api/v1/party/current", {}, true)
 	party_character_ids.clear()
-	if party_result.code >= 200 and party_result.code < 300:
+	if party_result.code >= 200 and party_result.code < 300 and party_result.json_ok:
 		for member in party_result.data.get("members", []):
 			var member_id := str(member.get("character_id", ""))
 			if not member_id.is_empty() and member_id != bot_character_id:
 				party_character_ids.append(member_id)
+	elif party_result.code != 404:
+		_log_party_api_issue("读取当前队伍", party_result)
+
+func _log_party_api_issue(action: String, result: Dictionary) -> void:
+	var detail := "HTTP " + str(result.get("code", 0))
+	var response_text := str(result.get("body", "")).strip_edges()
+	if not response_text.is_empty():
+		detail += " · " + response_text.substr(0, 240)
+	var warning := action + "失败：" + detail
+	var now := Time.get_ticks_msec()
+	if warning == last_party_warning and now - last_party_warning_msec < 15000:
+		return
+	last_party_warning = warning
+	last_party_warning_msec = now
+	_log(warning)
 
 func _run_companion_brain() -> void:
 	if network == null or not network.is_world_ready():
@@ -290,8 +315,15 @@ func _api(method: String, path: String, body: Dictionary = {}, authenticated: bo
 	var code := int(completed[1])
 	var response_body: PackedByteArray = completed[3]
 	var body_text := response_body.get_string_from_utf8()
-	var parsed: Variant = JSON.parse_string(body_text)
-	return {"code": code, "body": body_text, "data": parsed if parsed is Dictionary else {}}
+	var parser := JSON.new()
+	var parse_error: Error = parser.parse(body_text) if not body_text.strip_edges().is_empty() else ERR_PARSE_ERROR
+	var parsed: Variant = parser.data if parse_error == OK else null
+	return {
+		"code": code,
+		"body": body_text,
+		"data": parsed if parsed is Dictionary else {},
+		"json_ok": parse_error == OK and parsed is Dictionary
+	}
 
 func _log(message: String) -> void:
 	print("[HH-AI-BOT] " + message)
