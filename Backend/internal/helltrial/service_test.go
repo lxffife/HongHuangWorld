@@ -42,16 +42,16 @@ func TestValidateCompletion(t *testing.T) {
 }
 
 func TestMinimumContributionDamage(t *testing.T) {
-	if got := minimumContributionDamage(1); got != 32 {
+	if got := minimumContribution(1); got != 32 {
 		t.Fatalf("floor 1 threshold = %d, want 32", got)
 	}
-	if got := minimumContributionDamage(2); got != 43 {
+	if got := minimumContribution(2); got != 43 {
 		t.Fatalf("floor 2 threshold = %d, want 43", got)
 	}
-	if got := minimumContributionDamage(18); got != 233 {
+	if got := minimumContribution(18); got != 233 {
 		t.Fatalf("floor 18 threshold = %d, want 233", got)
 	}
-	if got := minimumContributionDamage(0); got != 0 {
+	if got := minimumContribution(0); got != 0 {
 		t.Fatalf("invalid floor threshold = %d, want 0", got)
 	}
 }
