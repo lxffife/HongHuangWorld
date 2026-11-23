@@ -15,6 +15,7 @@ const FloorCount = 18
 var (
 	ErrNoActiveSession = errors.New("character has no active world session")
 	ErrWrongWorld = errors.New("hell trials are only available in the underworld")
+	ErrWrongInstance = errors.New("active world instance does not match the requested hell floor")
 	ErrInvalid = errors.New("invalid hell trial request")
 	ErrFloorLocked = errors.New("hell trial floor is locked")
 	ErrObjectiveIncomplete = errors.New("hell trial objective is incomplete")
@@ -129,10 +130,22 @@ func (s *Service) Complete(ctx context.Context, nodeKey string, req CompletionRe
 		JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
 		JOIN world_instances wi ON wi.id=ws.instance_id AND wi.world_id=c.world_id
 		JOIN server_registry sr ON sr.id=ws.server_id AND sr.node_key=$2
-		WHERE c.id=$1::uuid AND c.status='alive'
+		WHERE c.id=$1::uuid AND c.status='alive' AND wi.hell_floor=$3
 		ORDER BY ws.connected_at DESC NULLS LAST LIMIT 1
 		FOR UPDATE OF c,ws`,req.CharacterID,nodeKey).Scan(&worldID)
-	if errors.Is(err,sql.ErrNoRows){return CompletionResult{},ErrNoActiveSession}
+	if errors.Is(err,sql.ErrNoRows) {
+		var activeUnderworld bool
+		checkErr := tx.QueryRowContext(ctx,`SELECT EXISTS(
+			SELECT 1 FROM characters c
+			JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
+			JOIN world_instances wi ON wi.id=ws.instance_id AND wi.world_id=c.world_id
+			JOIN server_registry sr ON sr.id=ws.server_id AND sr.node_key=$2
+			WHERE c.id=$1::uuid AND c.status='alive' AND c.world_id='underworld_fengdu'
+		)`,req.CharacterID,nodeKey).Scan(&activeUnderworld)
+		if checkErr != nil { return CompletionResult{},fmt.Errorf("check active underworld instance: %w",checkErr) }
+		if activeUnderworld { return CompletionResult{},ErrWrongInstance }
+		return CompletionResult{},ErrNoActiveSession
+	}
 	if err!=nil{return CompletionResult{},fmt.Errorf("validate hell trial world session: %w",err)}
 	if worldID!="underworld_fengdu"{return CompletionResult{},ErrWrongWorld}
 
