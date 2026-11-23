@@ -56,3 +56,9 @@ Client/HongHuangClient/project.godot.bak
 *.TMP
 *.tmp
 *.bak
+
+# Godot generated resource UID sidecar files
+*.uid
+
+# Native client release packages
+Client/NativeNet/*.zip
