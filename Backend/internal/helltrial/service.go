@@ -21,6 +21,7 @@ var (
 	ErrObjectiveIncomplete = errors.New("hell trial objective is incomplete")
 	ErrGuardianAlive = errors.New("hell trial guardian is alive")
 	ErrAlreadyCompleted = errors.New("hell trial floor is already completed")
+	ErrEntryIdempotencyConflict = errors.New("hell trial entry event ID was reused")
 )
 
 type Service struct { db *sql.DB }
@@ -42,6 +43,19 @@ type Progress struct {
 	HighestUnlockedFloor int `json:"highest_unlocked_floor"`
 	FinalTrialCompleted bool `json:"final_trial_completed"`
 	Floors []Floor `json:"floors"`
+}
+
+type EntryRequest struct {
+	CharacterID string `json:"character_id"`
+	Floor int `json:"floor"`
+	EventID string `json:"event_id"`
+}
+
+type EntryResult struct {
+	CharacterID string `json:"character_id"`
+	Floor int `json:"floor"`
+	EntryCount int `json:"entry_count"`
+	AlreadyApplied bool `json:"already_applied"`
 }
 
 type CompletionRequest struct {
@@ -184,6 +198,74 @@ func (s *Service) Complete(ctx context.Context, nodeKey string, req CompletionRe
 	}
 	if err=tx.Commit();err!=nil{return CompletionResult{},fmt.Errorf("commit hell trial completion: %w",err)}
 	return CompletionResult{CharacterID:req.CharacterID,Floor:req.Floor,Completed:true,NextUnlockedFloor:next,FinalTrialCompleted:req.Floor==FloorCount},nil
+}
+
+
+// RecordEntry records a real entry reported by the WorldServer that owns the
+// character's active session and the requested floor-specific instance.
+func (s *Service) RecordEntry(ctx context.Context, nodeKey string, req EntryRequest) (EntryResult,error) {
+	if strings.TrimSpace(nodeKey)=="" || !validUUID(req.CharacterID) || !validUUID(req.EventID) || req.Floor<1 || req.Floor>FloorCount {
+		return EntryResult{},ErrInvalid
+	}
+	tx,err:=s.db.BeginTx(ctx,nil)
+	if err!=nil{return EntryResult{},fmt.Errorf("begin hell trial entry: %w",err)}
+	defer tx.Rollback()
+
+	var worldID string
+	err=tx.QueryRowContext(ctx,`SELECT c.world_id
+		FROM characters c
+		JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
+		JOIN world_instances wi ON wi.id=ws.instance_id AND wi.world_id=c.world_id
+		JOIN server_registry sr ON sr.id=ws.server_id AND sr.node_key=$2
+		WHERE c.id=$1::uuid AND c.status='alive' AND wi.hell_floor=$3
+		ORDER BY ws.connected_at DESC NULLS LAST LIMIT 1
+		FOR UPDATE OF c,ws`,req.CharacterID,nodeKey,req.Floor).Scan(&worldID)
+	if errors.Is(err,sql.ErrNoRows) {
+		var activeUnderworld bool
+		checkErr:=tx.QueryRowContext(ctx,`SELECT EXISTS(
+			SELECT 1 FROM characters c
+			JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
+			JOIN world_instances wi ON wi.id=ws.instance_id AND wi.world_id=c.world_id
+			JOIN server_registry sr ON sr.id=ws.server_id AND sr.node_key=$2
+			WHERE c.id=$1::uuid AND c.status='alive' AND c.world_id='underworld_fengdu'
+		)`,req.CharacterID,nodeKey).Scan(&activeUnderworld)
+		if checkErr!=nil{return EntryResult{},fmt.Errorf("check active underworld instance: %w",checkErr)}
+		if activeUnderworld{return EntryResult{},ErrWrongInstance}
+		return EntryResult{},ErrNoActiveSession
+	}
+	if err!=nil{return EntryResult{},fmt.Errorf("validate hell trial entry session: %w",err)}
+	if worldID!="underworld_fengdu"{return EntryResult{},ErrWrongWorld}
+
+	var existingCharacter string
+	var existingFloor int
+	err=tx.QueryRowContext(ctx,`SELECT character_id::text,floor_number
+		FROM character_hell_trial_entry_events WHERE event_id=$1::uuid`,req.EventID).Scan(&existingCharacter,&existingFloor)
+	if err==nil {
+		if !strings.EqualFold(existingCharacter,req.CharacterID) || existingFloor!=req.Floor {return EntryResult{},ErrEntryIdempotencyConflict}
+		var count int
+		if err=tx.QueryRowContext(ctx,`SELECT entry_count FROM character_hell_trial_progress
+			WHERE character_id=$1::uuid AND floor_number=$2`,req.CharacterID,req.Floor).Scan(&count);err!=nil{return EntryResult{},fmt.Errorf("read idempotent hell trial entry count: %w",err)}
+		return EntryResult{CharacterID:req.CharacterID,Floor:req.Floor,EntryCount:count,AlreadyApplied:true},nil
+	}
+	if !errors.Is(err,sql.ErrNoRows){return EntryResult{},fmt.Errorf("check hell trial entry idempotency: %w",err)}
+
+	var status string
+	err=tx.QueryRowContext(ctx,`SELECT status FROM character_hell_trial_progress
+		WHERE character_id=$1::uuid AND floor_number=$2 FOR UPDATE`,req.CharacterID,req.Floor).Scan(&status)
+	if errors.Is(err,sql.ErrNoRows){return EntryResult{},ErrFloorLocked}
+	if err!=nil{return EntryResult{},fmt.Errorf("lock hell trial entry progress: %w",err)}
+
+	if _,err=tx.ExecContext(ctx,`INSERT INTO character_hell_trial_entry_events(event_id,character_id,floor_number)
+		VALUES($1::uuid,$2::uuid,$3)`,req.EventID,req.CharacterID,req.Floor);err!=nil{return EntryResult{},fmt.Errorf("record hell trial entry event: %w",err)}
+	var count int
+	err=tx.QueryRowContext(ctx,`UPDATE character_hell_trial_progress
+		SET first_entered_at=COALESCE(first_entered_at,now()),last_entered_at=now(),
+		    entry_count=entry_count+1,updated_at=now()
+		WHERE character_id=$1::uuid AND floor_number=$2
+		RETURNING entry_count`,req.CharacterID,req.Floor).Scan(&count)
+	if err!=nil{return EntryResult{},fmt.Errorf("update hell trial entry count: %w",err)}
+	if err=tx.Commit();err!=nil{return EntryResult{},fmt.Errorf("commit hell trial entry: %w",err)}
+	return EntryResult{CharacterID:req.CharacterID,Floor:req.Floor,EntryCount:count},nil
 }
 
 func min(a,b int) int { if a<b{return a};return b }
