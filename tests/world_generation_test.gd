@@ -4,6 +4,7 @@ const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
 const WorldChunkStreamerScript = preload("res://scripts/world_chunk_streamer.gd")
 const FengduCityBuilder = preload("res://scripts/fengdu_city_builder.gd")
 const FengduNavigation = preload("res://scripts/fengdu_navigation.gd")
+const FengduWorldLayout = preload("res://scripts/fengdu_world_layout.gd")
 const HellFloorBuilder = preload("res://scripts/underworld_hell_floor_builder.gd")
 
 
@@ -142,3 +143,24 @@ func _test_fengdu_navigation() -> void:
 			node["enabled"] = false
 	var disabled_nearest := FengduNavigation.find_nearest_node(disabled_network, Vector3(0.0, 0.0, -81.36), ["palace", "court"])
 	assert(str(disabled_nearest.get("node_id", "")) != "imperial_palace")
+
+	# The playable 1.9 km graybox uses the canonical meter-scale layout graph,
+	# not the separate 256 m city-plan prototype graph above.
+	var playable_network: Dictionary = FengduWorldLayout.get_navigation_network()
+	var playable_validation := FengduNavigation.validate_network(playable_network)
+	assert(bool(playable_validation.get("valid", false)))
+	var north_gate_edge_found := false
+	for edge_variant in playable_network.get("edges", []):
+		var edge: Dictionary = edge_variant
+		if str(edge.get("gate_id", "")) == "north_heaven_gate":
+			north_gate_edge_found = true
+			assert(str(edge.get("id", "")) == "road.gate.north")
+	assert(north_gate_edge_found)
+	var playable_open_route := FengduNavigation.find_path(playable_network, "junction.center", "gate.north")
+	assert(bool(playable_open_route.get("found", false)))
+	var playable_closed_route := FengduNavigation.find_path(
+		playable_network, "junction.center", "gate.north", {"closed_gates": ["north_heaven_gate"]}
+	)
+	assert(not bool(playable_closed_route.get("found", false)))
+	var other_gate_route := FengduNavigation.find_path(playable_network, "junction.center", "gate.south", {"closed_gates": ["north_heaven_gate"]})
+	assert(bool(other_gate_route.get("found", false)))
