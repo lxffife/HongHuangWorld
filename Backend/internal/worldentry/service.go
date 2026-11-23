@@ -19,6 +19,8 @@ var (
 	ErrInvalidTicket    = errors.New("invalid or expired world entry ticket")
 	ErrInvalidSessionSnapshot = errors.New("invalid or unauthorized world session snapshot")
 	ErrNoPendingDeath = errors.New("character has no pending death to respawn")
+	ErrInvalidHellTrialFloor = errors.New("invalid hell trial floor")
+	ErrHellTrialFloorLocked = errors.New("hell trial floor is locked")
 )
 
 type Entry struct {
@@ -64,6 +66,19 @@ func NewService(db *sql.DB) *Service {
 }
 
 func (s *Service) Issue(ctx context.Context, accountID string) (Entry, error) {
+	return s.issue(ctx, accountID, 0)
+}
+
+// IssueHellTrial routes a character only to the dedicated server for an unlocked
+// underworld floor. Floor progress is checked in the same transaction as ticket creation.
+func (s *Service) IssueHellTrial(ctx context.Context, accountID string, floor int) (Entry, error) {
+	if floor < 1 || floor > 18 {
+		return Entry{}, ErrInvalidHellTrialFloor
+	}
+	return s.issue(ctx, accountID, floor)
+}
+
+func (s *Service) issue(ctx context.Context, accountID string, hellFloor int) (Entry, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Entry{}, fmt.Errorf("begin world entry: %w", err)
@@ -72,6 +87,14 @@ func (s *Service) Issue(ctx context.Context, accountID string) (Entry, error) {
 
 	var entry Entry
 	var characterID, instanceID, serverID string
+	if hellFloor > 0 {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO character_hell_trial_progress(character_id, floor_number, status)
+			SELECT c.id, 1, 'unlocked' FROM souls s JOIN characters c ON c.id = s.current_character_id
+			WHERE s.account_id = $1 AND c.status = 'alive' AND c.world_id = 'underworld_fengdu'
+			ON CONFLICT (character_id, floor_number) DO NOTHING`, accountID); err != nil {
+			return Entry{}, fmt.Errorf("initialize first hell trial floor: %w", err)
+		}
+	}
 	err = tx.QueryRowContext(ctx,
 		`SELECT c.id::text, c.world_id, wi.id::text, sr.id::text, sr.host, sr.udp_port
 		 FROM souls s
@@ -79,14 +102,31 @@ func (s *Service) Issue(ctx context.Context, accountID string) (Entry, error) {
 		 JOIN world_definitions wd ON wd.id = c.world_id AND wd.enabled = TRUE
 		 JOIN world_instances wi ON wi.world_id = c.world_id AND wi.status = 'ready'
 		 JOIN server_registry sr ON sr.id = wi.server_id
-		 WHERE s.account_id = $1 AND c.status = 'alive' AND sr.status = 'ready' AND sr.admin_state = 'normal'
+		 WHERE s.account_id = $1 AND c.status = 'alive'
+		   AND wi.hell_floor IS NOT DISTINCT FROM NULLIF($2, 0)
+		   AND ($2 = 0 OR (c.world_id = 'underworld_fengdu' AND EXISTS (
+		       SELECT 1 FROM character_hell_trial_progress hp
+		       WHERE hp.character_id = c.id AND hp.floor_number = $2 AND hp.status = 'unlocked'
+		   )))
+		   AND sr.status = 'ready' AND sr.admin_state = 'normal'
 		   AND GREATEST(sr.current_players, (SELECT COUNT(*) FROM world_sessions ws WHERE ws.server_id = sr.id AND ws.session_state IN ('connecting', 'active', 'saving')))
 		       + (SELECT COUNT(*) FROM world_entry_tickets pending WHERE pending.server_id = sr.id AND pending.expires_at > now() AND pending.consumed_at IS NULL) < sr.capacity
 		   AND sr.last_heartbeat_at > now() - INTERVAL '30 seconds'
 		 ORDER BY sr.current_players ASC, wi.created_at ASC
-		 LIMIT 1 FOR UPDATE OF sr, c SKIP LOCKED`, accountID,
+		 LIMIT 1 FOR UPDATE OF sr, c SKIP LOCKED`, accountID, hellFloor,
 	).Scan(&characterID, &entry.WorldID, &instanceID, &serverID, &entry.Host, &entry.UDPPort)
 	if errors.Is(err, sql.ErrNoRows) {
+		if hellFloor > 0 {
+			var unlocked bool
+			checkErr := tx.QueryRowContext(ctx, `SELECT EXISTS(
+				SELECT 1 FROM souls s JOIN characters c ON c.id = s.current_character_id
+				JOIN character_hell_trial_progress hp ON hp.character_id = c.id
+				WHERE s.account_id = $1 AND c.status = 'alive' AND c.world_id = 'underworld_fengdu'
+				  AND hp.floor_number = $2 AND hp.status = 'unlocked'
+			)`, accountID, hellFloor).Scan(&unlocked)
+			if checkErr != nil { return Entry{}, fmt.Errorf("check hell trial floor unlock: %w", checkErr) }
+			if !unlocked { return Entry{}, ErrHellTrialFloorLocked }
+		}
 		return Entry{}, ErrNoAvailableServer
 	}
 	if err != nil {
