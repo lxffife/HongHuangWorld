@@ -317,6 +317,19 @@ func _select_underworld_atlas_at(mouse_position: Vector2) -> void:
 			details += " · 危险 " + str(node.get("danger_level", 0)) + "/10"
 			details += "\n" + str(node.get("access", ""))
 			details += "\n" + str(node.get("description", ""))
+			if _selected_atlas_id == "eighteen_hells":
+				var layers: Array = node.get("layers", [])
+				details += "\n十八层（由浅入深）："
+				for layer_index in range(layers.size()):
+					var layer: Dictionary = layers[layer_index]
+					var floor_text := str(layer_index + 1).pad_zeros(2)
+					var entry := floor_text + " " + str(layer.get("name", "未知狱"))
+					entry += "·" + str(layer.get("theme", ""))
+					if layer_index % 3 == 0:
+						details += "\n"
+					else:
+						details += "  |  "
+					details += entry
 			atlas_region_selected.emit(
 				_selected_atlas_id,
 				str(node.get("name", "区域")),
