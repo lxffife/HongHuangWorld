@@ -2,6 +2,8 @@ extends RefCounted
 
 const UnderworldVisualFactory = preload("res://scripts/underworld_visual_factory.gd")
 const QingyunVisualFactory = preload("res://scripts/qingyun_visual_factory.gd")
+const WorldChunkStreamerScript = preload("res://scripts/world_chunk_streamer.gd")
+const FengduCityBuilder = preload("res://scripts/fengdu_city_builder.gd")
 
 ## Builds the static visual and collision layer for a world.
 ## Kept independent from WorldScene so the same region layout can later be
@@ -10,26 +12,15 @@ static func build(world_id: String) -> Node3D:
 	var root := Node3D.new()
 	root.name = "WorldTerrain"
 	var is_underworld := world_id == "underworld_fengdu"
-	var ground := StaticBody3D.new()
-	ground.name = "Ground"
-	var mesh_instance := MeshInstance3D.new()
-	var mesh := PlaneMesh.new()
-	mesh.size = Vector2(240.0, 240.0)
-	mesh_instance.mesh = mesh
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color("#211f30") if is_underworld else Color("#354c43")
-	material.roughness = 0.94
-	mesh_instance.material_override = material
-	ground.add_child(mesh_instance)
-	var collision := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	shape.size = Vector3(240.0, 0.2, 240.0)
-	collision.shape = shape
-	collision.position.y = -0.1
-	ground.add_child(collision)
-	root.add_child(ground)
+	var streamer := Node3D.new()
+	streamer.name = "ChunkStreamer"
+	streamer.set_script(WorldChunkStreamerScript)
+	streamer.call("configure", world_id, 48.0, 1)
+	streamer.call("update_streaming", Vector3.ZERO)
+	root.add_child(streamer)
 
 	if is_underworld:
+		root.add_child(FengduCityBuilder.build())
 		# Fengdu gate and the soul lantern avenue.
 		root.add_child(UnderworldVisualFactory.create_fengdu_gate())
 		for side in [-1.0, 1.0]:
