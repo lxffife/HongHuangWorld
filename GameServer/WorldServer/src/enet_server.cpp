@@ -118,6 +118,7 @@ struct PlayerState {
     Clock::time_point last_combat_at{};
     bool mana_regen_was_in_combat{false};
     std::unordered_map<std::string, Clock::time_point> last_spell_at_by_id;
+    Clock::time_point last_taunt_at{};
     std::optional<PendingSpellCast> pending_spell;
     Clock::time_point last_pickup_at{};
     Clock::time_point last_chat_at{};
@@ -180,6 +181,8 @@ struct MonsterRuntime {
     // Runtime-only threat ledger. Damage admission remains durable in the
     // contribution writer; threat is rebuilt naturally as players fight.
     std::unordered_map<std::string, ThreatEntry> threat_by_character;
+    std::string taunt_target_character_id;
+    Clock::time_point taunt_expires_at{};
     bool rare_spawn{false};
     int spawn_chance_percent{100};
     int retry_spawn_seconds{60};
@@ -4038,6 +4041,51 @@ struct EnetServer::Impl {
             send_json(peer, honghuang::protocol::MessageType::CombatEvent, response);
         };
         if (player.health <= 0) { reject("角色已倒地，无法施法。"); return; }
+        // Taunt is a server-authoritative combat ability, not a damaging spell:
+        // it needs no staff, mana or cast bar, and expires automatically.
+        if (spell_id == "taunt") {
+            constexpr auto kTauntCooldown = std::chrono::seconds(15);
+            constexpr auto kTauntDuration = std::chrono::seconds(4);
+            constexpr double kTauntRange = 8.0;
+            const auto now = Clock::now();
+            if (player.last_taunt_at != Clock::time_point{} &&
+                now - player.last_taunt_at < kTauntCooldown) {
+                const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    kTauntCooldown - (now - player.last_taunt_at)).count();
+                send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                    Json{{"accepted", false}, {"action", "spell_cast"}, {"spell_id", "taunt"},
+                         {"cooldown_ms", remaining}, {"reason", "嘲讽尚在冷却中。"}});
+                return;
+            }
+            const auto target_id = command.value("target_entity_id", std::string{});
+            if (target_id.empty() || target_id.size() > 96) {
+                reject("嘲讽目标无效。"); return;
+            }
+            const auto target = std::find_if(monsters.begin(), monsters.end(),
+                [&](const MonsterRuntime& monster) { return monster.runtime_id == target_id; });
+            if (target == monsters.end() ||
+                target->state.mode == honghuang::simulation::MonsterMode::Dead ||
+                target->contribution_closing) {
+                reject("嘲讽目标已消失或已被击败。"); return;
+            }
+            const double dx = static_cast<double>(target->state.x) - player.x;
+            const double dz = static_cast<double>(target->state.z) - player.z;
+            if (dx * dx + dz * dz > kTauntRange * kTauntRange) {
+                reject("嘲讽距离过远，需要靠近目标（8 米内）。"); return;
+            }
+            target->taunt_target_character_id = player.character_id;
+            target->taunt_expires_at = now + kTauntDuration;
+            target->state.target_id = player.character_id;
+            target->state.mode = honghuang::simulation::MonsterMode::Chasing;
+            player.last_taunt_at = now;
+            send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                Json{{"accepted", true}, {"action", "spell_cast"}, {"phase", "released"},
+                     {"spell_id", "taunt"}, {"target_entity_id", target_id},
+                     {"duration_ms", static_cast<int>(kTauntDuration.count() * 1000)},
+                     {"cooldown_ms", static_cast<int>(kTauntCooldown.count() * 1000)},
+                     {"reason", "嘲讽成功，怪物将优先攻击你。"}});
+            return;
+        }
         const auto weapon = player_weapon_type(player);
         if (weapon != "staff" && weapon != "focus") { reject("装备法杖或法器后才能施展法术。"); return; }
         if (spell == nullptr || !spell->enabled || !honghuang::simulation::valid_spell_definition(*spell)) {
@@ -4770,6 +4818,34 @@ struct EnetServer::Impl {
             }
             double nearest_distance_squared = std::numeric_limits<double>::max();
             const PlayerState* nearest_player = nullptr;
+            if (!monster.taunt_target_character_id.empty()) {
+                const auto taunt_target = std::find_if(players.begin(), players.end(),
+                    [&](const auto& entry) {
+                        return entry.second.character_id == monster.taunt_target_character_id &&
+                               entry.second.health > 0;
+                    });
+                const bool alive = taunt_target != players.end();
+                bool within_leash = false;
+                if (alive) {
+                    const double tx = static_cast<double>(taunt_target->second.x) - monster.state.x;
+                    const double tz = static_cast<double>(taunt_target->second.z) - monster.state.z;
+                    const double leash = static_cast<double>(monster.definition.leash_radius);
+                    within_leash = tx * tx + tz * tz <= leash * leash;
+                }
+                const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    now.time_since_epoch()).count();
+                const auto expires_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    monster.taunt_expires_at.time_since_epoch()).count();
+                if (honghuang::simulation::taunt_override_is_active(
+                        alive, within_leash, now_ms, expires_ms)) {
+                    target_storage = {taunt_target->second.character_id,
+                        taunt_target->second.x, taunt_target->second.z, true};
+                    nearest_target = &target_storage;
+                } else {
+                    monster.taunt_target_character_id.clear();
+                    monster.taunt_expires_at = Clock::time_point{};
+                }
+            }
             const PlayerState* highest_threat_player = nullptr;
             double highest_effective_threat = 0.0;
             double current_effective_threat = 0.0;
@@ -4806,7 +4882,7 @@ struct EnetServer::Impl {
             }
             // A current target remains sticky until another combatant exceeds
             // its decayed threat by 20%; this prevents rapid target oscillation.
-            if (highest_threat_player != nullptr &&
+            if (nearest_target == nullptr && highest_threat_player != nullptr &&
                 honghuang::simulation::should_switch_monster_target(
                     current_effective_threat, highest_effective_threat)) {
                 target_storage = {highest_threat_player->character_id,
