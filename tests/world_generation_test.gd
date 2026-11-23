@@ -6,6 +6,7 @@ const FengduCityBuilder = preload("res://scripts/fengdu_city_builder.gd")
 const FengduNavigation = preload("res://scripts/fengdu_navigation.gd")
 const FengduWorldLayout = preload("res://scripts/fengdu_world_layout.gd")
 const FengduGraybox = preload("res://scripts/fengdu_graybox.gd")
+const FengduIncidentAlert = preload("res://scripts/fengdu_incident_alert.gd")
 const HellFloorBuilder = preload("res://scripts/underworld_hell_floor_builder.gd")
 
 
@@ -18,9 +19,28 @@ func _run_world_generation_tests() -> void:
 	_test_chunk_streaming()
 	_test_fengdu_city_blockout()
 	_test_fengdu_navigation()
+	_test_fengdu_incident_alert()
 	_test_hell_floor_blockout()
 	print("WORLD_GENERATION_TESTS_OK")
 	quit(0)
+
+
+func _test_fengdu_incident_alert() -> void:
+	var records := [
+		{"incident_id": "low", "severity": "low", "state": "investigating"},
+		{"incident_id": "resolved_high", "severity": "high", "state": "resolved"}
+	]
+	assert(FengduIncidentAlert.resolve_alert_level(records) == "normal")
+	records.append({"incident_id": "medium", "severity": "medium", "state": "queued"})
+	assert(FengduIncidentAlert.resolve_alert_level(records) == "watch")
+	records.append({"incident_id": "high", "severity": "high", "state": "assigned"})
+	assert(FengduIncidentAlert.resolve_alert_level(records) == "lockdown")
+	records[3]["state"] = "closed"
+	assert(FengduIncidentAlert.resolve_alert_level(records) == "watch")
+	records[2]["state"] = "resolved"
+	assert(FengduIncidentAlert.resolve_alert_level(records) == "normal")
+	records.append({"incident_id": "invalid", "severity": "high", "state": "cancelled"})
+	assert(FengduIncidentAlert.resolve_alert_level(records) == "normal")
 
 
 func _test_world_bounds_and_hell_catalog() -> void:
