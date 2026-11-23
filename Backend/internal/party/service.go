@@ -46,6 +46,8 @@ type Party struct {
  WorldInstanceID string `json:"world_instance_id"`
  LeaderAccountID string `json:"leader_account_id"`
  MaxMembers int `json:"max_members"`
+ MaterialLootMode string `json:"material_loot_mode"`
+ EquipmentLootMode string `json:"equipment_loot_mode"`
  Members []Member `json:"members"`
  Invitations []Invitation `json:"pending_invitations,omitempty"`
 }
@@ -218,9 +220,9 @@ func (s *Service) Disband(ctx context.Context, accountID string) error {
 func (s *Service) Get(ctx context.Context, accountID string) (Party,error) {
  if accountID==""{return Party{},ErrInvalid}
  var p Party
- err:=s.db.QueryRowContext(ctx,`SELECT p.id::text,p.world_id,p.world_instance_id::text,p.leader_account_id::text,p.max_members
+ err:=s.db.QueryRowContext(ctx,`SELECT p.id::text,p.world_id,p.world_instance_id::text,p.leader_account_id::text,p.max_members,p.material_loot_mode,p.equipment_loot_mode
  FROM party_members mine JOIN parties p ON p.id=mine.party_id WHERE mine.account_id=$1 AND p.status='active'`,accountID).
- Scan(&p.ID,&p.WorldID,&p.WorldInstanceID,&p.LeaderAccountID,&p.MaxMembers)
+ Scan(&p.ID,&p.WorldID,&p.WorldInstanceID,&p.LeaderAccountID,&p.MaxMembers,&p.MaterialLootMode,&p.EquipmentLootMode)
  if errors.Is(err,sql.ErrNoRows){return Party{},ErrNotFound};if err!=nil{return Party{},fmt.Errorf("load current party: %w",err)}
  rows,err:=s.db.QueryContext(ctx,`SELECT m.account_id::text,a.username,m.character_id::text,c.name,m.role,
  EXISTS(SELECT 1 FROM world_sessions ws
@@ -240,6 +242,34 @@ func (s *Service) Get(ctx context.Context, accountID string) (Party,error) {
  for rows.Next(){var m Member;if err:=rows.Scan(&m.AccountID,&m.Username,&m.CharacterID,&m.CharacterName,&m.Role,&m.Online,&m.IsSelf,&m.JoinedAt);err!=nil{return Party{},fmt.Errorf("scan party member: %w",err)};p.Members=append(p.Members,m)}
  if err:=rows.Err();err!=nil{return Party{},fmt.Errorf("iterate party members: %w",err)}
  return p,nil
+}
+
+type LootRules struct {
+ MaterialMode string `json:"material_loot_mode"`
+ EquipmentMode string `json:"equipment_loot_mode"`
+}
+
+func validLootMode(mode string) bool {
+ switch mode {
+ case "personal", "free_for_all", "round_robin", "leader": return true
+ default: return false
+ }
+}
+
+// SetLootRules changes material and equipment policies independently.
+func (s *Service) SetLootRules(ctx context.Context, accountID string, rules LootRules) (Party, error) {
+ if accountID == "" || !validLootMode(rules.MaterialMode) || !validLootMode(rules.EquipmentMode) { return Party{}, ErrInvalid }
+ tx, err := s.db.BeginTx(ctx, nil)
+ if err != nil { return Party{}, fmt.Errorf("begin party loot rule update: %w", err) }
+ defer tx.Rollback()
+ var partyID, role string
+ err = tx.QueryRowContext(ctx, `SELECT p.id::text,m.role FROM party_members m JOIN parties p ON p.id=m.party_id WHERE m.account_id=$1 AND p.status='active' FOR UPDATE OF p`, accountID).Scan(&partyID, &role)
+ if errors.Is(err, sql.ErrNoRows) { return Party{}, ErrNotFound }
+ if err != nil { return Party{}, fmt.Errorf("lock party for loot rule update: %w", err) }
+ if role != "leader" { return Party{}, ErrNotLeader }
+ if _, err = tx.ExecContext(ctx, `UPDATE parties SET material_loot_mode=$2,equipment_loot_mode=$3,updated_at=now() WHERE id=$1`, partyID, rules.MaterialMode, rules.EquipmentMode); err != nil { return Party{}, fmt.Errorf("update party loot rules: %w", err) }
+ if err = tx.Commit(); err != nil { return Party{}, fmt.Errorf("commit party loot rules: %w", err) }
+ return s.Get(ctx, accountID)
 }
 
 func (s *Service) Invitations(ctx context.Context, accountID string) ([]Invitation,error) {
