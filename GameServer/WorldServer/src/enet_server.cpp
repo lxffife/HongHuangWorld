@@ -1,6 +1,7 @@
 #include "network/enet_server.hpp"
 #include "protocol/frame.hpp"
 #include "simulation/movement.hpp"
+#include "simulation/world_obstacles.hpp"
 #include "simulation/monster.hpp"
 #include "simulation/combat.hpp"
 #include "simulation/weapon_combat.hpp"
@@ -4657,9 +4658,15 @@ struct EnetServer::Impl {
             }
             const float player_delta = honghuang::simulation::movement_delta_with_effect(
                 delta, player.slow_effect, effect_now_ms);
-            honghuang::simulation::integrate_horizontal(
-                player.x, player.z, player.move_x, player.move_z, player_delta,
-                player.movement_speed);
+            if (impl_->config.world_id == "underworld_fengdu") {
+                honghuang::simulation::integrate_fengdu_horizontal(
+                    player.x, player.z, player.move_x, player.move_z, player_delta,
+                    player.movement_speed);
+            } else {
+                honghuang::simulation::integrate_horizontal(
+                    player.x, player.z, player.move_x, player.move_z, player_delta,
+                    player.movement_speed);
+            }
             honghuang::simulation::integrate_vertical(
                 player.y, player.vertical_velocity, player.jump_requested, delta);
 
