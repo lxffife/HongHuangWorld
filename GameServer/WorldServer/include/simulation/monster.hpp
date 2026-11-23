@@ -49,6 +49,16 @@ inline bool should_switch_monster_target(double current_threat,
     return current_threat <= 0.0 || challenger_threat > current_threat * switch_ratio;
 }
 
+inline bool should_warn_threat_steal(double current_threat,
+                                     double challenger_threat,
+                                     double warning_ratio = 0.90) {
+    if (!std::isfinite(current_threat) || !std::isfinite(challenger_threat) ||
+        !std::isfinite(warning_ratio) || current_threat <= 0.0 ||
+        challenger_threat <= 0.0 || warning_ratio <= 0.0 || warning_ratio > 1.0)
+        return false;
+    return challenger_threat >= current_threat * warning_ratio;
+}
+
 struct MonsterAttackProfile {
     int windup_ms{520};
     int recovery_ms{420};
