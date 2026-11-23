@@ -26,6 +26,7 @@ int main() {
     decision = evaluate_gate_access(open_gate, visitor);
     assert(decision.allowed); // verified officials may pass ordinary curfew/pass checks
 
+    open_gate.curfew_active = false;
     open_gate.require_pass = true;
     visitor = {};
     decision = evaluate_gate_access(open_gate, visitor);
