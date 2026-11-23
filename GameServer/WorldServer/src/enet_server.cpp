@@ -3453,10 +3453,30 @@ struct EnetServer::Impl {
                 event["max_health"] = state.max_health;
                 event["mana"] = state.mana;
                 event["max_mana"] = state.max_mana;
-                event["health_restored"] = state.health - previous_health;
+                const auto health_restored = state.health - previous_health;
+                event["health_restored"] = health_restored;
                 event["mana_restored"] = state.mana - previous_mana;
                 event["applied"] = true; // This response is now being applied to live PlayerState, including idempotent replays.
                 event["duplicate_request"] = !result.result.value("applied", true);
+                // Healing creates half-value threat on nearby monsters already
+                // engaged in combat. Idempotent backend replays must not add it twice.
+                if (health_restored > 0 && result.result.value("applied", true)) {
+                    int healing_threat_targets = 0;
+                    const double healing_threat = static_cast<double>(health_restored) * 0.5;
+                    for (auto& monster : monsters) {
+                        if (monster.state.mode != honghuang::simulation::MonsterMode::Chasing ||
+                            monster.state.target_id.empty() ||
+                            monster.state.mode == honghuang::simulation::MonsterMode::Dead) continue;
+                        const double dx = static_cast<double>(monster.state.x) - state.x;
+                        const double dz = static_cast<double>(monster.state.z) - state.z;
+                        const double radius = static_cast<double>(monster.definition.aggro_radius);
+                        if (dx * dx + dz * dz > radius * radius) continue;
+                        record_monster_threat(monster, state.character_id, healing_threat);
+                        ++healing_threat_targets;
+                    }
+                    event["healing_threat_generated"] = healing_threat_targets > 0;
+                    event["healing_threat_targets"] = healing_threat_targets;
+                }
             } else {
                 event["reason"] = result.error;
             }
