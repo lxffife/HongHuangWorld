@@ -62,6 +62,11 @@ int main() {
     assert(city_z > -96.0F); // north wall blocks entry through solid section
 
     city_x = 0.0F;
+    city_z = -95.5F;
+    integrate_fengdu_horizontal(city_x, city_z, 0.0F, -1.0F, 0.1F, 5.0F);
+    assert(city_z < -95.5F); // north gate opening is traversable
+
+    city_x = 0.0F;
     city_z = -20.0F;
     integrate_fengdu_horizontal(city_x, city_z, 0.0F, -1.0F, 0.1F, 5.0F);
     assert(city_z < -20.0F); // south gate opening is traversable
@@ -75,6 +80,11 @@ int main() {
     city_z = -60.0F;
     integrate_fengdu_horizontal(city_x, city_z, 1.0F, 0.0F, 0.1F, 5.0F);
     assert(city_x > 46.0F); // east gate opening is traversable
+
+    city_x = -46.0F;
+    city_z = -60.0F;
+    integrate_fengdu_horizontal(city_x, city_z, -1.0F, 0.0F, 0.1F, 5.0F);
+    assert(city_x < -46.0F); // west gate opening is traversable
 
     city_x = 46.0F;
     city_z = -80.0F;
