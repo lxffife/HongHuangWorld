@@ -120,7 +120,7 @@ public:
  bool save_hell_trial_wave_checkpoint(const HellTrialWaveCheckpoint& checkpoint,
                                       std::string& error);
 private:
- sqlite3* db_{}; std::size_t capacity_{}; mutable std::mutex mutex_;
+ sqlite3* db_{}; std::size_t capacity_{}; mutable std::timed_mutex mutex_;
  std::optional<OutboxEvent> claim_due_filtered(std::int64_t now_ms, const std::string& event_type, bool exclude, std::string& error);
  bool record_monster_contribution_internal(const MonsterContributionRecord& contribution,
                                            const PendingMonsterDeathRecord* death,
