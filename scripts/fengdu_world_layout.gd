@@ -481,6 +481,24 @@ static func get_npc_activity_points() -> Array[Dictionary]:
 	var patrol_positions := [Vector3(-7, 0, 12), Vector3(7, 0, 12), Vector3(0, 0, 3), Vector3(0, 0, 15)]
 	for i in range(patrol_positions.size()):
 		points.append(_npc_point("patrol_office.guard.%02d" % (i + 1), "巡城司", "patrol_guard", "patrol_watch", patrol_positions[i], PI if i % 2 == 0 else 0.0, "always", 1, 1.4))
+	# Each gate has a day/night relief pair. Only the active shift is rendered by the graybox.
+	var gate_posts := [
+		{"id": "north_heaven_gate", "name": "北天门", "center": Vector3(0, 0, 88), "inward_facing": PI},
+		{"id": "south_ghost_gate", "name": "南幽门", "center": Vector3(0, 0, -88), "inward_facing": 0.0},
+		{"id": "east_mystic_gate", "name": "东玄门", "center": Vector3(88, 0, 0), "inward_facing": -PI * 0.5},
+		{"id": "west_dark_gate", "name": "西冥门", "center": Vector3(-88, 0, 0), "inward_facing": PI * 0.5}
+	]
+	for gate in gate_posts:
+		for shift_tag in ["day", "night"]:
+			var gate_point := _npc_point(
+				"gate_guard.%s.%s" % [str(gate["id"]), shift_tag],
+				"城门守备", "gate_guard", "gate_watch", gate["center"],
+				float(gate["inward_facing"]), "always", 1, 1.4
+			)
+			gate_point["gate_id"] = str(gate["id"])
+			gate_point["gate_name"] = str(gate["name"])
+			gate_point["shift_tag"] = shift_tag
+			points.append(gate_point)
 	var queue_positions: Array = waystation["queue_positions"]
 	for i in range(queue_positions.size()):
 		var queue_point := _npc_point("waystation.waiting_soul.%02d" % (i + 1), "引魂驿站", "waiting_soul", "queue_wait", waystation_center + queue_positions[i], PI, "always", 1, 0.8)
@@ -533,6 +551,15 @@ static func get_spatial_binding_for_point(point: Dictionary, network: Dictionary
 		"nearest_road_node_distance": nearest_distance,
 		"navigation_profile": "pedestrian"
 	}
+
+
+static func get_gate_guard_roster() -> Array[Dictionary]:
+	return [
+		{"gate_id": "north_heaven_gate", "gate_name": "北天门", "day_shift": "06:00-18:00", "night_shift": "18:00-06:00", "guards_per_shift": 1},
+		{"gate_id": "south_ghost_gate", "gate_name": "南幽门", "day_shift": "06:00-18:00", "night_shift": "18:00-06:00", "guards_per_shift": 1},
+		{"gate_id": "east_mystic_gate", "gate_name": "东玄门", "day_shift": "06:00-18:00", "night_shift": "18:00-06:00", "guards_per_shift": 1},
+		{"gate_id": "west_dark_gate", "gate_name": "西冥门", "day_shift": "06:00-18:00", "night_shift": "18:00-06:00", "guards_per_shift": 1}
+	]
 
 
 static func get_patrol_routes() -> Array[Dictionary]:
