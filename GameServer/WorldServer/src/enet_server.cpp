@@ -1130,6 +1130,9 @@ struct EnetServer::Impl {
     std::thread loot_refresh_thread;
     std::vector<GroundDropRuntime> ground_drops;
     std::vector<ProjectileRuntime> projectiles;
+    // Publish a compact, instance-wide health roster once per second. Party
+    // members can be far outside the normal entity interest radius.
+    Clock::time_point last_player_status_snapshot{};
     std::unique_ptr<honghuang::persistence::DurableOutbox> durable_outbox;
     // All persistence workers are declared after the SQLite owner and stop before it is destroyed.
     std::unique_ptr<honghuang::persistence::MonsterRuntimeCheckpointWriter> monster_checkpoint_writer;
@@ -4039,12 +4042,29 @@ struct EnetServer::Impl {
 
     void broadcast_snapshot() {
         if (players.empty()) return;
+        const auto snapshot_now = Clock::now();
+        const bool publish_player_status = last_player_status_snapshot == Clock::time_point{} ||
+            snapshot_now - last_player_status_snapshot >= std::chrono::seconds(1);
+        if (publish_player_status) last_player_status_snapshot = snapshot_now;
 
         // Build a per-player interest snapshot. Each player always receives their own
         // authoritative entity plus nearby players; distant entities are omitted and
-        // naturally disappear from the client's next snapshot.
+        // naturally disappear from the client's next snapshot. A compact global health
+        // roster is included once per second so party members remain visible at any range.
         for (const auto& [recipient_peer, recipient] : players) {
             Json entities = Json::array();
+            if (publish_player_status) {
+                for (const auto& [status_peer, status_player] : players) {
+                    (void)status_peer;
+                    entities.push_back({
+                        {"entity_type", "player_status"},
+                        {"character_id", status_player.character_id},
+                        {"health", status_player.health},
+                        {"max_health", status_player.max_health},
+                        {"alive", status_player.health > 0}
+                    });
+                }
+            }
             for (const auto& [entity_peer, entity] : players) {
                 (void)entity_peer;
                 if (entity.character_id != recipient.character_id &&
@@ -4059,6 +4079,8 @@ struct EnetServer::Impl {
                     {"birth_inheritance", entity.birth_inheritance},
                     {"equipment", entity.equipment},
                     {"mana", entity.mana}, {"max_mana", entity.max_mana},
+                    {"health", entity.health}, {"max_health", entity.max_health},
+                    {"alive", entity.health > 0},
                     {"x", entity.x}, {"y", entity.y}, {"z", entity.z},
                     {"yaw", entity.yaw},
                     {"last_input_sequence", entity.last_input_sequence},
