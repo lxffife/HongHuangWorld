@@ -12,6 +12,7 @@ var current_character: Dictionary = {}
 var entry_data: Dictionary = {}
 var request_queue: Array[Dictionary] = []
 var request_busy := false
+var scene_transitioning := false
 var world_network: HHWorldNetwork
 
 var http: HTTPRequest
@@ -2036,6 +2037,8 @@ func _set_status(message: String) -> void:
 	print("[HongHuangClient] ", message)
 
 func _enqueue(method: int, path: String, body: Dictionary = {}, authenticated := true, context := "") -> void:
+	if scene_transitioning or not is_inside_tree():
+		return
 	request_queue.append({
 		"method": method,
 		"path": path,
@@ -2046,6 +2049,14 @@ func _enqueue(method: int, path: String, body: Dictionary = {}, authenticated :=
 	_process_queue()
 
 func _process_queue() -> void:
+	# HTTPRequest belongs to Startup. Once the world scene transition begins,
+	# this node may be removed while an async completion callback is unwinding.
+	# Never dequeue or issue another request from a detached Startup scene.
+	if scene_transitioning or not is_inside_tree():
+		return
+	if not is_instance_valid(http) or not http.is_inside_tree():
+		request_busy = false
+		return
 	if request_busy or request_queue.is_empty():
 		return
 	request_busy = true
@@ -2063,6 +2074,8 @@ func _process_queue() -> void:
 	http.set_meta("request_context", item.context)
 
 func _on_http_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	if scene_transitioning or not is_inside_tree():
+		return
 	request_busy = false
 	var context := str(http.get_meta("request_context", ""))
 	var body_text := body.get_string_from_utf8()
@@ -2412,6 +2425,14 @@ func _start_world_connection(host: String, port: int, ticket: String) -> void:
 		_set_status("世界网络连接初始化失败，错误码：" + str(error))
 
 func _on_world_welcomed(snapshot: Dictionary) -> void:
+	# Stop the Startup HTTP queue before replacing this scene. In particular,
+	# _on_http_completed() must not start a queued request after Startup leaves
+	# the tree and its HTTPRequest becomes unconfigured.
+	scene_transitioning = true
+	request_queue.clear()
+	request_busy = false
+	if is_instance_valid(http) and http.is_inside_tree():
+		http.cancel_request()
 	HHSession.api_base = api_base
 	HHSession.access_token = access_token
 	_set_status("世界服务器验证成功，正在载入当前世界……")
