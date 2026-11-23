@@ -1868,7 +1868,7 @@ struct EnetServer::Impl {
             {"guardian_id", floor ? std::string(floor->guardian_id) : std::string{}},
             {"guardian_defeated", result.guardian_defeated},
             {"participant_contribution", hell_trial_contributions.contribution_for(character_id)},
-            {"minimum_contribution", hell_trial_minimum_contribution_damage()},
+            {"minimum_contribution", hell_trial_minimum_contribution()},
             {"source", "worldserver_authoritative_monster_death"}
         };
         const Json payload{
@@ -2647,7 +2647,7 @@ struct EnetServer::Impl {
         return true;
     }
 
-    std::int64_t hell_trial_minimum_contribution_damage() const {
+    std::int64_t hell_trial_minimum_contribution() const {
         const auto* floor = hell_trial_encounter.spec();
         if (floor == nullptr) return 1;
         const std::int64_t target_health = 90 + static_cast<std::int64_t>(floor->recommended_level) * 28;
@@ -2700,7 +2700,7 @@ struct EnetServer::Impl {
 
             if (encounter_result.completion_ready && !wave_checkpoint_failed) {
                 const auto eligible = hell_trial_contributions.eligible_participants(
-                    hell_trial_minimum_contribution_damage());
+                    hell_trial_minimum_contribution());
                 std::vector<honghuang::persistence::OutboxEvent> completion_events;
                 completion_events.reserve(eligible.size());
                 for (const auto& participant : eligible) {
