@@ -4609,9 +4609,10 @@ func _on_combat_event(event: Dictionary) -> void:
 		HHSession.world_snapshot["max_health"] = int(event.get("max_health", HHSession.world_snapshot.get("max_health", 0)))
 		HHSession.world_snapshot["mana"] = int(event.get("mana", HHSession.world_snapshot.get("mana", 0)))
 		HHSession.world_snapshot["max_mana"] = int(event.get("max_mana", HHSession.world_snapshot.get("max_mana", 0)))
-		for stat_key in ["attack", "defense", "strength", "constitution", "agility", "spirit", "vitality", "critical_chance_basis_points", "critical_damage_basis_points", "attack_interval_ms", "movement_speed"]:
+		for stat_key in ["attack", "defense", "strength", "constitution", "agility", "spirit", "vitality", "critical_chance_basis_points", "critical_damage_basis_points", "attack_interval_ms", "attack_range", "movement_speed"]:
 			if event.has(stat_key):
 				HHSession.world_snapshot[stat_key] = event[stat_key]
+		attack_repeat_interval = clampf(float(HHSession.world_snapshot.get("attack_interval_ms", 1200)) / 1000.0, 0.45, 3.0)
 		_update_vitals(int(HHSession.world_snapshot["health"]), int(HHSession.world_snapshot["max_health"]))
 		if is_instance_valid(mana_label):
 			mana_label.text = "灵力  " + str(int(HHSession.world_snapshot["mana"])) + " / " + str(int(HHSession.world_snapshot["max_mana"]))
@@ -4711,7 +4712,7 @@ func _on_combat_event(event: Dictionary) -> void:
 	if event.has("attacker_character_id"):
 		var event_attacker_id := str(event.get("attacker_character_id", ""))
 		var local_character_id := str(HHSession.world_snapshot.get("character_id", ""))
-		if not event_attacker_id.is_empty() and event_attacker_id != local_character_id:
+		if not event_attacker_id.is_empty() and not local_character_id.is_empty() and event_attacker_id != local_character_id:
 			return
 	if not bool(event.get("accepted", true)):
 		var rejection_reason := str(event.get("reason", "攻击未命中。"))
