@@ -23,7 +23,8 @@ func _ready() -> void:
 	name = "HellTrialPanel"
 	visible = false
 	z_index = 120
-	custom_minimum_size = Vector2(560.0, 520.0)
+	_layout_panel()
+	get_viewport().size_changed.connect(_layout_panel)
 	_build_ui()
 	_progress_http = HTTPRequest.new()
 	_progress_http.timeout = 12.0
@@ -33,6 +34,18 @@ func _ready() -> void:
 	_entry_http.timeout = 12.0
 	add_child(_entry_http)
 	_entry_http.request_completed.connect(_on_entry_request_completed)
+
+
+func _layout_panel() -> void:
+	var viewport_size := get_viewport().get_visible_rect().size
+	var panel_width := minf(560.0, maxf(280.0, viewport_size.x - 24.0))
+	var panel_height := minf(520.0, maxf(300.0, viewport_size.y - 24.0))
+	set_anchors_preset(Control.PRESET_CENTER)
+	offset_left = -panel_width * 0.5
+	offset_right = panel_width * 0.5
+	offset_top = -panel_height * 0.5
+	offset_bottom = panel_height * 0.5
+	custom_minimum_size = Vector2(panel_width, panel_height)
 
 
 func _build_ui() -> void:
