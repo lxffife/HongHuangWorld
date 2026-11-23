@@ -3462,7 +3462,8 @@ struct EnetServer::Impl {
                 // engaged in combat. Idempotent backend replays must not add it twice.
                 if (health_restored > 0 && result.result.value("applied", true)) {
                     int healing_threat_targets = 0;
-                    const double healing_threat = static_cast<double>(health_restored) * 0.5;
+                    const double healing_threat = honghuang::simulation::monster_healing_threat(
+                        static_cast<double>(health_restored));
                     for (auto& monster : monsters) {
                         if (monster.state.mode != honghuang::simulation::MonsterMode::Chasing ||
                             monster.state.target_id.empty() ||
