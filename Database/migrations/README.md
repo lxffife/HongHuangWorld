@@ -145,10 +145,13 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000067_fengdu_bla
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000068_party_system.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000069_party_loot_rules.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000070_party_focus_target.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000071_repeatable_death_events.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000072_hell_trial_progress.up.sql
 
 - `000069_party_loot_rules` adds independent material/equipment loot policies to parties (`personal`, `free_for_all`, `round_robin`, `leader`), persistent rotation cursors, and per-drop eligible-character records. The API exposes leader-only policy changes through `PUT /api/v1/party/loot-rules`. The rules apply to newly created drops; existing available drops retain their persisted eligibility. `free_for_all` allows all party members to compete for one atomic pickup; `round_robin` assigns each new drop to the next connected member in the same world instance; `leader` assigns it to the leader character. The WorldServer restores the eligibility list after restart and still validates pickup distance before Backend performs the transactional ownership transfer.
 ```
 
 - `000070_party_focus_target` adds an expiring shared party focus marker. Any authenticated current party member in the same world instance can set or clear the target through `PUT /api/v1/party/focus-target`; the current-party response exposes the target and marker author for 60 seconds. This is a tactical UI marker only: it does not force monster aggro or alter server-side damage/targeting. Clients should only display the marker when the referenced monster is present in their current world snapshot.
 
-- `000068_hell_trial_progress` 为每个肉身角色建立十八层地狱通关进度；角色首次进入冥界时开放第一层，后续层由服务端在目标完成且守将被击败后逐层解锁，完成层可重复进入。当前迁移仅建立持久化结构，写入接口仍待接入。
+- `000071_repeatable_death_events` 允许同一角色在同一世界会话中多次经历死亡与复活；保留已解决死亡历史，同时限制每个角色/会话最多一条未解决死亡记录。
+- `000072_hell_trial_progress` 为每个肉身角色建立十八层地狱通关进度；第一层由中心服首次读取时幂等初始化，可信 WorldServer 回报目标完成且守将击败后，在同一事务中完成当前层并解锁下一层；第十八层为最终层。
