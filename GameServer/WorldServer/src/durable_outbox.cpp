@@ -1682,6 +1682,7 @@ std::size_t DurableOutbox::pending_count(std::string& error) const {
 bool DurableOutbox::load_hell_trial_wave_checkpoint(
     const std::string& instance_key, int floor, HellTrialWaveCheckpoint& checkpoint,
     bool& found, std::string& error) const {
+    error.clear();
     found = false;
     if (instance_key.empty() || floor < 1 || floor > 18) {
         error = "invalid hell trial checkpoint key";
@@ -1712,6 +1713,7 @@ bool DurableOutbox::load_hell_trial_wave_checkpoint(
 
 bool DurableOutbox::save_hell_trial_wave_checkpoint(
     const HellTrialWaveCheckpoint& checkpoint, std::string& error) {
+    error.clear();
     if (checkpoint.instance_key.empty() || checkpoint.floor < 1 || checkpoint.floor > 18 ||
         checkpoint.stage < 0 || checkpoint.stage > 4 ||
         checkpoint.completed != (checkpoint.stage == 4)) {
