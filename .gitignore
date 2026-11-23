@@ -41,3 +41,17 @@ AdminWeb/dist/
 AdminWeb/.vite/
 *.tsbuildinfo
 npm-debug.log*
+
+# Godot local editor / MCP tooling (installed per developer machine)
+Client/HongHuangClient/addons/godot-mcp/
+
+# Asset Register plugin generated localization/import artifacts
+Client/HongHuangClient/ASSET-REGISTER.*
+
+# Local test captures and editor-generated backups / temporary files
+Client/HongHuangClient/godot_retry.png
+Client/HongHuangClient/godot_retry.png.import
+Client/HongHuangClient/project.godot.bak
+*.TMP
+*.tmp
+*.bak
