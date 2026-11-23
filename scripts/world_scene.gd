@@ -2043,7 +2043,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if event.keycode == KEY_F:
+		# Opening an NPC interaction is a UI transition: release the captured cursor
+		# immediately so the player can use dialogue and choice buttons.
 		_try_interact_nearest_npc()
+		get_viewport().set_input_as_handled()
 		return
 	if event.keycode == KEY_I:
 		_on_inventory_button_pressed()
@@ -5702,7 +5705,7 @@ func _build_npc_ui() -> void:
 	var close_button := Button.new()
 	close_button.text = "关闭"
 	_apply_button_theme(close_button)
-	close_button.pressed.connect(func(): npc_panel.visible = false)
+	close_button.pressed.connect(_close_npc_panel)
 	layout.add_child(close_button)
 
 	npc_http = HTTPRequest.new()
@@ -6169,6 +6172,12 @@ func _update_nearest_npc_prompt() -> void:
 		else:
 			npc_interact_button.text = "探索点：" + nearest_point_name + " · " + str(roundi(nearest_point_distance)) + "m"
 
+func _close_npc_panel() -> void:
+	if is_instance_valid(npc_panel):
+		npc_panel.visible = false
+	# Returning from the dialogue restores normal third-person gameplay controls.
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
 func _try_interact_nearest_npc() -> void:
 	if npc_request_busy or not is_instance_valid(local_player):
 		return
@@ -6184,6 +6193,8 @@ func _try_interact_nearest_npc() -> void:
 			nearest_npc_distance = distance
 			nearest_npc_id = str(npc_data.get("id", ""))
 	if not nearest_npc_id.is_empty():
+		# F should expose the cursor before the server response arrives, not require ESC.
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		npc_selected_id = nearest_npc_id
 		npc_status_label.text = "正在与 NPC 建立交互……"
 		_send_npc_request("POST", "/api/v1/worlds/current/npcs/interact", "interact", {"npc_id": nearest_npc_id})
