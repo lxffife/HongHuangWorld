@@ -24,6 +24,12 @@ func _test_world_bounds_and_hell_catalog() -> void:
 	assert(bounds == Vector4(-100.0, 100.0, -100.0, 100.0))
 	assert(WorldMapCatalog.resolve_region_name("underworld_fengdu", Vector3(0.0, 0.0, -81.0)) == "酆都皇城")
 	assert(WorldMapCatalog.resolve_region_name("underworld_fengdu", Vector3(22.0, 0.0, -40.0)) == "万魂鬼市")
+	var fengdu_waters := WorldMapCatalog.get_water_bodies("underworld_fengdu")
+	assert(fengdu_waters.size() == 1)
+	assert(str(fengdu_waters[0].get("id", "")) == "forgotten_river")
+	var blood_sea := WorldMapCatalog.get_underworld_atlas_node("blood_sea")
+	assert(str(blood_sea.get("authority", "")) == "冥河老祖 · 阿修罗诸王")
+	assert(str(blood_sea.get("distance", "")) == "极遥远的冥界远域")
 	var hell_layers := WorldMapCatalog.get_eighteen_hell_layers()
 	assert(hell_layers.size() == 18)
 	for index in range(hell_layers.size()):
