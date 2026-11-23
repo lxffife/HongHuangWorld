@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/liflife/HongHuangWorld/Backend/internal/auth"
@@ -57,6 +58,38 @@ func (h *worldEntryHandlers) issue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, entry)
+}
+
+func (h *worldEntryHandlers) issueHellTrial(w http.ResponseWriter, r *http.Request) {
+	header := r.Header.Get("Authorization")
+	if !strings.HasPrefix(header, "Bearer ") {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	account, err := h.authService.Authenticate(r.Context(), strings.TrimSpace(strings.TrimPrefix(header, "Bearer ")))
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	floor, err := strconv.Atoi(r.PathValue("floor"))
+	if err != nil || floor < 1 || floor > 18 {
+		http.Error(w, "invalid hell trial floor", http.StatusBadRequest)
+		return
+	}
+	entry, err := h.entryService.IssueHellTrial(r.Context(), account.ID, floor)
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusOK, entry)
+	case errors.Is(err, worldentry.ErrInvalidHellTrialFloor):
+		http.Error(w, "invalid hell trial floor", http.StatusBadRequest)
+	case errors.Is(err, worldentry.ErrHellTrialFloorLocked):
+		http.Error(w, "hell trial floor is locked", http.StatusConflict)
+	case errors.Is(err, worldentry.ErrNoAvailableServer):
+		http.Error(w, "no available world server for this hell floor", http.StatusServiceUnavailable)
+	default:
+		h.logger.Error("issue hell trial entry ticket failed", "floor", floor, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
 }
 
 func (h *worldEntryHandlers) redeem(w http.ResponseWriter, r *http.Request) {
