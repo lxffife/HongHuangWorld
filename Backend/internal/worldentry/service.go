@@ -106,7 +106,7 @@ func (s *Service) issue(ctx context.Context, accountID string, hellFloor int) (E
 		   AND wi.hell_floor IS NOT DISTINCT FROM NULLIF($2, 0)
 		   AND ($2 = 0 OR (c.world_id = 'underworld_fengdu' AND EXISTS (
 		       SELECT 1 FROM character_hell_trial_progress hp
-		       WHERE hp.character_id = c.id AND hp.floor_number = $2 AND hp.status = 'unlocked'
+		       WHERE hp.character_id = c.id AND hp.floor_number = $2 AND hp.status IN ('unlocked', 'completed')
 		   )))
 		   AND sr.status = 'ready' AND sr.admin_state = 'normal'
 		   AND GREATEST(sr.current_players, (SELECT COUNT(*) FROM world_sessions ws WHERE ws.server_id = sr.id AND ws.session_state IN ('connecting', 'active', 'saving')))
