@@ -97,8 +97,10 @@ func _create_chunk(index: Vector2i) -> StaticBody3D:
 
 
 func _chunk_color(index: Vector2i, center: Vector3) -> Color:
-	var base := Color("#211f30") if world_id == "underworld_fengdu" else Color("#354c43")
-	if world_id == "underworld_fengdu":
+	var base := Color("#211f30") if world_id.begins_with("underworld_") else Color("#354c43")
+	if world_id.begins_with("underworld_hell_"):
+		base = Color("#2b202b")
+	if world_id.begins_with("underworld_"):
 		if center.x > 72.0:
 			base = Color("#351d2c")
 		elif center.z < -84.0:
