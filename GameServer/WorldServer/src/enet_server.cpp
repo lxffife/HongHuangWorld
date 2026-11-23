@@ -3955,6 +3955,7 @@ struct EnetServer::Impl {
                          {"critical_chance_basis_points", honghuang::simulation::critical_chance_basis_points(player.agility)},
                          {"critical_damage_basis_points", 15000},
                          {"attack_interval_ms", attack_interval.count()},
+                         {"attack_range", weapon_profile.range},
                          {"movement_speed", player.movement_speed}});
             }
         }
@@ -4385,11 +4386,13 @@ struct EnetServer::Impl {
             begin_monster_death(*target, &player);
         }
         const Json event{
+            {"accepted", true},
             {"attacker_character_id", player.character_id},
             {"target_entity_id", target->runtime_id},
             {"target_name", target->definition.name},
             {"damage", damage.damage},
             {"critical", damage.critical},
+            {"health", damage.remaining_health},
             {"remaining_health", damage.remaining_health},
             {"max_health", target->definition.max_health},
             {"defeated", damage.defeated},
@@ -6196,6 +6199,7 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                             honghuang::simulation::critical_chance_basis_points(welcomed_player.agility);
                         client_welcome["critical_damage_basis_points"] = 15000;
                         client_welcome["attack_interval_ms"] = welcome_interval.count();
+                        client_welcome["attack_range"] = welcome_weapon.range;
                         client_welcome["equipment"] = welcomed_player.equipment;
                         Json mastery_snapshot = Json::array();
                         for (const auto& [spell_id, mastery] : impl_->players.at(event.peer).spell_mastery) {
