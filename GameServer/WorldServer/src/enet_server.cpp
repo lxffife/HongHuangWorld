@@ -1296,7 +1296,7 @@ struct EnetServer::Impl {
                 if (hell_trial_waves.is_unlocked(monster.definition.id)) continue;
                 monster.state.health = 0.0F;
                 monster.state.mode = honghuang::simulation::MonsterMode::Dead;
-                monster.respawn_at = Clock::time_point::max();
+                monster.respawn_at = Clock::time_point{};
             }
         } else if (config.world_id == "qingyun_human") {
             add_monster("wolf-001", "wilderness_wolf", "荒原狼", 3, 80.0F, 12.0F, 4.0F,
@@ -1365,6 +1365,58 @@ struct EnetServer::Impl {
     static std::int64_t wall_clock_ms() {
         return std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
+    }
+
+    bool persist_hell_trial_wave_checkpoint() {
+        if (!hell_trial_waves.enabled()) return true;
+        if (!durable_outbox) return false;
+        std::string error;
+        const honghuang::persistence::HellTrialWaveCheckpoint checkpoint{
+            config.instance_key, hell_trial_encounter.floor(), hell_trial_waves.stage(),
+            hell_trial_waves.completed(), wall_clock_ms()
+        };
+        if (!durable_outbox->save_hell_trial_wave_checkpoint(checkpoint, error)) {
+            std::cerr << "[HellTrialWave] checkpoint write failed: " << error << std::endl;
+            return false;
+        }
+        return true;
+    }
+
+    bool restore_hell_trial_wave_checkpoint() {
+        if (!hell_trial_waves.enabled()) return true;
+        if (!durable_outbox) return false;
+        honghuang::persistence::HellTrialWaveCheckpoint checkpoint;
+        bool found = false;
+        std::string error;
+        if (!durable_outbox->load_hell_trial_wave_checkpoint(
+                config.instance_key, hell_trial_encounter.floor(), checkpoint, found, error)) {
+            std::cerr << "[HellTrialWave] checkpoint load failed: " << error << std::endl;
+            return false;
+        }
+        if (!found) return true;
+        if (!hell_trial_waves.restore_stage(checkpoint.stage) ||
+            hell_trial_waves.completed() != checkpoint.completed) {
+            std::cerr << "[HellTrialWave] stored checkpoint is inconsistent" << std::endl;
+            return false;
+        }
+        const auto active_id = hell_trial_waves.active_definition_id();
+        if (!active_id.empty()) {
+            const auto active = std::find_if(monsters.begin(), monsters.end(),
+                [&](const MonsterRuntime& monster) { return monster.definition.id == active_id; });
+            if (active == monsters.end()) {
+                std::cerr << "[HellTrialWave] active wave monster is missing: " << active_id << std::endl;
+                return false;
+            }
+            if (active->state.mode == honghuang::simulation::MonsterMode::Dead &&
+                active->respawn_at.time_since_epoch().count() == 0) {
+                active->respawn_at = Clock::now();
+            }
+        }
+        std::cout << "[HellTrialWave] restored instance=" << config.instance_key
+                  << " floor=" << hell_trial_encounter.floor()
+                  << " stage=" << hell_trial_waves.stage()
+                  << " completed=" << hell_trial_waves.completed() << std::endl;
+        return true;
     }
 
     bool enqueue_durable_event(const std::string& event_id, const std::string& type,
@@ -2575,6 +2627,9 @@ struct EnetServer::Impl {
         capture_monster_death_context(monster, killer);
         if (hell_trial_encounter.enabled()) {
             const auto wave_transition = hell_trial_waves.record_death(monster.death_definition_id);
+            if (wave_transition.advanced) {
+                (void)persist_hell_trial_wave_checkpoint();
+            }
             if (wave_transition.advanced && !wave_transition.unlocked_definition_id.empty()) {
                 const auto next_wave = std::find_if(monsters.begin(), monsters.end(),
                     [&](const MonsterRuntime& candidate) {
@@ -5811,6 +5866,17 @@ bool EnetServer::start() {
     std::vector<MonsterRuntime> database_monsters;
     std::string monster_config_error;
     if(load_monster_spawn_config(impl_->config,database_monsters,monster_config_error)){
+        if (impl_->hell_trial_encounter.enabled()) {
+            const std::string hell_prefix = "hell-f" + std::to_string(impl_->config.hell_floor) + "-";
+            database_monsters.erase(std::remove_if(database_monsters.begin(), database_monsters.end(),
+                [&](const MonsterRuntime& monster) {
+                    return monster.runtime_id.rfind(hell_prefix, 0) == 0;
+                }), database_monsters.end());
+            for (const auto& local_monster : impl_->monsters) {
+                if (local_monster.runtime_id.rfind(hell_prefix, 0) == 0)
+                    database_monsters.push_back(local_monster);
+            }
+        }
         impl_->monsters=std::move(database_monsters);
         std::cout<<"Loaded database monster spawn points="<<impl_->monsters.size()<<'\n';
     }else{
@@ -5822,6 +5888,10 @@ bool EnetServer::start() {
     }
     if (!impl_->restore_monster_runtime_checkpoints()) {
         std::cerr << "WorldServer startup blocked: monster runtime checkpoints could not be restored\n";
+        return false;
+    }
+    if (!impl_->restore_hell_trial_wave_checkpoint()) {
+        std::cerr << "WorldServer startup blocked: hell trial wave checkpoint could not be restored\n";
         return false;
     }
     impl_->restore_pending_monster_deaths();
