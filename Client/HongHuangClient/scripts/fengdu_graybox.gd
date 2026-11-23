@@ -2125,6 +2125,19 @@ func _update_npc_agents(delta: float) -> void:
 		_apply_npc_behavior_pose(agent, phase)
 
 
+func _apply_gate_guard_shift(agent: Dictionary, hour: int) -> bool:
+	var root: Node3D = agent.get("root")
+	if root == null or not is_instance_valid(root):
+		return false
+	var shift_active := _is_gate_guard_shift_active(str(agent.get("shift_tag", "day")), hour)
+	root.visible = shift_active
+	agent["activity"] = "gate_watch" if shift_active else "off_duty"
+	if shift_active:
+		var gate_id := str(agent.get("gate_id", ""))
+		agent["state"] = "gate_watch" if bool(local_gate_open_by_id.get(gate_id, true)) else "gate_sealed_watch"
+	return shift_active
+
+
 func _is_gate_guard_shift_active(shift_tag: String, hour: int) -> bool:
 	if shift_tag == "day":
 		return hour >= 6 and hour < 18
@@ -2904,12 +2917,7 @@ func _apply_npc_schedules() -> void:
 		if str(agent.get("schedule_tag", "")) == "night":
 			root.visible = npc_schedule_night
 		if role == "gate_guard":
-			var shift_tag := str(agent.get("shift_tag", "day"))
-			var shift_active := _is_gate_guard_shift_active(shift_tag, hour)
-			root.visible = shift_active
-			agent["activity"] = "gate_watch" if shift_active else "off_duty"
-			if shift_active:
-				agent["state"] = "gate_watch" if bool(local_gate_open_by_id.get(str(agent.get("gate_id", "")), true)) else "gate_sealed_watch"
+			_apply_gate_guard_shift(agent, hour)
 		elif role == "soldier":
 			agent["activity"] = "drill" if hour >= 6 and hour < 22 else "rest"
 		elif role == "merchant":
