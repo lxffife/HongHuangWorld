@@ -72,6 +72,7 @@ func _test_hell_floor_blockout() -> void:
 	assert(not str(floor_data.get("objective", "")).is_empty())
 	assert(WorldMapCatalog.resolve_hell_floor_number("underworld_hell_18") == 18)
 	assert(WorldMapCatalog.resolve_hell_floor_number("underworld_hell_invalid") == 0)
+	assert(WorldMapCatalog.resolve_hell_floor_number("underworld_hell_99") == 0)
 	assert(WorldMapCatalog.resolve_region_name("underworld_hell_18", Vector3.ZERO) == "十八层地狱 · 第 18 层")
 	var floor_scene := HellFloorBuilder.build(18)
 	assert(str(floor_scene.get_meta("hell_floor_id", "")) == "hell_18")
