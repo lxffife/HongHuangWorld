@@ -13,4 +13,10 @@ SET max_per_event = EXCLUDED.max_per_event,
     requires_trusted_server = TRUE,
     enabled = TRUE;
 
+-- Nether stones are now earnable from elite monster kills even before the
+-- character unlocks their direct cultivation use.
+UPDATE currency_world_rules
+SET issue_enabled = TRUE
+WHERE world_id = 'underworld_fengdu' AND currency_id = 'nether_stone';
+
 COMMIT;
