@@ -4129,7 +4129,7 @@ struct EnetServer::Impl {
                 Json{{"accepted", true}, {"action", "revive"}, {"phase", "incoming"},
                      {"character_id", player.character_id}, {"character_name", player.name},
                      {"duration_ms", static_cast<int>(kReviveChannel.count() * 1000)}});
-            continue;
+            return;
         }
         // Taunt is a server-authoritative combat ability, not a damaging spell:
         // it needs no staff, mana or cast bar, and expires automatically.
