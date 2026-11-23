@@ -115,10 +115,10 @@ static func get_navigation_network() -> Dictionary:
 			{"id": "patrol.route.west_north", "position": Vector3(-34, 0, 78), "kind": "patrol_waypoint"}
 		],
 		"edges": [
-			{"id": "road.gate.north", "from": "gate.north", "to": "junction.north", "width": 11.0, "two_way": true},
-			{"id": "road.gate.south", "from": "gate.south", "to": "junction.south", "width": 11.0, "two_way": true},
-			{"id": "road.gate.east", "from": "gate.east", "to": "junction.east", "width": 11.0, "two_way": true},
-			{"id": "road.gate.west", "from": "gate.west", "to": "junction.west", "width": 11.0, "two_way": true},
+			{"id": "road.gate.north", "from": "gate.north", "to": "junction.north", "width": 11.0, "two_way": true, "gate_id": "north_heaven_gate"},
+			{"id": "road.gate.south", "from": "gate.south", "to": "junction.south", "width": 11.0, "two_way": true, "gate_id": "south_ghost_gate"},
+			{"id": "road.gate.east", "from": "gate.east", "to": "junction.east", "width": 11.0, "two_way": true, "gate_id": "east_mystic_gate"},
+			{"id": "road.gate.west", "from": "gate.west", "to": "junction.west", "width": 11.0, "two_way": true, "gate_id": "west_dark_gate"},
 			{"id": "road.axis.north", "from": "junction.north", "to": "junction.center", "width": 13.0, "two_way": true},
 			{"id": "road.axis.south", "from": "junction.center", "to": "junction.south", "width": 13.0, "two_way": true},
 			{"id": "road.cross.west", "from": "junction.west", "to": "junction.center", "width": 13.0, "two_way": true},
