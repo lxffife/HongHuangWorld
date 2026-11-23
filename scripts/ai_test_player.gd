@@ -21,6 +21,8 @@ var token := ""
 var network: Node
 var latest_entities: Array = []
 var party_character_ids: Array[String] = []
+var nearby_player_entities: Array[Dictionary] = []
+var last_entity_diagnostic_msec := 0
 var welcomed := false
 var stopping := false
 var input_sequence := 0
@@ -181,6 +183,12 @@ func _on_welcomed(snapshot: Dictionary) -> void:
 
 func _on_entities_updated(entities: Array) -> void:
 	latest_entities = entities
+	nearby_player_entities.clear()
+	for raw in entities:
+		if raw is Dictionary and str(raw.get("entity_type", "")) == "player":
+			var player: Dictionary = raw
+			if str(player.get("character_id", "")) != bot_character_id:
+				nearby_player_entities.append(player)
 
 func _on_combat_event(event: Dictionary) -> void:
 	var accepted := bool(event.get("accepted", false))
@@ -235,7 +243,7 @@ func _run_companion_brain() -> void:
 	if network == null or not network.is_world_ready():
 		return
 	var self_entity: Dictionary = {}
-	var players: Array[Dictionary] = []
+	var players: Array[Dictionary] = nearby_player_entities.duplicate()
 	var monsters: Array[Dictionary] = []
 	for raw in latest_entities:
 		if not raw is Dictionary:
@@ -245,13 +253,14 @@ func _run_companion_brain() -> void:
 			"player":
 				if str(entity.get("character_id", "")) == bot_character_id:
 					self_entity = entity
-				elif party_character_ids.has(str(entity.get("character_id", ""))):
-					players.append(entity)
 			"monster":
 				if int(entity.get("health", 0)) > 0 and not bool(entity.get("death_pending", false)):
 					monsters.append(entity)
 	if self_entity.is_empty():
-		# The own-player entity can be absent from a transient snapshot; never issue blind movement.
+		var now_diagnostic := Time.get_ticks_msec()
+		if now_diagnostic - last_entity_diagnostic_msec >= 10000:
+			last_entity_diagnostic_msec = now_diagnostic
+			_log("等待自身玩家快照；当前实体数=" + str(latest_entities.size()) + "，附近玩家=" + str(players.size()) + "，怪物=" + str(monsters.size()))
 		return
 	var self_pos := Vector2(float(self_entity.get("x", 0.0)), float(self_entity.get("z", 0.0)))
 	var target_player: Dictionary = {}
@@ -306,7 +315,14 @@ func _api(method: String, path: String, body: Dictionary = {}, authenticated: bo
 	if authenticated and not token.is_empty():
 		headers.append("Authorization: Bearer " + token)
 	var payload := "" if method == "GET" else JSON.stringify(body)
-	var error := request.request(api_base + path, headers, HTTPClient.METHOD_GET if method == "GET" else (HTTPClient.METHOD_POST if method == "POST" else HTTPClient.METHOD_GET), payload)
+	var http_method := HTTPClient.METHOD_GET
+	if method == "POST":
+		http_method = HTTPClient.METHOD_POST
+	elif method == "PUT":
+		http_method = HTTPClient.METHOD_PUT
+	elif method == "DELETE":
+		http_method = HTTPClient.METHOD_DELETE
+	var error := request.request(api_base + path, headers, http_method, payload)
 	if error != OK:
 		request.queue_free()
 		return {"code": 0, "body": "request start failed: " + str(error), "data": {}}
@@ -315,14 +331,22 @@ func _api(method: String, path: String, body: Dictionary = {}, authenticated: bo
 	var code := int(completed[1])
 	var response_body: PackedByteArray = completed[3]
 	var body_text := response_body.get_string_from_utf8()
-	var parser := JSON.new()
-	var parse_error: Error = parser.parse(body_text) if not body_text.strip_edges().is_empty() else ERR_PARSE_ERROR
-	var parsed: Variant = parser.data if parse_error == OK else null
+	var trimmed_body := body_text.strip_edges()
+	var parsed: Variant = null
+	var json_ok := false
+	# Some API routes return plain-text errors such as "party not found".
+	# Only invoke the JSON parser for JSON-looking responses; this avoids noisy
+	# engine parse errors and keeps the original HTTP/body diagnostics intact.
+	if trimmed_body.begins_with("{") or trimmed_body.begins_with("["):
+		var parser := JSON.new()
+		if parser.parse(trimmed_body) == OK:
+			parsed = parser.data
+			json_ok = parsed is Dictionary or parsed is Array
 	return {
 		"code": code,
 		"body": body_text,
 		"data": parsed if parsed is Dictionary else {},
-		"json_ok": parse_error == OK and parsed is Dictionary
+		"json_ok": json_ok
 	}
 
 func _log(message: String) -> void:
