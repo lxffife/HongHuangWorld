@@ -193,7 +193,7 @@ const FENGDU_PROTOTYPE := {
 	"landmarks": [
 		{"id": "naihe_bridge_valley", "name": "奈何桥 / 忘川河谷", "position": [22.0, 2.0, 2.0], "color": "#9ebce8", "kind": "visual", "map_visible": true},
 		{"id": "reincarnation_terrace", "name": "轮回殿台地", "position": [-34.0, 8.0, -55.0], "color": "#c7b6dc", "kind": "visual", "map_visible": true},
-{"id": "fengdu_outer_ridge", "name": "酆都北部山脊", "position": [-42.0, 12.0, -112.0], "color": "#b6a8a0", "kind": "visual", "map_visible": false}
+	{"id": "fengdu_outer_ridge", "name": "酆都北部山脊", "position": [-42.0, 12.0, -112.0], "color": "#b6a8a0", "kind": "visual", "map_visible": false}
 	]
 }
 
