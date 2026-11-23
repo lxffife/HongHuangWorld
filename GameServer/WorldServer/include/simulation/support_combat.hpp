@@ -16,6 +16,15 @@ inline constexpr std::int64_t kGuardianAegisCooldownMs = 12000;
 inline constexpr std::int64_t kGuardianAegisHealthPercent = 25;
 inline constexpr std::int64_t kGuardianAegisDurationMs = 8000;
 
+inline constexpr std::int64_t kPurifyManaCost = 14;
+inline constexpr std::int64_t kPurifyCooldownMs = 10000;
+
+inline std::int32_t purified_effect_count(bool slowed, bool frozen, bool poisoned) {
+    return static_cast<std::int32_t>(slowed) +
+           static_cast<std::int32_t>(frozen) +
+           static_cast<std::int32_t>(poisoned);
+}
+
 inline std::int64_t life_mend_amount(std::int64_t spirit) {
     if (spirit < 0) spirit = 0;
     return std::min<std::int64_t>(1000000,
