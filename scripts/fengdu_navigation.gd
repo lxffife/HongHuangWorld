@@ -57,6 +57,8 @@ static func find_nearest_node(network: Dictionary, world_position: Vector3, allo
 	var best_node: Dictionary = {}
 	var best_distance := INF
 	for node in network.get("nodes", []):
+		if not bool(node.get("enabled", true)):
+			continue
 		if not allowed_kinds.is_empty() and str(node.get("kind", "")) not in allowed_kinds:
 			continue
 		var node_position: Vector3 = node.get("position", Vector3.ZERO)
@@ -194,22 +196,22 @@ static func find_path(network: Dictionary, start_node_id: String, goal_node_id: 
 	}
 
 
-static func find_path_from_position(network: Dictionary, origin: Vector3, goal_node_id: String) -> Dictionary:
+static func find_path_from_position(network: Dictionary, origin: Vector3, goal_node_id: String, options: Dictionary = {}) -> Dictionary:
 	var nearest := find_nearest_node(network, origin)
 	if not bool(nearest.get("found", false)):
 		return _failed_path("no_navigation_nodes")
-	var result := find_path(network, str(nearest["node_id"]), goal_node_id)
+	var result := find_path(network, str(nearest["node_id"]), goal_node_id, options)
 	result["origin_node_id"] = str(nearest["node_id"])
 	result["origin_connector_distance"] = float(nearest["distance"])
 	return result
 
 
-static func find_path_to_district(network: Dictionary, origin: Vector3, district_id: String, entrances: Array) -> Dictionary:
+static func find_path_to_district(network: Dictionary, origin: Vector3, district_id: String, entrances: Array, options: Dictionary = {}) -> Dictionary:
 	for entrance in entrances:
 		if str(entrance.get("district_id", "")) != district_id:
 			continue
 		var goal_node_id := str(entrance.get("navigation_node_id", ""))
-		var result := find_path_from_position(network, origin, goal_node_id)
+		var result := find_path_from_position(network, origin, goal_node_id, options)
 		result["destination_district_id"] = district_id
 		result["destination_entry_id"] = str(entrance.get("id", ""))
 		result["destination_service"] = str(entrance.get("service", ""))
