@@ -10,7 +10,7 @@ namespace honghuang::simulation {
 struct HellTrialEligibleParticipant {
     std::string character_id;
     std::string session_id;
-    std::int64_t damage{};
+    std::int64_t contribution{};
 };
 
 // Tracks authenticated participation for one dedicated hell-floor instance.
@@ -20,14 +20,17 @@ public:
     bool register_participant(const std::string& character_id, const std::string& session_id);
     bool record_damage(const std::string& character_id, const std::string& session_id,
                        std::int64_t effective_damage);
+    bool record_healing(const std::string& character_id, const std::string& session_id,
+                        std::int64_t effective_healing);
     std::vector<HellTrialEligibleParticipant> eligible_participants(
-        std::int64_t minimum_damage) const;
-    std::int64_t damage_for(const std::string& character_id) const;
+        std::int64_t minimum_contribution) const;
+    std::int64_t contribution_for(const std::string& character_id) const;
 
 private:
     struct Participant {
         std::string session_id;
         std::int64_t damage{};
+        std::int64_t healing{};
     };
     std::unordered_map<std::string, Participant> participants_;
 };
