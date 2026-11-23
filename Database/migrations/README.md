@@ -131,3 +131,19 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000058_bounty_ver
 
 
 - `000059_bounty_monster_contribution_ledger`: immutable monster death contribution snapshots and per-character damage rows; no objective progress or payout behavior changes.
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000059_bounty_monster_contribution_ledger.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000060_bounty_monster_contribution_instance_index.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000061_character_spell_mastery.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000062_equipment_item_instances.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000063_character_inventory_capacity.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000064_equipment_salvage.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000065_equipment_enhancement.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000066_equipment_crafting.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000067_fengdu_blacksmith_npc.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000068_party_system.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000069_party_loot_rules.up.sql
+
+- `000069_party_loot_rules` adds independent material/equipment loot policies to parties (`personal`, `free_for_all`, `round_robin`, `leader`), persistent rotation cursors, and per-drop eligible-character records. The API exposes leader-only policy changes through `PUT /api/v1/party/loot-rules`.
+```
