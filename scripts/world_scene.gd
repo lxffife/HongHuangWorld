@@ -3524,6 +3524,14 @@ func _clear_target_ring() -> void:
 		target_selection_ring.queue_free()
 	target_selection_ring = null
 
+func _horizontal_distance_to_target(from_position: Vector3, target_position: Vector3) -> float:
+	# The world server validates melee range on the X/Z plane. Keep the HUD
+	# distance identical so elevation differences do not mislead the player.
+	return Vector2(from_position.x, from_position.z).distance_to(
+		Vector2(target_position.x, target_position.z)
+	)
+
+
 func _clear_monster_target() -> void:
 	_clear_target_ring()
 	selected_monster_id = ""
@@ -3541,7 +3549,7 @@ func _update_target_info() -> void:
 	var hp_line := "目标已锁定"
 	if is_instance_valid(local_player) and monster_targets.has(selected_monster_id):
 		var target_position: Vector3 = monster_targets[selected_monster_id]
-		var target_distance: float = local_player.global_position.distance_to(target_position)
+		var target_distance: float = _horizontal_distance_to_target(local_player.global_position, target_position)
 		hp_line = "距离 %.1f m" % target_distance
 	if entity.has("health") and entity.has("max_health"):
 		var current_hp := maxi(0, int(entity.get("health", 0)))
@@ -3619,7 +3627,7 @@ func _request_nearest_monster_attack(screen_position: Vector2 = Vector2(-1.0, -1
 		return
 
 	var target_position: Vector3 = monster_targets[target_id]
-	var target_distance: float = local_player.global_position.distance_to(target_position)
+	var target_distance: float = _horizontal_distance_to_target(local_player.global_position, target_position)
 	var target_name := str(monster_entities.get(target_id, {}).get("name", "怪物"))
 	var error: Error = network.send_attack(target_id)
 	if error != OK:
@@ -4319,12 +4327,17 @@ func _on_combat_event(event: Dictionary) -> void:
 		return
 	if not bool(event.get("accepted", true)):
 		var rejection_reason := str(event.get("reason", "攻击未命中。"))
-		hud_label.text = "攻击失败：" + rejection_reason + " · 请调整距离或目标"
+		var rejection_detail := rejection_reason
+		if rejection_reason == "距离目标太远。" and monster_targets.has(selected_monster_id) and is_instance_valid(local_player):
+			var rejected_position: Vector3 = monster_targets[selected_monster_id]
+			var rejected_distance: float = _horizontal_distance_to_target(local_player.global_position, rejected_position)
+			rejection_detail = "距离目标太远（当前 %.1f m）。继续靠近后再次点击左键。" % rejected_distance
+		hud_label.text = "攻击失败：" + rejection_detail
 		if is_instance_valid(target_info_label) and not selected_monster_id.is_empty():
 			_update_target_info()
-			target_info_label.text += "\n攻击未成功：" + rejection_reason + " · 请靠近目标"
+			target_info_label.text += "\n攻击未成功：" + rejection_detail
 			target_info_panel.visible = hud_visible
-		_show_notification("攻击未成功：" + rejection_reason + "。保持当前目标，靠近后再次点击左键。", 4.0)
+		_show_notification("攻击未成功：" + rejection_detail + "。目标保持锁定。", 4.0)
 		return
 	if bool(event.get("projectile_spawned", false)):
 		_show_notification("箭矢已发射，等待命中……")
