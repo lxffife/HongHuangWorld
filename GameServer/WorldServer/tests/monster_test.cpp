@@ -29,6 +29,11 @@ int main() {
     assert(should_warn_threat_steal(100.0, 90.0));
     assert(should_warn_threat_steal(100.0, 120.0));
     assert(!should_warn_threat_steal(100.0, 90.0, 0.0));
+    assert(monster_healing_threat(100.0) == 50.0);
+    assert(monster_healing_threat(0.0) == 0.0);
+    assert(monster_healing_threat(-10.0) == 0.0);
+    assert(monster_healing_threat(100.0, 0.0) == 0.0);
+    assert(monster_healing_threat(1.0e13) == 1.0e12);
 
     const MonsterDefinition wolf{
         .id = "wolf",
