@@ -150,6 +150,7 @@ struct GroundDropRuntime {
     float z{};
     Clock::time_point expires_at{};
     bool pickup_pending{};
+    std::vector<std::string> eligible_character_ids;
 };
 
 struct PendingMonsterDeathDrop {
@@ -990,6 +991,10 @@ bool load_persisted_ground_drops(const ServerConfig& config, std::vector<GroundD
             drop.id = value.at("id").get<std::string>();
             drop.session_id = value.at("session_id").get<std::string>();
             drop.owner_character_id = value.at("owner_character_id").get<std::string>();
+            if (value.contains("eligible_character_ids") && value["eligible_character_ids"].is_array()) {
+                for (const auto& eligible : value["eligible_character_ids"]) if (eligible.is_string()) drop.eligible_character_ids.push_back(eligible.get<std::string>());
+            }
+            if (drop.eligible_character_ids.empty() && !drop.owner_character_id.empty()) drop.eligible_character_ids.push_back(drop.owner_character_id);
             drop.item_id = value.at("item_id").get<std::string>();
             drop.quantity = value.at("quantity").get<int>();
             drop.x = value.at("position_x").get<float>();
@@ -1011,7 +1016,7 @@ bool load_persisted_ground_drops(const ServerConfig& config, std::vector<GroundD
     return true;
 }
 
-bool deliver_ground_drop(const ServerConfig& config, const GroundDropRuntime& drop,
+bool deliver_ground_drop(const ServerConfig& config, GroundDropRuntime& drop,
                          long& status, std::string& error) {
     const Json body{
         {"drop_id", drop.id}, {"session_id", drop.session_id},
@@ -1019,7 +1024,16 @@ bool deliver_ground_drop(const ServerConfig& config, const GroundDropRuntime& dr
         {"quantity", drop.quantity}, {"position_x", drop.x}, {"position_z", drop.z}
     };
     Json response;
-    return backend_inventory_request(config, "/api/v1/servers/drops", &body, status, response, error);
+    if (!backend_inventory_request(config, "/api/v1/servers/drops", &body, status, response, error)) return false;
+    if (response.is_object()) {
+        drop.owner_character_id = response.value("owner_character_id", drop.owner_character_id);
+        drop.eligible_character_ids.clear();
+        if (response.contains("eligible_character_ids") && response["eligible_character_ids"].is_array()) {
+            for (const auto& eligible : response["eligible_character_ids"]) if (eligible.is_string()) drop.eligible_character_ids.push_back(eligible.get<std::string>());
+        }
+        if (drop.eligible_character_ids.empty() && !drop.owner_character_id.empty()) drop.eligible_character_ids.push_back(drop.owner_character_id);
+    }
+    return true;
 }
 
 bool deliver_ground_pickup(const ServerConfig& config, const DropJob& job,
@@ -3766,9 +3780,10 @@ struct EnetServer::Impl {
                       Json{{"accepted", false}, {"reason", "掉落物已消失或正在结算。"}});
             return;
         }
-        if (drop->owner_character_id != player.character_id) {
+        const bool eligible = std::find(drop->eligible_character_ids.begin(), drop->eligible_character_ids.end(), player.character_id) != drop->eligible_character_ids.end();
+        if (!eligible) {
             send_json(peer, honghuang::protocol::MessageType::PickupEvent,
-                      Json{{"accepted", false}, {"reason", "这件掉落物不属于当前角色。"}});
+                      Json{{"accepted", false}, {"reason", "当前分配规则不允许你拾取这件掉落物。"}});
             return;
         }
         const double dx = static_cast<double>(drop->x) - player.x;
@@ -3780,7 +3795,9 @@ struct EnetServer::Impl {
             return;
         }
         drop->pickup_pending = true;
-        if (!enqueue_drop_job(DropJob{true, *drop, make_event_uuid(), player.session_id, 0})) {
+        GroundDropRuntime pickup_drop = *drop;
+        pickup_drop.owner_character_id = player.character_id;
+        if (!enqueue_drop_job(DropJob{true, std::move(pickup_drop), make_event_uuid(), player.session_id, 0})) {
             drop->pickup_pending = false;
             send_json(peer, honghuang::protocol::MessageType::PickupEvent,
                       Json{{"accepted", false}, {"reason", "拾取队列繁忙，请稍后重试。"}});
@@ -4130,7 +4147,7 @@ struct EnetServer::Impl {
                 });
             }
             for (const auto& drop : ground_drops) {
-                if (drop.owner_character_id != recipient.character_id ||
+                if (std::find(drop.eligible_character_ids.begin(), drop.eligible_character_ids.end(), recipient.character_id) == drop.eligible_character_ids.end() ||
                     drop.expires_at <= Clock::now() ||
                     !honghuang::simulation::within_interest_radius(
                         drop.x, drop.z, recipient.x, recipient.z, kInterestRadius)) continue;
