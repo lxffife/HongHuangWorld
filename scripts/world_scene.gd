@@ -5064,6 +5064,9 @@ func _on_reconnected_welcomed(snapshot: Dictionary) -> void:
 	var previous: HHWorldNetwork = HHSession.world_network
 	HHSession.world_network = reconnect_network
 	HHSession.world_snapshot = snapshot
+	_apply_world_instance_geometry(snapshot)
+	if is_instance_valid(hell_trial_panel):
+		hell_trial_panel.set_current_floor(int(snapshot.get("hell_floor", 0)))
 	if previous != null and is_instance_valid(previous):
 		if previous.disconnected.is_connected(_on_world_disconnected):
 			previous.disconnected.disconnect(_on_world_disconnected)
@@ -5111,7 +5114,14 @@ func _on_reconnected_welcomed(snapshot: Dictionary) -> void:
 	drop_targets.clear()
 	reconnect_button.visible = false
 	reconnect_button.disabled = false
-	hud_label.text = "已重新进入青云人界，角色已恢复到最近保存的位置。"
+	var hell_floor := int(snapshot.get("hell_floor", 0))
+	if hell_floor > 0:
+		var floor_data: Dictionary = WorldMapCatalog.get_hell_floor_data(hell_floor)
+		hud_label.text = "已进入第 %02d 层 · %s" % [hell_floor, str(floor_data.get("name", "地狱试炼"))]
+	else:
+		hud_label.text = "已重新进入「" + _world_display_name(str(snapshot.get("world_id", ""))) + "」，角色已恢复到最近保存的位置。"
+	_refresh_current_region(false)
+	_update_minimap_data()
 	_update_hud()
 
 func _refresh_equipment() -> void:
