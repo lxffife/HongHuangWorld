@@ -161,6 +161,9 @@ var party_create_button: Button
 var party_leave_button: Button
 var party_disband_button: Button
 var party_data: Dictionary = {}
+var party_material_loot_option: OptionButton
+var party_equipment_loot_option: OptionButton
+var party_loot_save_button: Button
 var party_member_statuses: Dictionary = {}
 var party_invitations: Array = []
 var party_seen_invitation_ids: Dictionary = {}
@@ -2540,6 +2543,33 @@ func _build_party_ui() -> void:
 	party_status_label.text = "正在读取队伍……"
 	party_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	layout.add_child(party_status_label)
+	var loot_title := Label.new()
+	loot_title.text = "战利品规则 · 队长设置"
+	loot_title.add_theme_color_override("font_color", Color("#d9b879"))
+	layout.add_child(loot_title)
+	var loot_row := HBoxContainer.new()
+	loot_row.add_theme_constant_override("separation", 8)
+	layout.add_child(loot_row)
+	party_material_loot_option = OptionButton.new()
+	party_material_loot_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	party_material_loot_option.add_item("材料：个人归属", 0)
+	party_material_loot_option.add_item("材料：自由拾取", 1)
+	party_material_loot_option.add_item("材料：轮流分配", 2)
+	party_material_loot_option.add_item("材料：队长分配", 3)
+	loot_row.add_child(party_material_loot_option)
+	party_equipment_loot_option = OptionButton.new()
+	party_equipment_loot_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	party_equipment_loot_option.add_item("装备：个人归属", 0)
+	party_equipment_loot_option.add_item("装备：自由拾取", 1)
+	party_equipment_loot_option.add_item("装备：轮流分配", 2)
+	party_equipment_loot_option.add_item("装备：队长分配", 3)
+	loot_row.add_child(party_equipment_loot_option)
+	party_loot_save_button = Button.new()
+	party_loot_save_button.text = "保存分配规则"
+	_apply_button_theme(party_loot_save_button, true)
+	party_loot_save_button.pressed.connect(_party_save_loot_rules)
+	layout.add_child(party_loot_save_button)
+	
 
 	var member_title := Label.new()
 	member_title.text = "队伍成员"
@@ -2636,6 +2666,8 @@ func _party_request(method: String, path: String, payload: Dictionary, context: 
 	var body := ""
 	if method == "POST":
 		http_method = HTTPClient.METHOD_POST
+	elif method == "PUT":
+		http_method = HTTPClient.METHOD_PUT
 		body = JSON.stringify(payload)
 	party_request_context = context
 	var error := party_http.request(HHSession.api_base + path, headers, http_method, body)
@@ -2643,8 +2675,15 @@ func _party_request(method: String, path: String, payload: Dictionary, context: 
 		party_request_context = ""
 		party_status_label.text = "队伍请求提交失败：" + str(error)
 
-func _party_invite() -> void:
-	if not is_instance_valid(party_username_input):
+func _party_save_loot_rules() -> void:
+	if not is_instance_valid(party_material_loot_option) or not is_instance_valid(party_equipment_loot_option):
+		return
+	var modes := ["personal", "free_for_all", "round_robin", "leader"]
+	var material_mode := modes[party_material_loot_option.selected]
+	var equipment_mode := modes[party_equipment_loot_option.selected]
+	_party_request("PUT", "/api/v1/party/loot-rules", {"material_loot_mode": material_mode, "equipment_loot_mode": equipment_mode}, "action")
+
+func _party_invite() -> void:	if not is_instance_valid(party_username_input):
 		return
 	var username := party_username_input.text.strip_edges()
 	if username.length() < 3:
@@ -2725,6 +2764,12 @@ func _render_party_members() -> void:
 	party_create_button.visible = false
 	party_leave_button.visible = true
 	party_disband_button.visible = is_leader
+	party_material_loot_option.visible = is_leader
+	party_equipment_loot_option.visible = is_leader
+	party_loot_save_button.visible = is_leader
+	var loot_modes := {"personal": 0, "free_for_all": 1, "round_robin": 2, "leader": 3}
+	party_material_loot_option.select(int(loot_modes.get(str(party_data.get("material_loot_mode", "personal")), 0)))
+	party_equipment_loot_option.select(int(loot_modes.get(str(party_data.get("equipment_loot_mode", "personal")), 0)))
 	for member_value in members:
 		if not (member_value is Dictionary):
 			continue
