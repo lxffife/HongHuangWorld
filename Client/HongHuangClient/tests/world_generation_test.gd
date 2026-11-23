@@ -114,6 +114,6 @@ func _test_fengdu_navigation() -> void:
 	var narrow_route := FengduNavigation.find_path(network, "imperial_palace", "north_gate", {"minimum_width": 13.0})
 	assert(not bool(narrow_route.get("found", false)))
 
-	var nearest := FengduNavigation.find_nearest_node(network, Vector3.ZERO, ["palace", "court"])
+	var nearest := FengduNavigation.find_nearest_node(network, Vector3(0.0, 0.0, -81.36), ["palace", "court"])
 	assert(bool(nearest.get("found", false)))
 	assert(str(nearest.get("node_id", "")) == "imperial_palace")
