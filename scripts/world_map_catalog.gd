@@ -74,7 +74,27 @@ const UNDERWORLD_ATLAS := {
 			"distance": "酆都地下辖域", "danger_level": 9,
 			"recommended_realm": "依层数递增",
 			"access": "审判、任务与封印入口",
-			"description": "独立的多层地下空间，兼具罪魂刑罚、危险存在镇压与远古封印剧情；阿鼻无间为最深层核心禁区。"
+			"description": "独立的多层地下空间，兼具罪魂刑罚、危险存在镇压与远古封印剧情。层级名称参考民间传说并作游戏化整理，不同地方志与民俗版本可能有异；阿鼻无间为本作最深层核心禁区。",
+			"layers": [
+				{"floor": 1, "id": "hell_1", "name": "拔舌地狱", "theme": "妄语、诽谤与恶意造谣", "guardian": "拔舌判官", "danger_level": 2},
+				{"floor": 2, "id": "hell_2", "name": "剪刀地狱", "theme": "挑拨离间、破坏盟约与姻缘", "guardian": "剪缘鬼将", "danger_level": 2},
+				{"floor": 3, "id": "hell_3", "name": "铁树地狱", "theme": "背信弃义、构陷无辜", "guardian": "铁树守狱使", "danger_level": 3},
+				{"floor": 4, "id": "hell_4", "name": "孽镜地狱", "theme": "照见隐罪、核验因果真相", "guardian": "孽镜司主", "danger_level": 3},
+				{"floor": 5, "id": "hell_5", "name": "蒸笼地狱", "theme": "散布谣言、伪证害人", "guardian": "蒸笼狱卒长", "danger_level": 4},
+				{"floor": 6, "id": "hell_6", "name": "铜柱地狱", "theme": "纵火、酷刑与暴虐", "guardian": "铜柱刑官", "danger_level": 4},
+				{"floor": 7, "id": "hell_7", "name": "刀山地狱", "theme": "杀伐残害、兵灾血债", "guardian": "刀山巡狱将", "danger_level": 5},
+				{"floor": 8, "id": "hell_8", "name": "冰山地狱", "theme": "忘恩负义、冷酷背弃", "guardian": "冰山女狱吏", "danger_level": 5},
+				{"floor": 9, "id": "hell_9", "name": "油锅地狱", "theme": "贪婪强夺、以权谋私", "guardian": "油锅狱主", "danger_level": 6},
+				{"floor": 10, "id": "hell_10", "name": "牛坑地狱", "theme": "虐待生灵、残害牲畜", "guardian": "牛坑监狱官", "danger_level": 6},
+				{"floor": 11, "id": "hell_11", "name": "石压地狱", "theme": "欺压弱小、恃强凌弱", "guardian": "石压力士", "danger_level": 7},
+				{"floor": 12, "id": "hell_12", "name": "舂臼地狱", "theme": "侵夺粮道、断人生计", "guardian": "舂臼刑使", "danger_level": 7},
+				{"floor": 13, "id": "hell_13", "name": "血池地狱", "theme": "屠戮无辜、累积血债", "guardian": "血池夜叉统领", "danger_level": 8},
+				{"floor": 14, "id": "hell_14", "name": "枉死地狱", "theme": "含冤亡魂复核、怨念平息与错案追查", "guardian": "枉死城主", "danger_level": 6},
+				{"floor": 15, "id": "hell_15", "name": "磔刑地狱", "theme": "背盟叛义、残害同袍", "guardian": "磔刑鬼将", "danger_level": 8},
+				{"floor": 16, "id": "hell_16", "name": "火山地狱", "theme": "焚城灭门、重大恶业", "guardian": "火山狱君", "danger_level": 9},
+				{"floor": 17, "id": "hell_17", "name": "石磨地狱", "theme": "盘剥众生、吞并与榨取", "guardian": "石磨鬼王", "danger_level": 9},
+				{"floor": 18, "id": "hell_18", "name": "阿鼻无间地狱", "theme": "极重罪业与上古邪物封镇", "guardian": "无间狱主", "danger_level": 10}
+			]
 		},
 		{
 			"id": "ghost_wilderness", "name": "幽冥荒原", "kind": "wilderness",
