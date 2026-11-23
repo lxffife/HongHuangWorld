@@ -19,7 +19,11 @@ int main() {
     assert(!ledger.record_damage("char-a", "session-a", 0));
     assert(ledger.record_damage("char-a", "session-a", 20));
     assert(ledger.record_damage("char-b", "session-b", 8));
-    assert(ledger.eligible_participants(10).size() == 1);
+    // Effective healing to another player contributes at half value.
+    assert(ledger.record_healing("char-b", "session-b", 4));
+    assert(ledger.contribution_for("char-b") == 10);
+    assert(ledger.eligible_participants(10).size() == 2);
+    assert(!ledger.record_healing("char-b", "stale-session", 100));
 
     // Reconnecting rotates the authenticated session but preserves earned damage.
     assert(ledger.register_participant("char-a", "session-a-reconnected"));
@@ -29,12 +33,12 @@ int main() {
     assert(eligible.size() == 1);
     assert(eligible.front().character_id == "char-a");
     assert(eligible.front().session_id == "session-a-reconnected");
-    assert(eligible.front().damage == 35);
+    assert(eligible.front().contribution == 35);
 
     // Accumulation saturates rather than overflowing into a negative value.
     assert(ledger.record_damage("char-a", "session-a-reconnected",
                                 std::numeric_limits<std::int64_t>::max()));
-    assert(ledger.damage_for("char-a") == std::numeric_limits<std::int64_t>::max());
+    assert(ledger.contribution_for("char-a") == std::numeric_limits<std::int64_t>::max());
     assert(ledger.eligible_participants(std::numeric_limits<std::int64_t>::max()).size() == 1);
     assert(ledger.eligible_participants(0).empty());
     return 0;
