@@ -1348,6 +1348,8 @@ func _toggle_hud_visibility() -> void:
 		soul_choice_button.visible = hud_visible and soul_essence_profile.get("pending_rare_choices", []).size() > 0
 	if is_instance_valid(target_info_panel):
 		target_info_panel.visible = hud_visible and not selected_monster_id.is_empty()
+	if is_instance_valid(world_map_panel) and not hud_visible:
+		world_map_panel.visible = false
 	if is_instance_valid(minimap_panel):
 		minimap_panel.visible = hud_visible and get_viewport().get_visible_rect().size.x >= 520.0 and not (is_instance_valid(friend_panel) and friend_panel.visible)
 	if is_instance_valid(input_debug_panel):
@@ -1358,6 +1360,7 @@ func _toggle_hud_visibility() -> void:
 		revive_channel_panel.visible = hud_visible and revive_channel_remaining > 0.0
 	if is_instance_valid(help_panel) and not hud_visible:
 		help_panel.visible = false
+		help_restore_mouse_captured = false
 	if is_instance_valid(hud_toggle_button):
 		hud_toggle_button.visible = hud_visible
 	if is_instance_valid(hud_restore_button):
@@ -1408,7 +1411,7 @@ func _build_controls_help_panel(hud: CanvasLayer) -> void:
 	var divider := HSeparator.new()
 	layout.add_child(divider)
 	var body := Label.new()
-	body.text = "角色移动\nW / A / S / D    前进、左移、后退、右移\n空格键    跳跃（地形允许时）\n鼠标移动    转动视角\n鼠标左键    攻击准星指向或已锁定的怪物\nTab    切换附近怪物目标\n\n交互与界面\nF    与附近 NPC 交互\nE    拾取附近掉落物\nI    打开背包\nC 或 Enter    打开聊天\nF1    显示 / 隐藏游戏 HUD\nF2    打开 / 关闭本操作指南\nEsc    关闭当前地图、聊天或帮助面板\n\n战斗技能\nQ    火球术       R    冰锥术\nT    嘲讽术       Y    回魂术\nU    回春术       G    守护灵盾\nH    净化术\n\n提示：打开聊天或面板时，部分移动与战斗输入会暂停。技能是否可用仍以服务器判定为准。"
+	body.text = "角色移动\nW / A / S / D    前进、左移、后退、右移\n空格键    跳跃（地形允许时）\n鼠标移动    转动视角\n鼠标左键    攻击准星指向或已锁定的怪物\nTab    切换附近怪物目标\n\n交互与界面\nF    与附近 NPC 交互\nE    拾取附近掉落物\nI    打开背包\nC 或 Enter    打开聊天\nF1    显示 / 隐藏游戏 HUD\nF2    打开 / 关闭本操作指南\nF3    显示 / 隐藏输入诊断\nEsc    关闭当前地图、聊天或帮助面板\n\n战斗技能\nQ    火球术       R    冰锥术\nT    嘲讽术       Y    回魂术\nU    回春术       G    守护灵盾\nH    净化术\n\n提示：打开聊天或面板时，部分移动与战斗输入会暂停。技能是否可用仍以服务器判定为准。"
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.add_theme_color_override("font_color", Color("#d7e0e9"))
 	body.add_theme_font_size_override("font_size", 14)
