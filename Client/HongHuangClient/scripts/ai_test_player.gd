@@ -8,7 +8,7 @@ const BOT_CONFIG_PATH := "user://ai_test_player.cfg"
 const CLIENT_BUILD := "0.1.0"
 const WORLD_ID := "underworld_fengdu"
 const FOLLOW_DISTANCE := 4.0
-const ATTACK_DISTANCE := 2.6
+const ATTACK_DISTANCE := 2.2
 const MONSTER_APPROACH_DISTANCE := 12.0
 const ATTACK_INTERVAL := 1.25
 
