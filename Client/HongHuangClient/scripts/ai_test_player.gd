@@ -9,6 +9,7 @@ const CLIENT_BUILD := "0.1.0"
 const WORLD_ID := "underworld_fengdu"
 const FOLLOW_DISTANCE := 4.0
 const ATTACK_DISTANCE := 2.6
+const MONSTER_APPROACH_DISTANCE := 12.0
 const ATTACK_INTERVAL := 1.25
 
 var api_base := ""
@@ -245,10 +246,12 @@ func _run_companion_brain() -> void:
 				_log("AI 攻击指令发送失败，错误码：" + str(attack_error))
 		_send_movement(Vector2.ZERO)
 		return
-	if not target_player.is_empty() and target_distance > FOLLOW_DISTANCE:
+	if not target_monster.is_empty() and monster_distance <= MONSTER_APPROACH_DISTANCE:
+		var monster_pos := Vector2(float(target_monster.get("x", 0.0)), float(target_monster.get("z", 0.0)))
+		_send_movement((monster_pos - self_pos).normalized())
+	elif not target_player.is_empty() and target_distance > FOLLOW_DISTANCE:
 		var player_pos := Vector2(float(target_player.get("x", 0.0)), float(target_player.get("z", 0.0)))
-		var direction := (player_pos - self_pos).normalized()
-		_send_movement(direction)
+		_send_movement((player_pos - self_pos).normalized())
 	else:
 		_send_movement(Vector2.ZERO)
 
