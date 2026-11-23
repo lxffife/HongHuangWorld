@@ -4084,6 +4084,18 @@ struct EnetServer::Impl {
                      {"duration_ms", static_cast<int>(kTauntDuration.count() * 1000)},
                      {"cooldown_ms", static_cast<int>(kTauntCooldown.count() * 1000)},
                      {"reason", "嘲讽成功，怪物将优先攻击你。"}});
+            const Json taunt_event{{"action", "monster_taunt"},
+                {"target_entity_id", target_id}, {"character_id", player.character_id},
+                {"character_name", player.name},
+                {"duration_ms", static_cast<int>(kTauntDuration.count() * 1000)}};
+            const double interest_squared = static_cast<double>(kInterestRadius) * kInterestRadius;
+            for (const auto& [recipient_peer, recipient] : players) {
+                if (recipient_peer == peer) continue;
+                const double rx = static_cast<double>(recipient.x) - player.x;
+                const double rz = static_cast<double>(recipient.z) - player.z;
+                if (rx * rx + rz * rz <= interest_squared)
+                    send_json(recipient_peer, honghuang::protocol::MessageType::CombatEvent, taunt_event);
+            }
             return;
         }
         const auto weapon = player_weapon_type(player);
