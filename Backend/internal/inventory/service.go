@@ -464,6 +464,10 @@ func (s *Service) CreateDrop(ctx context.Context, nodeKey string, request DropRe
 		  AND d.position_x=$6 AND d.position_z=$7 AND d.status='available' AND d.expires_at>now()`,
 		request.DropID,serverID,request.SessionID,request.ItemID,request.Quantity,request.PositionX,request.PositionZ), &existing)
 	if err == nil {
+		var eligibleRaw []byte
+		if err:=tx.QueryRowContext(ctx, "SELECT d.owner_character_id::text,COALESCE((SELECT jsonb_agg(e.character_id::text ORDER BY e.created_at,e.character_id) FROM ground_drop_eligible_characters e WHERE e.drop_id=d.id),'[]'::jsonb) FROM ground_drops d WHERE d.id=$1::uuid", request.DropID).Scan(&existing.OwnerCharacterID,&eligibleRaw);err!=nil{return GroundDrop{},fmt.Errorf("restore drop eligibility: %w",err)}
+		existing.EligibleCharacterIDs=[]string{}
+		if len(eligibleRaw)>0 { if err:=json.Unmarshal(eligibleRaw,&existing.EligibleCharacterIDs);err!=nil{return GroundDrop{},fmt.Errorf("decode recovered drop eligibility: %w",err)} }
 		if err:=tx.Commit();err!=nil{return GroundDrop{},fmt.Errorf("commit recovered ground drop: %w",err)}
 		return existing,nil
 	}
