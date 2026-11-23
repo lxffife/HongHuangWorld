@@ -1716,6 +1716,7 @@ struct EnetServer::Impl {
         const auto event_id = make_event_uuid();
         const Json payload{
             {"event_id", event_id},
+            {"session_id", player.session_id},
             {"character_id", player.character_id},
             {"floor", config.hell_floor}
         };
@@ -1742,6 +1743,7 @@ struct EnetServer::Impl {
         };
         const Json payload{
             {"event_id", event_id},
+            {"session_id", player.session_id},
             {"character_id", player.character_id},
             {"floor", hell_trial_encounter.floor()},
             {"objective_complete", result.objective_kills >= result.objective_required},
