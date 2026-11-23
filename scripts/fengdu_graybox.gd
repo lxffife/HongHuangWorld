@@ -3708,7 +3708,7 @@ func _build_hud() -> void:
 	npc_detail_label.custom_minimum_size = Vector2(410, 34)
 	column.add_child(npc_detail_label)
 	var help := Label.new()
-	help.text = "WASD 移动 · 空格跳跃 · 鼠标左键捕获视角 · ESC 释放 · E 交互 · F6 活动点"
+	help.text = "WASD 移动 · 空格跳跃 · 鼠标左键捕获视角 · ESC 释放 · E 交互/城门核验 · F6 活动点"
 	column.add_child(help)
 
 
