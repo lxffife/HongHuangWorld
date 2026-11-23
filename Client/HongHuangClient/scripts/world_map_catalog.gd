@@ -4,6 +4,15 @@ extends RefCounted
 ## Coordinates use world X/Z meters. Bounds are [min_x, max_x, min_z, max_z].
 
 const FENGDU_REGIONS := [
+	{"id": "imperial_palace", "name": "酆都皇城", "priority": 5, "bounds": [[-10.0, 10.0, -84.0, -74.0]]},
+	{"id": "ten_kings_manors", "name": "十王府", "priority": 6, "bounds": [[-35.0, -12.0, -77.0, -66.0]]},
+	{"id": "judge_court", "name": "判官司", "priority": 7, "bounds": [[12.0, 35.0, -77.0, -66.0]]},
+	{"id": "ghost_registry", "name": "鬼籍司", "priority": 8, "bounds": [[-35.0, -12.0, -64.0, -54.0]]},
+	{"id": "merit_bureau", "name": "功过司", "priority": 9, "bounds": [[12.0, 35.0, -64.0, -54.0]]},
+	{"id": "patrol_office", "name": "巡城司", "priority": 10, "bounds": [[-8.0, 8.0, -66.0, -56.0]]},
+	{"id": "reincarnation_bureau", "name": "轮回司", "priority": 11, "bounds": [[-10.0, 10.0, -48.0, -38.0]]},
+	{"id": "ghost_market", "name": "万魂鬼市", "priority": 12, "bounds": [[12.0, 35.0, -45.0, -35.0]]},
+	{"id": "residential_quarter", "name": "万家魂坊", "priority": 13, "bounds": [[-35.0, -12.0, -45.0, -35.0]]},
 	{"id": "naihe_bridge", "name": "奈何桥", "priority": 10, "bounds": [[15.0, 29.0, -0.5, 5.5]]},
 	{"id": "reincarnation_forecourt", "name": "轮回殿前", "priority": 20, "bounds": [[-35.0, -8.0, -69.0, -42.0]]},
 	{"id": "fengdu_ghost_gate", "name": "酆都鬼门关", "priority": 30, "bounds": [[-12.0, 12.0, -28.0, -9.0]]},
@@ -170,10 +179,10 @@ const FENGDU_CITY_PLAN := {
 
 const FENGDU_PROTOTYPE := {
 	"world_id": "underworld_fengdu",
-	"bounds": [-128.0, 128.0, -128.0, 128.0],
-	"world_size": 256.0,
+	"bounds": [-100.0, 100.0, -100.0, 100.0],
+	"world_size": 200.0,
 	"heightfield_cells": 128,
-	"tile_count": 4,
+	"tile_count": 5,
 	"water_bodies": [
 		{"id": "forgotten_river", "name": "忘川河", "kind": "river_visual", "size": [8.0, 150.0], "center": [22.0, 8.0], "height": -0.62, "color": "#344b69", "alpha": 0.76, "map_visible": false},
 		{"id": "blood_sea", "name": "血海", "kind": "sea_visual", "size": [56.0, 236.0], "center": [100.0, 0.0], "height": -1.25, "color": "#681d32", "alpha": 0.84, "map_visible": false}
@@ -210,11 +219,8 @@ static func get_eighteen_hell_layers() -> Array:
 
 
 static func get_world_bounds(world_id: String) -> Vector4:
-	if world_id == "underworld_fengdu":
-		return Vector4(-128.0, 128.0, -128.0, 128.0)
-	if world_id == "qingyun_human" or world_id == "myriad_demon":
-		return Vector4(-120.0, 120.0, -120.0, 120.0)
-	return Vector4(-120.0, 120.0, -120.0, 120.0)
+	# Must match WorldServer's integrate_horizontal default clamp.
+	return Vector4(-100.0, 100.0, -100.0, 100.0)
 
 
 static func get_regions(world_id: String) -> Array:
