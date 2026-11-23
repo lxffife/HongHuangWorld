@@ -26,6 +26,8 @@ HellTrialBossPhaseTransition HellTrialBossPhaseController::update(
 
 int HellTrialBossPhaseController::phase() const { return phase_; }
 
+void HellTrialBossPhaseController::reset() { phase_ = 0; }
+
 double HellTrialBossPhaseController::attack_multiplier() const {
     if (phase_ >= 3) return 1.60;
     if (phase_ == 2) return 1.25;
