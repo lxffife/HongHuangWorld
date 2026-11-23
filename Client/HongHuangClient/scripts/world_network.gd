@@ -116,7 +116,9 @@ func send_attack(target_entity_id: String) -> Error:
 	var frame := HHProtocolCodec.encode_frame(HHProtocolCodec.MessageType.ATTACK_COMMAND, payload)
 	if frame.is_empty():
 		return ERR_INVALID_DATA
-	return transport.send_frame(frame)
+	# Attack commands must be reliable: unlike continuous movement snapshots,
+	# losing one attack packet makes a click appear to do nothing.
+	return transport.send_frame(frame, true)
 
 
 func send_spell_cast(spell_id: String, target_entity_id: String) -> Error:
