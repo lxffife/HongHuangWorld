@@ -3763,6 +3763,10 @@ func _on_combat_event(event: Dictionary) -> void:
 		if bool(event.get("accepted", false)) and str(event.get("phase", "")) == "released" and spell_cooldown_remaining.has(spell_id):
 			spell_cooldown_remaining[spell_id] = maxf(float(event.get("cooldown_ms", 0)) / 1000.0, 0.0)
 			_update_spell_cooldown_hud()
+		elif not bool(event.get("accepted", false)) and spell_id == "taunt" and int(event.get("cooldown_ms", 0)) > 0:
+			# The server returns remaining cooldown on a rejected recast.
+			spell_cooldown_remaining[spell_id] = float(event.get("cooldown_ms", 0)) / 1000.0
+			_update_spell_cooldown_hud()
 		if not bool(event.get("accepted", false)):
 			_show_notification(str(event.get("reason", spell_name + "施展失败。")), 3.0)
 		elif str(event.get("phase", "")) == "casting":
