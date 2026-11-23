@@ -118,7 +118,8 @@ func (s *Service) Current(ctx context.Context, accountID string) (Progress, erro
 // Complete accepts reports only from the WorldServer currently hosting this character.
 // The event UUID makes retries safe; completion and next-floor unlock are atomic.
 func (s *Service) Complete(ctx context.Context, nodeKey string, req CompletionRequest) (CompletionResult,error) {
-	if strings.TrimSpace(nodeKey)=="" || validateCompletion(req)!=nil { return CompletionResult{},ErrInvalid }
+	if strings.TrimSpace(nodeKey)=="" { return CompletionResult{},ErrInvalid }
+	if err := validateCompletion(req); err != nil { return CompletionResult{},err }
 	tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return CompletionResult{},fmt.Errorf("begin hell trial completion: %w",err)}
 	defer tx.Rollback()
 
@@ -148,7 +149,9 @@ func (s *Service) Complete(ctx context.Context, nodeKey string, req CompletionRe
 	if err!=nil{return CompletionResult{},fmt.Errorf("lock hell trial floor: %w",err)}
 	if status=="completed" {
 		if priorEvent.Valid && strings.EqualFold(priorEvent.String,req.EventID) {
-			return CompletionResult{CharacterID:req.CharacterID,Floor:req.Floor,Completed:true,AlreadyApplied:true,NextUnlockedFloor:min(req.Floor+1,FloorCount),FinalTrialCompleted:req.Floor==FloorCount},nil
+			next := 0
+			if req.Floor < FloorCount { next = req.Floor + 1 }
+			return CompletionResult{CharacterID:req.CharacterID,Floor:req.Floor,Completed:true,AlreadyApplied:true,NextUnlockedFloor:next,FinalTrialCompleted:req.Floor==FloorCount},nil
 		}
 		return CompletionResult{},ErrAlreadyCompleted
 	}
