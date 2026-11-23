@@ -3766,9 +3766,9 @@ func _on_combat_event(event: Dictionary) -> void:
 				death_panel.visible = false
 			if is_instance_valid(respawn_button):
 				respawn_button.disabled = true
-			_show_notification("你被队友救起，恢复 25% 生命！", 4.0)
+			_show_notification("你被附近修士救起，恢复 25% 生命！", 4.0)
 		else:
-			_show_notification("队友已被救起。", 3.0)
+			_show_notification("附近玩家已被救起。", 3.0)
 		return
 	if str(event.get("action", "")) == "revive":
 		if str(event.get("phase", "")) == "incoming":
