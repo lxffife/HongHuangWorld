@@ -2586,7 +2586,7 @@ struct EnetServer::Impl {
                     records,
                     20 + static_cast<std::int64_t>(level) * 10,
                     10 + static_cast<std::int64_t>(level) * 5,
-                    underworld_economy ? 5 + static_cast<std::int64_t>(level) * 3 : 0,
+                    underworld_economy ? std::min<std::int64_t>(2000, 5 + static_cast<std::int64_t>(level) * 3) : 0,
                     (underworld_economy && level >= 10 &&
                      (level % 5 == 0 || definition_id.find("elite") != std::string::npos ||
                       definition_id.find("ancient") != std::string::npos ||
