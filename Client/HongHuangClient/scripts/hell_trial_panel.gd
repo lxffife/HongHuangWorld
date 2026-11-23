@@ -212,10 +212,10 @@ func _render_floor_rows() -> void:
 		name_label.text = str(metadata.get("name", "第 %02d 层" % floor_number))
 		name_label.add_theme_color_override("font_color", Color("#f0e5d2") if unlocked else Color("#84909e"))
 		details.add_child(name_label)
-		var objective := str(metadata.get("objective", "完成本层试炼并击败守将"))
+		var theme_name := str(metadata.get("theme", ""))
 		var guardian := str(metadata.get("guardian", "本层守将"))
 		var subline := Label.new()
-		subline.text = "目标：" + objective + "  ·  守将：" + guardian
+		subline.text = "目标：击败 3 类指定刑狱目标  ·  守将：" + guardian + ("  ·  " + theme_name if not theme_name.is_empty() else "")
 		subline.add_theme_color_override("font_color", Color("#a9b5c2"))
 		subline.add_theme_font_size_override("font_size", 11)
 		subline.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
