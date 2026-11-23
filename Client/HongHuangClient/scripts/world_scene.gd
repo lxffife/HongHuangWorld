@@ -5524,6 +5524,15 @@ func _build_death_ui() -> void:
 	respawn_button.pressed.connect(_on_respawn_pressed)
 	layout.add_child(respawn_button)
 
+	# A player can re-enter the world after a death snapshot was saved but
+	# before the death notification reached the client. Reconstruct the death
+	# UI from the authoritative entry snapshot so the player is never trapped
+	# at zero health with no visible respawn action.
+	if int(HHSession.world_snapshot.get("health", 1)) <= 0:
+		death_panel.visible = true
+		respawn_button.disabled = false
+		death_message_label.text = "检测到角色处于死亡状态，死亡记录可能已在服务器保存。\n可以复活并返回冥界·酆都。"
+
 func _on_respawn_pressed() -> void:
 	if respawn_busy or HHSession.access_token.is_empty():
 		return
