@@ -15,6 +15,7 @@ var api_base := ""
 var username := ""
 var password := ""
 var bot_name := ""
+var bot_character_id := ""
 var token := ""
 var network: Node
 var latest_entities: Array = []
@@ -93,15 +94,18 @@ func _prepare_account() -> bool:
 		"username": username, "password": password
 	})
 	if login.code >= 200 and login.code < 300:
-		token = str(login.data.get("token", login.data.get("access_token", "")))
+		token = str(login.data.get("access_token", ""))
 		if not token.is_empty():
 			_log("测试账号登录成功。")
 			return true
+	if login.code != 401:
+		_log("登录请求失败 HTTP " + str(login.code) + "：" + login.body)
+		return false
 	var register := await _api("POST", "/api/v1/auth/register", {
 		"username": username, "email": "", "password": password
 	})
 	if register.code >= 200 and register.code < 300:
-		token = str(register.data.get("token", register.data.get("access_token", "")))
+		token = str(register.data.get("access_token", ""))
 		if not token.is_empty():
 			_log("已创建并登录测试账号。")
 			return true
@@ -157,8 +161,9 @@ func _enter_world() -> bool:
 	return true
 
 func _on_welcomed(snapshot: Dictionary) -> void:
-	welcomed = true
-	_log("世界连接成功：角色=" + str(snapshot.get("character_id", "")) + "，世界=" + str(snapshot.get("world_id", "")))
+	bot_character_id = str(snapshot.get("character_id", ""))
+	welcomed = not bot_character_id.is_empty()
+	_log("世界连接成功：角色=" + bot_character_id + "，世界=" + str(snapshot.get("world_id", "")))
 
 func _on_entities_updated(entities: Array) -> void:
 	latest_entities = entities
@@ -192,7 +197,7 @@ func _run_companion_brain() -> void:
 		var entity: Dictionary = raw
 		match str(entity.get("entity_type", "")):
 			"player":
-				if str(entity.get("character_id", "")) == str(network.get("welcomed_snapshot", {}).get("character_id", "")):
+				if str(entity.get("character_id", "")) == bot_character_id:
 					self_entity = entity
 				else:
 					players.append(entity)
