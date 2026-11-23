@@ -4786,7 +4786,7 @@ func _on_combat_event(event: Dictionary) -> void:
 			selected_entity["max_health"] = int(event.get("max_health", 0))
 		monster_entities[selected_monster_id] = selected_entity
 		_update_target_info()
-	_spawn_combat_number(damage, false, bool(event.get("critical", false)))
+	_spawn_combat_number(damage, false, bool(event.get("critical", false)), health_target_id)
 	if bool(event.get("defeated", false)):
 		if str(event.get("target_entity_id", "")) == selected_monster_id:
 			_clear_monster_target()
@@ -4846,37 +4846,46 @@ func _spawn_monster_hit_visual(monster: Node3D, critical: bool) -> void:
 	tween.tween_property(material, "emission_energy_multiplier", 0.0, 0.22)
 	tween.chain().tween_callback(Callable(flash, "queue_free"))
 
-func _spawn_combat_number(amount: int, incoming: bool, critical: bool) -> void:
+func _spawn_combat_number(amount: int, incoming: bool, critical: bool, target_entity_id: String = "") -> void:
 	if amount <= 0:
 		return
 	var origin := Vector3.ZERO
 	if incoming and is_instance_valid(local_player):
 		origin = local_player.global_position + Vector3(0.0, 1.8, 0.0)
+	elif not target_entity_id.is_empty() and monsters.has(target_entity_id):
+		var hit_target := monsters[target_entity_id] as Node3D
+		if is_instance_valid(hit_target):
+			origin = hit_target.global_position + Vector3(0.0, 2.0, 0.0)
 	elif is_instance_valid(local_player):
-		var nearest_id := ""
-		var nearest_distance := INF
-		for monster_id in monster_targets.keys():
-			var target: Vector3 = monster_targets[monster_id]
-			var distance: float = local_player.global_position.distance_to(target)
-			if distance < nearest_distance:
-				nearest_distance = distance
-				nearest_id = str(monster_id)
-		if not nearest_id.is_empty() and monsters.has(nearest_id):
-			var target_node := monsters[nearest_id] as Node3D
-			origin = target_node.global_position + Vector3(0.0, 2.0, 0.0)
-		else:
-			origin = local_player.global_position + Vector3(0.0, 1.8, 0.0)
+		# Fallback only for legacy combat events that do not identify a target.
+		origin = local_player.global_position + Vector3(0.0, 1.8, 0.0)
+	# Bound transient nodes during large pulls and rapid multi-hit combat.
+	while floating_combat_labels.size() >= 24:
+		var oldest_id := ""
+		var oldest_lifetime := INF
+		for existing_id in floating_combat_lifetimes:
+			var remaining := float(floating_combat_lifetimes[existing_id])
+			if remaining < oldest_lifetime:
+				oldest_lifetime = remaining
+				oldest_id = str(existing_id)
+		if oldest_id.is_empty():
+			break
+		var oldest_label := floating_combat_labels.get(oldest_id) as Label3D
+		if is_instance_valid(oldest_label):
+			oldest_label.queue_free()
+		floating_combat_labels.erase(oldest_id)
+		floating_combat_lifetimes.erase(oldest_id)
 	var label := Label3D.new()
 	label.name = "CombatDamageNumber"
-	label.text = ("受击 -" if incoming else ("暴击 +" if critical else "+")) + str(amount)
+	label.text = ("受击 " if incoming else ("暴击 " if critical else "")) + str(amount)
 	label.font_size = 42 if critical else 32
 	label.outline_size = 8
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.no_depth_test = true
 	label.modulate = Color("#ff6262") if incoming else (Color("#ffe08a") if critical else Color("#fff1d0"))
-	label.position = origin
 	label.pixel_size = 0.01
 	add_child(label)
+	label.global_position = origin
 	var label_id := str(label.get_instance_id())
 	floating_combat_labels[label_id] = label
 	floating_combat_lifetimes[label_id] = 1.0 if critical else 0.82
