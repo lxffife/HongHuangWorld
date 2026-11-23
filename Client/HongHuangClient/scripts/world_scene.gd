@@ -33,6 +33,10 @@ var respawn_http: HTTPRequest
 var respawn_button: Button
 var respawn_busy := false
 var progression_http: HTTPRequest
+var wallet_http: HTTPRequest
+var wallet_request_busy := false
+var wallet_label: Label
+var wallet_refresh_timer: Timer
 var soul_essence_http: HTTPRequest
 var soul_essence_profile: Dictionary = {}
 var soul_essence_request_busy := false
@@ -294,6 +298,16 @@ func _ready() -> void:
 	progression_http.timeout = 10.0
 	add_child(progression_http)
 	progression_http.request_completed.connect(_on_progression_request_completed)
+	wallet_http = HTTPRequest.new()
+	wallet_http.timeout = 8.0
+	add_child(wallet_http)
+	wallet_http.request_completed.connect(_on_wallet_request_completed)
+	wallet_refresh_timer = Timer.new()
+	wallet_refresh_timer.wait_time = 15.0
+	wallet_refresh_timer.timeout.connect(_request_wallet)
+	add_child(wallet_refresh_timer)
+	wallet_refresh_timer.start()
+	_request_wallet()
 	soul_essence_http = HTTPRequest.new()
 	soul_essence_http.timeout = 10.0
 	add_child(soul_essence_http)
@@ -1069,7 +1083,7 @@ func _build_combat_hud() -> void:
 	vitals_panel = PanelContainer.new()
 	vitals_panel.position = Vector2(18.0, -104.0)
 	vitals_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	vitals_panel.custom_minimum_size = Vector2(320.0, 176.0)
+	vitals_panel.custom_minimum_size = Vector2(320.0, 196.0)
 	var vitals_style := StyleBoxFlat.new()
 	vitals_style.bg_color = Color("#0c1724", 0.94)
 	vitals_style.border_color = Color("#3b5368")
@@ -1084,6 +1098,11 @@ func _build_combat_hud() -> void:
 	var vitals_layout := VBoxContainer.new()
 	vitals_layout.add_theme_constant_override("separation", 6)
 	vitals_panel.add_child(vitals_layout)
+	wallet_label = Label.new()
+	wallet_label.text = "钱袋  冥币 --  ·  冥石 --"
+	wallet_label.add_theme_color_override("font_color", Color("#e5c98d"))
+	wallet_label.add_theme_font_size_override("font_size", 12)
+	vitals_layout.add_child(wallet_label)
 	health_label = Label.new()
 	health_label.text = "生命  ·  等待服务端战斗状态"
 	health_label.add_theme_color_override("font_color", Color("#f0c4b8"))
@@ -4963,8 +4982,49 @@ func _update_floating_combat_labels(delta: float) -> void:
 			floating_combat_labels.erase(label_id)
 			floating_combat_lifetimes.erase(label_id)
 
+func _request_wallet() -> void:
+	if wallet_http == null or wallet_request_busy or HHSession.access_token.is_empty():
+		return
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token])
+	var error := wallet_http.request(HHSession.api_base + "/api/v1/economy/wallet", headers, HTTPClient.METHOD_GET)
+	if error == OK:
+		wallet_request_busy = true
+	else:
+		push_warning("[Wallet] 钱包请求未发送，错误码：" + str(error))
+
+
+func _on_wallet_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	wallet_request_busy = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		if is_instance_valid(wallet_label):
+			wallet_label.text = "钱袋  余额同步中……"
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if not parsed is Dictionary or not parsed.get("balances", []) is Array:
+		push_warning("[Wallet] 钱包响应格式异常")
+		return
+	var ghost_cash := 0
+	var nether_stone := 0
+	for entry_variant in parsed.get("balances", []):
+		if not entry_variant is Dictionary:
+			continue
+		var entry: Dictionary = entry_variant
+		var currency_variant: Variant = entry.get("currency", {})
+		if not currency_variant is Dictionary:
+			continue
+		var currency: Dictionary = currency_variant
+		match str(currency.get("id", "")):
+			"ghost_cash":
+				ghost_cash = int(entry.get("available", 0))
+			"nether_stone":
+				nether_stone = int(entry.get("available", 0))
+	if is_instance_valid(wallet_label):
+		wallet_label.text = "钱袋  冥币 %s  ·  冥石 %s" % [str(ghost_cash), str(nether_stone)]
+
+
 func _refresh_reward_status_later() -> void:
 	await get_tree().create_timer(2.0).timeout
+	_request_wallet()
 	if str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu":
 		_request_soul_essence()
 	if progression_request_context.is_empty():
