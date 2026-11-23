@@ -79,7 +79,7 @@ var health_bar: ProgressBar
 var mana_bar: ProgressBar
 var spell_cooldown_labels: Dictionary = {}
 var spell_mastery_labels: Dictionary = {}
-var spell_cooldown_remaining: Dictionary = {"fireball": 0.0, "ice_bolt": 0.0, "taunt": 0.0, "revive": 0.0, "life_mend": 0.0, "guardian_aegis": 0.0}
+var spell_cooldown_remaining: Dictionary = {"fireball": 0.0, "ice_bolt": 0.0, "taunt": 0.0, "revive": 0.0, "life_mend": 0.0, "guardian_aegis": 0.0, "purify": 0.0}
 var shield_status_label: Label
 var shield_remaining := 0.0
 var shield_amount := 0
@@ -1027,6 +1027,12 @@ func _build_combat_hud() -> void:
 	aegis_label.add_theme_font_size_override("font_size", 11)
 	spell_cooldown_labels["guardian_aegis"] = aegis_label
 	vitals_layout.add_child(aegis_label)
+	var purify_label := Label.new()
+	purify_label.text = "H · 净化术：就绪"
+	purify_label.add_theme_color_override("font_color", Color("#c5b6e8"))
+	purify_label.add_theme_font_size_override("font_size", 11)
+	spell_cooldown_labels["purify"] = purify_label
+	vitals_layout.add_child(purify_label)
 	shield_status_label = Label.new()
 	shield_status_label.text = ""
 	shield_status_label.add_theme_color_override("font_color", Color("#9bc9ed"))
@@ -1975,6 +1981,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.keycode == KEY_G:
 		_request_support_spell("guardian_aegis")
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_H:
+		_request_purify_self()
 		get_viewport().set_input_as_handled()
 		return
 	if event.keycode == KEY_C:
@@ -3437,8 +3447,8 @@ func _update_spell_cooldown_hud() -> void:
 		var label := spell_cooldown_labels[spell_id] as Label
 		if not is_instance_valid(label):
 			continue
-		var spell_key := "U" if spell_id == "life_mend" else ("G" if spell_id == "guardian_aegis" else ("Y" if spell_id == "revive" else ("Q" if spell_id == "fireball" else ("R" if spell_id == "ice_bolt" else "T"))))
-		var spell_name := "回春术" if spell_id == "life_mend" else ("守护灵盾" if spell_id == "guardian_aegis" else ("回魂术" if spell_id == "revive" else ("火球术" if spell_id == "fireball" else ("冰锥术" if spell_id == "ice_bolt" else "嘲讽"))))
+		var spell_key := "U" if spell_id == "life_mend" else ("G" if spell_id == "guardian_aegis" else ("H" if spell_id == "purify" else ("Y" if spell_id == "revive" else ("Q" if spell_id == "fireball" else ("R" if spell_id == "ice_bolt" else "T")))))
+		var spell_name := "回春术" if spell_id == "life_mend" else ("守护灵盾" if spell_id == "guardian_aegis" else ("净化术" if spell_id == "purify" else ("回魂术" if spell_id == "revive" else ("火球术" if spell_id == "fireball" else ("冰锥术" if spell_id == "ice_bolt" else "嘲讽")))))
 		var remaining := float(spell_cooldown_remaining.get(spell_id, 0.0))
 		label.text = spell_key + " · " + spell_name + "：冷却 " + ("%.1f" % remaining) + " 秒" if remaining > 0.0 else spell_key + " · " + spell_name + "：就绪"
 
@@ -3520,6 +3530,18 @@ func _request_support_spell(spell_id: String) -> void:
 	var error: Error = network.send_spell_cast(spell_id, target_id)
 	if error != OK:
 		_show_notification("辅助法术请求发送失败：" + str(error))
+
+func _request_purify_self() -> void:
+	var network := HHSession.world_network
+	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
+		return
+	var character_id := str(HHSession.world_snapshot.get("character_id", ""))
+	if character_id.is_empty():
+		return
+	var error: Error = network.send_spell_cast("purify", character_id)
+	if error != OK:
+		_show_notification("净化术请求发送失败：" + str(error))
+
 
 func _request_revive_nearest() -> void:
 	var network := HHSession.world_network
@@ -3845,6 +3867,15 @@ func _update_spell_mastery_hud() -> void:
 
 
 func _on_combat_event(event: Dictionary) -> void:
+	if str(event.get("action", "")) == "player_cleansed":
+		var cleansed_id := str(event.get("character_id", ""))
+		if cleansed_id == str(HHSession.world_snapshot.get("character_id", "")):
+			player_slow_visual_remaining = 0.0
+			player_poison_visual_remaining = 0.0
+			_set_player_slow_visual(false)
+			_set_player_poison_visual(local_player, false)
+		_show_notification(str(event.get("source_name", "净化术")) + " 净化了你的异常状态（" + str(int(event.get("cleansed_effects", 0))) + " 项）。", 3.0)
+		return
 	if str(event.get("action", "")) == "threat_warning":
 		var monster_name := str(event.get("monster_name", "怪物"))
 		var current_name := str(event.get("current_target_name", "当前目标"))
@@ -4012,13 +4043,13 @@ func _on_combat_event(event: Dictionary) -> void:
 			mana_label.text = "灵力  " + str(int(HHSession.world_snapshot.get("mana", 0))) + " / " + str(int(HHSession.world_snapshot.get("max_mana", 0)))
 		_update_compact_hud()
 		var spell_id := str(event.get("spell_id", ""))
-		var spell_name := "回春术" if spell_id == "life_mend" else ("守护灵盾" if spell_id == "guardian_aegis" else ("回魂术" if spell_id == "revive" else ("嘲讽" if spell_id == "taunt" else ("冰锥术" if spell_id == "ice_bolt" else ("火球术" if spell_id == "fireball" else "法术")))))
+		var spell_name := "回春术" if spell_id == "life_mend" else ("守护灵盾" if spell_id == "guardian_aegis" else ("净化术" if spell_id == "purify" else ("回魂术" if spell_id == "revive" else ("嘲讽" if spell_id == "taunt" else ("冰锥术" if spell_id == "ice_bolt" else ("火球术" if spell_id == "fireball" else "法术"))))))
 		# Mirror the server: cooldown starts on successful release, not when
 		# the cast begins. An interrupted cast refunds mana and remains ready.
 		if bool(event.get("accepted", false)) and str(event.get("phase", "")) in ["released", "channeling"] and spell_cooldown_remaining.has(spell_id):
 			spell_cooldown_remaining[spell_id] = maxf(float(event.get("cooldown_ms", 0)) / 1000.0, 0.0)
 			_update_spell_cooldown_hud()
-		elif not bool(event.get("accepted", false)) and spell_id in ["taunt", "revive", "life_mend", "guardian_aegis"] and int(event.get("cooldown_ms", 0)) > 0:
+		elif not bool(event.get("accepted", false)) and spell_id in ["taunt", "revive", "life_mend", "guardian_aegis", "purify"] and int(event.get("cooldown_ms", 0)) > 0:
 			# The server returns remaining cooldown on a rejected recast.
 			spell_cooldown_remaining[spell_id] = float(event.get("cooldown_ms", 0)) / 1000.0
 			_update_spell_cooldown_hud()
