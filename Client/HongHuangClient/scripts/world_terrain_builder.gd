@@ -3,7 +3,9 @@ extends RefCounted
 const UnderworldVisualFactory = preload("res://scripts/underworld_visual_factory.gd")
 const QingyunVisualFactory = preload("res://scripts/qingyun_visual_factory.gd")
 const WorldChunkStreamerScript = preload("res://scripts/world_chunk_streamer.gd")
+const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
 const FengduCityBuilder = preload("res://scripts/fengdu_city_builder.gd")
+const HellFloorBuilder = preload("res://scripts/underworld_hell_floor_builder.gd")
 
 ## Builds the static visual and collision layer for a world.
 ## Kept independent from WorldScene so the same region layout can later be
@@ -12,6 +14,7 @@ static func build(world_id: String) -> Node3D:
 	var root := Node3D.new()
 	root.name = "WorldTerrain"
 	var is_underworld := world_id == "underworld_fengdu"
+	var is_hell_floor := world_id.begins_with("underworld_hell_")
 	var streamer := Node3D.new()
 	streamer.name = "ChunkStreamer"
 	streamer.set_script(WorldChunkStreamerScript)
@@ -73,6 +76,8 @@ static func build(world_id: String) -> Node3D:
 			_add_world_box(root, "BridgePostR_" + str(i), Vector3(0.32, 1.2, 0.32), Vector3(x, 1.55, 3.55), Color("#aaa0ae"))
 		_add_world_landmark_label(root, "NaiheBridgeName", "奈何桥", Vector3(22.0, 3.1, 2.0), Color("#b8c9e8"))
 
+	elif is_hell_floor:
+		root.add_child(HellFloorBuilder.build(WorldMapCatalog.resolve_hell_floor_number(world_id)))
 	else:
 		# Qingyun mountain gate, sect hall, stone path and layered pine silhouettes.
 		root.add_child(QingyunVisualFactory.create_mountain_gate())
