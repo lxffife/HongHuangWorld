@@ -1388,16 +1388,26 @@ func _update_compact_hud(progression: Dictionary = {}) -> void:
 			progress_parts.append(str(attribute_labels.get(attribute, attribute)) + "+" + str(applied) + " " + milestone_text)
 		if not progress_parts.is_empty():
 			lines.append("来世资质 · " + "  ".join(PackedStringArray(progress_parts)))
-		compact_hud_panel.custom_minimum_size = Vector2(460.0, 160.0)
-		compact_hud_label.custom_minimum_size = Vector2(436.0, 140.0)
+		# Underworld cards contain combat, soul-growth and attribute progress.
+		# Reserve enough vertical room so wrapped Chinese lines are never clipped.
+		compact_hud_panel.custom_minimum_size = Vector2(460.0, 240.0)
+		compact_hud_label.custom_minimum_size = Vector2(436.0, 220.0)
+		compact_hud_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		compact_hud_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		compact_hud_label.clip_text = false
+		compact_hud_label.max_lines_visible = -1
 		var pending_choices: Array = soul_essence_profile.get("pending_rare_choices", [])
 		if is_instance_valid(soul_choice_button):
 			soul_choice_button.visible = not pending_choices.is_empty()
 			if not pending_choices.is_empty():
 				soul_choice_button.text = "分配无相灵魄 · " + str(pending_choices.size())
 	else:
-		compact_hud_panel.custom_minimum_size = Vector2(460.0, 160.0)
-		compact_hud_label.custom_minimum_size = Vector2(436.0, 140.0)
+		compact_hud_panel.custom_minimum_size = Vector2(460.0, 190.0)
+		compact_hud_label.custom_minimum_size = Vector2(436.0, 170.0)
+		compact_hud_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		compact_hud_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		compact_hud_label.clip_text = false
+		compact_hud_label.max_lines_visible = -1
 	compact_hud_label.text = "\n".join(PackedStringArray(lines))
 	# The character card can be wider on large monitors but must never keep its
 	# original 460px label width on a narrower viewport.
