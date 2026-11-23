@@ -105,19 +105,33 @@ func (s *Service) ApplyDelta(ctx context.Context, accountID, currencyID, eventKe
 	if err != nil { return LedgerResult{}, fmt.Errorf("begin economy ledger transaction: %w", err) }
 	defer tx.Rollback()
 
+	result, err := s.ApplyDeltaInTx(ctx, tx, accountID, currencyID, eventKey, entryType, delta, sourceType, sourceID, note)
+	if err != nil { return LedgerResult{}, err }
+	if err := tx.Commit(); err != nil { return LedgerResult{}, fmt.Errorf("commit economy ledger transaction: %w", err) }
+	return result, nil
+}
+
+// ApplyDeltaInTx applies the same authoritative wallet and immutable-ledger
+// mutation inside a caller-owned transaction. It lets purchases grant items and
+// debit currency atomically without creating a second balance-writing path.
+func (s *Service) ApplyDeltaInTx(ctx context.Context, tx *sql.Tx, accountID, currencyID, eventKey, entryType string, delta int64, sourceType, sourceID, note string) (LedgerResult, error) {
+	if tx == nil || !validDeltaRequest(accountID, currencyID, eventKey, entryType, delta) {
+		return LedgerResult{}, ErrInvalidRequest
+	}
 	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, accountID); err != nil {
 		return LedgerResult{}, fmt.Errorf("lock economy account scope: %w", err)
 	}
 
 	var existing LedgerResult
 	var existingType string
-	err = tx.QueryRowContext(ctx, `SELECT currency_id, entry_type, delta, available_after, frozen_after
+	err := tx.QueryRowContext(ctx, `SELECT currency_id, entry_type, delta, available_after, frozen_after
 		FROM economy_ledger_entries WHERE account_id = $1 AND event_key = $2`, accountID, eventKey).
 		Scan(&existing.CurrencyID, &existingType, &existing.Delta, &existing.AvailableAfter, &existing.FrozenAfter)
 	if err == nil {
-		if existing.CurrencyID != currencyID || existing.Delta != delta || existingType != entryType { return LedgerResult{}, ErrIdempotencyConflict }
+		if existing.CurrencyID != currencyID || existing.Delta != delta || existingType != entryType {
+			return LedgerResult{}, ErrIdempotencyConflict
+		}
 		existing.Applied = false
-		if err := tx.Commit(); err != nil { return LedgerResult{}, fmt.Errorf("commit recovered economy event: %w", err) }
 		return existing, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) { return LedgerResult{}, fmt.Errorf("check economy idempotency key: %w", err) }
@@ -152,7 +166,6 @@ func (s *Service) ApplyDelta(ctx context.Context, accountID, currencyID, eventKe
 		accountID, currencyID, eventKey, entryType, delta, available, frozen, sourceType, sourceID, note); err != nil {
 		return LedgerResult{}, fmt.Errorf("append immutable economy ledger entry: %w", err)
 	}
-	if err := tx.Commit(); err != nil { return LedgerResult{}, fmt.Errorf("commit economy ledger transaction: %w", err) }
 	return result, nil
 }
 
@@ -164,6 +177,8 @@ func validDeltaRequest(accountID, currencyID, eventKey, entryType string, delta 
 		return delta > 0
 	case "spend", "cultivation", "craft":
 		return delta < 0
+	case "trade":
+		return true
 	case "system_adjustment":
 		return true
 	default:
