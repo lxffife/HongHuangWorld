@@ -89,24 +89,24 @@ const UNDERWORLD_ATLAS := {
 			"access": "审判、任务与封印入口",
 			"description": "独立的多层地下空间，兼具罪魂刑罚、危险存在镇压与远古封印剧情。层级名称参考民间传说并作游戏化整理，不同地方志与民俗版本可能有异；阿鼻无间为本作最深层核心禁区。",
 			"layers": [
-				{"floor": 1, "id": "hell_1", "name": "拔舌地狱", "theme": "妄语、诽谤与恶意造谣", "guardian": "拔舌判官", "danger_level": 2},
-				{"floor": 2, "id": "hell_2", "name": "剪刀地狱", "theme": "挑拨离间、破坏盟约与姻缘", "guardian": "剪缘鬼将", "danger_level": 2},
-				{"floor": 3, "id": "hell_3", "name": "铁树地狱", "theme": "背信弃义、构陷无辜", "guardian": "铁树守狱使", "danger_level": 3},
-				{"floor": 4, "id": "hell_4", "name": "孽镜地狱", "theme": "照见隐罪、核验因果真相", "guardian": "孽镜司主", "danger_level": 3},
-				{"floor": 5, "id": "hell_5", "name": "蒸笼地狱", "theme": "散布谣言、伪证害人", "guardian": "蒸笼狱卒长", "danger_level": 4},
-				{"floor": 6, "id": "hell_6", "name": "铜柱地狱", "theme": "纵火、酷刑与暴虐", "guardian": "铜柱刑官", "danger_level": 4},
-				{"floor": 7, "id": "hell_7", "name": "刀山地狱", "theme": "杀伐残害、兵灾血债", "guardian": "刀山巡狱将", "danger_level": 5},
-				{"floor": 8, "id": "hell_8", "name": "冰山地狱", "theme": "忘恩负义、冷酷背弃", "guardian": "冰山女狱吏", "danger_level": 5},
-				{"floor": 9, "id": "hell_9", "name": "油锅地狱", "theme": "贪婪强夺、以权谋私", "guardian": "油锅狱主", "danger_level": 6},
-				{"floor": 10, "id": "hell_10", "name": "牛坑地狱", "theme": "虐待生灵、残害牲畜", "guardian": "牛坑监狱官", "danger_level": 6},
-				{"floor": 11, "id": "hell_11", "name": "石压地狱", "theme": "欺压弱小、恃强凌弱", "guardian": "石压力士", "danger_level": 7},
-				{"floor": 12, "id": "hell_12", "name": "舂臼地狱", "theme": "侵夺粮道、断人生计", "guardian": "舂臼刑使", "danger_level": 7},
-				{"floor": 13, "id": "hell_13", "name": "血池地狱", "theme": "屠戮无辜、累积血债", "guardian": "血池夜叉统领", "danger_level": 8},
-				{"floor": 14, "id": "hell_14", "name": "枉死地狱", "theme": "含冤亡魂复核、怨念平息与错案追查", "guardian": "枉死城主", "danger_level": 6},
-				{"floor": 15, "id": "hell_15", "name": "磔刑地狱", "theme": "背盟叛义、残害同袍", "guardian": "磔刑鬼将", "danger_level": 8},
-				{"floor": 16, "id": "hell_16", "name": "火山地狱", "theme": "焚城灭门、重大恶业", "guardian": "火山狱君", "danger_level": 9},
-				{"floor": 17, "id": "hell_17", "name": "石磨地狱", "theme": "盘剥众生、吞并与榨取", "guardian": "石磨鬼王", "danger_level": 9},
-				{"floor": 18, "id": "hell_18", "name": "阿鼻无间地狱", "theme": "极重罪业与上古邪物封镇", "guardian": "无间狱主", "danger_level": 10}
+				{"floor": 1, "id": "hell_1", "name": "拔舌地狱", "theme": "妄语、诽谤与恶意造谣", "guardian": "拔舌判官", "danger_level": 2, "environment": "echo_tongue", "hazard": "回声判词阵", "objective": "找出三份互相矛盾的证词", "guardian_role": "拔舌判官", "reward_theme": "辨伪魂识"},
+				{"floor": 2, "id": "hell_2", "name": "剪刀地狱", "theme": "挑拨离间、破坏盟约与姻缘", "guardian": "剪缘鬼将", "danger_level": 2, "environment": "severed_fate", "hazard": "断缘剪影", "objective": "修复被剪断的因果线", "guardian_role": "剪缘鬼将", "reward_theme": "因果丝线"},
+				{"floor": 3, "id": "hell_3", "name": "铁树地狱", "theme": "背信弃义、构陷无辜", "guardian": "铁树守狱使", "danger_level": 3, "environment": "iron_tree_grove", "hazard": "倒刺铁枝", "objective": "穿越铁树刑阵并解救被困亡魂", "guardian_role": "铁树守狱使", "reward_theme": "铁木灵材"},
+				{"floor": 4, "id": "hell_4", "name": "孽镜地狱", "theme": "照见隐罪、核验因果真相", "guardian": "孽镜司主", "danger_level": 3, "environment": "mirror_court", "hazard": "孽镜幻象", "objective": "辨认镜中伪造记忆", "guardian_role": "孽镜司主", "reward_theme": "因果镜片"},
+				{"floor": 5, "id": "hell_5", "name": "蒸笼地狱", "theme": "散布谣言、伪证害人", "guardian": "蒸笼狱卒长", "danger_level": 4, "environment": "steam_furnace", "hazard": "蒸汽喷口", "objective": "关闭三座伪证蒸笼", "guardian_role": "蒸笼狱卒长", "reward_theme": "地火晶"},
+				{"floor": 6, "id": "hell_6", "name": "铜柱地狱", "theme": "纵火、酷刑与暴虐", "guardian": "铜柱刑官", "danger_level": 4, "environment": "bronze_pillar", "hazard": "炽热铜柱", "objective": "熄灭刑场阵眼", "guardian_role": "铜柱刑官", "reward_theme": "赤铜精"},
+				{"floor": 7, "id": "hell_7", "name": "刀山地狱", "theme": "杀伐残害、兵灾血债", "guardian": "刀山巡狱将", "danger_level": 5, "environment": "blade_mountain", "hazard": "巡回刀刃", "objective": "沿安全节奏穿越刀山", "guardian_role": "刀山巡狱将", "reward_theme": "兵煞碎片"},
+				{"floor": 8, "id": "hell_8", "name": "冰山地狱", "theme": "忘恩负义、冷酷背弃", "guardian": "冰山女狱吏", "danger_level": 5, "environment": "frozen_peak", "hazard": "寒霜风暴", "objective": "激活暖魂阵并救回冻魂", "guardian_role": "冰山女狱吏", "reward_theme": "寒魄晶"},
+				{"floor": 9, "id": "hell_9", "name": "油锅地狱", "theme": "贪婪强夺、以权谋私", "guardian": "油锅狱主", "danger_level": 6, "environment": "oil_cauldron", "hazard": "沸油喷涌", "objective": "关闭油锅阀门", "guardian_role": "油锅狱主", "reward_theme": "地火油髓"},
+				{"floor": 10, "id": "hell_10", "name": "牛坑地狱", "theme": "虐待生灵、残害牲畜", "guardian": "牛坑监狱官", "danger_level": 6, "environment": "ox_pit", "hazard": "冲撞兽魂", "objective": "驯服或击退失控牛魂", "guardian_role": "牛坑监狱官", "reward_theme": "兽魂骨片"},
+				{"floor": 11, "id": "hell_11", "name": "石压地狱", "theme": "欺压弱小、恃强凌弱", "guardian": "石压力士", "danger_level": 7, "environment": "stone_press", "hazard": "巨石碾压", "objective": "通过移动石阵", "guardian_role": "石压力士", "reward_theme": "山岳石髓"},
+				{"floor": 12, "id": "hell_12", "name": "舂臼地狱", "theme": "侵夺粮道、断人生计", "guardian": "舂臼刑使", "danger_level": 7, "environment": "mortar_pit", "hazard": "周期性落臼", "objective": "破坏舂臼机关", "guardian_role": "舂臼刑使", "reward_theme": "玄铁砂"},
+				{"floor": 13, "id": "hell_13", "name": "血池地狱", "theme": "屠戮无辜、累积血债", "guardian": "血池夜叉统领", "danger_level": 8, "environment": "blood_pool", "hazard": "血潮涨落", "objective": "净化血池核心", "guardian_role": "血池夜叉统领", "reward_theme": "血煞结晶"},
+				{"floor": 14, "id": "hell_14", "name": "枉死地狱", "theme": "含冤亡魂复核、怨念平息与错案追查", "guardian": "枉死城主", "danger_level": 6, "environment": "wrongful_death_city", "hazard": "怨念迷雾", "objective": "查明冤案并释放亡魂", "guardian_role": "枉死城主", "reward_theme": "清明功德"},
+				{"floor": 15, "id": "hell_15", "name": "磔刑地狱", "theme": "背盟叛义、残害同袍", "guardian": "磔刑鬼将", "danger_level": 8, "environment": "dismemberment", "hazard": "裂解锁链", "objective": "打断刑阵锁链", "guardian_role": "磔刑鬼将", "reward_theme": "幽冥锁链"},
+				{"floor": 16, "id": "hell_16", "name": "火山地狱", "theme": "焚城灭门、重大恶业", "guardian": "火山狱君", "danger_level": 9, "environment": "volcano", "hazard": "熔岩裂隙", "objective": "关闭三处熔岩喷口", "guardian_role": "火山狱君", "reward_theme": "熔火精魄"},
+				{"floor": 17, "id": "hell_17", "name": "石磨地狱", "theme": "盘剥众生、吞并与榨取", "guardian": "石磨鬼王", "danger_level": 9, "environment": "grinding_stone", "hazard": "巨磨碾压", "objective": "摧毁巨磨阵眼", "guardian_role": "石磨鬼王", "reward_theme": "地脉石心"},
+				{"floor": 18, "id": "hell_18", "name": "阿鼻无间地狱", "theme": "极重罪业与上古邪物封镇", "guardian": "无间狱主", "danger_level": 10, "environment": "abyss", "hazard": "无间业火", "objective": "封镇上古邪物", "guardian_role": "无间狱主", "reward_theme": "无间本源碎片"}
 			]
 		},
 		{
@@ -222,12 +222,30 @@ static func get_eighteen_hell_layers() -> Array:
 	return layers.duplicate(true)
 
 
+static func get_hell_floor_data(floor_number: int) -> Dictionary:
+	if floor_number < 1 or floor_number > 18:
+		return {}
+	var layers := get_eighteen_hell_layers()
+	return layers[floor_number - 1] if floor_number <= layers.size() else {}
+
+
+static func resolve_hell_floor_number(world_id: String) -> int:
+	if not world_id.begins_with("underworld_hell_"):
+		return 0
+	var suffix := world_id.trim_prefix("underworld_hell_")
+	if not suffix.is_valid_int():
+		return 0
+	return clampi(int(suffix), 1, 18)
+
+
 static func get_world_bounds(world_id: String) -> Vector4:
 	# Must match WorldServer's integrate_horizontal default clamp.
 	return Vector4(-100.0, 100.0, -100.0, 100.0)
 
 
 static func get_regions(world_id: String) -> Array:
+	if resolve_hell_floor_number(world_id) > 0:
+		return [{"id": "hell_trial_arena", "name": "刑狱试炼场", "priority": 1, "bounds": [[-30.0, 30.0, -30.0, 30.0]]}]
 	match world_id:
 		"underworld_fengdu":
 			return FENGDU_REGIONS.duplicate(true)
@@ -288,6 +306,9 @@ static func get_prototype_definition(world_id: String) -> Dictionary:
 
 
 static func resolve_region_name(world_id: String, position: Vector3) -> String:
+	var hell_floor := resolve_hell_floor_number(world_id)
+	if hell_floor > 0:
+		return "十八层地狱 · 第 %02d 层" % hell_floor
 	var regions := get_regions(world_id)
 	for region in regions:
 		for bounds in region["bounds"]:
