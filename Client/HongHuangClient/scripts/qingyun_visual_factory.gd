@@ -70,7 +70,7 @@ static func create_mountain_gate() -> StaticBody3D:
 	_box(root, "GateFoundation", Vector3(15.0, 0.48, 4.2), Vector3(0.0, 0.24, -22.0), Color("#555e58"))
 	_box(root, "FoundationTrim", Vector3(13.6, 0.18, 4.5), Vector3(0.0, 0.56, -22.0), pale_stone)
 	for side in [-1.0, 1.0]:
-		var x := side * 5.1
+		var x: float = float(side) * 5.1
 		_cylinder(root, "GatePillar_" + str(side), 0.43, 0.62, 6.2, Vector3(x, 3.7, -22.0), stone, 14)
 		_box(root, "PillarFoot_" + str(side), Vector3(1.55, 0.52, 1.55), Vector3(x, 0.92, -22.0), pale_stone)
 		_box(root, "PillarCapital_" + str(side), Vector3(1.55, 0.42, 1.55), Vector3(x, 6.72, -22.0), pale_stone)
