@@ -1131,13 +1131,15 @@ func _build_combat_hud() -> void:
 	_update_spell_mastery_hud()
 	notification_panel = PanelContainer.new()
 	notification_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	notification_panel.position = Vector2(-220.0, 96.0)
-	notification_panel.custom_minimum_size = Vector2(440.0, 48.0)
+	notification_panel.position = Vector2(-260.0, 96.0)
+	notification_panel.custom_minimum_size = Vector2(520.0, 72.0)
 	notification_panel.visible = false
 	_apply_panel_theme(notification_panel)
 	hud.add_child(notification_panel)
 	notification_label = Label.new()
+	notification_label.custom_minimum_size = Vector2(480.0, 48.0)
 	notification_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	notification_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	notification_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	notification_label.add_theme_color_override("font_color", Color("#f2e8d6"))
 	notification_label.add_theme_font_size_override("font_size", 14)
@@ -3506,10 +3508,14 @@ func _update_target_info() -> void:
 	var entity: Dictionary = monster_entities.get(selected_monster_id, {})
 	var title := str(entity.get("name", "怪物")) + "  ·  Lv." + str(int(entity.get("level", 1)))
 	var hp_line := "目标已锁定"
+	if is_instance_valid(local_player) and monster_targets.has(selected_monster_id):
+		var target_position: Vector3 = monster_targets[selected_monster_id]
+		var target_distance := local_player.global_position.distance_to(target_position)
+		hp_line = "距离 %.1f m" % target_distance
 	if entity.has("health") and entity.has("max_health"):
 		var current_hp := maxi(0, int(entity.get("health", 0)))
 		var maximum_hp := maxi(1, int(entity.get("max_health", 1)))
-		hp_line = "生命  " + str(current_hp) + " / " + str(maximum_hp) + "    ·    Tab 切换目标"
+		hp_line += "    ·    生命 " + str(current_hp) + " / " + str(maximum_hp) + "    ·    Tab 切换目标"
 		if is_instance_valid(target_health_bar):
 			target_health_bar.max_value = maximum_hp
 			target_health_bar.value = clampi(current_hp, 0, maximum_hp)
@@ -3521,46 +3527,78 @@ func _update_target_info() -> void:
 	target_info_label.text = title + "\n" + hp_line
 	target_info_panel.visible = hud_visible
 
-func _request_nearest_monster_attack() -> void:
+func _pick_monster_target_at_screen_position(screen_position: Vector2) -> String:
+	if not is_instance_valid(local_player):
+		return ""
+	var player_camera := local_player.get("camera") as Camera3D
+	if not is_instance_valid(player_camera) or not player_camera.is_inside_tree():
+		return ""
+	var viewport_size := get_viewport().get_visible_rect().size
+	var pick_position := screen_position
+	if pick_position.x < 0.0 or pick_position.y < 0.0:
+		pick_position = viewport_size * 0.5
+	var best_id := ""
+	var best_score := INF
+	# Screen-space picking works with the current visual-only monster rigs:
+	# it does not depend on invisible physics collision shapes being present.
+	for monster_id_variant in monster_targets.keys():
+		var monster_id := str(monster_id_variant)
+		if not monsters.has(monster_id):
+			continue
+		var monster_node := monsters[monster_id] as Node3D
+		if not is_instance_valid(monster_node) or not monster_node.is_visible_in_tree():
+			continue
+		var world_position: Vector3 = monster_targets[monster_id]
+		var aim_position := world_position + Vector3.UP * 1.05
+		if player_camera.is_position_behind(aim_position):
+			continue
+		var screen_point := player_camera.unproject_position(aim_position)
+		if screen_point.x < 0.0 or screen_point.y < 0.0 or screen_point.x > viewport_size.x or screen_point.y > viewport_size.y:
+			continue
+		var pixel_distance := screen_point.distance_to(pick_position)
+		if pixel_distance > 118.0:
+			continue
+		var world_distance := local_player.global_position.distance_to(world_position)
+		if world_distance > 60.0:
+			continue
+		# Prefer the object closest to the click/reticle, then the nearer one.
+		var score := pixel_distance + world_distance * 0.12
+		if score < best_score:
+			best_score = score
+			best_id = monster_id
+	return best_id
+
+func _request_nearest_monster_attack(screen_position: Vector2 = Vector2(-1.0, -1.0)) -> void:
 	var network := HHSession.world_network
 	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
 		_show_notification("战斗连接尚未就绪，无法攻击。")
 		return
 
-	# Prefer the selected target only while it still exists and is nearby.
-	# Otherwise automatically fall back to the nearest replicated monster.
-	var nearest_id := ""
-	var nearest_distance := 22.0
-	if monsters.has(selected_monster_id) and monster_targets.has(selected_monster_id):
-		var selected_position: Vector3 = monster_targets[selected_monster_id]
-		var selected_distance := Vector2(local_player.global_position.x, local_player.global_position.z).distance_to(Vector2(selected_position.x, selected_position.z))
-		if selected_distance <= nearest_distance:
-			nearest_id = selected_monster_id
-			nearest_distance = selected_distance
-	for monster_id in monster_targets:
-		if not monsters.has(monster_id):
-			continue
-		var target: Vector3 = monster_targets[monster_id]
-		var distance := Vector2(local_player.global_position.x, local_player.global_position.z).distance_to(Vector2(target.x, target.z))
-		if distance < nearest_distance:
-			nearest_distance = distance
-			nearest_id = str(monster_id)
-	if nearest_id.is_empty():
-		hud_label.text = "附近没有可攻击的怪物。"
-		_show_notification("附近没有可攻击的怪物，请靠近目标。")
+	# Click/reticle selection takes priority. If the click did not land on a
+	# visible monster, retain the current target rather than attacking a random
+	# nearby creature behind the player's camera.
+	var picked_id := _pick_monster_target_at_screen_position(screen_position)
+	if not picked_id.is_empty():
+		_set_monster_target(picked_id)
+	var target_id := picked_id
+	if target_id.is_empty() and monsters.has(selected_monster_id) and monster_targets.has(selected_monster_id):
+		target_id = selected_monster_id
+	if target_id.is_empty():
+		_show_notification("未选中怪物：请将屏幕中心对准怪物，再点击左键；按 Tab 可切换目标。", 4.0)
 		return
 
-	var error: Error = network.send_attack(nearest_id)
+	var target_position: Vector3 = monster_targets[target_id]
+	var target_distance := local_player.global_position.distance_to(target_position)
+	var error: Error = network.send_attack(target_id)
 	if error != OK:
 		hud_label.text = "攻击指令发送失败：" + str(error)
 		_show_notification("攻击指令发送失败：" + str(error))
 		return
-	# Local animation confirms the click; damage and hit confirmation remain
-	# authoritative on WorldServer. The server will return a reason if out of range.
 	if local_player.has_method("play_attack_animation"):
 		local_player.call("play_attack_animation")
-	var target_name := str(monster_entities.get(nearest_id, {}).get("name", "怪物"))
-	hud_label.text = "正在攻击：" + target_name
+	var target_name := str(monster_entities.get(target_id, {}).get("name", "怪物"))
+	hud_label.text = "正在攻击：" + target_name + " · 距离 %.1f m" % target_distance
+
 
 func _update_spell_cooldown_hud() -> void:
 	for spell_id in spell_cooldown_labels:
@@ -4246,8 +4284,11 @@ func _on_combat_event(event: Dictionary) -> void:
 		return
 	if not bool(event.get("accepted", true)):
 		var rejection_reason := str(event.get("reason", "攻击未命中。"))
-		hud_label.text = rejection_reason
-		_show_notification(rejection_reason, 2.5)
+		hud_label.text = "攻击失败：" + rejection_reason + " · 请调整距离或目标"
+		if is_instance_valid(target_info_label) and not selected_monster_id.is_empty():
+			target_info_label.text += "\n攻击未成功：" + rejection_reason + " · 请靠近目标"
+			target_info_panel.visible = hud_visible
+		_show_notification("攻击未成功：" + rejection_reason + "。保持当前目标，靠近后再次点击左键。", 4.0)
 		return
 	if bool(event.get("projectile_spawned", false)):
 		_show_notification("箭矢已发射，等待命中……")
