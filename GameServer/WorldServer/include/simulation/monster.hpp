@@ -59,6 +59,14 @@ inline bool should_warn_threat_steal(double current_threat,
     return challenger_threat >= current_threat * warning_ratio;
 }
 
+inline double monster_healing_threat(double restored_health,
+                                     double threat_multiplier = 0.50) {
+    if (!std::isfinite(restored_health) || !std::isfinite(threat_multiplier) ||
+        restored_health <= 0.0 || threat_multiplier <= 0.0 || threat_multiplier > 10.0)
+        return 0.0;
+    return std::min(1.0e12, restored_health * threat_multiplier);
+}
+
 struct MonsterAttackProfile {
     int windup_ms{520};
     int recovery_ms{420};
