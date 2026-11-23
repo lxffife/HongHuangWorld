@@ -157,6 +157,18 @@ func (s *Service) issue(ctx context.Context, accountID string, hellFloor int) (E
 	return entry, nil
 }
 
+func applyInstanceSpawn(snapshot *PlayerSnapshot) {
+	if snapshot == nil || snapshot.HellFloor < 1 || snapshot.HellFloor > 18 {
+		return
+	}
+	// Dedicated hell instances have their own arena coordinate space.
+	// Never reuse a character's saved Fengdu city position inside the trial.
+	snapshot.PositionX = 0
+	snapshot.PositionY = 0.15
+	snapshot.PositionZ = 18
+	snapshot.RotationY = 0
+}
+
 func (s *Service) Redeem(ctx context.Context, nodeKey, ticket string) (PlayerSnapshot, error) {
 	if nodeKey == "" || ticket == "" || len(ticket) > 128 {
 		return PlayerSnapshot{}, ErrInvalidTicket
@@ -221,14 +233,7 @@ func (s *Service) Redeem(ctx context.Context, nodeKey, ticket string) (PlayerSna
 	}
 	snapshot.CharacterID = characterID
 	snapshot.InstanceID = instanceID
-	if snapshot.HellFloor > 0 {
-		// Dedicated hell instances have their own arena coordinate space.
-		// Never reuse a character's saved Fengdu city position inside the trial.
-		snapshot.PositionX = 0
-		snapshot.PositionY = 0.15
-		snapshot.PositionZ = 18
-		snapshot.RotationY = 0
-	}
+	applyInstanceSpawn(&snapshot)
 	if len(birthInheritanceJSON) > 0 {
 		if err := json.Unmarshal(birthInheritanceJSON, &snapshot.BirthInheritance); err != nil {
 			return PlayerSnapshot{}, fmt.Errorf("decode character birth inheritance: %w", err)
