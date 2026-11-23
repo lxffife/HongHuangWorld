@@ -48,6 +48,9 @@ type Party struct {
  MaxMembers int `json:"max_members"`
  MaterialLootMode string `json:"material_loot_mode"`
  EquipmentLootMode string `json:"equipment_loot_mode"`
+ FocusTargetEntityID string `json:"focus_target_entity_id,omitempty"`
+ FocusSetBy string `json:"focus_set_by,omitempty"`
+ FocusUpdatedAt *time.Time `json:"focus_updated_at,omitempty"`
  Members []Member `json:"members"`
  Invitations []Invitation `json:"pending_invitations,omitempty"`
 }
@@ -220,9 +223,13 @@ func (s *Service) Disband(ctx context.Context, accountID string) error {
 func (s *Service) Get(ctx context.Context, accountID string) (Party,error) {
  if accountID==""{return Party{},ErrInvalid}
  var p Party
- err:=s.db.QueryRowContext(ctx,`SELECT p.id::text,p.world_id,p.world_instance_id::text,p.leader_account_id::text,p.max_members,p.material_loot_mode,p.equipment_loot_mode
- FROM party_members mine JOIN parties p ON p.id=mine.party_id WHERE mine.account_id=$1 AND p.status='active'`,accountID).
- Scan(&p.ID,&p.WorldID,&p.WorldInstanceID,&p.LeaderAccountID,&p.MaxMembers,&p.MaterialLootMode,&p.EquipmentLootMode)
+ err:=s.db.QueryRowContext(ctx,`SELECT p.id::text,p.world_id,p.world_instance_id::text,p.leader_account_id::text,p.max_members,p.material_loot_mode,p.equipment_loot_mode,
+ CASE WHEN p.focus_updated_at > now()-interval '60 seconds' THEN COALESCE(p.focus_target_entity_id,'') ELSE '' END,
+ CASE WHEN p.focus_updated_at > now()-interval '60 seconds' THEN COALESCE(a_focus.username,'') ELSE '' END,
+ CASE WHEN p.focus_updated_at > now()-interval '60 seconds' THEN p.focus_updated_at ELSE NULL END
+ FROM party_members mine JOIN parties p ON p.id=mine.party_id LEFT JOIN accounts a_focus ON a_focus.id=p.focus_by_account_id
+ WHERE mine.account_id=$1 AND p.status='active'`,accountID).
+ Scan(&p.ID,&p.WorldID,&p.WorldInstanceID,&p.LeaderAccountID,&p.MaxMembers,&p.MaterialLootMode,&p.EquipmentLootMode,&p.FocusTargetEntityID,&p.FocusSetBy,&p.FocusUpdatedAt)
  if errors.Is(err,sql.ErrNoRows){return Party{},ErrNotFound};if err!=nil{return Party{},fmt.Errorf("load current party: %w",err)}
  rows,err:=s.db.QueryContext(ctx,`SELECT m.account_id::text,a.username,m.character_id::text,c.name,m.role,
  EXISTS(SELECT 1 FROM world_sessions ws
@@ -244,6 +251,29 @@ func (s *Service) Get(ctx context.Context, accountID string) (Party,error) {
  return p,nil
 }
 
+type FocusTarget struct {
+ EntityID string `json:"target_entity_id"`
+}
+
+// SetFocusTarget publishes a short-lived tactical marker to the caller's current party.
+// Any current member may update it; the server records the authenticated account.
+func (s *Service) SetFocusTarget(ctx context.Context, accountID, targetEntityID string) (Party, error) {
+ targetEntityID = strings.TrimSpace(targetEntityID)
+ if accountID == "" || len(targetEntityID) > 96 { return Party{}, ErrInvalid }
+ current, err := currentForAccount(ctx, s.db, accountID)
+ if err != nil { return Party{}, err }
+ tx, err := s.db.BeginTx(ctx, nil)
+ if err != nil { return Party{}, fmt.Errorf("begin party focus update: %w", err) }
+ defer tx.Rollback()
+ var partyID, instanceID string
+ err = tx.QueryRowContext(ctx, "SELECT p.id::text,p.world_instance_id::text FROM party_members m JOIN parties p ON p.id=m.party_id WHERE m.account_id=$1 AND p.status='active' FOR UPDATE OF p", accountID).Scan(&partyID, &instanceID)
+ if errors.Is(err, sql.ErrNoRows) { return Party{}, ErrNotFound }
+ if err != nil { return Party{}, fmt.Errorf("lock party for focus update: %w", err) }
+ if current.instanceID != instanceID { return Party{}, ErrNotSameInstance }
+ if _, err = tx.ExecContext(ctx, "UPDATE parties SET focus_target_entity_id=NULLIF($2,''),focus_by_account_id=$3,focus_updated_at=CASE WHEN $2='' THEN NULL ELSE now() END,updated_at=now() WHERE id=$1", partyID, targetEntityID, accountID); err != nil { return Party{}, fmt.Errorf("update party focus target: %w", err) }
+ if err = tx.Commit(); err != nil { return Party{}, fmt.Errorf("commit party focus target: %w", err) }
+ return s.Get(ctx, accountID)
+}
 type LootRules struct {
  MaterialMode string `json:"material_loot_mode"`
  EquipmentMode string `json:"equipment_loot_mode"`
