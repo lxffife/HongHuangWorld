@@ -422,10 +422,19 @@ func resolveDropLootRecipients(ctx context.Context, tx *sql.Tx, serverID, sessio
   for _,m:=range members { if m.role=="leader" || m.accountID==leaderAccountID { return m.characterID, []string{m.characterID}, nil } }
   return "",nil,fmt.Errorf("party leader membership is missing")
  case "round_robin":
+  // Rotate only across members currently connected to this world instance.
+  // The source character is active by construction, so this list should not be empty.
+  onlineRows,err:=tx.QueryContext(ctx,"SELECT m.character_id::text FROM party_members m WHERE m.party_id=$1::uuid AND EXISTS (SELECT 1 FROM world_sessions ws WHERE ws.character_id=m.character_id AND ws.instance_id=$2::uuid AND ws.session_state='active' AND ws.connected_at IS NOT NULL) ORDER BY m.joined_at,m.character_id",partyID,instanceID)
+  if err!=nil{return "",nil,fmt.Errorf("list online round-robin recipients: %w",err)}
+  online:=make([]string,0,len(members))
+  for onlineRows.Next(){var characterID string;if err:=onlineRows.Scan(&characterID);err!=nil{onlineRows.Close();return "",nil,fmt.Errorf("scan online round-robin recipient: %w",err)};online=append(online,characterID)}
+  if err:=onlineRows.Err();err!=nil{onlineRows.Close();return "",nil,fmt.Errorf("iterate online round-robin recipients: %w",err)}
+  if err:=onlineRows.Close();err!=nil{return "",nil,fmt.Errorf("close online round-robin recipients: %w",err)}
+  if len(online)==0{return sourceCharacterID,[]string{sourceCharacterID},nil}
   update := "UPDATE parties SET "+cursorColumn+"="+cursorColumn+"+1,updated_at=now() WHERE id=$1::uuid RETURNING "+cursorColumn
   var cursor int64
   if err:=tx.QueryRowContext(ctx,update,partyID).Scan(&cursor);err!=nil{return "",nil,fmt.Errorf("advance party loot rotation: %w",err)}
-  chosen:=members[int((cursor-1)%int64(len(members)))].characterID
+  chosen:=online[int((cursor-1)%int64(len(online)))]
   return chosen, []string{chosen}, nil
  default: return sourceCharacterID, []string{sourceCharacterID}, nil
  }
