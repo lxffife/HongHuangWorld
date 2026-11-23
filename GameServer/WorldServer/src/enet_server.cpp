@@ -405,6 +405,7 @@ bool send_heartbeat(const ServerConfig& config, std::size_t current_players,
         {"current_players", current_players},
         {"world_id", config.world_id},
         {"instance_key", config.instance_key},
+        {"hell_floor", config.hell_floor},
         {"status", status}
     }.dump();
     std::string response;
@@ -1403,6 +1404,14 @@ struct EnetServer::Impl {
                         Json response;
                         delivered = backend_inventory_request(config, "/api/v1/servers/characters/spell-mastery",
                                                               &payload, status, response, delivery_error);
+                    } else if (event->event_type == "hell_trial_entry") {
+                        Json response;
+                        delivered = backend_inventory_request(config, "/api/v1/servers/hell-trials/entries",
+                                                              &payload, status, response, delivery_error);
+                    } else if (event->event_type == "hell_trial_completion") {
+                        Json response;
+                        delivered = backend_inventory_request(config, "/api/v1/servers/hell-trials/completions",
+                                                              &payload, status, response, delivery_error);
                     } else if (event->event_type == "soul_absorption") {
                         SoulAbsorptionEvent absorption{
                             event->event_id, payload.at("session_id").get<std::string>(),
@@ -1673,6 +1682,20 @@ struct EnetServer::Impl {
         std::string error;
         if (!enqueue_durable_event(reward.event_id, "character_reward", payload, error))
             std::cerr << "Could not persist character reward: " << error << '\n';
+    }
+
+    void enqueue_hell_trial_entry(const PlayerState& player) {
+        if (config.hell_floor < 1 || config.hell_floor > 18 ||
+            config.world_id != "underworld_fengdu" || player.character_id.empty()) return;
+        const auto event_id = make_event_uuid();
+        const Json payload{
+            {"event_id", event_id},
+            {"character_id", player.character_id},
+            {"floor", config.hell_floor}
+        };
+        std::string error;
+        if (!enqueue_durable_event(event_id, "hell_trial_entry", payload, error))
+            std::cerr << "Could not persist hell trial entry: " << error << '\n';
     }
 
     void enqueue_soul_reward(const PlayerState& player, std::int64_t experience,
@@ -5512,7 +5535,9 @@ EnetServer::~EnetServer() { stop(); delete impl_; }
 bool EnetServer::start() {
     if (impl_->config.backend_url.empty() || impl_->config.node_key.empty() || impl_->config.api_key.empty() ||
         impl_->config.advertise_host.empty() || impl_->config.world_id.empty() ||
-        impl_->config.instance_key.empty() || impl_->config.capacity < 1) {
+        impl_->config.instance_key.empty() || impl_->config.capacity < 1 ||
+        impl_->config.hell_floor < 0 || impl_->config.hell_floor > 18 ||
+        (impl_->config.hell_floor > 0 && impl_->config.world_id != "underworld_fengdu")) {
         std::cerr << "BACKEND_URL, WORLD_SERVER_NODE_KEY, WORLD_SERVER_API_KEY, "
                      "WORLD_SERVER_ADVERTISE_HOST, WORLD_ID, WORLD_SERVER_INSTANCE_KEY and "
                      "WORLD_SERVER_CAPACITY are required\n";
@@ -5768,6 +5793,7 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                             }
                         }
                         impl_->players.emplace(event.peer, std::move(player));
+                        impl_->enqueue_hell_trial_entry(impl_->players.at(event.peer));
                         impl_->broadcast_player_event(
                             honghuang::protocol::MessageType::PlayerJoined, impl_->players.at(event.peer));
                         Json client_welcome = snapshot;
