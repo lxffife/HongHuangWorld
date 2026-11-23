@@ -980,8 +980,8 @@ func _on_minimap_marker_selected(kind: String, marker_id: String, marker_name: S
 		_:
 			return
 	minimap_navigation_target = {"kind": kind, "id": marker_id, "name": marker_name, "x": target_position.x, "z": target_position.z}
-		if kind != "monster":
-			_show_notification("导航目标：" + marker_name)
+	if kind != "monster":
+		_show_notification("导航目标：" + marker_name)
 	_update_minimap_data()
 
 
