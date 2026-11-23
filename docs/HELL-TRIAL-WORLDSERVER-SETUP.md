@@ -35,7 +35,7 @@ WORLD_SERVER_HELL_FLOOR=0
 3. 中心服校验角色当前肉身、楼层解锁状态、楼层实例在线状态与容量，签发 60 秒有效的一次性票据。
 4. 客户端使用返回的 host、udp_port 和 ticket 连接指定 WorldServer。
 5. WorldServer 验证并兑换票据，成功加入后把入层事件写入 SQLite durable outbox。
-6. Outbox 后台线程重试 `POST /api/v1/servers/hell-trials/entries`，中心服再核对当前活动会话、节点身份和实际实例楼层。
+6. Outbox 后台线程重试 `POST /api/v1/servers/hell-trials/entries`，中心服再核对原始 session ID、节点身份和实际实例楼层。即使回调在角色断线后才送达，也会绑定到原始 `world_sessions` 记录，而不是要求玩家仍在线。
 
 普通 `POST /api/v1/worlds/enter` 只选择 `hell_floor IS NULL` 的常规世界实例，不会把玩家随机送入地狱某一层。
 
@@ -55,6 +55,7 @@ WorldServer 当前内置 18 份静态遭遇定义，位置在 `GameServer/WorldS
 - 守将使用该层唯一的 guardian definition ID。
 - 目标数达到 3 且守将被服务器确认死亡，才产生通关事件；先杀守将或先完成目标都不会提前通关。
 - 每层推荐等级、名称、目标怪物 ID、守将 ID 在 C++ 遭遇目录中定义；中心服也维护对应的守将 ID 白名单。
+- 入层和通关回调都携带创建事件时的 `session_id`；中心服校验该 session 由当前 WorldServer 节点创建，并允许对 `closed` 会话补交事件，避免网络重试期间玩家断线导致进度永久丢失。
 - 怪物配置热刷新会保留专属地狱遭遇点，避免后端常规刷怪配置覆盖本地楼层怪物。
 
 完整目录见 `docs/HELL-TRIAL-ENCOUNTER-CATALOG.md`。
