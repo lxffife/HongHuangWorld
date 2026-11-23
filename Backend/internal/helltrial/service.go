@@ -246,6 +246,9 @@ func (s *Service) RecordEntry(ctx context.Context, nodeKey string, req EntryRequ
 	if err!=nil{return EntryResult{},fmt.Errorf("validate hell trial entry session: %w",err)}
 	if worldID!="underworld_fengdu"{return EntryResult{},ErrWrongWorld}
 
+	if _,err=tx.ExecContext(ctx,`INSERT INTO character_hell_trial_progress(character_id,floor_number,status)
+		VALUES($1::uuid,1,'unlocked') ON CONFLICT(character_id,floor_number) DO NOTHING`,req.CharacterID);err!=nil{return EntryResult{},fmt.Errorf("initialize first hell floor: %w",err)}
+
 	var existingCharacter string
 	var existingFloor int
 	err=tx.QueryRowContext(ctx,`SELECT character_id::text,floor_number
