@@ -4144,6 +4144,98 @@ struct EnetServer::Impl {
                      {"duration_ms", static_cast<int>(kReviveChannel.count() * 1000)}});
             return;
         }
+        // Direct support skills are resolved authoritatively by the world server.
+        if (spell_id == "life_mend" || spell_id == "guardian_aegis") {
+            const bool is_heal = spell_id == "life_mend";
+            const auto mana_cost = is_heal
+                ? honghuang::simulation::kLifeMendManaCost
+                : honghuang::simulation::kGuardianAegisManaCost;
+            const auto cooldown_ms = is_heal
+                ? honghuang::simulation::kLifeMendCooldownMs
+                : honghuang::simulation::kGuardianAegisCooldownMs;
+            const auto now = Clock::now();
+            const auto cooldown = player.last_spell_at_by_id.find(spell_id);
+            if (cooldown != player.last_spell_at_by_id.end() &&
+                now - cooldown->second < std::chrono::milliseconds(cooldown_ms)) {
+                const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::milliseconds(cooldown_ms) - (now - cooldown->second)).count();
+                send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                    Json{{"accepted", false}, {"action", "spell_cast"}, {"spell_id", spell_id},
+                         {"cooldown_ms", remaining}, {"reason", "辅助法术尚在冷却中。"},
+                         {"mana", player.mana}, {"max_mana", player.max_mana}});
+                return;
+            }
+            if (!honghuang::simulation::can_pay_spell_cost(player.mana, static_cast<std::int32_t>(mana_cost))) {
+                reject("灵力不足，无法施展辅助法术。"); return;
+            }
+            const auto target_id = command.value("target_entity_id", std::string{});
+            auto target = std::find_if(players.begin(), players.end(), [&](const auto& entry) {
+                return entry.second.character_id == target_id;
+            });
+            if (target_id.empty() || target == players.end() || target->second.health <= 0) {
+                reject("辅助目标不存在或已经倒地。"); return;
+            }
+            const double dx = static_cast<double>(target->second.x) - player.x;
+            const double dz = static_cast<double>(target->second.z) - player.z;
+            if (!honghuang::simulation::support_target_in_range(dx, dz)) {
+                reject("辅助目标超出 12 米范围。"); return;
+            }
+            player.mana -= mana_cost;
+            player.last_spell_at_by_id[spell_id] = now;
+            if (is_heal) {
+                const auto missing = std::max<std::int64_t>(0,
+                    target->second.max_health - target->second.health);
+                const auto restored = std::min(missing,
+                    honghuang::simulation::life_mend_amount(player.spirit));
+                target->second.health += restored;
+                if (restored > 0) {
+                    target->second.last_combat_at = now;
+                    const auto healing_threat = honghuang::simulation::monster_healing_threat(
+                        static_cast<double>(restored));
+                    for (auto& monster : monsters) {
+                        if (monster.state.mode != honghuang::simulation::MonsterMode::Chasing ||
+                            monster.state.target_id.empty() ||
+                            monster.state.mode == honghuang::simulation::MonsterMode::Dead) continue;
+                        const double mx = static_cast<double>(monster.state.x) - player.x;
+                        const double mz = static_cast<double>(monster.state.z) - player.z;
+                        if (mx * mx + mz * mz <=
+                            static_cast<double>(monster.definition.aggro_radius) * monster.definition.aggro_radius) {
+                            record_monster_threat(monster, player.character_id, healing_threat);
+                        }
+                    }
+                }
+                send_json(target->first, honghuang::protocol::MessageType::CombatEvent,
+                    Json{{"accepted", true}, {"action", "player_healed"},
+                         {"source_character_id", player.character_id},
+                         {"source_name", player.name}, {"health_restored", restored},
+                         {"health", target->second.health}, {"max_health", target->second.max_health}});
+                send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                    Json{{"accepted", true}, {"action", "spell_cast"}, {"phase", "released"},
+                         {"spell_id", spell_id}, {"target_character_id", target_id},
+                         {"health_restored", restored}, {"mana", player.mana},
+                         {"max_mana", player.max_mana}, {"cooldown_ms", cooldown_ms}});
+            } else {
+                auto& ally = target->second;
+                const auto shield = honghuang::simulation::guardian_aegis_amount(ally.max_health);
+                if (ally.absorb_shield_expires_at <= now) ally.absorb_shield_health = 0;
+                ally.absorb_shield_health = std::max(ally.absorb_shield_health, shield);
+                ally.absorb_shield_expires_at = now +
+                    std::chrono::milliseconds(honghuang::simulation::kGuardianAegisDurationMs);
+                const Json shield_event{
+                    {"accepted", true}, {"action", "player_shielded"},
+                    {"source_character_id", player.character_id}, {"source_name", player.name},
+                    {"shield_health", ally.absorb_shield_health},
+                    {"duration_ms", honghuang::simulation::kGuardianAegisDurationMs}
+                };
+                send_json(target->first, honghuang::protocol::MessageType::CombatEvent, shield_event);
+                send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                    Json{{"accepted", true}, {"action", "spell_cast"}, {"phase", "released"},
+                         {"spell_id", spell_id}, {"target_character_id", target_id},
+                         {"shield_health", ally.absorb_shield_health}, {"mana", player.mana},
+                         {"max_mana", player.max_mana}, {"cooldown_ms", cooldown_ms}});
+            }
+            return;
+        }
         // Taunt is a server-authoritative combat ability, not a damaging spell:
         // it needs no staff, mana or cast bar, and expires automatically.
         if (spell_id == "taunt") {
