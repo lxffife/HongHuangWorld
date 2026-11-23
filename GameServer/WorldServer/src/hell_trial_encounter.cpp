@@ -74,9 +74,9 @@ void HellTrialEncounter::clamp_player_position(float& x, float& z) const {
 }
 
 HellTrialDeathResult HellTrialEncounter::record_monster_death(
-    std::string_view runtime_id, std::string_view definition_id) {
+    std::string_view life_id, std::string_view definition_id) {
     HellTrialDeathResult result;
-    if (!spec_ || runtime_id.empty() || definition_id.empty() || completed_) {
+    if (!spec_ || life_id.empty() || definition_id.empty() || completed_) {
         result.objective_kills = objective_kills_;
         result.objective_required = spec_ ? spec_->objective_required : 0;
         result.guardian_defeated = guardian_defeated_;
@@ -92,7 +92,7 @@ HellTrialDeathResult HellTrialEncounter::record_monster_death(
         const auto found = std::find(spec_->objective_monster_ids.begin(),
                                      spec_->objective_monster_ids.end(), definition_id);
         if (found != spec_->objective_monster_ids.end()) {
-            const auto [_, inserted] = counted_runtime_ids_.emplace(runtime_id);
+            const auto [_, inserted] = counted_runtime_ids_.emplace(life_id);
             if (inserted) {
                 ++objective_kills_;
                 result.objective_kill_recorded = true;
