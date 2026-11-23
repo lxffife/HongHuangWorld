@@ -150,3 +150,5 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000070_party_focu
 ```
 
 - `000070_party_focus_target` adds an expiring shared party focus marker. Any authenticated current party member in the same world instance can set or clear the target through `PUT /api/v1/party/focus-target`; the current-party response exposes the target and marker author for 60 seconds. This is a tactical UI marker only: it does not force monster aggro or alter server-side damage/targeting. Clients should only display the marker when the referenced monster is present in their current world snapshot.
+
+- `000068_hell_trial_progress` 为每个肉身角色建立十八层地狱通关进度；角色首次进入冥界时开放第一层，后续层由服务端在目标完成且守将被击败后逐层解锁，完成层可重复进入。当前迁移仅建立持久化结构，写入接口仍待接入。
