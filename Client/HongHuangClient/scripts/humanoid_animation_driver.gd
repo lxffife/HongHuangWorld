@@ -53,7 +53,7 @@ static func _find_clip(player: AnimationPlayer, state: String, attack_style: Str
 			var tokens: Array = candidates[candidate_index]
 			for token in tokens:
 				if normalized.contains(token):
-					var candidate_score := (100 if candidate_index == 0 and candidates.size() > 1 else 10) + token.length()
+					var candidate_score: int = (100 if candidate_index == 0 and candidates.size() > 1 else 10) + str(token).length()
 					score = maxi(score, candidate_score)
 		if score > best_score:
 			best_score = score
