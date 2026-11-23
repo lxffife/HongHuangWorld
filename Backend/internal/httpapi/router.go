@@ -16,6 +16,7 @@ import (
 	"github.com/liflife/HongHuangWorld/Backend/internal/character"
 	"github.com/liflife/HongHuangWorld/Backend/internal/economy"
 	"github.com/liflife/HongHuangWorld/Backend/internal/faction"
+	"github.com/liflife/HongHuangWorld/Backend/internal/helltrial"
 	"github.com/liflife/HongHuangWorld/Backend/internal/inventory"
 	"github.com/liflife/HongHuangWorld/Backend/internal/npc"
 	"github.com/liflife/HongHuangWorld/Backend/internal/party"
@@ -81,6 +82,9 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("GET /api/v1/servers/characters/spell-mastery", spellMasteryAPI.current)
 		worlds := &worldHandlers{service: world.NewService(db), logger: logger}
 		npcs := &npcHandlers{authService: authService, service: npc.NewService(db), logger: logger}
+		hellTrials := &hellTrialHandlers{authService: authService, service: helltrial.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
+		mux.HandleFunc("GET /api/v1/characters/current/hell-trials", hellTrials.current)
+		mux.HandleFunc("POST /api/v1/servers/hell-trials/completions", hellTrials.complete)
 		mux.HandleFunc("GET /api/v1/worlds/current/npcs", npcs.list)
 		mux.HandleFunc("POST /api/v1/worlds/current/npcs/interact", npcs.interact)
 		mux.HandleFunc("POST /api/v1/worlds/current/npcs/choose", npcs.chooseFate)
