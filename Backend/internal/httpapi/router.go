@@ -84,6 +84,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		npcs := &npcHandlers{authService: authService, service: npc.NewService(db), logger: logger}
 		hellTrials := &hellTrialHandlers{authService: authService, service: helltrial.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
 		mux.HandleFunc("GET /api/v1/characters/current/hell-trials", hellTrials.current)
+		mux.HandleFunc("POST /api/v1/servers/hell-trials/entries", hellTrials.enter)
 		mux.HandleFunc("POST /api/v1/servers/hell-trials/completions", hellTrials.complete)
 		mux.HandleFunc("GET /api/v1/worlds/current/npcs", npcs.list)
 		mux.HandleFunc("POST /api/v1/worlds/current/npcs/interact", npcs.interact)
