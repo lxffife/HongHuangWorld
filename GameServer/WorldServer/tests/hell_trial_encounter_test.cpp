@@ -48,12 +48,15 @@ int main() {
     HellTrialEncounter encounter(1);
     auto result = encounter.record_monster_death("mob-a", "hell_f01_tongue_wraith");
     assert(result.objective_kill_recorded && result.objective_kills == 1);
-    result = encounter.record_monster_death("mob-a", "hell_f01_tongue_wraith");
+    result = encounter.record_monster_death("mob-a-life-1", "hell_f01_tongue_wraith");
     assert(!result.objective_kill_recorded && result.objective_kills == 1);
-    result = encounter.record_monster_death("mob-b", "hell_f01_sin_clerk");
+    // A respawn keeps its spawn-point identity but receives a new life ID.
+    result = encounter.record_monster_death("mob-a-life-2", "hell_f01_tongue_wraith");
     assert(result.objective_kill_recorded && result.objective_kills == 2);
-    result = encounter.record_monster_death("mob-c", "hell_f01_echo_ghost");
+    result = encounter.record_monster_death("mob-b-life-1", "hell_f01_sin_clerk");
     assert(result.objective_kill_recorded && result.objective_kills == 3);
+    result = encounter.record_monster_death("mob-c-life-1", "hell_f01_echo_ghost");
+    assert(result.objective_kill_recorded && result.objective_kills == 4);
     assert(!result.completion_ready); // Objective alone cannot complete the floor.
 
     result = encounter.record_monster_death("boss-1", "hell_f01_tongue_jailer");
