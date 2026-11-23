@@ -1367,6 +1367,42 @@ struct EnetServer::Impl {
             std::chrono::system_clock::now().time_since_epoch()).count();
     }
 
+    Json hell_trial_runtime_snapshot() const {
+        if (!hell_trial_encounter.enabled()) return Json::object();
+        const auto* floor = hell_trial_encounter.spec();
+        const auto active_id = hell_trial_waves.active_definition_id();
+        std::string active_name;
+        if (floor != nullptr) {
+            if (active_id == floor->guardian_id) {
+                active_name = std::string(floor->guardian_name);
+            } else {
+                for (std::size_t i = 0; i < floor->objective_monster_ids.size(); ++i) {
+                    if (active_id == floor->objective_monster_ids[i]) {
+                        active_name = std::string(floor->objective_monster_names[i]);
+                        break;
+                    }
+                }
+            }
+        }
+        const int stage = hell_trial_waves.stage();
+        const std::string label = hell_trial_waves.completed() ? "试炼完成" :
+            (stage == 0 ? "第一波：" + active_name :
+             (stage < 3 ? "第" + std::to_string(stage + 1) + "波：" + active_name :
+              "守将：" + active_name));
+        return Json{
+            {"floor", hell_trial_encounter.floor()},
+            {"stage", stage},
+            {"stage_count", 4},
+            {"label", label},
+            {"active_definition_id", std::string(active_id)},
+            {"active_name", active_name},
+            {"completed", hell_trial_waves.completed()},
+            {"objective_kills", hell_trial_encounter.objective_kills()},
+            {"objective_required", floor ? floor->objective_required : 0},
+            {"boss_phase", stage == 3 ? hell_trial_boss_phase.phase() : 0}
+        };
+    }
+
     bool persist_hell_trial_wave_checkpoint() {
         if (!hell_trial_waves.enabled()) return true;
         if (!durable_outbox) return false;
@@ -2629,6 +2665,12 @@ struct EnetServer::Impl {
             const auto wave_transition = hell_trial_waves.record_death(monster.death_definition_id);
             if (wave_transition.advanced) {
                 (void)persist_hell_trial_wave_checkpoint();
+                Json wave_event = hell_trial_runtime_snapshot();
+                wave_event["action"] = "hell_trial_wave_transition";
+                for (const auto& [recipient_peer, recipient] : players) {
+                    (void)recipient;
+                    send_json(recipient_peer, honghuang::protocol::MessageType::CombatEvent, wave_event);
+                }
             }
             if (wave_transition.advanced && !wave_transition.unlocked_definition_id.empty()) {
                 const auto next_wave = std::find_if(monsters.begin(), monsters.end(),
@@ -6064,6 +6106,9 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                             honghuang::protocol::MessageType::PlayerJoined, impl_->players.at(event.peer));
                         Json client_welcome = snapshot;
                         client_welcome["hell_floor"] = impl_->config.hell_floor;
+                        if (impl_->hell_trial_encounter.enabled()) {
+                            client_welcome["hell_trial"] = impl_->hell_trial_runtime_snapshot();
+                        }
                         const auto& welcomed_player = impl_->players.at(event.peer);
                         const auto welcome_weapon = honghuang::simulation::weapon_combat_profile(
                             player_weapon_type(welcomed_player));
