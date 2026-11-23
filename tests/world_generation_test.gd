@@ -5,6 +5,7 @@ const WorldChunkStreamerScript = preload("res://scripts/world_chunk_streamer.gd"
 const FengduCityBuilder = preload("res://scripts/fengdu_city_builder.gd")
 const FengduNavigation = preload("res://scripts/fengdu_navigation.gd")
 const FengduWorldLayout = preload("res://scripts/fengdu_world_layout.gd")
+const FengduGraybox = preload("res://scripts/fengdu_graybox.gd")
 const HellFloorBuilder = preload("res://scripts/underworld_hell_floor_builder.gd")
 
 
@@ -164,3 +165,19 @@ func _test_fengdu_navigation() -> void:
 	assert(not bool(playable_closed_route.get("found", false)))
 	var other_gate_route := FengduNavigation.find_path(playable_network, "junction.center", "gate.south", {"closed_gates": ["north_heaven_gate"]})
 	assert(bool(other_gate_route.get("found", false)))
+
+	# Exercise the actual large-graybox adapter: local gate state must feed its public route API.
+	var gate_adapter := Node3D.new()
+	gate_adapter.set_script(FengduGraybox)
+	gate_adapter.call("_build_activity_registry")
+	assert(bool(gate_adapter.call("set_local_gate_state", "north_heaven_gate", false)))
+	var adapter_north_route: Dictionary = gate_adapter.call(
+		"get_navigation_route_between_positions", Vector3.ZERO, Vector3(0.0, 0.0, 96.0)
+	)
+	assert(not bool(adapter_north_route.get("found", false)))
+	var adapter_south_route: Dictionary = gate_adapter.call(
+		"get_navigation_route_between_positions", Vector3.ZERO, Vector3(0.0, 0.0, -96.0)
+	)
+	assert(bool(adapter_south_route.get("found", false)))
+	assert(not bool(gate_adapter.call("set_local_gate_state", "unknown_gate", false)))
+	gate_adapter.free()
