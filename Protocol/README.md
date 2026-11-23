@@ -92,3 +92,11 @@ CombatEvent 使用 JSON payload，事件方向与字段由服务端确定：
 5. 兑换成功后，世界服务器发送 ServerWelcome。断线后必须重新申请票据，不得复用旧票据。
 
 - 客户端通过 `AttackCommand` 提交目标实体 ID；服务端通过 `CombatEvent` 返回命中、伤害、击败或拒绝原因。攻击冷却/距离等正常拒绝不会关闭连接。
+
+
+## Purify support spell
+
+- H casts 净化术 on the caster. The world server validates the live session, target, 12 m support range, mana and per-spell cooldown.
+- 净化术 removes active slow, freeze and poison effects together. If no removable effect is active, the request is rejected without consuming mana or starting cooldown.
+- The server sends player_cleansed as a presentation/state notification; the client clears local debuff visuals and never edits authoritative combat state.
+- Tuning: 14 mana, 10-second cooldown, 12 m range.
