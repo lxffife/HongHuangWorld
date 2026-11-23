@@ -4041,6 +4041,7 @@ struct EnetServer::Impl {
             send_json(peer, honghuang::protocol::MessageType::CombatEvent, response);
         };
         if (player.health <= 0) { reject("角色已倒地，无法施法。"); return; }
+        if (player.pending_spell.has_value()) { reject("正在施法，请稍候。"); return; }
         // Taunt is a server-authoritative combat ability, not a damaging spell:
         // it needs no staff, mana or cast bar, and expires automatically.
         if (spell_id == "taunt") {
