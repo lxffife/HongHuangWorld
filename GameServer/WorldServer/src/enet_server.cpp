@@ -4109,6 +4109,13 @@ struct EnetServer::Impl {
                 !target->second.death_snapshot_persisted) {
                 reject("目标尚未倒地，或死亡记录仍在安全保存中。"); return;
             }
+            const bool already_being_revived = std::any_of(players.begin(), players.end(),
+                [&](const auto& entry) {
+                    return entry.second.revive_target_character_id == target_id;
+                });
+            if (already_being_revived) {
+                reject("已有其他修士正在救援该目标。"); return;
+            }
             const double dx = static_cast<double>(target->second.x) - player.x;
             const double dz = static_cast<double>(target->second.z) - player.z;
             if (!honghuang::simulation::ally_revive_in_range(dx, dz)) {
@@ -4397,6 +4404,9 @@ struct EnetServer::Impl {
                 send_json(rescuer_peer, honghuang::protocol::MessageType::CombatEvent,
                     Json{{"accepted", false}, {"action", "spell_cast"}, {"phase", "interrupted"},
                          {"spell_id", "revive"}, {"reason", "救援距离超出 3.5 米，施法中断。"}});
+                send_json(target->first, honghuang::protocol::MessageType::CombatEvent,
+                    Json{{"accepted", false}, {"action", "revive"}, {"phase", "interrupted"},
+                         {"reason", "救援者离开了救援范围。"}});
                 rescuer.revive_target_character_id.clear();
                 rescuer.revive_completes_at = Clock::time_point{};
                 continue;
