@@ -1958,7 +1958,7 @@ func _create_npc_figure(root: Node3D, role: String) -> Dictionary:
 		canopy.position = Vector3(0, 2.12, 0)
 		canopy.material_override = accent_material
 		root.add_child(canopy)
-	elif role == "soldier":
+	elif role in ["soldier", "gate_guard"]:
 		var spear := MeshInstance3D.new()
 		var spear_mesh := CylinderMesh.new()
 		spear_mesh.top_radius = 0.035
