@@ -9,6 +9,12 @@
 int main() {
     using namespace honghuang::simulation;
 
+    assert(taunt_override_is_active(true, true, 1000, 5000));
+    assert(!taunt_override_is_active(false, true, 1000, 5000));
+    assert(!taunt_override_is_active(true, false, 1000, 5000));
+    assert(!taunt_override_is_active(true, true, 5000, 5000));
+    assert(!taunt_override_is_active(true, true, 6000, 5000));
+
     assert(decayed_monster_threat(100.0, 0) == 100.0);
     assert(std::abs(decayed_monster_threat(100.0, 15) - 50.0) < 0.001);
     assert(decayed_monster_threat(100.0, 30) == 0.0);
