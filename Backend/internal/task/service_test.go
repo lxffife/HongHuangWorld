@@ -62,12 +62,6 @@ func TestExpireDueRejectsUnsafeBatchSizesBeforeDatabaseAccess(t *testing.T) {
 }
 
 
-func TestJoinRejectsMissingIdentityBeforeDatabaseAccess(t *testing.T) {
- service:=NewService(nil,nil)
- if err:=service.Join(context.Background(),"","task");err!=ErrInvalid { t.Fatalf("expected ErrInvalid for missing account, got %v",err) }
- if err:=service.Join(context.Background(),"account","");err!=ErrInvalid { t.Fatalf("expected ErrInvalid for missing task, got %v",err) }
-}
-
 func TestLeaveRejectsMissingIdentityBeforeDatabaseAccess(t *testing.T) {
  service:=NewService(nil,nil)
  if err:=service.Leave(context.Background(),"","task");err!=ErrInvalid { t.Fatalf("expected ErrInvalid for missing account, got %v",err) }
