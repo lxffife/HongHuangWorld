@@ -484,9 +484,13 @@ func _build_environment() -> void:
 	var world_id := str(HHSession.world_snapshot.get("world_id", "qingyun_human"))
 	add_child(WorldEnvironmentBuilder.build(world_id))
 
+var terrain_chunk_streamer: Node
+
 func _build_terrain() -> void:
 	var world_id := str(HHSession.world_snapshot.get("world_id", "qingyun_human"))
-	add_child(WorldTerrainBuilder.build(world_id))
+	var terrain_root := WorldTerrainBuilder.build(world_id)
+	add_child(terrain_root)
+	terrain_chunk_streamer = terrain_root.get_node_or_null("ChunkStreamer")
 
 func _build_player() -> void:
 	# Avoid a global class-cache dependency for the player controller. This also
@@ -4423,6 +4427,8 @@ func _update_input_debug_hud() -> void:
 	input_debug_label.text = keys + "\n" + movement_text + " · 网络：" + network_text + "\n" + send_text + " · ESC 释放鼠标"
 
 func _process(delta: float) -> void:
+	if is_instance_valid(terrain_chunk_streamer) and is_instance_valid(local_player):
+		terrain_chunk_streamer.call("update_streaming", local_player.global_position)
 	if shield_remaining > 0.0:
 		shield_remaining = maxf(0.0, shield_remaining - delta)
 		if is_instance_valid(shield_status_label):
