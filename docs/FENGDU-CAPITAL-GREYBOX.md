@@ -261,6 +261,7 @@ NPC 仍没有完整寻路、战斗、经济、任务对话树、持久化身份�
 - 新增 `GameServer/WorldServer/include/simulation/fengdu_incident_director.hpp`，提供纯 C++ 事件状态机：reported → dispatched → investigating → resolved → closed。
 - 只有已登记事件可以派遣；派遣人数必须大于 0；到场人数不能超过剩余编制；所有派遣单位到场后才能进入调查；未进入调查的事件不能直接结案。
 - 警报由所有活动事件聚合：任一高级事件触发 lockdown；否则存在中级事件触发 watch；没有活动中/高级事件时恢复 normal。事件解决后不再维持警报，多个并发事件按最高等级聚合。
+- `apply_city_alert_to_gate_policy()` 将事件警报转换为门禁策略覆盖：戒备要求通行令，战时封城同时设置 lockdown 与关门；应急放行仍必须满足应急身份和授权覆盖权限。该适配器与 `evaluate_gate_access()` 共用同一套服务端规则。
 - 新增 `fengdu_incident_director_test.cpp` 并注册 CTest，覆盖非法状态迁移、人数边界、事件全生命周期和并发事件警报降级。
 
 ### 权威边界
