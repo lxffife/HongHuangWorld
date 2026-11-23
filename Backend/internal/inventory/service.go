@@ -458,9 +458,9 @@ func (s *Service) CreateDrop(ctx context.Context, nodeKey string, request DropRe
 		FROM ground_drops d JOIN item_definitions i ON i.id=d.item_id
 		LEFT JOIN item_instances ii ON ii.id=d.item_instance_id
 		WHERE d.id=$1::uuid AND d.server_id=$2 AND d.session_id=$3::uuid
-		  AND d.item_id=$5 AND d.quantity=$6
-		  AND d.position_x=$7 AND d.position_z=$8 AND d.status='available' AND d.expires_at>now()`,
-		request.DropID,serverID,request.SessionID,request.CharacterID,request.ItemID,request.Quantity,request.PositionX,request.PositionZ), &existing)
+		  AND d.item_id=$4 AND d.quantity=$5
+		  AND d.position_x=$6 AND d.position_z=$7 AND d.status='available' AND d.expires_at>now()`,
+		request.DropID,serverID,request.SessionID,request.ItemID,request.Quantity,request.PositionX,request.PositionZ), &existing)
 	if err == nil {
 		if err:=tx.Commit();err!=nil{return GroundDrop{},fmt.Errorf("commit recovered ground drop: %w",err)}
 		return existing,nil
@@ -536,8 +536,8 @@ func (s *Service) PickupDrop(ctx context.Context, nodeKey string, request Pickup
 	var itemInstanceID sql.NullString
 	var quantity int
 	err = tx.QueryRowContext(ctx, `SELECT item_id,item_instance_id::text,quantity FROM ground_drops
-		WHERE id=$1::uuid AND server_id=$2 AND owner_character_id=$3::uuid
-		  AND status='available' AND expires_at>now() FOR UPDATE`,
+		WHERE id=$1::uuid AND server_id=$2 AND status='available' AND expires_at>now()
+		  AND EXISTS(SELECT 1 FROM ground_drop_eligible_characters e WHERE e.drop_id=ground_drops.id AND e.character_id=$3::uuid) FOR UPDATE`,
 		request.DropID,serverID,request.CharacterID).Scan(&itemID,&itemInstanceID,&quantity)
 	if errors.Is(err,sql.ErrNoRows){return Result{},ErrDropUnavailable}
 	if err!=nil{return Result{},fmt.Errorf("lock ground drop: %w",err)}
