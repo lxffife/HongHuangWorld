@@ -4241,7 +4241,8 @@ struct EnetServer::Impl {
         auto& player = player_it->second;
         if (player.health <= 0) {
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
-                      Json{{"accepted", false}, {"reason", "角色已倒地，无法攻击。"}});
+                      Json{{"accepted", false}, {"attacker_character_id", player.character_id},
+                           {"reason", "角色已倒地，无法攻击。"}});
             return;
         }
         const auto now = Clock::now();
@@ -4251,7 +4252,8 @@ struct EnetServer::Impl {
         if (player.last_attack_at.time_since_epoch().count() != 0 &&
             now - player.last_attack_at < attack_cooldown) {
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
-                      Json{{"accepted", false}, {"reason", "攻击间隔中，请稍后再试。"}});
+                      Json{{"accepted", false}, {"attacker_character_id", player.character_id},
+                           {"reason", "攻击间隔中，请稍后再试。"}});
             return;
         }
         // Invalid target IDs still consume cooldown to discourage malformed packet spam.
@@ -4278,7 +4280,8 @@ struct EnetServer::Impl {
             // An out-of-range click is a positioning correction, not an attack:
             // do not burn the player's attack cooldown while they move closer.
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
-                      Json{{"accepted", false}, {"reason", "距离目标太远。"}});
+                      Json{{"accepted", false}, {"attacker_character_id", player.character_id},
+                           {"target_entity_id", target->runtime_id}, {"reason", "距离目标太远。"}});
             return;
         }
         player.last_attack_at = now;
@@ -4355,7 +4358,9 @@ struct EnetServer::Impl {
             std::cerr << "Rejected melee hit because monster contribution was not admitted: "
                       << contribution_error << '\n';
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
-                      Json{{"accepted", false}, {"reason", "战斗记录繁忙，请稍后再试。"}});
+                      Json{{"accepted", false}, {"attacker_character_id", player.character_id},
+                           {"target_entity_id", target->runtime_id},
+                           {"reason", "战斗记录繁忙，请稍后再试。"}});
             return;
         }
         record_monster_damage(*target, player, damage.damage);
