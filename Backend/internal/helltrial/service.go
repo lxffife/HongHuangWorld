@@ -20,6 +20,7 @@ var (
 	ErrFloorLocked = errors.New("hell trial floor is locked")
 	ErrFloorNotEntered = errors.New("hell trial floor has no recorded entry")
 	ErrObjectiveIncomplete = errors.New("hell trial objective is incomplete")
+	ErrContributionInsufficient = errors.New("hell trial combat contribution is insufficient")
 	ErrGuardianAlive = errors.New("hell trial guardian is alive")
 	ErrAlreadyCompleted = errors.New("hell trial floor is already completed")
 	ErrEntryIdempotencyConflict = errors.New("hell trial entry event ID was reused")
@@ -106,12 +107,27 @@ var guardianDefinitionIDs = [FloorCount]string{
 
 type completionSnapshot struct {
 	Floor int `json:"floor"`
+	ParticipantDamage int64 `json:"participant_damage"`
+	MinimumContributionDamage int64 `json:"minimum_contribution_damage"`
 	ObjectiveKills int `json:"objective_kills"`
 	ObjectiveRequired int `json:"objective_required"`
 	ObjectiveComplete bool `json:"objective_complete"`
 	GuardianID string `json:"guardian_id"`
 	GuardianDefeated bool `json:"guardian_defeated"`
 	Source string `json:"source"`
+}
+
+func minimumContributionDamage(floor int) int64 {
+	levels := [...]int64{8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 80}
+	if floor < 1 || floor > len(levels) {
+		return 0
+	}
+	baseHealth := int64(90) + levels[floor-1]*28
+	threshold := (baseHealth + 9) / 10
+	if threshold < 10 {
+		return 10
+	}
+	return threshold
 }
 
 func validateCompletion(req CompletionRequest) error {
@@ -123,8 +139,12 @@ func validateCompletion(req CompletionRequest) error {
 	if err := json.Unmarshal(req.ObjectiveSnapshot, &snapshot); err != nil { return ErrInvalid }
 	if snapshot.Floor != req.Floor || snapshot.ObjectiveRequired < 1 ||
 		snapshot.ObjectiveRequired > 100 || snapshot.GuardianID != guardianDefinitionIDs[req.Floor-1] ||
-		snapshot.Source != "worldserver_authoritative_monster_death" {
+		snapshot.Source != "worldserver_authoritative_monster_death" ||
+		snapshot.MinimumContributionDamage != minimumContributionDamage(req.Floor) {
 		return ErrInvalid
+	}
+	if snapshot.ParticipantDamage < snapshot.MinimumContributionDamage {
+		return ErrContributionInsufficient
 	}
 	if !req.ObjectiveComplete || !snapshot.ObjectiveComplete ||
 		snapshot.ObjectiveKills != snapshot.ObjectiveRequired {
