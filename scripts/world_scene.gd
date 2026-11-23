@@ -3529,7 +3529,7 @@ func _update_target_info() -> void:
 	var hp_line := "目标已锁定"
 	if is_instance_valid(local_player) and monster_targets.has(selected_monster_id):
 		var target_position: Vector3 = monster_targets[selected_monster_id]
-		var target_distance := local_player.global_position.distance_to(target_position)
+		var target_distance: float = local_player.global_position.distance_to(target_position)
 		hp_line = "距离 %.1f m" % target_distance
 	if entity.has("health") and entity.has("max_health"):
 		var current_hp := maxi(0, int(entity.get("health", 0)))
