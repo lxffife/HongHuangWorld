@@ -16,7 +16,9 @@ func configure(next_world_id: String, tile_size: float = 48.0, radius: int = 1) 
 	world_id = next_world_id
 	chunk_size = maxf(tile_size, 16.0)
 	stream_radius = maxi(radius, 1)
-	_world_bounds = WorldMapCatalog.get_world_bounds(world_id)
+	# Keep visual chunks aligned with the current WorldServer movement clamp (±100 m).
+	# The schematic underworld atlas is intentionally much larger than this prototype.
+	_world_bounds = Vector4(-100.0, 100.0, -100.0, 100.0)
 
 
 func update_streaming(world_position: Vector3) -> void:
