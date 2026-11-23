@@ -2725,6 +2725,7 @@ struct EnetServer::Impl {
                               << completion_error << std::endl;
                     (void)hell_trial_waves.restore_stage(3);
                     (void)hell_trial_encounter.restore_stage(3);
+                    hell_trial_boss_phase.reset();
                 }
             } else if (wave_transition.advanced && wave_transition.stage == 4 &&
                        !encounter_result.completion_ready) {
