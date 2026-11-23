@@ -71,6 +71,10 @@ if(BUILD_TESTING)
     target_include_directories(fengdu_patrol_roster_test PRIVATE include)
     add_test(NAME fengdu_patrol_roster_test COMMAND fengdu_patrol_roster_test)
 
+    add_executable(hell_trial_progression_test tests/hell_trial_progression_test.cpp)
+    target_include_directories(hell_trial_progression_test PRIVATE include)
+    add_test(NAME hell_trial_progression_test COMMAND hell_trial_progression_test)
+
     add_executable(combat_test tests/combat_test.cpp)
     target_include_directories(combat_test PRIVATE include)
     add_test(NAME combat_test COMMAND combat_test)
