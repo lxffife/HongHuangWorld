@@ -35,7 +35,7 @@ public:
     }
 
     bool dispatch(std::string_view incident_id, std::size_t unit_count) {
-        auto* incident = find(incident_id);
+        auto* incident = find_mutable(incident_id);
         if (incident == nullptr || incident->state != IncidentState::reported || unit_count == 0) {
             return false;
         }
@@ -93,7 +93,7 @@ public:
     }
 
 private:
-    FengduIncident* find(std::string_view incident_id) {
+    FengduIncident* find_mutable(std::string_view incident_id) {
         for (auto& incident : incidents_) {
             if (incident.id == incident_id) return &incident;
         }
