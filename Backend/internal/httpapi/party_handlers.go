@@ -73,6 +73,14 @@ func (h *partyHandlers) lootRules(w http.ResponseWriter, r *http.Request) {
  if err != nil { h.writeError(w, err); return }
  writeJSON(w, http.StatusOK, result)
 }
+func (h *partyHandlers) focusTarget(w http.ResponseWriter, r *http.Request) {
+ id, ok := h.accountID(w, r); if !ok { return }
+ var body party.FocusTarget
+ if err := decodeJSON(w, r, &body); err != nil { http.Error(w, "invalid request body", http.StatusBadRequest); return }
+ result, err := h.service.SetFocusTarget(r.Context(), id, body.EntityID)
+ if err != nil { h.writeError(w, err); return }
+ writeJSON(w, http.StatusOK, result)
+}
 func (h *partyHandlers) writeError(w http.ResponseWriter,err error){
  switch{
  case errors.Is(err,party.ErrInvalid):http.Error(w,"invalid party request",http.StatusBadRequest)
