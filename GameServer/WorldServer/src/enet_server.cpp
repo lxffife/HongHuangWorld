@@ -3466,8 +3466,7 @@ struct EnetServer::Impl {
                         static_cast<double>(health_restored));
                     for (auto& monster : monsters) {
                         if (monster.state.mode != honghuang::simulation::MonsterMode::Chasing ||
-                            monster.state.target_id.empty() ||
-                            monster.state.mode == honghuang::simulation::MonsterMode::Dead) continue;
+                            monster.state.target_id.empty()) continue;
                         const double dx = static_cast<double>(monster.state.x) - state.x;
                         const double dz = static_cast<double>(monster.state.z) - state.z;
                         const double radius = static_cast<double>(monster.definition.aggro_radius);
