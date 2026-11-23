@@ -4413,7 +4413,7 @@ struct EnetServer::Impl {
                 Json{{"accepted", true}, {"action", "player_revived"},
                      {"character_id", revived.character_id}, {"health", revived.health},
                      {"max_health", revived.max_health}, {"mana", revived.mana},
-                     {"max_mana", revived.max_mana}, {"restored_percent", 25}});
+                     {"max_mana", revived.max_mana}, {"restored_percent", honghuang::simulation::kAllyReviveHealthPercent}});
             send_json(rescuer_peer, honghuang::protocol::MessageType::CombatEvent,
                 Json{{"accepted", true}, {"action", "spell_cast"}, {"phase", "released"},
                      {"spell_id", "revive"}, {"target_character_id", revived.character_id},
