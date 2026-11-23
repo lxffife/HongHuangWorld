@@ -32,6 +32,8 @@ var local_gate_open_by_id: Dictionary = {}
 var local_gate_lockdown_by_id: Dictionary = {}
 var local_gate_pass_required_by_id: Dictionary = {}
 var local_gate_faction_restricted_by_id: Dictionary = {}
+var city_alert_level := "normal"
+var gate_open_before_alert: Dictionary = {}
 var local_gate_identity_preview: Dictionary = {
 	"has_valid_pass": false,
 	"faction_permitted": true,
@@ -691,6 +693,47 @@ func set_local_gate_state(gate_id: String, is_open: bool) -> bool:
 
 func get_local_gate_states() -> Dictionary:
 	return local_gate_open_by_id.duplicate(true)
+
+
+func set_city_alert_level(level: String) -> bool:
+	if level not in ["normal", "watch", "lockdown"]:
+		return false
+	if level == city_alert_level:
+		return true
+	if level == "lockdown" and city_alert_level != "lockdown":
+		gate_open_before_alert = local_gate_open_by_id.duplicate(true)
+	if level == "normal" and city_alert_level == "lockdown":
+		for gate_id_variant in gate_open_before_alert.keys():
+			var restore_gate_id := str(gate_id_variant)
+			local_gate_open_by_id[restore_gate_id] = bool(gate_open_before_alert[restore_gate_id])
+			for agent in npc_agents:
+				if str(agent.get("role", "")) == "gate_guard" and str(agent.get("gate_id", "")) == restore_gate_id:
+					var guard_root: Node3D = agent.get("root")
+					if guard_root != null and is_instance_valid(guard_root) and guard_root.visible:
+						agent["state"] = "gate_watch" if bool(local_gate_open_by_id[restore_gate_id]) else "gate_sealed_watch"
+		gate_open_before_alert.clear()
+	city_alert_level = level
+	for gate_id_variant in local_gate_open_by_id.keys():
+		var gate_id := str(gate_id_variant)
+		local_gate_lockdown_by_id[gate_id] = level == "lockdown"
+		local_gate_pass_required_by_id[gate_id] = level in ["watch", "lockdown"]
+		if level == "lockdown":
+			set_local_gate_state(gate_id, false)
+		elif level == "normal" and not gate_open_before_alert.has(gate_id):
+			set_local_gate_state(gate_id, true)
+	return true
+
+
+func get_city_alert_status() -> Dictionary:
+	return {"level": city_alert_level, "label": {"normal": "常态", "watch": "戒备", "lockdown": "战时封城"}.get(city_alert_level, "未知"), "closed_gate_count": _count_closed_gates()}
+
+
+func _count_closed_gates() -> int:
+	var count := 0
+	for is_open_variant in local_gate_open_by_id.values():
+		if not bool(is_open_variant):
+			count += 1
+	return count
 
 
 func set_local_gate_policy(gate_id: String, policy_patch: Dictionary) -> bool:
@@ -3683,7 +3726,8 @@ func _update_hud() -> void:
 			nearest_distance = distance
 			nearest = str(district_name)
 	var period := "夜" if npc_schedule_night else "昼"
-	status_label.text = "%s %s  ·  位置 %.1f, %.1f  ·  附近：%s" % [period, _format_npc_clock(), p.x, p.z, nearest]
+	var alert_label := str(get_city_alert_status().get("label", "常态"))
+	status_label.text = "%s %s  ·  城防：%s  ·  位置 %.1f, %.1f  ·  附近：%s" % [period, _format_npc_clock(), alert_label, p.x, p.z, nearest]
 	_update_npc_interaction_hint()
 
 
