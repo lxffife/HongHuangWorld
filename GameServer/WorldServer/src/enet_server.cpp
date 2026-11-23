@@ -2733,6 +2733,7 @@ struct EnetServer::Impl {
                           << std::endl;
                 (void)hell_trial_waves.restore_stage(3);
                 (void)hell_trial_encounter.restore_stage(3);
+                hell_trial_boss_phase.reset();
             }
         }
         monster.state.target_id.clear();
