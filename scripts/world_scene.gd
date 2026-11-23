@@ -1390,8 +1390,8 @@ func _update_compact_hud(progression: Dictionary = {}) -> void:
 			lines.append("来世资质 · " + "  ".join(PackedStringArray(progress_parts)))
 		# Underworld cards contain combat, soul-growth and attribute progress.
 		# Reserve enough vertical room so wrapped Chinese lines are never clipped.
-		compact_hud_panel.custom_minimum_size = Vector2(460.0, 240.0)
-		compact_hud_label.custom_minimum_size = Vector2(436.0, 220.0)
+		compact_hud_panel.custom_minimum_size = Vector2(520.0, 240.0)
+		compact_hud_label.custom_minimum_size = Vector2(496.0, 220.0)
 		compact_hud_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		compact_hud_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		compact_hud_label.clip_text = false
@@ -1402,8 +1402,8 @@ func _update_compact_hud(progression: Dictionary = {}) -> void:
 			if not pending_choices.is_empty():
 				soul_choice_button.text = "分配无相灵魄 · " + str(pending_choices.size())
 	else:
-		compact_hud_panel.custom_minimum_size = Vector2(460.0, 190.0)
-		compact_hud_label.custom_minimum_size = Vector2(436.0, 170.0)
+		compact_hud_panel.custom_minimum_size = Vector2(360.0, 190.0)
+		compact_hud_label.custom_minimum_size = Vector2(336.0, 170.0)
 		compact_hud_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		compact_hud_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		compact_hud_label.clip_text = false
@@ -2033,6 +2033,27 @@ func _create_drop(item_name: String, quality: int, quantity: int) -> Node3D:
 	add_child(root)
 	return root
 
+func _input(event: InputEvent) -> void:
+	# Route combat clicks at the world root so GUI focus cannot silently swallow them.
+	if not (event is InputEventMouseButton):
+		return
+	var mouse_event := event as InputEventMouseButton
+	if mouse_event.button_index != MOUSE_BUTTON_LEFT or not mouse_event.pressed:
+		return
+	if not is_instance_valid(local_player) or is_gameplay_input_blocked():
+		return
+	var viewport := get_viewport()
+	var was_captured := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+	if not was_captured:
+		var hovered_control := viewport.gui_get_hovered_control()
+		if is_instance_valid(hovered_control) and hovered_control.mouse_filter == Control.MOUSE_FILTER_STOP:
+			return
+	var target_screen_position: Vector2 = viewport.get_visible_rect().size * 0.5 if was_captured else mouse_event.position
+	if not was_captured:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	_request_nearest_monster_attack(target_screen_position)
+	viewport.set_input_as_handled()
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE and is_instance_valid(world_map_panel) and world_map_panel.visible:
 		_toggle_world_map()
@@ -2345,7 +2366,7 @@ func _layout_hud() -> void:
 	# top-left stack. The original fixed Y=118 placed the button over the card.
 	if is_instance_valid(compact_hud_panel):
 		var is_underworld := str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu"
-		var card_width := minf(420.0 if is_underworld else 340.0, maxf(260.0, viewport_size.x - 36.0))
+		var card_width := minf(520.0 if is_underworld else 360.0, maxf(280.0, viewport_size.x - 48.0))
 		var card_height := compact_hud_panel.custom_minimum_size.y
 		compact_hud_panel.position = Vector2(18.0, 18.0)
 		compact_hud_panel.custom_minimum_size = Vector2(card_width, card_height)
