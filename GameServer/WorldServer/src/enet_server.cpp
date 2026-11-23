@@ -10,6 +10,7 @@
 #include "simulation/consumable.hpp"
 #include "simulation/status_effect.hpp"
 #include "simulation/revive.hpp"
+#include "simulation/support_combat.hpp"
 #include "persistence/durable_outbox.hpp"
 #include "persistence/monster_contribution_writer.hpp"
 #include "persistence/monster_runtime_checkpoint_writer.hpp"
@@ -129,6 +130,8 @@ struct PlayerState {
     std::string revive_target_character_id;
     Clock::time_point revive_completes_at{};
     Clock::time_point last_revive_at{};
+    std::int64_t absorb_shield_health{};
+    Clock::time_point absorb_shield_expires_at{};
     float revive_start_x{};
     float revive_start_z{};
     std::int64_t revive_start_health{};
