@@ -1504,6 +1504,8 @@ func _upsert_monster(entity: Dictionary) -> void:
 			var max_hp := int(entity.get("max_health", 0))
 			if max_hp > 0:
 				base_text += "\n生命 " + str(maxi(hp, 0)) + " / " + str(max_hp)
+		if str(party_data.get("focus_target_entity_id", "")) == monster_id:
+			base_text += "\n⚑ 队伍集火目标"
 		nameplate.text = base_text
 
 func _refresh_party_focus_visual() -> void:
@@ -2703,6 +2705,7 @@ func _party_request(method: String, path: String, payload: Dictionary, context: 
 	var body := ""
 	if method == "POST":
 		http_method = HTTPClient.METHOD_POST
+		body = JSON.stringify(payload)
 	elif method == "PUT":
 		http_method = HTTPClient.METHOD_PUT
 		body = JSON.stringify(payload)
