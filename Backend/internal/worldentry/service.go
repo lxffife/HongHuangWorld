@@ -36,6 +36,7 @@ type PlayerSnapshot struct {
 	CharacterID string  `json:"character_id"`
 	WorldID     string  `json:"world_id"`
 	InstanceID  string  `json:"instance_id"`
+	HellFloor   int     `json:"hell_floor"`
 	Name        string  `json:"name"`
 	PositionX   float64 `json:"position_x"`
 	PositionY   float64 `json:"position_y"`
@@ -173,7 +174,8 @@ func (s *Service) Redeem(ctx context.Context, nodeKey, ticket string) (PlayerSna
 	var equipmentJSON []byte
 	err = tx.QueryRowContext(ctx,
 		`SELECT t.id::text, c.id::text, t.instance_id::text, t.server_id::text,
-		        c.world_id, c.name, c.position_x, c.position_y, c.position_z, c.rotation_y,
+		        c.world_id, COALESCE(wi.hell_floor, 0), c.name,
+		        c.position_x, c.position_y, c.position_z, c.rotation_y,
 		        COALESCE((
 		          SELECT jsonb_build_object(
 		            'source_absorbed_count', bi.source_absorbed_count,
@@ -209,7 +211,7 @@ func (s *Service) Redeem(ctx context.Context, nodeKey, ticket string) (PlayerSna
 		   AND sr.node_key = $2 AND sr.status = 'ready' AND sr.admin_state = 'normal' AND sr.last_heartbeat_at > now() - INTERVAL '30 seconds'
 		   AND c.status = 'alive'
 		 FOR UPDATE OF t, c, sr`, tokenHash[:], nodeKey,
-	).Scan(&ticketID, &characterID, &instanceID, &serverID, &snapshot.WorldID, &snapshot.Name,
+	).Scan(&ticketID, &characterID, &instanceID, &serverID, &snapshot.WorldID, &snapshot.HellFloor, &snapshot.Name,
 		&snapshot.PositionX, &snapshot.PositionY, &snapshot.PositionZ, &snapshot.RotationY, &birthInheritanceJSON, &equipmentJSON)
 	if errors.Is(err, sql.ErrNoRows) {
 		return PlayerSnapshot{}, ErrInvalidTicket
@@ -219,6 +221,14 @@ func (s *Service) Redeem(ctx context.Context, nodeKey, ticket string) (PlayerSna
 	}
 	snapshot.CharacterID = characterID
 	snapshot.InstanceID = instanceID
+	if snapshot.HellFloor > 0 {
+		// Dedicated hell instances have their own arena coordinate space.
+		// Never reuse a character's saved Fengdu city position inside the trial.
+		snapshot.PositionX = 0
+		snapshot.PositionY = 0.15
+		snapshot.PositionZ = 18
+		snapshot.RotationY = 0
+	}
 	if len(birthInheritanceJSON) > 0 {
 		if err := json.Unmarshal(birthInheritanceJSON, &snapshot.BirthInheritance); err != nil {
 			return PlayerSnapshot{}, fmt.Errorf("decode character birth inheritance: %w", err)
