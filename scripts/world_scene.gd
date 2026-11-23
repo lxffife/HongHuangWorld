@@ -3657,6 +3657,15 @@ func _update_spell_mastery_hud() -> void:
 
 
 func _on_combat_event(event: Dictionary) -> void:
+	if str(event.get("action", "")) == "threat_warning":
+		var monster_name := str(event.get("monster_name", "怪物"))
+		var current_name := str(event.get("current_target_name", "当前目标"))
+		var challenger_name := str(event.get("challenger_name", "队友"))
+		var warning_text := "仇恨预警 · " + monster_name + "： " + challenger_name + " 已接近 " + current_name
+		if bool(event.get("will_switch", false)):
+			warning_text = "仇恨即将转移！" + monster_name + " 可能转向 " + challenger_name
+		_show_notification(warning_text, 3.8)
+		return
 	if str(event.get("action", "")) == "monster_taunt":
 		var taunter := str(event.get("character_name", "队友"))
 		_show_notification(taunter + " 嘲讽了怪物，怪物将优先攻击他！", 2.8)
@@ -3717,6 +3726,8 @@ func _on_combat_event(event: Dictionary) -> void:
 			_update_compact_hud()
 			if bool(event.get("applied", true)):
 				_show_notification("消耗品使用成功：生命 +" + str(int(event.get("health_restored", 0))) + "，灵力 +" + str(int(event.get("mana_restored", 0))))
+				if bool(event.get("healing_threat_generated", false)):
+					_show_notification("治疗吸引了附近 " + str(int(event.get("healing_threat_targets", 0))) + " 只战斗中怪物的注意！", 3.2)
 			else:
 				_show_notification("该请求已结算，角色资源已重新同步。")
 			_refresh_inventory()
