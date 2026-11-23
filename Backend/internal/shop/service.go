@@ -80,6 +80,7 @@ func (s *Service) ListForAccount(ctx context.Context, accountID string) ([]Shop,
 	var worldID string
 	err := s.db.QueryRowContext(ctx, `SELECT c.world_id
 		FROM souls soul JOIN characters c ON c.id=soul.current_character_id
+		JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
 		WHERE soul.account_id=$1 AND c.status='alive'`, accountID).Scan(&worldID)
 	if errors.Is(err, sql.ErrNoRows) { return []Shop{}, nil }
 	if err != nil { return nil, fmt.Errorf("resolve current character world for shops: %w", err) }
@@ -136,6 +137,7 @@ func (s *Service) Purchase(ctx context.Context, accountID string, request Purcha
 	var characterID,worldID string
 	if err:=tx.QueryRowContext(ctx,`SELECT c.id::text,c.world_id
 		FROM souls soul JOIN characters c ON c.id=soul.current_character_id
+		JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
 		WHERE soul.account_id=$1 AND c.status='alive' FOR UPDATE OF c`,accountID).Scan(&characterID,&worldID);err!=nil{
 		if errors.Is(err,sql.ErrNoRows){return PurchaseResult{},ErrInvalidRequest}
 		return PurchaseResult{},fmt.Errorf("resolve shop buyer character: %w",err)
