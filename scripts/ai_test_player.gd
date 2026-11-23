@@ -204,6 +204,9 @@ func _on_combat_event(event: Dictionary) -> void:
 	var accepted := bool(event.get("accepted", not event.has("reason")))
 	var phase := str(event.get("phase", ""))
 	var reason := str(event.get("reason", ""))
+	var persistence_error := str(event.get("persistence_error", ""))
+	if not persistence_error.is_empty():
+		reason += " · 存储诊断: " + persistence_error
 	if not accepted and reason.contains("战斗记录繁忙"):
 		attack_backoff_until_msec = maxi(attack_backoff_until_msec, Time.get_ticks_msec() + int(BUSY_ATTACK_BACKOFF * 1000.0))
 	elif not accepted and reason.contains("距离目标太远"):
