@@ -171,12 +171,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	if is_dead:
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
-			# Lock the cursor and use this same click as the first attack input.
-			# GUI controls consume their own clicks before _unhandled_input reaches here.
+		# In captured mode the gameplay reticle is the screen center. On the first
+		# click, preserve the visible cursor position before capturing it.
+		var was_captured := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+		var target_screen_position := get_viewport().get_visible_rect().size * 0.5 if was_captured else event.position
+		if not was_captured:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		if world != null and world.has_method("_request_nearest_monster_attack"):
-			world.call("_request_nearest_monster_attack")
+			world.call("_request_nearest_monster_attack", target_screen_position)
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("jump"):
 		jump_pending = true
