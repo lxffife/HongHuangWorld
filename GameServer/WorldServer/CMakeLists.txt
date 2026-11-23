@@ -67,6 +67,10 @@ if(BUILD_TESTING)
     target_include_directories(fengdu_incident_director_test PRIVATE include)
     add_test(NAME fengdu_incident_director_test COMMAND fengdu_incident_director_test)
 
+    add_executable(fengdu_patrol_roster_test tests/fengdu_patrol_roster_test.cpp)
+    target_include_directories(fengdu_patrol_roster_test PRIVATE include)
+    add_test(NAME fengdu_patrol_roster_test COMMAND fengdu_patrol_roster_test)
+
     add_executable(combat_test tests/combat_test.cpp)
     target_include_directories(combat_test PRIVATE include)
     add_test(NAME combat_test COMMAND combat_test)
