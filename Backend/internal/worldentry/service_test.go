@@ -17,6 +17,28 @@ func TestIssueHellTrialRejectsInvalidFloorBeforeDatabaseAccess(t *testing.T) {
 	}
 }
 
+func TestApplyInstanceSpawnForHellFloor(t *testing.T) {
+	snapshot := PlayerSnapshot{
+		HellFloor: 7,
+		PositionX: 84,
+		PositionY: 2,
+		PositionZ: -71,
+		RotationY: 1.2,
+	}
+	applyInstanceSpawn(&snapshot)
+	if snapshot.PositionX != 0 || snapshot.PositionY != 0.15 ||
+		snapshot.PositionZ != 18 || snapshot.RotationY != 0 {
+		t.Fatalf("hell floor spawn was not normalized: %+v", snapshot)
+	}
+
+	ordinary := PlayerSnapshot{PositionX: 84, PositionY: 2, PositionZ: -71, RotationY: 1.2}
+	applyInstanceSpawn(&ordinary)
+	if ordinary.PositionX != 84 || ordinary.PositionY != 2 ||
+		ordinary.PositionZ != -71 || ordinary.RotationY != 1.2 {
+		t.Fatalf("ordinary world spawn was unexpectedly changed: %+v", ordinary)
+	}
+}
+
 func TestSaveAndCloseRejectsInvalidSnapshots(t *testing.T) {
 	service := NewService(nil)
 	valid := SessionSnapshot{
