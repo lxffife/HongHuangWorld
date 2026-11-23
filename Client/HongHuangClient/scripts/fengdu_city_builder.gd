@@ -20,6 +20,7 @@ static func build() -> Node3D:
 		by_id[str(entry.get("id", ""))] = entry
 		_add_district(root, entry)
 	_add_city_walls(root)
+	_add_moat_and_bridges(root)
 	_add_roads(root, by_id, plan.get("roads", []))
 	_add_city_landmark(root, "CapitalName", "酆 都 天 城", Vector3(0.0, 19.0, CITY_CENTER_Z - 8.0), Color("#d9c7a1"))
 	_add_city_landmark(root, "CapitalSubtitle", "陰司中樞 · 十王分治 · 四門通幽", Vector3(0.0, 15.0, CITY_CENTER_Z - 8.0), Color("#b8a9c9"))
@@ -146,6 +147,74 @@ static func _add_district_details(district: Node3D, kind: String, footprint: Vec
 		"transport":
 			district.add_child(_box_mesh("WaystationPlatform", Vector3(footprint.x * 0.86, 0.35, footprint.y * 0.82), Vector3(0.0, 0.9, 0.0), Color("#827968")))
 			district.add_child(_box_mesh("WaystationCanopy", Vector3(footprint.x * 0.8, 0.35, footprint.y * 0.76), Vector3(0.0, building_height + 1.4, 0.0), Color("#343341")))
+
+
+static func _add_moat_and_bridges(root: Node3D) -> void:
+	# A continuous defensive moat surrounds the wall, with four deliberately
+	# aligned openings. Server collision uses the same X/Z rectangles.
+	var moat_color := Color("#292d45")
+	var moat_y := -0.18
+	var moat_depth := 6.1
+	# North and south runs, split around the 12 m gate/bridge openings.
+	for side in [-1.0, 1.0]:
+		_add_moat_segment(root, "NorthMoat_" + str(side),
+			Vector3(48.0, 0.18, moat_depth),
+			Vector3(side * 30.0, moat_y, -101.0), moat_color)
+		_add_moat_segment(root, "SouthMoat_" + str(side),
+			Vector3(48.0, 0.18, moat_depth),
+			Vector3(side * 30.0, moat_y, -19.0), moat_color)
+	# East and west runs are split above/below their gate openings.
+	for side in [-1.0, 1.0]:
+		var x := side * 51.0
+		var prefix := "West" if side < 0.0 else "East"
+		_add_moat_segment(root, prefix + "Moat_North",
+			Vector3(moat_depth, 0.18, 38.0), Vector3(x, moat_y, -85.0), moat_color)
+		_add_moat_segment(root, prefix + "Moat_South",
+			Vector3(moat_depth, 0.18, 38.0), Vector3(x, moat_y, -35.0), moat_color)
+
+	# Bridge decks overlap the moat banks slightly so there are no tiny gaps
+	# at the shore or wall threshold. The openings remain 12 m wide.
+	_add_gate_bridge(root, "NorthGateBridge", Vector3(12.0, 0.36, 10.0), Vector3(0.0, 0.10, -101.5), false)
+	_add_gate_bridge(root, "SouthGateBridge", Vector3(12.0, 0.36, 10.0), Vector3(0.0, 0.10, -18.5), false)
+	_add_gate_bridge(root, "WestGateBridge", Vector3(10.0, 0.36, 12.0), Vector3(-51.0, 0.10, -60.0), true)
+	_add_gate_bridge(root, "EastGateBridge", Vector3(10.0, 0.36, 12.0), Vector3(51.0, 0.10, -60.0), true)
+
+
+static func _add_moat_segment(root: Node3D, node_name: String, dimensions: Vector3, position: Vector3, color: Color) -> void:
+	var body := StaticBody3D.new()
+	body.name = node_name
+	body.position = position
+	var water := _box_mesh("WaterSurface", dimensions, Vector3.ZERO, color)
+	var material := water.material_override as StandardMaterial3D
+	material.roughness = 0.22
+	material.metallic = 0.12
+	body.add_child(water)
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = dimensions
+	collision.shape = shape
+	body.add_child(collision)
+	root.add_child(body)
+
+
+static func _add_gate_bridge(root: Node3D, node_name: String, dimensions: Vector3, position: Vector3, east_west: bool) -> void:
+	var bridge := StaticBody3D.new()
+	bridge.name = node_name
+	bridge.position = position
+	bridge.add_child(_box_mesh("StoneDeck", dimensions, Vector3.ZERO, Color("#6b625e")))
+	var deck_collision := CollisionShape3D.new()
+	var deck_shape := BoxShape3D.new()
+	deck_shape.size = dimensions
+	deck_collision.shape = deck_shape
+	bridge.add_child(deck_collision)
+	var rail_color := Color("#403b49")
+	if east_west:
+		for side in [-1.0, 1.0]:
+			bridge.add_child(_box_mesh("BridgeRail", Vector3(10.0, 0.72, 0.28), Vector3(0.0, 0.54, side * 5.65), rail_color))
+	else:
+		for side in [-1.0, 1.0]:
+			bridge.add_child(_box_mesh("BridgeRail", Vector3(0.28, 0.72, 10.0), Vector3(side * 5.65, 0.54, 0.0), rail_color))
+	root.add_child(bridge)
 
 
 static func _add_city_walls(root: Node3D) -> void:
