@@ -4291,13 +4291,15 @@ struct EnetServer::Impl {
         if (player_weapon_type(player) == "bow") {
             if (projectiles.size() >= 128) {
                 send_json(peer, honghuang::protocol::MessageType::CombatEvent,
-                          Json{{"accepted", false}, {"reason", "当前箭矢数量过多，请稍后再试。"}});
+                          Json{{"accepted", false}, {"attacker_character_id", player.character_id},
+                               {"reason", "当前箭矢数量过多，请稍后再试。"}});
                 return;
             }
             const double distance = std::sqrt(dx * dx + dz * dz);
             if (distance < 0.001) {
                 send_json(peer, honghuang::protocol::MessageType::CombatEvent,
-                          Json{{"accepted", false}, {"reason", "目标距离异常，无法发射箭矢。"}});
+                          Json{{"accepted", false}, {"attacker_character_id", player.character_id},
+                               {"reason", "目标距离异常，无法发射箭矢。"}});
                 return;
             }
             constexpr float projectile_speed = 24.0F;
@@ -4322,7 +4324,6 @@ struct EnetServer::Impl {
                            {"projectile_id", projectile_id}, {"target_entity_id", target->runtime_id}});
             return;
         }
-        broadcast_player_action_event(player, "attack", target->runtime_id, player_attack_style(player), peer);
         const honghuang::simulation::CombatantStats attacker{player.attack, player.defense, 100, 100};
         const honghuang::simulation::CombatantStats defender{
             static_cast<std::int64_t>(target->definition.attack),
@@ -4339,7 +4340,8 @@ struct EnetServer::Impl {
         };
         if (!honghuang::simulation::calculate_damage(attacker, defender, attack_profile, damage)) {
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
-                      Json{{"accepted", false}, {"reason", "伤害计算未通过校验。"}});
+                      Json{{"accepted", false}, {"attacker_character_id", player.character_id},
+                           {"target_entity_id", target->runtime_id}, {"reason", "伤害计算未通过校验。"}});
             return;
         }
         std::string contribution_error;
@@ -4375,6 +4377,7 @@ struct EnetServer::Impl {
         // hit that never changed monster health.
         player.last_attack_at = now;
         player.last_combat_at = now;
+        broadcast_player_action_event(player, "attack", target->runtime_id, player_attack_style(player), peer);
         record_monster_damage(*target, player, damage.damage);
         std::int64_t experience_reward = 0;
         std::int64_t cultivation_reward = 0;
