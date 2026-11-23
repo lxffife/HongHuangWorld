@@ -4550,7 +4550,12 @@ struct EnetServer::Impl {
                 const auto poison_damage = honghuang::simulation::consume_periodic_damage_tick(
                     player.poison_effect, effect_now_ms);
                 if (poison_damage > 0) {
-                    const auto applied_damage = std::min(player.health, poison_damage);
+                    if (player.absorb_shield_expires_at <= now) {
+                        player.absorb_shield_health = 0;
+                    }
+                    const auto poison_absorbed = honghuang::simulation::absorb_with_shield(
+                        poison_damage, player.absorb_shield_health);
+                    const auto applied_damage = std::min(player.health, poison_damage - poison_absorbed);
                     player.health -= applied_damage;
                     player.last_combat_at = now;
                     const bool poison_defeated = player.health <= 0;
@@ -5347,6 +5352,15 @@ struct EnetServer::Impl {
                                   << monster.runtime_id << '\n';
                         continue;
                     }
+                    if (target_player.absorb_shield_expires_at <= now) {
+                        target_player.absorb_shield_health = 0;
+                    }
+                    const auto absorbed = honghuang::simulation::absorb_with_shield(
+                        damage.damage, target_player.absorb_shield_health);
+                    damage.damage -= absorbed;
+                    damage.remaining_health = std::max<std::int64_t>(
+                        0, target_player.health - damage.damage);
+                    damage.defeated = damage.remaining_health <= 0;
                     target_player.health = damage.remaining_health;
                     target_player.last_combat_at = now;
                     if (damage.defeated) {
@@ -5374,6 +5388,15 @@ struct EnetServer::Impl {
                     monster.attack_phase_started_at = now;
                     continue;
                 }
+                if (player.absorb_shield_expires_at <= now) {
+                    player.absorb_shield_health = 0;
+                }
+                const auto absorbed = honghuang::simulation::absorb_with_shield(
+                    damage.damage, player.absorb_shield_health);
+                damage.damage -= absorbed;
+                damage.remaining_health = std::max<std::int64_t>(
+                    0, player.health - damage.damage);
+                damage.defeated = damage.remaining_health <= 0;
                 player.health = damage.remaining_health;
                 player.last_combat_at = now;
                 if (damage.defeated) {
