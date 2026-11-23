@@ -145,6 +145,12 @@ int main() {
     }
     assert(city_x < 45.0F); // cross the east moat and wall into the city
 
+    float invalid_obstacle_x = 1.0F;
+    float invalid_obstacle_z = 2.0F;
+    integrate_horizontal_with_obstacles(invalid_obstacle_x, invalid_obstacle_z,
+        1.0F, 1.0F, 0.1F, nullptr, 1, 5.0F, 128.0F);
+    assert(invalid_obstacle_x == 1.0F && invalid_obstacle_z == 2.0F); // reject a null obstacle list
+
     city_x = 0.0F;
     city_z = 0.0F;
     integrate_fengdu_horizontal(city_x, city_z, 1.0F, 0.0F, 0.1F, 5.0F);
