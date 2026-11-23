@@ -14,7 +14,7 @@ func TestValidateCompletion(t *testing.T) {
 		EventID: "123e4567-e89b-12d3-a456-426614174001",
 		ObjectiveComplete: true,
 		GuardianDefeated: true,
-		ObjectiveSnapshot: json.RawMessage(`{"kills":12,"required":12,"guardian_id":"floor_01_guardian"}`),
+		ObjectiveSnapshot: json.RawMessage(`{"floor":1,"objective_kills":3,"objective_required":3,"objective_complete":true,"guardian_id":"hell_f01_tongue_jailer","guardian_defeated":true,"source":"worldserver_authoritative_monster_death"}`),
 	}
 	if err := validateCompletion(valid); err != nil { t.Fatalf("valid completion rejected: %v", err) }
 	cases := []struct{name string; mutate func(*CompletionRequest); want error}{
@@ -28,6 +28,10 @@ func TestValidateCompletion(t *testing.T) {
 		{"oversized snapshot",func(r *CompletionRequest){r.ObjectiveSnapshot=json.RawMessage(`{"payload":"`+strings.Repeat("x",16*1024)+`"}`)},ErrInvalid},
 		{"objective incomplete",func(r *CompletionRequest){r.ObjectiveComplete=false},ErrObjectiveIncomplete},
 		{"guardian alive",func(r *CompletionRequest){r.GuardianDefeated=false},ErrGuardianAlive},
+		{"wrong floor proof",func(r *CompletionRequest){r.ObjectiveSnapshot=json.RawMessage(`{"floor":2,"objective_kills":3,"objective_required":3,"objective_complete":true,"guardian_id":"hell_f01_tongue_jailer","guardian_defeated":true,"source":"worldserver_authoritative_monster_death"}`)},ErrInvalid},
+		{"wrong guardian identity",func(r *CompletionRequest){r.ObjectiveSnapshot=json.RawMessage(`{"floor":1,"objective_kills":3,"objective_required":3,"objective_complete":true,"guardian_id":"fake_guardian","guardian_defeated":true,"source":"worldserver_authoritative_monster_death"}`)},ErrInvalid},
+		{"objective count below requirement",func(r *CompletionRequest){r.ObjectiveSnapshot=json.RawMessage(`{"floor":1,"objective_kills":2,"objective_required":3,"objective_complete":true,"guardian_id":"hell_f01_tongue_jailer","guardian_defeated":true,"source":"worldserver_authoritative_monster_death"}`)},ErrObjectiveIncomplete},
+		{"snapshot guardian alive",func(r *CompletionRequest){r.ObjectiveSnapshot=json.RawMessage(`{"floor":1,"objective_kills":3,"objective_required":3,"objective_complete":true,"guardian_id":"hell_f01_tongue_jailer","guardian_defeated":false,"source":"worldserver_authoritative_monster_death"}`)},ErrGuardianAlive},
 	}
 	for _,tc:=range cases { t.Run(tc.name,func(t *testing.T){req:=valid;tc.mutate(&req);if err:=validateCompletion(req);!errors.Is(err,tc.want){t.Fatalf("got %v, want %v",err,tc.want)}}) }
 }
