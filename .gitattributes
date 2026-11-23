@@ -1,2 +1,5 @@
 # Shell scripts must use Unix LF line endings on Linux hosts.
 *.sh text eol=lf
+
+# Keep Godot project files on a consistent line ending across Windows/Linux.
+*.godot text eol=lf
