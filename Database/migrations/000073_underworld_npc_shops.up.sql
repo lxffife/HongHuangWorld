@@ -46,13 +46,14 @@ VALUES
 ('fengdu_weapon_shop', 'underworld_fengdu', '酆都百兵铺', 'weapon', 'ghost_cash', '售卖初阶兵器与基础防具'),
 ('fengdu_elixir_shop', 'underworld_fengdu', '黄泉丹药坊', 'alchemy', 'ghost_cash', '售卖疗伤与恢复类基础丹药'),
 ('fengdu_talisman_shop', 'underworld_fengdu', '镇魂符箓铺', 'talisman', 'ghost_cash', '售卖护身与镇邪类基础法器耗材'),
-('fengdu_general_shop', 'underworld_fengdu', '冥市杂货行', 'general', 'ghost_cash', '回收与供应常见修行材料')
+('fengdu_general_shop', 'underworld_fengdu', '冥市杂货行', 'general', 'ghost_cash', '回收与供应常见修行材料'),
+('fengdu_formation_shop', 'underworld_fengdu', '九曲阵材铺', 'formation', 'ghost_cash', '售卖初阶阵旗与布阵材料')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO item_definitions
 (id, name, category, quality, max_stack, icon_key, description)
 VALUES
-('fengdu_warding_talisman', '镇邪符', 'consumable', 1, 99, 'talisman_warding', '以朱砂符墨绘制的基础镇邪符，可作为后续符箓系统的消耗材料。'),
+('fengdu_warding_talisman', '镇邪符', 'material', 1, 99, 'talisman_warding', '可用于符箓学习与合成的基础符箓材料；实际施符效果由技能系统提供。'),
 ('fengdu_array_flag', '聚阴阵旗', 'material', 1, 99, 'formation_flag_nether', '布置初阶聚阴阵所需的阵旗材料。')
 ON CONFLICT (id) DO NOTHING;
 
@@ -66,7 +67,7 @@ VALUES
 ('fengdu_talisman_shop', 'fengdu_warding_talisman', 18, NULL, 10),
 ('fengdu_general_shop', 'wolf_fang', 8, NULL, 10),
 ('fengdu_general_shop', 'wolf_pelt', 12, NULL, 20),
-('fengdu_general_shop', 'fengdu_array_flag', 45, NULL, 30)
+('fengdu_formation_shop', 'fengdu_array_flag', 45, NULL, 10)
 ON CONFLICT (shop_id, item_id) DO NOTHING;
 
 COMMIT;
