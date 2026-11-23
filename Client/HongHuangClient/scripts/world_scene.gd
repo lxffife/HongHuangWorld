@@ -3607,7 +3607,7 @@ func _request_nearest_monster_attack(screen_position: Vector2 = Vector2(-1.0, -1
 		return
 
 	var target_position: Vector3 = monster_targets[target_id]
-	var target_distance := local_player.global_position.distance_to(target_position)
+	var target_distance: float = local_player.global_position.distance_to(target_position)
 	var error: Error = network.send_attack(target_id)
 	if error != OK:
 		hud_label.text = "攻击指令发送失败：" + str(error)
