@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <string>
 
 namespace honghuang::simulation {
@@ -22,6 +23,25 @@ struct MonsterDefinition {
     float spawn_z{};
     float attack_range{1.8F};
 };
+
+
+inline double decayed_monster_threat(double value, std::int64_t age_seconds,
+                                     std::int64_t decay_seconds = 30) {
+    if (!std::isfinite(value) || value <= 0.0 || age_seconds < 0 ||
+        decay_seconds <= 0 || age_seconds >= decay_seconds) return 0.0;
+    const double freshness = 1.0 -
+        static_cast<double>(age_seconds) / static_cast<double>(decay_seconds);
+    return value * freshness;
+}
+
+inline bool should_switch_monster_target(double current_threat,
+                                          double challenger_threat,
+                                          double switch_ratio = 1.20) {
+    if (!std::isfinite(current_threat) || !std::isfinite(challenger_threat) ||
+        !std::isfinite(switch_ratio) || challenger_threat <= 0.0 || switch_ratio < 1.0)
+        return false;
+    return current_threat <= 0.0 || challenger_threat > current_threat * switch_ratio;
+}
 
 struct MonsterAttackProfile {
     int windup_ms{520};
