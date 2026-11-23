@@ -745,6 +745,9 @@ func _show_hell_trial_runtime_state(snapshot: Dictionary) -> void:
 		return
 	var floor_number := int(trial_data.get("floor", snapshot.get("hell_floor", 0)))
 	var label := str(trial_data.get("label", ""))
+	var boss_phase := int(trial_data.get("boss_phase", 0))
+	if boss_phase > 0:
+		label += " · 守将阶段 " + str(boss_phase)
 	if bool(trial_data.get("completed", false)):
 		_show_notification("第 %02d 层 · 试炼已完成" % floor_number, 4.0)
 	elif not label.is_empty():
