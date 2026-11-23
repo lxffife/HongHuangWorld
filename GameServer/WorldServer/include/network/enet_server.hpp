@@ -18,6 +18,7 @@ struct ServerConfig {
     std::string region{"local"};
     std::string world_id{"qingyun_human"};
     std::string instance_key{"qingyun-local-1"};
+    int hell_floor{}; // 0 for ordinary worlds; 1..18 for a dedicated hell-floor instance.
     std::string outbox_database_path{"./data/worldserver-outbox.sqlite3"};
     int capacity{100};
 };
