@@ -173,6 +173,13 @@ struct MonsterRuntime {
     Clock::time_point attack_phase_started_at{};
     MonsterAttackPhase attack_phase{MonsterAttackPhase::Ready};
     std::string attack_target_character_id;
+    struct ThreatEntry {
+        double value{};
+        Clock::time_point last_update{};
+    };
+    // Runtime-only threat ledger. Damage admission remains durable in the
+    // contribution writer; threat is rebuilt naturally as players fight.
+    std::unordered_map<std::string, ThreatEntry> threat_by_character;
     bool rare_spawn{false};
     int spawn_chance_percent{100};
     int retry_spawn_seconds{60};
@@ -1768,6 +1775,27 @@ struct EnetServer::Impl {
         if (contribution.hit_count < std::numeric_limits<std::int64_t>::max())
             ++contribution.hit_count;
         contribution.last_hit_at = Clock::now();
+        // Damage creates threat only after the durable contribution was admitted.
+        // Keep the ledger bounded and refresh recency for decay/target selection.
+        auto threat = monster.threat_by_character.find(character_id);
+        if (threat == monster.threat_by_character.end()) {
+            constexpr std::size_t kMaximumThreatTargets = 256;
+            if (monster.threat_by_character.size() >= kMaximumThreatTargets) {
+                auto weakest = std::min_element(monster.threat_by_character.begin(),
+                    monster.threat_by_character.end(), [](const auto& left, const auto& right) {
+                        if (left.second.value != right.second.value)
+                            return left.second.value < right.second.value;
+                        return left.first > right.first;
+                    });
+                if (weakest != monster.threat_by_character.end())
+                    monster.threat_by_character.erase(weakest);
+            }
+            threat = monster.threat_by_character.emplace(character_id,
+                MonsterRuntime::ThreatEntry{}).first;
+        }
+        threat->second.value = std::min(1.0e12, threat->second.value +
+            static_cast<double>(effective_damage));
+        threat->second.last_update = Clock::now();
     }
 
     void record_monster_damage(MonsterRuntime& monster, const PlayerState& player,
@@ -4568,6 +4596,7 @@ struct EnetServer::Impl {
                     monster.contribution_instance_id = next_instance_id;
                     monster.contribution_closing = false;
                     monster.damage_contributions.clear();
+                    monster.threat_by_character.clear();
                     monster.death_context_captured = false;
                     monster.death_intent_persisted = false;
                     monster.death_finalizer_submitted = false;
@@ -4740,18 +4769,54 @@ struct EnetServer::Impl {
                 }
             }
             double nearest_distance_squared = std::numeric_limits<double>::max();
+            const PlayerState* nearest_player = nullptr;
+            const PlayerState* highest_threat_player = nullptr;
+            double highest_effective_threat = 0.0;
+            double current_effective_threat = 0.0;
+            const auto current_target_id = monster.state.target_id;
             for (const auto& [peer, player] : players) {
-                if (nearest_target != nullptr) break;
                 (void)peer;
                 if (player.health <= 0) continue;
                 const double dx = static_cast<double>(player.x) - monster.state.x;
                 const double dz = static_cast<double>(player.z) - monster.state.z;
                 const double distance_squared = dx * dx + dz * dz;
+                const double leash_squared = static_cast<double>(monster.definition.leash_radius) *
+                    monster.definition.leash_radius;
+                if (distance_squared <= leash_squared) {
+                    const auto threat = monster.threat_by_character.find(player.character_id);
+                    if (threat != monster.threat_by_character.end()) {
+                        const auto age = std::chrono::duration_cast<std::chrono::seconds>(
+                            now - threat->second.last_update).count();
+                        if (age >= 0 && age < 30) {
+                            const double freshness = std::max(0.0, 1.0 -
+                                static_cast<double>(age) / 30.0);
+                            const double effective = threat->second.value * freshness;
+                            if (effective > highest_effective_threat) {
+                                highest_effective_threat = effective;
+                                highest_threat_player = &player;
+                            }
+                            if (player.character_id == current_target_id)
+                                current_effective_threat = effective;
+                        }
+                    }
+                }
                 if (distance_squared < nearest_distance_squared) {
                     nearest_distance_squared = distance_squared;
-                    target_storage = {player.character_id, player.x, player.z, true};
-                    nearest_target = &target_storage;
+                    nearest_player = &player;
                 }
+            }
+            // A current target remains sticky until another combatant exceeds
+            // its decayed threat by 20%; this prevents rapid target oscillation.
+            if (highest_threat_player != nullptr &&
+                (current_effective_threat <= 0.0 ||
+                 highest_effective_threat > current_effective_threat * 1.20)) {
+                target_storage = {highest_threat_player->character_id,
+                    highest_threat_player->x, highest_threat_player->z, true};
+                nearest_target = &target_storage;
+            } else if (nearest_target == nullptr && nearest_player != nullptr) {
+                target_storage = {nearest_player->character_id, nearest_player->x,
+                    nearest_player->z, true};
+                nearest_target = &target_storage;
             }
             if (nearest_target != nullptr &&
                 honghuang::simulation::monster_attack_profile(monster.definition).style == std::string("wolf_lunge")) {
