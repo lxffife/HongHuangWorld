@@ -3422,7 +3422,7 @@ func _request_revive_nearest() -> void:
 			nearest_distance = distance
 			target_id = str(character_id)
 	if target_id.is_empty():
-		_show_notification("3.5 米内没有可救援的倒地队友。")
+		_show_notification("3.5 米内没有可救援的倒地玩家。")
 		return
 	var error: Error = network.send_spell_cast("revive", target_id)
 	if error != OK:
