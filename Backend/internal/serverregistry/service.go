@@ -27,6 +27,7 @@ type Heartbeat struct {
 	CurrentPlayers int
 	WorldID        string
 	InstanceKey    string
+	HellFloor      int
 	Status         string
 }
 
@@ -137,7 +138,8 @@ func (s *Service) Heartbeat(ctx context.Context, input Heartbeat) (Result, error
 	input.InstanceKey = strings.TrimSpace(input.InstanceKey)
 	if input.NodeKey == "" || len(input.NodeKey) > 96 || input.Host == "" || len(input.Host) > 255 ||
 		input.UDPPort < 1 || input.UDPPort > 65535 || input.Capacity < 1 || input.CurrentPlayers < 0 ||
-		input.CurrentPlayers > input.Capacity || input.WorldID == "" || input.InstanceKey == "" || len(input.InstanceKey) > 64 {
+		input.CurrentPlayers > input.Capacity || input.WorldID == "" || input.InstanceKey == "" || len(input.InstanceKey) > 64 ||
+		input.HellFloor < 0 || input.HellFloor > 18 || (input.HellFloor > 0 && input.WorldID != "underworld_fengdu") {
 		return Result{}, ErrInvalidHeartbeat
 	}
 	if input.Region == "" {
@@ -176,12 +178,12 @@ func (s *Service) Heartbeat(ctx context.Context, input Heartbeat) (Result, error
 	instanceDigest := sha256.Sum256([]byte(instanceIdentity))
 	instanceKey := "node/" + hex.EncodeToString(instanceDigest[:])
 	err = tx.QueryRowContext(ctx,
-		`INSERT INTO world_instances (world_id, instance_key, status, server_id)
-		 VALUES ($1, $2, $3, $4)
-		 ON CONFLICT (instance_key) DO UPDATE SET status = CASE WHEN (SELECT admin_state FROM server_registry WHERE id = EXCLUDED.server_id) = 'draining' THEN 'draining' WHEN (SELECT admin_state FROM server_registry WHERE id = EXCLUDED.server_id) = 'disabled' THEN 'offline' ELSE EXCLUDED.status END, server_id = EXCLUDED.server_id, updated_at = now()
+		`INSERT INTO world_instances (world_id, instance_key, status, server_id, hell_floor)
+		 VALUES ($1, $2, $3, $4, NULLIF($5, 0))
+		 ON CONFLICT (instance_key) DO UPDATE SET status = CASE WHEN (SELECT admin_state FROM server_registry WHERE id = EXCLUDED.server_id) = 'draining' THEN 'draining' WHEN (SELECT admin_state FROM server_registry WHERE id = EXCLUDED.server_id) = 'disabled' THEN 'offline' ELSE EXCLUDED.status END, server_id = EXCLUDED.server_id, hell_floor = EXCLUDED.hell_floor, updated_at = now()
 		 WHERE world_instances.world_id = EXCLUDED.world_id
 		 RETURNING id::text`,
-		input.WorldID, instanceKey, input.Status, result.ServerID,
+		input.WorldID, instanceKey, input.Status, result.ServerID, input.HellFloor,
 	).Scan(&result.InstanceID)
 	if err != nil {
 		return Result{}, fmt.Errorf("upsert world instance: %w", err)
