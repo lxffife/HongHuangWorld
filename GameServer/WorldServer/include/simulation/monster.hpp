@@ -25,6 +25,12 @@ struct MonsterDefinition {
 };
 
 
+
+inline bool taunt_override_is_active(bool target_alive, bool target_within_leash,
+                                     std::int64_t now_ms, std::int64_t expires_at_ms) {
+    return target_alive && target_within_leash && expires_at_ms > now_ms;
+}
+
 inline double decayed_monster_threat(double value, std::int64_t age_seconds,
                                      std::int64_t decay_seconds = 30) {
     if (!std::isfinite(value) || value <= 0.0 || age_seconds < 0 ||
