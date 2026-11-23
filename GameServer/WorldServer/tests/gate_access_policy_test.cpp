@@ -7,6 +7,10 @@
 
 int main() {
     using namespace honghuang::simulation;
+    for (const auto gate_id : kFengduGateIds) {
+        assert(is_known_fengdu_gate(gate_id));
+    }
+    assert(!is_known_fengdu_gate("unknown_gate"));
 
     GatePolicySnapshot open_gate{"north_heaven_gate"};
     GateAccessRequest visitor{};
