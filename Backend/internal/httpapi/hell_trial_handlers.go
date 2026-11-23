@@ -77,6 +77,8 @@ func (h *hellTrialHandlers) enter(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "character is not inside the requested hell floor instance", http.StatusConflict)
 	case errors.Is(err, helltrial.ErrFloorLocked):
 		http.Error(w, "hell trial floor is locked", http.StatusConflict)
+	case errors.Is(err, helltrial.ErrFloorNotEntered):
+		http.Error(w, "hell trial floor entry must be recorded before completion", http.StatusConflict)
 	case errors.Is(err, helltrial.ErrEntryIdempotencyConflict):
 		http.Error(w, "entry event ID was already used for another character or floor", http.StatusConflict)
 	default:
