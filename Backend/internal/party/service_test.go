@@ -1,6 +1,9 @@
 package party
 
-import "testing"
+import (
+ "strings"
+ "testing"
+)
 
 func TestValidLootMode(t *testing.T) {
 	for _, mode := range []string{"personal", "free_for_all", "round_robin", "leader"} {
@@ -13,4 +16,13 @@ func TestValidLootMode(t *testing.T) {
 			t.Errorf("invalid loot mode %q was accepted", mode)
 		}
 	}
+}
+
+func TestValidFocusTargetID(t *testing.T) {
+ for _, id := range []string{"", "monster-uuid-123", "a"} {
+  if !validFocusTargetID(id) { t.Errorf("valid focus target %q was rejected", id) }
+ }
+ for _, id := range []string{strings.Repeat("x", 97), "monster\ntarget", "monster\ttarget"} {
+  if validFocusTargetID(id) { t.Errorf("invalid focus target %q was accepted", id) }
+ }
 }
