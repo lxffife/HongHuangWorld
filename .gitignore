@@ -47,6 +47,7 @@ Client/HongHuangClient/addons/godot-mcp/
 
 # Asset Register plugin generated localization/import artifacts
 Client/HongHuangClient/ASSET-REGISTER.*
+Client/HongHuangClient/assets/3d/asset-register.*
 
 # Local test captures and editor-generated backups / temporary files
 Client/HongHuangClient/godot_retry.png
