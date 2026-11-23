@@ -235,7 +235,8 @@ static func resolve_hell_floor_number(world_id: String) -> int:
 	var suffix := world_id.trim_prefix("underworld_hell_")
 	if not suffix.is_valid_int():
 		return 0
-	return clampi(int(suffix), 1, 18)
+	var floor_number := int(suffix)
+	return floor_number if floor_number >= 1 and floor_number <= 18 else 0
 
 
 static func get_world_bounds(world_id: String) -> Vector4:
