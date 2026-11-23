@@ -21,6 +21,7 @@ import (
 	"github.com/liflife/HongHuangWorld/Backend/internal/npc"
 	"github.com/liflife/HongHuangWorld/Backend/internal/party"
 	"github.com/liflife/HongHuangWorld/Backend/internal/serverregistry"
+	"github.com/liflife/HongHuangWorld/Backend/internal/shop"
 	"github.com/liflife/HongHuangWorld/Backend/internal/soul"
 	"github.com/liflife/HongHuangWorld/Backend/internal/task"
 	"github.com/liflife/HongHuangWorld/Backend/internal/world"
@@ -151,6 +152,9 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		economyAPI := &economyHandlers{authService: authService, service: economy.NewService(db), logger: logger}
 		mux.HandleFunc("GET /api/v1/economy/currencies", economyAPI.catalog)
 		mux.HandleFunc("GET /api/v1/economy/wallet", economyAPI.wallet)
+		shopAPI := &shopHandlers{authService: authService, service: shop.NewService(db), logger: logger}
+		mux.HandleFunc("GET /api/v1/shops", shopAPI.list)
+		mux.HandleFunc("POST /api/v1/shops/{shopID}/purchase", shopAPI.purchase)
 		items := &inventoryHandlers{authService: authService, service: inventory.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
 		mux.HandleFunc("GET /api/v1/items", items.catalog)
 		mux.HandleFunc("GET /api/v1/characters/current/inventory", items.current)
