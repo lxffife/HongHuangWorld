@@ -1,5 +1,12 @@
 BEGIN;
 
+ALTER TABLE world_instances
+    ADD COLUMN hell_floor SMALLINT CHECK (hell_floor BETWEEN 1 AND 18),
+    ADD CONSTRAINT world_instances_hell_floor_world_check
+        CHECK (hell_floor IS NULL OR world_id = 'underworld_fengdu');
+CREATE INDEX idx_world_instances_hell_floor
+    ON world_instances(world_id, hell_floor) WHERE hell_floor IS NOT NULL;
+
 -- Persistent, server-authoritative progress for the eighteen underworld floors.
 CREATE TABLE character_hell_trial_progress (
     character_id UUID NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
