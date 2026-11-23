@@ -178,6 +178,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_toggle_activity_debug()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_F7:
 		_cycle_city_alert_level()
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_F8:
+		_trigger_patrol_incident_demo()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_E:
 		if judge_workbench_open:
 			_close_judge_bureau_workbench()
@@ -2371,6 +2373,22 @@ func _update_market_gate_inspection(delta: float) -> void:
 		light.light_energy = 0.82 if inspecting else (0.48 + 0.08 * (0.5 + 0.5 * sin(market_ambience_time)))
 
 
+func _trigger_patrol_incident_demo() -> void:
+	if player == null:
+		return
+	patrol_alert_sequence += 1
+	patrol_alert_position = player.global_position - player.global_transform.basis.z * 7.0
+	patrol_alert_position.y = 0.0
+	patrol_alert_remaining = maxf(patrol_alert_remaining, 45.0)
+	var incident_profile := _patrol_incident_profile(patrol_alert_sequence)
+	_begin_patrol_dispatch(patrol_alert_position, incident_profile)
+	if npc_detail_label != null:
+		npc_detail_label.text = "巡城司已登记：%s（%s）\\n已向巡城司派遣请求，警报等级将按事件严重程度自动调整。" % [
+			str(incident_profile.get("title", "现场事件")),
+			str(incident_profile.get("severity_label", "一般"))
+		]
+
+
 func _patrol_incident_profile(sequence: int) -> Dictionary:
 	# Scripted local demo cycle exercises response tiers; real incident facts must come from the game service.
 	match posmod(sequence - 1, 3):
@@ -3749,7 +3767,7 @@ func _build_hud() -> void:
 	npc_detail_label.custom_minimum_size = Vector2(410, 34)
 	column.add_child(npc_detail_label)
 	var help := Label.new()
-	help.text = "WASD 移动 · 空格跳跃 · 鼠标左键捕获视角 · ESC 释放 · E 交互/城门核验 · F6 活动点 · F7 城防演示"
+	help.text = "WASD 移动 · 空格跳跃 · 鼠标左键捕获视角 · ESC 释放 · E 交互/城门核验 · F6 活动点 · F7 城防演示 · F8 上报事件"
 	column.add_child(help)
 
 
