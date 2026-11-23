@@ -705,8 +705,8 @@ type Reward struct {
 	CharacterID    string `json:"character_id"`
 	Experience     int64  `json:"experience"`
 	Cultivation    int64  `json:"cultivation"`
-	GhostCash      int64  `json:"ghost_cash"`
-	NetherStone    int64  `json:"nether_stone"`
+	GhostCash       int64 `json:"ghost_cash"`
+	NetherStone     int64 `json:"nether_stone"`
 	AttributePoints int   `json:"attribute_points"`
 }
 
