@@ -2666,13 +2666,6 @@ struct EnetServer::Impl {
                     // Do not expose the next wave until its progress is durable.
                     (void)hell_trial_waves.restore_stage(previous_stage);
                     wave_checkpoint_failed = true;
-                } else {
-                    Json wave_event = hell_trial_runtime_snapshot();
-                    wave_event["action"] = "hell_trial_wave_transition";
-                    for (const auto& [recipient_peer, recipient] : players) {
-                        (void)recipient;
-                        send_json(recipient_peer, honghuang::protocol::MessageType::CombatEvent, wave_event);
-                    }
                 }
             }
 
@@ -2696,6 +2689,13 @@ struct EnetServer::Impl {
                 monster.contribution_instance_id, monster.death_definition_id);
             if (wave_checkpoint_failed) {
                 (void)hell_trial_encounter.restore_stage(previous_stage);
+            } else if (wave_transition.advanced && wave_transition.stage < 4) {
+                Json wave_event = hell_trial_runtime_snapshot();
+                wave_event["action"] = "hell_trial_wave_transition";
+                for (const auto& [recipient_peer, recipient] : players) {
+                    (void)recipient;
+                    send_json(recipient_peer, honghuang::protocol::MessageType::CombatEvent, wave_event);
+                }
             }
 
             if (encounter_result.completion_ready && !wave_checkpoint_failed) {
