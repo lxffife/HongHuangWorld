@@ -13,7 +13,7 @@ inline constexpr std::int64_t kAllyReviveHealthPercent = 25;
 
 inline std::int64_t ally_revive_health(std::int64_t maximum_health) {
     if (maximum_health <= 0) return 0;
-    return std::max<std::int64_t>(1, maximum_health * kAllyReviveHealthPercent / 100);
+    return std::max<std::int64_t>(1, maximum_health / 4);
 }
 
 inline bool ally_revive_in_range(double dx, double dz, double range = kAllyReviveRange) {
