@@ -14,7 +14,7 @@ struct HellTrialEligibleParticipant {
 };
 
 // Tracks authenticated participation for one dedicated hell-floor instance.
-// Damage is retained when a character reconnects with a new session ID.
+// Damage and support contribution are retained when a character reconnects with a new session ID.
 class HellTrialContributionLedger {
 public:
     bool register_participant(const std::string& character_id, const std::string& session_id);
