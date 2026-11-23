@@ -4716,6 +4716,8 @@ func _on_combat_event(event: Dictionary) -> void:
 			return
 	if not bool(event.get("accepted", true)):
 		var rejection_reason := str(event.get("reason", "攻击未命中。"))
+		if rejection_reason not in ["攻击间隔中，请稍后再试。", "距离目标太远。", "战斗记录繁忙，本次攻击未生效，可立即重试。"]:
+			attack_button_held = false
 		if rejection_reason == "攻击间隔中，请稍后再试。":
 			var cooldown_seconds := maxf(float(event.get("cooldown_ms", 0)) / 1000.0, 0.0)
 			attack_repeat_remaining = maxf(cooldown_seconds, 0.15)
