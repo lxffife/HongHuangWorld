@@ -48,6 +48,13 @@ struct MonsterRuntimeCheckpointRecord {
  std::int64_t respawn_at_ms{};
  std::int64_t checkpoint_at_ms{};
 };
+struct HellTrialWaveCheckpoint {
+ std::string instance_key;
+ int floor{};
+ int stage{};
+ bool completed{};
+ std::int64_t updated_at_ms{};
+};
 struct OutboxEvent { std::string event_id; std::string event_type; std::string payload; std::uint32_t attempts{}; std::int64_t next_retry_at_ms{}; std::int64_t created_at_ms{}; std::string last_error; };
 class DurableOutbox {
 public:
@@ -107,6 +114,11 @@ public:
  OutboxStats stats(std::int64_t now_ms, std::string& error, const std::string& event_type = {}) const;
  std::vector<OutboxEvent> list_dead_letters(std::size_t limit, const std::string& event_type, std::string& error) const;
  bool retry_dead_letter(const std::string& event_id, std::int64_t now_ms, std::string& error);
+ bool load_hell_trial_wave_checkpoint(const std::string& instance_key, int floor,
+                                      HellTrialWaveCheckpoint& checkpoint, bool& found,
+                                      std::string& error) const;
+ bool save_hell_trial_wave_checkpoint(const HellTrialWaveCheckpoint& checkpoint,
+                                      std::string& error);
 private:
  sqlite3* db_{}; std::size_t capacity_{}; mutable std::mutex mutex_;
  std::optional<OutboxEvent> claim_due_filtered(std::int64_t now_ms, const std::string& event_type, bool exclude, std::string& error);
