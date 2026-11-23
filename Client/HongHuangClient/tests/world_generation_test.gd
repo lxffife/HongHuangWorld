@@ -22,12 +22,18 @@ func _run_world_generation_tests() -> void:
 func _test_world_bounds_and_hell_catalog() -> void:
 	var bounds := WorldMapCatalog.get_world_bounds("underworld_fengdu")
 	assert(bounds == Vector4(-100.0, 100.0, -100.0, 100.0))
+	assert(WorldMapCatalog.resolve_region_name("underworld_fengdu", Vector3(0.0, 0.0, -81.0)) == "酆都皇城")
+	assert(WorldMapCatalog.resolve_region_name("underworld_fengdu", Vector3(22.0, 0.0, -40.0)) == "万魂鬼市")
 	var hell_layers := WorldMapCatalog.get_eighteen_hell_layers()
 	assert(hell_layers.size() == 18)
 	for index in range(hell_layers.size()):
 		var layer: Dictionary = hell_layers[index]
 		assert(int(layer.get("floor", 0)) == index + 1)
 		assert(not str(layer.get("name", "")).is_empty())
+		assert(not str(layer.get("environment", "")).is_empty())
+		assert(not str(layer.get("hazard", "")).is_empty())
+		assert(not str(layer.get("objective", "")).is_empty())
+		assert(not str(layer.get("reward_theme", "")).is_empty())
 
 
 func _test_chunk_streaming() -> void:
