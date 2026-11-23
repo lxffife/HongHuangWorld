@@ -730,6 +730,55 @@ func _build_world_map_hud() -> void:
 	_update_minimap_data()
 
 
+func _map_world_id() -> String:
+	var world_id := str(HHSession.world_snapshot.get("world_id", ""))
+	var hell_floor := int(HHSession.world_snapshot.get("hell_floor", 0))
+	return "underworld_hell_%02d" % hell_floor if hell_floor > 0 else world_id
+
+
+func _open_hell_trial_panel() -> void:
+	if is_instance_valid(hell_trial_panel):
+		hell_trial_panel.set_current_floor(int(HHSession.world_snapshot.get("hell_floor", 0)))
+		hell_trial_panel.open_panel()
+
+
+func _on_hell_trial_entry_ticket_received(floor_number: int, host: String, port: int, ticket: String) -> void:
+	if is_instance_valid(world_map_panel):
+		world_map_panel.visible = false
+	if is_instance_valid(hell_trial_panel):
+		hell_trial_panel.close_panel()
+	hud_label.text = "正在进入第 %02d 层专属刑狱……" % floor_number
+	_connect_to_world_ticket(host, port, ticket)
+
+
+func _on_hell_trial_return_requested() -> void:
+	if is_instance_valid(hell_trial_panel):
+		hell_trial_panel.close_panel()
+	_on_reconnect_pressed()
+
+
+func _apply_world_instance_geometry(snapshot: Dictionary) -> void:
+	var floor_number := int(snapshot.get("hell_floor", 0))
+	if floor_number > 0:
+		if is_instance_valid(world_terrain_root):
+			world_terrain_root.queue_free()
+		world_terrain_root = null
+		terrain_chunk_streamer = null
+		if is_instance_valid(hell_floor_visual_root):
+			hell_floor_visual_root.queue_free()
+		hell_floor_visual_root = UnderworldHellFloorBuilder.build(floor_number)
+		add_child(hell_floor_visual_root)
+	else:
+		if is_instance_valid(hell_floor_visual_root):
+			hell_floor_visual_root.queue_free()
+		hell_floor_visual_root = null
+		if not is_instance_valid(world_terrain_root):
+			var world_id := str(snapshot.get("world_id", "qingyun_human"))
+			world_terrain_root = WorldTerrainBuilder.build(world_id)
+			add_child(world_terrain_root)
+			terrain_chunk_streamer = world_terrain_root.get_node_or_null("ChunkStreamer")
+
+
 func _toggle_world_map_mode() -> void:
 	if not is_instance_valid(world_map_canvas):
 		return
@@ -4984,6 +5033,9 @@ func _on_reconnect_request_completed(result: int, response_code: int, _headers: 
 		hud_label.text = "中心服返回的重连信息不完整。"
 		return
 
+	_connect_to_world_ticket(host, port, ticket)
+
+func _connect_to_world_ticket(host: String, port: int, ticket: String) -> void:
 	if reconnect_network != null and is_instance_valid(reconnect_network):
 		reconnect_network.close()
 		reconnect_network.queue_free()
@@ -4991,7 +5043,7 @@ func _on_reconnect_request_completed(result: int, response_code: int, _headers: 
 	HHSession.add_child(reconnect_network)
 	reconnect_network.welcomed.connect(_on_reconnected_welcomed)
 	reconnect_network.rejected.connect(func(reason: String):
-		hud_label.text = "世界服务器拒绝重连：" + reason
+		hud_label.text = "世界服务器拒绝连接：" + reason
 		reconnect_button.disabled = false
 	)
 	reconnect_network.connection_error.connect(func(message: String):
@@ -5002,11 +5054,11 @@ func _on_reconnect_request_completed(result: int, response_code: int, _headers: 
 		reconnect_button.visible = true
 		reconnect_button.disabled = false
 	)
-	hud_label.text = "正在重新连接世界服务器 " + host + ":" + str(port) + "……"
+	hud_label.text = "正在连接世界服务器 " + host + ":" + str(port) + "……"
 	var connect_error := reconnect_network.connect_with_ticket(host, port, ticket)
 	if connect_error != OK:
 		reconnect_button.disabled = false
-		hud_label.text = "初始化重连失败，错误码：" + str(connect_error)
+		hud_label.text = "初始化世界连接失败，错误码：" + str(connect_error)
 
 func _on_reconnected_welcomed(snapshot: Dictionary) -> void:
 	var previous: HHWorldNetwork = HHSession.world_network
