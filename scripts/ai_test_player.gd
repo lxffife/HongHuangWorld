@@ -19,6 +19,7 @@ var bot_character_id := ""
 var token := ""
 var network: Node
 var latest_entities: Array = []
+var party_character_ids: Array[String] = []
 var welcomed := false
 var stopping := false
 var input_sequence := 0
@@ -184,6 +185,13 @@ func _poll_and_accept_invites() -> void:
 			_log("已接受组队邀请，正式加入你的队伍。")
 		else:
 			_log("接受组队邀请失败 HTTP " + str(response.code) + "：" + response.body)
+	var party_result := await _api("GET", "/api/v1/party/current", {}, true)
+	party_character_ids.clear()
+	if party_result.code >= 200 and party_result.code < 300:
+		for member in party_result.data.get("members", []):
+			var member_id := str(member.get("character_id", ""))
+			if not member_id.is_empty() and member_id != bot_character_id:
+				party_character_ids.append(member_id)
 
 func _run_companion_brain() -> void:
 	if network == null or not network.is_world_ready():
@@ -199,7 +207,7 @@ func _run_companion_brain() -> void:
 			"player":
 				if str(entity.get("character_id", "")) == bot_character_id:
 					self_entity = entity
-				else:
+				elif party_character_ids.has(str(entity.get("character_id", ""))):
 					players.append(entity)
 			"monster":
 				if int(entity.get("health", 0)) > 0 and not bool(entity.get("death_pending", false)):
