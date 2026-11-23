@@ -4930,6 +4930,36 @@ struct EnetServer::Impl {
                     nearest_player = &player;
                 }
             }
+            if (highest_threat_player != nullptr &&
+                highest_threat_player->character_id != current_target_id &&
+                honghuang::simulation::should_warn_threat_steal(
+                    current_effective_threat, highest_effective_threat) &&
+                (monster.last_threat_warning_at == Clock::time_point{} ||
+                 now - monster.last_threat_warning_at >= std::chrono::seconds(5))) {
+                const auto current_target = std::find_if(players.begin(), players.end(),
+                    [&](const auto& entry) {
+                        return entry.second.character_id == current_target_id;
+                    });
+                if (current_target != players.end()) {
+                    const double ratio = highest_effective_threat /
+                        std::max(1.0, current_effective_threat);
+                    const Json warning{{"action", "threat_warning"},
+                        {"monster_id", monster.runtime_id},
+                        {"monster_name", monster.definition.name},
+                        {"current_target_name", current_target->second.name},
+                        {"challenger_name", highest_threat_player->name},
+                        {"challenger_ratio", ratio},
+                        {"will_switch", honghuang::simulation::should_switch_monster_target(
+                            current_effective_threat, highest_effective_threat)}};
+                    for (const auto& [observer_peer, observer] : players) {
+                        if (!honghuang::simulation::within_interest_radius(
+                            monster.state.x, monster.state.z, observer.x, observer.z, kInterestRadius))
+                            continue;
+                        send_json(observer_peer, honghuang::protocol::MessageType::CombatEvent, warning);
+                    }
+                    monster.last_threat_warning_at = now;
+                }
+            }
             // A current target remains sticky until another combatant exceeds
             // its decayed threat by 20%; this prevents rapid target oscillation.
             if (!taunt_override_active && highest_threat_player != nullptr &&
