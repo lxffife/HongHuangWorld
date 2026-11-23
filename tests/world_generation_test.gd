@@ -187,4 +187,36 @@ func _test_fengdu_navigation() -> void:
 	)
 	assert(bool(adapter_south_route.get("found", false)))
 	assert(not bool(gate_adapter.call("set_local_gate_state", "unknown_gate", false)))
+	var gate_roster: Array = FengduWorldLayout.get_gate_guard_roster()
+	assert(gate_roster.size() == 4)
+	var gate_guard_points := 0
+	var shift_coverage: Dictionary = {}
+	for activity_point in FengduWorldLayout.get_npc_activity_points():
+		if str(activity_point.get("role", "")) != "gate_guard":
+			continue
+		gate_guard_points += 1
+		var roster_key := str(activity_point.get("gate_id", "")) + ":" + str(activity_point.get("shift_tag", ""))
+		shift_coverage[roster_key] = int(shift_coverage.get(roster_key, 0)) + 1
+	assert(gate_guard_points == 8)
+	for gate in gate_roster:
+		var gate_id := str(gate.get("gate_id", ""))
+		assert(int(shift_coverage.get(gate_id + ":day", 0)) == 1)
+		assert(int(shift_coverage.get(gate_id + ":night", 0)) == 1)
+	assert(bool(gate_adapter.call("_is_gate_guard_shift_active", "day", 6)))
+	assert(bool(gate_adapter.call("_is_gate_guard_shift_active", "day", 17)))
+	assert(not bool(gate_adapter.call("_is_gate_guard_shift_active", "day", 18)))
+	assert(bool(gate_adapter.call("_is_gate_guard_shift_active", "night", 18)))
+	assert(bool(gate_adapter.call("_is_gate_guard_shift_active", "night", 5)))
+	assert(not bool(gate_adapter.call("_is_gate_guard_shift_active", "night", 6)))
+	var day_guard_root := Node3D.new()
+	var day_guard := {"role": "gate_guard", "gate_id": "north_heaven_gate", "shift_tag": "day", "root": day_guard_root}
+	assert(bool(gate_adapter.call("_apply_gate_guard_shift", day_guard, 9)))
+	assert(day_guard_root.visible)
+	assert(str(day_guard.get("state", "")) == "gate_watch")
+	assert(bool(gate_adapter.call("set_local_gate_state", "north_heaven_gate", false)))
+	assert(bool(gate_adapter.call("_apply_gate_guard_shift", day_guard, 9)))
+	assert(str(day_guard.get("state", "")) == "gate_sealed_watch")
+	assert(not bool(gate_adapter.call("_apply_gate_guard_shift", day_guard, 18)))
+	assert(not day_guard_root.visible)
+	day_guard_root.free()
 	gate_adapter.free()
