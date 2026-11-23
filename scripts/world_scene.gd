@@ -3996,7 +3996,20 @@ func _on_combat_event(event: Dictionary) -> void:
 	if action == "hell_trial_boss_phase":
 		var phase_name := str(event.get("phase_name", "守将变招"))
 		var phase_number := int(event.get("phase", 1))
-		_show_notification("守将进入第 %d 阶段：%s" % [phase_number, phase_name], 4.0)
+		var attack_id := str(event.get("signature_attack", ""))
+		var attack_names := {
+			"soul_bolt": "噬魂弹",
+			"blade_slash": "断罪斩",
+			"poison_bolt": "蚀骨毒焰",
+			"frost_bolt": "寒狱冰锥",
+			"heavy_slam": "无间震击",
+			"melee": "狱判重击"
+		}
+		var attack_name := str(attack_names.get(attack_id, "招式变化")) if not attack_id.is_empty() else ""
+		var notice := "守将进入第 %d 阶段：%s" % [phase_number, phase_name]
+		if not attack_name.is_empty():
+			notice += " · 新招式：" + attack_name
+		_show_notification(notice, 4.5)
 		return
 	if action == "player_cleansed":
 		var cleansed_id := str(event.get("character_id", ""))
