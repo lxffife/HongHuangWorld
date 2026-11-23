@@ -1431,6 +1431,7 @@ struct EnetServer::Impl {
         }
         if (!found) return true;
         if (!hell_trial_waves.restore_stage(checkpoint.stage) ||
+            !hell_trial_encounter.restore_stage(checkpoint.stage) ||
             hell_trial_waves.completed() != checkpoint.completed) {
             std::cerr << "[HellTrialWave] stored checkpoint is inconsistent" << std::endl;
             return false;
