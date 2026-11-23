@@ -17,6 +17,7 @@ var _busy := false
 var _current_floor := 0
 var _highest_unlocked_floor := 0
 var _floor_progress: Dictionary = {}
+var _pending_floor := 0
 
 func _ready() -> void:
 	name = "HellTrialPanel"
@@ -227,6 +228,7 @@ func _request_enter(floor_number: int) -> void:
 		_status.text = "该层尚未解锁。"
 		return
 	_busy = true
+	_pending_floor = floor_number
 	_set_floor_buttons_disabled(true)
 	_status.text = "正在申请第 %02d 层专属入口……" % floor_number
 	var headers := PackedStringArray([
@@ -277,15 +279,4 @@ func _on_entry_request_completed(result: int, response_code: int, _headers: Pack
 
 
 func _requested_floor_from_response() -> int:
-	for floor_number in range(1, FLOOR_COUNT + 1):
-		var button_text := "进入试炼"
-		if _floor_progress.has(floor_number):
-			var state := str(_floor_progress[floor_number].get("status", ""))
-			if state == "completed":
-				button_text = "已通关 · 重返"
-		# The only in-flight request is the selected enabled floor. Its button
-		# is temporarily disabled while the request runs; retain it explicitly.
 	return _pending_floor
-
-
-var _pending_floor := 0
