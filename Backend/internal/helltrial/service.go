@@ -132,7 +132,7 @@ func (s *Service) Complete(ctx context.Context, nodeKey string, req CompletionRe
 		JOIN server_registry sr ON sr.id=ws.server_id AND sr.node_key=$2
 		WHERE c.id=$1::uuid AND c.status='alive' AND wi.hell_floor=$3
 		ORDER BY ws.connected_at DESC NULLS LAST LIMIT 1
-		FOR UPDATE OF c,ws`,req.CharacterID,nodeKey).Scan(&worldID)
+		FOR UPDATE OF c,ws`,req.CharacterID,nodeKey,req.Floor).Scan(&worldID)
 	if errors.Is(err,sql.ErrNoRows) {
 		var activeUnderworld bool
 		checkErr := tx.QueryRowContext(ctx,`SELECT EXISTS(
