@@ -316,6 +316,8 @@ struct CharacterRewardEvent {
     std::string character_id;
     std::int64_t experience{};
     std::int64_t cultivation{};
+    std::int64_t ghost_cash{};
+    std::int64_t nether_stone{};
     unsigned int attempts{};
 };
 
@@ -631,7 +633,9 @@ bool deliver_character_reward(const ServerConfig& config, const CharacterRewardE
         {"session_id", reward.session_id},
         {"character_id", reward.character_id},
         {"experience", reward.experience},
-        {"cultivation", reward.cultivation}
+        {"cultivation", reward.cultivation},
+        {"ghost_cash", reward.ghost_cash},
+        {"nether_stone", reward.nether_stone}
     }.dump();
     std::string response;
     struct curl_slist* headers = nullptr;
@@ -1529,7 +1533,9 @@ struct EnetServer::Impl {
                             event->event_id, payload.at("session_id").get<std::string>(),
                             payload.at("character_id").get<std::string>(),
                             payload.at("experience").get<std::int64_t>(),
-                            payload.at("cultivation").get<std::int64_t>(), event->attempts
+                            payload.at("cultivation").get<std::int64_t>(),
+                            payload.value("ghost_cash", std::int64_t{}),
+                            payload.value("nether_stone", std::int64_t{}), event->attempts
                         };
                         delivered = deliver_character_reward(config, reward, status, delivery_error);
                     } else if (event->event_type == "soul_reward") {
@@ -2578,7 +2584,11 @@ struct EnetServer::Impl {
                 honghuang::persistence::allocate_monster_combat_rewards(
                     records,
                     20 + static_cast<std::int64_t>(level) * 10,
-                    10 + static_cast<std::int64_t>(level) * 5);
+                    10 + static_cast<std::int64_t>(level) * 5,
+                    5 + static_cast<std::int64_t>(level) * 3,
+                    (level >= 10 && (level % 5 == 0 || definition_id.find("elite") != std::string::npos ||
+                                     definition_id.find("ancient") != std::string::npos ||
+                                     definition_id.find("boss") != std::string::npos)) ? 1 + level / 20 : 0);
             for (const auto& recipient : reward_recipients) {
                 if (recipient.experience <= 0 && recipient.cultivation <= 0) continue;
                 const auto reward_id = make_event_uuid();
@@ -2587,7 +2597,9 @@ struct EnetServer::Impl {
                     {"session_id", recipient.session_id},
                     {"character_id", recipient.character_id},
                     {"experience", recipient.experience},
-                    {"cultivation", recipient.cultivation}
+                    {"cultivation", recipient.cultivation},
+                    {"ghost_cash", recipient.ghost_cash},
+                    {"nether_stone", recipient.nether_stone}
                 });
             }
 
