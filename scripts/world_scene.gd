@@ -4543,9 +4543,11 @@ func _build_input_debug_hud() -> void:
 	if hud == null:
 		return
 	input_debug_panel = PanelContainer.new()
-	input_debug_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	input_debug_panel.position = Vector2(-238.0, -154.0)
-	input_debug_panel.custom_minimum_size = Vector2(220.0, 126.0)
+	# Keep diagnostics in the open center-left area. The previous bottom-right
+	# position overlapped the exploration prompt and chat drawer, hiding key state.
+	input_debug_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	input_debug_panel.position = Vector2(18.0, 224.0)
+	input_debug_panel.custom_minimum_size = Vector2(300.0, 116.0)
 	input_debug_panel.visible = false
 	hud.add_child(input_debug_panel)
 	var layout := VBoxContainer.new()
@@ -4571,10 +4573,12 @@ func _update_input_debug_hud() -> void:
 	keys += "[S]" if local_player.is_move_key_pressed("back") else " S "
 	keys += " "
 	keys += "[D]" if local_player.is_move_key_pressed("right") else " D "
-	var network_text := "已连接" if local_player.movement_network_ready else "未就绪"
-	var movement_text := "有移动输入" if local_player.current_move_input.length_squared() > 0.001 else "无移动输入"
-	var send_text := "发送正常" if local_player.last_send_error == OK else "发送错误 " + str(local_player.last_send_error)
-	input_debug_label.text = keys + "\n" + movement_text + " · 网络：" + network_text + "\n" + send_text + " · ESC 释放鼠标"
+	var network_text := "已就绪" if local_player.movement_network_ready else "未就绪"
+	var move_input: Vector2 = local_player.current_move_input
+	var movement_text := "有输入" if move_input.length_squared() > 0.001 else "无输入"
+	var send_text := "发送调用成功" if local_player.last_send_error == OK else "发送错误码 " + str(local_player.last_send_error)
+	var player_position: Vector3 = local_player.global_position
+	input_debug_label.text = "按键：" + keys + "\n输入：" + movement_text + " (" + ("%.1f" % move_input.x) + ", " + ("%.1f" % move_input.y) + ")\n世界网络：" + network_text + " · " + send_text + "\n客户端坐标：" + ("%.1f, %.1f, %.1f" % [player_position.x, player_position.y, player_position.z])
 
 func _process(delta: float) -> void:
 	if is_instance_valid(terrain_chunk_streamer) and is_instance_valid(local_player):
