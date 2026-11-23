@@ -78,6 +78,15 @@ int main() {
     result = respawn.record_monster_death("spawn-a-life-4", "hell_f01_tongue_wraith");
     assert(result.objective_kills == 3 && !result.objective_kill_recorded);
 
+    HellTrialEncounter recovered(1);
+    assert(recovered.restore_stage(2));
+    assert(recovered.objective_kills() == 2);
+    assert(!recovered.guardian_defeated() && !recovered.completed());
+    assert(!recovered.restore_stage(5));
+    assert(recovered.restore_stage(4));
+    assert(recovered.objective_kills() == 3);
+    assert(recovered.guardian_defeated() && recovered.completed());
+
     HellTrialEncounter boss_first(18);
     result = boss_first.record_monster_death("boss-18", "hell_f18_abyss_judge");
     assert(result.guardian_killed && !result.completion_ready);
