@@ -9,6 +9,7 @@ import (
 
 func TestValidateCompletion(t *testing.T) {
 	valid := CompletionRequest{
+		SessionID: "123e4567-e89b-12d3-a456-426614174002",
 		CharacterID: "123e4567-e89b-12d3-a456-426614174000",
 		Floor: 1,
 		EventID: "123e4567-e89b-12d3-a456-426614174001",
@@ -44,6 +45,7 @@ func TestFloorCountAndFinalBoundary(t *testing.T) {
 
 func TestValidateEntry(t *testing.T) {
 	valid := EntryRequest{
+		SessionID: "123e4567-e89b-12d3-a456-426614174002",
 		CharacterID: "123e4567-e89b-12d3-a456-426614174000",
 		Floor: 18,
 		EventID: "123e4567-e89b-12d3-a456-426614174001",
