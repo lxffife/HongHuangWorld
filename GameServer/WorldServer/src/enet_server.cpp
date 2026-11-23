@@ -1777,8 +1777,8 @@ struct EnetServer::Impl {
             {"objective_complete", result.objective_kills >= result.objective_required},
             {"guardian_id", floor ? std::string(floor->guardian_id) : std::string{}},
             {"guardian_defeated", result.guardian_defeated},
-            {"participant_damage", hell_trial_contributions.damage_for(character_id)},
-            {"minimum_contribution_damage", hell_trial_minimum_contribution_damage()},
+            {"participant_contribution", hell_trial_contributions.contribution_for(character_id)},
+            {"minimum_contribution", hell_trial_minimum_contribution_damage()},
             {"source", "worldserver_authoritative_monster_death"}
         };
         const Json payload{
@@ -4380,6 +4380,12 @@ struct EnetServer::Impl {
                     honghuang::simulation::life_mend_amount(player.spirit));
                 target->second.health += restored;
                 if (restored > 0) {
+                    // Real healing to another character counts as support contribution;
+                    // self-healing and overheal do not advance the eligibility score.
+                    if (hell_trial_encounter.enabled() && target_id != player.character_id) {
+                        (void)hell_trial_contributions.record_healing(
+                            player.character_id, player.session_id, restored);
+                    }
                     target->second.last_combat_at = now;
                     const auto healing_threat = honghuang::simulation::monster_healing_threat(
                         static_cast<double>(restored));
