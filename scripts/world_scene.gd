@@ -2382,7 +2382,7 @@ func _layout_hud() -> void:
 		if is_instance_valid(world_map_canvas):
 			world_map_canvas.custom_minimum_size = Vector2(map_width - 48.0, map_height - 112.0)
 	if is_instance_valid(minimap_panel):
-		var map_visible := viewport_size.x >= 520.0 and hud_visible and not (is_instance_valid(friend_panel) and friend_panel.visible)
+		var map_visible: bool = viewport_size.x >= 520.0 and hud_visible and not (is_instance_valid(friend_panel) and friend_panel.visible)
 		minimap_panel.visible = map_visible
 		minimap_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 		minimap_panel.offset_left = -202.0
@@ -2962,9 +2962,9 @@ func _party_set_focus_target(target_entity_id: String) -> void:
 func _party_save_loot_rules() -> void:
 	if not is_instance_valid(party_material_loot_option) or not is_instance_valid(party_equipment_loot_option):
 		return
-	var modes := ["personal", "free_for_all", "round_robin", "leader"]
-	var material_mode := modes[party_material_loot_option.selected]
-	var equipment_mode := modes[party_equipment_loot_option.selected]
+	var modes: Array[String] = ["personal", "free_for_all", "round_robin", "leader"]
+	var material_mode: String = modes[party_material_loot_option.selected]
+	var equipment_mode: String = modes[party_equipment_loot_option.selected]
 	_party_request("PUT", "/api/v1/party/loot-rules", {"material_loot_mode": material_mode, "equipment_loot_mode": equipment_mode}, "action")
 
 func _party_invite() -> void:
@@ -5315,8 +5315,8 @@ func _on_craft_equipment_completed(result: int, response_code: int, _headers: Pa
 func _confirm_enhance_equipment(instance_id: String, item_name: String, level: int, quality: int) -> void:
 	if enhancement_busy or instance_id.is_empty():
 		return
-	var caps := [0, 3, 5, 8, 10, 12]
-	var max_level := caps[clampi(quality, 1, 5)]
+	var caps: Array[int] = [0, 3, 5, 8, 10, 12]
+	var max_level: int = caps[clampi(quality, 1, 5)]
 	if level >= max_level:
 		inventory_status.text = "该品质装备已达到强化上限 +" + str(max_level)
 		return
