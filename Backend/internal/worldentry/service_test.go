@@ -8,6 +8,15 @@ import (
 	"testing"
 )
 
+func TestIssueHellTrialRejectsInvalidFloorBeforeDatabaseAccess(t *testing.T) {
+	service := NewService(nil)
+	for _, floor := range []int{0, -1, 19} {
+		if _, err := service.IssueHellTrial(context.Background(), "account-1", floor); !errors.Is(err, ErrInvalidHellTrialFloor) {
+			t.Fatalf("floor %d: error = %v, want ErrInvalidHellTrialFloor", floor, err)
+		}
+	}
+}
+
 func TestSaveAndCloseRejectsInvalidSnapshots(t *testing.T) {
 	service := NewService(nil)
 	valid := SessionSnapshot{
