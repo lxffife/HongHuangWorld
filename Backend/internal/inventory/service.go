@@ -86,6 +86,7 @@ type GroundDropSnapshot struct {
 	Affixes []EquipmentAffix `json:"affixes,omitempty"`
 	SessionID string `json:"session_id"`
 	OwnerCharacterID string `json:"owner_character_id"`
+	EligibleCharacterIDs []string `json:"eligible_character_ids"`
 	ItemID string `json:"item_id"`
 	ItemName string `json:"item_name"`
 	Quality int `json:"quality"`
@@ -299,7 +300,8 @@ func (s *Service) ListGroundDrops(ctx context.Context, nodeKey string) ([]Ground
 	rows, err := s.db.QueryContext(ctx, `SELECT d.id::text, d.session_id::text, d.owner_character_id::text,
 		d.item_id, i.name, COALESCE(ii.quality, i.quality), d.quantity, d.position_x, d.position_z,
 		GREATEST(0, CEIL(EXTRACT(EPOCH FROM (d.expires_at - now()))))::integer,
-		COALESCE(ii.id::text, ''), COALESCE(ii.rolled_stats, '{}'::jsonb), COALESCE(ii.affixes, '[]'::jsonb)
+		COALESCE(ii.id::text, ''), COALESCE(ii.rolled_stats, '{}'::jsonb), COALESCE(ii.affixes, '[]'::jsonb),
+		COALESCE((SELECT jsonb_agg(e.character_id::text ORDER BY e.created_at,e.character_id) FROM ground_drop_eligible_characters e WHERE e.drop_id=d.id), '[]'::jsonb)
 		FROM ground_drops d
 		JOIN server_registry s ON s.id = d.server_id
 		JOIN item_definitions i ON i.id = d.item_id
@@ -311,16 +313,18 @@ func (s *Service) ListGroundDrops(ctx context.Context, nodeKey string) ([]Ground
 	drops := make([]GroundDropSnapshot, 0)
 	for rows.Next() {
 		var drop GroundDropSnapshot
-		var rolledRaw, affixesRaw []byte
+		var rolledRaw, affixesRaw, eligibleRaw []byte
 		if err := rows.Scan(&drop.ID, &drop.SessionID, &drop.OwnerCharacterID, &drop.ItemID,
 			&drop.ItemName, &drop.Quality, &drop.Quantity, &drop.PositionX, &drop.PositionZ,
-			&drop.RemainingSeconds, &drop.ItemInstanceID, &rolledRaw, &affixesRaw); err != nil {
+			&drop.RemainingSeconds, &drop.ItemInstanceID, &rolledRaw, &affixesRaw, &eligibleRaw); err != nil {
 			return nil, fmt.Errorf("scan persisted ground drop: %w", err)
 		}
 		drop.RolledStats = map[string]int{}
 		drop.Affixes = []EquipmentAffix{}
 		if len(rolledRaw)>0 { if err:=json.Unmarshal(rolledRaw,&drop.RolledStats); err!=nil{return nil,fmt.Errorf("decode ground drop stats: %w",err)} }
 		if len(affixesRaw)>0 { if err:=json.Unmarshal(affixesRaw,&drop.Affixes); err!=nil{return nil,fmt.Errorf("decode ground drop affixes: %w",err)} }
+		drop.EligibleCharacterIDs=[]string{}
+		if len(eligibleRaw)>0 { if err:=json.Unmarshal(eligibleRaw,&drop.EligibleCharacterIDs); err!=nil{return nil,fmt.Errorf("decode ground drop eligible characters: %w",err)} }
 		drops = append(drops, drop)
 	}
 	if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate persisted ground drops: %w", err) }
@@ -416,7 +420,7 @@ func (s *Service) CreateDrop(ctx context.Context, nodeKey string, request DropRe
 		FROM ground_drops d JOIN item_definitions i ON i.id=d.item_id
 		LEFT JOIN item_instances ii ON ii.id=d.item_instance_id
 		WHERE d.id=$1::uuid AND d.server_id=$2 AND d.session_id=$3::uuid
-		  AND d.owner_character_id=$4::uuid AND d.item_id=$5 AND d.quantity=$6
+		  AND d.item_id=$5 AND d.quantity=$6
 		  AND d.position_x=$7 AND d.position_z=$8 AND d.status='available' AND d.expires_at>now()`,
 		request.DropID,serverID,request.SessionID,request.CharacterID,request.ItemID,request.Quantity,request.PositionX,request.PositionZ), &existing)
 	if err == nil {
