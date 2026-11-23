@@ -93,13 +93,42 @@ func validateEntry(req EntryRequest) error {
 	return nil
 }
 
+var guardianDefinitionIDs = [FloorCount]string{
+	"hell_f01_tongue_jailer", "hell_f02_scissor_lord", "hell_f03_iron_tree",
+	"hell_f04_mirror_judge", "hell_f05_steam_king", "hell_f06_copper_pillar",
+	"hell_f07_blade_marshal", "hell_f08_ice_empress", "hell_f09_oil_demon",
+	"hell_f10_ox_commander", "hell_f11_stone_jailer", "hell_f12_mortar_king",
+	"hell_f13_blood_lord", "hell_f14_wrongful_king", "hell_f15_executioner",
+	"hell_f16_volcano_king", "hell_f17_grind_lord", "hell_f18_abyss_judge",
+}
+
+type completionSnapshot struct {
+	Floor int `json:"floor"`
+	ObjectiveKills int `json:"objective_kills"`
+	ObjectiveRequired int `json:"objective_required"`
+	ObjectiveComplete bool `json:"objective_complete"`
+	GuardianID string `json:"guardian_id"`
+	GuardianDefeated bool `json:"guardian_defeated"`
+	Source string `json:"source"`
+}
+
 func validateCompletion(req CompletionRequest) error {
 	if !validUUID(req.CharacterID) || !validUUID(req.EventID) || req.Floor < 1 || req.Floor > FloorCount { return ErrInvalid }
 	if len(req.ObjectiveSnapshot) == 0 || len(req.ObjectiveSnapshot) > 16*1024 || !json.Valid(req.ObjectiveSnapshot) { return ErrInvalid }
 	var object map[string]json.RawMessage
 	if err := json.Unmarshal(req.ObjectiveSnapshot, &object); err != nil || object == nil { return ErrInvalid }
-	if !req.ObjectiveComplete { return ErrObjectiveIncomplete }
-	if !req.GuardianDefeated { return ErrGuardianAlive }
+	var snapshot completionSnapshot
+	if err := json.Unmarshal(req.ObjectiveSnapshot, &snapshot); err != nil { return ErrInvalid }
+	if snapshot.Floor != req.Floor || snapshot.ObjectiveRequired < 1 ||
+		snapshot.ObjectiveRequired > 100 || snapshot.GuardianID != guardianDefinitionIDs[req.Floor-1] ||
+		snapshot.Source != "worldserver_authoritative_monster_death" {
+		return ErrInvalid
+	}
+	if !req.ObjectiveComplete || !snapshot.ObjectiveComplete ||
+		snapshot.ObjectiveKills < snapshot.ObjectiveRequired {
+		return ErrObjectiveIncomplete
+	}
+	if !req.GuardianDefeated || !snapshot.GuardianDefeated { return ErrGuardianAlive }
 	return nil
 }
 
