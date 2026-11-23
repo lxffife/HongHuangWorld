@@ -2,6 +2,7 @@ extends Node3D
 
 const WORLD_LAYOUT = preload("res://scripts/fengdu_world_layout.gd")
 const WORLD_NAVIGATION = preload("res://scripts/fengdu_navigation.gd")
+const GATE_POLICY = preload("res://scripts/fengdu_gate_policy.gd")
 ## Walkable Fengdu capital graybox. All dimensions in meters.
 ## This is a client-side art/navigation prototype; gates and permissions are not authoritative.
 
@@ -28,6 +29,17 @@ var activity_points: Array[Dictionary] = []
 var navigation_network_data: Dictionary = {}
 var last_navigation_route: Dictionary = {}
 var local_gate_open_by_id: Dictionary = {}
+var local_gate_lockdown_by_id: Dictionary = {}
+var local_gate_pass_required_by_id: Dictionary = {}
+var local_gate_faction_restricted_by_id: Dictionary = {}
+var local_gate_identity_preview: Dictionary = {
+	"has_valid_pass": false,
+	"faction_permitted": true,
+	"is_official": false,
+	"is_emergency_responder": false,
+	"is_wanted": false,
+	"has_gate_override": false
+}
 var patrol_route: Array[Vector3] = []
 var patrol_route_node_ids: Array[String] = []
 var activity_debug_root: Node3D
@@ -165,6 +177,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_close_judge_bureau_workbench()
 		elif _is_player_at_judge_bureau():
 			_open_judge_bureau_workbench()
+		elif _is_player_near_gate():
+			_inspect_nearby_gate()
 		else:
 			_interact_with_focused_npc()
 	elif event is InputEventMouseMotion and mouse_captured:
@@ -594,7 +608,11 @@ func _build_activity_registry() -> void:
 	navigation_network_data = WORLD_LAYOUT.get_navigation_network()
 	local_gate_open_by_id.clear()
 	for gate in WORLD_LAYOUT.get_gates():
-		local_gate_open_by_id[str(gate.get("id", ""))] = true
+		var gate_id := str(gate.get("id", ""))
+		local_gate_open_by_id[gate_id] = true
+		local_gate_lockdown_by_id[gate_id] = false
+		local_gate_pass_required_by_id[gate_id] = false
+		local_gate_faction_restricted_by_id[gate_id] = false
 	for point in WORLD_LAYOUT.get_npc_activity_points():
 		var bound_point: Dictionary = point.duplicate(true)
 		bound_point.merge(WORLD_LAYOUT.get_spatial_binding_for_point(bound_point, navigation_network_data), true)
@@ -673,6 +691,37 @@ func set_local_gate_state(gate_id: String, is_open: bool) -> bool:
 
 func get_local_gate_states() -> Dictionary:
 	return local_gate_open_by_id.duplicate(true)
+
+
+func set_local_gate_policy(gate_id: String, policy_patch: Dictionary) -> bool:
+	if not local_gate_open_by_id.has(gate_id):
+		return false
+	if policy_patch.has("lockdown"):
+		local_gate_lockdown_by_id[gate_id] = bool(policy_patch["lockdown"])
+	if policy_patch.has("require_pass"):
+		local_gate_pass_required_by_id[gate_id] = bool(policy_patch["require_pass"])
+	if policy_patch.has("restrict_faction"):
+		local_gate_faction_restricted_by_id[gate_id] = bool(policy_patch["restrict_faction"])
+	return true
+
+
+func set_local_gate_identity_preview(identity: Dictionary) -> void:
+	local_gate_identity_preview = identity.duplicate(true)
+
+
+func evaluate_local_gate_access(gate_id: String, identity_override: Dictionary = {}) -> Dictionary:
+	if not local_gate_open_by_id.has(gate_id):
+		return GATE_POLICY.evaluate(gate_id, {}, {})
+	var hour := int(npc_world_minutes / 60.0)
+	var policy := {
+		"is_open": bool(local_gate_open_by_id[gate_id]),
+		"lockdown": bool(local_gate_lockdown_by_id.get(gate_id, false)),
+		"curfew_active": hour >= 0 and hour < 6,
+		"require_pass": bool(local_gate_pass_required_by_id.get(gate_id, false)),
+		"restrict_faction": bool(local_gate_faction_restricted_by_id.get(gate_id, false))
+	}
+	var identity := local_gate_identity_preview.duplicate(true) if identity_override.is_empty() else identity_override.duplicate(true)
+	return GATE_POLICY.evaluate(gate_id, policy, identity)
 
 
 func _get_navigation_options(overrides: Dictionary = {}) -> Dictionary:
@@ -3638,6 +3687,39 @@ func _update_hud() -> void:
 	_update_npc_interaction_hint()
 
 
+func _get_nearby_gate(max_distance: float = 8.5) -> Dictionary:
+	if player == null:
+		return {}
+	var nearest_gate: Dictionary = {}
+	var nearest_distance := max_distance
+	for gate in WORLD_LAYOUT.get_gates():
+		var gate_position: Vector3 = gate.get("position", Vector3.ZERO)
+		var distance := player.global_position.distance_to(gate_position)
+		if distance <= nearest_distance:
+			nearest_distance = distance
+			nearest_gate = gate
+	return nearest_gate.duplicate(true)
+
+
+func _is_player_near_gate() -> bool:
+	return not _get_nearby_gate().is_empty()
+
+
+func _inspect_nearby_gate() -> void:
+	var gate := _get_nearby_gate()
+	if gate.is_empty() or npc_detail_label == null:
+		return
+	var gate_id := str(gate.get("id", ""))
+	var result := evaluate_local_gate_access(gate_id)
+	var state_text := "开放" if bool(local_gate_open_by_id.get(gate_id, true)) else "关闭"
+	npc_detail_label.text = "%s · %s\n%s\n%s\n\n此为客户端规则预览，正式通行由 WorldServer 核验身份、通行令、通缉与城防状态。" % [
+		str(gate.get("name", "城门")),
+		state_text,
+		"核验通过" if bool(result.get("allowed", false)) else "核验未通过",
+		str(result.get("message", "无法核验"))
+	]
+
+
 func _update_npc_interaction_hint() -> void:
 	if npc_hint_label == null or player == null:
 		return
@@ -3645,6 +3727,14 @@ func _update_npc_interaction_hint() -> void:
 	if player.global_position.distance_to(Vector3(51.0, 0.0, 36.5)) <= 7.0:
 		npc_focus_agent = {}
 		npc_hint_label.text = "E 打开判官司工作台 · 案卷复核与庭审"
+		return
+	var nearby_gate := _get_nearby_gate(8.5)
+	if not nearby_gate.is_empty():
+		npc_focus_agent = {}
+		var gate_id := str(nearby_gate.get("id", ""))
+		var gate_result := evaluate_local_gate_access(gate_id)
+		var gate_state := "开放" if bool(local_gate_open_by_id.get(gate_id, true)) else "关闭"
+		npc_hint_label.text = "E 核验%s · 城门%s · %s" % [str(nearby_gate.get("name", "城门")), gate_state, str(gate_result.get("message", ""))]
 		return
 	var nearest_incident_distance := 9.0
 	var nearest_incident: Dictionary = {}
