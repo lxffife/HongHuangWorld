@@ -144,6 +144,9 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000066_equipment_
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000067_fengdu_blacksmith_npc.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000068_party_system.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000069_party_loot_rules.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000070_party_focus_target.up.sql
 
 - `000069_party_loot_rules` adds independent material/equipment loot policies to parties (`personal`, `free_for_all`, `round_robin`, `leader`), persistent rotation cursors, and per-drop eligible-character records. The API exposes leader-only policy changes through `PUT /api/v1/party/loot-rules`. The rules apply to newly created drops; existing available drops retain their persisted eligibility. `free_for_all` allows all party members to compete for one atomic pickup; `round_robin` assigns each new drop to the next connected member in the same world instance; `leader` assigns it to the leader character. The WorldServer restores the eligibility list after restart and still validates pickup distance before Backend performs the transactional ownership transfer.
 ```
+
+- `000070_party_focus_target` adds an expiring shared party focus marker. Any authenticated current party member in the same world instance can set or clear the target through `PUT /api/v1/party/focus-target`; the current-party response exposes the target and marker author for 60 seconds. This is a tactical UI marker only: it does not force monster aggro or alter server-side damage/targeting. Clients should only display the marker when the referenced monster is present in their current world snapshot.
