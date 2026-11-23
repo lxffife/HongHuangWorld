@@ -8,9 +8,11 @@ const BOT_CONFIG_PATH := "user://ai_test_player.cfg"
 const CLIENT_BUILD := "0.1.0"
 const WORLD_ID := "underworld_fengdu"
 const FOLLOW_DISTANCE := 4.0
-const ATTACK_DISTANCE := 2.2
+const ATTACK_DISTANCE := 1.35
 const MONSTER_APPROACH_DISTANCE := 12.0
-const ATTACK_INTERVAL := 1.25
+const ATTACK_INTERVAL := 1.5
+const BUSY_ATTACK_BACKOFF := 5.0
+const RANGE_ATTACK_BACKOFF := 1.0
 
 var api_base := ""
 var username := ""
@@ -27,6 +29,9 @@ var welcomed := false
 var stopping := false
 var input_sequence := 0
 var last_attack_msec := 0
+var attack_backoff_until_msec := 0
+var last_attack_target_id := ""
+var last_dead_notice_msec := 0
 var last_party_poll_msec := 0
 var last_party_warning := ""
 var last_party_warning_msec := 0
@@ -191,10 +196,19 @@ func _on_entities_updated(entities: Array) -> void:
 				nearby_player_entities.append(player)
 
 func _on_combat_event(event: Dictionary) -> void:
-	var accepted := bool(event.get("accepted", false))
+	# ENet may deliver combat events for nearby players as well. Only report
+	# results explicitly attributed to this bot, otherwise unrelated events
+	# look like repeated successful bot attacks.
+	if str(event.get("attacker_character_id", "")) != bot_character_id:
+		return
+	var accepted := bool(event.get("accepted", not event.has("reason")))
 	var phase := str(event.get("phase", ""))
 	var reason := str(event.get("reason", ""))
-	_log("战斗服务器反馈：" + ("接受" if accepted else "未接受") + " · " + phase + (" · " + reason if not reason.is_empty() else ""))
+	if not accepted and reason.contains("战斗记录繁忙"):
+		attack_backoff_until_msec = maxi(attack_backoff_until_msec, Time.get_ticks_msec() + int(BUSY_ATTACK_BACKOFF * 1000.0))
+	elif not accepted and reason.contains("距离目标太远"):
+		attack_backoff_until_msec = maxi(attack_backoff_until_msec, Time.get_ticks_msec() + int(RANGE_ATTACK_BACKOFF * 1000.0))
+	_log("战斗服务器反馈：" + ("命中结算" if accepted else "未接受") + " · " + phase + (" · " + reason if not reason.is_empty() else ""))
 
 func _poll_and_accept_invites() -> void:
 	var result := await _api("GET", "/api/v1/party/invitations", {}, true)
@@ -262,6 +276,14 @@ func _run_companion_brain() -> void:
 			last_entity_diagnostic_msec = now_diagnostic
 			_log("等待自身玩家快照；当前实体数=" + str(latest_entities.size()) + "，附近玩家=" + str(players.size()) + "，怪物=" + str(monsters.size()))
 		return
+	var self_health := int(self_entity.get("health", 1))
+	if self_health <= 0 or not bool(self_entity.get("alive", true)):
+		_send_movement(Vector2.ZERO)
+		var dead_now := Time.get_ticks_msec()
+		if dead_now - last_dead_notice_msec >= 10000:
+			last_dead_notice_msec = dead_now
+			_log("角色已倒地，暂停自动攻击，等待复活。")
+		return
 	var self_pos := Vector2(float(self_entity.get("x", 0.0)), float(self_entity.get("z", 0.0)))
 	var target_player: Dictionary = {}
 	var target_distance := INF
@@ -283,11 +305,12 @@ func _run_companion_brain() -> void:
 			target_monster = monster
 	if not target_monster.is_empty() and monster_distance <= ATTACK_DISTANCE:
 		var now := Time.get_ticks_msec()
-		if now - last_attack_msec >= int(ATTACK_INTERVAL * 1000.0):
-			var attack_error: int = network.send_attack(str(target_monster.get("entity_id", "")))
+		if now >= attack_backoff_until_msec and now - last_attack_msec >= int(ATTACK_INTERVAL * 1000.0):
+			last_attack_target_id = str(target_monster.get("entity_id", ""))
+			var attack_error: int = network.send_attack(last_attack_target_id)
 			if attack_error == OK:
 				last_attack_msec = now
-				_log("AI 发起攻击：" + str(target_monster.get("name", "怪物")))
+				_log("AI 发起攻击：" + str(target_monster.get("name", "怪物")) + " · 距离 " + str(snappedf(monster_distance, 0.1)) + "m")
 			else:
 				_log("AI 攻击指令发送失败，错误码：" + str(attack_error))
 		_send_movement(Vector2.ZERO)
