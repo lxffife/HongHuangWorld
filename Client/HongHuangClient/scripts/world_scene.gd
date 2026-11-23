@@ -1943,7 +1943,8 @@ func _create_arrow_projectile() -> Node3D:
 	shaft.material_override = wood
 	root.add_child(shaft)
 	var head := MeshInstance3D.new()
-	var head_mesh := ConeMesh.new()
+	# Godot 4 provides CylinderMesh; a zero top radius creates a cone-shaped arrowhead.
+	var head_mesh := CylinderMesh.new()
 	head_mesh.top_radius = 0.0
 	head_mesh.bottom_radius = 0.085
 	head_mesh.height = 0.22
