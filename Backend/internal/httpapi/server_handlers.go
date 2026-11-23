@@ -24,6 +24,7 @@ type serverHeartbeatRequest struct {
 	CurrentPlayers int    `json:"current_players"`
 	WorldID        string `json:"world_id"`
 	InstanceKey    string `json:"instance_key"`
+	HellFloor      int    `json:"hell_floor"`
 	Status         string `json:"status"`
 }
 
@@ -45,7 +46,7 @@ func (h *serverHandlers) heartbeat(w http.ResponseWriter, r *http.Request) {
 	result, err := h.service.Heartbeat(r.Context(), serverregistry.Heartbeat{
 		NodeKey: request.NodeKey, Host: request.Host, UDPPort: request.UDPPort,
 		Region: request.Region, Capacity: request.Capacity, CurrentPlayers: request.CurrentPlayers,
-		WorldID: request.WorldID, InstanceKey: request.InstanceKey, Status: request.Status,
+		WorldID: request.WorldID, InstanceKey: request.InstanceKey, HellFloor: request.HellFloor, Status: request.Status,
 	})
 	if err != nil {
 		if errors.Is(err, serverregistry.ErrInvalidHeartbeat) {
