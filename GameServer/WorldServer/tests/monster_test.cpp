@@ -89,6 +89,15 @@ int main() {
     assert(frost_profile.windup_ms == 820 && frost_profile.cooldown_ms == 2400);
     assert(std::string(frost_profile.style) == "frost_bolt");
     assert(frost_profile.range >= 6.0F);
+    // Encounter-specific profiles override both movement reach and kiting style.
+    // A guardian using a frost signature should retreat when a player closes in.
+    MonsterState frost_guardian_state{.x = 0.0F, .z = 0.0F, .health = wolf.max_health};
+    const MonsterTarget frost_guardian_target{
+        .id = "player-frost-guardian", .x = 3.0F, .z = 0.0F, .alive = true};
+    assert(tick_monster(wolf, frost_guardian_state, &frost_guardian_target,
+                        0.05F, &frost_profile));
+    assert(frost_guardian_state.mode == MonsterMode::Chasing);
+    assert(frost_guardian_state.x < 0.0F);
 
     auto poison_soul = wolf;
     poison_soul.id = "poison_soul";
