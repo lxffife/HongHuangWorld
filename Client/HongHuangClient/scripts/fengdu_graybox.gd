@@ -27,6 +27,7 @@ var npc_spawn_points: Dictionary = {}
 var activity_points: Array[Dictionary] = []
 var navigation_network_data: Dictionary = {}
 var last_navigation_route: Dictionary = {}
+var local_gate_open_by_id: Dictionary = {}
 var patrol_route: Array[Vector3] = []
 var patrol_route_node_ids: Array[String] = []
 var activity_debug_root: Node3D
@@ -591,6 +592,9 @@ func _build_activity_registry() -> void:
 	# Consume presentation-independent NPC placements and route data.
 	activity_points.clear()
 	navigation_network_data = WORLD_LAYOUT.get_navigation_network()
+	local_gate_open_by_id.clear()
+	for gate in WORLD_LAYOUT.get_gates():
+		local_gate_open_by_id[str(gate.get("id", ""))] = true
 	for point in WORLD_LAYOUT.get_npc_activity_points():
 		var bound_point: Dictionary = point.duplicate(true)
 		bound_point.merge(WORLD_LAYOUT.get_spatial_binding_for_point(bound_point, navigation_network_data), true)
@@ -623,7 +627,7 @@ func _build_activity_registry() -> void:
 		activity_points.append(route_point)
 
 
-func get_navigation_route_to_district(district_id: String, origin: Vector3 = Vector3.ZERO) -> Dictionary:
+func get_navigation_route_to_district(district_id: String, origin: Vector3 = Vector3.ZERO, options: Dictionary = {}) -> Dictionary:
 	# Public scene adapter for UI, quest and NPC callers. Does not move an actor.
 	if navigation_network_data.is_empty():
 		navigation_network_data = WORLD_LAYOUT.get_navigation_network()
@@ -631,12 +635,13 @@ func get_navigation_route_to_district(district_id: String, origin: Vector3 = Vec
 		navigation_network_data,
 		origin,
 		district_id,
-		WORLD_LAYOUT.get_district_service_entrances()
+		WORLD_LAYOUT.get_district_service_entrances(),
+		_get_navigation_options(options)
 	)
 	return last_navigation_route.duplicate(true)
 
 
-func get_navigation_route_between_positions(origin: Vector3, destination: Vector3) -> Dictionary:
+func get_navigation_route_between_positions(origin: Vector3, destination: Vector3, options: Dictionary = {}) -> Dictionary:
 	if navigation_network_data.is_empty():
 		navigation_network_data = WORLD_LAYOUT.get_navigation_network()
 	var destination_node := WORLD_NAVIGATION.find_nearest_node(navigation_network_data, destination)
@@ -645,10 +650,34 @@ func get_navigation_route_between_positions(origin: Vector3, destination: Vector
 	last_navigation_route = WORLD_NAVIGATION.find_path_from_position(
 		navigation_network_data,
 		origin,
-		str(destination_node["node_id"])
+		str(destination_node["node_id"]),
+		_get_navigation_options(options)
 	)
 	last_navigation_route["destination_connector_distance"] = float(destination_node["distance"])
 	return last_navigation_route.duplicate(true)
+
+
+func set_local_gate_state(gate_id: String, is_open: bool) -> bool:
+	# Local graybox switch only. The WorldServer must make the authoritative decision.
+	if not local_gate_open_by_id.has(gate_id):
+		return false
+	local_gate_open_by_id[gate_id] = is_open
+	return true
+
+
+func get_local_gate_states() -> Dictionary:
+	return local_gate_open_by_id.duplicate(true)
+
+
+func _get_navigation_options(overrides: Dictionary = {}) -> Dictionary:
+	var options := overrides.duplicate(true)
+	var closed_gates: Array = options.get("closed_gates", []).duplicate()
+	for gate_id_variant in local_gate_open_by_id.keys():
+		var gate_id := str(gate_id_variant)
+		if not bool(local_gate_open_by_id[gate_id]) and gate_id not in closed_gates:
+			closed_gates.append(gate_id)
+	options["closed_gates"] = closed_gates
+	return options
 
 
 func _district_key(district_name: String) -> String:
@@ -2596,7 +2625,7 @@ func _begin_patrol_guard_return(agent: Dictionary) -> void:
 		_finish_patrol_dispatch(agent)
 
 
-func _build_patrol_dispatch_path(origin: Vector3, destination: Vector3) -> Dictionary:
+func _build_patrol_dispatch_path(origin: Vector3, destination: Vector3, options: Dictionary = {}) -> Dictionary:
 	# Connect arbitrary incident/actor positions to the nearest stable road nodes.
 	var start_node := WORLD_NAVIGATION.find_nearest_node(navigation_network_data, origin)
 	var goal_node := WORLD_NAVIGATION.find_nearest_node(navigation_network_data, destination)
@@ -2605,7 +2634,8 @@ func _build_patrol_dispatch_path(origin: Vector3, destination: Vector3) -> Dicti
 	var route := WORLD_NAVIGATION.find_path(
 		navigation_network_data,
 		str(start_node.get("node_id", "")),
-		str(goal_node.get("node_id", ""))
+		str(goal_node.get("node_id", "")),
+		_get_navigation_options(options)
 	)
 	if not bool(route.get("found", false)):
 		return route
