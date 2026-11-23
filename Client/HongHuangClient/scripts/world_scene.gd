@@ -1354,7 +1354,7 @@ func _update_hud() -> void:
 	var world_id := str(snapshot.get("world_id", ""))
 	var world_name := _world_display_name(world_id)
 	var character_name := str(snapshot.get("name", "初入洪荒"))
-	hud_label.text = "当前世界 · " + world_name + " · 所在区域 " + (current_region_name if not current_region_name.is_empty() else "区域载入中") + "\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\nF NPC交互 · E 拾取 · I 背包 · Q 火球术 · R 冰锥术 · T 嘲讽 · Y 救援 · C 聊天 · 鼠标左键攻击 · F2 网络诊断"
+	hud_label.text = "当前世界 · " + world_name + " · 所在区域 " + (current_region_name if not current_region_name.is_empty() else "区域载入中") + "\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\nF NPC交互 · E 拾取 · I 背包 · Q 火球术 · R 冰锥术 · T 嘲讽 · Y 救援 · U 回春术 · G 守护灵盾 · C 聊天 · 鼠标左键攻击 · F2 网络诊断"
 	_update_compact_hud()
 
 func _exit_tree() -> void:
@@ -1382,7 +1382,9 @@ func _on_entities_updated(entities: Array) -> void:
 			var status := {
 				"health": int(entity.get("health", 0)),
 				"max_health": int(entity.get("max_health", 0)),
-				"alive": bool(entity.get("alive", false))
+				"alive": bool(entity.get("alive", false)),
+				"shield_health": int(entity.get("shield_health", 0)),
+				"shield_remaining_ms": int(entity.get("shield_remaining_ms", 0))
 			}
 			if party_member_statuses.get(status_id, {}) != status:
 				party_member_statuses[status_id] = status
@@ -3015,8 +3017,9 @@ func _render_party_members() -> void:
 		elif not bool(status.get("alive", false)):
 			health_label.text = "倒地"
 		else:
-			health_label.text = str(health) + " / " + str(max_health)
-		health_label.custom_minimum_size.x = 92.0
+			var shield := int(status.get("shield_health", 0))
+			health_label.text = str(health) + " / " + str(max_health) + (" · 护盾 " + str(shield) if shield > 0 else "")
+		health_label.custom_minimum_size.x = 132.0
 		health_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		health_label.add_theme_color_override("font_color", Color("#d58b83") if status.size() > 0 and not bool(status.get("alive", false)) else Color("#c8d4df"))
 		status_row.add_child(health_label)
