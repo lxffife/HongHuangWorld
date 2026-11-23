@@ -91,6 +91,7 @@ static func _add_district(root: Node3D, entry: Dictionary) -> void:
 	if kind == "palace":
 		district.add_child(_box_mesh("UpperHall", Vector3(main_width * 0.62, 4.0, main_depth * 0.58), Vector3(0.0, building_height + 3.0, 0.0), Color("#806044")))
 		district.add_child(_box_mesh("UpperRoof", Vector3(main_width * 0.76, 0.65, main_depth * 0.72), Vector3(0.0, building_height + 5.35, 0.0), Color("#332638")))
+	_add_district_details(district, kind, footprint, base_color, building_height)
 	var label := Label3D.new()
 	label.name = "DistrictLabel"
 	label.text = str(entry.get("name", "城区"))
@@ -101,6 +102,50 @@ static func _add_district(root: Node3D, entry: Dictionary) -> void:
 	label.modulate = Color("#e1d2b4")
 	district.add_child(label)
 	root.add_child(district)
+
+
+static func _add_district_details(district: Node3D, kind: String, footprint: Vector2, base_color: Color, building_height: float) -> void:
+	match kind:
+		"palace":
+			for side in [-1.0, 1.0]:
+				for depth_side in [-1.0, 1.0]:
+					var pillar := CylinderMesh.new()
+					pillar.top_radius = 0.34
+					pillar.bottom_radius = 0.42
+					pillar.height = building_height * 0.78
+					pillar.radial_segments = 10
+					var pillar_node := MeshInstance3D.new()
+					pillar_node.name = "PalacePillar"
+					pillar_node.mesh = pillar
+					pillar_node.position = Vector3(side * footprint.x * 0.31, 0.7 + building_height * 0.39, depth_side * footprint.y * 0.29)
+					var pillar_material := StandardMaterial3D.new()
+					pillar_material.albedo_color = Color("#a88b60")
+					pillar_node.material_override = pillar_material
+					district.add_child(pillar_node)
+		"court", "admin":
+			for side in [-1.0, 1.0]:
+				district.add_child(_box_mesh("SideWing", Vector3(footprint.x * 0.2, building_height * 0.58, footprint.y * 0.52), Vector3(side * footprint.x * 0.39, 0.7 + building_height * 0.29, 0.0), base_color.lightened(0.12)))
+		"market":
+			for stall_index in range(4):
+				var stall_x := -footprint.x * 0.34 + float(stall_index) * footprint.x * 0.22
+				district.add_child(_box_mesh("MarketCounter_" + str(stall_index), Vector3(2.0, 0.9, 1.5), Vector3(stall_x, 1.15, footprint.y * 0.28), Color("#8b704d")))
+				district.add_child(_box_mesh("MarketAwning_" + str(stall_index), Vector3(2.3, 0.22, 1.9), Vector3(stall_x, 3.0, footprint.y * 0.28), Color("#6b3f4a") if stall_index % 2 == 0 else Color("#46596b")))
+		"residential":
+			for house_index in range(3):
+				var house_x := -footprint.x * 0.28 + float(house_index) * footprint.x * 0.28
+				district.add_child(_box_mesh("SoulHouse_" + str(house_index), Vector3(2.5, 2.8, 2.7), Vector3(house_x, 2.1, -footprint.y * 0.28), Color("#59645d")))
+				district.add_child(_box_mesh("SoulHouseRoof_" + str(house_index), Vector3(3.0, 0.42, 3.1), Vector3(house_x, 3.72, -footprint.y * 0.28), Color("#30323b")))
+		"military":
+			for side in [-1.0, 1.0]:
+				district.add_child(_box_mesh("WatchTower", Vector3(2.0, 7.0, 2.0), Vector3(side * footprint.x * 0.34, 4.2, 0.0), Color("#414752")))
+				district.add_child(_box_mesh("WatchTowerRoof", Vector3(2.8, 0.55, 2.8), Vector3(side * footprint.x * 0.34, 8.0, 0.0), Color("#292b35")))
+		"gate":
+			for side in [-1.0, 1.0]:
+				district.add_child(_box_mesh("GateColumn", Vector3(0.8, building_height + 1.0, 0.9), Vector3(side * footprint.x * 0.34, (building_height + 1.0) * 0.5, 0.0), Color("#82705e")))
+			district.add_child(_box_mesh("GateBeam", Vector3(footprint.x * 0.82, 0.8, 1.1), Vector3(0.0, building_height + 0.5, 0.0), Color("#a18a64")))
+		"transport":
+			district.add_child(_box_mesh("WaystationPlatform", Vector3(footprint.x * 0.86, 0.35, footprint.y * 0.82), Vector3(0.0, 0.9, 0.0), Color("#827968")))
+			district.add_child(_box_mesh("WaystationCanopy", Vector3(footprint.x * 0.8, 0.35, footprint.y * 0.76), Vector3(0.0, building_height + 1.4, 0.0), Color("#343341")))
 
 
 static func _add_city_walls(root: Node3D) -> void:
