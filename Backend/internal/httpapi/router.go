@@ -174,6 +174,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("POST /api/v1/servers/characters/rewards", rewards.apply)
 		entry := &worldEntryHandlers{authService: authService, entryService: worldentry.NewService(db), apiKey: os.Getenv("WORLD_SERVER_API_KEY"), logger: logger}
 		mux.HandleFunc("POST /api/v1/worlds/enter", entry.issue)
+		mux.HandleFunc("POST /api/v1/worlds/hell-trials/{floor}/enter", entry.issueHellTrial)
 		mux.HandleFunc("POST /api/v1/characters/current/respawn", entry.respawn)
 		mux.HandleFunc("POST /api/v1/servers/tickets/redeem", entry.redeem)
 		mux.HandleFunc("POST /api/v1/servers/sessions/snapshot", entry.saveSnapshot)
