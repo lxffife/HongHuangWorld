@@ -45,7 +45,7 @@ public:
     }
 
     bool mark_units_arrived(std::string_view incident_id, std::size_t unit_count) {
-        auto* incident = find(incident_id);
+        auto* incident = find_mutable(incident_id);
         if (incident == nullptr || incident->state != IncidentState::dispatched ||
             unit_count == 0 || unit_count > incident->assigned_units - incident->arrived_units) {
             return false;
@@ -58,14 +58,14 @@ public:
     }
 
     bool resolve(std::string_view incident_id) {
-        auto* incident = find(incident_id);
+        auto* incident = find_mutable(incident_id);
         if (incident == nullptr || incident->state != IncidentState::investigating) return false;
         incident->state = IncidentState::resolved;
         return true;
     }
 
     bool close(std::string_view incident_id) {
-        auto* incident = find(incident_id);
+        auto* incident = find_mutable(incident_id);
         if (incident == nullptr || incident->state != IncidentState::resolved) return false;
         incident->state = IncidentState::closed;
         return true;
