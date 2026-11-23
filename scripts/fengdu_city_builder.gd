@@ -5,7 +5,7 @@ extends RefCounted
 const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
 
 const CITY_SCALE := 0.12
-const CITY_CENTER_Z := -70.0
+const CITY_CENTER_Z := -60.0
 const WALL_HALF_X := 47.0
 const WALL_HALF_Z := 37.0
 
@@ -63,7 +63,7 @@ static func _add_district(root: Node3D, entry: Dictionary) -> void:
 	var footprint := Vector2(maxf(float(size_data[0]) * CITY_SCALE, 5.0), maxf(float(size_data[1]) * CITY_SCALE, 4.5))
 	var kind := str(entry.get("kind", "admin"))
 	var base_color := _district_color(kind)
-	var district := Node3D.new()
+	var district := StaticBody3D.new()
 	district.name = "District_" + str(entry.get("id", "unknown"))
 	district.position = center
 	var foundation := _box_mesh("Foundation", Vector3(footprint.x, 0.7, footprint.y), Vector3(0.0, 0.35, 0.0), base_color.darkened(0.22))
@@ -80,6 +80,12 @@ static func _add_district(root: Node3D, entry: Dictionary) -> void:
 	var main_width := footprint.x * 0.68
 	var main_depth := footprint.y * 0.66
 	district.add_child(_box_mesh("MainHall", Vector3(main_width, building_height, main_depth), Vector3(0.0, 0.7 + building_height * 0.5, 0.0), base_color))
+	var building_collision := CollisionShape3D.new()
+	var building_shape := BoxShape3D.new()
+	building_shape.size = Vector3(main_width, building_height, main_depth)
+	building_collision.shape = building_shape
+	building_collision.position = Vector3(0.0, 0.7 + building_height * 0.5, 0.0)
+	district.add_child(building_collision)
 	district.add_child(_box_mesh("Roof", Vector3(main_width * 1.18, 0.85, main_depth * 1.16), Vector3(0.0, 1.1 + building_height, 0.0), Color("#282936")))
 	district.add_child(_box_mesh("RoofRidge", Vector3(main_width * 0.72, 0.28, 0.5), Vector3(0.0, 1.58 + building_height, 0.0), Color("#a88b60")))
 	if kind == "palace":
@@ -101,12 +107,25 @@ static func _add_city_walls(root: Node3D) -> void:
 	var wall_color := Color("#494451")
 	# North and south walls are split around a 12 m gate opening.
 	for side in [-1.0, 1.0]:
-		root.add_child(_box_mesh("NorthWall_" + str(side), Vector3(WALL_HALF_X * 2.0 * 0.5 - 6.0, 5.0, 1.8), Vector3(side * (WALL_HALF_X * 0.5 + 3.0), 2.5, CITY_CENTER_Z - WALL_HALF_Z), wall_color))
-		root.add_child(_box_mesh("SouthWall_" + str(side), Vector3(WALL_HALF_X * 0.5 - 6.0, 5.0, 1.8), Vector3(side * (WALL_HALF_X * 0.5 + 3.0), 2.5, CITY_CENTER_Z + WALL_HALF_Z), wall_color))
+		_add_wall(root, "NorthWall_" + str(side), Vector3(WALL_HALF_X - 6.0, 5.0, 1.8), Vector3(side * (WALL_HALF_X * 0.5 + 3.0), 2.5, CITY_CENTER_Z - WALL_HALF_Z), wall_color)
+		_add_wall(root, "SouthWall_" + str(side), Vector3(WALL_HALF_X - 6.0, 5.0, 1.8), Vector3(side * (WALL_HALF_X * 0.5 + 3.0), 2.5, CITY_CENTER_Z + WALL_HALF_Z), wall_color)
 	for side in [-1.0, 1.0]:
-		root.add_child(_box_mesh("SideWall_" + str(side), Vector3(1.8, 5.0, WALL_HALF_Z * 2.0), Vector3(side * WALL_HALF_X, 2.5, CITY_CENTER_Z), wall_color))
+		_add_wall(root, "SideWall_" + str(side), Vector3(1.8, 5.0, WALL_HALF_Z * 2.0), Vector3(side * WALL_HALF_X, 2.5, CITY_CENTER_Z), wall_color)
 	_add_city_landmark(root, "SouthGateName", "南 幽 门", Vector3(0.0, 7.0, CITY_CENTER_Z + WALL_HALF_Z + 1.5), Color("#c9b9d2"))
 	_add_city_landmark(root, "NorthGateName", "北 天 门", Vector3(0.0, 7.0, CITY_CENTER_Z - WALL_HALF_Z - 1.5), Color("#c9b9d2"))
+
+
+static func _add_wall(root: Node3D, node_name: String, dimensions: Vector3, position: Vector3, color: Color) -> void:
+	var wall := StaticBody3D.new()
+	wall.name = node_name
+	wall.position = position
+	wall.add_child(_box_mesh("WallVisual", dimensions, Vector3.ZERO, color))
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = dimensions
+	collision.shape = shape
+	wall.add_child(collision)
+	root.add_child(wall)
 
 
 static func _add_roads(root: Node3D, by_id: Dictionary, roads: Array) -> void:
