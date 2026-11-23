@@ -122,7 +122,7 @@ func (s *Service) issue(ctx context.Context, accountID string, hellFloor int) (E
 				SELECT 1 FROM souls s JOIN characters c ON c.id = s.current_character_id
 				JOIN character_hell_trial_progress hp ON hp.character_id = c.id
 				WHERE s.account_id = $1 AND c.status = 'alive' AND c.world_id = 'underworld_fengdu'
-				  AND hp.floor_number = $2 AND hp.status = 'unlocked'
+				  AND hp.floor_number = $2 AND hp.status IN ('unlocked', 'completed')
 			)`, accountID, hellFloor).Scan(&unlocked)
 			if checkErr != nil { return Entry{}, fmt.Errorf("check hell trial floor unlock: %w", checkErr) }
 			if !unlocked { return Entry{}, ErrHellTrialFloorLocked }
