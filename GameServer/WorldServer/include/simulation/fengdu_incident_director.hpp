@@ -6,11 +6,25 @@
 #include <string_view>
 #include <utility>
 
+#include "simulation/gate_access_policy.hpp"
+
 namespace honghuang::simulation {
 
 enum class IncidentSeverity { low, medium, high };
 enum class IncidentState { reported, dispatched, investigating, resolved, closed };
 enum class CityAlertLevel { normal, watch, lockdown };
+
+inline GatePolicySnapshot apply_city_alert_to_gate_policy(
+    const GatePolicySnapshot& base, CityAlertLevel alert_level) {
+    GatePolicySnapshot effective = base;
+    if (alert_level == CityAlertLevel::watch) {
+        effective.require_pass = true;
+    } else if (alert_level == CityAlertLevel::lockdown) {
+        effective.lockdown = true;
+        effective.is_open = false;
+    }
+    return effective;
+}
 
 struct FengduIncident {
     std::string id;
