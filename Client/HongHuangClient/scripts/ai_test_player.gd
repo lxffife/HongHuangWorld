@@ -27,6 +27,7 @@ var input_sequence := 0
 var last_attack_msec := 0
 var last_party_poll_msec := 0
 var last_input_msec := 0
+var connect_started_msec := 0
 var status_text := "starting"
 
 func _initialize() -> void:
@@ -52,9 +53,13 @@ func _main() -> void:
 		quit(4)
 		return
 	_log("已进入世界，等待 ServerWelcome。准备好后请在游戏内邀请账号：" + username)
+	connect_started_msec = Time.get_ticks_msec()
 	while not stopping:
 		await create_timer(0.1).timeout
 		if not welcomed:
+			if Time.get_ticks_msec() - connect_started_msec > 45000:
+				_log("等待世界服务器握手超过 45 秒，停止本次启动。")
+				stopping = true
 			continue
 		var now := Time.get_ticks_msec()
 		if now - last_party_poll_msec >= 2000:
@@ -156,6 +161,7 @@ func _enter_world() -> bool:
 	network.connection_error.connect(func(message: String): _log("网络错误：" + message))
 	network.disconnected.connect(func(): _log("ENet 已断开。"))
 	network.entities_updated.connect(_on_entities_updated)
+	network.combat_event.connect(_on_combat_event)
 	var connect_error: int = network.connect_with_ticket(host, port, ticket)
 	if connect_error != OK:
 		_log("初始化 ENet 连接失败，错误码：" + str(connect_error))
@@ -169,6 +175,12 @@ func _on_welcomed(snapshot: Dictionary) -> void:
 
 func _on_entities_updated(entities: Array) -> void:
 	latest_entities = entities
+
+func _on_combat_event(event: Dictionary) -> void:
+	var accepted := bool(event.get("accepted", false))
+	var phase := str(event.get("phase", ""))
+	var reason := str(event.get("reason", ""))
+	_log("战斗服务器反馈：" + ("接受" if accepted else "未接受") + " · " + phase + (" · " + reason if not reason.is_empty() else ""))
 
 func _poll_and_accept_invites() -> void:
 	var result := await _api("GET", "/api/v1/party/invitations", {}, true)
@@ -263,6 +275,7 @@ func _send_movement(direction: Vector2) -> void:
 
 func _api(method: String, path: String, body: Dictionary = {}, authenticated: bool = false) -> Dictionary:
 	var request := HTTPRequest.new()
+	request.timeout = 15.0
 	root.add_child(request)
 	var headers := PackedStringArray(["Content-Type: application/json"])
 	if authenticated and not token.is_empty():
