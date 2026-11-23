@@ -1752,7 +1752,7 @@ struct EnetServer::Impl {
         if (!enqueue_durable_event(event_id, "hell_trial_completion", payload, error))
             std::cerr << "Could not persist hell trial completion: character="
                       << player.character_id << " floor=" << hell_trial_encounter.floor()
-                      << " reason=" << error << '\\n';
+                      << " reason=" << error << '\n';
     }
 
     void enqueue_soul_reward(const PlayerState& player, std::int64_t experience,
