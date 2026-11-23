@@ -1553,7 +1553,7 @@ func _build_controls_help_panel(hud: CanvasLayer) -> void:
 	var divider := HSeparator.new()
 	layout.add_child(divider)
 	var body := Label.new()
-	body.text = "角色移动\nW / A / S / D    前进、左移、后退、右移\n空格键    跳跃（地形允许时）\n鼠标移动    转动视角\n鼠标左键    攻击准星指向或已锁定的怪物\nTab    切换附近怪物目标\n\n交互与界面\nF    与附近 NPC 交互\nE    拾取附近掉落物\nI    打开背包\nC 或 Enter    打开聊天\nF1    显示 / 隐藏游戏 HUD\nF2    打开 / 关闭本操作指南\nF3    显示 / 隐藏输入诊断\nEsc    关闭当前地图、聊天或帮助面板\n\n战斗技能\nQ    火球术       R    冰锥术\nT    嘲讽术       Y    回魂术\nU    回春术       G    守护灵盾\nH    净化术\n\n提示：打开聊天或面板时，部分移动与战斗输入会暂停。技能是否可用仍以服务器判定为准。"
+	body.text = "角色移动\nW / A / S / D    前进、左移、后退、右移\n空格键    跳跃（地形允许时）\n鼠标移动    转动视角\n鼠标左键    点击攻击；按住可连续攻击，进入攻击距离后自动出手\nTab    切换附近怪物目标\n\n交互与界面\nF    与附近 NPC 交互\nE    拾取附近掉落物\nI    打开背包\nC 或 Enter    打开聊天\nF1    显示 / 隐藏游戏 HUD\nF2    打开 / 关闭本操作指南\nF3    显示 / 隐藏输入诊断\nEsc    关闭当前地图、聊天或帮助面板\n\n战斗技能\nQ    火球术       R    冰锥术\nT    嘲讽术       Y    回魂术\nU    回春术       G    守护灵盾\nH    净化术\n\n提示：打开聊天或面板时，部分移动与战斗输入会暂停。技能是否可用仍以服务器判定为准。"
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.add_theme_color_override("font_color", Color("#d7e0e9"))
 	body.add_theme_font_size_override("font_size", 14)
@@ -1756,7 +1756,7 @@ func _update_hud() -> void:
 	var world_id := str(snapshot.get("world_id", ""))
 	var world_name := _world_display_name(world_id)
 	var character_name := str(snapshot.get("name", "初入洪荒"))
-	hud_label.text = character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\nF NPC交互 · E 拾取 · I 背包 · Q 火球术 · R 冰锥术 · T 嘲讽 · Y 救援 · U 回春术 · G 守护灵盾 · C 聊天 · 鼠标左键攻击 · F2 网络诊断"
+	hud_label.text = character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\nF NPC交互 · E 拾取 · I 背包 · Q 火球术 · R 冰锥术 · T 嘲讽 · Y 救援 · U 回春术 · G 守护灵盾 · C 聊天 · 鼠标左键攻击（按住连续攻击） · F2 网络诊断"
 	_update_compact_hud()
 
 func _exit_tree() -> void:
