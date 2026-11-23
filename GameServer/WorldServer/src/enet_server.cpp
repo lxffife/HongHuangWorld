@@ -4254,10 +4254,10 @@ struct EnetServer::Impl {
                       Json{{"accepted", false}, {"reason", "攻击间隔中，请稍后再试。"}});
             return;
         }
-        // Consume the cooldown even for misses to prevent invalid-target packet spam.
-        player.last_attack_at = now;
+        // Invalid target IDs still consume cooldown to discourage malformed packet spam.
         const auto target_id = command.value("target_entity_id", std::string{});
         if (target_id.empty() || target_id.size() > 96) {
+            player.last_attack_at = now;
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", false}, {"reason", "攻击目标无效。"}});
             return;
@@ -4267,6 +4267,7 @@ struct EnetServer::Impl {
         });
         if (target == monsters.end() || target->state.mode == honghuang::simulation::MonsterMode::Dead ||
             target->contribution_closing) {
+            player.last_attack_at = now;
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", false}, {"reason", "目标已消失或已被击败。"}});
             return;
@@ -4274,10 +4275,13 @@ struct EnetServer::Impl {
         const double dx = static_cast<double>(target->state.x) - player.x;
         const double dz = static_cast<double>(target->state.z) - player.z;
         if (dx * dx + dz * dz > static_cast<double>(combat_profile.range) * combat_profile.range) {
+            // An out-of-range click is a positioning correction, not an attack:
+            // do not burn the player's attack cooldown while they move closer.
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", false}, {"reason", "距离目标太远。"}});
             return;
         }
+        player.last_attack_at = now;
         player.last_combat_at = now;
         if (player_weapon_type(player) == "bow") {
             if (projectiles.size() >= 128) {
