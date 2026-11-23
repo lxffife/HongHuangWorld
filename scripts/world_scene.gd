@@ -164,6 +164,9 @@ var party_data: Dictionary = {}
 var party_material_loot_option: OptionButton
 var party_equipment_loot_option: OptionButton
 var party_loot_save_button: Button
+var party_focus_label: Label
+var party_focus_button: Button
+var party_focus_clear_button: Button
 var party_member_statuses: Dictionary = {}
 var party_invitations: Array = []
 var party_seen_invitation_ids: Dictionary = {}
@@ -1503,6 +1506,23 @@ func _upsert_monster(entity: Dictionary) -> void:
 				base_text += "\n生命 " + str(maxi(hp, 0)) + " / " + str(max_hp)
 		nameplate.text = base_text
 
+func _refresh_party_focus_visual() -> void:
+	var focus_id := str(party_data.get("focus_target_entity_id", ""))
+	for monster_id in monsters.keys():
+		var monster_node := monsters[monster_id] as Node3D
+		if not is_instance_valid(monster_node):
+			continue
+		var nameplate := monster_node.get_node_or_null("Nameplate") as Label3D
+		if nameplate == null:
+			continue
+		var entity: Dictionary = monster_entities.get(str(monster_id), {})
+		var base_text := str(entity.get("name", "野兽")) + " · Lv." + str(int(entity.get("level", 1)))
+		if entity.has("health") and int(entity.get("max_health", 0)) > 0:
+			base_text += "\n生命 " + str(maxi(int(entity.get("health", 0)), 0)) + " / " + str(int(entity.get("max_health", 0)))
+		if str(monster_id) == focus_id:
+			base_text += "\n⚑ 队伍集火目标"
+		nameplate.text = base_text
+
 func _create_monster(monster_name: String, monster_level: int) -> Node3D:
 	var visual_root: Node3D = UnderworldVisualFactory.create_monster(monster_name, monster_level)
 	var archetype := str(visual_root.get_meta("visual_archetype", ""))
@@ -2543,6 +2563,23 @@ func _build_party_ui() -> void:
 	party_status_label.text = "正在读取队伍……"
 	party_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	layout.add_child(party_status_label)
+	party_focus_label = _party_label("集火目标：暂无")
+	party_focus_label.add_theme_color_override("font_color", Color("#f0c77d"))
+	layout.add_child(party_focus_label)
+	var focus_actions := HBoxContainer.new()
+	focus_actions.add_theme_constant_override("separation", 8)
+	layout.add_child(focus_actions)
+	party_focus_button = Button.new()
+	party_focus_button.text = "标记当前选中目标为集火"
+	_apply_button_theme(party_focus_button, true)
+	party_focus_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	party_focus_button.pressed.connect(_party_mark_focus_target)
+	focus_actions.add_child(party_focus_button)
+	party_focus_clear_button = Button.new()
+	party_focus_clear_button.text = "清除"
+	_apply_button_theme(party_focus_clear_button)
+	party_focus_clear_button.pressed.connect(func(): _party_set_focus_target(""))
+	focus_actions.add_child(party_focus_clear_button)
 	var loot_title := Label.new()
 	loot_title.text = "战利品规则 · 队长设置"
 	loot_title.add_theme_color_override("font_color", Color("#d9b879"))
@@ -2675,6 +2712,15 @@ func _party_request(method: String, path: String, payload: Dictionary, context: 
 		party_request_context = ""
 		party_status_label.text = "队伍请求提交失败：" + str(error)
 
+func _party_mark_focus_target() -> void:
+	if selected_monster_id.is_empty() or not monster_entities.has(selected_monster_id):
+		party_status_label.text = "请先在场景中选中一只存活的怪物，再设置集火目标。"
+		return
+	_party_set_focus_target(selected_monster_id)
+
+func _party_set_focus_target(target_entity_id: String) -> void:
+	_party_request("PUT", "/api/v1/party/focus-target", {"target_entity_id": target_entity_id}, "focus")
+
 func _party_save_loot_rules() -> void:
 	if not is_instance_valid(party_material_loot_option) or not is_instance_valid(party_equipment_loot_option):
 		return
@@ -2729,6 +2775,14 @@ func _on_party_request_completed(result: int, response_code: int, _headers: Pack
 			if context == "invitations":
 				party_invites_box.add_child(_party_label("邀请列表读取失败（HTTP " + str(response_code) + "）"))
 		return
+	if context == "focus":
+		if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+			party_status_label.text = "设置集火目标失败（HTTP " + str(response_code) + "）：" + body.get_string_from_utf8()
+			return
+		party_data = data
+		_render_party_members()
+		_show_notification("队伍集火目标已更新", 3.0)
+		return
 	if context == "action":
 		if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
 			party_status_label.text = "队伍操作失败（HTTP " + str(response_code) + "）：" + body.get_string_from_utf8()
@@ -2756,6 +2810,9 @@ func _render_party_members() -> void:
 		party_material_loot_option.visible = false
 		party_equipment_loot_option.visible = false
 		party_loot_save_button.visible = false
+		party_focus_button.visible = false
+		party_focus_clear_button.visible = false
+		party_focus_label.text = "集火目标：需要先创建队伍"
 		party_members_box.add_child(_party_label("尚无队伍成员"))
 		return
 	party_status_label.text = "队伍 " + str(party_data.get("id", "")).substr(0, 8) + " · " + str(members.size()) + " / " + str(party_data.get("max_members", 5)) + " 人"
@@ -2770,6 +2827,14 @@ func _render_party_members() -> void:
 	party_material_loot_option.visible = is_leader
 	party_equipment_loot_option.visible = is_leader
 	party_loot_save_button.visible = is_leader
+	party_focus_button.visible = true
+	party_focus_clear_button.visible = true
+	var focus_id := str(party_data.get("focus_target_entity_id", ""))
+	if focus_id.is_empty():
+		party_focus_label.text = "集火目标：暂无（标记有效期 60 秒）"
+	else:
+		party_focus_label.text = "集火目标：" + str(monster_entities.get(focus_id, {}).get("name", focus_id)) + " · 标记者：" + str(party_data.get("focus_set_by", "队员"))
+	_refresh_party_focus_visual()
 	var loot_modes := {"personal": 0, "free_for_all": 1, "round_robin": 2, "leader": 3}
 	party_material_loot_option.select(int(loot_modes.get(str(party_data.get("material_loot_mode", "personal")), 0)))
 	party_equipment_loot_option.select(int(loot_modes.get(str(party_data.get("equipment_loot_mode", "personal")), 0)))
