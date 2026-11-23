@@ -99,6 +99,10 @@ if(BUILD_TESTING)
     target_include_directories(revive_test PRIVATE include)
     add_test(NAME revive_test COMMAND revive_test)
 
+    add_executable(support_combat_test tests/support_combat_test.cpp)
+    target_include_directories(support_combat_test PRIVATE include)
+    add_test(NAME support_combat_test COMMAND support_combat_test)
+
     add_executable(chat_delivery_policy_test tests/chat_delivery_policy_test.cpp)
     target_include_directories(chat_delivery_policy_test PRIVATE include)
     add_test(NAME chat_delivery_policy_test COMMAND chat_delivery_policy_test)
