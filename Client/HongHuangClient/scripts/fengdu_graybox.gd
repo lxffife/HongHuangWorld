@@ -174,6 +174,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_release_mouse()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_F6:
 		_toggle_activity_debug()
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_F7:
+		_cycle_city_alert_level()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_E:
 		if judge_workbench_open:
 			_close_judge_bureau_workbench()
@@ -720,6 +722,17 @@ func set_city_alert_level(level: String) -> bool:
 		if level == "lockdown":
 			set_local_gate_state(gate_id, false)
 	return true
+
+
+func _cycle_city_alert_level() -> void:
+	var next_level := "watch"
+	if city_alert_level == "watch":
+		next_level = "lockdown"
+	elif city_alert_level == "lockdown":
+		next_level = "normal"
+	set_city_alert_level(next_level)
+	if npc_detail_label != null:
+		npc_detail_label.text = "城防状态已切换：%s\n这是本地灰盒演示，不会同步到其他玩家或 WorldServer。" % str(get_city_alert_status().get("label", "未知"))
 
 
 func get_city_alert_status() -> Dictionary:
@@ -3708,7 +3721,7 @@ func _build_hud() -> void:
 	npc_detail_label.custom_minimum_size = Vector2(410, 34)
 	column.add_child(npc_detail_label)
 	var help := Label.new()
-	help.text = "WASD 移动 · 空格跳跃 · 鼠标左键捕获视角 · ESC 释放 · E 交互/城门核验 · F6 活动点"
+	help.text = "WASD 移动 · 空格跳跃 · 鼠标左键捕获视角 · ESC 释放 · E 交互/城门核验 · F6 活动点 · F7 城防警戒演示"
 	column.add_child(help)
 
 
