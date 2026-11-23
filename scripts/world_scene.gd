@@ -3521,25 +3521,43 @@ func _update_target_info() -> void:
 func _request_nearest_monster_attack() -> void:
 	var network := HHSession.world_network
 	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
+		_show_notification("战斗连接尚未就绪，无法攻击。")
 		return
-	var nearest_id := selected_monster_id if monsters.has(selected_monster_id) else ""
-	var nearest_distance := 4.5
-	if nearest_id.is_empty():
-		for monster_id in monster_targets:
-			var target: Vector3 = monster_targets[monster_id]
-			var distance := Vector2(local_player.global_position.x, local_player.global_position.z).distance_to(Vector2(target.x, target.z))
-			if distance < nearest_distance:
-				nearest_distance = distance
-				nearest_id = str(monster_id)
+
+	# Prefer the selected target only while it still exists and is nearby.
+	# Otherwise automatically fall back to the nearest replicated monster.
+	var nearest_id := ""
+	var nearest_distance := 22.0
+	if monsters.has(selected_monster_id) and monster_targets.has(selected_monster_id):
+		var selected_position: Vector3 = monster_targets[selected_monster_id]
+		var selected_distance := Vector2(local_player.global_position.x, local_player.global_position.z).distance_to(Vector2(selected_position.x, selected_position.z))
+		if selected_distance <= nearest_distance:
+			nearest_id = selected_monster_id
+			nearest_distance = selected_distance
+	for monster_id in monster_targets:
+		if not monsters.has(monster_id):
+			continue
+		var target: Vector3 = monster_targets[monster_id]
+		var distance := Vector2(local_player.global_position.x, local_player.global_position.z).distance_to(Vector2(target.x, target.z))
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest_id = str(monster_id)
 	if nearest_id.is_empty():
 		hud_label.text = "附近没有可攻击的怪物。"
+		_show_notification("附近没有可攻击的怪物，请靠近目标。")
 		return
+
 	var error: Error = network.send_attack(nearest_id)
 	if error != OK:
 		hud_label.text = "攻击指令发送失败：" + str(error)
-	elif local_player.has_method("play_attack_animation"):
-		# 本地挥剑只反馈输入；命中、伤害与攻击结果仍由 WorldServer 决定。
+		_show_notification("攻击指令发送失败：" + str(error))
+		return
+	# Local animation confirms the click; damage and hit confirmation remain
+	# authoritative on WorldServer. The server will return a reason if out of range.
+	if local_player.has_method("play_attack_animation"):
 		local_player.call("play_attack_animation")
+	var target_name := str(monster_entities.get(nearest_id, {}).get("name", "怪物"))
+	hud_label.text = "正在攻击：" + target_name
 
 func _update_spell_cooldown_hud() -> void:
 	for spell_id in spell_cooldown_labels:
@@ -4224,7 +4242,9 @@ func _on_combat_event(event: Dictionary) -> void:
 			_stop_revive_channel_ui()
 		return
 	if not bool(event.get("accepted", true)):
-		hud_label.text = str(event.get("reason", "攻击未命中。"))
+		var rejection_reason := str(event.get("reason", "攻击未命中。"))
+		hud_label.text = rejection_reason
+		_show_notification(rejection_reason, 2.5)
 		return
 	if bool(event.get("projectile_spawned", false)):
 		_show_notification("箭矢已发射，等待命中……")
