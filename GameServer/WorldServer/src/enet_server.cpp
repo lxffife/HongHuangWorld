@@ -4251,17 +4251,21 @@ struct EnetServer::Impl {
             combat_profile.cooldown, player.agility);
         if (player.last_attack_at.time_since_epoch().count() != 0 &&
             now - player.last_attack_at < attack_cooldown) {
+            const auto remaining_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                attack_cooldown - (now - player.last_attack_at)).count();
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", false}, {"attacker_character_id", player.character_id},
+                           {"cooldown_ms", std::max<std::int64_t>(0, remaining_ms)},
                            {"reason", "攻击间隔中，请稍后再试。"}});
             return;
         }
-        // Invalid target IDs still consume cooldown to discourage malformed packet spam.
+        // Invalid requests do not consume the real attack cooldown. The network
+        // transport already rate-limits malformed traffic independently.
         const auto target_id = command.value("target_entity_id", std::string{});
         if (target_id.empty() || target_id.size() > 96) {
-            player.last_attack_at = now;
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
-                      Json{{"accepted", false}, {"reason", "攻击目标无效。"}});
+                      Json{{"accepted", false}, {"attacker_character_id", player.character_id},
+                           {"reason", "攻击目标无效。"}});
             return;
         }
         auto target = std::find_if(monsters.begin(), monsters.end(), [&](const MonsterRuntime& monster) {
@@ -4269,9 +4273,9 @@ struct EnetServer::Impl {
         });
         if (target == monsters.end() || target->state.mode == honghuang::simulation::MonsterMode::Dead ||
             target->contribution_closing) {
-            player.last_attack_at = now;
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
-                      Json{{"accepted", false}, {"reason", "目标已消失或已被击败。"}});
+                      Json{{"accepted", false}, {"attacker_character_id", player.character_id},
+                           {"reason", "目标已消失或已被击败。"}});
             return;
         }
         const double dx = static_cast<double>(target->state.x) - player.x;
@@ -4284,8 +4288,6 @@ struct EnetServer::Impl {
                            {"target_entity_id", target->runtime_id}, {"reason", "距离目标太远。"}});
             return;
         }
-        player.last_attack_at = now;
-        player.last_combat_at = now;
         if (player_weapon_type(player) == "bow") {
             if (projectiles.size() >= 128) {
                 send_json(peer, honghuang::protocol::MessageType::CombatEvent,
@@ -4299,6 +4301,10 @@ struct EnetServer::Impl {
                 return;
             }
             constexpr float projectile_speed = 24.0F;
+            // A projectile launch is an accepted attack; start cooldown only
+            // after all launch preconditions have passed.
+            player.last_attack_at = now;
+            player.last_combat_at = now;
             const auto projectile_id = make_event_uuid();
             projectiles.push_back(ProjectileRuntime{
                 projectile_id, player.character_id, {}, {}, target->runtime_id,
@@ -4360,10 +4366,15 @@ struct EnetServer::Impl {
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", false}, {"attacker_character_id", player.character_id},
                            {"target_entity_id", target->runtime_id},
-                           {"reason", "战斗记录繁忙，请稍后再试。"},
+                           {"reason", "战斗记录繁忙，本次攻击未生效，可立即重试。"},
                            {"persistence_error", contribution_error}});
             return;
         }
+        // Only a durably admitted melee hit consumes cooldown. A busy
+        // contribution writer must not leave the player locked out after a
+        // hit that never changed monster health.
+        player.last_attack_at = now;
+        player.last_combat_at = now;
         record_monster_damage(*target, player, damage.damage);
         std::int64_t experience_reward = 0;
         std::int64_t cultivation_reward = 0;
