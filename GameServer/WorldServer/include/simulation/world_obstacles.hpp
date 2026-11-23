@@ -41,10 +41,10 @@ inline constexpr std::array<WorldObstacle, 19> kFengduObstacles{{
     {6.0F, 47.0F, -23.9F, -22.1F},
 
     // East and west walls: matching 12 m gate openings.
-    {-47.9F, -46.1F, -94.0F, -63.0F},
-    {-47.9F, -46.1F, -57.0F, -26.0F},
-    {46.1F, 47.9F, -94.0F, -63.0F},
-    {46.1F, 47.9F, -57.0F, -26.0F}
+    {-47.9F, -46.1F, -97.0F, -66.0F},
+    {-47.9F, -46.1F, -54.0F, -23.0F},
+    {46.1F, 47.9F, -97.0F, -66.0F},
+    {46.1F, 47.9F, -54.0F, -23.0F}
 }};
 
 inline bool circle_overlaps_obstacle(float x, float z, const WorldObstacle& obstacle,
