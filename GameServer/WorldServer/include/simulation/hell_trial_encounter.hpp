@@ -40,6 +40,7 @@ public:
     int objective_kills() const;
     bool guardian_defeated() const;
     bool completed() const;
+    bool restore_stage(int stage);
     void clamp_player_position(float& x, float& z) const;
 
     // life_id is unique for each monster life, even when the same spawn point
