@@ -662,6 +662,10 @@ func set_local_gate_state(gate_id: String, is_open: bool) -> bool:
 	if not local_gate_open_by_id.has(gate_id):
 		return false
 	local_gate_open_by_id[gate_id] = is_open
+	for agent in npc_agents:
+		if str(agent.get("role", "")) == "gate_guard" and str(agent.get("gate_id", "")) == gate_id:
+			if bool(agent.get("root") != null and is_instance_valid(agent.get("root")) and agent["root"].visible):
+				agent["state"] = "gate_watch" if is_open else "gate_sealed_watch"
 	return true
 
 
@@ -2158,13 +2162,18 @@ func get_gate_watch_status() -> Array[Dictionary]:
 			var guard_root: Node3D = agent.get("root")
 			if guard_root != null and is_instance_valid(guard_root) and guard_root.visible:
 				guard_count += 1
+		var is_open := bool(local_gate_open_by_id.get(gate_id, true))
+		var has_required_guards := guard_count >= int(gate.get("guards_per_shift", 1))
+		var status := "守备不足"
+		if has_required_guards:
+			status = "正常值守" if is_open else "封门警戒"
 		status_rows.append({
 			"gate_id": gate_id,
 			"gate_name": str(gate.get("gate_name", "")),
-			"is_open": bool(local_gate_open_by_id.get(gate_id, true)),
+			"is_open": is_open,
 			"shift": shift_tag,
 			"guard_count": guard_count,
-			"status": "正常值守" if guard_count >= int(gate.get("guards_per_shift", 1)) else "守备不足"
+			"status": status
 		})
 	return status_rows
 
