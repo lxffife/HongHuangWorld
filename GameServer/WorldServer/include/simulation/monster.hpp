@@ -173,7 +173,8 @@ inline bool valid_monster_definition(const MonsterDefinition& definition) {
 // Server-authoritative, deterministic movement/aggro step. Combat is deliberately
 // separate: this function only chooses a mode and moves the monster in the X/Z plane.
 inline bool tick_monster(const MonsterDefinition& definition, MonsterState& state,
-                         const MonsterTarget* target, float delta_seconds) {
+                         const MonsterTarget* target, float delta_seconds,
+                         const MonsterAttackProfile* attack_profile_override = nullptr) {
     if (!valid_monster_definition(definition) ||
         !std::isfinite(state.x) || !std::isfinite(state.z) ||
         !std::isfinite(state.health) || state.health < 0.0F ||
@@ -229,7 +230,8 @@ inline bool tick_monster(const MonsterDefinition& definition, MonsterState& stat
     float dx = destination_x - state.x;
     float dz = destination_z - state.z;
 
-    const auto profile = monster_attack_profile(definition);
+    const auto profile = attack_profile_override != nullptr
+        ? *attack_profile_override : monster_attack_profile(definition);
     double movement_attack_range = static_cast<double>(definition.attack_range);
     double ranged_preferred_distance = 0.0;
     if (state.mode == MonsterMode::Chasing && target != nullptr) {
