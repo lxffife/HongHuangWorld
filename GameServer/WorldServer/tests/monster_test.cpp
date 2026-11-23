@@ -9,6 +9,16 @@
 int main() {
     using namespace honghuang::simulation;
 
+    assert(decayed_monster_threat(100.0, 0) == 100.0);
+    assert(std::abs(decayed_monster_threat(100.0, 15) - 50.0) < 0.001);
+    assert(decayed_monster_threat(100.0, 30) == 0.0);
+    assert(decayed_monster_threat(100.0, -1) == 0.0);
+    assert(decayed_monster_threat(-10.0, 1) == 0.0);
+    assert(should_switch_monster_target(0.0, 1.0));
+    assert(!should_switch_monster_target(100.0, 120.0));
+    assert(should_switch_monster_target(100.0, 121.0));
+    assert(!should_switch_monster_target(100.0, 90.0));
+
     const MonsterDefinition wolf{
         .id = "wolf",
         .name = "荒原狼",
