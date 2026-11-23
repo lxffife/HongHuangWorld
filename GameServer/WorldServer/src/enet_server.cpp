@@ -2559,7 +2559,7 @@ struct EnetServer::Impl {
         capture_monster_death_context(monster, killer);
         if (hell_trial_encounter.enabled()) {
             const auto encounter_result = hell_trial_encounter.record_monster_death(
-                monster.runtime_id, monster.death_definition_id);
+                monster.contribution_instance_id, monster.death_definition_id);
             if (encounter_result.completion_ready) {
                 // Keep the participant roster beyond disconnects. Completion is
                 // bound to each character's original authenticated floor session.
