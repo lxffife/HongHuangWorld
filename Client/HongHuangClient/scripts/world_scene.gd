@@ -79,7 +79,7 @@ var health_bar: ProgressBar
 var mana_bar: ProgressBar
 var spell_cooldown_labels: Dictionary = {}
 var spell_mastery_labels: Dictionary = {}
-var spell_cooldown_remaining: Dictionary = {"fireball": 0.0, "ice_bolt": 0.0}
+var spell_cooldown_remaining: Dictionary = {"fireball": 0.0, "ice_bolt": 0.0, "taunt": 0.0}
 var notification_panel: PanelContainer
 var notification_label: Label
 var notification_timer: Timer
@@ -991,6 +991,12 @@ func _build_combat_hud() -> void:
 		mastery_label.add_theme_font_size_override("font_size", 10)
 		spell_mastery_labels[spell_id] = mastery_label
 		vitals_layout.add_child(mastery_label)
+	var taunt_label := Label.new()
+	taunt_label.text = "T  ·  嘲讽：就绪"
+	taunt_label.add_theme_color_override("font_color", Color("#e7b77a"))
+	taunt_label.add_theme_font_size_override("font_size", 11)
+	spell_cooldown_labels["taunt"] = taunt_label
+	vitals_layout.add_child(taunt_label)
 	_update_spell_cooldown_hud()
 	_update_spell_mastery_hud()
 	notification_panel = PanelContainer.new()
@@ -1838,6 +1844,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.keycode == KEY_R:
 		_request_ice_bolt()
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_T:
+		_request_taunt()
 		get_viewport().set_input_as_handled()
 		return
 	if event.keycode == KEY_C:
@@ -3299,8 +3309,8 @@ func _update_spell_cooldown_hud() -> void:
 		var label := spell_cooldown_labels[spell_id] as Label
 		if not is_instance_valid(label):
 			continue
-		var spell_key := "Q" if spell_id == "fireball" else "R"
-		var spell_name := "火球术" if spell_id == "fireball" else "冰锥术"
+		var spell_key := "Q" if spell_id == "fireball" else ("R" if spell_id == "ice_bolt" else "T")
+		var spell_name := "火球术" if spell_id == "fireball" else ("冰锥术" if spell_id == "ice_bolt" else "嘲讽")
 		var remaining := float(spell_cooldown_remaining.get(spell_id, 0.0))
 		label.text = spell_key + " · " + spell_name + "：冷却 " + ("%.1f" % remaining) + " 秒" if remaining > 0.0 else spell_key + " · " + spell_name + "：就绪"
 
@@ -3344,6 +3354,26 @@ func _request_ice_bolt() -> void:
 	var error: Error = network.send_spell_cast("ice_bolt", target_id)
 	if error != OK:
 		_show_notification("冰锥术请求发送失败：" + str(error))
+
+func _request_taunt() -> void:
+	var network := HHSession.world_network
+	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
+		return
+	var target_id := selected_monster_id if monsters.has(selected_monster_id) else ""
+	var nearest_distance := 8.0
+	if target_id.is_empty():
+		for monster_id in monster_targets:
+			var target: Vector3 = monster_targets[monster_id]
+			var distance := Vector2(local_player.global_position.x, local_player.global_position.z).distance_to(Vector2(target.x, target.z))
+			if distance <= nearest_distance:
+				nearest_distance = distance
+				target_id = str(monster_id)
+	if target_id.is_empty():
+		_show_notification("8 米内没有可嘲讽的怪物，请靠近目标。")
+		return
+	var error: Error = network.send_spell_cast("taunt", target_id)
+	if error != OK:
+		_show_notification("嘲讽请求发送失败：" + str(error))
 
 func _on_monster_action_event(event: Dictionary) -> void:
 	var attacker_id := str(event.get("source_entity_id", ""))
@@ -3627,6 +3657,10 @@ func _update_spell_mastery_hud() -> void:
 
 
 func _on_combat_event(event: Dictionary) -> void:
+	if str(event.get("action", "")) == "monster_taunt":
+		var taunter := str(event.get("character_name", "队友"))
+		_show_notification(taunter + " 嘲讽了怪物，怪物将优先攻击他！", 2.8)
+		return
 	if str(event.get("action", "")) == "player_death_persisted":
 		if is_instance_valid(respawn_button):
 			respawn_button.disabled = false
@@ -3723,7 +3757,7 @@ func _on_combat_event(event: Dictionary) -> void:
 			mana_label.text = "灵力  " + str(int(HHSession.world_snapshot.get("mana", 0))) + " / " + str(int(HHSession.world_snapshot.get("max_mana", 0)))
 		_update_compact_hud()
 		var spell_id := str(event.get("spell_id", ""))
-		var spell_name := "冰锥术" if spell_id == "ice_bolt" else ("火球术" if spell_id == "fireball" else "法术")
+		var spell_name := "嘲讽" if spell_id == "taunt" else ("冰锥术" if spell_id == "ice_bolt" else ("火球术" if spell_id == "fireball" else "法术"))
 		# Mirror the server: cooldown starts on successful release, not when
 		# the cast begins. An interrupted cast refunds mana and remains ready.
 		if bool(event.get("accepted", false)) and str(event.get("phase", "")) == "released" and spell_cooldown_remaining.has(spell_id):
