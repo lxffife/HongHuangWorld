@@ -569,7 +569,7 @@ func _build_compact_hud() -> void:
 	hud_toggle_button.pressed.connect(_toggle_hud_visibility)
 	hud.add_child(hud_toggle_button)
 	help_button = Button.new()
-	help_button.text = "快捷键  F1?"
+	help_button.text = "快捷键  F2"
 	help_button.custom_minimum_size = Vector2(112.0, 34.0)
 	help_button.pressed.connect(_toggle_help_panel)
 	hud.add_child(help_button)
@@ -2171,7 +2171,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_toggle_world_map()
 		get_viewport().set_input_as_handled()
 		return
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F2:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F3:
 		input_debug_visible = not input_debug_visible
 		if is_instance_valid(input_debug_panel):
 			input_debug_panel.visible = hud_visible and input_debug_visible
@@ -2206,6 +2206,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			notification_panel.visible = false
 		if is_instance_valid(help_panel) and not hud_visible:
 			help_panel.visible = false
+			help_restore_mouse_captured = false
 		if is_instance_valid(revive_channel_panel):
 			revive_channel_panel.visible = hud_visible and revive_channel_remaining > 0.0
 		get_viewport().set_input_as_handled()
@@ -2461,6 +2462,8 @@ func is_gameplay_input_blocked() -> bool:
 	if chat_expanded or (is_instance_valid(friend_panel) and friend_panel.visible):
 		return true
 	if is_instance_valid(party_panel) and party_panel.visible:
+		return true
+	if is_instance_valid(help_panel) and help_panel.visible:
 		return true
 	var focused_control := get_viewport().gui_get_focus_owner()
 	return focused_control is LineEdit or focused_control is TextEdit
