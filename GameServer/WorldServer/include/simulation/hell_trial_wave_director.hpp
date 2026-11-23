@@ -21,6 +21,7 @@ public:
     bool enabled() const;
     int stage() const;
     bool completed() const;
+    bool restore_stage(int stage);
     std::string_view active_definition_id() const;
     bool is_unlocked(std::string_view definition_id) const;
     HellTrialWaveTransition record_death(std::string_view definition_id);
