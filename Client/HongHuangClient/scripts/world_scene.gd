@@ -3493,9 +3493,15 @@ func _request_support_spell(spell_id: String) -> void:
 	var self_health := float(HHSession.world_snapshot.get("health", 0))
 	var self_max_health := maxf(float(HHSession.world_snapshot.get("max_health", 1)), 1.0)
 	lowest_health_ratio = self_health / self_max_health
-	for character_id in party_member_statuses.keys():
-		var status: Dictionary = party_member_statuses[character_id]
-		if str(character_id) == self_id or not bool(status.get("alive", true)):
+	var party_members: Array = party_data.get("members", [])
+	for member_value in party_members:
+		if not (member_value is Dictionary):
+			continue
+		var character_id := str(member_value.get("character_id", ""))
+		if character_id.is_empty() or character_id == self_id:
+			continue
+		var status: Dictionary = party_member_statuses.get(character_id, {})
+		if status.is_empty() or not bool(status.get("alive", true)):
 			continue
 		if not remote_targets.has(character_id):
 			continue
