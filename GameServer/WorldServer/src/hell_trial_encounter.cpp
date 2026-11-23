@@ -66,6 +66,13 @@ int HellTrialEncounter::objective_kills() const { return objective_kills_; }
 bool HellTrialEncounter::guardian_defeated() const { return guardian_defeated_; }
 bool HellTrialEncounter::completed() const { return completed_; }
 
+void HellTrialEncounter::clamp_player_position(float& x, float& z) const {
+    if (!spec_) return;
+    constexpr float kArenaHalfExtent = 27.0F;
+    x = std::clamp(x, -kArenaHalfExtent, kArenaHalfExtent);
+    z = std::clamp(z, -kArenaHalfExtent, kArenaHalfExtent);
+}
+
 HellTrialDeathResult HellTrialEncounter::record_monster_death(
     std::string_view runtime_id, std::string_view definition_id) {
     HellTrialDeathResult result;
