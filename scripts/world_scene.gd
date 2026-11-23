@@ -1897,6 +1897,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			input_debug_panel.visible = hud_visible and input_debug_visible
 		if is_instance_valid(notification_panel) and not hud_visible:
 			notification_panel.visible = false
+		if is_instance_valid(revive_channel_panel):
+			revive_channel_panel.visible = hud_visible and revive_channel_remaining > 0.0
 		get_viewport().set_input_as_handled()
 		return
 	if not (event is InputEventKey) or not event.pressed or event.echo:
