@@ -4147,14 +4147,17 @@ struct EnetServer::Impl {
             return;
         }
         // Direct support skills are resolved authoritatively by the world server.
-        if (spell_id == "life_mend" || spell_id == "guardian_aegis") {
+        if (spell_id == "life_mend" || spell_id == "guardian_aegis" || spell_id == "purify") {
             const bool is_heal = spell_id == "life_mend";
+            const bool is_purify = spell_id == "purify";
             const auto mana_cost = is_heal
                 ? honghuang::simulation::kLifeMendManaCost
-                : honghuang::simulation::kGuardianAegisManaCost;
+                : (is_purify ? honghuang::simulation::kPurifyManaCost
+                             : honghuang::simulation::kGuardianAegisManaCost);
             const auto cooldown_ms = is_heal
                 ? honghuang::simulation::kLifeMendCooldownMs
-                : honghuang::simulation::kGuardianAegisCooldownMs;
+                : (is_purify ? honghuang::simulation::kPurifyCooldownMs
+                             : honghuang::simulation::kGuardianAegisCooldownMs);
             const auto now = Clock::now();
             const auto cooldown = player.last_spell_at_by_id.find(spell_id);
             if (cooldown != player.last_spell_at_by_id.end() &&
@@ -4181,6 +4184,19 @@ struct EnetServer::Impl {
             const double dz = static_cast<double>(target->second.z) - player.z;
             if (!honghuang::simulation::support_target_in_range(dx, dz)) {
                 reject("辅助目标超出 12 米范围。"); return;
+            }
+            int purified_effects = 0;
+            if (is_purify) {
+                const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    now.time_since_epoch()).count();
+                purified_effects = honghuang::simulation::purified_effect_count(
+                    honghuang::simulation::slow_is_active(target->second.slow_effect, now_ms),
+                    honghuang::simulation::freeze_is_active(target->second.freeze_effect, now_ms),
+                    honghuang::simulation::periodic_damage_is_active(target->second.poison_effect, now_ms));
+                if (purified_effects == 0) {
+                    reject("目标没有可净化的异常状态。");
+                    return;
+                }
             }
             player.mana -= mana_cost;
             player.last_spell_at_by_id[spell_id] = now;
@@ -4216,6 +4232,20 @@ struct EnetServer::Impl {
                     Json{{"accepted", true}, {"action", "spell_cast"}, {"phase", "released"},
                          {"spell_id", spell_id}, {"target_character_id", target_id},
                          {"health_restored", restored}, {"mana", player.mana},
+                         {"max_mana", player.max_mana}, {"cooldown_ms", cooldown_ms}});
+            } else if (is_purify) {
+                auto& ally = target->second;
+                honghuang::simulation::clear_negative_statuses(
+                    ally.slow_effect, ally.freeze_effect, ally.poison_effect);
+                ally.poison_source_entity_id.clear();
+                send_json(target->first, honghuang::protocol::MessageType::CombatEvent,
+                    Json{{"accepted", true}, {"action", "player_cleansed"},
+                         {"character_id", ally.character_id}, {"source_name", player.name},
+                         {"cleansed_effects", purified_effects}});
+                send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                    Json{{"accepted", true}, {"action", "spell_cast"}, {"phase", "released"},
+                         {"spell_id", spell_id}, {"target_character_id", target_id},
+                         {"cleansed_effects", purified_effects}, {"mana", player.mana},
                          {"max_mana", player.max_mana}, {"cooldown_ms", cooldown_ms}});
             } else {
                 auto& ally = target->second;
