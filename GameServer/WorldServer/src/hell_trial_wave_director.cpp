@@ -12,6 +12,13 @@ bool HellTrialWaveDirector::enabled() const { return spec_ != nullptr; }
 int HellTrialWaveDirector::stage() const { return stage_; }
 bool HellTrialWaveDirector::completed() const { return completed_; }
 
+bool HellTrialWaveDirector::restore_stage(int stage) {
+    if (!enabled() || stage < 0 || stage > 4) return false;
+    stage_ = stage;
+    completed_ = stage_ == 4;
+    return true;
+}
+
 std::string_view HellTrialWaveDirector::active_definition_id() const {
     if (!spec_ || completed_) return {};
     if (stage_ < static_cast<int>(spec_->objective_monster_ids.size())) {
