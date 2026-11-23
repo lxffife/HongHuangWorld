@@ -17,7 +17,7 @@ static func build(floor_number: int) -> Node3D:
 	_add_hazard_blockout(root, floor_number, palette["hazard"])
 	_add_guardian_platform(root, str(data.get("guardian", "守狱者")), palette["accent"])
 	_add_portal(root, "EntrancePortal", "来路 · 返回阴司", Vector3(0.0, 0.0, 27.0), palette["accent"])
-	_add_portal(root, "TrialExitPortal", "下一层入口（待服务端开放）", Vector3(0.0, 0.0, -27.0), palette["accent"])
+	_add_portal(root, "TrialExitPortal", "下一层入口 · 请通过试炼名册进入", Vector3(0.0, 0.0, -27.0), palette["accent"])
 	_add_label(root, "FloorTitle", "第 %02d 层 · %s" % [floor_number, str(data.get("name", "地狱"))], Vector3(0.0, 15.0, 0.0), palette["accent"], 42)
 	_add_label(root, "FloorObjective", "试炼目标：" + str(data.get("objective", "")), Vector3(0.0, 12.0, 0.0), Color("#d7d0c6"), 22)
 	_add_label(root, "GuardianName", "守狱者：" + str(data.get("guardian", "")), Vector3(0.0, 5.0, -9.0), palette["accent"], 24)
