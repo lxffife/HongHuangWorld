@@ -5,15 +5,16 @@ extends RefCounted
 static func build(world_id: String) -> Node3D:
 	var root := Node3D.new()
 	root.name = "WorldEnvironmentRig"
-	var is_underworld := world_id == "underworld_fengdu"
+	var is_underworld := world_id.begins_with("underworld_")
+	var is_hell_floor := world_id.begins_with("underworld_hell_")
 	var world_environment := WorldEnvironment.new()
 	var environment := Environment.new()
 	environment.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
 	var sky_material := ProceduralSkyMaterial.new()
 	if is_underworld:
-		sky_material.sky_top_color = Color("#080d20")
-		sky_material.sky_horizon_color = Color("#382b4d")
+		sky_material.sky_top_color = Color("#10091b") if is_hell_floor else Color("#080d20")
+		sky_material.sky_horizon_color = Color("#4a2637") if is_hell_floor else Color("#382b4d")
 		sky_material.ground_bottom_color = Color("#080b14")
 		sky_material.ground_horizon_color = Color("#241d32")
 	else:
@@ -28,7 +29,7 @@ static func build(world_id: String) -> Node3D:
 	environment.ambient_light_energy = 0.32 if is_underworld else 0.65
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	environment.fog_enabled = true
-	environment.fog_light_color = Color("#51445f") if is_underworld else Color("#9ba9b8")
+	environment.fog_light_color = Color("#63384b") if is_hell_floor else (Color("#51445f") if is_underworld else Color("#9ba9b8"))
 	environment.fog_density = 0.012 if is_underworld else 0.0018
 	world_environment.environment = environment
 	root.add_child(world_environment)
