@@ -266,6 +266,7 @@ func _ready() -> void:
 		local_player.position = local_target_position
 	_refresh_current_region(false)
 	_update_hud()
+	_show_hell_trial_runtime_state(HHSession.world_snapshot)
 	progression_http = HTTPRequest.new()
 	progression_http.timeout = 10.0
 	add_child(progression_http)
@@ -734,6 +735,18 @@ func _map_world_id() -> String:
 	var world_id := str(HHSession.world_snapshot.get("world_id", ""))
 	var hell_floor := int(HHSession.world_snapshot.get("hell_floor", 0))
 	return "underworld_hell_%02d" % hell_floor if hell_floor > 0 else world_id
+
+func _show_hell_trial_runtime_state(snapshot: Dictionary) -> void:
+	var trial: Variant = snapshot.get("hell_trial", {})
+	if not (trial is Dictionary) or trial.is_empty():
+		return
+	var floor_number := int(trial.get("floor", snapshot.get("hell_floor", 0)))
+	var label := str(trial.get("label", ""))
+	if bool(trial.get("completed", false)):
+		_show_notification("第 %02d 层 · 试炼已完成" % floor_number, 4.0)
+	elif not label.is_empty():
+		_show_notification("第 %02d 层 · 当前挑战：%s" % [floor_number, label], 4.0)
+
 
 
 func _open_hell_trial_panel() -> void:
@@ -5079,6 +5092,7 @@ func _on_reconnected_welcomed(snapshot: Dictionary) -> void:
 	HHSession.world_network = reconnect_network
 	HHSession.world_snapshot = snapshot
 	_apply_world_instance_geometry(snapshot)
+	_show_hell_trial_runtime_state(snapshot)
 	if is_instance_valid(hell_trial_panel):
 		hell_trial_panel.set_current_floor(int(snapshot.get("hell_floor", 0)))
 	if previous != null and is_instance_valid(previous):
