@@ -36,6 +36,18 @@ CREATE TABLE character_hell_trial_progress (
 CREATE INDEX idx_character_hell_trial_status
     ON character_hell_trial_progress(character_id, status, floor_number);
 
+CREATE TABLE character_hell_trial_entry_events (
+    event_id UUID PRIMARY KEY,
+    character_id UUID NOT NULL,
+    floor_number SMALLINT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    FOREIGN KEY (character_id, floor_number)
+        REFERENCES character_hell_trial_progress(character_id, floor_number)
+        ON DELETE CASCADE
+);
+CREATE INDEX idx_character_hell_trial_entry_character_time
+    ON character_hell_trial_entry_events(character_id, created_at DESC);
+
 INSERT INTO character_hell_trial_progress(character_id, floor_number, status)
 SELECT id, 1, 'unlocked'
 FROM characters
