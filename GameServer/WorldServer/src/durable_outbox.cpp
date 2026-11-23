@@ -103,7 +103,11 @@ DurableOutbox::DurableOutbox(const std::string& path, std::size_t capacity, bool
         "mode INTEGER NOT NULL CHECK(mode BETWEEN 0 AND 3),respawn_at_ms INTEGER NOT NULL DEFAULT 0,"
         "checkpoint_at_ms INTEGER NOT NULL);"
         "CREATE INDEX IF NOT EXISTS idx_monster_runtime_checkpoints_instance "
-        "ON monster_runtime_checkpoints(monster_instance_id);";
+        "ON monster_runtime_checkpoints(monster_instance_id);"
+        "CREATE TABLE IF NOT EXISTS hell_trial_wave_checkpoints("
+        "instance_key TEXT NOT NULL,floor INTEGER NOT NULL CHECK(floor BETWEEN 1 AND 18),"
+        "stage INTEGER NOT NULL CHECK(stage BETWEEN 0 AND 4),completed INTEGER NOT NULL CHECK(completed IN(0,1)),"
+        "updated_at_ms INTEGER NOT NULL,PRIMARY KEY(instance_key,floor));";
     char* message = nullptr;
     if (sqlite3_exec(db_, schema, nullptr, nullptr, &message) != SQLITE_OK) {
         const std::string error = message ? message : sqlite3_errmsg(db_);
@@ -1674,4 +1678,65 @@ std::size_t DurableOutbox::pending_count(std::string& error) const {
         return 0;
     }
 }
+
+bool DurableOutbox::load_hell_trial_wave_checkpoint(
+    const std::string& instance_key, int floor, HellTrialWaveCheckpoint& checkpoint,
+    bool& found, std::string& error) const {
+    found = false;
+    if (instance_key.empty() || floor < 1 || floor > 18) {
+        error = "invalid hell trial checkpoint key";
+        return false;
+    }
+    std::lock_guard lock(mutex_);
+    try {
+        Stmt query(db_,
+            "SELECT stage,completed,updated_at_ms FROM hell_trial_wave_checkpoints "
+            "WHERE instance_key=? AND floor=?");
+        bind_text(query.get(), 1, instance_key);
+        sqlite3_bind_int(query.get(), 2, floor);
+        const int step = sqlite3_step(query.get());
+        if (step == SQLITE_DONE) return true;
+        if (step != SQLITE_ROW) throw std::runtime_error(sqlite3_errmsg(db_));
+        checkpoint.instance_key = instance_key;
+        checkpoint.floor = floor;
+        checkpoint.stage = sqlite3_column_int(query.get(), 0);
+        checkpoint.completed = sqlite3_column_int(query.get(), 1) != 0;
+        checkpoint.updated_at_ms = sqlite3_column_int64(query.get(), 2);
+        found = true;
+        return true;
+    } catch (const std::exception& exception) {
+        error = exception.what();
+        return false;
+    }
+}
+
+bool DurableOutbox::save_hell_trial_wave_checkpoint(
+    const HellTrialWaveCheckpoint& checkpoint, std::string& error) {
+    if (checkpoint.instance_key.empty() || checkpoint.floor < 1 || checkpoint.floor > 18 ||
+        checkpoint.stage < 0 || checkpoint.stage > 4 ||
+        checkpoint.completed != (checkpoint.stage == 4)) {
+        error = "invalid hell trial wave checkpoint";
+        return false;
+    }
+    std::lock_guard lock(mutex_);
+    try {
+        Stmt upsert(db_,
+            "INSERT INTO hell_trial_wave_checkpoints(instance_key,floor,stage,completed,updated_at_ms) "
+            "VALUES(?,?,?,?,?) ON CONFLICT(instance_key,floor) DO UPDATE SET "
+            "stage=MAX(hell_trial_wave_checkpoints.stage,excluded.stage),"
+            "completed=MAX(hell_trial_wave_checkpoints.completed,excluded.completed),"
+            "updated_at_ms=MAX(hell_trial_wave_checkpoints.updated_at_ms,excluded.updated_at_ms)");
+        bind_text(upsert.get(), 1, checkpoint.instance_key);
+        sqlite3_bind_int(upsert.get(), 2, checkpoint.floor);
+        sqlite3_bind_int(upsert.get(), 3, checkpoint.stage);
+        sqlite3_bind_int(upsert.get(), 4, checkpoint.completed ? 1 : 0);
+        sqlite3_bind_int64(upsert.get(), 5, checkpoint.updated_at_ms);
+        if (sqlite3_step(upsert.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+        return true;
+    } catch (const std::exception& exception) {
+        error = exception.what();
+        return false;
+    }
+}
+
 } // namespace honghuang::persistence
