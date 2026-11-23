@@ -59,6 +59,10 @@ if(BUILD_TESTING)
     target_include_directories(movement_test PRIVATE include)
     add_test(NAME movement_test COMMAND movement_test)
 
+    add_executable(gate_access_policy_test tests/gate_access_policy_test.cpp)
+    target_include_directories(gate_access_policy_test PRIVATE include)
+    add_test(NAME gate_access_policy_test COMMAND gate_access_policy_test)
+
     add_executable(combat_test tests/combat_test.cpp)
     target_include_directories(combat_test PRIVATE include)
     add_test(NAME combat_test COMMAND combat_test)
