@@ -391,6 +391,44 @@ func createGroundDropInstance(ctx context.Context,tx *sql.Tx,request DropRequest
 	return result,nil
 }
 
+
+func resolveDropLootRecipients(ctx context.Context, tx *sql.Tx, serverID, sessionID, sourceCharacterID, itemID string) (string, []string, error) {
+ var instanceID, category string
+ err := tx.QueryRowContext(ctx, "SELECT ws.instance_id::text,i.category FROM world_sessions ws JOIN item_definitions i ON i.id=$4 WHERE ws.id=$1::uuid AND ws.server_id=$2 AND ws.character_id=$3::uuid AND ws.session_state='active' FOR SHARE OF ws", sessionID, serverID, sourceCharacterID, itemID).Scan(&instanceID, &category)
+ if errors.Is(err, sql.ErrNoRows) { return "", nil, ErrSessionInvalid }
+ if err != nil { return "", nil, fmt.Errorf("resolve drop source session: %w", err) }
+ modeColumn, cursorColumn := "material_loot_mode", "material_loot_cursor"
+ if category == "equipment" { modeColumn, cursorColumn = "equipment_loot_mode", "equipment_loot_cursor" }
+ var partyID, mode, leaderAccountID string
+ query := "SELECT p.id::text,p."+modeColumn+",p.leader_account_id::text FROM party_members mine JOIN parties p ON p.id=mine.party_id WHERE mine.character_id=$1::uuid AND p.world_instance_id=$2::uuid AND p.status='active' FOR UPDATE OF p"
+ err = tx.QueryRowContext(ctx, query, sourceCharacterID, instanceID).Scan(&partyID, &mode, &leaderAccountID)
+ if errors.Is(err, sql.ErrNoRows) { return sourceCharacterID, []string{sourceCharacterID}, nil }
+ if err != nil { return "", nil, fmt.Errorf("resolve party loot policy: %w", err) }
+ rows, err := tx.QueryContext(ctx, "SELECT m.character_id::text,m.account_id::text,m.role FROM party_members m WHERE m.party_id=$1::uuid ORDER BY m.joined_at,m.character_id", partyID)
+ if err != nil { return "", nil, fmt.Errorf("list party loot recipients: %w", err) }
+ type member struct { characterID, accountID, role string }
+ members := make([]member,0,8)
+ for rows.Next() { var m member; if err:=rows.Scan(&m.characterID,&m.accountID,&m.role);err!=nil{rows.Close();return "",nil,fmt.Errorf("scan party loot recipient: %w",err)};members=append(members,m) }
+ if err:=rows.Err();err!=nil{rows.Close();return "",nil,fmt.Errorf("iterate party loot recipients: %w",err)}
+ if err:=rows.Close();err!=nil{return "",nil,fmt.Errorf("close party loot recipients: %w",err)}
+ if len(members)==0 { return sourceCharacterID, []string{sourceCharacterID}, nil }
+ eligible:=make([]string,0,len(members))
+ for _,m:=range members { eligible=append(eligible,m.characterID) }
+ switch mode {
+ case "free_for_all": return sourceCharacterID, eligible, nil
+ case "leader":
+  for _,m:=range members { if m.role=="leader" || m.accountID==leaderAccountID { return m.characterID, []string{m.characterID}, nil } }
+  return "",nil,fmt.Errorf("party leader membership is missing")
+ case "round_robin":
+  update := "UPDATE parties SET "+cursorColumn+"="+cursorColumn+"+1,updated_at=now() WHERE id=$1::uuid RETURNING "+cursorColumn
+  var cursor int64
+  if err:=tx.QueryRowContext(ctx,update,partyID).Scan(&cursor);err!=nil{return "",nil,fmt.Errorf("advance party loot rotation: %w",err)}
+  chosen:=members[int((cursor-1)%int64(len(members)))].characterID
+  return chosen, []string{chosen}, nil
+ default: return sourceCharacterID, []string{sourceCharacterID}, nil
+ }
+}
+
 func (s *Service) CreateDrop(ctx context.Context, nodeKey string, request DropRequest) (GroundDrop, error) {
 	if strings.TrimSpace(nodeKey) == "" || !validUUID(request.DropID) || !validUUID(request.SessionID) ||
 		!validUUID(request.CharacterID) || strings.TrimSpace(request.ItemID) == "" ||
@@ -428,22 +466,20 @@ func (s *Service) CreateDrop(ctx context.Context, nodeKey string, request DropRe
 		return existing,nil
 	}
 	if !errors.Is(err,sql.ErrNoRows){return GroundDrop{},fmt.Errorf("recover existing ground drop: %w",err)}
-	var valid bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (
-		SELECT 1 FROM world_sessions WHERE id = $1::uuid AND server_id = $2 AND character_id = $3::uuid AND session_state = 'active'
-	)`, request.SessionID, serverID, request.CharacterID).Scan(&valid); err != nil {
-		return GroundDrop{}, fmt.Errorf("verify drop session: %w", err)
-	}
-	if !valid { return GroundDrop{}, ErrSessionInvalid }
+	assignedOwner, eligibleCharacters, err := resolveDropLootRecipients(ctx, tx, serverID, request.SessionID, request.CharacterID, request.ItemID)
+	if err != nil { return GroundDrop{}, err }
 	result,err:=createGroundDropInstance(ctx,tx,request)
 	if err!=nil{return GroundDrop{},err}
 	err=tx.QueryRowContext(ctx,`INSERT INTO ground_drops
 		(id,server_id,session_id,owner_character_id,item_id,item_instance_id,quantity,position_x,position_z,expires_at)
 		VALUES($1::uuid,$2,$3::uuid,$4::uuid,$5,NULLIF($6,'')::uuid,$7,$8,$9,now()+INTERVAL '15 minutes')
 		RETURNING id::text,item_id,quantity,position_x,position_z,expires_at::text`,
-		request.DropID,serverID,request.SessionID,request.CharacterID,request.ItemID,result.ItemInstanceID,
+		request.DropID,serverID,request.SessionID,assignedOwner,request.ItemID,result.ItemInstanceID,
 		request.Quantity,request.PositionX,request.PositionZ).Scan(&result.ID,&result.ItemID,&result.Quantity,&result.PositionX,&result.PositionZ,&result.ExpiresAt)
 	if err!=nil{return GroundDrop{},fmt.Errorf("create ground drop: %w",err)}
+	for _, characterID := range eligibleCharacters {
+		if _,err:=tx.ExecContext(ctx,"INSERT INTO ground_drop_eligible_characters(drop_id,character_id) VALUES($1::uuid,$2::uuid) ON CONFLICT DO NOTHING",request.DropID,characterID);err!=nil{return GroundDrop{},fmt.Errorf("persist drop eligibility: %w",err)}
+	}
 	if err := tx.Commit(); err != nil { return GroundDrop{}, fmt.Errorf("commit ground drop: %w", err) }
 	return result, nil
 }
