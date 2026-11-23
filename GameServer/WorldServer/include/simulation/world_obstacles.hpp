@@ -21,7 +21,7 @@ inline constexpr float kPlayerCollisionRadius = 0.45F;
 // Coordinates mirror FengduCityBuilder's schematic-to-world transform:
 // world_x = schematic_x * 0.12, world_z = -schematic_y * 0.12 - 60.
 // Gate openings are intentionally absent from the wall rectangles.
-inline constexpr std::array<WorldObstacle, 19> kFengduObstacles{{
+inline constexpr std::array<WorldObstacle, 27> kFengduObstacles{{
     // Main building footprints (the visible/collidable halls, not decorative roofs).
     {-6.283F, 6.283F, -84.845F, -77.875F},       // Imperial Palace
     {-28.186F, -17.414F, -74.290F, -68.270F},    // Ten Kings Manors
@@ -45,7 +45,18 @@ inline constexpr std::array<WorldObstacle, 19> kFengduObstacles{{
     {-47.9F, -46.1F, -97.0F, -66.0F},
     {-47.9F, -46.1F, -54.0F, -23.0F},
     {46.1F, 47.9F, -97.0F, -66.0F},
-    {46.1F, 47.9F, -54.0F, -23.0F}
+    {46.1F, 47.9F, -54.0F, -23.0F},
+
+    // Moat water ring: four runs split around the same 12 m gate openings.
+    // These are blocking footprints; bridges occupy the intentionally empty gaps.
+    {-54.0F, -6.0F, -104.0F, -97.9F},
+    {6.0F, 54.0F, -104.0F, -97.9F},
+    {-54.0F, -6.0F, -22.1F, -16.0F},
+    {6.0F, 54.0F, -22.1F, -16.0F},
+    {-54.0F, -47.9F, -104.0F, -66.0F},
+    {-54.0F, -47.9F, -54.0F, -16.0F},
+    {47.9F, 54.0F, -104.0F, -66.0F},
+    {47.9F, 54.0F, -54.0F, -16.0F}
 }};
 
 inline bool circle_overlaps_obstacle(float x, float z, const WorldObstacle& obstacle,
@@ -101,7 +112,7 @@ inline void integrate_horizontal_with_obstacles(
 inline void integrate_fengdu_horizontal(float& x, float& z, float move_x, float move_z,
                                         float delta, float speed = 5.0F) {
     integrate_horizontal_with_obstacles(x, z, move_x, move_z, delta,
-        kFengduObstacles.data(), kFengduObstacles.size(), speed);
+        kFengduObstacles.data(), kFengduObstacles.size(), speed, 128.0F);
 }
 
 } // namespace honghuang::simulation
