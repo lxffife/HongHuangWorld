@@ -1,4 +1,5 @@
 #include "simulation/movement.hpp"
+#include "simulation/world_obstacles.hpp"
 
 #ifdef NDEBUG
 #undef NDEBUG
