@@ -119,6 +119,7 @@ var monster_entities: Dictionary = {}
 var monster_animation_time := 0.0
 var selected_monster_id := ""
 var target_info_panel: PanelContainer
+var combat_reticle: Label
 var target_info_label: Label
 var target_health_bar: ProgressBar
 var minimap_panel: PanelContainer
@@ -1210,6 +1211,24 @@ func _build_combat_hud() -> void:
 	revive_channel_bar.value = 0.0
 	revive_channel_bar.show_percentage = false
 	revive_layout.add_child(revive_channel_bar)
+
+	combat_reticle = Label.new()
+	combat_reticle.name = "CombatReticle"
+	combat_reticle.text = "＋"
+	combat_reticle.set_anchors_preset(Control.PRESET_CENTER)
+	combat_reticle.offset_left = -12.0
+	combat_reticle.offset_top = -14.0
+	combat_reticle.offset_right = 12.0
+	combat_reticle.offset_bottom = 14.0
+	combat_reticle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	combat_reticle.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	combat_reticle.add_theme_font_size_override("font_size", 22)
+	combat_reticle.add_theme_color_override("font_color", Color("#f5e8c8"))
+	combat_reticle.add_theme_color_override("font_outline_color", Color("#101820"))
+	combat_reticle.add_theme_constant_override("outline_size", 3)
+	combat_reticle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	combat_reticle.visible = false
+	hud.add_child(combat_reticle)
 
 	target_info_panel = PanelContainer.new()
 	target_info_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -4645,6 +4664,8 @@ func _update_input_debug_hud() -> void:
 	input_debug_label.text = "按键：" + keys + "\n输入：" + movement_text + " (" + ("%.1f" % move_input.x) + ", " + ("%.1f" % move_input.y) + ")\n世界网络：" + network_text + " · " + send_text + "\n客户端坐标：" + ("%.1f, %.1f, %.1f" % [player_position.x, player_position.y, player_position.z])
 
 func _process(delta: float) -> void:
+	if is_instance_valid(combat_reticle):
+		combat_reticle.visible = Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and hud_visible
 	if is_instance_valid(terrain_chunk_streamer) and is_instance_valid(local_player):
 		terrain_chunk_streamer.call("update_streaming", local_player.global_position)
 	if shield_remaining > 0.0:
