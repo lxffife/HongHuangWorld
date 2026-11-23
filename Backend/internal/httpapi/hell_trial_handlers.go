@@ -73,6 +73,8 @@ func (h *hellTrialHandlers) complete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "character is not active on this world server", http.StatusForbidden)
 	case errors.Is(err, helltrial.ErrWrongWorld):
 		http.Error(w, "hell trials are only available in the underworld", http.StatusForbidden)
+	case errors.Is(err, helltrial.ErrWrongInstance):
+		http.Error(w, "character is not inside the requested hell floor instance", http.StatusConflict)
 	case errors.Is(err, helltrial.ErrFloorLocked):
 		http.Error(w, "hell trial floor is locked", http.StatusConflict)
 	case errors.Is(err, helltrial.ErrObjectiveIncomplete):
