@@ -5642,7 +5642,9 @@ struct EnetServer::Impl {
                     }
                 }
             }
-            const auto attack_profile = honghuang::simulation::monster_attack_profile(monster.definition);
+            const auto attack_profile = is_hell_guardian
+                ? hell_trial_boss_phase.attack_profile(monster.definition, hell_trial_encounter.floor())
+                : honghuang::simulation::monster_attack_profile(monster.definition);
             const auto rare_scale = monster.rare_spawn ? 1.25 : 1.0;
             const auto windup_duration = std::chrono::milliseconds(
                 static_cast<int>(std::lround(attack_profile.windup_ms * rare_scale * boss_tempo_scale)));
