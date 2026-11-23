@@ -4206,6 +4206,7 @@ struct EnetServer::Impl {
                 }
                 send_json(target->first, honghuang::protocol::MessageType::CombatEvent,
                     Json{{"accepted", true}, {"action", "player_healed"},
+                         {"character_id", target->second.character_id},
                          {"source_character_id", player.character_id},
                          {"source_name", player.name}, {"health_restored", restored},
                          {"health", target->second.health}, {"max_health", target->second.max_health}});
@@ -4569,7 +4570,9 @@ struct EnetServer::Impl {
                              {"attack_style", "poison_tick"}, {"status_effect", "poison"},
                              {"status_duration_ms", remaining_poison_ms},
                              {"damage", applied_damage}, {"health", player.health},
-                             {"max_health", player.max_health}, {"defeated", poison_defeated}});
+                             {"max_health", player.max_health},
+                             {"shield_remaining", player.absorb_shield_health},
+                             {"defeated", poison_defeated}});
                     if (poison_defeated) {
                         handle_player_defeat(peer);
                     }
@@ -5373,6 +5376,7 @@ struct EnetServer::Impl {
                                    {"attack_style", "heavy_slam"},
                                    {"damage", damage.damage}, {"health", target_player.health},
                                    {"max_health", target_player.max_health},
+                                   {"shield_remaining", target_player.absorb_shield_health},
                                    {"defeated", damage.defeated}});
                 }
             } else {
@@ -5434,7 +5438,9 @@ struct EnetServer::Impl {
                                {"source_entity_id", monster.runtime_id},
                                {"attack_style", attack_profile.style},
                                {"damage", damage.damage}, {"health", player.health},
-                               {"max_health", player.max_health}, {"defeated", damage.defeated},
+                               {"max_health", player.max_health},
+                               {"shield_remaining", player.absorb_shield_health},
+                               {"defeated", damage.defeated},
                                {"status_resistance_bp", (applied_poison || applied_slow) ? status_resistance_bp : 0},
                                 {"status_effect", applied_poison ? "poison" : (applied_slow ? "slow" : "")},
                                {"status_duration_ms", applied_poison
