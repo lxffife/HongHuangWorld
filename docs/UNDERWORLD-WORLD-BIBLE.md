@@ -108,7 +108,7 @@
 - 玩家查询接口：`GET /api/v1/characters/current/hell-trials`，通过账号当前肉身与活动世界会话解析进度，不接受客户端传入角色 ID。
 - WorldServer 入层接口：`POST /api/v1/servers/hell-trials/entries`；通关接口：`POST /api/v1/servers/hell-trials/completions`。均要求 `X-World-Server-Key` 与 `X-World-Server-Node`，中心服核对角色活动会话确实由该节点承载，且世界实例 `hell_floor` 与请求层数一致。
 - 玩家进入某一层的服务端票据接口：`POST /api/v1/worlds/hell-trials/{floor}/enter`（Bearer 账号令牌）。中心服只会为已解锁楼层签发票据，并只选择 `world_instances.hell_floor` 精确匹配的专属实例；普通 `POST /api/v1/worlds/enter` 明确排除所有地狱专属实例，避免普通酆都入口误分配到某一层。
-- 入层事件和通关事件均使用 UUID 幂等；未记录入层、未完成目标、守将未败、层数未解锁均不能结算。当前层完成与下一层解锁在同一数据库事务内提交。
+- 入层事件和通关事件均使用 UUID 幂等；未记录入层、未完成目标、守将未败、层数未解锁均不能结算。当前层完成与下一层解锁在同一数据库事务内提交。 回调携带原始 `session_id`，中心服按节点与实例验证原始会话记录，并允许断线后的补交事件。
 - **本轮新增的运行时接线**：WorldServer 支持 `WORLD_SERVER_HELL_FLOOR=1..18` 专属层实例配置；心跳会把层号写入 `world_instances.hell_floor`。角色通过地狱楼层票据进入专属实例后，WorldServer 在玩家成功加入时生成 UUID 入层事件并写入本地 SQLite durable outbox，后台线程重试调用中心服入层接口。普通世界配置使用 `WORLD_SERVER_HELL_FLOOR=0`。
 - **本轮新增的关卡运行时**：WorldServer 根据 `WORLD_SERVER_HELL_FLOOR` 加载对应层的 3 个指定目标怪物和 1 个守将；十八层各有独立的怪物定义 ID、守将 ID、名称和推荐等级。目标怪物按稳定刷新点只计数一次，守将死亡与目标数量两项条件缺一不可。满足条件后，WorldServer 为当前专属实例的在线角色生成通关事件，写入 SQLite durable outbox，再调用中心服通关接口。中心服同时核对楼层、目标数量、目标快照来源和该层预设守将 ID，防止把其他层守将或普通怪物击杀当作通关。怪物配置热刷新不会移除专属地狱实例的内置遭遇怪物。\n- **仍待完成的内容**：当前每层已有基础静态遭遇（3 个目标怪物 + 1 个守将），但还没有多波次刷怪、动态难度、队伍贡献资格、失败/重置流程、各层独立地形与环境机关，也没有 Godot 端十八层入口 UI、传送流程和专属场景。遭遇计数目前是 WorldServer 进程内状态，服务器重启会重置当前轮遭遇；中心服已提交的玩家通关进度不受影响。当前可以验证服务器权威的基础通关闭环，但不能把它描述为完整副本内容。
 
