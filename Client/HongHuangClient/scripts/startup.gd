@@ -632,7 +632,7 @@ func _build_lobby_ui() -> void:
 	lobby_preview_root.add_child(preview_world)
 	var preview_camera := Camera3D.new()
 	preview_camera.position = Vector3(0.0, 1.48, 4.7)
-	preview_camera.look_at(Vector3(0.0, 1.12, 0.0), Vector3.UP)
+	preview_camera.look_at_from_position(preview_camera.position, Vector3(0.0, 1.12, 0.0), Vector3.UP)
 	preview_camera.current = true
 	lobby_preview_root.add_child(preview_camera)
 	var key_light := DirectionalLight3D.new()
