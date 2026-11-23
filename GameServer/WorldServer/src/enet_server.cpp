@@ -4859,6 +4859,12 @@ struct EnetServer::Impl {
                         taunt_target->second.x, taunt_target->second.z, true};
                     nearest_target = &target_storage;
                 } else {
+                    // Remove the forced target lock so the normal threat ledger
+                    // can immediately choose the next valid combatant.
+                    if (monster.state.target_id == monster.taunt_target_character_id) {
+                        monster.state.target_id.clear();
+                        monster.state.mode = honghuang::simulation::MonsterMode::Idle;
+                    }
                     monster.taunt_target_character_id.clear();
                     monster.taunt_expires_at = Clock::time_point{};
                 }
