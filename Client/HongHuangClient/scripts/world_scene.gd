@@ -2981,8 +2981,16 @@ func _party_invite() -> void:
 func _on_party_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	var context := party_request_context
 	party_request_context = ""
-	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
-	var data: Dictionary = parsed if parsed is Dictionary else {}
+	var data: Dictionary = {}
+	# API errors use plain-text HTTP responses (for example, 404 when the
+	# player has not joined a party). Only parse successful JSON responses.
+	if result == HTTPRequest.RESULT_SUCCESS and response_code >= 200 and response_code < 300:
+		var parser := JSON.new()
+		var parse_error := parser.parse(body.get_string_from_utf8())
+		if parse_error != OK or not (parser.data is Dictionary):
+			party_status_label.text = "队伍服务响应格式错误（HTTP " + str(response_code) + "）"
+			return
+		data = parser.data
 	if context == "current":
 		if result == HTTPRequest.RESULT_SUCCESS and response_code >= 200 and response_code < 300:
 			party_data = data
