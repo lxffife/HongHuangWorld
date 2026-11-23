@@ -4362,7 +4362,12 @@ struct EnetServer::Impl {
                         {"character_id", status_player.character_id},
                         {"health", status_player.health},
                         {"max_health", status_player.max_health},
-                        {"alive", status_player.health > 0}
+                        {"alive", status_player.health > 0},
+                        {"shield_health", status_player.absorb_shield_expires_at > snapshot_now
+                            ? status_player.absorb_shield_health : 0},
+                        {"shield_remaining_ms", status_player.absorb_shield_expires_at > snapshot_now
+                            ? std::chrono::duration_cast<std::chrono::milliseconds>(
+                                status_player.absorb_shield_expires_at - snapshot_now).count() : 0}
                     });
                 }
             }
