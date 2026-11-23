@@ -161,6 +161,7 @@ var party_create_button: Button
 var party_leave_button: Button
 var party_disband_button: Button
 var party_data: Dictionary = {}
+var party_member_statuses: Dictionary = {}
 var party_invitations: Array = []
 var party_seen_invitation_ids: Dictionary = {}
 var party_invitation_baseline_loaded := false
@@ -1241,11 +1242,29 @@ func _on_entities_updated(entities: Array) -> void:
 	var seen_monsters: Dictionary = {}
 	var seen_drops: Dictionary = {}
 	var seen_projectiles: Dictionary = {}
+	var seen_party_statuses: Dictionary = {}
+	var received_party_status_snapshot := false
+	var party_status_changed := false
 	var own_id := str(HHSession.world_snapshot.get("character_id", ""))
 	for entity in entities:
 		if not (entity is Dictionary):
 			continue
 		var entity_type := str(entity.get("entity_type", "player"))
+		if entity_type == "player_status":
+			received_party_status_snapshot = true
+			var status_id := str(entity.get("character_id", ""))
+			if status_id.is_empty():
+				continue
+			seen_party_statuses[status_id] = true
+			var status := {
+				"health": int(entity.get("health", 0)),
+				"max_health": int(entity.get("max_health", 0)),
+				"alive": bool(entity.get("alive", false))
+			}
+			if party_member_statuses.get(status_id, {}) != status:
+				party_member_statuses[status_id] = status
+				party_status_changed = true
+			continue
 		if entity_type == "monster":
 			var monster_id := str(entity.get("entity_id", ""))
 			if monster_id.is_empty():
@@ -1287,6 +1306,22 @@ func _on_entities_updated(entities: Array) -> void:
 			continue
 		seen[character_id] = true
 		_upsert_remote_player(entity)
+		if entity.has("health") and entity.has("max_health"):
+			var player_status := {
+				"health": int(entity.get("health", 0)),
+				"max_health": int(entity.get("max_health", 0)),
+				"alive": bool(entity.get("alive", int(entity.get("health", 0)) > 0))
+			}
+			if party_member_statuses.get(character_id, {}) != player_status:
+				party_member_statuses[character_id] = player_status
+				party_status_changed = true
+	if received_party_status_snapshot:
+		for status_id in party_member_statuses.keys():
+			if not seen_party_statuses.has(status_id):
+				party_member_statuses.erase(status_id)
+				party_status_changed = true
+	if party_status_changed and is_instance_valid(party_panel) and party_panel.visible and not party_data.is_empty():
+		_render_party_members()
 	for character_id in remote_players.keys():
 		if not seen.has(character_id):
 			remote_players[character_id].queue_free()
@@ -2710,6 +2745,32 @@ func _render_party_members() -> void:
 		role_label.text = "队长" if str(member.get("role", "")) == "leader" else "队员"
 		role_label.add_theme_color_override("font_color", Color("#d9b879"))
 		row.add_child(role_label)
+		var status: Dictionary = party_member_statuses.get(str(member.get("character_id", "")), {})
+		var status_row := HBoxContainer.new()
+		status_row.add_theme_constant_override("separation", 8)
+		party_members_box.add_child(status_row)
+		var health_bar := ProgressBar.new()
+		health_bar.custom_minimum_size = Vector2(250.0, 12.0)
+		health_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		health_bar.show_percentage = false
+		var max_health := maxi(1, int(status.get("max_health", 1)))
+		var health := clampi(int(status.get("health", 0)), 0, max_health)
+		health_bar.max_value = max_health
+		health_bar.value = health
+		status_row.add_child(health_bar)
+		var health_label := Label.new()
+		if not bool(member.get("online", false)):
+			health_label.text = "离线"
+		elif status.is_empty():
+			health_label.text = "状态同步中"
+		elif not bool(status.get("alive", false)):
+			health_label.text = "倒地"
+		else:
+			health_label.text = str(health) + " / " + str(max_health)
+		health_label.custom_minimum_size.x = 92.0
+		health_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		health_label.add_theme_color_override("font_color", Color("#d58b83") if status.size() > 0 and not bool(status.get("alive", false)) else Color("#c8d4df"))
+		status_row.add_child(health_label)
 		if is_leader and not bool(member.get("is_self", false)):
 			var transfer_button := Button.new()
 			transfer_button.text = "转让"
