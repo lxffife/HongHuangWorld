@@ -1,4 +1,5 @@
 #include "simulation/support_combat.hpp"
+#include "simulation/status_effect.hpp"
 
 #ifdef NDEBUG
 #undef NDEBUG
@@ -29,4 +30,18 @@ int main() {
     assert(purified_effect_count(true, false, false) == 1);
     assert(purified_effect_count(false, true, true) == 2);
     assert(purified_effect_count(true, true, true) == 3);
+
+    TimedSlowEffect slow;
+    TimedFreezeEffect freeze;
+    PeriodicDamageEffect poison;
+    assert(apply_slow(slow, 1000, 3000, 0.55F));
+    assert(apply_freeze(freeze, 1000, 700));
+    assert(apply_periodic_damage(poison, 1000, 3000, 1000, 4));
+    assert(purified_effect_count(slow_is_active(slow, 1100),
+                                 freeze_is_active(freeze, 1100),
+                                 periodic_damage_is_active(poison, 1100)) == 3);
+    clear_negative_statuses(slow, freeze, poison);
+    assert(!slow_is_active(slow, 1100));
+    assert(!freeze_is_active(freeze, 1100));
+    assert(!periodic_damage_is_active(poison, 1100));
 }
