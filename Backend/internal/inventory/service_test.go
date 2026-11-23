@@ -380,3 +380,23 @@ func TestEquipmentEnhancementCombatBonuses(t *testing.T) {
 		t.Fatal("unenhanced equipment should not add combat bonuses")
 	}
 }
+
+
+func TestGroundDropEligibilitySerializesForWorldServer(t *testing.T) {
+	drop := GroundDropSnapshot{
+		ID: "00000000-0000-4000-8000-000000000001",
+		OwnerCharacterID: "00000000-0000-4000-8000-000000000002",
+		EligibleCharacterIDs: []string{
+			"00000000-0000-4000-8000-000000000002",
+			"00000000-0000-4000-8000-000000000003",
+		},
+	}
+	encoded, err := json.Marshal(drop)
+	if err != nil { t.Fatalf("marshal ground drop: %v", err) }
+	var decoded map[string]any
+	if err := json.Unmarshal(encoded, &decoded); err != nil { t.Fatalf("unmarshal ground drop: %v", err) }
+	recipients, ok := decoded["eligible_character_ids"].([]any)
+	if !ok || len(recipients) != 2 {
+		t.Fatalf("eligible_character_ids = %v, want two authorized characters", decoded["eligible_character_ids"])
+	}
+}
