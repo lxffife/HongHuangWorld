@@ -55,11 +55,15 @@ int main() {
     const auto second = roster.dispatch(director, high_id, 3);
     assert(second.dispatched && second.unit_ids.size() == 3);
     assert(roster.available_count() == 0);
-    for (const auto& id : second.unit_ids) assert(roster.mark_unit_arrived(director, id));
+    for (const auto& id : second.unit_ids) {
+        assert(roster.mark_unit_arrived(director, id));
+    }
     assert(director.find(high_id)->state == IncidentState::investigating);
     assert(director.resolve(high_id));
     assert(roster.begin_return(director, high_id));
-    for (const auto& id : second.unit_ids) assert(roster.mark_unit_returned(director, id));
+    for (const auto& id : second.unit_ids) {
+        assert(roster.mark_unit_returned(director, id));
+    }
     assert(roster.available_count() == 3);
     assert(roster.deployed_count() == 0);
     assert(director.find(high_id)->state == IncidentState::closed);
