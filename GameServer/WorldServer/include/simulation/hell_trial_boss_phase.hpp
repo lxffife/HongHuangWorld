@@ -1,5 +1,7 @@
 #pragma once
 
+#include "simulation/monster.hpp"
+
 namespace honghuang::simulation {
 
 struct HellTrialBossPhaseTransition {
@@ -15,6 +17,7 @@ public:
     void reset();
     double attack_multiplier() const;
     double tempo_multiplier() const;
+    MonsterAttackProfile attack_profile(const MonsterDefinition& definition, int floor) const;
 
 private:
     int phase_{};
