@@ -187,6 +187,42 @@ func _test_fengdu_navigation() -> void:
 	)
 	assert(bool(adapter_south_route.get("found", false)))
 	assert(not bool(gate_adapter.call("set_local_gate_state", "unknown_gate", false)))
+	assert(not bool(gate_adapter.call("set_local_gate_policy", "unknown_gate", {"lockdown": true})))
+	var visitor_identity := {"has_valid_pass": false, "faction_permitted": true, "is_official": false, "is_emergency_responder": false, "is_wanted": false, "has_gate_override": false}
+	gate_adapter.set("npc_world_minutes", 2.0 * 60.0)
+	var curfew_denial: Dictionary = gate_adapter.call("evaluate_local_gate_access", "north_heaven_gate", visitor_identity)
+	assert(not bool(curfew_denial.get("allowed", true)))
+	assert(str(curfew_denial.get("code", "")) == "curfew_pass_required")
+	var pass_identity := visitor_identity.duplicate(true)
+	pass_identity["has_valid_pass"] = true
+	var curfew_pass: Dictionary = gate_adapter.call("evaluate_local_gate_access", "north_heaven_gate", pass_identity)
+	assert(bool(curfew_pass.get("allowed", false)))
+	pass_identity["is_wanted"] = true
+	var wanted_denial: Dictionary = gate_adapter.call("evaluate_local_gate_access", "north_heaven_gate", pass_identity)
+	assert(str(wanted_denial.get("code", "")) == "wanted")
+	pass_identity["is_wanted"] = false
+	gate_adapter.set("npc_world_minutes", 10.0 * 60.0)
+	assert(bool(gate_adapter.call("set_local_gate_policy", "north_heaven_gate", {"require_pass": true})))
+	var no_pass_denial: Dictionary = gate_adapter.call("evaluate_local_gate_access", "north_heaven_gate", visitor_identity)
+	assert(str(no_pass_denial.get("code", "")) == "pass_required")
+	assert(bool(gate_adapter.call("set_local_gate_state", "north_heaven_gate", false)))
+	var closed_gate_denial: Dictionary = gate_adapter.call("evaluate_local_gate_access", "north_heaven_gate", pass_identity)
+	assert(str(closed_gate_denial.get("code", "")) == "gate_closed")
+	var override_identity := pass_identity.duplicate(true)
+	override_identity["has_gate_override"] = true
+	assert(bool(gate_adapter.call("set_local_gate_policy", "north_heaven_gate", {"lockdown": true})))
+	var lockdown_denial: Dictionary = gate_adapter.call("evaluate_local_gate_access", "north_heaven_gate", override_identity)
+	assert(str(lockdown_denial.get("code", "")) == "lockdown")
+	override_identity["is_emergency_responder"] = true
+	var emergency_access: Dictionary = gate_adapter.call("evaluate_local_gate_access", "north_heaven_gate", override_identity)
+	assert(bool(emergency_access.get("allowed", false)))
+	assert(bool(gate_adapter.call("set_local_gate_policy", "north_heaven_gate", {"restrict_faction": true, "lockdown": false, "require_pass": false})))
+	var faction_identity := visitor_identity.duplicate(true)
+	faction_identity["faction_permitted"] = false
+	var faction_denial: Dictionary = gate_adapter.call("evaluate_local_gate_access", "north_heaven_gate", faction_identity)
+	assert(str(faction_denial.get("code", "")) == "faction_restricted")
+	var emergency_faction_access: Dictionary = gate_adapter.call("evaluate_local_gate_access", "north_heaven_gate", override_identity)
+	assert(bool(emergency_faction_access.get("allowed", false)))
 	var gate_roster: Array = FengduWorldLayout.get_gate_guard_roster()
 	assert(gate_roster.size() == 4)
 	var gate_guard_points := 0
