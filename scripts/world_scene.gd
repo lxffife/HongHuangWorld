@@ -156,8 +156,14 @@ var party_status_label: Label
 var party_members_box: VBoxContainer
 var party_invites_box: VBoxContainer
 var party_username_input: LineEdit
+var party_invite_row: HBoxContainer
+var party_create_button: Button
+var party_leave_button: Button
+var party_disband_button: Button
 var party_data: Dictionary = {}
 var party_invitations: Array = []
+var party_seen_invitation_ids: Dictionary = {}
+var party_invitation_baseline_loaded := false
 var party_request_context := ""
 var party_action_busy := false
 
@@ -2512,18 +2518,18 @@ func _build_party_ui() -> void:
 	party_members_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	member_scroll.add_child(party_members_box)
 
-	var invite_row := HBoxContainer.new()
-	layout.add_child(invite_row)
+	party_invite_row = HBoxContainer.new()
+	layout.add_child(party_invite_row)
 	party_username_input = LineEdit.new()
 	party_username_input.placeholder_text = "输入同一世界实例玩家用户名"
 	party_username_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	party_username_input.max_length = 32
-	invite_row.add_child(party_username_input)
+	party_invite_row.add_child(party_username_input)
 	var invite_button := Button.new()
 	invite_button.text = "邀请"
 	_apply_button_theme(invite_button, true)
 	invite_button.pressed.connect(_party_invite)
-	invite_row.add_child(invite_button)
+	party_invite_row.add_child(invite_button)
 
 	var invitation_title := Label.new()
 	invitation_title.text = "收到的邀请"
@@ -2534,20 +2540,20 @@ func _build_party_ui() -> void:
 
 	var actions := HBoxContainer.new()
 	layout.add_child(actions)
-	var create_button := Button.new()
-	create_button.text = "创建队伍"
-	_apply_button_theme(create_button, true)
-	create_button.pressed.connect(func(): _party_request("POST", "/api/v1/party", {}, "action"))
-	actions.add_child(create_button)
-	var leave_button := Button.new()
-	leave_button.text = "离开队伍"
-	_apply_button_theme(leave_button)
-	leave_button.pressed.connect(func(): _party_request("POST", "/api/v1/party/leave", {}, "action"))
-	actions.add_child(leave_button)
-	var disband_button := Button.new()
-	disband_button.text = "解散队伍"
-	_apply_button_theme(disband_button)
-	disband_button.pressed.connect(func():
+	party_create_button = Button.new()
+	party_create_button.text = "创建队伍"
+	_apply_button_theme(party_create_button, true)
+	party_create_button.pressed.connect(func(): _party_request("POST", "/api/v1/party", {}, "action"))
+	actions.add_child(party_create_button)
+	party_leave_button = Button.new()
+	party_leave_button.text = "离开队伍"
+	_apply_button_theme(party_leave_button)
+	party_leave_button.pressed.connect(func(): _party_request("POST", "/api/v1/party/leave", {}, "action"))
+	actions.add_child(party_leave_button)
+	party_disband_button = Button.new()
+	party_disband_button.text = "解散队伍"
+	_apply_button_theme(party_disband_button)
+	party_disband_button.pressed.connect(func():
 		var dialog := ConfirmationDialog.new()
 		dialog.title = "解散队伍"
 		dialog.dialog_text = "确定解散当前队伍吗？所有队员都会离队。"
@@ -2557,7 +2563,7 @@ func _build_party_ui() -> void:
 		dialog.canceled.connect(dialog.queue_free)
 		dialog.popup_centered()
 	)
-	actions.add_child(disband_button)
+	actions.add_child(party_disband_button)
 
 	party_http = HTTPRequest.new()
 	party_http.timeout = 12.0
@@ -2567,8 +2573,13 @@ func _build_party_ui() -> void:
 	party_refresh_timer.wait_time = 15.0
 	party_refresh_timer.one_shot = false
 	party_refresh_timer.timeout.connect(func():
-		if is_instance_valid(party_panel) and party_panel.visible and party_request_context == "":
+		if party_request_context != "":
+			return
+		if is_instance_valid(party_panel) and party_panel.visible:
 			_party_request("GET", "/api/v1/party/current", {}, "current")
+		else:
+			# Keep the invitation inbox fresh even while the party panel is closed.
+			_party_request("GET", "/api/v1/party/invitations", {}, "background_invitations")
 	)
 	add_child(party_refresh_timer)
 	party_refresh_timer.start()
@@ -2624,12 +2635,25 @@ func _on_party_request_completed(result: int, response_code: int, _headers: Pack
 		_render_party_members()
 		_party_request("GET", "/api/v1/party/invitations", {}, "invitations")
 		return
-	if context == "invitations":
+	if context == "invitations" or context == "background_invitations":
 		if result == HTTPRequest.RESULT_SUCCESS and response_code >= 200 and response_code < 300:
-			party_invitations = data.get("invitations", [])
-			_render_party_invitations()
+			var incoming: Array = data.get("invitations", [])
+			for invitation_value in incoming:
+				if not (invitation_value is Dictionary):
+					continue
+				var invitation_id := str(invitation_value.get("id", ""))
+				if invitation_id.is_empty():
+					continue
+				if party_invitation_baseline_loaded and not party_seen_invitation_ids.has(invitation_id):
+					_show_notification(str(invitation_value.get("inviter_name", "玩家")) + " 邀请你加入队伍", 5.0)
+				party_seen_invitation_ids[invitation_id] = true
+			party_invitation_baseline_loaded = true
+			party_invitations = incoming
+			if context == "invitations":
+				_render_party_invitations()
 		else:
-			party_invites_box.add_child(_party_label("邀请列表读取失败（HTTP " + str(response_code) + "）"))
+			if context == "invitations":
+				party_invites_box.add_child(_party_label("邀请列表读取失败（HTTP " + str(response_code) + "）"))
 		return
 	if context == "action":
 		if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
@@ -2651,6 +2675,10 @@ func _render_party_members() -> void:
 	var members: Array = party_data.get("members", [])
 	if party_data.is_empty():
 		party_status_label.text = "当前没有队伍。创建队伍后，可邀请同一世界实例的玩家。"
+		party_invite_row.visible = false
+		party_create_button.visible = true
+		party_leave_button.visible = false
+		party_disband_button.visible = false
 		party_members_box.add_child(_party_label("尚无队伍成员"))
 		return
 	party_status_label.text = "队伍 " + str(party_data.get("id", "")).substr(0, 8) + " · " + str(members.size()) + " / " + str(party_data.get("max_members", 5)) + " 人"
@@ -2658,6 +2686,10 @@ func _render_party_members() -> void:
 	for member_value in members:
 		if member_value is Dictionary and bool(member_value.get("is_self", false)):
 			is_leader = str(member_value.get("role", "")) == "leader"
+	party_invite_row.visible = is_leader
+	party_create_button.visible = false
+	party_leave_button.visible = true
+	party_disband_button.visible = is_leader
 	for member_value in members:
 		if not (member_value is Dictionary):
 			continue
