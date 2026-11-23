@@ -145,5 +145,5 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000067_fengdu_bla
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000068_party_system.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000069_party_loot_rules.up.sql
 
-- `000069_party_loot_rules` adds independent material/equipment loot policies to parties (`personal`, `free_for_all`, `round_robin`, `leader`), persistent rotation cursors, and per-drop eligible-character records. The API exposes leader-only policy changes through `PUT /api/v1/party/loot-rules`.
+- `000069_party_loot_rules` adds independent material/equipment loot policies to parties (`personal`, `free_for_all`, `round_robin`, `leader`), persistent rotation cursors, and per-drop eligible-character records. The API exposes leader-only policy changes through `PUT /api/v1/party/loot-rules`. The rules apply to newly created drops; existing available drops retain their persisted eligibility. `free_for_all` allows all party members to compete for one atomic pickup; `round_robin` assigns each new drop to the next connected member in the same world instance; `leader` assigns it to the leader character. The WorldServer restores the eligibility list after restart and still validates pickup distance before Backend performs the transactional ownership transfer.
 ```
