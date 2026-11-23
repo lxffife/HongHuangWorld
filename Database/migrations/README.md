@@ -154,4 +154,4 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000072_hell_trial
 - `000070_party_focus_target` adds an expiring shared party focus marker. Any authenticated current party member in the same world instance can set or clear the target through `PUT /api/v1/party/focus-target`; the current-party response exposes the target and marker author for 60 seconds. This is a tactical UI marker only: it does not force monster aggro or alter server-side damage/targeting. Clients should only display the marker when the referenced monster is present in their current world snapshot.
 
 - `000071_repeatable_death_events` 允许同一角色在同一世界会话中多次经历死亡与复活；保留已解决死亡历史，同时限制每个角色/会话最多一条未解决死亡记录。
-- `000072_hell_trial_progress` 为每个肉身角色建立十八层地狱通关进度；第一层由中心服首次读取时幂等初始化，可信 WorldServer 回报目标完成且守将击败后，在同一事务中完成当前层并解锁下一层；第十八层为最终层。
+- `000072_hell_trial_progress` 为世界实例增加可空的 `hell_floor`（仅允许冥界 1–18 层），为每个肉身角色建立十八层地狱通关进度与幂等进入事件。中心服只接受当前活动会话所在 WorldServer、且世界实例 `hell_floor` 与请求一致的进入/通关回报；通关与下一层解锁在同一事务中完成，第十八层为最终层。
