@@ -2689,6 +2689,8 @@ struct EnetServer::Impl {
         honghuang::simulation::clear_negative_statuses(
             player.slow_effect, player.freeze_effect, player.poison_effect);
         player.poison_source_entity_id.clear();
+        player.absorb_shield_health = 0;
+        player.absorb_shield_expires_at = Clock::time_point{};
         if (player.pending_spell.has_value()) {
             const auto pending = *player.pending_spell;
             player.pending_spell.reset();
@@ -4515,6 +4517,8 @@ struct EnetServer::Impl {
             if (now < rescuer.revive_completes_at) continue;
             auto& revived = target->second;
             revived.health = honghuang::simulation::ally_revive_health(revived.max_health);
+            revived.absorb_shield_health = 0;
+            revived.absorb_shield_expires_at = Clock::time_point{};
             revived.death_snapshot_queued = false;
             revived.death_snapshot_persisted = false;
             revived.last_combat_at = now;
