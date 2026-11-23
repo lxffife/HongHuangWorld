@@ -107,8 +107,8 @@ var guardianDefinitionIDs = [FloorCount]string{
 
 type completionSnapshot struct {
 	Floor int `json:"floor"`
-	ParticipantDamage int64 `json:"participant_damage"`
-	MinimumContributionDamage int64 `json:"minimum_contribution_damage"`
+	ParticipantContribution int64 `json:"participant_contribution"`
+	MinimumContribution int64 `json:"minimum_contribution"`
 	ObjectiveKills int `json:"objective_kills"`
 	ObjectiveRequired int `json:"objective_required"`
 	ObjectiveComplete bool `json:"objective_complete"`
@@ -140,10 +140,10 @@ func validateCompletion(req CompletionRequest) error {
 	if snapshot.Floor != req.Floor || snapshot.ObjectiveRequired < 1 ||
 		snapshot.ObjectiveRequired > 100 || snapshot.GuardianID != guardianDefinitionIDs[req.Floor-1] ||
 		snapshot.Source != "worldserver_authoritative_monster_death" ||
-		snapshot.MinimumContributionDamage != minimumContributionDamage(req.Floor) {
+		snapshot.MinimumContribution != minimumContributionDamage(req.Floor) {
 		return ErrInvalid
 	}
-	if snapshot.ParticipantDamage < snapshot.MinimumContributionDamage {
+	if snapshot.ParticipantContribution < snapshot.MinimumContribution {
 		return ErrContributionInsufficient
 	}
 	if !req.ObjectiveComplete || !snapshot.ObjectiveComplete ||
