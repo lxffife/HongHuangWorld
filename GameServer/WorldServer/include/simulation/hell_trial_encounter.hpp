@@ -53,7 +53,7 @@ private:
     int objective_kills_{};
     bool guardian_defeated_{};
     bool completed_{};
-    std::unordered_set<std::string> counted_runtime_ids_;
+    std::unordered_set<std::string> counted_life_ids_;
 };
 
 const std::array<HellTrialFloorSpec, HellTrialEncounter::floor_count>&
