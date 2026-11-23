@@ -8,7 +8,7 @@ namespace honghuang::simulation {
 bool HellTrialContributionLedger::register_participant(
     const std::string& character_id, const std::string& session_id) {
     if (character_id.empty() || session_id.empty()) return false;
-    auto [it, inserted] = participants_.try_emplace(character_id, Participant{session_id, 0});
+    auto [it, inserted] = participants_.try_emplace(character_id, Participant{session_id, 0, 0});
     if (!inserted) it->second.session_id = session_id;
     return true;
 }
@@ -27,14 +27,31 @@ bool HellTrialContributionLedger::record_damage(
     return true;
 }
 
+bool HellTrialContributionLedger::record_healing(
+    const std::string& character_id, const std::string& session_id,
+    std::int64_t effective_healing) {
+    if (effective_healing <= 0 || character_id.empty() || session_id.empty()) return false;
+    const auto found = participants_.find(character_id);
+    if (found == participants_.end() || found->second.session_id != session_id) return false;
+    auto& total = found->second.healing;
+    if (total > std::numeric_limits<std::int64_t>::max() - effective_healing)
+        total = std::numeric_limits<std::int64_t>::max();
+    else
+        total += effective_healing;
+    return true;
+}
+
 std::vector<HellTrialEligibleParticipant>
-HellTrialContributionLedger::eligible_participants(std::int64_t minimum_damage) const {
+HellTrialContributionLedger::eligible_participants(std::int64_t minimum_contribution) const {
     std::vector<HellTrialEligibleParticipant> result;
-    if (minimum_damage <= 0) return result;
+    if (minimum_contribution <= 0) return result;
     result.reserve(participants_.size());
     for (const auto& [character_id, participant] : participants_) {
-        if (participant.damage >= minimum_damage) {
-            result.push_back({character_id, participant.session_id, participant.damage});
+        const auto support_score = participant.healing / 2;
+        const auto contribution = participant.damage > std::numeric_limits<std::int64_t>::max() - support_score
+            ? std::numeric_limits<std::int64_t>::max() : participant.damage + support_score;
+        if (contribution >= minimum_contribution) {
+            result.push_back({character_id, participant.session_id, contribution});
         }
     }
     std::sort(result.begin(), result.end(), [](const auto& left, const auto& right) {
@@ -43,9 +60,12 @@ HellTrialContributionLedger::eligible_participants(std::int64_t minimum_damage) 
     return result;
 }
 
-std::int64_t HellTrialContributionLedger::damage_for(const std::string& character_id) const {
+std::int64_t HellTrialContributionLedger::contribution_for(const std::string& character_id) const {
     const auto found = participants_.find(character_id);
-    return found == participants_.end() ? 0 : found->second.damage;
+    if (found == participants_.end()) return 0;
+    const auto support_score = found->second.healing / 2;
+    return found->second.damage > std::numeric_limits<std::int64_t>::max() - support_score
+        ? std::numeric_limits<std::int64_t>::max() : found->second.damage + support_score;
 }
 
 } // namespace honghuang::simulation
