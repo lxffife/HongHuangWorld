@@ -243,7 +243,7 @@ func (h *gamePlayerAdminHandlers) online(w http.ResponseWriter, r *http.Request)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
-		if connectedAt.Valid { value := connectedAt.Time; item.ConnectedAt = &value }
+		if connectedAt.Valid { item.ConnectedAt = connectedAt.Time }
 		if heartbeatAt.Valid { value := heartbeatAt.Time; item.HeartbeatAt = &value }
 		items = append(items, item)
 	}
