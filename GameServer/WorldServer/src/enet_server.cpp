@@ -124,6 +124,13 @@ struct PlayerState {
     Clock::time_point last_chat_at{};
     Clock::time_point last_combat_refresh_at{};
     bool death_snapshot_queued{false};
+    bool death_snapshot_persisted{false};
+    std::string revive_target_character_id;
+    Clock::time_point revive_completes_at{};
+    Clock::time_point last_revive_at{};
+    float revive_start_x{};
+    float revive_start_z{};
+    std::int64_t revive_start_health{};
 };
 
 enum class MonsterAttackPhase { Ready, Windup, Recovery };
@@ -2663,6 +2670,7 @@ struct EnetServer::Impl {
             found->second.death_snapshot_queued) return;
         auto& player = found->second;
         player.death_snapshot_queued = true;
+        player.death_snapshot_persisted = false;
         {
             std::lock_guard lock(persistence_mutex);
             pending_snapshots[player.session_id] = player;
@@ -2702,6 +2710,7 @@ struct EnetServer::Impl {
         for (const auto& session_id : completed) {
             for (const auto& [peer, player] : players) {
                 if (player.session_id != session_id || player.health > 0) continue;
+                player.death_snapshot_persisted = true;
                 send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                     Json{{"accepted", true}, {"action", "player_death_persisted"},
                          {"health", 0}, {"character_id", player.character_id}});
@@ -4067,6 +4076,61 @@ struct EnetServer::Impl {
         };
         if (player.health <= 0) { reject("角色已倒地，无法施法。"); return; }
         if (player.pending_spell.has_value()) { reject("正在施法，请稍候。"); return; }
+        // Rescue is a short server-authoritative channel. A death must be durably
+        // recorded before another player can restore the downed character.
+        if (spell_id == "revive") {
+            constexpr auto kReviveCooldown = std::chrono::seconds(45);
+            constexpr auto kReviveChannel = std::chrono::seconds(5);
+            constexpr double kReviveRange = 3.5;
+            const auto now = Clock::now();
+            if (!player.revive_target_character_id.empty()) {
+                reject("你正在进行救援，请先完成或中断当前救援。"); return;
+            }
+            if (player.last_revive_at != Clock::time_point{} &&
+                now - player.last_revive_at < kReviveCooldown) {
+                const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    kReviveCooldown - (now - player.last_revive_at)).count();
+                send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                    Json{{"accepted", false}, {"action", "spell_cast"}, {"spell_id", "revive"},
+                         {"cooldown_ms", remaining}, {"reason", "救援术尚在冷却中。"}});
+                return;
+            }
+            const auto target_id = command.value("target_entity_id", std::string{});
+            if (target_id.empty() || target_id.size() > 96 || target_id == player.character_id) {
+                reject("救援目标无效。"); return;
+            }
+            auto target = std::find_if(players.begin(), players.end(), [&](const auto& entry) {
+                return entry.second.character_id == target_id;
+            });
+            if (target == players.end() || target->second.health > 0 ||
+                !target->second.death_snapshot_persisted) {
+                reject("目标尚未倒地，或死亡记录仍在安全保存中。"); return;
+            }
+            const double dx = static_cast<double>(target->second.x) - player.x;
+            const double dz = static_cast<double>(target->second.z) - player.z;
+            if (dx * dx + dz * dz > kReviveRange * kReviveRange) {
+                reject("救援距离过远，需要靠近倒地角色（3.5 米内）。"); return;
+            }
+            player.revive_target_character_id = target_id;
+            player.revive_completes_at = now + kReviveChannel;
+            player.revive_start_x = player.x;
+            player.revive_start_z = player.z;
+            player.revive_start_health = player.health;
+            player.last_revive_at = now;
+            player.move_x = 0.0F;
+            player.move_z = 0.0F;
+            send_json(peer, honghuang::protocol::MessageType::CombatEvent,
+                Json{{"accepted", true}, {"action", "spell_cast"}, {"phase", "channeling"},
+                     {"spell_id", "revive"}, {"target_character_id", target_id},
+                     {"duration_ms", static_cast<int>(kReviveChannel.count() * 1000)},
+                     {"cooldown_ms", static_cast<int>(kReviveCooldown.count() * 1000)},
+                     {"reason", "正在施展回魂术，保持原地并避免受到攻击。"}});
+            send_json(target->first, honghuang::protocol::MessageType::CombatEvent,
+                Json{{"accepted", true}, {"action", "revive"}, {"phase", "incoming"},
+                     {"character_id", player.character_id}, {"character_name", player.name},
+                     {"duration_ms", static_cast<int>(kReviveChannel.count() * 1000)}});
+            continue;
+        }
         // Taunt is a server-authoritative combat ability, not a damaging spell:
         // it needs no staff, mana or cast bar, and expires automatically.
         if (spell_id == "taunt") {
@@ -4294,6 +4358,63 @@ struct EnetServer::Impl {
         drain_combat_refresh_results();
         drain_death_snapshot_results();
         const auto now = Clock::now();
+        // Resolve rescue channels before the regular simulation step. Any movement,
+        // damage, disconnect or target state change interrupts the channel.
+        for (auto& [rescuer_peer, rescuer] : players) {
+            if (rescuer.revive_target_character_id.empty()) continue;
+            auto target = std::find_if(players.begin(), players.end(), [&](const auto& entry) {
+                return entry.second.character_id == rescuer.revive_target_character_id;
+            });
+            const double moved_x = static_cast<double>(rescuer.x - rescuer.revive_start_x);
+            const double moved_z = static_cast<double>(rescuer.z - rescuer.revive_start_z);
+            const bool interrupted = rescuer.health <= 0 ||
+                rescuer.health != rescuer.revive_start_health ||
+                moved_x * moved_x + moved_z * moved_z > 0.16 ||
+                target == players.end() || target->second.health > 0 ||
+                (target != players.end() && !target->second.death_snapshot_persisted);
+            if (interrupted) {
+                send_json(rescuer_peer, honghuang::protocol::MessageType::CombatEvent,
+                    Json{{"accepted", false}, {"action", "spell_cast"}, {"phase", "interrupted"},
+                         {"spell_id", "revive"}, {"reason", "救援被打断：移动、受到攻击或目标状态发生变化。"}});
+                if (target != players.end()) {
+                    send_json(target->first, honghuang::protocol::MessageType::CombatEvent,
+                        Json{{"accepted", false}, {"action", "revive"}, {"phase", "interrupted"},
+                             {"reason", "救援者无法继续施法。"}});
+                }
+                rescuer.revive_target_character_id.clear();
+                rescuer.revive_completes_at = Clock::time_point{};
+                continue;
+            }
+            const double dx = static_cast<double>(target->second.x) - rescuer.x;
+            const double dz = static_cast<double>(target->second.z) - rescuer.z;
+            if (dx * dx + dz * dz > 3.5 * 3.5) {
+                send_json(rescuer_peer, honghuang::protocol::MessageType::CombatEvent,
+                    Json{{"accepted", false}, {"action", "spell_cast"}, {"phase", "interrupted"},
+                         {"spell_id", "revive"}, {"reason", "救援距离超出 3.5 米，施法中断。"}});
+                rescuer.revive_target_character_id.clear();
+                rescuer.revive_completes_at = Clock::time_point{};
+                continue;
+            }
+            if (now < rescuer.revive_completes_at) continue;
+            auto& revived = target->second;
+            revived.health = std::max<std::int64_t>(1, revived.max_health / 4);
+            revived.death_snapshot_queued = false;
+            revived.death_snapshot_persisted = false;
+            revived.last_combat_at = now;
+            revived.last_input_at = now;
+            revived.last_mana_regen_at = now;
+            send_json(target->first, honghuang::protocol::MessageType::CombatEvent,
+                Json{{"accepted", true}, {"action", "player_revived"},
+                     {"character_id", revived.character_id}, {"health", revived.health},
+                     {"max_health", revived.max_health}, {"mana", revived.mana},
+                     {"max_mana", revived.max_mana}, {"restored_percent", 25}});
+            send_json(rescuer_peer, honghuang::protocol::MessageType::CombatEvent,
+                Json{{"accepted", true}, {"action", "spell_cast"}, {"phase", "released"},
+                     {"spell_id", "revive"}, {"target_character_id", revived.character_id},
+                     {"reason", "回魂成功，目标恢复 25% 生命。"}});
+            rescuer.revive_target_character_id.clear();
+            rescuer.revive_completes_at = Clock::time_point{};
+        }
         for (auto& [peer, player] : players) {
             (void)peer;
             if (player.last_combat_refresh_at == Clock::time_point{} ||
