@@ -67,6 +67,8 @@ type EquipmentAffix struct {
 
 type GroundDrop struct {
 	ID string `json:"id"`
+	OwnerCharacterID string `json:"owner_character_id"`
+	EligibleCharacterIDs []string `json:"eligible_character_ids"`
 	ItemInstanceID string `json:"item_instance_id,omitempty"`
 	Quality int `json:"quality"`
 	RolledStats map[string]int `json:"rolled_stats,omitempty"`
@@ -480,6 +482,8 @@ func (s *Service) CreateDrop(ctx context.Context, nodeKey string, request DropRe
 	for _, characterID := range eligibleCharacters {
 		if _,err:=tx.ExecContext(ctx,"INSERT INTO ground_drop_eligible_characters(drop_id,character_id) VALUES($1::uuid,$2::uuid) ON CONFLICT DO NOTHING",request.DropID,characterID);err!=nil{return GroundDrop{},fmt.Errorf("persist drop eligibility: %w",err)}
 	}
+	result.OwnerCharacterID=assignedOwner
+	result.EligibleCharacterIDs=eligibleCharacters
 	if err := tx.Commit(); err != nil { return GroundDrop{}, fmt.Errorf("commit ground drop: %w", err) }
 	return result, nil
 }
