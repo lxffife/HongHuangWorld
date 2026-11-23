@@ -12,6 +12,7 @@ class HellTrialBossPhaseController {
 public:
     HellTrialBossPhaseTransition update(double health, double max_health);
     int phase() const;
+    void reset();
     double attack_multiplier() const;
     double tempo_multiplier() const;
 
