@@ -79,7 +79,7 @@ var health_bar: ProgressBar
 var mana_bar: ProgressBar
 var spell_cooldown_labels: Dictionary = {}
 var spell_mastery_labels: Dictionary = {}
-var spell_cooldown_remaining: Dictionary = {"fireball": 0.0, "ice_bolt": 0.0, "taunt": 0.0}
+var spell_cooldown_remaining: Dictionary = {"fireball": 0.0, "ice_bolt": 0.0, "taunt": 0.0, "revive": 0.0}
 var notification_panel: PanelContainer
 var notification_label: Label
 var notification_timer: Timer
@@ -1001,6 +1001,12 @@ func _build_combat_hud() -> void:
 	taunt_label.add_theme_font_size_override("font_size", 11)
 	spell_cooldown_labels["taunt"] = taunt_label
 	vitals_layout.add_child(taunt_label)
+	var revive_label := Label.new()
+	revive_label.text = "Y  ·  回魂术：就绪"
+	revive_label.add_theme_color_override("font_color", Color("#9ed7bd"))
+	revive_label.add_theme_font_size_override("font_size", 11)
+	spell_cooldown_labels["revive"] = revive_label
+	vitals_layout.add_child(revive_label)
 	_update_spell_cooldown_hud()
 	_update_spell_mastery_hud()
 	notification_panel = PanelContainer.new()
@@ -1284,7 +1290,7 @@ func _update_hud() -> void:
 	var world_id := str(snapshot.get("world_id", ""))
 	var world_name := _world_display_name(world_id)
 	var character_name := str(snapshot.get("name", "初入洪荒"))
-	hud_label.text = "当前世界 · " + world_name + " · 所在区域 " + (current_region_name if not current_region_name.is_empty() else "区域载入中") + "\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\nF NPC交互 · E 拾取 · I 背包 · Q 火球术（法杖/法器） · C 聊天 · 鼠标左键攻击 · F2 网络诊断"
+	hud_label.text = "当前世界 · " + world_name + " · 所在区域 " + (current_region_name if not current_region_name.is_empty() else "区域载入中") + "\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\nF NPC交互 · E 拾取 · I 背包 · Q 火球术 · R 冰锥术 · T 嘲讽 · Y 救援 · C 聊天 · 鼠标左键攻击 · F2 网络诊断"
 	_update_compact_hud()
 
 func _exit_tree() -> void:
@@ -1889,6 +1895,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.keycode == KEY_T:
 		_request_taunt()
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_Y:
+		_request_revive_nearest()
 		get_viewport().set_input_as_handled()
 		return
 	if event.keycode == KEY_C:
@@ -3350,7 +3360,7 @@ func _update_spell_cooldown_hud() -> void:
 		var label := spell_cooldown_labels[spell_id] as Label
 		if not is_instance_valid(label):
 			continue
-		var spell_key := "Q" if spell_id == "fireball" else ("R" if spell_id == "ice_bolt" else "T")
+		var spell_key := "Y" if spell_id == "revive" else ("Q" if spell_id == "fireball" else ("R" if spell_id == "ice_bolt" else "T"))
 		var spell_name := "火球术" if spell_id == "fireball" else ("冰锥术" if spell_id == "ice_bolt" else "嘲讽")
 		var remaining := float(spell_cooldown_remaining.get(spell_id, 0.0))
 		label.text = spell_key + " · " + spell_name + "：冷却 " + ("%.1f" % remaining) + " 秒" if remaining > 0.0 else spell_key + " · " + spell_name + "：就绪"
@@ -3395,6 +3405,28 @@ func _request_ice_bolt() -> void:
 	var error: Error = network.send_spell_cast("ice_bolt", target_id)
 	if error != OK:
 		_show_notification("冰锥术请求发送失败：" + str(error))
+
+func _request_revive_nearest() -> void:
+	var network := HHSession.world_network
+	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
+		return
+	var target_id := ""
+	var nearest_distance := 3.5
+	for character_id in remote_targets.keys():
+		var status: Dictionary = party_member_statuses.get(character_id, {})
+		if status.is_empty() or bool(status.get("alive", true)):
+			continue
+		var target: Vector3 = remote_targets[character_id]
+		var distance := Vector2(local_player.global_position.x, local_player.global_position.z).distance_to(Vector2(target.x, target.z))
+		if distance <= nearest_distance:
+			nearest_distance = distance
+			target_id = str(character_id)
+	if target_id.is_empty():
+		_show_notification("3.5 米内没有可救援的倒地队友。")
+		return
+	var error: Error = network.send_spell_cast("revive", target_id)
+	if error != OK:
+		_show_notification("回魂术请求发送失败：" + str(error))
 
 func _request_taunt() -> void:
 	var network := HHSession.world_network
@@ -3722,6 +3754,28 @@ func _on_combat_event(event: Dictionary) -> void:
 		var taunter := str(event.get("character_name", "队友"))
 		_show_notification(taunter + " 嘲讽了怪物，怪物将优先攻击他！", 2.8)
 		return
+	if str(event.get("action", "")) == "player_revived":
+		var revived_id := str(event.get("character_id", ""))
+		if revived_id == str(HHSession.world_snapshot.get("character_id", "")):
+			HHSession.world_snapshot["health"] = int(event.get("health", 1))
+			HHSession.world_snapshot["max_health"] = int(event.get("max_health", HHSession.world_snapshot.get("max_health", 100)))
+			HHSession.world_snapshot["mana"] = int(event.get("mana", HHSession.world_snapshot.get("mana", 0)))
+			HHSession.world_snapshot["max_mana"] = int(event.get("max_mana", HHSession.world_snapshot.get("max_mana", 0)))
+			_update_vitals(int(HHSession.world_snapshot["health"]), int(HHSession.world_snapshot["max_health"]))
+			if is_instance_valid(death_panel):
+				death_panel.visible = false
+			if is_instance_valid(respawn_button):
+				respawn_button.disabled = true
+			_show_notification("你被队友救起，恢复 25% 生命！", 4.0)
+		else:
+			_show_notification("队友已被救起。", 3.0)
+		return
+	if str(event.get("action", "")) == "revive":
+		if str(event.get("phase", "")) == "incoming":
+			_show_notification(str(event.get("character_name", "队友")) + " 正在对你施展回魂术……", 5.0)
+		elif str(event.get("phase", "")) == "interrupted":
+			_show_notification(str(event.get("reason", "救援中断。")), 3.0)
+		return
 	if str(event.get("action", "")) == "player_death_persisted":
 		if is_instance_valid(respawn_button):
 			respawn_button.disabled = false
@@ -3820,7 +3874,7 @@ func _on_combat_event(event: Dictionary) -> void:
 			mana_label.text = "灵力  " + str(int(HHSession.world_snapshot.get("mana", 0))) + " / " + str(int(HHSession.world_snapshot.get("max_mana", 0)))
 		_update_compact_hud()
 		var spell_id := str(event.get("spell_id", ""))
-		var spell_name := "嘲讽" if spell_id == "taunt" else ("冰锥术" if spell_id == "ice_bolt" else ("火球术" if spell_id == "fireball" else "法术"))
+		var spell_name := "回魂术" if spell_id == "revive" else ("嘲讽" if spell_id == "taunt" else ("冰锥术" if spell_id == "ice_bolt" else ("火球术" if spell_id == "fireball" else "法术")))
 		# Mirror the server: cooldown starts on successful release, not when
 		# the cast begins. An interrupted cast refunds mana and remains ready.
 		if bool(event.get("accepted", false)) and str(event.get("phase", "")) == "released" and spell_cooldown_remaining.has(spell_id):
@@ -3832,6 +3886,8 @@ func _on_combat_event(event: Dictionary) -> void:
 			_update_spell_cooldown_hud()
 		if not bool(event.get("accepted", false)):
 			_show_notification(str(event.get("reason", spell_name + "施展失败。")), 3.0)
+		elif str(event.get("phase", "")) == "channeling":
+			_show_notification("正在施展回魂术：保持原地 5 秒，受到攻击或移动会中断。", 5.0)
 		elif str(event.get("phase", "")) == "casting":
 			_show_notification("正在凝聚" + spell_name + " · 灵力 -" + str(int(event.get("mana_cost", 18))), 1.5)
 		elif str(event.get("phase", "")) == "released":
