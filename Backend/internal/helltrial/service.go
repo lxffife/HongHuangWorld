@@ -117,7 +117,7 @@ type completionSnapshot struct {
 	Source string `json:"source"`
 }
 
-func minimumContributionDamage(floor int) int64 {
+func minimumContribution(floor int) int64 {
 	levels := [...]int64{8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 80}
 	if floor < 1 || floor > len(levels) {
 		return 0
@@ -140,7 +140,7 @@ func validateCompletion(req CompletionRequest) error {
 	if snapshot.Floor != req.Floor || snapshot.ObjectiveRequired < 1 ||
 		snapshot.ObjectiveRequired > 100 || snapshot.GuardianID != guardianDefinitionIDs[req.Floor-1] ||
 		snapshot.Source != "worldserver_authoritative_monster_death" ||
-		snapshot.MinimumContribution != minimumContributionDamage(req.Floor) {
+		snapshot.MinimumContribution != minimumContribution(req.Floor) {
 		return ErrInvalid
 	}
 	if snapshot.ParticipantContribution < snapshot.MinimumContribution {
