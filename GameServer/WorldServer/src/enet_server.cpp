@@ -1155,6 +1155,9 @@ struct EnetServer::Impl {
     honghuang::simulation::HellTrialEncounter hell_trial_encounter;
     ENetHost* host{};
     std::unordered_map<ENetPeer*, PlayerState> players;
+    // Character -> most recent authenticated session that entered this dedicated floor.
+    // Keep participants after disconnect so a delayed boss kill can still grant progress.
+    std::unordered_map<std::string, std::string> hell_trial_participants;
     std::vector<MonsterRuntime> monsters;
     std::mutex monster_config_mutex;
     std::condition_variable monster_config_cv;
@@ -1713,6 +1716,7 @@ struct EnetServer::Impl {
     void enqueue_hell_trial_entry(const PlayerState& player) {
         if (config.hell_floor < 1 || config.hell_floor > 18 ||
             config.world_id != "underworld_fengdu" || player.character_id.empty()) return;
+        hell_trial_participants[player.character_id] = player.session_id;
         const auto event_id = make_event_uuid();
         const Json payload{
             {"event_id", event_id},
@@ -1725,9 +1729,10 @@ struct EnetServer::Impl {
             std::cerr << "Could not persist hell trial entry: " << error << '\n';
     }
 
-    void enqueue_hell_trial_completion(const PlayerState& player,
+    void enqueue_hell_trial_completion(const std::string& session_id,
+                                        const std::string& character_id,
                                         const honghuang::simulation::HellTrialDeathResult& result) {
-        if (!result.completion_ready || player.character_id.empty() ||
+        if (!result.completion_ready || character_id.empty() || session_id.empty() ||
             !hell_trial_encounter.enabled()) return;
         const auto* floor = hell_trial_encounter.spec();
         const auto event_id = make_event_uuid();
@@ -1743,8 +1748,8 @@ struct EnetServer::Impl {
         };
         const Json payload{
             {"event_id", event_id},
-            {"session_id", player.session_id},
-            {"character_id", player.character_id},
+            {"session_id", session_id},
+            {"character_id", character_id},
             {"floor", hell_trial_encounter.floor()},
             {"objective_complete", result.objective_kills >= result.objective_required},
             {"guardian_defeated", result.guardian_defeated},
@@ -1753,7 +1758,7 @@ struct EnetServer::Impl {
         std::string error;
         if (!enqueue_durable_event(event_id, "hell_trial_completion", payload, error))
             std::cerr << "Could not persist hell trial completion: character="
-                      << player.character_id << " floor=" << hell_trial_encounter.floor()
+                      << character_id << " floor=" << hell_trial_encounter.floor()
                       << " reason=" << error << '\n';
     }
 
@@ -2523,11 +2528,10 @@ struct EnetServer::Impl {
             const auto encounter_result = hell_trial_encounter.record_monster_death(
                 monster.runtime_id, monster.death_definition_id);
             if (encounter_result.completion_ready) {
-                // This WorldServer is dedicated to one floor. Every connected
-                // character on it has passed the server-issued floor ticket.
-                for (const auto& [peer, player] : players) {
-                    (void)peer;
-                    enqueue_hell_trial_completion(player, encounter_result);
+                // Keep the participant roster beyond disconnects. Completion is
+                // bound to each character's original authenticated floor session.
+                for (const auto& [character_id, session_id] : hell_trial_participants) {
+                    enqueue_hell_trial_completion(session_id, character_id, encounter_result);
                 }
             }
         }
