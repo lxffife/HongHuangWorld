@@ -33,9 +33,10 @@ WORLD_SERVER_HELL_FLOOR=0
 1. 客户端先请求 `GET /api/v1/characters/current/hell-trials` 获取服务端权威进度。
 2. 客户端请求 `POST /api/v1/worlds/hell-trials/{floor}/enter`，携带账号 Bearer 令牌。
 3. 中心服校验角色当前肉身、楼层解锁状态、楼层实例在线状态与容量，签发 60 秒有效的一次性票据。
-4. 客户端使用返回的 host、udp_port 和 ticket 连接指定 WorldServer。
-5. WorldServer 验证并兑换票据，成功加入后把入层事件写入 SQLite durable outbox。
-6. Outbox 后台线程重试 `POST /api/v1/servers/hell-trials/entries`，中心服再核对原始 session ID、节点身份和实际实例楼层。即使回调在角色断线后才送达，也会绑定到原始 `world_sessions` 记录，而不是要求玩家仍在线。
+4. 中心服兑换票据时读取 `world_instances.hell_floor`；地狱层出生点强制设为 `(0, 0.15, 18)`，不会沿用酆都城内的旧坐标。
+5. 客户端使用返回的 host、udp_port 和 ticket 连接指定 WorldServer；ServerWelcome 返回 `hell_floor`，Godot 根据楼层加载程序化灰盒场景。
+6. WorldServer 验证并兑换票据，成功加入后把入层事件写入 SQLite durable outbox。
+7. Outbox 后台线程重试 `POST /api/v1/servers/hell-trials/entries`，中心服再核对原始 session ID、节点身份和实际实例楼层。即使回调在角色断线后才送达，也会绑定到原始 `world_sessions` 记录，而不是要求玩家仍在线。
 
 普通 `POST /api/v1/worlds/enter` 只选择 `hell_floor IS NULL` 的常规世界实例，不会把玩家随机送入地狱某一层。
 
@@ -64,4 +65,4 @@ WorldServer 当前内置 18 份静态遭遇定义，位置在 `GameServer/WorldS
 
 本阶段已接通楼层实例注册、按层签发票据、普通入口隔离、玩家加入后可靠记录入层，以及“3 个目标怪物 + 本层守将”的服务端权威通关事件。通关事件经 SQLite durable outbox 重试投递，中心服核对目标快照、楼层和守将身份。
 
-当前遭遇计数仍保存在 WorldServer 进程内；服务重启会重置尚未完成的遭遇轮次。多波次刷怪、动态难度、队伍贡献资格、失败/重置流程、独立地图机关和 Godot 场景仍需后续开发。不要通过客户端参数直接提交通关结果。
+Godot 已有十八层入口面板、服务端票据连接、地狱内进度查看/返回酆都，以及每层程序化灰盒场景；危险标记目前仅为视觉占位。当前遭遇计数仍保存在 WorldServer 进程内；服务重启会重置尚未完成的遭遇轮次。多波次刷怪、动态难度、队伍贡献资格、失败/重置流程、独立地图机关、Boss 多阶段技能和各层精细美术场景仍需后续开发。不要通过客户端参数直接提交通关结果。
