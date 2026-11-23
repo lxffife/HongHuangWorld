@@ -72,6 +72,6 @@ Godot 已有十八层入口面板、服务端票据连接、地狱内进度查�
 ## 十八层地狱波次检查点
 
 - 每个地狱 WorldServer 的 `WORLD_SERVER_INSTANCE_KEY` 必须在进程重启后保持不变；波次检查点以 instance key 与楼层号作为唯一键。
-- 检查点保存在 `WORLD_SERVER_OUTBOX_DATABASE_PATH` 指向的本地 SQLite 数据库中，与现有 durable outbox 使用同一文件；请确保该目录位于持久化磁盘，不要使用容器临时目录。
+- 检查点保存在 `WORLD_SERVER_OUTBOX_PATH` 指向的本地 SQLite 数据库中，与现有 durable outbox 使用同一文件；请确保该目录位于持久化磁盘，不要使用容器临时目录。
 - 每次完成一个目标波次后，WorldServer 先持久化阶段，再激活下一波。最终守将阶段只有在所有合格玩家的通关事件批量写入 SQLite 成功后才会标记完成。
 - 玩家伤害/治疗贡献账本尚未持久化；重启会恢复当前波次与目标击杀数，但未结算的个人贡献需要重新累计。
