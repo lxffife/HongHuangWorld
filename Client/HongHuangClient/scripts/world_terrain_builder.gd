@@ -73,12 +73,6 @@ static func build(world_id: String) -> Node3D:
 			_add_world_box(root, "BridgePostR_" + str(i), Vector3(0.32, 1.2, 0.32), Vector3(x, 1.55, 3.55), Color("#aaa0ae"))
 		_add_world_landmark_label(root, "NaiheBridgeName", "奈何桥", Vector3(22.0, 3.1, 2.0), Color("#b8c9e8"))
 
-		# Distant reincarnation hall silhouette, placed beyond the gate avenue.
-		_add_world_box(root, "ReincarnationHallBase", Vector3(22.0, 1.2, 12.0), Vector3(-22.0, 0.6, -55.0), Color("#383344"))
-		_add_world_box(root, "ReincarnationHallBody", Vector3(16.0, 7.0, 9.0), Vector3(-22.0, 4.1, -55.0), Color("#51465c"))
-		_add_world_box(root, "ReincarnationHallRoof", Vector3(20.0, 1.0, 12.0), Vector3(-22.0, 8.1, -55.0), Color("#292536"))
-		_add_world_box(root, "ReincarnationHallRoofTop", Vector3(12.0, 0.7, 8.0), Vector3(-22.0, 9.0, -55.0), Color("#65536d"))
-		_add_world_landmark_label(root, "ReincarnationHallName", "轮回殿", Vector3(-22.0, 11.0, -54.0), Color("#c4b6dc"))
 	else:
 		# Qingyun mountain gate, sect hall, stone path and layered pine silhouettes.
 		root.add_child(QingyunVisualFactory.create_mountain_gate())
