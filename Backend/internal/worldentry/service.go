@@ -518,12 +518,16 @@ func (s *Service) RespawnCurrent(ctx context.Context, accountID string) error {
 	if errors.Is(err, sql.ErrNoRows) { return ErrNoPendingDeath }
 	if err != nil { return fmt.Errorf("load pending character death: %w", err) }
 	if maxHealth < 1 { return ErrInvalidSessionSnapshot }
+	// Close every still-live session for this character, not only the session
+	// referenced by the newest death event. This prevents a stale server session
+	// from writing a zero-health snapshot after the respawn transaction commits.
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE world_sessions SET session_state = 'closed', disconnected_at = COALESCE(disconnected_at, now()), updated_at = now()
-		 WHERE id = (SELECT session_id FROM character_death_events WHERE id = $1)
+		`UPDATE world_sessions
+		 SET session_state = 'closed', disconnected_at = COALESCE(disconnected_at, now()), updated_at = now()
+		 WHERE character_id = $1
 		   AND session_state IN ('connecting', 'active', 'saving')`,
-		deathID,
-	); err != nil { return fmt.Errorf("close dead world session before respawn: %w", err) }
+		characterID,
+	); err != nil { return fmt.Errorf("close dead world sessions before respawn: %w", err) }
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE characters SET world_id = 'underworld_fengdu',
 		 position_x = 0, position_y = 0, position_z = 0, rotation_y = 0, updated_at = now()
@@ -533,10 +537,14 @@ func (s *Service) RespawnCurrent(ctx context.Context, accountID string) error {
 		`UPDATE character_attributes SET health = max_health, mana = max_mana, updated_at = now()
 		 WHERE character_id = $1`, characterID,
 	); err != nil { return fmt.Errorf("restore respawned character attributes: %w", err) }
+	// Older unrespawned rows can remain from previous sessions (for example,
+	// when the client missed a respawn notification). Once the character is
+	// restored, close the entire pending death chain so it cannot be replayed.
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE character_death_events SET respawned_at = now(), respawn_world_id = 'underworld_fengdu'
-		 WHERE id = $1 AND respawned_at IS NULL`, deathID,
-	); err != nil { return fmt.Errorf("complete character respawn record: %w", err) }
+		`UPDATE character_death_events
+		 SET respawned_at = COALESCE(respawned_at, now()), respawn_world_id = 'underworld_fengdu'
+		 WHERE character_id = $1 AND respawned_at IS NULL`, characterID,
+	); err != nil { return fmt.Errorf("complete pending character respawn records: %w", err) }
 	if err := tx.Commit(); err != nil { return fmt.Errorf("commit character respawn: %w", err) }
 	return nil
 }
