@@ -83,6 +83,10 @@ var spell_cooldown_remaining: Dictionary = {"fireball": 0.0, "ice_bolt": 0.0, "t
 var notification_panel: PanelContainer
 var notification_label: Label
 var notification_timer: Timer
+var threat_alert_panel: PanelContainer
+var threat_alert_label: Label
+var threat_alert_bar: ProgressBar
+var threat_alert_timer: Timer
 var vitals_known := false
 var input_debug_panel: PanelContainer
 var input_debug_label: Label
@@ -1017,6 +1021,43 @@ func _build_combat_hud() -> void:
 	notification_timer.wait_time = 3.2
 	notification_timer.timeout.connect(func(): notification_panel.visible = false)
 	add_child(notification_timer)
+
+	# Persistent threat-pressure indicator: the toast is transient, while this
+	# compact meter keeps the tank/healer warning readable during the response window.
+	threat_alert_panel = PanelContainer.new()
+	threat_alert_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	threat_alert_panel.position = Vector2(-190.0, 152.0)
+	threat_alert_panel.custom_minimum_size = Vector2(380.0, 58.0)
+	threat_alert_panel.visible = false
+	_apply_panel_theme(threat_alert_panel)
+	hud.add_child(threat_alert_panel)
+	var threat_alert_layout := VBoxContainer.new()
+	threat_alert_layout.add_theme_constant_override("separation", 4)
+	threat_alert_panel.add_child(threat_alert_layout)
+	threat_alert_label = Label.new()
+	threat_alert_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	threat_alert_label.add_theme_color_override("font_color", Color("#f0c78d"))
+	threat_alert_label.add_theme_font_size_override("font_size", 12)
+	threat_alert_layout.add_child(threat_alert_label)
+	threat_alert_bar = ProgressBar.new()
+	threat_alert_bar.custom_minimum_size = Vector2(350.0, 8.0)
+	threat_alert_bar.min_value = 0.0
+	threat_alert_bar.max_value = 1.2
+	threat_alert_bar.value = 0.0
+	threat_alert_bar.show_percentage = false
+	var threat_track := StyleBoxFlat.new()
+	threat_track.bg_color = Color("#202f40")
+	threat_track.set_corner_radius_all(4)
+	var threat_fill := StyleBoxFlat.new()
+	threat_fill.bg_color = Color("#d69a4d")
+	threat_fill.set_corner_radius_all(4)
+	threat_alert_bar.add_theme_stylebox_override("background", threat_track)
+	threat_alert_bar.add_theme_stylebox_override("fill", threat_fill)
+	threat_alert_layout.add_child(threat_alert_bar)
+	threat_alert_timer = Timer.new()
+	threat_alert_timer.one_shot = true
+	threat_alert_timer.timeout.connect(func(): threat_alert_panel.visible = false)
+	add_child(threat_alert_timer)
 
 	target_info_panel = PanelContainer.new()
 	target_info_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -3661,9 +3702,20 @@ func _on_combat_event(event: Dictionary) -> void:
 		var monster_name := str(event.get("monster_name", "怪物"))
 		var current_name := str(event.get("current_target_name", "当前目标"))
 		var challenger_name := str(event.get("challenger_name", "队友"))
+		var ratio := clampf(float(event.get("challenger_ratio", 0.0)), 0.0, 1.2)
+		var will_switch := bool(event.get("will_switch", false))
 		var warning_text := "仇恨预警 · " + monster_name + "： " + challenger_name + " 已接近 " + current_name
-		if bool(event.get("will_switch", false)):
+		if will_switch:
 			warning_text = "仇恨即将转移！" + monster_name + " 可能转向 " + challenger_name
+		if is_instance_valid(threat_alert_panel):
+			threat_alert_label.text = ("危险 · " if will_switch else "仇恨压力 · ") + monster_name + "  |  " + challenger_name + " / " + current_name + "  ·  " + str(round(ratio * 100.0)) + "%"
+			threat_alert_bar.value = ratio
+			var fill := StyleBoxFlat.new()
+			fill.bg_color = Color("#d65d55") if will_switch else Color("#d69a4d")
+			fill.set_corner_radius_all(4)
+			threat_alert_bar.add_theme_stylebox_override("fill", fill)
+			threat_alert_panel.visible = true
+			threat_alert_timer.start(6.0)
 		_show_notification(warning_text, 3.8)
 		return
 	if str(event.get("action", "")) == "monster_taunt":
