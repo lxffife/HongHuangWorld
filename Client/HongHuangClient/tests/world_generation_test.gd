@@ -150,13 +150,20 @@ func _test_fengdu_navigation() -> void:
 	var playable_network: Dictionary = FengduWorldLayout.get_navigation_network()
 	var playable_validation := FengduNavigation.validate_network(playable_network)
 	assert(bool(playable_validation.get("valid", false)))
-	var north_gate_edge_found := false
+	var expected_gate_edges := {
+		"road.gate.north": "north_heaven_gate",
+		"road.gate.south": "south_ghost_gate",
+		"road.gate.east": "east_mystic_gate",
+		"road.gate.west": "west_dark_gate"
+	}
+	var gate_edge_count := 0
 	for edge_variant in playable_network.get("edges", []):
 		var edge: Dictionary = edge_variant
-		if str(edge.get("gate_id", "")) == "north_heaven_gate":
-			north_gate_edge_found = true
-			assert(str(edge.get("id", "")) == "road.gate.north")
-	assert(north_gate_edge_found)
+		var edge_id := str(edge.get("id", ""))
+		if expected_gate_edges.has(edge_id):
+			gate_edge_count += 1
+			assert(str(edge.get("gate_id", "")) == str(expected_gate_edges[edge_id]))
+	assert(gate_edge_count == 4)
 	var playable_open_route := FengduNavigation.find_path(playable_network, "junction.center", "gate.north")
 	assert(bool(playable_open_route.get("found", false)))
 	var playable_closed_route := FengduNavigation.find_path(
