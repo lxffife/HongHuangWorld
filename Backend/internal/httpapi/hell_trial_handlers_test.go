@@ -43,3 +43,20 @@ func TestHellTrialCompletionRejectsMalformedJSON(t *testing.T) {
 	h.complete(res, req)
 	if res.Code != http.StatusBadRequest { t.Fatalf("expected 400, got %d", res.Code) }
 }
+
+func TestHellTrialEntryRequiresServerKey(t *testing.T) {
+	h := &hellTrialHandlers{apiKey: "server-secret", logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/servers/hell-trials/entries", strings.NewReader(`{}`))
+	res := httptest.NewRecorder()
+	h.enter(res, req)
+	if res.Code != http.StatusUnauthorized { t.Fatalf("expected 401, got %d", res.Code) }
+}
+
+func TestHellTrialEntryRequiresNodeIdentity(t *testing.T) {
+	h := &hellTrialHandlers{apiKey: "server-secret", logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/servers/hell-trials/entries", strings.NewReader(`{}`))
+	req.Header.Set("X-World-Server-Key", "server-secret")
+	res := httptest.NewRecorder()
+	h.enter(res, req)
+	if res.Code != http.StatusBadRequest { t.Fatalf("expected 400, got %d", res.Code) }
+}
