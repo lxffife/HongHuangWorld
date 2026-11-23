@@ -928,7 +928,7 @@ func _build_combat_hud() -> void:
 	vitals_panel = PanelContainer.new()
 	vitals_panel.position = Vector2(18.0, -104.0)
 	vitals_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	vitals_panel.custom_minimum_size = Vector2(320.0, 154.0)
+	vitals_panel.custom_minimum_size = Vector2(320.0, 176.0)
 	var vitals_style := StyleBoxFlat.new()
 	vitals_style.bg_color = Color("#0c1724", 0.94)
 	vitals_style.border_color = Color("#3b5368")
