@@ -33,6 +33,9 @@ int main() {
     assert(shortage.unit_ids.empty());
     assert(roster.available_count() == 1);
     assert(director.find(high_id)->state == IncidentState::reported);
+    const auto oversized = roster.dispatch(director, high_id, 1000000000);
+    assert(!oversized.dispatched && oversized.reason == "insufficient_available_units");
+    assert(director.find(high_id)->state == IncidentState::reported);
 
     assert(!roster.mark_unit_arrived(director, "unknown_guard"));
     assert(roster.mark_unit_arrived(director, first.unit_ids[0]));
