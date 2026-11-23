@@ -14,6 +14,7 @@
 #include "simulation/hell_trial_encounter.hpp"
 #include "simulation/hell_trial_contribution.hpp"
 #include "simulation/hell_trial_wave_director.hpp"
+#include "simulation/hell_trial_boss_phase.hpp"
 #include "simulation/support_combat.hpp"
 #include "persistence/durable_outbox.hpp"
 #include "persistence/monster_contribution_writer.hpp"
@@ -1156,6 +1157,7 @@ struct EnetServer::Impl {
     ServerConfig config;
     honghuang::simulation::HellTrialEncounter hell_trial_encounter;
     honghuang::simulation::HellTrialWaveDirector hell_trial_waves;
+    honghuang::simulation::HellTrialBossPhaseController hell_trial_boss_phase;
     ENetHost* host{};
     std::unordered_map<ENetPeer*, PlayerState> players;
     // Authenticated participants must cross a minimum damage threshold to earn floor credit.
@@ -5476,14 +5478,41 @@ struct EnetServer::Impl {
                           << monster.runtime_id << '\n';
                 continue;
             }
+            const bool is_hell_guardian = hell_trial_encounter.enabled() &&
+                monster.definition.id == hell_trial_encounter.spec()->guardian_id;
+            double boss_tempo_scale = 1.0;
+            if (is_hell_guardian) {
+                const auto transition = hell_trial_boss_phase.update(
+                    static_cast<double>(monster.state.health),
+                    static_cast<double>(monster.definition.max_health));
+                boss_tempo_scale = hell_trial_boss_phase.tempo_multiplier();
+                if (transition.changed) {
+                    const char* phase_name = transition.phase == 1 ? "审判" :
+                        (transition.phase == 2 ? "刑罚" : "无间狂怒");
+                    const Json phase_event{
+                        {"action", "hell_trial_boss_phase"},
+                        {"floor", hell_trial_encounter.floor()},
+                        {"boss_definition_id", monster.definition.id},
+                        {"phase", transition.phase},
+                        {"phase_name", phase_name},
+                        {"health_ratio", transition.health_ratio},
+                        {"attack_multiplier", hell_trial_boss_phase.attack_multiplier()}
+                    };
+                    for (const auto& [observer_peer, observer] : players) {
+                        if (!honghuang::simulation::within_interest_radius(
+                                monster.state.x, monster.state.z, observer.x, observer.z, kInterestRadius)) continue;
+                        send_json(observer_peer, honghuang::protocol::MessageType::CombatEvent, phase_event);
+                    }
+                }
+            }
             const auto attack_profile = honghuang::simulation::monster_attack_profile(monster.definition);
             const auto rare_scale = monster.rare_spawn ? 1.25 : 1.0;
             const auto windup_duration = std::chrono::milliseconds(
-                static_cast<int>(std::lround(attack_profile.windup_ms * rare_scale)));
+                static_cast<int>(std::lround(attack_profile.windup_ms * rare_scale * boss_tempo_scale)));
             const auto recovery_duration = std::chrono::milliseconds(
-                static_cast<int>(std::lround(attack_profile.recovery_ms * rare_scale)));
+                static_cast<int>(std::lround(attack_profile.recovery_ms * rare_scale * boss_tempo_scale)));
             const auto attack_cooldown = std::chrono::milliseconds(
-                static_cast<int>(std::lround(attack_profile.cooldown_ms * rare_scale)));
+                static_cast<int>(std::lround(attack_profile.cooldown_ms * rare_scale * boss_tempo_scale)));
             const auto broadcast_attack_phase = [&](const std::string& phase) {
                 const Json action{
                     {"source_entity_id", monster.runtime_id},
@@ -5566,8 +5595,11 @@ struct EnetServer::Impl {
                 continue;
             }
 
+            const auto attack_power = static_cast<std::int64_t>(std::ceil(
+                static_cast<double>(monster.definition.attack) *
+                (is_hell_guardian ? hell_trial_boss_phase.attack_multiplier() : 1.0)));
             const honghuang::simulation::CombatantStats attacker{
-                static_cast<std::int64_t>(monster.definition.attack),
+                attack_power,
                 static_cast<std::int64_t>(monster.definition.defense), 1, 1
             };
             if (heavy_slam) {
