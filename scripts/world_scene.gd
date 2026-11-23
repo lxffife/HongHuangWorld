@@ -2753,6 +2753,9 @@ func _render_party_members() -> void:
 		party_create_button.visible = true
 		party_leave_button.visible = false
 		party_disband_button.visible = false
+		party_material_loot_option.visible = false
+		party_equipment_loot_option.visible = false
+		party_loot_save_button.visible = false
 		party_members_box.add_child(_party_label("尚无队伍成员"))
 		return
 	party_status_label.text = "队伍 " + str(party_data.get("id", "")).substr(0, 8) + " · " + str(members.size()) + " / " + str(party_data.get("max_members", 5)) + " 人"
