@@ -9,6 +9,7 @@
 #include "simulation/player_resources.hpp"
 #include "simulation/consumable.hpp"
 #include "simulation/status_effect.hpp"
+#include "simulation/revive.hpp"
 #include "persistence/durable_outbox.hpp"
 #include "persistence/monster_contribution_writer.hpp"
 #include "persistence/monster_runtime_checkpoint_writer.hpp"
@@ -4079,9 +4080,8 @@ struct EnetServer::Impl {
         // Rescue is a short server-authoritative channel. A death must be durably
         // recorded before another player can restore the downed character.
         if (spell_id == "revive") {
-            constexpr auto kReviveCooldown = std::chrono::seconds(45);
-            constexpr auto kReviveChannel = std::chrono::seconds(5);
-            constexpr double kReviveRange = 3.5;
+            constexpr auto kReviveCooldown = std::chrono::milliseconds(honghuang::simulation::kAllyReviveCooldownMs);
+            constexpr auto kReviveChannel = std::chrono::milliseconds(honghuang::simulation::kAllyReviveChannelMs);
             const auto now = Clock::now();
             if (!player.revive_target_character_id.empty()) {
                 reject("你正在进行救援，请先完成或中断当前救援。"); return;
@@ -4108,7 +4108,7 @@ struct EnetServer::Impl {
             }
             const double dx = static_cast<double>(target->second.x) - player.x;
             const double dz = static_cast<double>(target->second.z) - player.z;
-            if (dx * dx + dz * dz > kReviveRange * kReviveRange) {
+            if (!honghuang::simulation::ally_revive_in_range(dx, dz)) {
                 reject("救援距离过远，需要靠近倒地角色（3.5 米内）。"); return;
             }
             player.revive_target_character_id = target_id;
@@ -4367,11 +4367,14 @@ struct EnetServer::Impl {
             });
             const double moved_x = static_cast<double>(rescuer.x - rescuer.revive_start_x);
             const double moved_z = static_cast<double>(rescuer.z - rescuer.revive_start_z);
-            const bool interrupted = rescuer.health <= 0 ||
-                rescuer.health != rescuer.revive_start_health ||
-                moved_x * moved_x + moved_z * moved_z > 0.16 ||
-                target == players.end() || target->second.health > 0 ||
-                (target != players.end() && !target->second.death_snapshot_persisted);
+            const bool channel_valid = honghuang::simulation::ally_revive_channel_valid(
+                rescuer.health > 0,
+                rescuer.health == rescuer.revive_start_health,
+                moved_x * moved_x + moved_z * moved_z <= 0.16,
+                target != players.end(),
+                target != players.end() && target->second.health <= 0,
+                target != players.end() && target->second.death_snapshot_persisted);
+            const bool interrupted = !channel_valid;
             if (interrupted) {
                 send_json(rescuer_peer, honghuang::protocol::MessageType::CombatEvent,
                     Json{{"accepted", false}, {"action", "spell_cast"}, {"phase", "interrupted"},
@@ -4387,7 +4390,7 @@ struct EnetServer::Impl {
             }
             const double dx = static_cast<double>(target->second.x) - rescuer.x;
             const double dz = static_cast<double>(target->second.z) - rescuer.z;
-            if (dx * dx + dz * dz > 3.5 * 3.5) {
+            if (!honghuang::simulation::ally_revive_in_range(dx, dz)) {
                 send_json(rescuer_peer, honghuang::protocol::MessageType::CombatEvent,
                     Json{{"accepted", false}, {"action", "spell_cast"}, {"phase", "interrupted"},
                          {"spell_id", "revive"}, {"reason", "救援距离超出 3.5 米，施法中断。"}});
@@ -4397,7 +4400,7 @@ struct EnetServer::Impl {
             }
             if (now < rescuer.revive_completes_at) continue;
             auto& revived = target->second;
-            revived.health = std::max<std::int64_t>(1, revived.max_health / 4);
+            revived.health = honghuang::simulation::ally_revive_health(revived.max_health);
             revived.death_snapshot_queued = false;
             revived.death_snapshot_persisted = false;
             revived.last_combat_at = now;
