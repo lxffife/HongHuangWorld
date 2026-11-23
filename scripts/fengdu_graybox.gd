@@ -702,7 +702,7 @@ func set_city_alert_level(level: String) -> bool:
 		return true
 	if level == "lockdown" and city_alert_level != "lockdown":
 		gate_open_before_alert = local_gate_open_by_id.duplicate(true)
-	if level == "normal" and city_alert_level == "lockdown":
+	if level != "lockdown" and city_alert_level == "lockdown":
 		for gate_id_variant in gate_open_before_alert.keys():
 			var restore_gate_id := str(gate_id_variant)
 			local_gate_open_by_id[restore_gate_id] = bool(gate_open_before_alert[restore_gate_id])
