@@ -4658,7 +4658,7 @@ struct EnetServer::Impl {
             }
             const float player_delta = honghuang::simulation::movement_delta_with_effect(
                 delta, player.slow_effect, effect_now_ms);
-            if (impl_->config.world_id == "underworld_fengdu") {
+            if (config.world_id == "underworld_fengdu") {
                 honghuang::simulation::integrate_fengdu_horizontal(
                     player.x, player.z, player.move_x, player.move_z, player_delta,
                     player.movement_speed);
