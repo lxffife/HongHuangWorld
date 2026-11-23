@@ -4360,7 +4360,8 @@ struct EnetServer::Impl {
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", false}, {"attacker_character_id", player.character_id},
                            {"target_entity_id", target->runtime_id},
-                           {"reason", "战斗记录繁忙，请稍后再试。"}});
+                           {"reason", "战斗记录繁忙，请稍后再试。"},
+                           {"persistence_error", contribution_error}});
             return;
         }
         record_monster_damage(*target, player, damage.damage);
