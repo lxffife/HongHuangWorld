@@ -107,8 +107,9 @@
 - 数据库迁移 `000072_hell_trial_progress` 为世界实例增加可空 `hell_floor`（1–18），并按 `character_id + floor_number` 持久化解锁/通关状态、进入次数、时间和目标快照。
 - 玩家查询接口：`GET /api/v1/characters/current/hell-trials`，通过账号当前肉身与活动世界会话解析进度，不接受客户端传入角色 ID。
 - WorldServer 入层接口：`POST /api/v1/servers/hell-trials/entries`；通关接口：`POST /api/v1/servers/hell-trials/completions`。均要求 `X-World-Server-Key` 与 `X-World-Server-Node`，中心服核对角色活动会话确实由该节点承载，且世界实例 `hell_floor` 与请求层数一致。
+- 玩家进入某一层的服务端票据接口：`POST /api/v1/worlds/hell-trials/{floor}/enter`（Bearer 账号令牌）。中心服只会为已解锁楼层签发票据，并只选择 `world_instances.hell_floor` 精确匹配的专属实例；普通 `POST /api/v1/worlds/enter` 明确排除所有地狱专属实例，避免普通酆都入口误分配到某一层。
 - 入层事件和通关事件均使用 UUID 幂等；未记录入层、未完成目标、守将未败、层数未解锁均不能结算。当前层完成与下一层解锁在同一数据库事务内提交。
-- **尚未完成的运行时接线**：WorldServer 的真实副本入口、怪物目标计数、守将死亡事件尚未调用这两个中心服回调；Godot 端的十八层传送与场景也未接入。因此目前已具备中心服 API 和持久化规则，但不能宣称十八层已经可在客户端实际游玩。
+- **本轮新增的运行时接线**：WorldServer 支持 `WORLD_SERVER_HELL_FLOOR=1..18` 专属层实例配置；心跳会把层号写入 `world_instances.hell_floor`。角色通过地狱楼层票据进入专属实例后，WorldServer 在玩家成功加入时生成 UUID 入层事件并写入本地 SQLite durable outbox，后台线程重试调用中心服入层接口。普通世界配置使用 `WORLD_SERVER_HELL_FLOOR=0`。\n- **尚未完成的运行时接线**：关卡目标完成状态、守将实体与击杀事件仍未接入通关回调；Godot 端十八层入口 UI、传送流程与专属场景也未接入。因此当前可以完成“按解锁状态申请楼层票据→进入对应专属 WorldServer→可靠记录入层”，但还不能宣称十八层副本完整可通关。
 
 ## 九、当前实现状态
 
