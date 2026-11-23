@@ -13,6 +13,7 @@
 #include "simulation/revive.hpp"
 #include "simulation/hell_trial_encounter.hpp"
 #include "simulation/hell_trial_contribution.hpp"
+#include "simulation/hell_trial_wave_director.hpp"
 #include "simulation/support_combat.hpp"
 #include "persistence/durable_outbox.hpp"
 #include "persistence/monster_contribution_writer.hpp"
@@ -1154,6 +1155,7 @@ bool deliver_chat_message(const ServerConfig& config, const ChatJob& job,
 struct EnetServer::Impl {
     ServerConfig config;
     honghuang::simulation::HellTrialEncounter hell_trial_encounter;
+    honghuang::simulation::HellTrialWaveDirector hell_trial_waves;
     ENetHost* host{};
     std::unordered_map<ENetPeer*, PlayerState> players;
     // Authenticated participants must cross a minimum damage threshold to earn floor credit.
@@ -1247,7 +1249,8 @@ struct EnetServer::Impl {
     std::thread chat_outbox_thread;
     Clock::time_point last_chat_outbox_metrics_at{};
 
-    explicit Impl(ServerConfig value) : config(std::move(value)), hell_trial_encounter(config.hell_floor) {
+    explicit Impl(ServerConfig value) : config(std::move(value)), hell_trial_encounter(config.hell_floor),
+        hell_trial_waves(config.hell_floor) {
         const auto add_monster = [this](std::string runtime_id, std::string definition_id,
                                         std::string name, int level, float health,
                                         float attack, float defense, float speed,
@@ -1285,6 +1288,14 @@ struct EnetServer::Impl {
                         floor->recommended_level + 3,
                         420.0F + tier * 145.0F, 25.0F + tier * 2.4F,
                         12.0F + tier * 1.5F, 2.0F, 16.0F, 40.0F, 0.0F, -28.0F);
+            // Only the current wave is alive. Later objective spirits and the
+            // guardian remain dormant until the authoritative previous death.
+            for (auto& monster : monsters) {
+                if (hell_trial_waves.is_unlocked(monster.definition.id)) continue;
+                monster.state.health = 0.0F;
+                monster.state.mode = honghuang::simulation::MonsterMode::Dead;
+                monster.respawn_at = Clock::time_point::max();
+            }
         } else if (config.world_id == "qingyun_human") {
             add_monster("wolf-001", "wilderness_wolf", "荒原狼", 3, 80.0F, 12.0F, 4.0F,
                         2.8F, 10.0F, 24.0F, -12.0F, -8.0F);
@@ -2561,6 +2572,18 @@ struct EnetServer::Impl {
         if (!monster.contribution_closing) return;
         capture_monster_death_context(monster, killer);
         if (hell_trial_encounter.enabled()) {
+            const auto wave_transition = hell_trial_waves.record_death(monster.death_definition_id);
+            if (wave_transition.advanced && !wave_transition.unlocked_definition_id.empty()) {
+                const auto next_wave = std::find_if(monsters.begin(), monsters.end(),
+                    [&](const MonsterRuntime& candidate) {
+                        return candidate.definition.id == wave_transition.unlocked_definition_id;
+                    });
+                if (next_wave != monsters.end()) {
+                    next_wave->state.health = 0.0F;
+                    next_wave->state.mode = honghuang::simulation::MonsterMode::Dead;
+                    next_wave->respawn_at = Clock::now();
+                }
+            }
             const auto encounter_result = hell_trial_encounter.record_monster_death(
                 monster.contribution_instance_id, monster.death_definition_id);
             if (encounter_result.completion_ready) {
@@ -5093,6 +5116,10 @@ struct EnetServer::Impl {
                     monster.respawn_at.time_since_epoch().count() == 0) {
                     if (!monster.death_finalizer_submitted)
                         submit_monster_death_finalization(monster);
+                    continue;
+                }
+                if (hell_trial_waves.enabled() &&
+                    !hell_trial_waves.is_unlocked(monster.definition.id)) {
                     continue;
                 }
                 if (monster.respawn_at.time_since_epoch().count() != 0 && now >= monster.respawn_at) {
