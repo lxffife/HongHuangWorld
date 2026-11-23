@@ -187,6 +187,10 @@ if(BUILD_TESTING)
     target_link_libraries(monster_contribution_writer_test PRIVATE SQLite::SQLite3 Threads::Threads)
     add_test(NAME monster_contribution_writer_test COMMAND monster_contribution_writer_test)
 
+    add_executable(monster_reward_distribution_test tests/monster_reward_distribution_test.cpp)
+    target_include_directories(monster_reward_distribution_test PRIVATE include)
+    add_test(NAME monster_reward_distribution_test COMMAND monster_reward_distribution_test)
+
     add_executable(monster_death_finalizer_test
         tests/monster_death_finalizer_test.cpp
         src/monster_death_finalizer.cpp
