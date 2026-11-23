@@ -3,6 +3,7 @@ extends Node3D
 const WORLD_LAYOUT = preload("res://scripts/fengdu_world_layout.gd")
 const WORLD_NAVIGATION = preload("res://scripts/fengdu_navigation.gd")
 const GATE_POLICY = preload("res://scripts/fengdu_gate_policy.gd")
+const INCIDENT_ALERT = preload("res://scripts/fengdu_incident_alert.gd")
 ## Walkable Fengdu capital graybox. All dimensions in meters.
 ## This is a client-side art/navigation prototype; gates and permissions are not authoritative.
 
@@ -79,6 +80,7 @@ var patrol_incident_queue: Array[Dictionary] = []
 var patrol_incident_records: Array[Dictionary] = []
 var patrol_dispatch_queue_elapsed := 0.0
 var patrol_incident_focus_id := ""
+var patrol_alert_controls_city := false
 var judge_workbench_root: Control
 var judge_case_list: ItemList
 var judge_case_detail: RichTextLabel
@@ -2983,6 +2985,19 @@ func _update_patrol_alert(delta: float) -> void:
 		patrol_dispatch_queue_elapsed = 0.0
 		_process_patrol_dispatch_queue()
 	_update_patrol_incident_lifecycle(delta)
+	_sync_city_alert_with_patrol_incidents()
+
+
+func _sync_city_alert_with_patrol_incidents() -> void:
+	var target_level := INCIDENT_ALERT.resolve_alert_level(patrol_incident_records)
+	if target_level != "normal":
+		patrol_alert_controls_city = true
+		if city_alert_level != target_level:
+			set_city_alert_level(target_level)
+	elif patrol_alert_controls_city:
+		patrol_alert_controls_city = false
+		if city_alert_level != "normal":
+			set_city_alert_level("normal")
 
 
 func _sync_soldier_formation(agent: Dictionary) -> void:
@@ -3721,7 +3736,7 @@ func _build_hud() -> void:
 	npc_detail_label.custom_minimum_size = Vector2(410, 34)
 	column.add_child(npc_detail_label)
 	var help := Label.new()
-	help.text = "WASD 移动 · 空格跳跃 · 鼠标左键捕获视角 · ESC 释放 · E 交互/城门核验 · F6 活动点 · F7 城防警戒演示"
+	help.text = "WASD 移动 · 空格跳跃 · 鼠标左键捕获视角 · ESC 释放 · E 交互/城门核验 · F6 活动点 · F7 城防演示"
 	column.add_child(help)
 
 
