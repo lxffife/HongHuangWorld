@@ -169,6 +169,78 @@ func (s *Service) ApplyDeltaInTx(ctx context.Context, tx *sql.Tx, accountID, cur
 	return result, nil
 }
 
+
+var ErrIssuanceNotAllowed = errors.New("currency issuance is not allowed by world policy")
+
+// ApplyIssuanceInTx is the only path for server-originated currency issuance.
+// It enforces the world/source policy and daily per-account cap while holding
+// the same account advisory lock used by the wallet ledger.
+func (s *Service) ApplyIssuanceInTx(
+	ctx context.Context, tx *sql.Tx, accountID, worldID, currencyID, eventKey string,
+	amount int64, sourceType, sourceID, note string,
+) (LedgerResult, error) {
+	if tx == nil || strings.TrimSpace(accountID) == "" || strings.TrimSpace(worldID) == "" ||
+		strings.TrimSpace(sourceType) == "" || amount <= 0 || amount == math.MinInt64 ||
+		len(eventKey) == 0 || len(eventKey) > 128 {
+		return LedgerResult{}, ErrInvalidRequest
+	}
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, accountID); err != nil {
+		return LedgerResult{}, fmt.Errorf("lock economy account issuance scope: %w", err)
+	}
+
+	// A committed ledger key is an idempotent replay, even when the daily cap
+	// has since been reached.
+	var existing LedgerResult
+	var existingType string
+	err := tx.QueryRowContext(ctx, `SELECT currency_id, entry_type, delta, available_after, frozen_after
+		FROM economy_ledger_entries WHERE account_id = $1 AND event_key = $2`, accountID, eventKey).
+		Scan(&existing.CurrencyID, &existingType, &existing.Delta, &existing.AvailableAfter, &existing.FrozenAfter)
+	if err == nil {
+		if existing.CurrencyID != currencyID || existing.Delta != amount || existingType != "grant" {
+			return LedgerResult{}, ErrIdempotencyConflict
+		}
+		existing.Applied = false
+		return existing, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return LedgerResult{}, fmt.Errorf("check currency issuance idempotency: %w", err)
+	}
+
+	var issueEnabled bool
+	if err := tx.QueryRowContext(ctx, `SELECT issue_enabled FROM currency_world_rules
+		WHERE world_id = $1 AND currency_id = $2`, worldID, currencyID).Scan(&issueEnabled); err != nil {
+		if errors.Is(err, sql.ErrNoRows) { return LedgerResult{}, ErrIssuanceNotAllowed }
+		return LedgerResult{}, fmt.Errorf("load currency world issuance rule: %w", err)
+	}
+	if !issueEnabled { return LedgerResult{}, ErrIssuanceNotAllowed }
+
+	var maxPerEvent, dailyCap int64
+	var policyEnabled, requiresTrustedServer bool
+	if err := tx.QueryRowContext(ctx, `SELECT max_per_event, daily_cap, enabled, requires_trusted_server
+		FROM currency_issuance_policies
+		WHERE world_id = $1 AND currency_id = $2 AND source_type = $3`,
+		worldID, currencyID, sourceType).Scan(&maxPerEvent, &dailyCap, &policyEnabled, &requiresTrustedServer); err != nil {
+		if errors.Is(err, sql.ErrNoRows) { return LedgerResult{}, ErrIssuanceNotAllowed }
+		return LedgerResult{}, fmt.Errorf("load currency issuance policy: %w", err)
+	}
+	if !policyEnabled || !requiresTrustedServer || amount > maxPerEvent {
+		return LedgerResult{}, ErrIssuanceNotAllowed
+	}
+
+	var issuedToday int64
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(delta), 0)
+		FROM economy_ledger_entries
+		WHERE account_id = $1 AND currency_id = $2 AND source_type = $3
+		  AND delta > 0 AND created_at >= date_trunc('day', now())`,
+		accountID, currencyID, sourceType).Scan(&issuedToday); err != nil {
+		return LedgerResult{}, fmt.Errorf("calculate daily currency issuance: %w", err)
+	}
+	if issuedToday > dailyCap-amount { return LedgerResult{}, ErrIssuanceNotAllowed }
+
+	return s.ApplyDeltaInTx(ctx, tx, accountID, currencyID, eventKey, "grant", amount,
+		sourceType, sourceID, note)
+}
+
 func validDeltaRequest(accountID, currencyID, eventKey, entryType string, delta int64) bool {
 	if strings.TrimSpace(accountID) == "" || len(currencyID) == 0 || len(currencyID) > 64 ||
 		len(eventKey) == 0 || len(eventKey) > 128 || delta == 0 || delta == math.MinInt64 { return false }
