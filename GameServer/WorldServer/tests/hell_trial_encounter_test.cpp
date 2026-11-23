@@ -48,15 +48,12 @@ int main() {
     HellTrialEncounter encounter(1);
     auto result = encounter.record_monster_death("mob-a", "hell_f01_tongue_wraith");
     assert(result.objective_kill_recorded && result.objective_kills == 1);
-    result = encounter.record_monster_death("mob-a-life-1", "hell_f01_tongue_wraith");
+    result = encounter.record_monster_death("mob-a", "hell_f01_tongue_wraith");
     assert(!result.objective_kill_recorded && result.objective_kills == 1);
-    // A respawn keeps its spawn-point identity but receives a new life ID.
-    result = encounter.record_monster_death("mob-a-life-2", "hell_f01_tongue_wraith");
+    result = encounter.record_monster_death("mob-b", "hell_f01_sin_clerk");
     assert(result.objective_kill_recorded && result.objective_kills == 2);
-    result = encounter.record_monster_death("mob-b-life-1", "hell_f01_sin_clerk");
+    result = encounter.record_monster_death("mob-c", "hell_f01_echo_ghost");
     assert(result.objective_kill_recorded && result.objective_kills == 3);
-    result = encounter.record_monster_death("mob-c-life-1", "hell_f01_echo_ghost");
-    assert(result.objective_kill_recorded && result.objective_kills == 4);
     assert(!result.completion_ready); // Objective alone cannot complete the floor.
 
     result = encounter.record_monster_death("boss-1", "hell_f01_tongue_jailer");
@@ -66,6 +63,20 @@ int main() {
 
     result = encounter.record_monster_death("boss-1", "hell_f01_tongue_jailer");
     assert(!result.completion_ready); // Completion callback is emitted only once.
+
+    HellTrialEncounter respawn(1);
+    result = respawn.record_monster_death("spawn-a-life-1", "hell_f01_tongue_wraith");
+    assert(result.objective_kills == 1 && result.objective_kill_recorded);
+    result = respawn.record_monster_death("spawn-a-life-1", "hell_f01_tongue_wraith");
+    assert(result.objective_kills == 1 && !result.objective_kill_recorded);
+    // The same spawn point gets a new life ID after respawn and counts once more.
+    result = respawn.record_monster_death("spawn-a-life-2", "hell_f01_tongue_wraith");
+    assert(result.objective_kills == 2 && result.objective_kill_recorded);
+    result = respawn.record_monster_death("spawn-a-life-3", "hell_f01_tongue_wraith");
+    assert(result.objective_kills == 3 && result.objective_kill_recorded);
+    // The required count is capped; additional respawns cannot inflate snapshots.
+    result = respawn.record_monster_death("spawn-a-life-4", "hell_f01_tongue_wraith");
+    assert(result.objective_kills == 3 && !result.objective_kill_recorded);
 
     HellTrialEncounter boss_first(18);
     result = boss_first.record_monster_death("boss-18", "hell_f18_abyss_judge");
