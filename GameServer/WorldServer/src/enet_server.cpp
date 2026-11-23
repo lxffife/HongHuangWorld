@@ -4657,6 +4657,8 @@ struct EnetServer::Impl {
                     monster.contribution_closing = false;
                     monster.damage_contributions.clear();
                     monster.threat_by_character.clear();
+                    monster.taunt_target_character_id.clear();
+                    monster.taunt_expires_at = Clock::time_point{};
                     monster.death_context_captured = false;
                     monster.death_intent_persisted = false;
                     monster.death_finalizer_submitted = false;
@@ -4830,6 +4832,7 @@ struct EnetServer::Impl {
             }
             double nearest_distance_squared = std::numeric_limits<double>::max();
             const PlayerState* nearest_player = nullptr;
+            bool taunt_override_active = false;
             if (!monster.taunt_target_character_id.empty()) {
                 const auto taunt_target = std::find_if(players.begin(), players.end(),
                     [&](const auto& entry) {
@@ -4850,6 +4853,7 @@ struct EnetServer::Impl {
                     monster.taunt_expires_at.time_since_epoch()).count();
                 if (honghuang::simulation::taunt_override_is_active(
                         alive, within_leash, now_ms, expires_ms)) {
+                    taunt_override_active = true;
                     target_storage = {taunt_target->second.character_id,
                         taunt_target->second.x, taunt_target->second.z, true};
                     nearest_target = &target_storage;
@@ -4894,7 +4898,7 @@ struct EnetServer::Impl {
             }
             // A current target remains sticky until another combatant exceeds
             // its decayed threat by 20%; this prevents rapid target oscillation.
-            if (nearest_target == nullptr && highest_threat_player != nullptr &&
+            if (!taunt_override_active && highest_threat_player != nullptr &&
                 honghuang::simulation::should_switch_monster_target(
                     current_effective_threat, highest_effective_threat)) {
                 target_storage = {highest_threat_player->character_id,
