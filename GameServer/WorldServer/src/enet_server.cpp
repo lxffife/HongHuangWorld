@@ -1851,12 +1851,11 @@ struct EnetServer::Impl {
         // only characters that contributed enough authenticated damage qualify.
     }
 
-    void enqueue_hell_trial_completion(const std::string& session_id,
-                                        const std::string& character_id,
-                                        const honghuang::simulation::HellTrialDeathResult& result,
-                                        std::int64_t delay_ms = 0) {
+    std::optional<honghuang::persistence::OutboxEvent> make_hell_trial_completion_event(
+        const std::string& session_id, const std::string& character_id,
+        const honghuang::simulation::HellTrialDeathResult& result) {
         if (!result.completion_ready || character_id.empty() || session_id.empty() ||
-            !hell_trial_encounter.enabled()) return;
+            !hell_trial_encounter.enabled()) return std::nullopt;
         const auto* floor = hell_trial_encounter.spec();
         const auto event_id = make_event_uuid();
         const Json snapshot{
@@ -1880,14 +1879,10 @@ struct EnetServer::Impl {
             {"guardian_defeated", result.guardian_defeated},
             {"objective_snapshot", snapshot}
         };
-        std::string error;
-        const bool stored = delay_ms > 0
-            ? enqueue_durable_event_after(event_id, "hell_trial_completion", payload, delay_ms, error)
-            : enqueue_durable_event(event_id, "hell_trial_completion", payload, error);
-        if (!stored)
-            std::cerr << "Could not persist hell trial completion: character="
-                      << character_id << " floor=" << hell_trial_encounter.floor()
-                      << " reason=" << error << '\n';
+        const auto now = wall_clock_ms();
+        return honghuang::persistence::OutboxEvent{
+            event_id, "hell_trial_completion", payload.dump(), 0, now, now, {}
+        };
     }
 
     void enqueue_soul_reward(const PlayerState& player, std::int64_t experience,
@@ -2662,17 +2657,26 @@ struct EnetServer::Impl {
         if (!monster.contribution_closing) return;
         capture_monster_death_context(monster, killer);
         if (hell_trial_encounter.enabled()) {
+            const int previous_stage = hell_trial_waves.stage();
             const auto wave_transition = hell_trial_waves.record_death(monster.death_definition_id);
-            if (wave_transition.advanced) {
-                (void)persist_hell_trial_wave_checkpoint();
-                Json wave_event = hell_trial_runtime_snapshot();
-                wave_event["action"] = "hell_trial_wave_transition";
-                for (const auto& [recipient_peer, recipient] : players) {
-                    (void)recipient;
-                    send_json(recipient_peer, honghuang::protocol::MessageType::CombatEvent, wave_event);
+            bool wave_checkpoint_failed = false;
+            if (wave_transition.advanced && wave_transition.stage < 4) {
+                if (!persist_hell_trial_wave_checkpoint()) {
+                    // Do not expose the next wave until its progress is durable.
+                    (void)hell_trial_waves.restore_stage(previous_stage);
+                    wave_checkpoint_failed = true;
+                } else {
+                    Json wave_event = hell_trial_runtime_snapshot();
+                    wave_event["action"] = "hell_trial_wave_transition";
+                    for (const auto& [recipient_peer, recipient] : players) {
+                        (void)recipient;
+                        send_json(recipient_peer, honghuang::protocol::MessageType::CombatEvent, wave_event);
+                    }
                 }
             }
-            if (wave_transition.advanced && !wave_transition.unlocked_definition_id.empty()) {
+
+            if (wave_transition.advanced && !wave_checkpoint_failed &&
+                !wave_transition.unlocked_definition_id.empty()) {
                 const auto next_wave = std::find_if(monsters.begin(), monsters.end(),
                     [&](const MonsterRuntime& candidate) {
                         return candidate.definition.id == wave_transition.unlocked_definition_id;
@@ -2681,19 +2685,51 @@ struct EnetServer::Impl {
                     next_wave->state.health = 0.0F;
                     next_wave->state.mode = honghuang::simulation::MonsterMode::Dead;
                     next_wave->respawn_at = Clock::now();
+                } else {
+                    std::cerr << "[HellTrialWave] next wave monster is missing: "
+                              << wave_transition.unlocked_definition_id << std::endl;
                 }
             }
+
             const auto encounter_result = hell_trial_encounter.record_monster_death(
                 monster.contribution_instance_id, monster.death_definition_id);
-            if (encounter_result.completion_ready) {
-                // Retain contribution across reconnects, but only reward participants
-                // who dealt at least 10% of one objective monster's base health.
+            if (wave_checkpoint_failed) {
+                (void)hell_trial_encounter.restore_stage(previous_stage);
+            }
+
+            if (encounter_result.completion_ready && !wave_checkpoint_failed) {
                 const auto eligible = hell_trial_contributions.eligible_participants(
                     hell_trial_minimum_contribution_damage());
+                std::vector<honghuang::persistence::OutboxEvent> completion_events;
+                completion_events.reserve(eligible.size());
                 for (const auto& participant : eligible) {
-                    enqueue_hell_trial_completion(participant.session_id,
-                                                  participant.character_id, encounter_result);
+                    auto event = make_hell_trial_completion_event(
+                        participant.session_id, participant.character_id, encounter_result);
+                    if (event) completion_events.push_back(std::move(*event));
                 }
+                std::string completion_error;
+                if (enqueue_durable_events(completion_events, completion_error)) {
+                    // Stage four is committed only after every eligible completion
+                    // event is safely in the same SQLite transaction.
+                    (void)persist_hell_trial_wave_checkpoint();
+                    Json wave_event = hell_trial_runtime_snapshot();
+                    wave_event["action"] = "hell_trial_wave_transition";
+                    for (const auto& [recipient_peer, recipient] : players) {
+                        (void)recipient;
+                        send_json(recipient_peer, honghuang::protocol::MessageType::CombatEvent, wave_event);
+                    }
+                } else {
+                    std::cerr << "[HellTrialWave] completion batch was not durable: "
+                              << completion_error << std::endl;
+                    (void)hell_trial_waves.restore_stage(3);
+                    (void)hell_trial_encounter.restore_stage(3);
+                }
+            } else if (wave_transition.advanced && wave_transition.stage == 4 &&
+                       !encounter_result.completion_ready) {
+                std::cerr << "[HellTrialWave] guardian transition did not complete encounter; rolling back"
+                          << std::endl;
+                (void)hell_trial_waves.restore_stage(3);
+                (void)hell_trial_encounter.restore_stage(3);
             }
         }
         monster.state.target_id.clear();
