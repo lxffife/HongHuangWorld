@@ -7,7 +7,7 @@ const ACTIVE_STATES := ["queued", "assigned", "investigating"]
 static func resolve_alert_level(records: Array) -> String:
 	var level := "normal"
 	for value in records:
-		if not value is Dictionary:
+		if typeof(value) != TYPE_DICTIONARY:
 			continue
 		var incident: Dictionary = value
 		if str(incident.get("state", "")) not in ACTIVE_STATES:
