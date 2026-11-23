@@ -5643,7 +5643,7 @@ struct EnetServer::Impl {
             if (!honghuang::simulation::tick_monster(
                     monster.definition, monster.state, nearest_target, monster_delta, &attack_profile)) {
                 std::cerr << "Skipping invalid monster simulation state: "
-                          << monster.runtime_id << '\\n';
+                          << monster.runtime_id << '\n';
                 continue;
             }
             const auto rare_scale = monster.rare_spawn ? 1.25 : 1.0;
