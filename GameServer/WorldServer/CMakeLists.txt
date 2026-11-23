@@ -28,6 +28,7 @@ add_executable(world_server
     src/enet_server.cpp
     src/hell_trial_encounter.cpp
     src/hell_trial_contribution.cpp
+    src/hell_trial_wave_director.cpp
     src/frame.cpp
     src/durable_outbox.cpp
     src/monster_runtime_checkpoint_writer.cpp
@@ -87,6 +88,14 @@ if(BUILD_TESTING)
     )
     target_include_directories(hell_trial_contribution_test PRIVATE include)
     add_test(NAME hell_trial_contribution_test COMMAND hell_trial_contribution_test)
+
+    add_executable(hell_trial_wave_director_test
+        tests/hell_trial_wave_director_test.cpp
+        src/hell_trial_wave_director.cpp
+        src/hell_trial_encounter.cpp
+    )
+    target_include_directories(hell_trial_wave_director_test PRIVATE include)
+    add_test(NAME hell_trial_wave_director_test COMMAND hell_trial_wave_director_test)
 
     add_executable(combat_test tests/combat_test.cpp)
     target_include_directories(combat_test PRIVATE include)
