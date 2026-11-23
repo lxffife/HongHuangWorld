@@ -3,6 +3,7 @@ extends SceneTree
 const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
 const WorldChunkStreamerScript = preload("res://scripts/world_chunk_streamer.gd")
 const FengduCityBuilder = preload("res://scripts/fengdu_city_builder.gd")
+const FengduNavigation = preload("res://scripts/fengdu_navigation.gd")
 const HellFloorBuilder = preload("res://scripts/underworld_hell_floor_builder.gd")
 
 
@@ -14,6 +15,7 @@ func _run_world_generation_tests() -> void:
 	_test_world_bounds_and_hell_catalog()
 	_test_chunk_streaming()
 	_test_fengdu_city_blockout()
+	_test_fengdu_navigation()
 	_test_hell_floor_blockout()
 	print("WORLD_GENERATION_TESTS_OK")
 	quit(0)
@@ -89,3 +91,29 @@ func _test_hell_floor_blockout() -> void:
 	assert(floor_scene.get_node_or_null("GuardianDais") is MeshInstance3D)
 	assert(floor_scene.get_node_or_null("ArenaWallX_-1.0") is StaticBody3D)
 	floor_scene.free()
+
+
+func _test_fengdu_navigation() -> void:
+	var network := FengduNavigation.build_city_network(WorldMapCatalog.get_fengdu_city_plan())
+	var validation := FengduNavigation.validate_network(network)
+	assert(bool(validation.get("valid", false)))
+	assert(int(validation.get("node_count", 0)) == 15)
+	assert(int(validation.get("edge_count", 0)) == 11)
+
+	var open_route := FengduNavigation.find_path(network, "imperial_palace", "north_gate")
+	assert(bool(open_route.get("found", false)))
+	assert(open_route.get("node_ids", []).has("north_gate"))
+
+	var closed_route := FengduNavigation.find_path(network, "imperial_palace", "north_gate", {"closed_gates": ["north_gate"]})
+	assert(not bool(closed_route.get("found", false)))
+	assert(str(closed_route.get("reason", "")) == "unreachable")
+
+	var alternate_route := FengduNavigation.find_path(network, "ghost_registry", "ghost_market", {"blocked_edge_ids": ["city_road_05"]})
+	assert(bool(alternate_route.get("found", false)))
+
+	var narrow_route := FengduNavigation.find_path(network, "imperial_palace", "north_gate", {"minimum_width": 13.0})
+	assert(not bool(narrow_route.get("found", false)))
+
+	var nearest := FengduNavigation.find_nearest_node(network, Vector3.ZERO, ["palace", "court"])
+	assert(bool(nearest.get("found", false)))
+	assert(str(nearest.get("node_id", "")) == "imperial_palace")
