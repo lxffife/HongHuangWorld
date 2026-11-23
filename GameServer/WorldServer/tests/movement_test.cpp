@@ -56,7 +56,7 @@ int main() {
 
 
     // Fengdu server-authoritative collision: buildings and walls block, gate gaps remain open.
-    float city_x = 0.0F;
+    float city_x = 10.0F;
     float city_z = -95.5F;
     integrate_fengdu_horizontal(city_x, city_z, 0.0F, -1.0F, 0.1F, 5.0F);
     assert(city_z > -96.0F); // north wall blocks entry through solid section
