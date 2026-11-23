@@ -32,13 +32,28 @@ func TestValidateCompletion(t *testing.T) {
 		{"guardian alive",func(r *CompletionRequest){r.GuardianDefeated=false},ErrGuardianAlive},
 		{"wrong floor proof",func(r *CompletionRequest){r.ObjectiveSnapshot=json.RawMessage(`{"floor":2,"objective_kills":3,"objective_required":3,"objective_complete":true,"guardian_id":"hell_f01_tongue_jailer","guardian_defeated":true,"source":"worldserver_authoritative_monster_death"}`)},ErrInvalid},
 		{"wrong guardian identity",func(r *CompletionRequest){r.ObjectiveSnapshot=json.RawMessage(`{"floor":1,"objective_kills":3,"objective_required":3,"objective_complete":true,"guardian_id":"fake_guardian","guardian_defeated":true,"source":"worldserver_authoritative_monster_death"}`)},ErrInvalid},
-		{"objective count below requirement",func(r *CompletionRequest){r.ObjectiveSnapshot=json.RawMessage(`{"floor":1,"objective_kills":2,"objective_required":3,"objective_complete":true,"guardian_id":"hell_f01_tongue_jailer","guardian_defeated":true,"source":"worldserver_authoritative_monster_death"}`)},ErrObjectiveIncomplete},
-		{"objective count above requirement",func(r *CompletionRequest){r.ObjectiveSnapshot=json.RawMessage(`{"floor":1,"objective_kills":4,"objective_required":3,"objective_complete":true,"guardian_id":"hell_f01_tongue_jailer","guardian_defeated":true,"source":"worldserver_authoritative_monster_death"}`)},ErrObjectiveIncomplete},
+		{"objective count below requirement",func(r *CompletionRequest){r.ObjectiveSnapshot=json.RawMessage(`{"floor":1,"objective_kills":2,"objective_required":3,"objective_complete":true,"participant_damage":32,"minimum_contribution_damage":32,"guardian_id":"hell_f01_tongue_jailer","guardian_defeated":true,"source":"worldserver_authoritative_monster_death"}`)},ErrObjectiveIncomplete},
+		{"objective count above requirement",func(r *CompletionRequest){r.ObjectiveSnapshot=json.RawMessage(`{"floor":1,"objective_kills":4,"objective_required":3,"objective_complete":true,"participant_damage":32,"minimum_contribution_damage":32,"guardian_id":"hell_f01_tongue_jailer","guardian_defeated":true,"source":"worldserver_authoritative_monster_death"}`)},ErrObjectiveIncomplete},
 		{"snapshot guardian alive",func(r *CompletionRequest){r.ObjectiveSnapshot=json.RawMessage(`{"floor":1,"objective_kills":3,"objective_required":3,"objective_complete":true,"participant_damage":32,"minimum_contribution_damage":32,"guardian_id":"hell_f01_tongue_jailer","guardian_defeated":false,"source":"worldserver_authoritative_monster_death"}`)},ErrGuardianAlive},
 		{"participant contribution below threshold",func(r *CompletionRequest){r.ObjectiveSnapshot=json.RawMessage(`{"floor":1,"objective_kills":3,"objective_required":3,"objective_complete":true,"participant_damage":31,"minimum_contribution_damage":32,"guardian_id":"hell_f01_tongue_jailer","guardian_defeated":true,"source":"worldserver_authoritative_monster_death"}`)},ErrContributionInsufficient},
 		{"forged contribution threshold",func(r *CompletionRequest){r.ObjectiveSnapshot=json.RawMessage(`{"floor":1,"objective_kills":3,"objective_required":3,"objective_complete":true,"participant_damage":32,"minimum_contribution_damage":1,"guardian_id":"hell_f01_tongue_jailer","guardian_defeated":true,"source":"worldserver_authoritative_monster_death"}`)},ErrInvalid},
 	}
 	for _,tc:=range cases { t.Run(tc.name,func(t *testing.T){req:=valid;tc.mutate(&req);if err:=validateCompletion(req);!errors.Is(err,tc.want){t.Fatalf("got %v, want %v",err,tc.want)}}) }
+}
+
+func TestMinimumContributionDamage(t *testing.T) {
+	if got := minimumContributionDamage(1); got != 32 {
+		t.Fatalf("floor 1 threshold = %d, want 32", got)
+	}
+	if got := minimumContributionDamage(2); got != 43 {
+		t.Fatalf("floor 2 threshold = %d, want 43", got)
+	}
+	if got := minimumContributionDamage(18); got != 233 {
+		t.Fatalf("floor 18 threshold = %d, want 233", got)
+	}
+	if got := minimumContributionDamage(0); got != 0 {
+		t.Fatalf("invalid floor threshold = %d, want 0", got)
+	}
 }
 
 func TestGuardianDefinitionCatalog(t *testing.T) {
