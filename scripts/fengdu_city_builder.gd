@@ -165,7 +165,7 @@ static func _add_moat_and_bridges(root: Node3D) -> void:
 			Vector3(side * 30.0, moat_y, -19.05), moat_color)
 	# East and west runs are split above/below their gate openings.
 	for side in [-1.0, 1.0]:
-		var x := side * 50.95
+		var x: float = float(side) * 50.95
 		var prefix := "West" if side < 0.0 else "East"
 		_add_moat_segment(root, prefix + "Moat_North",
 			Vector3(moat_depth, 0.18, 38.0), Vector3(x, moat_y, -85.0), moat_color)
