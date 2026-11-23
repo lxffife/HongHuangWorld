@@ -73,6 +73,11 @@ var hell_floor_visual_root: Node3D
 var hell_trial_panel: Variant
 var hell_trial_open_button: Button
 var hud_visible := true
+var hud_toggle_button: Button
+var hud_restore_button: Button
+var help_button: Button
+var help_panel: PanelContainer
+var help_restore_mouse_captured := false
 var death_panel: PanelContainer
 var death_message_label: Label
 var compact_hud_panel: PanelContainer
@@ -558,6 +563,23 @@ func _build_compact_hud() -> void:
 	details_toggle_button.custom_minimum_size = Vector2(112.0, 34.0)
 	details_toggle_button.pressed.connect(_toggle_details_panel)
 	hud.add_child(details_toggle_button)
+	hud_toggle_button = Button.new()
+	hud_toggle_button.text = "隐藏界面  F1"
+	hud_toggle_button.custom_minimum_size = Vector2(112.0, 34.0)
+	hud_toggle_button.pressed.connect(_toggle_hud_visibility)
+	hud.add_child(hud_toggle_button)
+	help_button = Button.new()
+	help_button.text = "快捷键  F1?"
+	help_button.custom_minimum_size = Vector2(112.0, 34.0)
+	help_button.pressed.connect(_toggle_help_panel)
+	hud.add_child(help_button)
+	hud_restore_button = Button.new()
+	hud_restore_button.text = "显示界面  F1"
+	hud_restore_button.custom_minimum_size = Vector2(124.0, 38.0)
+	hud_restore_button.visible = false
+	hud_restore_button.pressed.connect(_toggle_hud_visibility)
+	hud.add_child(hud_restore_button)
+	_build_controls_help_panel(hud)
 	soul_choice_button = Button.new()
 	soul_choice_button.text = "分配无相灵魄"
 	soul_choice_button.position = Vector2(140.0, 118.0)
@@ -1140,14 +1162,14 @@ func _build_combat_hud() -> void:
 	_update_spell_cooldown_hud()
 	_update_spell_mastery_hud()
 	notification_panel = PanelContainer.new()
-	notification_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	notification_panel.position = Vector2(-260.0, 96.0)
-	notification_panel.custom_minimum_size = Vector2(520.0, 88.0)
+	notification_panel.set_anchors_preset(Control.PRESET_CENTER)
+	notification_panel.position = Vector2(-230.0, 140.0)
+	notification_panel.custom_minimum_size = Vector2(460.0, 68.0)
 	notification_panel.visible = false
 	_apply_panel_theme(notification_panel)
 	hud.add_child(notification_panel)
 	notification_label = Label.new()
-	notification_label.custom_minimum_size = Vector2(480.0, 64.0)
+	notification_label.custom_minimum_size = Vector2(420.0, 48.0)
 	notification_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	notification_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	notification_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1296,6 +1318,9 @@ func _show_notification(message: String, duration: float = 3.2) -> void:
 	notification_panel.visible = true
 	if is_instance_valid(notification_timer):
 		notification_timer.start(duration)
+	if is_instance_valid(notification_panel):
+		var viewport_size := get_viewport().get_visible_rect().size
+		notification_panel.position = Vector2(-230.0, viewport_size.y * 0.16)
 
 func _update_vitals(current_health: int, max_health: int) -> void:
 	if max_health <= 0 or current_health < 0:
@@ -1309,6 +1334,92 @@ func _toggle_details_panel() -> void:
 	details_visible = not details_visible
 	$HUD/Panel.visible = hud_visible and details_visible
 	details_toggle_button.text = "收起角色面板" if details_visible else "角色 · 修炼"
+
+func _toggle_hud_visibility() -> void:
+	hud_visible = not hud_visible
+	$HUD/Panel.visible = hud_visible and details_visible
+	if is_instance_valid(compact_hud_panel):
+		compact_hud_panel.visible = hud_visible
+	if is_instance_valid(chat_panel):
+		chat_panel.visible = hud_visible
+	if is_instance_valid(details_toggle_button):
+		details_toggle_button.visible = hud_visible
+	if is_instance_valid(soul_choice_button):
+		soul_choice_button.visible = hud_visible and soul_essence_profile.get("pending_rare_choices", []).size() > 0
+	if is_instance_valid(target_info_panel):
+		target_info_panel.visible = hud_visible and not selected_monster_id.is_empty()
+	if is_instance_valid(minimap_panel):
+		minimap_panel.visible = hud_visible and get_viewport().get_visible_rect().size.x >= 520.0 and not (is_instance_valid(friend_panel) and friend_panel.visible)
+	if is_instance_valid(input_debug_panel):
+		input_debug_panel.visible = hud_visible and input_debug_visible
+	if is_instance_valid(notification_panel) and not hud_visible:
+		notification_panel.visible = false
+	if is_instance_valid(revive_channel_panel):
+		revive_channel_panel.visible = hud_visible and revive_channel_remaining > 0.0
+	if is_instance_valid(help_panel) and not hud_visible:
+		help_panel.visible = false
+	if is_instance_valid(hud_toggle_button):
+		hud_toggle_button.visible = hud_visible
+	if is_instance_valid(hud_restore_button):
+		hud_restore_button.visible = not hud_visible
+	if is_instance_valid(help_button):
+		help_button.visible = true
+	if is_instance_valid(hud_toggle_button):
+		hud_toggle_button.text = "隐藏界面  F1"
+	_layout_hud()
+
+func _toggle_help_panel() -> void:
+	if not is_instance_valid(help_panel):
+		return
+	var opening := not help_panel.visible
+	if opening:
+		help_restore_mouse_captured = Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		help_panel.visible = true
+	else:
+		help_panel.visible = false
+		if help_restore_mouse_captured and not is_gameplay_input_blocked():
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		help_restore_mouse_captured = false
+
+func _build_controls_help_panel(hud: CanvasLayer) -> void:
+	help_panel = PanelContainer.new()
+	help_panel.name = "ControlsHelpPanel"
+	help_panel.set_anchors_preset(Control.PRESET_CENTER)
+	help_panel.custom_minimum_size = Vector2(540.0, 500.0)
+	help_panel.visible = false
+	_apply_panel_theme(help_panel)
+	hud.add_child(help_panel)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 10)
+	help_panel.add_child(layout)
+	var heading := HBoxContainer.new()
+	layout.add_child(heading)
+	var title := Label.new()
+	title.text = "洪荒 · 操作指南"
+	title.add_theme_color_override("font_color", Color("#e7c98e"))
+	title.add_theme_font_size_override("font_size", 20)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_child(title)
+	var close_button := Button.new()
+	close_button.text = "关闭  Esc"
+	close_button.pressed.connect(_toggle_help_panel)
+	heading.add_child(close_button)
+	var divider := HSeparator.new()
+	layout.add_child(divider)
+	var body := Label.new()
+	body.text = "角色移动\nW / A / S / D    前进、左移、后退、右移\n空格键    跳跃（地形允许时）\n鼠标移动    转动视角\n鼠标左键    攻击准星指向或已锁定的怪物\nTab    切换附近怪物目标\n\n交互与界面\nF    与附近 NPC 交互\nE    拾取附近掉落物\nI    打开背包\nC 或 Enter    打开聊天\nF1    显示 / 隐藏游戏 HUD\nF2    打开 / 关闭本操作指南\nEsc    关闭当前地图、聊天或帮助面板\n\n战斗技能\nQ    火球术       R    冰锥术\nT    嘲讽术       Y    回魂术\nU    回春术       G    守护灵盾\nH    净化术\n\n提示：打开聊天或面板时，部分移动与战斗输入会暂停。技能是否可用仍以服务器判定为准。"
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_theme_color_override("font_color", Color("#d7e0e9"))
+	body.add_theme_font_size_override("font_size", 14)
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	layout.add_child(body)
+	var footer := Label.new()
+	footer.text = "按 F2 随时查看 · 点击右上角「快捷键」也可打开"
+	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	footer.add_theme_color_override("font_color", Color("#91a5b8"))
+	footer.add_theme_font_size_override("font_size", 11)
+	layout.add_child(footer)
 
 func _world_display_name(world_id: String) -> String:
 	match world_id:
@@ -2071,6 +2182,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		$HUD/Panel.visible = hud_visible and details_visible
 		if is_instance_valid(compact_hud_panel):
 			compact_hud_panel.visible = hud_visible
+		if is_instance_valid(hud_toggle_button):
+			hud_toggle_button.visible = hud_visible
+		if is_instance_valid(hud_restore_button):
+			hud_restore_button.visible = not hud_visible
+		if is_instance_valid(help_button):
+			help_button.visible = true
 		if is_instance_valid(chat_panel):
 			chat_panel.visible = hud_visible
 		if is_instance_valid(details_toggle_button):
@@ -2087,6 +2204,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			input_debug_panel.visible = hud_visible and input_debug_visible
 		if is_instance_valid(notification_panel) and not hud_visible:
 			notification_panel.visible = false
+		if is_instance_valid(help_panel) and not hud_visible:
+			help_panel.visible = false
 		if is_instance_valid(revive_channel_panel):
 			revive_channel_panel.visible = hud_visible and revive_channel_remaining > 0.0
 		get_viewport().set_input_as_handled()
@@ -2099,6 +2218,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			chat_input.grab_focus()
 		get_viewport().set_input_as_handled()
 		return
+	if event.keycode == KEY_ESCAPE and is_instance_valid(help_panel) and help_panel.visible:
+		_toggle_help_panel()
+		get_viewport().set_input_as_handled()
+		return
 	if event.keycode == KEY_ESCAPE and chat_expanded:
 		if is_instance_valid(chat_input):
 			chat_input.release_focus()
@@ -2109,6 +2232,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	# (or another text editor). Letters such as I/C/F/E belong to the text field.
 	var focused_control := get_viewport().gui_get_focus_owner()
 	if focused_control is LineEdit or focused_control is TextEdit:
+		return
+	if event.keycode == KEY_F1:
+		_toggle_hud_visibility()
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_F2:
+		_toggle_help_panel()
+		get_viewport().set_input_as_handled()
 		return
 	if event.keycode == KEY_TAB:
 		_cycle_monster_target()
@@ -2369,16 +2500,31 @@ func _layout_hud() -> void:
 		var is_underworld := str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu"
 		var card_width := minf(520.0 if is_underworld else 360.0, maxf(280.0, viewport_size.x - 48.0))
 		var card_height := compact_hud_panel.custom_minimum_size.y
-		compact_hud_panel.position = Vector2(18.0, 18.0)
+		compact_hud_panel.position = Vector2(18.0, 60.0)
 		compact_hud_panel.custom_minimum_size = Vector2(card_width, card_height)
 		compact_hud_panel.size = Vector2(card_width, card_height)
 		if is_instance_valid(compact_hud_label):
 			compact_hud_label.custom_minimum_size = Vector2(card_width - 24.0, card_height - 20.0)
-		var controls_y := 18.0 + card_height + 8.0
+		var controls_y := 60.0 + card_height + 8.0
 		if is_instance_valid(details_toggle_button):
 			details_toggle_button.position = Vector2(18.0, controls_y)
 		if is_instance_valid(soul_choice_button):
 			soul_choice_button.position = Vector2(140.0, controls_y)
+	if is_instance_valid(hud_toggle_button):
+		hud_toggle_button.position = Vector2(18.0, 18.0)
+	if is_instance_valid(hud_restore_button):
+		hud_restore_button.position = Vector2(18.0, 18.0)
+	if is_instance_valid(help_button):
+		help_button.position = Vector2(138.0, 18.0)
+	if is_instance_valid(help_panel):
+		var help_width := minf(540.0, maxf(320.0, viewport_size.x - 32.0))
+		var help_height := minf(500.0, maxf(360.0, viewport_size.y - 32.0))
+		help_panel.set_anchors_preset(Control.PRESET_CENTER)
+		help_panel.offset_left = -help_width * 0.5
+		help_panel.offset_right = help_width * 0.5
+		help_panel.offset_top = -help_height * 0.5
+		help_panel.offset_bottom = help_height * 0.5
+		help_panel.custom_minimum_size = Vector2(help_width, help_height)
 
 	# The chat drawer owns the lower-right corner. Its width and height adapt
 	# to small windows, and the interaction prompt is placed above it.
@@ -3679,8 +3825,7 @@ func _request_nearest_monster_attack(screen_position: Vector2 = Vector2(-1.0, -1
 	# driven exclusively by the authoritative server combat event.
 	if local_player.has_method("play_attack_animation"):
 		local_player.call("play_attack_animation")
-	hud_label.text = "攻击已发送 · " + target_name + " · %.1f m" % target_distance
-	_show_notification("已向「" + target_name + "」发起攻击，正在等待服务器命中判定。", 3.0)
+	_show_notification("攻击指令已发送  ·  " + target_name + "  ·  距离 %.1f m" % target_distance, 1.5)
 	if is_instance_valid(target_info_label):
 		target_info_label.text += "\n攻击指令已发送 · 等待服务器判定"
 
