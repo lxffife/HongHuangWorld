@@ -3937,7 +3937,21 @@ func _update_spell_mastery_hud() -> void:
 
 
 func _on_combat_event(event: Dictionary) -> void:
-	if str(event.get("action", "")) == "player_cleansed":
+	var action := str(event.get("action", ""))
+	if action == "hell_trial_wave_transition":
+		var floor_number := int(event.get("floor", 0))
+		var wave_label := str(event.get("label", "试炼阶段变化"))
+		if bool(event.get("completed", false)):
+			_show_notification("第 %02d 层 · 试炼完成" % floor_number, 5.0)
+		else:
+			_show_notification("第 %02d 层 · %s" % [floor_number, wave_label], 4.0)
+		return
+	if action == "hell_trial_boss_phase":
+		var phase_name := str(event.get("phase_name", "守将变招"))
+		var phase_number := int(event.get("phase", 1))
+		_show_notification("守将进入第 %d 阶段：%s" % [phase_number, phase_name], 4.0)
+		return
+	if action == "player_cleansed":
 		var cleansed_id := str(event.get("character_id", ""))
 		if cleansed_id == str(HHSession.world_snapshot.get("character_id", "")):
 			player_slow_visual_remaining = 0.0
