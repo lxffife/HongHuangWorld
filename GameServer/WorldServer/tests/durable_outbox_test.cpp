@@ -510,13 +510,13 @@ int main() {
 
         honghuang::persistence::MonsterLifeStateRecord fractional_initial{
             "spawn-fractional", "life-fractional", "wolf", 80.5};
-        assert(box.ensure_monster_life_state(fractional_initial, persisted, error));
+        assert(reopened.ensure_monster_life_state(fractional_initial, persisted, error));
         honghuang::persistence::MonsterContributionRecord fractional_hit{
             "fractional-hit", "life-fractional", "wolf", "session-fractional",
             "character-fractional", 10, 1, 975, 975, "[]"};
-        assert(box.admit_monster_damage(
+        assert(reopened.admit_monster_damage(
             fractional_hit, "spawn-fractional", 80.5, 70.5, error));
-        const auto fractional_states = box.load_monster_life_states(error);
+        const auto fractional_states = reopened.load_monster_life_states(error);
         const auto fractional_state = std::find_if(fractional_states.begin(), fractional_states.end(),
             [](const auto& value) { return value.runtime_id == "spawn-fractional"; });
         assert(error.empty() && fractional_state != fractional_states.end() &&
