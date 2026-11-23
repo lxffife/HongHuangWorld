@@ -24,6 +24,11 @@ int main() {
     assert(!should_switch_monster_target(100.0, 120.0));
     assert(should_switch_monster_target(100.0, 121.0));
     assert(!should_switch_monster_target(100.0, 90.0));
+    assert(!should_warn_threat_steal(0.0, 100.0));
+    assert(!should_warn_threat_steal(100.0, 89.0));
+    assert(should_warn_threat_steal(100.0, 90.0));
+    assert(should_warn_threat_steal(100.0, 120.0));
+    assert(!should_warn_threat_steal(100.0, 90.0, 0.0));
 
     const MonsterDefinition wolf{
         .id = "wolf",
