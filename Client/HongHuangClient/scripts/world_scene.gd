@@ -13,6 +13,8 @@ const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
 const WorldMapViewScript = preload("res://scripts/world_map_view.gd")
 const WorldTerrainBuilder = preload("res://scripts/world_terrain_builder.gd")
 const WorldEnvironmentBuilder = preload("res://scripts/world_environment_builder.gd")
+const UnderworldHellFloorBuilder = preload("res://scripts/underworld_hell_floor_builder.gd")
+const HellTrialPanelScript = preload("res://scripts/hell_trial_panel.gd")
 
 @onready var hud_label: Label = $HUD/Panel/Margin/Content/Status
 @onready var progression_label: Label = $HUD/Panel/Margin/Content/Progression
@@ -66,6 +68,10 @@ var selected_chat_channel := "nearby"
 
 var local_player: Variant
 var terrain_chunk_streamer: Node
+var world_terrain_root: Node3D
+var hell_floor_visual_root: Node3D
+var hell_trial_panel: Control
+var hell_trial_open_button: Button
 var hud_visible := true
 var death_panel: PanelContainer
 var death_message_label: Label
@@ -487,9 +493,9 @@ func _build_environment() -> void:
 
 func _build_terrain() -> void:
 	var world_id := str(HHSession.world_snapshot.get("world_id", "qingyun_human"))
-	var terrain_root := WorldTerrainBuilder.build(world_id)
-	add_child(terrain_root)
-	terrain_chunk_streamer = terrain_root.get_node_or_null("ChunkStreamer")
+	world_terrain_root = WorldTerrainBuilder.build(world_id)
+	add_child(world_terrain_root)
+	terrain_chunk_streamer = world_terrain_root.get_node_or_null("ChunkStreamer")
 
 func _build_player() -> void:
 	# Avoid a global class-cache dependency for the player controller. This also
@@ -687,6 +693,11 @@ func _build_world_map_hud() -> void:
 	_apply_button_theme(world_map_city_button)
 	world_map_city_button.pressed.connect(_toggle_fengdu_city_mode)
 	header.add_child(world_map_city_button)
+	hell_trial_open_button = Button.new()
+	hell_trial_open_button.text = "十八层地狱"
+	_apply_button_theme(hell_trial_open_button)
+	hell_trial_open_button.pressed.connect(_open_hell_trial_panel)
+	header.add_child(hell_trial_open_button)
 	var close_button := Button.new()
 	close_button.text = "关闭"
 	_apply_button_theme(close_button)
@@ -710,6 +721,11 @@ func _build_world_map_hud() -> void:
 	world_map_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	world_map_hint_label.custom_minimum_size.y = 28.0
 	layout.add_child(world_map_hint_label)
+	hell_trial_panel = HellTrialPanelScript.new()
+	hud.add_child(hell_trial_panel)
+	hell_trial_panel.entry_ticket_received.connect(_on_hell_trial_entry_ticket_received)
+	hell_trial_panel.return_to_fengdu_requested.connect(_on_hell_trial_return_requested)
+	hell_trial_panel.set_current_floor(int(HHSession.world_snapshot.get("hell_floor", 0)))
 	_layout_hud()
 	_update_minimap_data()
 
@@ -783,7 +799,7 @@ func _update_minimap_data() -> void:
 		minimap_view.set("player_yaw", local_player.global_rotation.y)
 	minimap_view.set("exploration_points", exploration_point_data.values())
 	minimap_view.set("npc_points", npc_definitions)
-	var current_world_id := str(HHSession.world_snapshot.get("world_id", ""))
+	var current_world_id := _map_world_id()
 	minimap_view.set("landmark_points", WorldMapCatalog.get_minimap_landmarks(current_world_id))
 	if is_instance_valid(world_map_canvas):
 		world_map_canvas.set("world_id", current_world_id)
@@ -796,6 +812,8 @@ func _update_minimap_data() -> void:
 		else:
 			world_map_mode_button.visible = true
 			world_map_city_button.visible = true
+		hell_trial_open_button.visible = str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu"
+		hell_trial_open_button.text = "地狱进度" if int(HHSession.world_snapshot.get("hell_floor", 0)) > 0 else "十八层地狱"
 		world_map_canvas.set("world_bounds", WorldMapCatalog.get_world_bounds(current_world_id))
 		world_map_canvas.set("region_data", WorldMapCatalog.get_regions(current_world_id))
 		world_map_canvas.set("water_data", WorldMapCatalog.get_world_map_water_bodies(current_world_id))
@@ -1208,7 +1226,7 @@ func _region_for_position(world_id: String, position: Vector3) -> String:
 func _refresh_current_region(show_entry_notice: bool) -> void:
 	if not is_instance_valid(local_player):
 		return
-	var world_id := str(HHSession.world_snapshot.get("world_id", ""))
+	var world_id := _map_world_id()
 	var next_region := _region_for_position(world_id, local_player.position)
 	if next_region == current_region_name:
 		return
