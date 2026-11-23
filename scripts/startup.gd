@@ -91,11 +91,6 @@ var soul_fate_box: VBoxContainer
 var soul_fate_refresh_button: Button
 
 func _ready() -> void:
-	# Keep machine/display preferences out of project.godot: the Godot editor
-	# rewrites that file when opening a project, which otherwise creates noisy
-	# Git changes on different editor machines.
-	DisplayServer.window_set_min_size(Vector2i(960, 540))
-	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_MAXIMIZED)
 	# The Startup scene is a full-window UI. Explicitly anchor its root to
 	# the viewport so dynamically-created children do not inherit a tiny rect.
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
