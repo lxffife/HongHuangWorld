@@ -79,7 +79,10 @@ var health_bar: ProgressBar
 var mana_bar: ProgressBar
 var spell_cooldown_labels: Dictionary = {}
 var spell_mastery_labels: Dictionary = {}
-var spell_cooldown_remaining: Dictionary = {"fireball": 0.0, "ice_bolt": 0.0, "taunt": 0.0, "revive": 0.0}
+var spell_cooldown_remaining: Dictionary = {"fireball": 0.0, "ice_bolt": 0.0, "taunt": 0.0, "revive": 0.0, "life_mend": 0.0, "guardian_aegis": 0.0}
+var shield_status_label: Label
+var shield_remaining := 0.0
+var shield_amount := 0
 var notification_panel: PanelContainer
 var notification_label: Label
 var notification_timer: Timer
@@ -1012,6 +1015,23 @@ func _build_combat_hud() -> void:
 	revive_label.add_theme_font_size_override("font_size", 11)
 	spell_cooldown_labels["revive"] = revive_label
 	vitals_layout.add_child(revive_label)
+	var heal_label := Label.new()
+	heal_label.text = "U  ·  回春术：就绪"
+	heal_label.add_theme_color_override("font_color", Color("#8fd9b4"))
+	heal_label.add_theme_font_size_override("font_size", 11)
+	spell_cooldown_labels["life_mend"] = heal_label
+	vitals_layout.add_child(heal_label)
+	var aegis_label := Label.new()
+	aegis_label.text = "G  ·  守护灵盾：就绪"
+	aegis_label.add_theme_color_override("font_color", Color("#9bc9ed"))
+	aegis_label.add_theme_font_size_override("font_size", 11)
+	spell_cooldown_labels["guardian_aegis"] = aegis_label
+	vitals_layout.add_child(aegis_label)
+	shield_status_label = Label.new()
+	shield_status_label.text = ""
+	shield_status_label.add_theme_color_override("font_color", Color("#9bc9ed"))
+	shield_status_label.add_theme_font_size_override("font_size", 10)
+	vitals_layout.add_child(shield_status_label)
 	_update_spell_cooldown_hud()
 	_update_spell_mastery_hud()
 	notification_panel = PanelContainer.new()
@@ -1945,6 +1965,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.keycode == KEY_Y:
 		_request_revive_nearest()
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_U:
+		_request_support_spell("life_mend")
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_G:
+		_request_support_spell("guardian_aegis")
 		get_viewport().set_input_as_handled()
 		return
 	if event.keycode == KEY_C:
@@ -3406,8 +3434,8 @@ func _update_spell_cooldown_hud() -> void:
 		var label := spell_cooldown_labels[spell_id] as Label
 		if not is_instance_valid(label):
 			continue
-		var spell_key := "Y" if spell_id == "revive" else ("Q" if spell_id == "fireball" else ("R" if spell_id == "ice_bolt" else "T"))
-		var spell_name := "回魂术" if spell_id == "revive" else ("火球术" if spell_id == "fireball" else ("冰锥术" if spell_id == "ice_bolt" else "嘲讽"))
+		var spell_key := "U" if spell_id == "life_mend" else ("G" if spell_id == "guardian_aegis" else ("Y" if spell_id == "revive" else ("Q" if spell_id == "fireball" else ("R" if spell_id == "ice_bolt" else "T"))))
+		var spell_name := "回春术" if spell_id == "life_mend" else ("守护灵盾" if spell_id == "guardian_aegis" else ("回魂术" if spell_id == "revive" else ("火球术" if spell_id == "fireball" else ("冰锥术" if spell_id == "ice_bolt" else "嘲讽"))))
 		var remaining := float(spell_cooldown_remaining.get(spell_id, 0.0))
 		label.text = spell_key + " · " + spell_name + "：冷却 " + ("%.1f" % remaining) + " 秒" if remaining > 0.0 else spell_key + " · " + spell_name + "：就绪"
 
@@ -3451,6 +3479,38 @@ func _request_ice_bolt() -> void:
 	var error: Error = network.send_spell_cast("ice_bolt", target_id)
 	if error != OK:
 		_show_notification("冰锥术请求发送失败：" + str(error))
+
+func _request_support_spell(spell_id: String) -> void:
+	var network := HHSession.world_network
+	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
+		return
+	var self_id := str(HHSession.world_snapshot.get("character_id", ""))
+	var target_id := self_id
+	var lowest_health_ratio := 1.0
+	var self_health := float(HHSession.world_snapshot.get("health", 0))
+	var self_max_health := maxf(float(HHSession.world_snapshot.get("max_health", 1)), 1.0)
+	lowest_health_ratio = self_health / self_max_health
+	for character_id in party_member_statuses.keys():
+		var status: Dictionary = party_member_statuses[character_id]
+		if str(character_id) == self_id or not bool(status.get("alive", true)):
+			continue
+		if not remote_targets.has(character_id):
+			continue
+		var target: Vector3 = remote_targets[character_id]
+		var distance := Vector2(local_player.global_position.x - target.x, local_player.global_position.z - target.z).length()
+		if distance > 12.0:
+			continue
+		var max_hp := maxf(float(status.get("max_health", 1)), 1.0)
+		var ratio := float(status.get("health", 0)) / max_hp
+		if ratio < lowest_health_ratio:
+			lowest_health_ratio = ratio
+			target_id = str(character_id)
+	if target_id.is_empty():
+		_show_notification("没有可施展辅助法术的目标。")
+		return
+	var error: Error = network.send_spell_cast(spell_id, target_id)
+	if error != OK:
+		_show_notification("辅助法术请求发送失败：" + str(error))
 
 func _request_revive_nearest() -> void:
 	var network := HHSession.world_network
@@ -3800,6 +3860,26 @@ func _on_combat_event(event: Dictionary) -> void:
 		var taunter := str(event.get("character_name", "队友"))
 		_show_notification(taunter + " 嘲讽了怪物，怪物将优先攻击他！", 2.8)
 		return
+	if str(event.get("action", "")) == "player_healed":
+		var healed_id := str(event.get("character_id", ""))
+		if healed_id == str(HHSession.world_snapshot.get("character_id", "")):
+			HHSession.world_snapshot["health"] = int(event.get("health", HHSession.world_snapshot.get("health", 0)))
+			_update_vitals(int(HHSession.world_snapshot["health"]), int(event.get("max_health", HHSession.world_snapshot.get("max_health", 100))))
+		_show_notification(str(event.get("source_name", "队友")) + " 为你恢复 " + str(int(event.get("health_restored", 0))) + " 点生命。", 3.0)
+		return
+	if str(event.get("action", "")) == "player_shielded":
+		shield_amount = int(event.get("shield_health", 0))
+		shield_remaining = float(event.get("duration_ms", 8000)) / 1000.0
+		if is_instance_valid(shield_status_label):
+			shield_status_label.text = "护盾 " + str(shield_amount) + " · " + ("%.1f" % shield_remaining) + " 秒"
+		_show_notification(str(event.get("source_name", "队友")) + " 为你施加守护灵盾（" + str(shield_amount) + "）。", 3.0)
+		return
+	if event.has("shield_remaining"):
+		shield_amount = int(event.get("shield_remaining", 0))
+		if shield_amount <= 0:
+			shield_remaining = 0.0
+		elif shield_remaining <= 0.0:
+			shield_remaining = 8.0
 	if str(event.get("action", "")) == "player_revived":
 		_stop_revive_channel_ui()
 		var revived_id := str(event.get("character_id", ""))
@@ -3923,7 +4003,7 @@ func _on_combat_event(event: Dictionary) -> void:
 			mana_label.text = "灵力  " + str(int(HHSession.world_snapshot.get("mana", 0))) + " / " + str(int(HHSession.world_snapshot.get("max_mana", 0)))
 		_update_compact_hud()
 		var spell_id := str(event.get("spell_id", ""))
-		var spell_name := "回魂术" if spell_id == "revive" else ("嘲讽" if spell_id == "taunt" else ("冰锥术" if spell_id == "ice_bolt" else ("火球术" if spell_id == "fireball" else "法术")))
+		var spell_name := "回春术" if spell_id == "life_mend" else ("守护灵盾" if spell_id == "guardian_aegis" else ("回魂术" if spell_id == "revive" else ("嘲讽" if spell_id == "taunt" else ("冰锥术" if spell_id == "ice_bolt" else ("火球术" if spell_id == "fireball" else "法术")))))
 		# Mirror the server: cooldown starts on successful release, not when
 		# the cast begins. An interrupted cast refunds mana and remains ready.
 		if bool(event.get("accepted", false)) and str(event.get("phase", "")) in ["released", "channeling"] and spell_cooldown_remaining.has(spell_id):
@@ -4303,6 +4383,12 @@ func _update_input_debug_hud() -> void:
 	input_debug_label.text = keys + "\n" + movement_text + " · 网络：" + network_text + "\n" + send_text + " · ESC 释放鼠标"
 
 func _process(delta: float) -> void:
+	if shield_remaining > 0.0:
+		shield_remaining = maxf(0.0, shield_remaining - delta)
+		if is_instance_valid(shield_status_label):
+			shield_status_label.text = "护盾 " + str(shield_amount) + " · " + ("%.1f" % shield_remaining) + " 秒"
+	elif is_instance_valid(shield_status_label):
+		shield_status_label.text = ""
 	if revive_channel_remaining > 0.0:
 		revive_channel_remaining = maxf(0.0, revive_channel_remaining - delta)
 		if is_instance_valid(revive_channel_bar):
