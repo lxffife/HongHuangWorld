@@ -3708,11 +3708,13 @@ func _on_monster_action_event(event: Dictionary) -> void:
 		if attack_style == "heavy_slam":
 			_set_iron_slam_telegraph(attacker, false)
 			_spawn_iron_slam_impact_visual(attacker, float(attacker.get_meta("attack_radius", 3.6)))
-		if attack_style == "soul_bolt" or attack_style == "poison_bolt":
+		if attack_style == "soul_bolt" or attack_style == "poison_bolt" or attack_style == "frost_bolt":
 			_set_elemental_telegraph(attacker, false)
 			if str(event.get("target_character_id", "")) == str(HHSession.world_snapshot.get("character_id", "")):
 				if attack_style == "poison_bolt":
 					_spawn_poison_bolt_visual(attacker)
+				elif attack_style == "frost_bolt":
+					_spawn_frost_bolt_visual(attacker)
 				else:
 					_spawn_soul_bolt_visual(attacker)
 
@@ -3800,6 +3802,32 @@ func _spawn_soul_bolt_visual(attacker: Node3D) -> void:
 	var tween := create_tween()
 	tween.tween_property(bolt, "global_position", destination, 0.24)
 	tween.tween_callback(Callable(bolt, "queue_free"))
+
+func _spawn_frost_bolt_visual(attacker: Node3D) -> void:
+	if not is_instance_valid(local_player):
+		return
+	var bolt := MeshInstance3D.new()
+	bolt.name = "FrostBoltImpactVisual"
+	var prism := PrismMesh.new()
+	prism.size = Vector3(0.22, 0.42, 0.22)
+	bolt.mesh = prism
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#a9e8ff")
+	material.emission_enabled = true
+	material.emission = Color("#62cfff")
+	material.emission_energy_multiplier = 3.0
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bolt.material_override = material
+	add_child(bolt)
+	bolt.global_position = attacker.global_position + Vector3(0.0, 1.05, 0.0)
+	bolt.look_at(local_player.global_position + Vector3(0.0, 1.0, 0.0), Vector3.UP)
+	var destination: Vector3 = local_player.global_position + Vector3(0.0, 1.0, 0.0)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(bolt, "global_position", destination, 0.26)
+	tween.tween_property(bolt, "rotation:z", bolt.rotation.z + 1.8, 0.26)
+	tween.chain().tween_callback(Callable(bolt, "queue_free"))
+
 
 func _spawn_poison_bolt_visual(attacker: Node3D) -> void:
 	if not is_instance_valid(local_player):
