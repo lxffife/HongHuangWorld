@@ -40,6 +40,16 @@ int main() {
     assert(!waves.is_unlocked("hell_f01_tongue_jailer"));
     assert(!waves.record_death("hell_f01_tongue_jailer").advanced);
 
+    HellTrialWaveDirector recovered(1);
+    assert(recovered.restore_stage(2));
+    assert(recovered.stage() == 2);
+    assert(recovered.active_definition_id() == "hell_f01_echo_ghost");
+    assert(!recovered.is_unlocked("hell_f01_tongue_wraith"));
+    assert(recovered.restore_stage(4));
+    assert(recovered.completed());
+    assert(recovered.active_definition_id().empty());
+    assert(!recovered.restore_stage(5));
+
     HellTrialWaveDirector invalid(0);
     assert(!invalid.enabled());
     assert(invalid.is_unlocked("any-monster"));
