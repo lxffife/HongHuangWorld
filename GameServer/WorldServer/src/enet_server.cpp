@@ -3164,6 +3164,17 @@ struct EnetServer::Impl {
                 });
             if (!already_merged) merged.push_back(current);
         }
+        if (hell_trial_encounter.enabled()) {
+            const std::string hell_prefix = "hell-f" + std::to_string(config.hell_floor) + "-";
+            for (const auto& current : monsters) {
+                if (current.runtime_id.rfind(hell_prefix, 0) != 0) continue;
+                const bool already_merged = std::any_of(
+                    merged.begin(), merged.end(), [&current](const MonsterRuntime& candidate) {
+                        return candidate.runtime_id == current.runtime_id;
+                    });
+                if (!already_merged) merged.push_back(current);
+            }
+        }
         monsters=std::move(merged);
         restore_pending_monster_deaths();
         std::cout<<"Applied monster spawn configuration; active spawn points="<<monsters.size()<<'\n';
