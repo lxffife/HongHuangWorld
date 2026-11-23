@@ -1192,6 +1192,17 @@ func _build_combat_hud() -> void:
 	notification_panel.custom_minimum_size = Vector2(460.0, 80.0)
 	notification_panel.visible = false
 	_apply_panel_theme(notification_panel)
+	# Semi-transparent glass panel; keep the text itself fully readable.
+	var notification_style := StyleBoxFlat.new()
+	notification_style.bg_color = Color(0.035, 0.055, 0.075, 0.58)
+	notification_style.border_color = Color(0.55, 0.68, 0.78, 0.24)
+	notification_style.set_border_width_all(1)
+	notification_style.set_corner_radius_all(12)
+	notification_style.content_margin_left = 16.0
+	notification_style.content_margin_right = 16.0
+	notification_style.content_margin_top = 10.0
+	notification_style.content_margin_bottom = 10.0
+	notification_panel.add_theme_stylebox_override("panel", notification_style)
 	hud.add_child(notification_panel)
 	notification_label = Label.new()
 	notification_label.custom_minimum_size = Vector2(420.0, 48.0)
@@ -1351,16 +1362,15 @@ func _layout_notification_panel() -> void:
 		return
 	var viewport_size := get_viewport().get_visible_rect().size
 	var notice_width := minf(520.0, maxf(250.0, viewport_size.x - 32.0))
-	var notice_height := 80.0
-	# Pin the toast to the horizontal center using explicit anchors/offsets;
-	# do not rely on Control.position with a centered preset.
+	var notice_height := 76.0
+	# Center transient world-entry and combat notices, slightly above the crosshair.
 	notification_panel.anchor_left = 0.5
 	notification_panel.anchor_right = 0.5
-	notification_panel.anchor_top = 0.0
-	notification_panel.anchor_bottom = 0.0
+	notification_panel.anchor_top = 0.5
+	notification_panel.anchor_bottom = 0.5
 	notification_panel.offset_left = -notice_width * 0.5
 	notification_panel.offset_right = notice_width * 0.5
-	notification_panel.offset_top = maxf(96.0, viewport_size.y * 0.22)
+	notification_panel.offset_top = -notice_height * 0.5 - 54.0
 	notification_panel.offset_bottom = notification_panel.offset_top + notice_height
 	notification_panel.custom_minimum_size = Vector2(notice_width, notice_height)
 	if is_instance_valid(notification_label):
@@ -1710,7 +1720,7 @@ func _update_hud() -> void:
 	var world_id := str(snapshot.get("world_id", ""))
 	var world_name := _world_display_name(world_id)
 	var character_name := str(snapshot.get("name", "初入洪荒"))
-	hud_label.text = "当前世界 · " + world_name + " · 所在区域 " + (current_region_name if not current_region_name.is_empty() else "区域载入中") + "\n" + character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\nF NPC交互 · E 拾取 · I 背包 · Q 火球术 · R 冰锥术 · T 嘲讽 · Y 救援 · U 回春术 · G 守护灵盾 · C 聊天 · 鼠标左键攻击 · F2 网络诊断"
+	hud_label.text = character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\nF NPC交互 · E 拾取 · I 背包 · Q 火球术 · R 冰锥术 · T 嘲讽 · Y 救援 · U 回春术 · G 守护灵盾 · C 聊天 · 鼠标左键攻击 · F2 网络诊断"
 	_update_compact_hud()
 
 func _exit_tree() -> void:
