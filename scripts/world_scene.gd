@@ -3577,7 +3577,7 @@ func _pick_monster_target_at_screen_position(screen_position: Vector2) -> String
 		var pixel_distance := screen_point.distance_to(pick_position)
 		if pixel_distance > 118.0:
 			continue
-		var world_distance := local_player.global_position.distance_to(world_position)
+		var world_distance: float = local_player.global_position.distance_to(world_position)
 		if world_distance > 60.0:
 			continue
 		# Prefer the object closest to the click/reticle, then the nearer one.
