@@ -18,6 +18,7 @@ var (
 	ErrWrongInstance = errors.New("active world instance does not match the requested hell floor")
 	ErrInvalid = errors.New("invalid hell trial request")
 	ErrFloorLocked = errors.New("hell trial floor is locked")
+	ErrFloorNotEntered = errors.New("hell trial floor has no recorded entry")
 	ErrObjectiveIncomplete = errors.New("hell trial objective is incomplete")
 	ErrGuardianAlive = errors.New("hell trial guardian is alive")
 	ErrAlreadyCompleted = errors.New("hell trial floor is already completed")
@@ -177,10 +178,12 @@ func (s *Service) Complete(ctx context.Context, nodeKey string, req CompletionRe
 
 	var status string
 	var priorEvent sql.NullString
-	err=tx.QueryRowContext(ctx,`SELECT status,completion_event_id::text FROM character_hell_trial_progress
-		WHERE character_id=$1::uuid AND floor_number=$2 FOR UPDATE`,req.CharacterID,req.Floor).Scan(&status,&priorEvent)
+	var entered bool
+	err=tx.QueryRowContext(ctx,`SELECT status,completion_event_id::text,(first_entered_at IS NOT NULL) FROM character_hell_trial_progress
+		WHERE character_id=$1::uuid AND floor_number=$2 FOR UPDATE`,req.CharacterID,req.Floor).Scan(&status,&priorEvent,&entered)
 	if errors.Is(err,sql.ErrNoRows){return CompletionResult{},ErrFloorLocked}
 	if err!=nil{return CompletionResult{},fmt.Errorf("lock hell trial floor: %w",err)}
+	if !entered { return CompletionResult{},ErrFloorNotEntered }
 	if status=="completed" {
 		if priorEvent.Valid && strings.EqualFold(priorEvent.String,req.EventID) {
 			next := 0
