@@ -51,6 +51,11 @@ public:
             return result;
         }
 
+        if (required_units > units_.size()) {
+            result.reason = "insufficient_available_units";
+            return result;
+        }
+
         std::vector<FengduPatrolUnit*> candidates;
         candidates.reserve(required_units);
         for (auto& unit : units_) {
@@ -63,16 +68,24 @@ public:
             result.reason = "insufficient_available_units";
             return result;
         }
+
+        // Prepare all potentially allocating data before mutating the incident state.
+        result.unit_ids.reserve(required_units);
+        std::vector<std::string> incident_refs;
+        incident_refs.reserve(required_units);
+        for (const auto* unit : candidates) {
+            result.unit_ids.push_back(unit->id);
+            incident_refs.emplace_back(incident_id);
+        }
         if (!director.dispatch(incident_id, required_units)) {
+            result.unit_ids.clear();
             result.reason = "incident_dispatch_rejected";
             return result;
         }
 
-        result.unit_ids.reserve(required_units);
-        for (auto* unit : candidates) {
-            unit->state = PatrolUnitState::responding;
-            unit->incident_id = std::string(incident_id);
-            result.unit_ids.push_back(unit->id);
+        for (std::size_t index = 0; index < candidates.size(); ++index) {
+            candidates[index]->state = PatrolUnitState::responding;
+            candidates[index]->incident_id = std::move(incident_refs[index]);
         }
         result.dispatched = true;
         return result;
