@@ -1444,8 +1444,9 @@ struct EnetServer::Impl {
                 std::cerr << "[HellTrialWave] active wave monster is missing: " << active_id << std::endl;
                 return false;
             }
-            if (active->state.mode == honghuang::simulation::MonsterMode::Dead &&
-                active->respawn_at.time_since_epoch().count() == 0) {
+            if (active->state.mode == honghuang::simulation::MonsterMode::Dead) {
+                // The active wave has no cooldown gate: dormant spawn defaults from
+                // generic monster recovery must not impose a 60-second delay.
                 active->respawn_at = Clock::now();
             }
         }
