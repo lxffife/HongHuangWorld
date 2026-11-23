@@ -85,6 +85,13 @@ func validUUID(value string) bool {
 	return true
 }
 
+func validateEntry(req EntryRequest) error {
+	if !validUUID(req.CharacterID) || !validUUID(req.EventID) || req.Floor < 1 || req.Floor > FloorCount {
+		return ErrInvalid
+	}
+	return nil
+}
+
 func validateCompletion(req CompletionRequest) error {
 	if !validUUID(req.CharacterID) || !validUUID(req.EventID) || req.Floor < 1 || req.Floor > FloorCount { return ErrInvalid }
 	if len(req.ObjectiveSnapshot) == 0 || len(req.ObjectiveSnapshot) > 16*1024 || !json.Valid(req.ObjectiveSnapshot) { return ErrInvalid }
@@ -204,7 +211,7 @@ func (s *Service) Complete(ctx context.Context, nodeKey string, req CompletionRe
 // RecordEntry records a real entry reported by the WorldServer that owns the
 // character's active session and the requested floor-specific instance.
 func (s *Service) RecordEntry(ctx context.Context, nodeKey string, req EntryRequest) (EntryResult,error) {
-	if strings.TrimSpace(nodeKey)=="" || !validUUID(req.CharacterID) || !validUUID(req.EventID) || req.Floor<1 || req.Floor>FloorCount {
+	if strings.TrimSpace(nodeKey)=="" || validateEntry(req)!=nil {
 		return EntryResult{},ErrInvalid
 	}
 	tx,err:=s.db.BeginTx(ctx,nil)
@@ -255,8 +262,20 @@ func (s *Service) RecordEntry(ctx context.Context, nodeKey string, req EntryRequ
 	if errors.Is(err,sql.ErrNoRows){return EntryResult{},ErrFloorLocked}
 	if err!=nil{return EntryResult{},fmt.Errorf("lock hell trial entry progress: %w",err)}
 
-	if _,err=tx.ExecContext(ctx,`INSERT INTO character_hell_trial_entry_events(event_id,character_id,floor_number)
-		VALUES($1::uuid,$2::uuid,$3)`,req.EventID,req.CharacterID,req.Floor);err!=nil{return EntryResult{},fmt.Errorf("record hell trial entry event: %w",err)}
+	insertResult,insertErr:=tx.ExecContext(ctx,`INSERT INTO character_hell_trial_entry_events(event_id,character_id,floor_number)
+		VALUES($1::uuid,$2::uuid,$3) ON CONFLICT(event_id) DO NOTHING`,req.EventID,req.CharacterID,req.Floor)
+	if insertErr!=nil{return EntryResult{},fmt.Errorf("record hell trial entry event: %w",insertErr)}
+	inserted,insertErr:=insertResult.RowsAffected()
+	if insertErr!=nil{return EntryResult{},fmt.Errorf("check hell trial entry insert: %w",insertErr)}
+	if inserted==0 {
+		var existingCharacter string
+		var existingFloor int
+		if err=tx.QueryRowContext(ctx,`SELECT character_id::text,floor_number FROM character_hell_trial_entry_events WHERE event_id=$1::uuid`,req.EventID).Scan(&existingCharacter,&existingFloor);err!=nil{return EntryResult{},fmt.Errorf("resolve concurrent hell trial entry: %w",err)}
+		if !strings.EqualFold(existingCharacter,req.CharacterID) || existingFloor!=req.Floor{return EntryResult{},ErrEntryIdempotencyConflict}
+		var count int
+		if err=tx.QueryRowContext(ctx,`SELECT entry_count FROM character_hell_trial_progress WHERE character_id=$1::uuid AND floor_number=$2`,req.CharacterID,req.Floor).Scan(&count);err!=nil{return EntryResult{},fmt.Errorf("read concurrent hell trial entry count: %w",err)}
+		return EntryResult{CharacterID:req.CharacterID,Floor:req.Floor,EntryCount:count,AlreadyApplied:true},nil
+	}
 	var count int
 	err=tx.QueryRowContext(ctx,`UPDATE character_hell_trial_progress
 		SET first_entered_at=COALESCE(first_entered_at,now()),last_entered_at=now(),
