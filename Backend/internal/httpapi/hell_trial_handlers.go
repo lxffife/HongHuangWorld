@@ -121,6 +121,8 @@ func (h *hellTrialHandlers) complete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "hell trial floor is locked", http.StatusConflict)
 	case errors.Is(err, helltrial.ErrObjectiveIncomplete):
 		http.Error(w, "hell trial objective is incomplete", http.StatusConflict)
+	case errors.Is(err, helltrial.ErrContributionInsufficient):
+		http.Error(w, "hell trial combat contribution is insufficient", http.StatusConflict)
 	case errors.Is(err, helltrial.ErrGuardianAlive):
 		http.Error(w, "hell trial guardian is still alive", http.StatusConflict)
 	case errors.Is(err, helltrial.ErrAlreadyCompleted):
