@@ -12,6 +12,7 @@
 #include "simulation/status_effect.hpp"
 #include "simulation/revive.hpp"
 #include "simulation/hell_trial_encounter.hpp"
+#include "simulation/hell_trial_contribution.hpp"
 #include "simulation/support_combat.hpp"
 #include "persistence/durable_outbox.hpp"
 #include "persistence/monster_contribution_writer.hpp"
@@ -1155,9 +1156,8 @@ struct EnetServer::Impl {
     honghuang::simulation::HellTrialEncounter hell_trial_encounter;
     ENetHost* host{};
     std::unordered_map<ENetPeer*, PlayerState> players;
-    // Character -> most recent authenticated session that entered this dedicated floor.
-    // Keep participants after disconnect so a delayed boss kill can still grant progress.
-    std::unordered_map<std::string, std::string> hell_trial_participants;
+    // Authenticated participants must cross a minimum damage threshold to earn floor credit.
+    honghuang::simulation::HellTrialContributionLedger hell_trial_contributions;
     std::vector<MonsterRuntime> monsters;
     std::mutex monster_config_mutex;
     std::condition_variable monster_config_cv;
@@ -1733,7 +1733,6 @@ struct EnetServer::Impl {
         if (config.hell_floor < 1 || config.hell_floor > 18 ||
             config.world_id != "underworld_fengdu" || player.character_id.empty() ||
             player.session_id.empty()) return;
-        hell_trial_participants[player.character_id] = player.session_id;
         const auto event_id = make_event_uuid();
         const Json payload{
             {"event_id", event_id},
@@ -1746,16 +1745,9 @@ struct EnetServer::Impl {
             std::cerr << "Could not persist hell trial entry: " << error << '\n';
             return;
         }
-        // A player may join after this floor's encounter was already cleared.
-        // Record entry first, then defer completion delivery to preserve event order.
-        if (hell_trial_encounter.completed()) {
-            const auto* floor = hell_trial_encounter.spec();
-            const honghuang::simulation::HellTrialDeathResult completed{
-                false, false, true, hell_trial_encounter.objective_kills(),
-                floor ? floor->objective_required : 0, hell_trial_encounter.guardian_defeated()
-            };
-            enqueue_hell_trial_completion(player.session_id, player.character_id, completed, 5000);
-        }
+        hell_trial_contributions.register_participant(player.character_id, player.session_id);
+        // Joining after the encounter is cleared does not grant automatic credit;
+        // only characters that contributed enough authenticated damage qualify.
     }
 
     void enqueue_hell_trial_completion(const std::string& session_id,
@@ -1935,6 +1927,8 @@ struct EnetServer::Impl {
         if (contribution.hit_count < std::numeric_limits<std::int64_t>::max())
             ++contribution.hit_count;
         contribution.last_hit_at = Clock::now();
+        if (hell_trial_encounter.enabled())
+            (void)hell_trial_contributions.record_damage(character_id, session_id, effective_damage);
         // Damage creates threat only after the durable contribution was admitted.
         record_monster_threat(monster, character_id, static_cast<double>(effective_damage));
     }
@@ -2554,6 +2548,13 @@ struct EnetServer::Impl {
         return true;
     }
 
+    std::int64_t hell_trial_minimum_contribution_damage() const {
+        const auto* floor = hell_trial_encounter.spec();
+        if (floor == nullptr) return 1;
+        const std::int64_t target_health = 90 + static_cast<std::int64_t>(floor->recommended_level) * 28;
+        return std::max<std::int64_t>(10, (target_health + 9) / 10);
+    }
+
     void begin_monster_death(MonsterRuntime& monster, const PlayerState* killer) {
         if (!monster.contribution_closing) return;
         capture_monster_death_context(monster, killer);
@@ -2561,10 +2562,13 @@ struct EnetServer::Impl {
             const auto encounter_result = hell_trial_encounter.record_monster_death(
                 monster.contribution_instance_id, monster.death_definition_id);
             if (encounter_result.completion_ready) {
-                // Keep the participant roster beyond disconnects. Completion is
-                // bound to each character's original authenticated floor session.
-                for (const auto& [character_id, session_id] : hell_trial_participants) {
-                    enqueue_hell_trial_completion(session_id, character_id, encounter_result);
+                // Retain contribution across reconnects, but only reward participants
+                // who dealt at least 10% of one objective monster's base health.
+                const auto eligible = hell_trial_contributions.eligible_participants(
+                    hell_trial_minimum_contribution_damage());
+                for (const auto& participant : eligible) {
+                    enqueue_hell_trial_completion(participant.session_id,
+                                                  participant.character_id, encounter_result);
                 }
             }
         }
