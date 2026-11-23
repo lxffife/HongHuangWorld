@@ -30,6 +30,17 @@ int main() {
         assert(!encounter.completed());
     }
 
+    HellTrialEncounter arena(3);
+    float arena_x = 42.0F;
+    float arena_z = -35.0F;
+    arena.clamp_player_position(arena_x, arena_z);
+    assert(arena_x == 27.0F && arena_z == -27.0F);
+    HellTrialEncounter ordinary(0);
+    float ordinary_x = 42.0F;
+    float ordinary_z = -35.0F;
+    ordinary.clamp_player_position(ordinary_x, ordinary_z);
+    assert(ordinary_x == 42.0F && ordinary_z == -35.0F);
+
     HellTrialEncounter invalid(19);
     assert(!invalid.enabled());
     assert(invalid.floor() == 0);
