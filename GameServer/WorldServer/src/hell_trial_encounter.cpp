@@ -66,6 +66,14 @@ int HellTrialEncounter::objective_kills() const { return objective_kills_; }
 bool HellTrialEncounter::guardian_defeated() const { return guardian_defeated_; }
 bool HellTrialEncounter::completed() const { return completed_; }
 
+bool HellTrialEncounter::restore_stage(int stage) {
+    if (!enabled() || stage < 0 || stage > 4) return false;
+    objective_kills_ = std::min(stage, spec_->objective_required);
+    guardian_defeated_ = stage == 4;
+    completed_ = stage == 4;
+    return true;
+}
+
 void HellTrialEncounter::clamp_player_position(float& x, float& z) const {
     if (!spec_) return;
     constexpr float kArenaHalfExtent = 27.0F;
