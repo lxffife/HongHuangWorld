@@ -47,6 +47,7 @@ type Progress struct {
 }
 
 type EntryRequest struct {
+	SessionID string `json:"session_id"`
 	CharacterID string `json:"character_id"`
 	Floor int `json:"floor"`
 	EventID string `json:"event_id"`
@@ -60,6 +61,7 @@ type EntryResult struct {
 }
 
 type CompletionRequest struct {
+	SessionID string `json:"session_id"`
 	CharacterID string `json:"character_id"`
 	Floor int `json:"floor"`
 	EventID string `json:"event_id"`
@@ -87,7 +89,7 @@ func validUUID(value string) bool {
 }
 
 func validateEntry(req EntryRequest) error {
-	if !validUUID(req.CharacterID) || !validUUID(req.EventID) || req.Floor < 1 || req.Floor > FloorCount {
+	if !validUUID(req.SessionID) || !validUUID(req.CharacterID) || !validUUID(req.EventID) || req.Floor < 1 || req.Floor > FloorCount {
 		return ErrInvalid
 	}
 	return nil
@@ -113,7 +115,7 @@ type completionSnapshot struct {
 }
 
 func validateCompletion(req CompletionRequest) error {
-	if !validUUID(req.CharacterID) || !validUUID(req.EventID) || req.Floor < 1 || req.Floor > FloorCount { return ErrInvalid }
+	if !validUUID(req.SessionID) || !validUUID(req.CharacterID) || !validUUID(req.EventID) || req.Floor < 1 || req.Floor > FloorCount { return ErrInvalid }
 	if len(req.ObjectiveSnapshot) == 0 || len(req.ObjectiveSnapshot) > 16*1024 || !json.Valid(req.ObjectiveSnapshot) { return ErrInvalid }
 	var object map[string]json.RawMessage
 	if err := json.Unmarshal(req.ObjectiveSnapshot, &object); err != nil || object == nil { return ErrInvalid }
@@ -178,21 +180,23 @@ func (s *Service) Complete(ctx context.Context, nodeKey string, req CompletionRe
 	var worldID string
 	err=tx.QueryRowContext(ctx,`SELECT c.world_id
 		FROM characters c
-		JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
+		JOIN world_sessions ws ON ws.character_id=c.id AND ws.id=$4::uuid
+		  AND ws.session_state IN ('active','saving','closed')
 		JOIN world_instances wi ON wi.id=ws.instance_id AND wi.world_id=c.world_id
 		JOIN server_registry sr ON sr.id=ws.server_id AND sr.node_key=$2
 		WHERE c.id=$1::uuid AND c.status='alive' AND wi.hell_floor=$3
 		ORDER BY ws.connected_at DESC NULLS LAST LIMIT 1
-		FOR UPDATE OF c,ws`,req.CharacterID,nodeKey,req.Floor).Scan(&worldID)
+		FOR UPDATE OF c,ws`,req.CharacterID,nodeKey,req.Floor,req.SessionID).Scan(&worldID)
 	if errors.Is(err,sql.ErrNoRows) {
 		var activeUnderworld bool
 		checkErr := tx.QueryRowContext(ctx,`SELECT EXISTS(
 			SELECT 1 FROM characters c
-			JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
+			JOIN world_sessions ws ON ws.character_id=c.id AND ws.id=$3::uuid
+			  AND ws.session_state IN ('active','saving','closed')
 			JOIN world_instances wi ON wi.id=ws.instance_id AND wi.world_id=c.world_id
 			JOIN server_registry sr ON sr.id=ws.server_id AND sr.node_key=$2
 			WHERE c.id=$1::uuid AND c.status='alive' AND c.world_id='underworld_fengdu'
-		)`,req.CharacterID,nodeKey).Scan(&activeUnderworld)
+		)`,req.CharacterID,nodeKey,req.SessionID).Scan(&activeUnderworld)
 		if checkErr != nil { return CompletionResult{},fmt.Errorf("check active underworld instance: %w",checkErr) }
 		if activeUnderworld { return CompletionResult{},ErrWrongInstance }
 		return CompletionResult{},ErrNoActiveSession
@@ -253,7 +257,8 @@ func (s *Service) RecordEntry(ctx context.Context, nodeKey string, req EntryRequ
 	var worldID string
 	err=tx.QueryRowContext(ctx,`SELECT c.world_id
 		FROM characters c
-		JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
+		JOIN world_sessions ws ON ws.character_id=c.id AND ws.id=$4::uuid
+		  AND ws.session_state IN ('active','saving','closed')
 		JOIN world_instances wi ON wi.id=ws.instance_id AND wi.world_id=c.world_id
 		JOIN server_registry sr ON sr.id=ws.server_id AND sr.node_key=$2
 		WHERE c.id=$1::uuid AND c.status='alive' AND wi.hell_floor=$3
@@ -263,11 +268,12 @@ func (s *Service) RecordEntry(ctx context.Context, nodeKey string, req EntryRequ
 		var activeUnderworld bool
 		checkErr:=tx.QueryRowContext(ctx,`SELECT EXISTS(
 			SELECT 1 FROM characters c
-			JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
+			JOIN world_sessions ws ON ws.character_id=c.id AND ws.id=$3::uuid
+			  AND ws.session_state IN ('active','saving','closed')
 			JOIN world_instances wi ON wi.id=ws.instance_id AND wi.world_id=c.world_id
 			JOIN server_registry sr ON sr.id=ws.server_id AND sr.node_key=$2
 			WHERE c.id=$1::uuid AND c.status='alive' AND c.world_id='underworld_fengdu'
-		)`,req.CharacterID,nodeKey).Scan(&activeUnderworld)
+		)`,req.CharacterID,nodeKey,req.SessionID).Scan(&activeUnderworld)
 		if checkErr!=nil{return EntryResult{},fmt.Errorf("check active underworld instance: %w",checkErr)}
 		if activeUnderworld{return EntryResult{},ErrWrongInstance}
 		return EntryResult{},ErrNoActiveSession
