@@ -31,5 +31,8 @@ int main() {
     assert(!transition.changed && transition.phase == 3);
     transition = boss.update(1.0, 0.0);
     assert(!transition.changed && transition.phase == 3);
+    boss.reset();
+    assert(boss.phase() == 0);
+    assert(std::abs(boss.attack_multiplier() - 1.0) < 0.001);
     return 0;
 }
