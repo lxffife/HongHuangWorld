@@ -45,8 +45,33 @@ func TestValidReward(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "ghost cash only",
+			reward: Reward{EventID: eventID, SessionID: sessionID, CharacterID: characterID, GhostCash: 100},
+			want: true,
+		},
+		{
+			name: "nether stone only",
+			reward: Reward{EventID: eventID, SessionID: sessionID, CharacterID: characterID, NetherStone: 1},
+			want: true,
+		},
+		{
 			name: "empty reward",
 			reward: Reward{EventID: eventID, CharacterID: characterID},
+			want: false,
+		},
+		{
+			name: "negative ghost cash",
+			reward: Reward{EventID: eventID, SessionID: sessionID, CharacterID: characterID, GhostCash: -1},
+			want: false,
+		},
+		{
+			name: "ghost cash over issuance cap",
+			reward: Reward{EventID: eventID, SessionID: sessionID, CharacterID: characterID, GhostCash: 2001},
+			want: false,
+		},
+		{
+			name: "nether stone over issuance cap",
+			reward: Reward{EventID: eventID, SessionID: sessionID, CharacterID: characterID, NetherStone: 6},
 			want: false,
 		},
 		{
