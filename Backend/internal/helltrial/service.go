@@ -127,7 +127,7 @@ func validateCompletion(req CompletionRequest) error {
 		return ErrInvalid
 	}
 	if !req.ObjectiveComplete || !snapshot.ObjectiveComplete ||
-		snapshot.ObjectiveKills < snapshot.ObjectiveRequired {
+		snapshot.ObjectiveKills != snapshot.ObjectiveRequired {
 		return ErrObjectiveIncomplete
 	}
 	if !req.GuardianDefeated || !snapshot.GuardianDefeated { return ErrGuardianAlive }
