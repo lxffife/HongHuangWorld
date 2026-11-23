@@ -3,6 +3,7 @@ extends SceneTree
 const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
 const WorldChunkStreamerScript = preload("res://scripts/world_chunk_streamer.gd")
 const FengduCityBuilder = preload("res://scripts/fengdu_city_builder.gd")
+const HellFloorBuilder = preload("res://scripts/underworld_hell_floor_builder.gd")
 
 
 func _initialize() -> void:
@@ -13,6 +14,7 @@ func _run_world_generation_tests() -> void:
 	_test_world_bounds_and_hell_catalog()
 	_test_chunk_streaming()
 	_test_fengdu_city_blockout()
+	_test_hell_floor_blockout()
 	print("WORLD_GENERATION_TESTS_OK")
 	quit(0)
 
@@ -55,3 +57,20 @@ func _test_fengdu_city_blockout() -> void:
 	assert(palace.get_node_or_null("CollisionShape3D") is CollisionShape3D)
 	assert(city.get_node_or_null("Road_imperial_palace_ten_kings_manors") is MeshInstance3D)
 	city.free()
+
+
+func _test_hell_floor_blockout() -> void:
+	var floor_data := WorldMapCatalog.get_hell_floor_data(18)
+	assert(not floor_data.is_empty())
+	assert(str(floor_data.get("environment", "")) == "abyss")
+	assert(not str(floor_data.get("objective", "")).is_empty())
+	assert(WorldMapCatalog.resolve_hell_floor_number("underworld_hell_18") == 18)
+	assert(WorldMapCatalog.resolve_hell_floor_number("underworld_hell_invalid") == 0)
+	assert(WorldMapCatalog.resolve_region_name("underworld_hell_18", Vector3.ZERO) == "十八层地狱 · 第 18 层")
+	var floor_scene := HellFloorBuilder.build(18)
+	assert(str(floor_scene.get_meta("hell_floor_id", "")) == "hell_18")
+	assert(floor_scene.get_node_or_null("EntrancePortal") is Node3D)
+	assert(floor_scene.get_node_or_null("TrialExitPortal") is Node3D)
+	assert(floor_scene.get_node_or_null("GuardianDais") is MeshInstance3D)
+	assert(floor_scene.get_node_or_null("ArenaWallX_-1.0") is StaticBody3D)
+	floor_scene.free()
