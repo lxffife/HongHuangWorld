@@ -5917,6 +5917,7 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                         impl_->broadcast_player_event(
                             honghuang::protocol::MessageType::PlayerJoined, impl_->players.at(event.peer));
                         Json client_welcome = snapshot;
+                        client_welcome["hell_floor"] = impl_->config.hell_floor;
                         const auto& welcomed_player = impl_->players.at(event.peer);
                         const auto welcome_weapon = honghuang::simulation::weapon_combat_profile(
                             player_weapon_type(welcomed_player));
