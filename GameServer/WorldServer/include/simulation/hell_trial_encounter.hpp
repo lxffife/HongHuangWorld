@@ -40,6 +40,7 @@ public:
     int objective_kills() const;
     bool guardian_defeated() const;
     bool completed() const;
+    void clamp_player_position(float& x, float& z) const;
 
     // runtime_id identifies one spawn point/life. Repeated death callbacks for
     // the same life cannot inflate the objective counter.
