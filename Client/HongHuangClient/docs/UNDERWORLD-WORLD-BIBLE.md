@@ -103,9 +103,14 @@
 - 已通关的层数允许重复进入；尚未开放的后续层不能通过客户端参数跳层。
 - 第十八层是阿鼻/无间最深层核心禁区，通关后流程结束，不创建第十九层。
 - 失败条件彼此独立：目标未完成、守将仍存活、层数无效、层数未解锁、重复提交完成请求都会得到不同结果，避免客户端把视觉击杀或传送当作通关。
-- 当前 C++ `HellTrialProgression` 是可单测的服务端规则组件；本次尚未接入角色数据库持久化、地狱副本实例、任务目标事件或 Godot 传送入口。真实上线前必须将通关状态绑定 character_id 并在中心服事务中保存，WorldServer 不能只依赖内存状态。
+- C++ `HellTrialProgression` 保留为 WorldServer 规则单测；中心服 Go 包 `Backend/internal/helltrial` 已提供角色进度查询、入层记录和通关结算服务。
+- 数据库迁移 `000072_hell_trial_progress` 为世界实例增加可空 `hell_floor`（1–18），并按 `character_id + floor_number` 持久化解锁/通关状态、进入次数、时间和目标快照。
+- 玩家查询接口：`GET /api/v1/characters/current/hell-trials`，通过账号当前肉身与活动世界会话解析进度，不接受客户端传入角色 ID。
+- WorldServer 入层接口：`POST /api/v1/servers/hell-trials/entries`；通关接口：`POST /api/v1/servers/hell-trials/completions`。均要求 `X-World-Server-Key` 与 `X-World-Server-Node`，中心服核对角色活动会话确实由该节点承载，且世界实例 `hell_floor` 与请求层数一致。
+- 入层事件和通关事件均使用 UUID 幂等；未记录入层、未完成目标、守将未败、层数未解锁均不能结算。当前层完成与下一层解锁在同一数据库事务内提交。
+- **尚未完成的运行时接线**：WorldServer 的真实副本入口、怪物目标计数、守将死亡事件尚未调用这两个中心服回调；Godot 端的十八层传送与场景也未接入。因此目前已具备中心服 API 和持久化规则，但不能宣称十八层已经可在客户端实际游玩。
 
-## 八、当前实现状态
+## 九、当前实现状态
 
 - `world_map_catalog.gd`：包含第一版冥界示意总览节点和关系连线。
 - `world_map_view.gd`：支持本地地图与冥界总览两种显示模式。
