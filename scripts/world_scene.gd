@@ -4305,6 +4305,7 @@ func _on_combat_event(event: Dictionary) -> void:
 		var rejection_reason := str(event.get("reason", "攻击未命中。"))
 		hud_label.text = "攻击失败：" + rejection_reason + " · 请调整距离或目标"
 		if is_instance_valid(target_info_label) and not selected_monster_id.is_empty():
+			_update_target_info()
 			target_info_label.text += "\n攻击未成功：" + rejection_reason + " · 请靠近目标"
 			target_info_panel.visible = hud_visible
 		_show_notification("攻击未成功：" + rejection_reason + "。保持当前目标，靠近后再次点击左键。", 4.0)
