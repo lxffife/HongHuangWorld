@@ -210,6 +210,7 @@ func _test_fengdu_navigation() -> void:
 	assert(not bool(gate_adapter.call("_is_gate_guard_shift_active", "night", 6)))
 	var day_guard_root := Node3D.new()
 	var day_guard := {"role": "gate_guard", "gate_id": "north_heaven_gate", "shift_tag": "day", "root": day_guard_root}
+	assert(bool(gate_adapter.call("set_local_gate_state", "north_heaven_gate", true)))
 	assert(bool(gate_adapter.call("_apply_gate_guard_shift", day_guard, 9)))
 	assert(day_guard_root.visible)
 	assert(str(day_guard.get("state", "")) == "gate_watch")
