@@ -87,6 +87,11 @@ var threat_alert_panel: PanelContainer
 var threat_alert_label: Label
 var threat_alert_bar: ProgressBar
 var threat_alert_timer: Timer
+var revive_channel_panel: PanelContainer
+var revive_channel_label: Label
+var revive_channel_bar: ProgressBar
+var revive_channel_remaining := 0.0
+var revive_channel_total := 5.0
 var vitals_known := false
 var input_debug_panel: PanelContainer
 var input_debug_label: Label
@@ -1065,6 +1070,30 @@ func _build_combat_hud() -> void:
 	threat_alert_timer.timeout.connect(func(): threat_alert_panel.visible = false)
 	add_child(threat_alert_timer)
 
+	revive_channel_panel = PanelContainer.new()
+	revive_channel_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	revive_channel_panel.position = Vector2(-190.0, 218.0)
+	revive_channel_panel.custom_minimum_size = Vector2(380.0, 52.0)
+	revive_channel_panel.visible = false
+	_apply_panel_theme(revive_channel_panel)
+	hud.add_child(revive_channel_panel)
+	var revive_layout := VBoxContainer.new()
+	revive_layout.add_theme_constant_override("separation", 4)
+	revive_channel_panel.add_child(revive_layout)
+	revive_channel_label = Label.new()
+	revive_channel_label.text = "回魂术引导中"
+	revive_channel_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	revive_channel_label.add_theme_color_override("font_color", Color("#a9dfc0"))
+	revive_channel_label.add_theme_font_size_override("font_size", 12)
+	revive_layout.add_child(revive_channel_label)
+	revive_channel_bar = ProgressBar.new()
+	revive_channel_bar.custom_minimum_size = Vector2(350.0, 9.0)
+	revive_channel_bar.min_value = 0.0
+	revive_channel_bar.max_value = 1.0
+	revive_channel_bar.value = 0.0
+	revive_channel_bar.show_percentage = false
+	revive_layout.add_child(revive_channel_bar)
+
 	target_info_panel = PanelContainer.new()
 	target_info_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	target_info_panel.position = Vector2(-180.0, 18.0)
@@ -1096,6 +1125,21 @@ func _build_combat_hud() -> void:
 	target_health_bar.add_theme_stylebox_override("background", target_track)
 	target_health_bar.add_theme_stylebox_override("fill", target_fill)
 	target_layout.add_child(target_health_bar)
+
+func _start_revive_channel_ui(actor_name: String, duration_ms: int) -> void:
+	revive_channel_total = maxf(float(duration_ms) / 1000.0, 0.5)
+	revive_channel_remaining = revive_channel_total
+	if is_instance_valid(revive_channel_label):
+		revive_channel_label.text = actor_name + " · 回魂术引导中"
+	if is_instance_valid(revive_channel_bar):
+		revive_channel_bar.value = 0.0
+	if is_instance_valid(revive_channel_panel):
+		revive_channel_panel.visible = hud_visible
+
+func _stop_revive_channel_ui() -> void:
+	revive_channel_remaining = 0.0
+	if is_instance_valid(revive_channel_panel):
+		revive_channel_panel.visible = false
 
 func _show_notification(message: String, duration: float = 3.2) -> void:
 	if not is_instance_valid(notification_panel) or not is_instance_valid(notification_label):
@@ -3755,6 +3799,7 @@ func _on_combat_event(event: Dictionary) -> void:
 		_show_notification(taunter + " 嘲讽了怪物，怪物将优先攻击他！", 2.8)
 		return
 	if str(event.get("action", "")) == "player_revived":
+		_stop_revive_channel_ui()
 		var revived_id := str(event.get("character_id", ""))
 		if revived_id == str(HHSession.world_snapshot.get("character_id", "")):
 			HHSession.world_snapshot["health"] = int(event.get("health", 1))
@@ -3772,8 +3817,10 @@ func _on_combat_event(event: Dictionary) -> void:
 		return
 	if str(event.get("action", "")) == "revive":
 		if str(event.get("phase", "")) == "incoming":
-			_show_notification(str(event.get("character_name", "队友")) + " 正在对你施展回魂术……", 5.0)
+			_start_revive_channel_ui(str(event.get("character_name", "附近修士")), int(event.get("duration_ms", 5000)))
+			_show_notification(str(event.get("character_name", "附近修士")) + " 正在对你施展回魂术……", 5.0)
 		elif str(event.get("phase", "")) == "interrupted":
+			_stop_revive_channel_ui()
 			_show_notification(str(event.get("reason", "救援中断。")), 3.0)
 		return
 	if str(event.get("action", "")) == "player_death_persisted":
@@ -3885,13 +3932,20 @@ func _on_combat_event(event: Dictionary) -> void:
 			spell_cooldown_remaining[spell_id] = float(event.get("cooldown_ms", 0)) / 1000.0
 			_update_spell_cooldown_hud()
 		if not bool(event.get("accepted", false)):
+			if spell_id == "revive":
+				_stop_revive_channel_ui()
 			_show_notification(str(event.get("reason", spell_name + "施展失败。")), 3.0)
 		elif str(event.get("phase", "")) == "channeling":
+			_start_revive_channel_ui("正在救援倒地玩家", int(event.get("duration_ms", 5000)))
 			_show_notification("正在施展回魂术：保持原地 5 秒，受到攻击或移动会中断。", 5.0)
 		elif str(event.get("phase", "")) == "casting":
 			_show_notification("正在凝聚" + spell_name + " · 灵力 -" + str(int(event.get("mana_cost", 18))), 1.5)
 		elif str(event.get("phase", "")) == "released":
+			if spell_id == "revive":
+				_stop_revive_channel_ui()
 			_show_notification(spell_name + "已释放！", 1.5)
+		elif str(event.get("phase", "")) == "interrupted" and spell_id == "revive":
+			_stop_revive_channel_ui()
 		return
 	if not bool(event.get("accepted", true)):
 		hud_label.text = str(event.get("reason", "攻击未命中。"))
@@ -4247,6 +4301,12 @@ func _update_input_debug_hud() -> void:
 	input_debug_label.text = keys + "\n" + movement_text + " · 网络：" + network_text + "\n" + send_text + " · ESC 释放鼠标"
 
 func _process(delta: float) -> void:
+	if revive_channel_remaining > 0.0:
+		revive_channel_remaining = maxf(0.0, revive_channel_remaining - delta)
+		if is_instance_valid(revive_channel_bar):
+			revive_channel_bar.value = 1.0 - revive_channel_remaining / maxf(revive_channel_total, 0.1)
+		if revive_channel_remaining <= 0.0 and is_instance_valid(revive_channel_panel):
+			revive_channel_panel.visible = false
 	minimap_refresh_accumulator += delta
 	if minimap_refresh_accumulator >= 0.2:
 		minimap_refresh_accumulator = 0.0
