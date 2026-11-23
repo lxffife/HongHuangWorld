@@ -9,6 +9,28 @@ int main() {
     using namespace honghuang::simulation;
 
     FengduIncidentDirector director;
+    GatePolicySnapshot base_gate{"north_heaven_gate"};
+    GateAccessRequest visitor{};
+    auto normal_decision = evaluate_gate_access(
+        apply_city_alert_to_gate_policy(base_gate, CityAlertLevel::normal), visitor);
+    assert(normal_decision.allowed);
+    auto watch_decision = evaluate_gate_access(
+        apply_city_alert_to_gate_policy(base_gate, CityAlertLevel::watch), visitor);
+    assert(!watch_decision.allowed && watch_decision.code == GateAccessCode::pass_required);
+    visitor.has_valid_pass = true;
+    watch_decision = evaluate_gate_access(
+        apply_city_alert_to_gate_policy(base_gate, CityAlertLevel::watch), visitor);
+    assert(watch_decision.allowed);
+    visitor = {};
+    auto lockdown_decision = evaluate_gate_access(
+        apply_city_alert_to_gate_policy(base_gate, CityAlertLevel::lockdown), visitor);
+    assert(!lockdown_decision.allowed && lockdown_decision.code == GateAccessCode::lockdown);
+    visitor.is_emergency_responder = true;
+    visitor.has_gate_override = true;
+    lockdown_decision = evaluate_gate_access(
+        apply_city_alert_to_gate_policy(base_gate, CityAlertLevel::lockdown), visitor);
+    assert(lockdown_decision.allowed);
+
     assert(director.report("", IncidentSeverity::low) == nullptr);
     const auto* low = director.report("suspicious_activity", IncidentSeverity::low);
     assert(low != nullptr);
