@@ -38,6 +38,22 @@ func TestValidateCompletion(t *testing.T) {
 	for _,tc:=range cases { t.Run(tc.name,func(t *testing.T){req:=valid;tc.mutate(&req);if err:=validateCompletion(req);!errors.Is(err,tc.want){t.Fatalf("got %v, want %v",err,tc.want)}}) }
 }
 
+func TestGuardianDefinitionCatalog(t *testing.T) {
+	if len(guardianDefinitionIDs) != FloorCount {
+		t.Fatalf("expected %d guardian definitions, got %d", FloorCount, len(guardianDefinitionIDs))
+	}
+	seen := make(map[string]struct{}, FloorCount)
+	for floor, id := range guardianDefinitionIDs {
+		if id == "" {
+			t.Fatalf("floor %d has an empty guardian definition", floor+1)
+		}
+		if _, exists := seen[id]; exists {
+			t.Fatalf("guardian definition %q is reused", id)
+		}
+		seen[id] = struct{}{}
+	}
+}
+
 func TestFloorCountAndFinalBoundary(t *testing.T) {
 	if FloorCount!=18 { t.Fatalf("expected 18 floors, got %d",FloorCount) }
 	if min(19,FloorCount)!=18 { t.Fatal("floor 18 must be the terminal floor") }
