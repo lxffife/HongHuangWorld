@@ -4898,6 +4898,8 @@ struct EnetServer::Impl {
             }
             const PlayerState* highest_threat_player = nullptr;
             double highest_effective_threat = 0.0;
+            const PlayerState* highest_challenger_player = nullptr;
+            double highest_challenger_effective_threat = 0.0;
             double current_effective_threat = 0.0;
             const auto current_target_id = monster.state.target_id;
             for (const auto& [peer, player] : players) {
@@ -4920,8 +4922,12 @@ struct EnetServer::Impl {
                                 highest_effective_threat = effective;
                                 highest_threat_player = &player;
                             }
-                            if (player.character_id == current_target_id)
+                            if (player.character_id == current_target_id) {
                                 current_effective_threat = effective;
+                            } else if (effective > highest_challenger_effective_threat) {
+                                highest_challenger_effective_threat = effective;
+                                highest_challenger_player = &player;
+                            }
                         }
                     }
                 }
@@ -4930,10 +4936,9 @@ struct EnetServer::Impl {
                     nearest_player = &player;
                 }
             }
-            if (highest_threat_player != nullptr &&
-                highest_threat_player->character_id != current_target_id &&
+            if (highest_challenger_player != nullptr &&
                 honghuang::simulation::should_warn_threat_steal(
-                    current_effective_threat, highest_effective_threat) &&
+                    current_effective_threat, highest_challenger_effective_threat) &&
                 (monster.last_threat_warning_at == Clock::time_point{} ||
                  now - monster.last_threat_warning_at >= std::chrono::seconds(5))) {
                 const auto current_target = std::find_if(players.begin(), players.end(),
@@ -4941,16 +4946,16 @@ struct EnetServer::Impl {
                         return entry.second.character_id == current_target_id;
                     });
                 if (current_target != players.end()) {
-                    const double ratio = highest_effective_threat /
+                    const double ratio = highest_challenger_effective_threat /
                         std::max(1.0, current_effective_threat);
                     const Json warning{{"action", "threat_warning"},
                         {"monster_id", monster.runtime_id},
                         {"monster_name", monster.definition.name},
                         {"current_target_name", current_target->second.name},
-                        {"challenger_name", highest_threat_player->name},
+                        {"challenger_name", highest_challenger_player->name},
                         {"challenger_ratio", ratio},
                         {"will_switch", honghuang::simulation::should_switch_monster_target(
-                            current_effective_threat, highest_effective_threat)}};
+                            current_effective_threat, highest_challenger_effective_threat)}};
                     for (const auto& [observer_peer, observer] : players) {
                         if (!honghuang::simulation::within_interest_radius(
                             monster.state.x, monster.state.z, observer.x, observer.z, kInterestRadius))
