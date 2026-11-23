@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+
+	"github.com/liflife/HongHuangWorld/Backend/internal/economy"
 	"fmt"
 	"math"
 	"regexp"
@@ -13,7 +15,7 @@ import (
 var (
 	ErrInvalidRequest = errors.New("invalid shop request")
 	ErrShopUnavailable = errors.New("shop or item is unavailable")
-	ErrInsufficientFunds = errors.New("insufficient currency balance")
+	ErrInsufficientFunds = economy.ErrInsufficientFunds
 	ErrInventoryFull = errors.New("inventory is full")
 	ErrStackLimit = errors.New("inventory stack limit exceeded")
 	ErrOutOfStock = errors.New("shop item is out of stock")
@@ -196,35 +198,12 @@ func (s *Service) Purchase(ctx context.Context, accountID string, request Purcha
 		if usedSlots>=maxSlots{return PurchaseResult{},ErrInventoryFull}
 	}
 
-	if _,err:=tx.ExecContext(ctx,`INSERT INTO currency_balances(account_id,currency_id)
-		VALUES($1,$2) ON CONFLICT(account_id,currency_id) DO NOTHING`,accountID,currencyID);err!=nil{
-		return PurchaseResult{},fmt.Errorf("initialize buyer currency balance: %w",err)
-	}
-	var balance int64
-	if err:=tx.QueryRowContext(ctx,`SELECT available_amount FROM currency_balances
-		WHERE account_id=$1 AND currency_id=$2 FOR UPDATE`,accountID,currencyID).Scan(&balance);err!=nil{
-		return PurchaseResult{},fmt.Errorf("lock buyer currency balance: %w",err)
-	}
-	if balance<total{return PurchaseResult{},ErrInsufficientFunds}
-	balance-=total
-
-	if stock.Valid{
-		res,err:=tx.ExecContext(ctx,`UPDATE npc_shop_items SET stock_quantity=stock_quantity-$3
-			WHERE shop_id=$1 AND item_id=$2 AND stock_quantity >= $3`,request.ShopID,request.ItemID,request.Quantity)
-		if err!=nil{return PurchaseResult{},fmt.Errorf("decrement NPC shop stock: %w",err)}
-		changed,_:=res.RowsAffected();if changed!=1{return PurchaseResult{},ErrOutOfStock}
-	}
-	if _,err:=tx.ExecContext(ctx,`UPDATE currency_balances SET available_amount=$3,updated_at=now()
-		WHERE account_id=$1 AND currency_id=$2`,accountID,currencyID,balance);err!=nil{
-		return PurchaseResult{},fmt.Errorf("debit buyer currency: %w",err)
-	}
 	eventKey:="npc_shop:"+request.RequestID
-	if _,err:=tx.ExecContext(ctx,`INSERT INTO economy_ledger_entries
-		(account_id,currency_id,event_key,entry_type,delta,available_after,frozen_delta,frozen_after,source_type,source_id,note)
-		VALUES($1,$2,$3,'trade',$4,$5,0,0,'npc_shop',$6,$7)`,
-		accountID,currencyID,eventKey,-total,balance,request.ShopID,"购买"+itemName);err!=nil{
-		return PurchaseResult{},fmt.Errorf("append NPC shop currency ledger: %w",err)
-	}
+	ledgerResult,err:=economy.NewService(s.db).ApplyDeltaInTx(ctx,tx,accountID,currencyID,eventKey,"trade",-total,"npc_shop",request.ShopID,"购买"+itemName)
+	if err!=nil{return PurchaseResult{},err}
+	if !ledgerResult.Applied{return PurchaseResult{},ErrIdempotencyConflict}
+	balance:=ledgerResult.AvailableAfter
+
 	if _,err:=tx.ExecContext(ctx,`INSERT INTO character_inventory(character_id,item_id,quantity)
 		VALUES($1::uuid,$2,$3)
 		ON CONFLICT(character_id,item_id) DO UPDATE
