@@ -3361,7 +3361,7 @@ func _update_spell_cooldown_hud() -> void:
 		if not is_instance_valid(label):
 			continue
 		var spell_key := "Y" if spell_id == "revive" else ("Q" if spell_id == "fireball" else ("R" if spell_id == "ice_bolt" else "T"))
-		var spell_name := "火球术" if spell_id == "fireball" else ("冰锥术" if spell_id == "ice_bolt" else "嘲讽")
+		var spell_name := "回魂术" if spell_id == "revive" else ("火球术" if spell_id == "fireball" else ("冰锥术" if spell_id == "ice_bolt" else "嘲讽"))
 		var remaining := float(spell_cooldown_remaining.get(spell_id, 0.0))
 		label.text = spell_key + " · " + spell_name + "：冷却 " + ("%.1f" % remaining) + " 秒" if remaining > 0.0 else spell_key + " · " + spell_name + "：就绪"
 
@@ -3877,10 +3877,10 @@ func _on_combat_event(event: Dictionary) -> void:
 		var spell_name := "回魂术" if spell_id == "revive" else ("嘲讽" if spell_id == "taunt" else ("冰锥术" if spell_id == "ice_bolt" else ("火球术" if spell_id == "fireball" else "法术")))
 		# Mirror the server: cooldown starts on successful release, not when
 		# the cast begins. An interrupted cast refunds mana and remains ready.
-		if bool(event.get("accepted", false)) and str(event.get("phase", "")) == "released" and spell_cooldown_remaining.has(spell_id):
+		if bool(event.get("accepted", false)) and str(event.get("phase", "")) in ["released", "channeling"] and spell_cooldown_remaining.has(spell_id):
 			spell_cooldown_remaining[spell_id] = maxf(float(event.get("cooldown_ms", 0)) / 1000.0, 0.0)
 			_update_spell_cooldown_hud()
-		elif not bool(event.get("accepted", false)) and spell_id == "taunt" and int(event.get("cooldown_ms", 0)) > 0:
+		elif not bool(event.get("accepted", false)) and spell_id in ["taunt", "revive"] and int(event.get("cooldown_ms", 0)) > 0:
 			# The server returns remaining cooldown on a rejected recast.
 			spell_cooldown_remaining[spell_id] = float(event.get("cooldown_ms", 0)) / 1000.0
 			_update_spell_cooldown_hud()
