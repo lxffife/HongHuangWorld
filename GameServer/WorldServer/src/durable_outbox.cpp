@@ -393,8 +393,8 @@ bool DurableOutbox::admit_monster_damage(
         error = "invalid monster contribution record";
         return false;
     }
-    std::unique_lock<std::mutex> lock(mutex_, std::defer_lock);
-    if (!lock.try_lock()) { error = "SQLite writer is busy; retry hit without applying damage"; return false; }
+    std::unique_lock<std::timed_mutex> lock(mutex_, std::defer_lock);
+    if (!lock.try_lock_for(std::chrono::milliseconds{10})) { error = "SQLite writer remained busy for 10 ms; retry hit without applying damage"; return false; }
     sqlite3_busy_timeout(db_, 50);
     struct TimeoutReset { sqlite3* db; ~TimeoutReset(){ sqlite3_busy_timeout(db, 5000); } } reset{db_};
     bool transaction_open = false;
@@ -482,9 +482,9 @@ bool DurableOutbox::apply_monster_health_transition(
         error = "invalid health-only monster transition";
         return false;
     }
-    std::unique_lock<std::mutex> lock(mutex_, std::defer_lock);
-    if (!lock.try_lock()) {
-        error = "SQLite writer is busy; defer environmental damage";
+    std::unique_lock<std::timed_mutex> lock(mutex_, std::defer_lock);
+    if (!lock.try_lock_for(std::chrono::milliseconds{10})) {
+        error = "SQLite writer remained busy for 10 ms; defer environmental damage";
         return false;
     }
     sqlite3_busy_timeout(db_, 50);
@@ -606,9 +606,9 @@ bool DurableOutbox::admit_monster_contribution(
         sqlite3* db{};
         ~BusyTimeoutReset() { if (db != nullptr) sqlite3_busy_timeout(db, 5000); }
     };
-    std::unique_lock<std::mutex> lock(mutex_, std::defer_lock);
-    if (!lock.try_lock()) {
-        error = "SQLite writer is busy; retry hit without applying damage";
+    std::unique_lock<std::timed_mutex> lock(mutex_, std::defer_lock);
+    if (!lock.try_lock_for(std::chrono::milliseconds{10})) {
+        error = "SQLite writer remained busy for 10 ms; retry hit without applying damage";
         return false;
     }
     sqlite3_busy_timeout(db_, 50);
@@ -1108,10 +1108,10 @@ bool DurableOutbox::record_monster_contribution_internal(
         sqlite3* db{};
         ~BusyTimeoutReset() { if (db != nullptr) sqlite3_busy_timeout(db, 5000); }
     };
-    std::unique_lock<std::mutex> lock(mutex_, std::defer_lock);
+    std::unique_lock<std::timed_mutex> lock(mutex_, std::defer_lock);
     if (death != nullptr) {
-        if (!lock.try_lock()) {
-            error = "SQLite writer is busy; retry lethal hit without applying damage";
+        if (!lock.try_lock_for(std::chrono::milliseconds{10})) {
+            error = "SQLite writer remained busy for 10 ms; retry lethal hit without applying damage";
             return false;
         }
         sqlite3_busy_timeout(db_, 200);
