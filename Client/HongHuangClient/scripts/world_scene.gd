@@ -102,6 +102,7 @@ var shield_amount := 0
 var notification_panel: PanelContainer
 var notification_label: Label
 var notification_timer: Timer
+var notification_queue: Array[Dictionary] = []
 var threat_alert_panel: PanelContainer
 var threat_alert_label: Label
 var threat_alert_bar: ProgressBar
@@ -1218,7 +1219,7 @@ func _build_combat_hud() -> void:
 	notification_timer = Timer.new()
 	notification_timer.one_shot = true
 	notification_timer.wait_time = 3.2
-	notification_timer.timeout.connect(func(): notification_panel.visible = false)
+	notification_timer.timeout.connect(_on_notification_timeout)
 	add_child(notification_timer)
 
 	# Persistent threat-pressure indicator: the toast is transient, while this
@@ -1348,13 +1349,45 @@ func _stop_revive_channel_ui() -> void:
 		revive_channel_panel.visible = false
 
 func _show_notification(message: String, duration: float = 3.2) -> void:
+	if message.strip_edges().is_empty():
+		return
+	if not is_instance_valid(notification_panel) or not is_instance_valid(notification_label):
+		return
+	# Do not let a burst of world-entry, combat and reward events overwrite
+	# one another. Keep a small FIFO queue and collapse repeated messages.
+	if notification_panel.visible:
+		if notification_label.text == message:
+			if is_instance_valid(notification_timer):
+				notification_timer.start(duration)
+			return
+		for queued in notification_queue:
+			if str(queued.get("message", "")) == message:
+				return
+		if notification_queue.size() >= 4:
+			notification_queue.pop_front()
+		notification_queue.append({"message": message, "duration": duration})
+		return
+	_display_notification(message, duration)
+
+
+func _display_notification(message: String, duration: float) -> void:
 	if not is_instance_valid(notification_panel) or not is_instance_valid(notification_label):
 		return
 	notification_label.text = message
 	_layout_notification_panel()
 	notification_panel.visible = true
 	if is_instance_valid(notification_timer):
-		notification_timer.start(duration)
+		notification_timer.start(maxf(0.8, duration))
+
+
+func _on_notification_timeout() -> void:
+	if is_instance_valid(notification_panel):
+		notification_panel.visible = false
+	if notification_queue.is_empty():
+		return
+	var next_notice: Dictionary = notification_queue.pop_front()
+	_display_notification(str(next_notice.get("message", "")),
+		float(next_notice.get("duration", 3.2)))
 
 
 func _layout_notification_panel() -> void:
