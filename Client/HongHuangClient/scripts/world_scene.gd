@@ -76,6 +76,10 @@ var hud_visible := true
 var hud_toggle_button: Button
 var hud_restore_button: Button
 var help_button: Button
+var leave_world_button: Button
+var leave_world_dialog: ConfirmationDialog
+var leaving_world := false
+var leave_transition_started := false
 var help_panel: PanelContainer
 var help_restore_mouse_captured := false
 var death_panel: PanelContainer
@@ -573,6 +577,18 @@ func _build_compact_hud() -> void:
 	help_button.custom_minimum_size = Vector2(112.0, 34.0)
 	help_button.pressed.connect(_toggle_help_panel)
 	hud.add_child(help_button)
+	leave_world_button = Button.new()
+	leave_world_button.text = "退出世界"
+	leave_world_button.custom_minimum_size = Vector2(112.0, 34.0)
+	leave_world_button.pressed.connect(_confirm_leave_world)
+	hud.add_child(leave_world_button)
+	leave_world_dialog = ConfirmationDialog.new()
+	leave_world_dialog.title = "返回角色大厅"
+	leave_world_dialog.dialog_text = "确定退出当前世界并返回角色大厅吗？\n系统将断开世界连接，角色位置以服务器最近一次保存记录为准。"
+	leave_world_dialog.ok_button_text = "退出并返回大厅"
+	leave_world_dialog.cancel_button_text = "继续游戏"
+	leave_world_dialog.confirmed.connect(_leave_world_to_lobby)
+	add_child(leave_world_dialog)
 	hud_restore_button = Button.new()
 	hud_restore_button.text = "显示界面  F1"
 	hud_restore_button.custom_minimum_size = Vector2(124.0, 38.0)
@@ -1395,9 +1411,61 @@ func _toggle_hud_visibility() -> void:
 		hud_restore_button.visible = not hud_visible
 	if is_instance_valid(help_button):
 		help_button.visible = true
+	if is_instance_valid(leave_world_button):
+		leave_world_button.visible = hud_visible
 	if is_instance_valid(hud_toggle_button):
 		hud_toggle_button.text = "隐藏界面  F1"
 	_layout_hud()
+
+func _confirm_leave_world() -> void:
+	if leaving_world or not is_instance_valid(leave_world_dialog):
+		return
+	leave_world_dialog.popup_centered()
+
+
+func _leave_world_to_lobby() -> void:
+	if leaving_world:
+		return
+	leaving_world = true
+	leave_transition_started = false
+	if is_instance_valid(leave_world_button):
+		leave_world_button.disabled = true
+	_show_notification("正在安全退出世界，返回角色大厅……", 3.0)
+	var network: HHWorldNetwork = HHSession.world_network
+	if network == null or not is_instance_valid(network) or not network.is_world_ready():
+		_finish_leave_world_to_lobby()
+		return
+	network.close()
+	# ENet normally emits disconnected on the next poll. Keep a bounded fallback
+	# so the player can still leave if the peer was already half-closed.
+	_finish_leave_world_to_lobby_after_timeout()
+
+
+func _finish_leave_world_to_lobby_after_timeout() -> void:
+	await get_tree().create_timer(1.5).timeout
+	if leaving_world:
+		_finish_leave_world_to_lobby()
+
+
+func _finish_leave_world_to_lobby() -> void:
+	if not leaving_world or leave_transition_started:
+		return
+	leave_transition_started = true
+	var network: HHWorldNetwork = HHSession.world_network
+	if network != null and is_instance_valid(network):
+		if network.get_parent() == HHSession:
+			HHSession.remove_child(network)
+		network.queue_free()
+	HHSession.world_network = null
+	HHSession.world_snapshot = {}
+	var error := get_tree().change_scene_to_file("res://scenes/Startup.tscn")
+	if error != OK:
+		leaving_world = false
+		leave_transition_started = false
+		if is_instance_valid(leave_world_button):
+			leave_world_button.disabled = false
+		hud_label.text = "返回角色大厅失败，错误码：" + str(error)
+
 
 func _toggle_help_panel() -> void:
 	if not is_instance_valid(help_panel):
@@ -2219,6 +2287,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			hud_restore_button.visible = not hud_visible
 		if is_instance_valid(help_button):
 			help_button.visible = true
+		if is_instance_valid(leave_world_button):
+			leave_world_button.visible = hud_visible
 		if is_instance_valid(chat_panel):
 			chat_panel.visible = hud_visible
 		if is_instance_valid(details_toggle_button):
@@ -2496,6 +2566,8 @@ func is_gameplay_input_blocked() -> bool:
 		return true
 	if is_instance_valid(help_panel) and help_panel.visible:
 		return true
+	if is_instance_valid(leave_world_dialog) and leave_world_dialog.visible:
+		return true
 	var focused_control := get_viewport().gui_get_focus_owner()
 	return focused_control is LineEdit or focused_control is TextEdit
 
@@ -2550,6 +2622,8 @@ func _layout_hud() -> void:
 		hud_restore_button.position = Vector2(18.0, 18.0)
 	if is_instance_valid(help_button):
 		help_button.position = Vector2(138.0, 18.0)
+	if is_instance_valid(leave_world_button):
+		leave_world_button.position = Vector2(258.0, 18.0)
 	if is_instance_valid(help_panel):
 		var help_width := minf(540.0, maxf(320.0, viewport_size.x - 32.0))
 		var help_height := minf(500.0, maxf(360.0, viewport_size.y - 32.0))
@@ -4541,8 +4615,19 @@ func _on_combat_event(event: Dictionary) -> void:
 		elif str(event.get("phase", "")) == "interrupted" and spell_id == "revive":
 			_stop_revive_channel_ui()
 		return
+	# Combat events for nearby players share the same ENet stream. Only
+	# display attack results addressed to this local character.
+	if event.has("attacker_character_id"):
+		var event_attacker_id := str(event.get("attacker_character_id", ""))
+		var local_character_id := str(HHSession.world_snapshot.get("character_id", ""))
+		if not event_attacker_id.is_empty() and event_attacker_id != local_character_id:
+			return
 	if not bool(event.get("accepted", true)):
 		var rejection_reason := str(event.get("reason", "攻击未命中。"))
+		if rejection_reason == "攻击间隔中，请稍后再试。":
+			var cooldown_seconds := maxf(float(event.get("cooldown_ms", 0)) / 1000.0, 0.0)
+			_show_notification("攻击冷却中 · 还需 %.1f 秒" % cooldown_seconds, 1.8)
+			return
 		var rejection_detail := rejection_reason
 		if rejection_reason == "距离目标太远。" and monster_targets.has(selected_monster_id) and is_instance_valid(local_player):
 			var rejected_position: Vector3 = monster_targets[selected_monster_id]
@@ -5400,6 +5485,9 @@ func _animate_soul_monster(monster: Node3D, delta: float, phase: float, moving: 
 
 
 func _on_world_disconnected() -> void:
+	if leaving_world:
+		_finish_leave_world_to_lobby()
+		return
 	hud_label.text = "与世界服务器的连接已断开。角色位置会周期保存，重连后将恢复到最近一次成功保存的位置。"
 	reconnect_button.visible = true
 	reconnect_button.disabled = false
