@@ -19,6 +19,7 @@ func TestValidateCompletion(t *testing.T) {
 	}
 	if err := validateCompletion(valid); err != nil { t.Fatalf("valid completion rejected: %v", err) }
 	cases := []struct{name string; mutate func(*CompletionRequest); want error}{
+		{"invalid session UUID",func(r *CompletionRequest){r.SessionID="not-a-uuid"},ErrInvalid},
 		{"invalid character UUID",func(r *CompletionRequest){r.CharacterID="not-a-uuid"},ErrInvalid},
 		{"invalid event UUID",func(r *CompletionRequest){r.EventID="not-a-uuid"},ErrInvalid},
 		{"floor below range",func(r *CompletionRequest){r.Floor=0},ErrInvalid},
@@ -52,6 +53,7 @@ func TestValidateEntry(t *testing.T) {
 	}
 	if err := validateEntry(valid); err != nil { t.Fatalf("valid floor entry rejected: %v", err) }
 	cases := []struct{name string; mutate func(*EntryRequest)}{
+		{"invalid session",func(r *EntryRequest){r.SessionID="bad"}},
 		{"invalid character",func(r *EntryRequest){r.CharacterID="bad"}},
 		{"invalid event",func(r *EntryRequest){r.EventID="bad"}},
 		{"floor zero",func(r *EntryRequest){r.Floor=0}},
