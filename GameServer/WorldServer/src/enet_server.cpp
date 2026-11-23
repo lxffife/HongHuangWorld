@@ -2580,17 +2580,21 @@ struct EnetServer::Impl {
             // Base combat rewards belong to every authenticated contributor, not
             // only the final hitter. Allocate integer rewards proportionally and
             // distribute rounding leftovers by descending damage (stable tie-break).
+            const bool underworld_economy = world_id == "underworld_fengdu";
             const auto reward_recipients =
                 honghuang::persistence::allocate_monster_combat_rewards(
                     records,
                     20 + static_cast<std::int64_t>(level) * 10,
                     10 + static_cast<std::int64_t>(level) * 5,
-                    5 + static_cast<std::int64_t>(level) * 3,
-                    (level >= 10 && (level % 5 == 0 || definition_id.find("elite") != std::string::npos ||
-                                     definition_id.find("ancient") != std::string::npos ||
-                                     definition_id.find("boss") != std::string::npos)) ? 1 + level / 20 : 0);
+                    underworld_economy ? 5 + static_cast<std::int64_t>(level) * 3 : 0,
+                    (underworld_economy && level >= 10 &&
+                     (level % 5 == 0 || definition_id.find("elite") != std::string::npos ||
+                      definition_id.find("ancient") != std::string::npos ||
+                      definition_id.find("boss") != std::string::npos))
+                        ? std::min<std::int64_t>(5, 1 + level / 20) : 0);
             for (const auto& recipient : reward_recipients) {
-                if (recipient.experience <= 0 && recipient.cultivation <= 0) continue;
+                if (recipient.experience <= 0 && recipient.cultivation <= 0 &&
+                    recipient.ghost_cash <= 0 && recipient.nether_stone <= 0) continue;
                 const auto reward_id = make_event_uuid();
                 append_event("character_reward", Json{
                     {"event_id", reward_id},
