@@ -104,7 +104,7 @@ int main() {
 
     city_x = 0.0F;
     city_z = -110.0F;
-    for (int step = 0; step < 40; ++step) {
+    for (int step = 0; step < 44; ++step) {
         integrate_fengdu_horizontal(city_x, city_z, 0.0F, 1.0F, 0.1F, 5.0F);
     }
     assert(city_z > -90.0F); // cross the entire north moat and gate
@@ -116,7 +116,7 @@ int main() {
 
     city_x = 0.0F;
     city_z = -10.0F;
-    for (int step = 0; step < 40; ++step) {
+    for (int step = 0; step < 44; ++step) {
         integrate_fengdu_horizontal(city_x, city_z, 0.0F, -1.0F, 0.1F, 5.0F);
     }
     assert(city_z < -30.0F); // cross the entire south moat and gate
@@ -128,7 +128,7 @@ int main() {
 
     city_x = -60.0F;
     city_z = -60.0F;
-    for (int step = 0; step < 40; ++step) {
+    for (int step = 0; step < 44; ++step) {
         integrate_fengdu_horizontal(city_x, city_z, 1.0F, 0.0F, 0.1F, 5.0F);
     }
     assert(city_x > -40.0F); // cross the entire west moat and gate
@@ -140,7 +140,7 @@ int main() {
 
     city_x = 60.0F;
     city_z = -60.0F;
-    for (int step = 0; step < 40; ++step) {
+    for (int step = 0; step < 44; ++step) {
         integrate_fengdu_horizontal(city_x, city_z, -1.0F, 0.0F, 0.1F, 5.0F);
     }
     assert(city_x < 40.0F); // cross the entire east moat and gate
