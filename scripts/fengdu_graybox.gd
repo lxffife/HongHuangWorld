@@ -719,8 +719,6 @@ func set_city_alert_level(level: String) -> bool:
 		local_gate_pass_required_by_id[gate_id] = level in ["watch", "lockdown"]
 		if level == "lockdown":
 			set_local_gate_state(gate_id, false)
-		elif level == "normal" and not gate_open_before_alert.has(gate_id):
-			set_local_gate_state(gate_id, true)
 	return true
 
 
