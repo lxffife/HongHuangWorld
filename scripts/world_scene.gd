@@ -738,11 +738,14 @@ func _map_world_id() -> String:
 
 func _show_hell_trial_runtime_state(snapshot: Dictionary) -> void:
 	var trial: Variant = snapshot.get("hell_trial", {})
-	if not (trial is Dictionary) or trial.is_empty():
+	if not (trial is Dictionary):
 		return
-	var floor_number := int(trial.get("floor", snapshot.get("hell_floor", 0)))
-	var label := str(trial.get("label", ""))
-	if bool(trial.get("completed", false)):
+	var trial_data: Dictionary = trial
+	if trial_data.is_empty():
+		return
+	var floor_number := int(trial_data.get("floor", snapshot.get("hell_floor", 0)))
+	var label := str(trial_data.get("label", ""))
+	if bool(trial_data.get("completed", false)):
 		_show_notification("第 %02d 层 · 试炼已完成" % floor_number, 4.0)
 	elif not label.is_empty():
 		_show_notification("第 %02d 层 · 当前挑战：%s" % [floor_number, label], 4.0)
