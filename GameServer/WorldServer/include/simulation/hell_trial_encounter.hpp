@@ -42,10 +42,10 @@ public:
     bool completed() const;
     void clamp_player_position(float& x, float& z) const;
 
-    // runtime_id identifies one spawn point/life. Repeated death callbacks for
-    // the same life cannot inflate the objective counter.
+    // life_id is unique for each monster life, even when the same spawn point
+    // respawns. Repeated death callbacks for one life cannot inflate the counter.
     HellTrialDeathResult record_monster_death(
-        std::string_view runtime_id, std::string_view definition_id);
+        std::string_view life_id, std::string_view definition_id);
 
 private:
     int floor_{};
