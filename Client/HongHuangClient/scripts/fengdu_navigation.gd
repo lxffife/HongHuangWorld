@@ -69,11 +69,54 @@ static func find_nearest_node(network: Dictionary, world_position: Vector3, allo
 	return {"found": true, "node_id": str(best_node.get("id", "")), "distance": best_distance}
 
 
-static func find_path(network: Dictionary, start_node_id: String, goal_node_id: String) -> Dictionary:
+static func build_city_network(city_plan: Dictionary) -> Dictionary:
+	var nodes: Array[Dictionary] = []
+	var node_kinds: Dictionary = {}
+	for entry_variant in city_plan.get("nodes", []):
+		if not entry_variant is Dictionary:
+			continue
+		var entry: Dictionary = entry_variant
+		var node_id := str(entry.get("id", ""))
+		var position_data: Array = entry.get("position", [])
+		if node_id.is_empty() or position_data.size() < 2:
+			continue
+		var world_position := Vector3(float(position_data[0]) * 0.12, 0.0, -float(position_data[1]) * 0.12 - 60.0)
+		var kind := str(entry.get("kind", "district"))
+		node_kinds[node_id] = kind
+		nodes.append({"id": node_id, "name": str(entry.get("name", node_id)), "kind": kind, "position": world_position, "enabled": true})
+
+	var edges: Array[Dictionary] = []
+	var edge_index := 0
+	for road_variant in city_plan.get("roads", []):
+		if not road_variant is Dictionary:
+			continue
+		var road: Dictionary = road_variant
+		var from_id := str(road.get("from", ""))
+		var to_id := str(road.get("to", ""))
+		if not node_kinds.has(from_id) or not node_kinds.has(to_id):
+			continue
+		var is_gate := str(node_kinds[from_id]) == "gate" or str(node_kinds[to_id]) == "gate"
+		var edge: Dictionary = {
+			"id": "city_road_%02d" % edge_index,
+			"from": from_id,
+			"to": to_id,
+			"two_way": true,
+			"width": 12.0 if is_gate else 8.0,
+			"kind": "gate" if is_gate else "road",
+			"enabled": true
+		}
+		if is_gate:
+			edge["gate_id"] = from_id if str(node_kinds[from_id]) == "gate" else to_id
+		edges.append(edge)
+		edge_index += 1
+	return {"nodes": nodes, "edges": edges, "routes": []}
+
+
+static func find_path(network: Dictionary, start_node_id: String, goal_node_id: String, options: Dictionary = {}) -> Dictionary:
 	var nodes_by_id: Dictionary = {}
 	for node in network.get("nodes", []):
 		var node_id := str(node.get("id", ""))
-		if node_id != "":
+		if node_id != "" and bool(node.get("enabled", true)):
 			nodes_by_id[node_id] = node
 	if not nodes_by_id.has(start_node_id) or not nodes_by_id.has(goal_node_id):
 		return _failed_path("unknown_node")
@@ -105,6 +148,8 @@ static func find_path(network: Dictionary, start_node_id: String, goal_node_id: 
 		var current_node: Dictionary = nodes_by_id[current_id]
 		var current_position: Vector3 = current_node.get("position", Vector3.ZERO)
 		for edge in network.get("edges", []):
+			if not _edge_is_traversable(edge, options):
+				continue
 			var from_id := str(edge.get("from", ""))
 			var to_id := str(edge.get("to", ""))
 			var neighbor_id := ""
@@ -119,7 +164,8 @@ static func find_path(network: Dictionary, start_node_id: String, goal_node_id: 
 			var edge_length := current_position.distance_to(neighbor_position)
 			var width := maxf(float(edge.get("width", 1.0)), 1.0)
 			var width_penalty := 1.0 + (4.0 / width) * 0.08
-			var candidate_total := current_distance + edge_length * width_penalty
+			var edge_cost := maxf(float(edge.get("cost_multiplier", 1.0)), 0.1)
+			var candidate_total := current_distance + edge_length * width_penalty * edge_cost
 			if candidate_total < float(distances.get(neighbor_id, INF)):
 				distances[neighbor_id] = candidate_total
 				previous[neighbor_id] = current_id
@@ -169,6 +215,27 @@ static func find_path_to_district(network: Dictionary, origin: Vector3, district
 		result["destination_service"] = str(entrance.get("service", ""))
 		return result
 	return _failed_path("unknown_district")
+
+
+static func _edge_is_traversable(edge: Dictionary, options: Dictionary) -> bool:
+	if not bool(edge.get("enabled", true)):
+		return false
+	var blocked_edges: Array = options.get("blocked_edge_ids", [])
+	if str(edge.get("id", "")) in blocked_edges:
+		return false
+	var gate_id := str(edge.get("gate_id", ""))
+	var closed_gates: Array = options.get("closed_gates", [])
+	if not gate_id.is_empty() and gate_id in closed_gates:
+		return false
+	var required_access := str(edge.get("required_access", ""))
+	if not required_access.is_empty():
+		var access_tags: Array = options.get("access_tags", [])
+		if required_access not in access_tags:
+			return false
+	var minimum_width := float(options.get("minimum_width", 0.0))
+	if float(edge.get("width", INF)) < minimum_width:
+		return false
+	return true
 
 
 static func _failed_path(reason: String) -> Dictionary:
