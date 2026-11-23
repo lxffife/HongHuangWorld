@@ -3015,7 +3015,7 @@ struct EnetServer::Impl {
             completed.swap(completed_death_snapshots);
         }
         for (const auto& session_id : completed) {
-            for (const auto& [peer, player] : players) {
+            for (auto& [peer, player] : players) {
                 if (player.session_id != session_id || player.health > 0) continue;
                 player.death_snapshot_persisted = true;
                 send_json(peer, honghuang::protocol::MessageType::CombatEvent,
@@ -4293,7 +4293,6 @@ struct EnetServer::Impl {
             }
             constexpr float projectile_speed = 24.0F;
             const auto projectile_id = make_event_uuid();
-            player.last_spell_at_by_id[pending.spell_id] = now;
             projectiles.push_back(ProjectileRuntime{
                 projectile_id, player.character_id, {}, {}, target->runtime_id,
                 player.x, player.y + 1.15F, player.z,
@@ -5605,10 +5604,10 @@ struct EnetServer::Impl {
                 target_storage.approach_z = target_storage.z + static_cast<float>(std::sin(angle) * slot_radius);
                 target_storage.has_approach_position = true;
             }
-            const auto effect_now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            const auto monster_effect_now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                 now.time_since_epoch()).count();
-            const bool monster_frozen = honghuang::simulation::freeze_is_active(monster.freeze_effect,effect_now_ms);
-            const float monster_delta = monster_frozen ? 0.0F : honghuang::simulation::movement_delta_with_effect(delta,monster.slow_effect,effect_now_ms);
+            const bool monster_frozen = honghuang::simulation::freeze_is_active(monster.freeze_effect,monster_effect_now_ms);
+            const float monster_delta = monster_frozen ? 0.0F : honghuang::simulation::movement_delta_with_effect(delta,monster.slow_effect,monster_effect_now_ms);
             const bool is_hell_guardian = hell_trial_encounter.enabled() &&
                 monster.definition.id == hell_trial_encounter.spec()->guardian_id;
             double boss_tempo_scale = 1.0;
@@ -6154,7 +6153,7 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                         }
                         const auto& welcomed_player = impl_->players.at(event.peer);
                         const auto welcome_weapon = honghuang::simulation::weapon_combat_profile(
-                            player_weapon_type(welcomed_player));
+                            impl_->player_weapon_type(welcomed_player));
                         const auto welcome_interval = honghuang::simulation::agility_adjusted_attack_cooldown(
                             welcome_weapon.cooldown, welcomed_player.agility);
                         client_welcome["health"] = welcomed_player.health;
