@@ -174,7 +174,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		# In captured mode the gameplay reticle is the screen center. On the first
 		# click, preserve the visible cursor position before capturing it.
 		var was_captured := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
-		var target_screen_position := get_viewport().get_visible_rect().size * 0.5 if was_captured else event.position
+		var target_screen_position: Vector2 = get_viewport().get_visible_rect().size * 0.5 if was_captured else (event as InputEventMouseButton).position
 		if not was_captured:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		if world != null and world.has_method("_request_nearest_monster_attack"):
