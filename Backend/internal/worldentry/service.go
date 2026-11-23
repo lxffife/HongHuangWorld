@@ -276,7 +276,7 @@ func (s *Service) SavePosition(ctx context.Context, input SessionSnapshot) error
 			 FROM world_sessions ws
 			 JOIN characters c ON c.id = ws.character_id
 			 WHERE ws.id = $1 AND ws.character_id = $2
-			 ON CONFLICT (session_id, character_id) DO NOTHING`,
+			 ON CONFLICT (session_id, character_id) WHERE respawned_at IS NULL DO NOTHING`,
 			input.SessionID, input.CharacterID,
 		); err != nil {
 			return fmt.Errorf("record character death: %w", err)
@@ -389,7 +389,7 @@ func (s *Service) SaveAndClose(ctx context.Context, input SessionSnapshot) error
 			 FROM world_sessions ws
 			 JOIN characters c ON c.id = ws.character_id
 			 WHERE ws.id = $1 AND ws.character_id = $2
-			 ON CONFLICT (session_id, character_id) DO NOTHING`,
+			 ON CONFLICT (session_id, character_id) WHERE respawned_at IS NULL DO NOTHING`,
 			input.SessionID, input.CharacterID,
 		); err != nil {
 			return fmt.Errorf("record final character death: %w", err)
@@ -403,6 +403,17 @@ func (s *Service) SaveAndClose(ctx context.Context, input SessionSnapshot) error
 		)
 		if err != nil { return fmt.Errorf("save final character health: %w", err) }
 		if rows, rowsErr := result.RowsAffected(); rowsErr != nil { return fmt.Errorf("check final health rows: %w", rowsErr) } else if rows != 1 { return ErrInvalidSessionSnapshot }
+	}
+	if input.Health != nil && *input.Health > 0 {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE character_death_events
+			 SET respawned_at = now(),
+			     respawn_world_id = (SELECT world_id FROM characters WHERE id = $2)
+			 WHERE session_id = $1 AND character_id = $2 AND respawned_at IS NULL`,
+			input.SessionID, input.CharacterID,
+		); err != nil {
+			return fmt.Errorf("close rescued character death record on disconnect: %w", err)
+		}
 	}
 	if input.Mana != nil {
 		result, err := tx.ExecContext(ctx,
