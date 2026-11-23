@@ -663,9 +663,11 @@ func set_local_gate_state(gate_id: String, is_open: bool) -> bool:
 		return false
 	local_gate_open_by_id[gate_id] = is_open
 	for agent in npc_agents:
-		if str(agent.get("role", "")) == "gate_guard" and str(agent.get("gate_id", "")) == gate_id:
-			if bool(agent.get("root") != null and is_instance_valid(agent.get("root")) and agent["root"].visible):
-				agent["state"] = "gate_watch" if is_open else "gate_sealed_watch"
+		if str(agent.get("role", "")) != "gate_guard" or str(agent.get("gate_id", "")) != gate_id:
+			continue
+		var guard_root: Node3D = agent.get("root")
+		if guard_root != null and is_instance_valid(guard_root) and guard_root.visible:
+			agent["state"] = "gate_watch" if is_open else "gate_sealed_watch"
 	return true
 
 
