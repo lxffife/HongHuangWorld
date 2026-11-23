@@ -2,8 +2,9 @@
 
 #include "simulation/movement.hpp"
 
-#include <array>
 #include <algorithm>
+#include <array>
+#include <cstddef>
 
 namespace honghuang::simulation {
 
@@ -67,7 +68,8 @@ inline void integrate_horizontal_with_obstacles(
     if (!std::isfinite(x) || !std::isfinite(z) ||
         !std::isfinite(move_x) || !std::isfinite(move_z) ||
         !std::isfinite(speed) || !std::isfinite(bound) ||
-        !std::isfinite(radius) || radius < 0.0F || bound <= 0.0F) {
+        !std::isfinite(radius) || radius < 0.0F || bound <= 0.0F ||
+        (obstacle_count > 0 && obstacles == nullptr)) {
         return;
     }
     const float dt = std::clamp(delta, 0.0F, 0.1F);
