@@ -291,6 +291,19 @@ func (s *Service) SavePosition(ctx context.Context, input SessionSnapshot) error
 		if err != nil { return fmt.Errorf("save periodic character health: %w", err) }
 		if rows, rowsErr := result.RowsAffected(); rowsErr != nil { return fmt.Errorf("check periodic health rows: %w", rowsErr) } else if rows != 1 { return ErrInvalidSessionSnapshot }
 	}
+	// A positive authoritative snapshot confirms a same-session rescue. Close
+	// the pending death record before a later defeat can create a new one.
+	if input.Health != nil && *input.Health > 0 {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE character_death_events
+			 SET respawned_at = now(),
+			     respawn_world_id = (SELECT world_id FROM characters WHERE id = $2)
+			 WHERE session_id = $1 AND character_id = $2 AND respawned_at IS NULL`,
+			input.SessionID, input.CharacterID,
+		); err != nil {
+			return fmt.Errorf("close rescued character death record: %w", err)
+		}
+	}
 	if input.Mana != nil {
 		result, err := tx.ExecContext(ctx,
 			`UPDATE character_attributes SET mana = LEAST($2, max_mana), updated_at = now()
