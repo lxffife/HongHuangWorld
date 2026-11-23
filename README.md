@@ -118,3 +118,9 @@ WorldServer 在玩家完成认证后广播可靠 `PlayerJoined`，在断线或�
 ## 世界地图与 Terrain3D
 
 地图采用与渲染器解耦的坐标投影和区域目录。当前 Terrain3D 尚未安装到正式客户端；请先阅读 [Terrain3D 接入记录与版本门禁](docs/TERRAIN3D-INTEGRATION.md)，确认 Godot、NativeNet 和 Terrain3D 的精确版本匹配后再接入。
+
+## 战斗快捷键
+
+- Q：火球术；R：冰锥术；T：嘲讽；Y：回魂术。
+- U：回春术；G：守护灵盾；H：净化术（净化自身的减速、冻结和中毒）。
+- 技能冷却、灵力消耗与效果结算均由世界服务器决定，客户端只发送施法意图。
