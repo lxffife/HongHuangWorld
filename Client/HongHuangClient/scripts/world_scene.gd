@@ -3824,7 +3824,6 @@ func _request_nearest_monster_attack(screen_position: Vector2 = Vector2(-1.0, -1
 	var target_name := str(monster_entities.get(target_id, {}).get("name", "怪物"))
 	var error: Error = network.send_attack(target_id)
 	if error != OK:
-		hud_label.text = "攻击发送失败 · 错误码 " + str(error)
 		_show_notification("攻击指令发送失败（错误码 " + str(error) + "），目标仍保持锁定。", 4.0)
 		return
 	# Give immediate feedback for the click; damage and hit effects are still
@@ -4525,7 +4524,6 @@ func _on_combat_event(event: Dictionary) -> void:
 			var rejected_position: Vector3 = monster_targets[selected_monster_id]
 			var rejected_distance: float = _horizontal_distance_to_target(local_player.global_position, rejected_position)
 			rejection_detail = "距离目标太远（当前 %.1f m）。继续靠近后再次点击左键。" % rejected_distance
-		hud_label.text = ("攻击未成功 · 距离 %.1f m" % _horizontal_distance_to_target(local_player.global_position, monster_targets[selected_monster_id])) if rejection_reason == "距离目标太远。" and monster_targets.has(selected_monster_id) and is_instance_valid(local_player) else "攻击未成功 · 请查看通知"
 		if is_instance_valid(target_info_label) and not selected_monster_id.is_empty():
 			_update_target_info()
 			target_info_label.text += "\n攻击未成功：" + rejection_detail
