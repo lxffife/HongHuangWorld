@@ -43,7 +43,7 @@ int main() {
     assert(!roster.begin_return(director, medium_id));
     assert(director.resolve(medium_id));
     assert(roster.begin_return(director, medium_id));
-    assert(!roster.dispatch(director, high_id, 1).dispatched);
+    assert(!roster.dispatch(director, high_id, 2).dispatched);
     assert(roster.mark_unit_returned(director, first.unit_ids[0]));
     assert(roster.available_count() == 2);
     assert(director.find(medium_id)->state == IncidentState::resolved);
