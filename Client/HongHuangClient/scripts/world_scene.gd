@@ -2966,7 +2966,8 @@ func _party_save_loot_rules() -> void:
 	var equipment_mode := modes[party_equipment_loot_option.selected]
 	_party_request("PUT", "/api/v1/party/loot-rules", {"material_loot_mode": material_mode, "equipment_loot_mode": equipment_mode}, "action")
 
-func _party_invite() -> void:	if not is_instance_valid(party_username_input):
+func _party_invite() -> void:
+	if not is_instance_valid(party_username_input):
 		return
 	var username := party_username_input.text.strip_edges()
 	if username.length() < 3:
