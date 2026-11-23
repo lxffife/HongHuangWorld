@@ -4788,9 +4788,8 @@ struct EnetServer::Impl {
                         const auto age = std::chrono::duration_cast<std::chrono::seconds>(
                             now - threat->second.last_update).count();
                         if (age >= 0 && age < 30) {
-                            const double freshness = std::max(0.0, 1.0 -
-                                static_cast<double>(age) / 30.0);
-                            const double effective = threat->second.value * freshness;
+                            const double effective =
+                                honghuang::simulation::decayed_monster_threat(threat->second.value, age);
                             if (effective > highest_effective_threat) {
                                 highest_effective_threat = effective;
                                 highest_threat_player = &player;
@@ -4808,8 +4807,8 @@ struct EnetServer::Impl {
             // A current target remains sticky until another combatant exceeds
             // its decayed threat by 20%; this prevents rapid target oscillation.
             if (highest_threat_player != nullptr &&
-                (current_effective_threat <= 0.0 ||
-                 highest_effective_threat > current_effective_threat * 1.20)) {
+                honghuang::simulation::should_switch_monster_target(
+                    current_effective_threat, highest_effective_threat)) {
                 target_storage = {highest_threat_player->character_id,
                     highest_threat_player->x, highest_threat_player->z, true};
                 nearest_target = &target_storage;
