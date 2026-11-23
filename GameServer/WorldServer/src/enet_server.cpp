@@ -5609,20 +5609,17 @@ struct EnetServer::Impl {
                 now.time_since_epoch()).count();
             const bool monster_frozen = honghuang::simulation::freeze_is_active(monster.freeze_effect,effect_now_ms);
             const float monster_delta = monster_frozen ? 0.0F : honghuang::simulation::movement_delta_with_effect(delta,monster.slow_effect,effect_now_ms);
-            if (!honghuang::simulation::tick_monster(
-                    monster.definition, monster.state, nearest_target, monster_delta)) {
-                std::cerr << "Skipping invalid monster simulation state: "
-                          << monster.runtime_id << '\n';
-                continue;
-            }
             const bool is_hell_guardian = hell_trial_encounter.enabled() &&
                 monster.definition.id == hell_trial_encounter.spec()->guardian_id;
             double boss_tempo_scale = 1.0;
+            auto attack_profile = honghuang::simulation::monster_attack_profile(monster.definition);
             if (is_hell_guardian) {
                 const auto transition = hell_trial_boss_phase.update(
                     static_cast<double>(monster.state.health),
                     static_cast<double>(monster.definition.max_health));
                 boss_tempo_scale = hell_trial_boss_phase.tempo_multiplier();
+                attack_profile = hell_trial_boss_phase.attack_profile(
+                    monster.definition, hell_trial_encounter.floor());
                 if (transition.changed) {
                     const char* phase_name = transition.phase == 1 ? "审判" :
                         (transition.phase == 2 ? "刑罚" : "无间狂怒");
@@ -5633,7 +5630,8 @@ struct EnetServer::Impl {
                         {"phase", transition.phase},
                         {"phase_name", phase_name},
                         {"health_ratio", transition.health_ratio},
-                        {"attack_multiplier", hell_trial_boss_phase.attack_multiplier()}
+                        {"attack_multiplier", hell_trial_boss_phase.attack_multiplier()},
+                        {"signature_attack", attack_profile.style}
                     };
                     for (const auto& [observer_peer, observer] : players) {
                         if (!honghuang::simulation::within_interest_radius(
@@ -5642,9 +5640,12 @@ struct EnetServer::Impl {
                     }
                 }
             }
-            const auto attack_profile = is_hell_guardian
-                ? hell_trial_boss_phase.attack_profile(monster.definition, hell_trial_encounter.floor())
-                : honghuang::simulation::monster_attack_profile(monster.definition);
+            if (!honghuang::simulation::tick_monster(
+                    monster.definition, monster.state, nearest_target, monster_delta, &attack_profile)) {
+                std::cerr << "Skipping invalid monster simulation state: "
+                          << monster.runtime_id << '\\n';
+                continue;
+            }
             const auto rare_scale = monster.rare_spawn ? 1.25 : 1.0;
             const auto windup_duration = std::chrono::milliseconds(
                 static_cast<int>(std::lround(attack_profile.windup_ms * rare_scale * boss_tempo_scale)));
