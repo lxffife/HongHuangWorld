@@ -2537,7 +2537,12 @@ struct EnetServer::Impl {
             using honghuang::persistence::OutboxEvent;
             const auto now = wall_clock_ms();
             std::vector<Json> objectives;
-            std::unordered_map<std::string, Json> contributors_by_task;
+            struct BountyContributorAggregate {
+                Json payload;
+                std::int64_t latest_hit_at_ms{};
+            };
+            std::unordered_map<std::string, std::unordered_map<std::string, BountyContributorAggregate>>
+                contributors_by_task;
 
             for (const auto& record : records) {
                 auto parsed = Json::parse(record.bounty_objectives_json, nullptr, false);
@@ -2565,17 +2570,37 @@ struct EnetServer::Impl {
                     if (!duplicate) objectives.push_back(objective);
                     record_task_ids.insert(task_id);
                 }
-                if (record.total_damage > 0 && record.hit_count > 0) {
-                    const Json contributor{
-                        {"session_id", record.session_id},
-                        {"character_id", record.character_id},
-                        {"damage", record.total_damage},
-                        {"hit_count", record.hit_count}
-                    };
+                if (record.total_damage > 0 && record.hit_count > 0 &&
+                    !record.character_id.empty() && !record.session_id.empty()) {
                     for (const auto& task_id : record_task_ids) {
-                        auto [found, inserted] = contributors_by_task.try_emplace(task_id, Json::array());
-                        (void)inserted;
-                        found->second.push_back(contributor);
+                        auto& by_character = contributors_by_task[task_id];
+                        auto [found, inserted] = by_character.try_emplace(record.character_id);
+                        auto& aggregate = found->second;
+                        if (inserted) {
+                            aggregate.payload = Json{
+                                {"session_id", record.session_id},
+                                {"character_id", record.character_id},
+                                {"damage", 0},
+                                {"hit_count", 0}
+                            };
+                            aggregate.latest_hit_at_ms = record.last_hit_at_ms;
+                        } else if (record.last_hit_at_ms > aggregate.latest_hit_at_ms ||
+                                   (record.last_hit_at_ms == aggregate.latest_hit_at_ms &&
+                                    record.session_id < aggregate.payload.value("session_id", std::string{}))) {
+                            // Route the merged task contribution through the most recent
+                            // session for this character; use a stable tie-break on replay.
+                            aggregate.payload["session_id"] = record.session_id;
+                            aggregate.latest_hit_at_ms = record.last_hit_at_ms;
+                        }
+                        const auto saturating_add = [](std::int64_t current, std::int64_t value) {
+                            if (value <= 0) return current;
+                            return current > std::numeric_limits<std::int64_t>::max() - value
+                                ? std::numeric_limits<std::int64_t>::max() : current + value;
+                        };
+                        aggregate.payload["damage"] = saturating_add(
+                            aggregate.payload.value("damage", std::int64_t{0}), record.total_damage);
+                        aggregate.payload["hit_count"] = saturating_add(
+                            aggregate.payload.value("hit_count", std::int64_t{0}), record.hit_count);
                     }
                 }
             }
@@ -2611,7 +2636,16 @@ struct EnetServer::Impl {
                 const auto task_contributors = contributors_by_task.find(task_id);
                 if (task_contributors != contributors_by_task.end() && !task_contributors->second.empty()) {
                     constexpr std::size_t kContributionChunkSize = 256;
-                    const auto& contributors = task_contributors->second;
+                    std::vector<Json> contributors;
+                    contributors.reserve(task_contributors->second.size());
+                    for (const auto& [character_id, aggregate] : task_contributors->second) {
+                        (void)character_id;
+                        contributors.push_back(aggregate.payload);
+                    }
+                    std::sort(contributors.begin(), contributors.end(), [](const Json& left, const Json& right) {
+                        return left.value("character_id", std::string{}) <
+                               right.value("character_id", std::string{});
+                    });
                     const auto chunk_count = (contributors.size() + kContributionChunkSize - 1) /
                                              kContributionChunkSize;
                     for (std::size_t chunk = 0; chunk < chunk_count; ++chunk) {
