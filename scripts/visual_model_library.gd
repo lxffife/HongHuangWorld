@@ -15,6 +15,22 @@ const MODEL_PATHS := {
 	"wraith": "res://assets/models/wraith.glb"
 }
 
+# Target visual heights in metres. These affect presentation only; gameplay
+# collision and server reach remain independent of imported mesh dimensions.
+const TARGET_HEIGHTS := {
+	"player_humanoid": 1.8,
+	"wolf": 1.15,
+	"iron_beast": 2.8,
+	"warrior": 1.9,
+	"life_soul": 1.65,
+	"wind_soul": 1.65,
+	"fire_soul": 1.65,
+	"frost_soul": 1.65,
+	"wraith": 1.85
+}
+const MIN_SCALE_FACTOR := 0.25
+const MAX_SCALE_FACTOR := 4.0
+
 static func instantiate_model(model_key: String, fallback_factory: Callable) -> Node3D:
 	var model_path := str(MODEL_PATHS.get(model_key, ""))
 	if not model_path.is_empty() and ResourceLoader.exists(model_path):
@@ -24,6 +40,7 @@ static func instantiate_model(model_key: String, fallback_factory: Callable) -> 
 			if instance is Node3D and _contains_renderable_mesh(instance):
 				instance.set_meta("model_source", model_path)
 				instance.set_meta("model_key", model_key)
+				_normalize_visual_height(instance as Node3D, model_key)
 				_attach_animation_driver(instance as Node3D, model_key)
 				return instance as Node3D
 			if instance != null:
@@ -39,6 +56,56 @@ static func instantiate_model(model_key: String, fallback_factory: Callable) -> 
 	return Node3D.new()
 
 
+static func _normalize_visual_height(model_root: Node3D, model_key: String) -> void:
+	var target_height := float(TARGET_HEIGHTS.get(model_key, 0.0))
+	if target_height <= 0.0:
+		return
+	var bounds_state := {
+		"found": false,
+		"minimum": Vector3.ZERO,
+		"maximum": Vector3.ZERO
+	}
+	_collect_mesh_bounds(model_root, Transform3D.IDENTITY, true, bounds_state)
+	if not bool(bounds_state["found"]):
+		return
+	var bounds_size: Vector3 = bounds_state["maximum"] - bounds_state["minimum"]
+	var current_height := bounds_size.y * absf(model_root.scale.y)
+	if current_height < 0.05:
+		push_warning("Imported model has an unusable height; keeping source scale: " + model_key)
+		return
+	var factor := target_height / current_height
+	if factor < MIN_SCALE_FACTOR or factor > MAX_SCALE_FACTOR:
+		push_warning("Imported model scale is outside safe normalization limits; review source units: " + model_key)
+		model_root.set_meta("model_height_before_normalization", current_height)
+		model_root.set_meta("model_height_target", target_height)
+		model_root.set_meta("model_scale_review_required", true)
+		return
+	model_root.scale *= factor
+	model_root.set_meta("model_height_before_normalization", snappedf(current_height, 0.001))
+	model_root.set_meta("model_height_target", target_height)
+	model_root.set_meta("model_normalization_factor", snappedf(factor, 0.001))
+
+
+static func _collect_mesh_bounds(node: Node, parent_transform: Transform3D, is_root: bool, state: Dictionary) -> void:
+	var local_transform := Transform3D.IDENTITY if is_root else node.transform
+	var current_transform := parent_transform * local_transform
+	if node is MeshInstance3D:
+		var mesh := (node as MeshInstance3D).mesh
+		if mesh != null:
+			var transformed_bounds: AABB = mesh.get_aabb() * current_transform
+			var minimum: Vector3 = transformed_bounds.position
+			var maximum: Vector3 = transformed_bounds.position + transformed_bounds.size
+			if not bool(state["found"]):
+				state["minimum"] = minimum
+				state["maximum"] = maximum
+				state["found"] = true
+			else:
+				state["minimum"] = (state["minimum"] as Vector3).min(minimum)
+				state["maximum"] = (state["maximum"] as Vector3).max(maximum)
+	for child in node.get_children():
+		_collect_mesh_bounds(child, current_transform, false, state)
+
+
 static func _contains_renderable_mesh(root: Node) -> bool:
 	if root is MeshInstance3D and (root as MeshInstance3D).mesh != null:
 		return true
@@ -46,7 +113,6 @@ static func _contains_renderable_mesh(root: Node) -> bool:
 		if _contains_renderable_mesh(child):
 			return true
 	return false
-
 
 
 static func _attach_animation_driver(model_root: Node3D, model_key: String) -> void:
