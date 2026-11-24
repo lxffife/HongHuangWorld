@@ -66,9 +66,9 @@ INSERT INTO world_monster_spawn_points
 VALUES
     ('fengdu-gate-wraith-01', 'underworld_fengdu', 'wandering_wraith', -7, -26, FALSE, 100, 60, 0),
     ('fengdu-gate-ironbone-01', 'underworld_fengdu', 'ironbone_beast_soul', 7, -27, FALSE, 100, 75, 0),
-    ('fengdu-gate-elite-01', 'underworld_fengdu', 'blazing_war_soul_elite', 0, -36, TRUE, 12, 180, 90),
+    ('fengdu-gate-elite-01', 'underworld_fengdu', 'blazing_war_soul_elite', 10, -28, TRUE, 12, 180, 90),
     ('wangchuan-gale-01', 'underworld_fengdu', 'gale_wraith', 19, 11, FALSE, 100, 60, 0),
-    ('wangchuan-scholar-01', 'underworld_fengdu', 'spirit_scholar_wisp', 29, 22, FALSE, 100, 75, 0),
+    ('wangchuan-scholar-01', 'underworld_fengdu', 'spirit_scholar_wisp', 25, 22, FALSE, 100, 75, 0),
     ('wangchuan-echo-elite-01', 'underworld_fengdu', 'wangchuan_echo_wisp', 23, 42, TRUE, 10, 300, 120),
     ('battlefield-war-soul-01', 'underworld_fengdu', 'blazing_war_soul', -52, 17, FALSE, 100, 60, 0),
     ('battlefield-life-soul-01', 'underworld_fengdu', 'life_ancient_soul', -65, 31, FALSE, 100, 90, 0),
