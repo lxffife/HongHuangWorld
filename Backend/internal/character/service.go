@@ -1945,8 +1945,8 @@ type SpellLearningResult struct {
 }
 
 // LearnSpell consumes an owned skill tome and records the learned technique
-// atomically. Learning is performed outside an active world session so the
-// authoritative WorldServer can load the new ownership snapshot on next entry.
+// atomically. If the character is online, WorldServer refreshes ownership
+// from this backend before accepting the next cast of a previously locked spell.
 func (s *Service) LearnSpell(ctx context.Context, accountID, requestID, itemID string) (SpellLearningResult, error) {
 	if !validSpellLearningRequest(accountID,requestID,itemID) {
 		return SpellLearningResult{}, ErrSpellLearningInvalid
