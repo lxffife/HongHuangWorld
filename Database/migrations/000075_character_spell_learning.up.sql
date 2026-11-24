@@ -57,8 +57,8 @@ ON CONFLICT(id) DO NOTHING;
 
 INSERT INTO spell_tome_definitions(item_id,spell_id,display_name,discipline_id,required_world_id)
 VALUES
-('tome_suppressing_talisman','ice_bolt','镇邪符','fengdu_ming司','underworld_fengdu'),
-('tome_ghost_gate_chain','taunt','鬼门锁链','fengdu_ming司','underworld_fengdu')
+('tome_suppressing_talisman','ice_bolt','镇邪符','fengdu_ming_si','underworld_fengdu'),
+('tome_ghost_gate_chain','taunt','鬼门锁链','fengdu_ming_si','underworld_fengdu')
 ON CONFLICT(item_id) DO NOTHING;
 
 INSERT INTO npc_shop_items(shop_id,item_id,unit_price,stock_quantity,sort_order,enabled)
