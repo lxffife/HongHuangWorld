@@ -524,7 +524,65 @@ func play_hit_reaction(damage: int, attack_style: String = "") -> void:
 	var style_strength := 0.115 if attack_style == "heavy_slam" else 0.055
 	var damage_strength := clampf(float(maxi(damage, 0)) / 240.0, 0.0, 0.045)
 	hit_reaction_strength = maxf(hit_reaction_strength, style_strength + damage_strength)
+	_spawn_hit_flash(attack_style)
 	_spawn_hit_reaction_visual(attack_style)
+
+
+func _hit_flash_color(attack_style: String) -> Color:
+	match attack_style:
+		"heavy_slam":
+			return Color("#ff985e")
+		"poison_bolt", "poison_tick":
+			return Color("#8cff72")
+		"frost_bolt":
+			return Color("#75e7ff")
+		"soul_bolt":
+			return Color("#d39aff")
+		_:
+			return Color("#d9f2ff")
+
+
+func _apply_hit_flash_recursive(node: Node, material: StandardMaterial3D) -> void:
+	if node is GeometryInstance3D:
+		(node as GeometryInstance3D).material_overlay = material
+	for child in node.get_children():
+		_apply_hit_flash_recursive(child, material)
+
+
+func _clear_hit_flash_recursive(node: Node, material: StandardMaterial3D) -> void:
+	if node is GeometryInstance3D:
+		var geometry := node as GeometryInstance3D
+		if geometry.material_overlay == material:
+			geometry.material_overlay = null
+	for child in node.get_children():
+		_clear_hit_flash_recursive(child, material)
+
+
+func _clear_hit_flash_visual(root: Node, material: StandardMaterial3D) -> void:
+	if is_instance_valid(root):
+		_clear_hit_flash_recursive(root, material)
+
+
+func _spawn_hit_flash(attack_style: String) -> void:
+	if not is_instance_valid(visual):
+		return
+	var previous := visual.get_meta("hit_flash_material") as StandardMaterial3D
+	if is_instance_valid(previous):
+		_clear_hit_flash_recursive(visual, previous)
+	var flash := StandardMaterial3D.new()
+	var tint := _hit_flash_color(attack_style)
+	flash.albedo_color = Color(tint.r, tint.g, tint.b, 0.62)
+	flash.emission_enabled = true
+	flash.emission = tint
+	flash.emission_energy_multiplier = 1.7
+	flash.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	flash.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	visual.set_meta("hit_flash_material", flash)
+	_apply_hit_flash_recursive(visual, flash)
+	var tween := create_tween()
+	tween.tween_property(flash, "albedo_color:a", 0.0, 0.22)
+	tween.parallel().tween_property(flash, "emission_energy_multiplier", 0.0, 0.22)
+	tween.tween_callback(Callable(self, "_clear_hit_flash_visual").bind(visual, flash))
 
 
 func _spawn_hit_reaction_visual(attack_style: String) -> void:
@@ -540,7 +598,7 @@ func _spawn_hit_reaction_visual(attack_style: String) -> void:
 	ring.mesh = ring_mesh
 	ring.position = Vector3(0.0, 0.08, 0.0)
 	ring.rotation.x = PI / 2.0
-	var tint := Color("#ffad75") if attack_style == "heavy_slam" else Color("#b8dfff")
+	var tint := _hit_flash_color(attack_style)
 	var material := StandardMaterial3D.new()
 	material.albedo_color = Color(tint.r, tint.g, tint.b, 0.82)
 	material.emission_enabled = true
