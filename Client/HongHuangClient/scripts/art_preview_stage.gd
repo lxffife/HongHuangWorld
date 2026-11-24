@@ -76,7 +76,7 @@ func _build_gallery() -> void:
 	gate.name = "FengduGatePreview"
 	gate.position = Vector3(0.0, 0.0, 8.0)
 	add_child(gate)
-	_add_label("酆都鬼门关 · 建筑灰盒", Vector3(0.0, 2.1, -14.0), 0.32)
+	_add_label("酆都鬼门关 · 建筑灰盒", Vector3(0.0, 11.15, -10.8), 0.32)
 	var wall := VisualFactory.create_fengdu_wall_segment()
 	wall.position = Vector3(-7.0, 0.0, -5.8)
 	add_child(wall)
