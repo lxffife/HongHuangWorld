@@ -191,3 +191,14 @@ godot --headless --path . --script res://tests/world_generation_test.gd
 - 免费商用来源、逐包授权核验、模型比例/骨骼/动画验收和导入步骤见 [MODEL-ASSET-PIPELINE.md](docs/MODEL-ASSET-PIPELINE.md)。
 - 当前登记的是候选来源与接入机制；尚未把第三方模型包下载并导入游戏，也尚未完成 Godot 实机验收。
 - 外部 GLB 若包含 AnimationPlayer，怪物模型会自动按位移切换 idle/walk/run；已接入服务端确认的怪物攻击、受击、死亡动画触发。玩家人形仍走现有动画驱动，避免控制冲突。动作缺失时保留程序化表现。
+
+
+## GLB 模型资源自动验收
+
+模型资源放入 `assets/models/` 并完成 Godot 首次导入后，在客户端目录运行：
+
+```bash
+godot --headless --path . --script res://tools/validate_model_assets.gd
+```
+
+工具检查九个模型映射的 GLB 是否可加载、根节点/网格是否有效、骨骼与动画是否存在，并输出 JSON 报告到 `user://model_asset_validation.json`。默认允许缺少候选模型；发布验收时可加 `-- --require-all`，要求九个模型文件全部存在。结构检查通过后仍需人工检查模型比例、朝向、材质和动作。
