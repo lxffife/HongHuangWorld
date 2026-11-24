@@ -140,6 +140,8 @@ var combat_reticle: Label
 var target_info_label: Label
 var target_health_bar: ProgressBar
 var combat_summary_label: Label
+var combat_summary_toggle_button: Button
+var combat_summary_expanded := false
 var combat_damage_dealt := 0
 var combat_damage_taken := 0
 var combat_highest_hit := 0
@@ -1408,11 +1410,19 @@ func _build_combat_hud() -> void:
 	target_health_bar.add_theme_stylebox_override("fill", target_fill)
 	target_layout.add_child(target_health_bar)
 
+	combat_summary_toggle_button = Button.new()
+	combat_summary_toggle_button.text = "战斗详情  ▸"
+	combat_summary_toggle_button.custom_minimum_size = Vector2(112.0, 26.0)
+	combat_summary_toggle_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	combat_summary_toggle_button.add_theme_font_size_override("font_size", 11)
+	combat_summary_toggle_button.pressed.connect(_toggle_combat_summary)
+	vitals_layout.add_child(combat_summary_toggle_button)
 	combat_summary_label = Label.new()
 	combat_summary_label.text = "本次战斗  伤害 0  ·  暴击 0  ·  击杀 0"
 	combat_summary_label.add_theme_color_override("font_color", Color("#d7c49b"))
 	combat_summary_label.add_theme_font_size_override("font_size", 11)
 	combat_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	combat_summary_label.visible = false
 	vitals_layout.add_child(combat_summary_label)
 	combat_log_label = Label.new()
 	combat_log_label.text = "最近命中：暂无"
@@ -1420,6 +1430,7 @@ func _build_combat_hud() -> void:
 	combat_log_label.add_theme_font_size_override("font_size", 10)
 	combat_log_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	combat_log_label.custom_minimum_size = Vector2(300.0, 38.0)
+	combat_log_label.visible = false
 	vitals_layout.add_child(combat_log_label)
 	combat_summary_reset_button = Button.new()
 	combat_summary_reset_button.text = "重置战斗统计"
@@ -1427,8 +1438,22 @@ func _build_combat_hud() -> void:
 	combat_summary_reset_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	combat_summary_reset_button.add_theme_font_size_override("font_size", 11)
 	combat_summary_reset_button.pressed.connect(_reset_combat_summary)
+	combat_summary_reset_button.visible = false
 	vitals_layout.add_child(combat_summary_reset_button)
 	_update_combat_summary()
+
+
+func _toggle_combat_summary() -> void:
+	combat_summary_expanded = not combat_summary_expanded
+	if is_instance_valid(combat_summary_toggle_button):
+		combat_summary_toggle_button.text = "战斗详情  ▾" if combat_summary_expanded else "战斗详情  ▸"
+	if is_instance_valid(combat_summary_label):
+		combat_summary_label.visible = combat_summary_expanded
+	if is_instance_valid(combat_log_label):
+		combat_log_label.visible = combat_summary_expanded
+	if is_instance_valid(combat_summary_reset_button):
+		combat_summary_reset_button.visible = combat_summary_expanded
+	_layout_hud()
 
 
 func _update_combat_summary() -> void:
@@ -2965,8 +2990,8 @@ func _layout_hud() -> void:
 		minimap_panel.offset_top = 64.0
 		minimap_panel.offset_bottom = 354.0
 	if is_instance_valid(target_info_panel):
-		var target_width := minf(380.0, maxf(250.0, viewport_size.x - 32.0))
-		target_info_panel.position = Vector2(-target_width * 0.5, 18.0)
+		var target_width := minf(420.0, maxf(250.0, viewport_size.x - 32.0))
+		target_info_panel.position = Vector2(-target_width * 0.5, 72.0)
 		target_info_panel.custom_minimum_size.x = target_width
 		if is_instance_valid(target_health_bar):
 			target_health_bar.custom_minimum_size.x = target_width - 40.0
