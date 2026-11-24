@@ -2158,14 +2158,14 @@ func _upsert_drop(entity: Dictionary) -> void:
 func _upsert_projectile(entity: Dictionary) -> void:
 	var projectile_id := str(entity.get("entity_id", ""))
 	var projectile_type := str(entity.get("projectile_type", ""))
-	if projectile_id.is_empty() or projectile_type not in ["arrow", "fireball", "ice_bolt"]:
+	if projectile_id.is_empty() or projectile_type not in ["arrow", "nether_phosphor", "suppressing_talisman"]:
 		return
 	var target := Vector3(float(entity.get("x", 0.0)), float(entity.get("y", 1.15)), float(entity.get("z", 0.0)))
 	var is_new := not projectiles.has(projectile_id)
 	if is_new:
-		if projectile_type == "fireball":
+		if projectile_type == "nether_phosphor":
 			projectiles[projectile_id] = _create_fireball_projectile()
-		elif projectile_type == "ice_bolt":
+		elif projectile_type == "suppressing_talisman":
 			projectiles[projectile_id] = _create_ice_bolt_projectile()
 		else:
 			projectiles[projectile_id] = _create_arrow_projectile()
@@ -4710,7 +4710,7 @@ func _on_combat_event(event: Dictionary) -> void:
 		_update_spell_mastery_hud()
 		var new_level := int(event.get("level", 1))
 		if new_level > previous_level:
-			_show_notification(("火球术" if spell_id == "fireball" else "冰锥术") + "熟练度提升至 Lv." + str(new_level) + "！", 3.0)
+			_show_notification(_spell_display_name(spell_id) + "熟练度提升至 Lv." + str(new_level) + "！", 3.0)
 		return
 	if str(event.get("action", "")) == "spell_cast":
 		if event.has("mana"):
@@ -4898,7 +4898,7 @@ func _on_combat_event(event: Dictionary) -> void:
 			_refresh_reward_status_later()
 	else:
 		var projectile_type := str(event.get("projectile_type", ""))
-		var hit_prefix := "火球命中 " if projectile_type == "fireball" else ("冰锥命中 " if projectile_type == "ice_bolt" else "命中 ")
+		var hit_prefix := "幽冥磷火命中 " if projectile_type == "nether_phosphor" else ("镇邪符命中 " if projectile_type == "suppressing_talisman" else "命中 ")
 		var hit_suffix := " · 目标被冻结" if str(event.get("status_effect", "")) == "freeze" else (" · 目标减速" if str(event.get("status_effect", "")) == "slow" else "")
 		_show_notification(hit_prefix + monster_name + " · 造成 " + str(damage) + " 点伤害" + hit_suffix)
 
