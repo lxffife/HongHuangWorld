@@ -53,5 +53,24 @@ int main() {
     HellTrialWaveDirector invalid(0);
     assert(!invalid.enabled());
     assert(invalid.is_unlocked("any-monster"));
+
+    // Every configured floor must preserve the same strict four-stage gate.
+    const auto& floor_specs = honghuang::simulation::hell_trial_floor_specs();
+    for (int floor = 1; floor <= HellTrialEncounter::floor_count; ++floor) {
+        HellTrialWaveDirector sequence(floor);
+        const auto& spec = floor_specs[static_cast<std::size_t>(floor - 1)];
+        for (std::size_t wave = 0; wave < spec.objective_monster_ids.size(); ++wave) {
+            assert(sequence.active_definition_id() == spec.objective_monster_ids[wave]);
+            const auto locked_id = spec.objective_monster_ids[
+                (wave + 1) % spec.objective_monster_ids.size()];
+            const auto locked = sequence.record_death(locked_id);
+            assert(!locked.advanced && sequence.stage() == static_cast<int>(wave));
+            const auto advanced = sequence.record_death(spec.objective_monster_ids[wave]);
+            assert(advanced.advanced && advanced.stage == static_cast<int>(wave + 1));
+        }
+        const auto guardian = sequence.record_death(spec.guardian_id);
+        assert(guardian.advanced && guardian.completed);
+        assert(sequence.completed() && sequence.active_definition_id().empty());
+    }
     return 0;
 }
