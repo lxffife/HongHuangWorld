@@ -5015,7 +5015,9 @@ func _on_combat_event(event: Dictionary) -> void:
 	if event.has("attacker_character_id"):
 		var event_attacker_id := str(event.get("attacker_character_id", ""))
 		var local_character_id := str(HHSession.world_snapshot.get("character_id", ""))
-		if not event_attacker_id.is_empty() and not local_character_id.is_empty() and event_attacker_id != local_character_id:
+		# Visual-only combat events are intentionally broadcast to nearby
+		# observers; do not discard them merely because another player attacked.
+		if not bool(event.get("visual_only", false)) and not event_attacker_id.is_empty() and not local_character_id.is_empty() and event_attacker_id != local_character_id:
 			return
 	if not bool(event.get("accepted", true)):
 		var rejection_reason := str(event.get("reason", "攻击未命中。"))
@@ -5056,7 +5058,24 @@ func _on_combat_event(event: Dictionary) -> void:
 			if str(event.get("status_effect", "")) == "freeze":
 				_set_monster_freeze_visual(visual_target, true)
 			visual_target.set_meta("hit_reaction_time", 0.24)
-			_spawn_monster_hit_visual(visual_target, false)
+			# Nearby observers receive the same authoritative monster HP as the
+			# attacker. Keep their nameplate and selected-target HUD in sync too.
+			if event.has("health") or event.has("max_health"):
+				var visual_entity: Dictionary = monster_entities.get(visual_target_id, {})
+				if event.has("health"):
+					visual_entity["health"] = int(event.get("health", 0))
+				if event.has("max_health"):
+					visual_entity["max_health"] = int(event.get("max_health", 0))
+				monster_entities[visual_target_id] = visual_entity
+				var visual_plate := visual_target.get_node_or_null("Nameplate") as Label3D
+				if is_instance_valid(visual_plate):
+					var visual_max_health := int(visual_entity.get("max_health", 0))
+					visual_plate.text = str(visual_entity.get("name", event.get("target_name", "怪物"))) + " · Lv." + str(int(visual_entity.get("level", 1)))
+					if visual_max_health > 0:
+						visual_plate.text += "\\n生命 " + str(maxi(int(visual_entity.get("health", 0)), 0)) + " / " + str(visual_max_health)
+				if visual_target_id == selected_monster_id:
+					_update_target_info()
+			_spawn_monster_hit_visual(visual_target, bool(event.get("critical", false)))
 			if bool(event.get("defeated", false)):
 				visual_target.set_meta("burn_visual_remaining", 0.0)
 				_set_monster_burn_visual(visual_target, false)
