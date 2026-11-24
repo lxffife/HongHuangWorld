@@ -11,7 +11,10 @@ int main() {
 
     const auto* fireball = find_spell_definition("fireball");
     assert(fireball != nullptr);
-    assert(fireball->element == SpellElement::Fire);
+    assert(fireball->element == SpellElement::NetherFlame);
+    assert(fireball->display_name == "幽冥磷火");
+    assert(fireball->discipline_id == "underworld_hell");
+    assert(fireball->visual_style == "nether_phosphor");
     assert(fireball->mana_cost == 18);
     assert(fireball->cast_time_ms == 350);
     assert(fireball->cooldown_ms == 1800);
@@ -27,7 +30,10 @@ int main() {
     assert(valid_spell_definition(*fireball));
 
     const auto* ice_bolt = find_spell_definition("ice_bolt");
-    assert(ice_bolt != nullptr && ice_bolt->element == SpellElement::Ice);
+    assert(ice_bolt != nullptr && ice_bolt->element == SpellElement::Talisman);
+    assert(ice_bolt->display_name == "镇邪符");
+    assert(ice_bolt->discipline_id == "general_talisman");
+    assert(ice_bolt->visual_style == "suppressing_talisman");
     assert(ice_bolt->mana_cost == 16 && ice_bolt->cast_time_ms == 300);
     assert(ice_bolt->range == 18.0F && ice_bolt->power_basis_points == 8500);
     assert(ice_bolt->slow_duration_ms == 3000);
