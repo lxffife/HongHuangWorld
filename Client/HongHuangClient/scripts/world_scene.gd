@@ -4192,6 +4192,14 @@ func _update_target_info() -> void:
 	if str(party_data.get("focus_target_entity_id", "")) == selected_monster_id:
 		threat_text += "  ·  队伍集火"
 		threat_color = Color("#f0d18d")
+	if target_distance >= 0.0:
+		var player_attack_range := maxf(float(HHSession.world_snapshot.get("attack_range", 2.5)), 0.5)
+		if target_distance <= player_attack_range + 0.2:
+			threat_text += "  ·  可攻击"
+			if aggro_target_id.is_empty():
+				threat_color = Color("#8bd3a6")
+		else:
+			threat_text += "  ·  接近中"
 	if is_instance_valid(target_status_label):
 		target_status_label.text = threat_text
 		target_status_label.add_theme_color_override("font_color", threat_color)
