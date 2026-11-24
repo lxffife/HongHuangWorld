@@ -115,10 +115,14 @@ func send_attack(target_entity_id: String) -> Error:
 	var payload := JSON.stringify({"target_entity_id": target_entity_id}).to_utf8_buffer()
 	var frame := HHProtocolCodec.encode_frame(HHProtocolCodec.MessageType.ATTACK_COMMAND, payload)
 	if frame.is_empty():
+		push_error("[CombatAttack] frame encode failed target=" + target_entity_id)
 		return ERR_INVALID_DATA
+	print("[CombatAttack] client_send target=", target_entity_id, " world_ready=", world_ready)
 	# Attack commands must be reliable: unlike continuous movement snapshots,
 	# losing one attack packet makes a click appear to do nothing.
-	return transport.send_frame(frame, true)
+	var send_error: Error = transport.send_frame(frame, true)
+	print("[CombatAttack] client_send_result target=", target_entity_id, " error=", send_error)
+	return send_error
 
 
 func send_spell_cast(spell_id: String, target_entity_id: String) -> Error:
@@ -232,6 +236,8 @@ func _on_frame_received(bytes: PackedByteArray) -> void:
 		HHProtocolCodec.MessageType.COMBAT_EVENT:
 			var combat: Variant = JSON.parse_string(payload.get_string_from_utf8())
 			if combat is Dictionary:
+				if combat.has("accepted") or combat.has("damage"):
+					print("[CombatAttack] server_event ", JSON.stringify(combat))
 				combat_event.emit(combat)
 			else:
 				rejected.emit("收到无效的 CombatEvent。")

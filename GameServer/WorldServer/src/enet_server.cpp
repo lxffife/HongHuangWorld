@@ -4384,7 +4384,13 @@ struct EnetServer::Impl {
         auto player_it = players.find(peer);
         if (player_it == players.end()) return;
         auto& player = player_it->second;
+        const auto diagnostic_target_id = command.value("target_entity_id", std::string{});
+        std::cout << "[CombatAttack] received character=" << player.character_id
+                  << " target=" << diagnostic_target_id
+                  << " health=" << player.health << "/" << player.max_health
+                  << " position=" << player.x << "," << player.z << std::endl;
         if (player.health <= 0) {
+            std::cout << "[CombatAttack] rejected_dead character=" << player.character_id << std::endl;
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", false}, {"attacker_character_id", player.character_id},
                            {"reason", "角色已倒地，无法攻击。"}});
@@ -4398,6 +4404,8 @@ struct EnetServer::Impl {
             now - player.last_attack_at < attack_cooldown) {
             const auto remaining_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                 attack_cooldown - (now - player.last_attack_at)).count();
+            std::cout << "[CombatAttack] rejected_cooldown character=" << player.character_id
+                      << " remaining_ms=" << remaining_ms << std::endl;
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", false}, {"attacker_character_id", player.character_id},
                            {"cooldown_ms", std::max<std::int64_t>(0, remaining_ms)},
@@ -4418,6 +4426,8 @@ struct EnetServer::Impl {
         });
         if (target == monsters.end() || target->state.mode == honghuang::simulation::MonsterMode::Dead ||
             target->contribution_closing) {
+            std::cout << "[CombatAttack] rejected_target_missing character=" << player.character_id
+                      << " target=" << target_id << " monsters=" << monsters.size() << std::endl;
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", false}, {"attacker_character_id", player.character_id},
                            {"reason", "目标已消失或已被击败。"}});
