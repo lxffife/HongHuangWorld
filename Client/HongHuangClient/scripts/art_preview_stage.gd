@@ -3,6 +3,7 @@ extends Node3D
 ## This scene is intentionally separate from the live multiplayer world.
 
 const VisualFactory = preload("res://scripts/underworld_visual_factory.gd")
+const VisualModelLibrary = preload("res://scripts/visual_model_library.gd")
 
 func _ready() -> void:
 	_build_stage()
@@ -66,11 +67,11 @@ func _build_stage() -> void:
 	camera.current = true
 
 func _build_gallery() -> void:
-	_add_model("转世人形", VisualFactory.create_player_humanoid(), Vector3(-5.2, 0.0, 1.0), 0.0)
-	_add_model("荒原狼", VisualFactory.create_monster("荒原狼", 1), Vector3(-2.4, 0.0, 0.0), 0.0)
-	_add_model("铁骨兽魂", VisualFactory.create_monster("铁骨兽魂", 1), Vector3(0.4, 0.0, 0.0), 0.0)
-	_add_model("炽战残魂", VisualFactory.create_monster("炽战残魂", 1), Vector3(3.1, 0.0, 0.0), 0.0)
-	_add_model("游祟", VisualFactory.create_monster("游祟", 1), Vector3(5.7, 0.0, 0.0), 0.0)
+	_add_model("转世人形", VisualModelLibrary.instantiate_model("player_humanoid", func() -> Node3D: return VisualFactory.create_player_humanoid()), Vector3(-5.2, 0.0, 1.0), 0.0, 2.35)
+	_add_model("荒原狼", VisualFactory.create_monster("荒原狼", 1), Vector3(-2.4, 0.0, 0.0), 0.0, 1.55)
+	_add_model("铁骨兽魂", VisualFactory.create_monster("铁骨兽魂", 1), Vector3(0.4, 0.0, 0.0), 0.0, 3.15)
+	_add_model("炽战残魂", VisualFactory.create_monster("炽战残魂", 1), Vector3(3.1, 0.0, 0.0), 0.0, 2.45)
+	_add_model("游祟", VisualFactory.create_monster("游祟", 1), Vector3(5.7, 0.0, 0.0), 0.0, 2.35)
 
 	var gate := VisualFactory.create_fengdu_gate()
 	gate.name = "FengduGatePreview"
@@ -94,13 +95,13 @@ func _build_gallery() -> void:
 	add_child(pillar)
 	_add_label("镇界石柱", Vector3(-7.0, 5.7, 1.0), 0.20)
 
-func _add_model(label_text: String, model: Node3D, at: Vector3, yaw: float) -> void:
+func _add_model(label_text: String, model: Node3D, at: Vector3, yaw: float, label_height: float) -> void:
 	if model == null:
 		return
 	model.position = at
 	model.rotation.y = yaw
 	add_child(model)
-	_add_label(label_text, at + Vector3(0.0, 2.25, 0.0), 0.24)
+	_add_label(label_text, at + Vector3(0.0, label_height, 0.0), 0.24)
 
 func _add_label(label_text: String, at: Vector3, font_size: float) -> void:
 	var label := Label3D.new()
