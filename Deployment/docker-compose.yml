@@ -8,6 +8,9 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-honghuang}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     ports:
+      # Keep host-local access for services running on the Pi and publish a
+      # second binding on the LAN interface for trusted local-network clients.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
       - "${HH_LAN_BIND_IP:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - honghuang-postgres-data:/var/lib/postgresql/data
@@ -25,6 +28,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}"]
     ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
       - "${HH_LAN_BIND_IP:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
     volumes:
       - honghuang-redis-data:/data
@@ -40,6 +44,7 @@ services:
     restart: unless-stopped
     command: ["-js", "-sd", "/data", "-m", "8222", "--auth", "${NATS_AUTH_TOKEN:?Run 04-configure.sh to create NATS_AUTH_TOKEN}"]
     ports:
+      - "127.0.0.1:${NATS_PORT:-4222}:4222"
       - "${HH_LAN_BIND_IP:-127.0.0.1}:${NATS_PORT:-4222}:4222"
       - "127.0.0.1:${NATS_MONITOR_PORT:-8222}:8222"
     volumes:
