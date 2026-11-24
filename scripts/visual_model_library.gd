@@ -24,6 +24,7 @@ static func instantiate_model(model_key: String, fallback_factory: Callable) -> 
 			if instance is Node3D and _contains_renderable_mesh(instance):
 				instance.set_meta("model_source", model_path)
 				instance.set_meta("model_key", model_key)
+				_attach_animation_driver(instance as Node3D)
 				return instance as Node3D
 			if instance != null:
 				instance.queue_free()
@@ -45,3 +46,13 @@ static func _contains_renderable_mesh(root: Node) -> bool:
 		if _contains_renderable_mesh(child):
 			return true
 	return false
+
+
+
+static func _attach_animation_driver(model_root: Node3D) -> void:
+	if model_root.get_node_or_null("ModelAnimationController") != null:
+		return
+	var controller := Node.new()
+	controller.name = "ModelAnimationController"
+	controller.set_script(load("res://scripts/model_animation_controller.gd"))
+	model_root.add_child(controller)
