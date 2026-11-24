@@ -4629,38 +4629,55 @@ struct EnetServer::Impl {
             }
             return;
         }
-        // Taunt is a server-authoritative combat ability, not a damaging spell:
-        // it needs no staff, mana or cast bar, and expires automatically.
+        // Ghost Gate Chain is a server-authoritative control technique:
+        // it draws aggro, briefly binds the target, and slows its movement.
         if (spell_id == "taunt") {
-            constexpr auto kTauntCooldown = std::chrono::seconds(15);
+            constexpr auto kChainCooldown = std::chrono::seconds(15);
             constexpr auto kTauntDuration = std::chrono::seconds(4);
-            constexpr double kTauntRange = 8.0;
+            constexpr std::int32_t kManaCost = 12;
+            constexpr std::int32_t kBindDurationMs = 900;
+            constexpr std::int32_t kSlowDurationMs = 2400;
+            constexpr float kSlowMultiplier = 0.42F;
+            constexpr double kChainRange = 8.0;
             const auto now = Clock::now();
             if (player.last_taunt_at != Clock::time_point{} &&
-                now - player.last_taunt_at < kTauntCooldown) {
+                now - player.last_taunt_at < kChainCooldown) {
                 const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    kTauntCooldown - (now - player.last_taunt_at)).count();
+                    kChainCooldown - (now - player.last_taunt_at)).count();
                 send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                     Json{{"accepted", false}, {"action", "spell_cast"}, {"spell_id", "taunt"},
-                         {"cooldown_ms", remaining}, {"reason", "嘲讽尚在冷却中。"}});
+                         {"cooldown_ms", remaining}, {"reason", "鬼门锁链尚在冷却中。"}});
                 return;
             }
             const auto target_id = command.value("target_entity_id", std::string{});
             if (target_id.empty() || target_id.size() > 96) {
-                reject("嘲讽目标无效。"); return;
+                reject("鬼门锁链目标无效。"); return;
             }
-            const auto target = std::find_if(monsters.begin(), monsters.end(),
+            auto target = std::find_if(monsters.begin(), monsters.end(),
                 [&](const MonsterRuntime& monster) { return monster.runtime_id == target_id; });
             if (target == monsters.end() ||
                 target->state.mode == honghuang::simulation::MonsterMode::Dead ||
                 target->contribution_closing) {
-                reject("嘲讽目标已消失或已被击败。"); return;
+                reject("鬼门锁链目标已消失或已被击败。"); return;
             }
             const double dx = static_cast<double>(target->state.x) - player.x;
             const double dz = static_cast<double>(target->state.z) - player.z;
-            if (dx * dx + dz * dz > kTauntRange * kTauntRange) {
-                reject("嘲讽距离过远，需要靠近目标（8 米内）。"); return;
+            if (dx * dx + dz * dz > kChainRange * kChainRange) {
+                reject("鬼门锁链距离过远，需要靠近目标（8 米内）。"); return;
             }
+            if (!honghuang::simulation::can_pay_spell_cost(player.mana, kManaCost)) {
+                reject("灵力不足，无法施展鬼门锁链。"); return;
+            }
+            const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now.time_since_epoch()).count();
+            const auto bind_duration_ms = honghuang::simulation::monster_freeze_duration_ms(
+                kBindDurationMs, target->definition.id, target->definition.name, target->rare_spawn);
+            if (!honghuang::simulation::apply_freeze(target->freeze_effect, now_ms, bind_duration_ms) ||
+                !honghuang::simulation::apply_slow(
+                    target->slow_effect, now_ms, kSlowDurationMs, kSlowMultiplier)) {
+                reject("鬼门锁链施展失败，目标状态未改变。"); return;
+            }
+            player.mana -= kManaCost;
             target->taunt_target_character_id = player.character_id;
             target->taunt_expires_at = now + kTauntDuration;
             target->state.target_id = player.character_id;
@@ -4668,21 +4685,26 @@ struct EnetServer::Impl {
             player.last_taunt_at = now;
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                 Json{{"accepted", true}, {"action", "spell_cast"}, {"phase", "released"},
-                     {"spell_id", "taunt"}, {"target_entity_id", target_id},
+                     {"spell_id", "taunt"}, {"display_name", "鬼门锁链"},
+                     {"target_entity_id", target_id}, {"mana", player.mana},
+                     {"max_mana", player.max_mana},
                      {"duration_ms", static_cast<int>(kTauntDuration.count() * 1000)},
-                     {"cooldown_ms", static_cast<int>(kTauntCooldown.count() * 1000)},
-                     {"reason", "嘲讽成功，怪物将优先攻击你。"}});
-            const Json taunt_event{{"action", "monster_taunt"},
+                     {"bind_duration_ms", bind_duration_ms},
+                     {"slow_duration_ms", kSlowDurationMs},
+                     {"mana_cost", kManaCost},
+                     {"cooldown_ms", static_cast<int>(kChainCooldown.count() * 1000)},
+                     {"reason", "鬼门锁链缠住目标，短暂定身并迫使其转向攻击你。"}});
+            const Json chain_event{{"action", "monster_chain_bound"},
                 {"target_entity_id", target_id}, {"character_id", player.character_id},
-                {"character_name", player.name},
-                {"duration_ms", static_cast<int>(kTauntDuration.count() * 1000)}};
+                {"character_name", player.name}, {"bind_duration_ms", bind_duration_ms},
+                {"slow_duration_ms", kSlowDurationMs}};
             const double interest_squared = static_cast<double>(kInterestRadius) * kInterestRadius;
             for (const auto& [recipient_peer, recipient] : players) {
                 if (recipient_peer == peer) continue;
                 const double rx = static_cast<double>(recipient.x) - player.x;
                 const double rz = static_cast<double>(recipient.z) - player.z;
                 if (rx * rx + rz * rz <= interest_squared)
-                    send_json(recipient_peer, honghuang::protocol::MessageType::CombatEvent, taunt_event);
+                    send_json(recipient_peer, honghuang::protocol::MessageType::CombatEvent, chain_event);
             }
             return;
         }
