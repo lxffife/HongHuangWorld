@@ -77,6 +77,22 @@ func _build_gallery() -> void:
 	gate.position = Vector3(0.0, 0.0, 8.0)
 	add_child(gate)
 	_add_label("酆都鬼门关 · 建筑灰盒", Vector3(0.0, 2.1, -14.0), 0.32)
+	var wall := VisualFactory.create_fengdu_wall_segment()
+	wall.position = Vector3(-7.0, 0.0, -5.8)
+	add_child(wall)
+	_add_label("酆都城墙模块", Vector3(-7.0, 5.8, -5.8), 0.20)
+	var lantern := VisualFactory.create_ghost_lantern()
+	lantern.position = Vector3(7.0, 0.0, 0.0)
+	add_child(lantern)
+	_add_label("引魂灯", Vector3(7.0, 4.2, 0.0), 0.20)
+	var tombstone := VisualFactory.create_soul_tombstone()
+	tombstone.position = Vector3(7.0, 0.0, -6.0)
+	add_child(tombstone)
+	_add_label("镇魂碑", Vector3(7.0, 2.2, -6.0), 0.20)
+	var pillar := VisualFactory.create_soul_pillar()
+	pillar.position = Vector3(-7.0, 0.0, 1.0)
+	add_child(pillar)
+	_add_label("镇界石柱", Vector3(-7.0, 5.7, 1.0), 0.20)
 
 func _add_model(label_text: String, model: Node3D, at: Vector3, yaw: float) -> void:
 	if model == null:
