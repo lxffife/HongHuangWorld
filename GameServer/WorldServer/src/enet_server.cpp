@@ -5996,6 +5996,7 @@ struct EnetServer::Impl {
                                    {"attack_style", "heavy_slam"},
                                    {"damage", damage.damage}, {"health", target_player.health},
                                    {"max_health", target_player.max_health},
+                                   {"shield_absorbed", absorbed},
                                    {"shield_remaining", target_player.absorb_shield_health},
                                    {"defeated", damage.defeated}});
                 }
@@ -6059,6 +6060,7 @@ struct EnetServer::Impl {
                                {"attack_style", attack_profile.style},
                                {"damage", damage.damage}, {"health", player.health},
                                {"max_health", player.max_health},
+                               {"shield_absorbed", absorbed},
                                {"shield_remaining", player.absorb_shield_health},
                                {"defeated", damage.defeated},
                                {"status_resistance_bp", (applied_poison || applied_slow) ? status_resistance_bp : 0},
