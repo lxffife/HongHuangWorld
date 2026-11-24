@@ -2936,6 +2936,42 @@ func _set_monster_freeze_visual(monster: Node3D, enabled: bool) -> void:
 
 
 func _on_combat_event(event: Dictionary) -> void:
+	if str(event.get("action", "")) == "monster_death_settlement":
+		var monster_name := str(event.get("monster_name", "怪物"))
+		var monster_level := int(event.get("monster_level", 0))
+		var reward_parts: Array[String] = []
+		var experience := int(event.get("experience", 0))
+		var cultivation := int(event.get("cultivation", 0))
+		var ghost_cash := int(event.get("ghost_cash", 0))
+		var nether_stone := int(event.get("nether_stone", 0))
+		if experience > 0:
+			reward_parts.append("经验 +" + str(experience))
+		if cultivation > 0:
+			reward_parts.append("修为 +" + str(cultivation))
+		if ghost_cash > 0:
+			reward_parts.append("冥币 +" + str(ghost_cash))
+		if nether_stone > 0:
+			reward_parts.append("冥石 +" + str(nether_stone))
+		var reward_text := "击败 " + monster_name
+		if monster_level > 0:
+			reward_text += "（Lv." + str(monster_level) + "）"
+		reward_text += " · " + ("；".join(PackedStringArray(reward_parts)) if not reward_parts.is_empty() else "贡献奖励已结算")
+		var drops: Array = event.get("drops", [])
+		if not drops.is_empty():
+			var drop_parts: Array[String] = []
+			for drop_variant in drops:
+				if not drop_variant is Dictionary:
+					continue
+				var drop: Dictionary = drop_variant
+				var item_id := str(drop.get("item_id", "未知物品"))
+				var quantity := int(drop.get("quantity", 1))
+				drop_parts.append(item_id + " ×" + str(quantity))
+			reward_text += " · 掉落：" + "、".join(PackedStringArray(drop_parts)) + "（掉落在地面，按 E 拾取）"
+		_show_notification(reward_text, 6.0)
+		_append_chat_line("[系统] " + reward_text, "nearby")
+		_refresh_reward_status_later()
+		_refresh_inventory()
+		return
 	if str(event.get("action", "")) == "equipment_refresh":
 		if not bool(event.get("accepted", false)):
 			return
