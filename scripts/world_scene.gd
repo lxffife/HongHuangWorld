@@ -5000,12 +5000,16 @@ func _on_wallet_request_completed(result: int, response_code: int, _headers: Pac
 			wallet_label.text = "钱袋  余额同步中……"
 		return
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
-	if not parsed is Dictionary or not parsed.get("balances", []) is Array:
+	if not (parsed is Dictionary):
 		push_warning("[Wallet] 钱包响应格式异常")
+		return
+	var balances_variant: Variant = parsed.get("balances", [])
+	if not (balances_variant is Array):
+		push_warning("[Wallet] 钱包余额列表格式异常")
 		return
 	var ghost_cash := 0
 	var nether_stone := 0
-	for entry_variant in parsed.get("balances", []):
+	for entry_variant in balances_variant:
 		if not entry_variant is Dictionary:
 			continue
 		var entry: Dictionary = entry_variant
