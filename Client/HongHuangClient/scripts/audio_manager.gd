@@ -7,6 +7,8 @@ const CONFIG_PATH := "user://honghuang_audio.cfg"
 const BUS_NAMES := ["Music", "SFX", "UI"]
 
 var _cache: Dictionary = {}
+var _ambience_player: AudioStreamPlayer
+var _ambience_cue := ""
 var _volumes := {"Master": 0.85, "Music": 0.55, "SFX": 0.8, "UI": 0.75}
 var _muted := false
 
@@ -20,7 +22,9 @@ const CUES := {
 	"pickup": {"duration": 0.18, "start": 660.0, "end": 990.0, "noise": 0.04, "gain": 0.20, "wave": "chime"},
 	"ui": {"duration": 0.075, "start": 520.0, "end": 420.0, "noise": 0.02, "gain": 0.13, "wave": "tone"},
 	"warning": {"duration": 0.28, "start": 220.0, "end": 180.0, "noise": 0.10, "gain": 0.26, "wave": "warning"},
-	"footstep": {"duration": 0.10, "start": 90.0, "end": 48.0, "noise": 0.72, "gain": 0.16, "wave": "step"}
+	"footstep": {"duration": 0.10, "start": 90.0, "end": 48.0, "noise": 0.72, "gain": 0.16, "wave": "step"},
+	"ambience_underworld": {"duration": 8.0, "start": 42.0, "end": 46.0, "noise": 0.18, "gain": 0.10, "wave": "ambient_dread"},
+	"ambience_qingyun": {"duration": 8.0, "start": 110.0, "end": 116.0, "noise": 0.06, "gain": 0.07, "wave": "ambient_wind"}
 }
 
 func _ready() -> void:
@@ -60,6 +64,44 @@ func _apply_volumes() -> void:
 		var volume := float(_volumes[bus_name])
 		AudioServer.set_bus_volume_db(index, linear_to_db(maxf(volume, 0.001)))
 		AudioServer.set_bus_mute(index, _muted or volume <= 0.001)
+
+func start_ambience(cue: String) -> void:
+	if not CUES.has(cue) or not cue.begins_with("ambience_"):
+		return
+	if _ambience_cue == cue and is_instance_valid(_ambience_player):
+		return
+	stop_ambience()
+	var stream: AudioStreamWAV = _cache.get(cue)
+	if stream == null:
+		stream = _build_stream(cue)
+		stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		stream.loop_begin = 0
+		stream.loop_end = stream.data.size() / 2
+		_cache[cue] = stream
+	_ambience_player = AudioStreamPlayer.new()
+	_ambience_player.name = "RegionAmbience"
+	_ambience_player.stream = stream
+	_ambience_player.bus = "Music"
+	_ambience_player.volume_db = -5.0
+	add_child(_ambience_player)
+	_ambience_cue = cue
+	_ambience_player.play()
+
+func stop_ambience() -> void:
+	if is_instance_valid(_ambience_player):
+		_ambience_player.stop()
+		_ambience_player.queue_free()
+	_ambience_player = null
+	_ambience_cue = ""
+
+func set_region_ambience(world_id: String) -> void:
+	match world_id:
+		"underworld_fengdu":
+			start_ambience("ambience_underworld")
+		"qingyun_human":
+			start_ambience("ambience_qingyun")
+		_:
+			stop_ambience()
 
 func set_volume(bus_name: String, value: float) -> void:
 	if not _volumes.has(bus_name):
@@ -134,11 +176,15 @@ func _build_stream(cue: String) -> AudioStreamWAV:
 	for index in range(sample_count):
 		var t := float(index) / float(sample_count)
 		var envelope := pow(maxf(0.0, 1.0 - t), 1.8)
+		if wave.begins_with("ambient_"):
+			envelope = 0.72 + 0.16 * sin(TAU * t * 2.0)
 		if wave == "chime" or wave == "magic":
 			envelope *= minf(1.0, t * 18.0)
 		var frequency := lerpf(start_frequency, end_frequency, t)
 		phase += TAU * frequency / float(SAMPLE_RATE)
 		var tone := sin(phase)
+		if wave.begins_with("ambient_"):
+			tone = sin(phase) * 0.72 + sin(phase * 0.503 + sin(TAU * t) * 0.3) * 0.28
 		var overtone := sin(phase * (2.01 if wave == "chime" else 1.48)) * 0.28
 		var noise := randf_range(-1.0, 1.0) * noise_amount
 		var sample := clampf((tone * (1.0 - noise_amount * 0.45) + overtone + noise) * envelope * gain, -1.0, 1.0)
