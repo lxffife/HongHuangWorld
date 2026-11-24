@@ -628,7 +628,7 @@ bool save_periodic_position(const ServerConfig& config, const PlayerState& playe
 
 
 bool deliver_character_reward(const ServerConfig& config, const CharacterRewardEvent& reward,
-                              long& http_status, std::string& error) {
+                              long& http_status, std::string& error, long timeout_ms = 5000L) {
     CURL* curl = curl_easy_init();
     if (curl == nullptr) { error = "could not initialize character reward HTTP client"; return false; }
     const std::string url = config.backend_url + "/api/v1/servers/characters/rewards";
@@ -4599,7 +4599,7 @@ struct EnetServer::Impl {
                 return;
             }
         }
-        if (player.pending_spell.has_value()) { reject("正在施法，请稍候。"); return;
+        if (player.pending_spell.has_value()) { reject("正在施法，请稍候。"); return; }
         if (!player.revive_target_character_id.empty() && spell_id != "revive") {
             reject("回魂术引导中，不能同时施展其他法术。"); return;
         }
