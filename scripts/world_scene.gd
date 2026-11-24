@@ -4730,6 +4730,8 @@ func _on_monster_action_event(event: Dictionary) -> void:
 		_set_iron_slam_telegraph(attacker, false)
 		_set_elemental_telegraph(attacker, false, attack_style)
 	elif phase == "impact":
+		var impact_cue := "heavy_hit" if attack_style == "heavy_slam" else "monster_attack"
+		HHAudio.play_world(impact_cue, attacker.global_position, 0.94 if attack_style == "heavy_slam" else randf_range(0.94, 1.06), 32.0)
 		attacker.set_meta("attack_phase", "impact")
 		attacker.set_meta("attack_phase_duration", 0.2)
 		# Remove only this monster; other monsters may still be winding up on us.
@@ -5334,6 +5336,9 @@ func _on_combat_event(event: Dictionary) -> void:
 	# Death rewards are acknowledged only after the server has committed the
 	# durable settlement batch. Do not treat this as a normal zero-damage hit.
 	if str(event.get("action", "")) == "monster_death_settlement":
+		var fallen_id := str(event.get("monster_id", event.get("entity_id", "")))
+		if monsters.has(fallen_id) and is_instance_valid(monsters[fallen_id]):
+			HHAudio.play_world("death", (monsters[fallen_id] as Node3D).global_position, 0.9, 34.0)
 		if not bool(event.get("committed", false)):
 			_show_notification("怪物已击败，奖励正在安全结算……", 3.0)
 			return
@@ -5477,6 +5482,7 @@ func _on_combat_event(event: Dictionary) -> void:
 		elif str(event.get("phase", "")) == "casting":
 			_show_notification("正在凝聚" + spell_name + " · 灵力 -" + str(int(event.get("mana_cost", 18))), 1.5)
 		elif str(event.get("phase", "")) == "released":
+			HHAudio.play_combat("spell", 1.0 if spell_id == "fireball" else 0.92)
 			if spell_id == "revive":
 				_stop_revive_channel_ui()
 			elif spell_id == "taunt":
