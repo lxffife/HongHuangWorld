@@ -2186,26 +2186,28 @@ func _create_monster(monster_name: String, monster_level: int) -> Node3D:
 	elemental_telegraph.position.y = 0.07
 	elemental_telegraph.visible = false
 	visual_root.add_child(elemental_telegraph)
-	if archetype == "iron_beast":
-		var telegraph := MeshInstance3D.new()
-		telegraph.name = "SlamTelegraph"
-		var torus := TorusMesh.new()
-		torus.inner_radius = 0.94
-		torus.outer_radius = 1.0
-		torus.rings = 40
-		torus.ring_segments = 8
-		telegraph.mesh = torus
-		var telegraph_material := StandardMaterial3D.new()
-		telegraph_material.albedo_color = Color("#ff6547", 0.34)
-		telegraph_material.emission_enabled = true
-		telegraph_material.emission = Color("#ff3f2d")
-		telegraph_material.emission_energy_multiplier = 1.2
-		telegraph_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		telegraph_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		telegraph.material_override = telegraph_material
-		telegraph.position.y = 0.075
-		telegraph.visible = false
-		visual_root.add_child(telegraph)
+	# Any monster can receive a heavy_slam attack profile (including bosses).
+	# Create the ground-area marker universally; it remains hidden unless that
+	# monster actually begins a heavy slam.
+	var telegraph := MeshInstance3D.new()
+	telegraph.name = "SlamTelegraph"
+	var torus := TorusMesh.new()
+	torus.inner_radius = 0.94
+	torus.outer_radius = 1.0
+	torus.rings = 40
+	torus.ring_segments = 8
+	telegraph.mesh = torus
+	var telegraph_material := StandardMaterial3D.new()
+	telegraph_material.albedo_color = Color("#ff6547", 0.34)
+	telegraph_material.emission_enabled = true
+	telegraph_material.emission = Color("#ff3f2d")
+	telegraph_material.emission_energy_multiplier = 1.2
+	telegraph_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	telegraph_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	telegraph.material_override = telegraph_material
+	telegraph.position.y = 0.075
+	telegraph.visible = false
+	visual_root.add_child(telegraph)
 	var slow_ring := MeshInstance3D.new()
 	slow_ring.name = "SlowStatusRing"
 	var slow_ring_mesh := TorusMesh.new()
