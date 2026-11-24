@@ -4451,7 +4451,8 @@ func _on_monster_action_event(event: Dictionary) -> void:
 		attacker.set_meta("attack_phase", "impact")
 		attacker.set_meta("attack_phase_duration", 0.2)
 		if str(event.get("target_character_id", "")) == str(HHSession.world_snapshot.get("character_id", "")):
-			_set_incoming_attack_telegraph(attack_style, false)
+			# Remove this monster only; other monsters may still be winding up on us.
+			_set_incoming_attack_telegraph(attack_style, false, attacker_id)
 		attacker.set_meta("attack_phase_time", 0.2)
 		if attack_style == "heavy_slam":
 			_set_iron_slam_telegraph(attacker, false)
