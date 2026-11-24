@@ -1189,7 +1189,7 @@ func _build_combat_hud() -> void:
 		cooldown_label.clip_text = true
 		cooldown_label.custom_minimum_size = Vector2(68.0, 22.0)
 		spell_cooldown_labels[spell_id] = cooldown_label
-		spell_grid.add_child(cooldown_label)
+		_add_spell_hotbar_slot(spell_grid, cooldown_label, Color("#b98d55"))
 		var mastery_label := Label.new()
 		mastery_label.add_theme_color_override("font_color", Color("#9db9a7"))
 		mastery_label.add_theme_font_size_override("font_size", 10)
@@ -1203,7 +1203,7 @@ func _build_combat_hud() -> void:
 	taunt_label.custom_minimum_size = Vector2(68.0, 22.0)
 	taunt_label.clip_text = true
 	spell_cooldown_labels["taunt"] = taunt_label
-	spell_grid.add_child(taunt_label)
+	_add_spell_hotbar_slot(spell_grid, taunt_label, Color("#c47b48"))
 	var revive_label := Label.new()
 	revive_label.text = "Y  ·  回魂术：就绪"
 	revive_label.add_theme_color_override("font_color", Color("#9ed7bd"))
@@ -1211,7 +1211,7 @@ func _build_combat_hud() -> void:
 	revive_label.custom_minimum_size = Vector2(68.0, 22.0)
 	revive_label.clip_text = true
 	spell_cooldown_labels["revive"] = revive_label
-	spell_grid.add_child(revive_label)
+	_add_spell_hotbar_slot(spell_grid, revive_label, Color("#65a88f"))
 	var heal_label := Label.new()
 	heal_label.text = "U  ·  养气归元：就绪"
 	heal_label.add_theme_color_override("font_color", Color("#8fd9b4"))
@@ -1219,7 +1219,7 @@ func _build_combat_hud() -> void:
 	heal_label.custom_minimum_size = Vector2(68.0, 22.0)
 	heal_label.clip_text = true
 	spell_cooldown_labels["life_mend"] = heal_label
-	spell_grid.add_child(heal_label)
+	_add_spell_hotbar_slot(spell_grid, heal_label, Color("#5baf83"))
 	var aegis_label := Label.new()
 	aegis_label.text = "G  ·  罡气护体：就绪"
 	aegis_label.add_theme_color_override("font_color", Color("#9bc9ed"))
@@ -1227,7 +1227,7 @@ func _build_combat_hud() -> void:
 	aegis_label.custom_minimum_size = Vector2(68.0, 22.0)
 	aegis_label.clip_text = true
 	spell_cooldown_labels["guardian_aegis"] = aegis_label
-	spell_grid.add_child(aegis_label)
+	_add_spell_hotbar_slot(spell_grid, aegis_label, Color("#659bc6"))
 	var purify_label := Label.new()
 	purify_label.text = "H · 净秽符：就绪"
 	purify_label.add_theme_color_override("font_color", Color("#c5b6e8"))
@@ -1235,7 +1235,7 @@ func _build_combat_hud() -> void:
 	purify_label.custom_minimum_size = Vector2(68.0, 22.0)
 	purify_label.clip_text = true
 	spell_cooldown_labels["purify"] = purify_label
-	spell_grid.add_child(purify_label)
+	_add_spell_hotbar_slot(spell_grid, purify_label, Color("#9881c7"))
 	shield_status_label = Label.new()
 	shield_status_label.text = ""
 	shield_status_label.add_theme_color_override("font_color", Color("#9bc9ed"))
@@ -4297,6 +4297,28 @@ func _spell_hotkey(spell_id: String) -> String:
 	return "?"
 
 
+func _add_spell_hotbar_slot(grid: GridContainer, label: Label, accent: Color) -> void:
+	var slot := PanelContainer.new()
+	slot.custom_minimum_size = Vector2(72.0, 34.0)
+	slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var slot_style := StyleBoxFlat.new()
+	slot_style.bg_color = Color("#111e2a", 0.96)
+	slot_style.border_color = accent.darkened(0.25)
+	slot_style.set_border_width_all(1)
+	slot_style.set_corner_radius_all(6)
+	slot_style.content_margin_left = 3.0
+	slot_style.content_margin_right = 3.0
+	slot_style.content_margin_top = 3.0
+	slot_style.content_margin_bottom = 3.0
+	slot.add_theme_stylebox_override("panel", slot_style)
+	label.custom_minimum_size = Vector2(64.0, 26.0)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 10)
+	slot.add_child(label)
+	grid.add_child(slot)
+
+
 func _update_spell_cooldown_hud() -> void:
 	for spell_id in spell_cooldown_labels:
 		var label := spell_cooldown_labels[spell_id] as Label
@@ -4305,14 +4327,16 @@ func _update_spell_cooldown_hud() -> void:
 		var spell_key := _spell_hotkey(spell_id)
 		var spell_name := _spell_display_name(spell_id)
 		var compact_name := spell_name.substr(0, mini(2, spell_name.length()))
+		var spell_glyphs := {"fireball": "✦", "ice_bolt": "❄", "taunt": "⛓", "revive": "☯", "life_mend": "✚", "guardian_aegis": "◈", "purify": "✧"}
+		var glyph := str(spell_glyphs.get(spell_id, "◇"))
 		if spell_id in ["ice_bolt", "taunt"] and not _is_spell_known(spell_id):
-			label.text = spell_key + " " + compact_name + " 未掌握"
+			label.text = glyph + " " + spell_key + " 未掌握"
 			label.tooltip_text = spell_key + " · " + spell_name + "：未掌握（需技能典籍）"
 			label.add_theme_color_override("font_color", Color("#d69a78"))
 			continue
 		label.add_theme_color_override("font_color", Color("#e7b77a") if spell_id == "taunt" else Color("#c4d2df"))
 		var remaining := float(spell_cooldown_remaining.get(spell_id, 0.0))
-		label.text = spell_key + " " + compact_name + (" %.0f秒" % remaining) if remaining > 0.0 else spell_key + " " + compact_name + " 就绪"
+		label.text = glyph + " " + spell_key + " " + compact_name + (" %.0f秒" % remaining) if remaining > 0.0 else glyph + " " + spell_key + " " + compact_name + " 就绪"
 		label.tooltip_text = spell_key + " · " + spell_name + ("：冷却 %.1f 秒" % remaining) if remaining > 0.0 else spell_key + " · " + spell_name + "：就绪"
 
 
