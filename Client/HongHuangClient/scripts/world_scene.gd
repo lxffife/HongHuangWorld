@@ -5691,6 +5691,7 @@ func _on_combat_event(event: Dictionary) -> void:
 						visual_plate.text += "\n生命 " + str(maxi(int(visual_entity.get("health", 0)), 0)) + " / " + str(visual_max_health)
 				if visual_target_id == selected_monster_id:
 					_update_target_info()
+			_play_model_animation_action(visual_target, "hit")
 			_spawn_monster_hit_visual(visual_target, bool(event.get("critical", false)))
 			if bool(event.get("defeated", false)):
 				_begin_monster_death_visual(visual_target)
@@ -5765,6 +5766,7 @@ func _on_combat_event(event: Dictionary) -> void:
 			_set_monster_burn_visual(hit_monster, false)
 			_set_monster_freeze_visual(hit_monster, false)
 		hit_monster.set_meta("hit_reaction_time", 0.24)
+		_play_model_animation_action(hit_monster, "hit")
 		_spawn_monster_hit_visual(hit_monster, bool(event.get("critical", false)))
 		if bool(event.get("defeated", false)):
 			_begin_monster_death_visual(hit_monster)
