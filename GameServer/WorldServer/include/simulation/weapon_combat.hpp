@@ -25,7 +25,9 @@ inline WeaponCombatProfile weapon_combat_profile(std::string_view weapon_type) {
     if (weapon_type == "bow") return {22.0F, std::chrono::milliseconds(900), 10000, 0};
     if (weapon_type == "staff" || weapon_type == "focus")
         return {3.5F, std::chrono::milliseconds(700), 10000, 0};
-    return {2.5F, std::chrono::milliseconds(700), 8000, 0};
+    // Unarmed attacks need a little more reach to account for character capsule
+    // separation and client/server position sampling at the moment of the click.
+    return {3.0F, std::chrono::milliseconds(700), 8000, 0};
 }
 
 
