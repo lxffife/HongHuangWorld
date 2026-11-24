@@ -24,7 +24,6 @@ var (
 	ErrInvalidSpellMasteryReward = errors.New("invalid spell mastery reward")
 	ErrSpellLearningInvalid = errors.New("invalid spell learning request")
 	ErrSpellAlreadyKnown = errors.New("spell is already learned")
-	ErrSpellLearningInWorld = errors.New("leave the world before learning a spell")
 	ErrInvalidRace = errors.New("race has no configured default cultivation system")
 	ErrInsufficientCultivation = errors.New("not enough cultivation for breakthrough")
 	ErrMaxRealm = errors.New("character has reached the highest configured realm")
@@ -1962,13 +1961,6 @@ func (s *Service) LearnSpell(ctx context.Context, accountID, requestID, itemID s
 		WHERE soul.account_id=$1 AND c.status='alive' FOR UPDATE OF c`, accountID).Scan(&characterID,&worldID)
 	if errors.Is(err,sql.ErrNoRows) { return SpellLearningResult{}, ErrSpellLearningInvalid }
 	if err != nil { return SpellLearningResult{}, fmt.Errorf("resolve current character for spell learning: %w",err) }
-
-	var active bool
-	if err := tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM world_sessions
-		WHERE character_id=$1::uuid AND session_state IN ('connecting','active','saving'))`,characterID).Scan(&active); err != nil {
-		return SpellLearningResult{},fmt.Errorf("check active session before spell learning: %w",err)
-	}
-	if active { return SpellLearningResult{},ErrSpellLearningInWorld }
 
 	var previousItemID, previousSpellID string
 	err = tx.QueryRowContext(ctx,`SELECT item_id,spell_id FROM character_spell_learning_events
