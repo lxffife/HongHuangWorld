@@ -4730,7 +4730,9 @@ struct EnetServer::Impl {
             now + std::chrono::milliseconds(spell->cast_time_ms)};
         send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                   Json{{"accepted", true}, {"action", "spell_cast"}, {"phase", "casting"},
-                       {"spell_id", std::string(spell->id)}, {"mana", player.mana},
+                       {"spell_id", std::string(spell->id)}, {"display_name", std::string(spell->display_name)},
+                       {"discipline_id", std::string(spell->discipline_id)},
+                       {"visual_style", std::string(spell->visual_style)}, {"mana", player.mana},
                        {"max_mana", player.max_mana}, {"mana_cost", spell->mana_cost},
                        {"cast_time_ms", spell->cast_time_ms}, {"cooldown_ms", spell->cooldown_ms}});
     }
@@ -5099,17 +5101,19 @@ struct EnetServer::Impl {
                 spell->defense_penetration_basis_points,
                 roll_critical_hit(player.agility),
                 now + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<float>(spell->projectile_lifetime_seconds)),
-                spell->element == honghuang::simulation::SpellElement::Talisman ? "suppressing_talisman" : "nether_phosphor",
+                std::string(spell->visual_style),
                 spell->slow_duration_ms, spell->slow_multiplier, spell->freeze_duration_ms,
                  spell->burn_duration_ms, spell->burn_interval_ms,
                  spell->burn_damage_basis_points
             });
             broadcast_player_action_event(player, "cast", target->runtime_id,
-                spell->element == honghuang::simulation::SpellElement::Talisman ? "spell_talisman" : "spell_nether_phosphor", peer);
+                "spell_" + std::string(spell->visual_style), peer);
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", true}, {"action", "spell_cast"}, {"phase", "released"},
-                           {"spell_id", std::string(spell->id)}, {"projectile_id", projectile_id},
-                           {"mana", player.mana}, {"max_mana", player.max_mana}});
+                           {"spell_id", std::string(spell->id)}, {"display_name", std::string(spell->display_name)},
+                           {"discipline_id", std::string(spell->discipline_id)},
+                           {"visual_style", std::string(spell->visual_style)},
+                           {"projectile_id", projectile_id}, {"mana", player.mana}, {"max_mana", player.max_mana}});
         }
         for (auto projectile = projectiles.begin(); projectile != projectiles.end();) {
             const auto owner = std::find_if(players.begin(), players.end(), [&](const auto& entry) {
