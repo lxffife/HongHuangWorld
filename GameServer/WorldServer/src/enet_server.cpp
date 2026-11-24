@@ -4420,6 +4420,8 @@ struct EnetServer::Impl {
         }
         const Json event{
             {"accepted", true},
+            {"source", "melee"},
+            {"attack_style", player_attack_style(player)},
             {"attacker_character_id", player.character_id},
             {"target_entity_id", target->runtime_id},
             {"target_name", target->definition.name},
