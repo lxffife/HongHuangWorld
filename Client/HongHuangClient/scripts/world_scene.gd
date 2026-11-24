@@ -5072,6 +5072,19 @@ func _on_combat_event(event: Dictionary) -> void:
 		if event.has("max_health"):
 			health_entity["max_health"] = int(event.get("max_health", 0))
 		monster_entities[health_target_id] = health_entity
+		# Update the overhead nameplate from the same authoritative combat
+		# event so its HP text does not wait for the next world snapshot.
+		var health_monster := monsters.get(health_target_id) as Node3D
+		if is_instance_valid(health_monster):
+			var health_nameplate := health_monster.get_node_or_null("Nameplate") as Label3D
+			if is_instance_valid(health_nameplate):
+				var plate_text := str(health_entity.get("name", "怪物")) + " · Lv." + str(int(health_entity.get("level", 1)))
+				var plate_max_health := int(health_entity.get("max_health", 0))
+				if plate_max_health > 0:
+					plate_text += "\n生命 " + str(maxi(int(health_entity.get("health", 0)), 0)) + " / " + str(plate_max_health)
+				if str(party_data.get("focus_target_entity_id", "")) == health_target_id:
+					plate_text += "\n⚑ 队伍集火目标"
+				health_nameplate.text = plate_text
 		if health_target_id == selected_monster_id:
 			_update_target_info()
 	_spawn_combat_number(damage, false, bool(event.get("critical", false)), health_target_id)
