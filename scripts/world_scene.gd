@@ -5458,6 +5458,8 @@ func _on_player_action_event(event: Dictionary) -> void:
 	var remote := remote_players[character_id] as Node3D
 	if not is_instance_valid(remote):
 		return
+	if action == "hit":
+		_spawn_remote_player_hit_visual(remote, str(event.get("attack_style", "")))
 	# Hit reactions outrank attacks. Lower-priority events cannot replace an active hit.
 	var incoming_priority := 2 if action == "hit" else 1
 	var current_time := float(remote.get_meta("remote_action_time", 0.0))
@@ -5470,6 +5472,40 @@ func _on_player_action_event(event: Dictionary) -> void:
 	remote.set_meta("remote_action_time", maxf(current_time, duration) if current_priority == incoming_priority else duration)
 	remote.set_meta("remote_action_duration", duration)
 	remote.set_meta("remote_action_style", str(event.get("attack_style", "")))
+
+func _spawn_remote_player_hit_visual(remote: Node3D, attack_style: String) -> void:
+	if not is_instance_valid(remote):
+		return
+	var previous := remote.get_node_or_null("RemoteHitReactionRing")
+	if is_instance_valid(previous):
+		previous.queue_free()
+	var ring := MeshInstance3D.new()
+	ring.name = "RemoteHitReactionRing"
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.42
+	ring_mesh.outer_radius = 0.52
+	ring_mesh.rings = 24
+	ring_mesh.ring_segments = 8
+	ring.mesh = ring_mesh
+	ring.position.y = 0.06
+	ring.rotation.x = PI / 2.0
+	var tint := Color("#ffad75") if attack_style == "heavy_slam" else Color("#b8dfff")
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(tint.r, tint.g, tint.b, 0.82)
+	material.emission_enabled = true
+	material.emission = tint
+	material.emission_energy_multiplier = 1.8
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring.material_override = material
+	remote.add_child(ring)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(ring, "scale", Vector3.ONE * 1.9, 0.34)
+	tween.tween_property(material, "albedo_color:a", 0.0, 0.34)
+	tween.tween_property(material, "emission_energy_multiplier", 0.0, 0.34)
+	tween.chain().tween_callback(Callable(ring, "queue_free"))
+
 
 func _on_player_joined(player: Dictionary) -> void:
 	_upsert_remote_player(player)
