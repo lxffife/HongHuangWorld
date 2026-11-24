@@ -1647,7 +1647,12 @@ struct EnetServer::Impl {
                     continue;
                 }
 
-                if (status >= 300 && status < 500) {
+                // Timeouts and rate limiting are transient even though HTTP classifies
+                // them as client errors. Keep these durable events queued instead of
+                // permanently losing rewards or bounty progress during backend pressure.
+                const bool retryable_client_status =
+                    status == 408 || status == 425 || status == 429;
+                if (status >= 300 && status < 500 && !retryable_client_status) {
                     std::string dead_error;
                     if (!durable_outbox->move_to_dead_letter(
                             event->event_id, event->attempts + 1, delivery_error, dead_error))
