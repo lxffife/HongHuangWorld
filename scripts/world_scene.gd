@@ -2235,7 +2235,9 @@ func _refresh_monster_nameplate(monster_id: String) -> void:
 			base_text += "\n目标：" + (aggro_target_name if not aggro_target_name.is_empty() else "队友")
 			nameplate.modulate = Color("#ffc36b")
 	else:
-		nameplate.modulate = base_color
+		nameplate.modulate = Color("#f2d28a") if monster_id == selected_monster_id else base_color
+	if monster_id == selected_monster_id:
+		base_text += "\n◆ 当前锁定目标"
 	if str(party_data.get("focus_target_entity_id", "")) == monster_id:
 		base_text += "\n⚑ 队伍集火目标"
 	nameplate.text = base_text
@@ -4103,8 +4105,11 @@ func _cycle_monster_target() -> void:
 func _set_monster_target(monster_id: String) -> void:
 	if not monsters.has(monster_id):
 		return
+	var previous_target_id := selected_monster_id
 	_clear_target_ring()
 	selected_monster_id = monster_id
+	if not previous_target_id.is_empty() and previous_target_id != monster_id:
+		_refresh_monster_nameplate(previous_target_id)
 	var target := monsters[monster_id] as Node3D
 	var ring := MeshInstance3D.new()
 	ring.name = "TargetSelectionRing"
@@ -4139,8 +4144,11 @@ func _horizontal_distance_to_target(from_position: Vector3, target_position: Vec
 
 
 func _clear_monster_target() -> void:
+	var previous_target_id := selected_monster_id
 	_clear_target_ring()
 	selected_monster_id = ""
+	if not previous_target_id.is_empty():
+		_refresh_monster_nameplate(previous_target_id)
 	if is_instance_valid(target_info_panel):
 		target_info_panel.visible = false
 
