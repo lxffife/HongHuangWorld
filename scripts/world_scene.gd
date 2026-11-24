@@ -4589,7 +4589,7 @@ func _show_ghost_gate_chain_effect(target_entity_id: String) -> void:
 			link.material_override = iron
 			effect.add_child(link)
 	var rotation_tween := create_tween()
-	rotation_tween.tween_property(effect, "rotation:y", TAU, 1.1)
+	rotation_tween.tween_property(effect, "rotation", Vector3(0.0, TAU, 0.0), 1.1)
 	await get_tree().create_timer(1.35).timeout
 	if is_instance_valid(effect):
 		effect.queue_free()
