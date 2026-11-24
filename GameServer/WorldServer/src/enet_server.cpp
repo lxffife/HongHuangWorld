@@ -2780,12 +2780,23 @@ struct EnetServer::Impl {
             const int previous_stage = hell_trial_waves.stage();
             const auto wave_transition = hell_trial_waves.record_death(monster.death_definition_id);
             bool wave_checkpoint_failed = false;
-            if (wave_transition.advanced && wave_transition.stage < 4) {
-                if (!persist_hell_trial_wave_checkpoint()) {
-                    // Do not expose the next wave until its progress is durable.
+            if (wave_transition.advanced && !wave_transition.unlocked_definition_id.empty()) {
+                const auto next_wave = std::find_if(monsters.begin(), monsters.end(),
+                    [&](const MonsterRuntime& candidate) {
+                        return candidate.definition.id == wave_transition.unlocked_definition_id;
+                    });
+                if (next_wave == monsters.end()) {
+                    std::cerr << "[HellTrialWave] next wave monster is missing: "
+                              << wave_transition.unlocked_definition_id << std::endl;
                     (void)hell_trial_waves.restore_stage(previous_stage);
                     wave_checkpoint_failed = true;
                 }
+            }
+            if (wave_transition.advanced && !wave_checkpoint_failed &&
+                wave_transition.stage < 4 && !persist_hell_trial_wave_checkpoint()) {
+                // Do not expose the next wave until its progress is durable.
+                (void)hell_trial_waves.restore_stage(previous_stage);
+                wave_checkpoint_failed = true;
             }
 
             if (wave_transition.advanced && !wave_checkpoint_failed &&
@@ -2794,14 +2805,10 @@ struct EnetServer::Impl {
                     [&](const MonsterRuntime& candidate) {
                         return candidate.definition.id == wave_transition.unlocked_definition_id;
                     });
-                if (next_wave != monsters.end()) {
-                    next_wave->state.health = 0.0F;
-                    next_wave->state.mode = honghuang::simulation::MonsterMode::Dead;
-                    next_wave->respawn_at = Clock::now();
-                } else {
-                    std::cerr << "[HellTrialWave] next wave monster is missing: "
-                              << wave_transition.unlocked_definition_id << std::endl;
-                }
+                // Existence was validated before the checkpoint was committed.
+                next_wave->state.health = 0.0F;
+                next_wave->state.mode = honghuang::simulation::MonsterMode::Dead;
+                next_wave->respawn_at = Clock::now();
             }
 
             honghuang::simulation::HellTrialDeathResult encounter_result;
