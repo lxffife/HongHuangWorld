@@ -4425,12 +4425,27 @@ struct EnetServer::Impl {
         }
         const double dx = static_cast<double>(target->state.x) - player.x;
         const double dz = static_cast<double>(target->state.z) - player.z;
-        if (dx * dx + dz * dz > static_cast<double>(combat_profile.range) * combat_profile.range) {
+        const double attack_distance = std::sqrt(dx * dx + dz * dz);
+        const auto weapon_type = player_weapon_type(player);
+        std::cout << "[CombatAttack] request character=" << player.character_id
+                  << " target=" << target->runtime_id
+                  << " weapon=" << weapon_type
+                  << " distance_m=" << attack_distance
+                  << " range_m=" << combat_profile.range
+                  << " attack=" << player.attack
+                  << " target_hp=" << target->state.health << "/" << target->definition.max_health
+                  << " target_defense=" << target->definition.defense << std::endl;
+        if (attack_distance > static_cast<double>(combat_profile.range)) {
             // An out-of-range click is a positioning correction, not an attack:
             // do not burn the player's attack cooldown while they move closer.
+            std::cout << "[CombatAttack] rejected_out_of_range character=" << player.character_id
+                      << " target=" << target->runtime_id
+                      << " distance_m=" << attack_distance
+                      << " range_m=" << combat_profile.range << std::endl;
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", false}, {"attacker_character_id", player.character_id},
-                           {"target_entity_id", target->runtime_id}, {"reason", "距离目标太远。"}});
+                           {"target_entity_id", target->runtime_id}, {"reason", "距离目标太远。"},
+                           {"distance_m", attack_distance}, {"attack_range_m", combat_profile.range}});
             return;
         }
         if (player_weapon_type(player) == "bow") {
@@ -4522,6 +4537,11 @@ struct EnetServer::Impl {
         // hit that never changed monster health.
         player.last_attack_at = now;
         player.last_combat_at = now;
+        std::cout << "[CombatAttack] accepted character=" << player.character_id
+                  << " target=" << target->runtime_id
+                  << " damage=" << damage.damage
+                  << " hp=" << damage.remaining_health << "/" << target->definition.max_health
+                  << " critical=" << (damage.critical ? "true" : "false") << std::endl;
         broadcast_player_action_event(player, "attack", target->runtime_id, player_attack_style(player), peer);
         record_monster_damage(*target, player, damage.damage);
         std::int64_t experience_reward = 0;
