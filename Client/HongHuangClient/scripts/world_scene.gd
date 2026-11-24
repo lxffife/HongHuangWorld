@@ -6070,6 +6070,12 @@ func _animate_monster_attack(monster: Node3D, archetype: String, phase: String, 
 	var anticipation := sin(clampf(progress, 0.0, 1.0) * PI * 0.5) if phase == "windup" else 0.0
 	var strike := sin(clampf(progress, 0.0, 1.0) * PI) if phase == "impact" else 0.0
 	var recovery := 1.0 - clampf(progress, 0.0, 1.0) if phase == "recovery" else 0.0
+	var elemental_telegraph := monster.get_node_or_null("ElementalTelegraph") as MeshInstance3D
+	if is_instance_valid(elemental_telegraph) and phase == "windup":
+		var warning_material := elemental_telegraph.material_override as StandardMaterial3D
+		if warning_material != null:
+			warning_material.albedo_color.a = lerpf(0.24, 0.66, anticipation)
+			warning_material.emission_energy_multiplier = lerpf(1.0, 3.0, anticipation)
 	match archetype:
 		"wolf":
 			var torso := monster.get_node_or_null("Torso") as Node3D
@@ -6099,9 +6105,21 @@ func _animate_monster_attack(monster: Node3D, archetype: String, phase: String, 
 					telegraph_material.emission_energy_multiplier = lerpf(1.0, 2.2, progress)
 		"warrior":
 			var arm := monster.get_node_or_null("ArmPivotRight") as Node3D
+			var warrior_style := str(monster.get_meta("attack_style", "melee"))
 			if is_instance_valid(arm):
-				arm.rotation.x = anticipation * 0.42 - strike * 1.05 + recovery * 0.12
-				arm.rotation.z = -0.18 - anticipation * 0.16 - strike * 0.34
+				if warrior_style == "heavy_slam":
+					# A heavy slam visibly loads the shoulder, then drives the blade down.
+					arm.rotation.x = anticipation * 0.82 - strike * 1.38 + recovery * 0.16
+					arm.rotation.z = -0.12 - anticipation * 0.24 - strike * 0.50
+				else:
+					arm.rotation.x = anticipation * 0.42 - strike * 1.05 + recovery * 0.12
+					arm.rotation.z = -0.18 - anticipation * 0.16 - strike * 0.34
+			var warrior_torso := monster.get_node_or_null("Torso") as Node3D
+			if is_instance_valid(warrior_torso) and warrior_style == "heavy_slam":
+				warrior_torso.position.y += -anticipation * 0.10 + strike * 0.06
+			var blade := monster.get_node_or_null("ArmPivotRight/Blade") as Node3D
+			if is_instance_valid(blade) and warrior_style == "heavy_slam":
+				blade.rotation.z = -anticipation * 0.24 + strike * 0.58
 		"life_soul", "wind_soul", "wraith":
 			var core := monster.get_node_or_null("SoulCore") as Node3D
 			if is_instance_valid(core):
