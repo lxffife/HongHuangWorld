@@ -2926,7 +2926,13 @@ struct EnetServer::Impl {
                 continue;
             }
             const auto now = Clock::now();
+            const auto death_killer_character_id = monster->death_killer_character_id;
+            Json killer_drops = Json::array();
             for (const auto& drop : monster->pending_death_drops) {
+                killer_drops.push_back(Json{
+                    {"item_id", drop.item_id}, {"quantity", drop.quantity},
+                    {"drop_id", drop.id}
+                });
                 const auto remaining_ms = std::max<std::int64_t>(0, drop.expires_at_unix_ms - wall_clock_ms());
                 if (remaining_ms <= 0) continue;
                 ground_drops.push_back(GroundDropRuntime{
@@ -2959,13 +2965,6 @@ struct EnetServer::Impl {
                   monster->death_definition_id.find("ancient") != std::string::npos ||
                   monster->death_definition_id.find("boss") != std::string::npos))
                     ? std::min<std::int64_t>(5, 1 + monster->death_level / 20) : 0);
-            Json killer_drops = Json::array();
-            for (const auto& drop : monster->pending_death_drops) {
-                killer_drops.push_back(Json{
-                    {"item_id", drop.item_id}, {"quantity", drop.quantity},
-                    {"drop_id", drop.id}
-                });
-            }
             std::unordered_set<std::string> notified_characters;
             for (const auto& [contributor_key, contribution] : monster->damage_contributions) {
                 (void)contributor_key;
@@ -2984,7 +2983,7 @@ struct EnetServer::Impl {
                         {"ghost_cash", reward == reward_recipients.end() ? 0 : reward->ghost_cash},
                         {"nether_stone", reward == reward_recipients.end() ? 0 : reward->nether_stone}
                     };
-                    if (character_id == monster->death_killer_character_id)
+                    if (character_id == death_killer_character_id)
                         settlement["drops"] = killer_drops;
                     send_json(peer, honghuang::protocol::MessageType::CombatEvent, settlement);
                     break;
