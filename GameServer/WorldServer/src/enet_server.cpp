@@ -5938,7 +5938,8 @@ struct EnetServer::Impl {
                 monster.attack_phase = MonsterAttackPhase::Ready;
             }
             if (monster.attack_phase == MonsterAttackPhase::Windup) {
-                if (!in_attack_range || monster.attack_target_character_id != player.character_id) {
+                if ((!heavy_slam && !in_attack_range) ||
+                    monster.attack_target_character_id != player.character_id) {
                     monster.attack_phase = MonsterAttackPhase::Ready;
                     broadcast_attack_phase("cancelled");
                     monster.attack_target_character_id.clear();
