@@ -139,6 +139,12 @@ var target_info_panel: PanelContainer
 var combat_reticle: Label
 var target_info_label: Label
 var target_health_bar: ProgressBar
+var combat_summary_label: Label
+var combat_damage_dealt := 0
+var combat_damage_taken := 0
+var combat_highest_hit := 0
+var combat_critical_hits := 0
+var combat_kills := 0
 var minimap_panel: PanelContainer
 var world_map_panel: PanelContainer
 var world_map_canvas: Control
@@ -1356,6 +1362,23 @@ func _build_combat_hud() -> void:
 	target_health_bar.add_theme_stylebox_override("background", target_track)
 	target_health_bar.add_theme_stylebox_override("fill", target_fill)
 	target_layout.add_child(target_health_bar)
+
+	combat_summary_label = Label.new()
+	combat_summary_label.text = "本次战斗  伤害 0  ·  暴击 0  ·  击杀 0"
+	combat_summary_label.add_theme_color_override("font_color", Color("#d7c49b"))
+	combat_summary_label.add_theme_font_size_override("font_size", 11)
+	combat_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vitals_layout.add_child(combat_summary_label)
+	_update_combat_summary()
+
+
+func _update_combat_summary() -> void:
+	if not is_instance_valid(combat_summary_label):
+		return
+	combat_summary_label.text = "本次战斗  伤害 %d  ·  最高 %d  ·  暴击 %d  ·  击杀 %d  ·  受伤 %d" % [
+		combat_damage_dealt, combat_highest_hit, combat_critical_hits, combat_kills, combat_damage_taken
+	]
+
 
 func _start_revive_channel_ui(actor_name: String, duration_ms: int) -> void:
 	revive_channel_total = maxf(float(duration_ms) / 1000.0, 0.5)
@@ -5005,6 +5028,8 @@ func _on_combat_event(event: Dictionary) -> void:
 			player_poison_visual_remaining = maxf(float(event.get("status_duration_ms", 0)) / 1000.0, 0.0)
 			_set_player_poison_visual(local_player, player_poison_visual_remaining > 0.0)
 		var incoming_damage := int(event.get("damage", 0))
+		combat_damage_taken += maxi(incoming_damage, 0)
+		_update_combat_summary()
 		if str(event.get("attack_style", "")) != "poison_tick" and is_instance_valid(local_player) and local_player.has_method("play_hit_reaction"):
 			local_player.call("play_hit_reaction", incoming_damage, str(event.get("attack_style", "")))
 		_spawn_combat_number(incoming_damage, true, false)
@@ -5062,6 +5087,13 @@ func _on_combat_event(event: Dictionary) -> void:
 			if is_instance_valid(defeated_nameplate):
 				defeated_nameplate.visible = false
 	var damage := int(event.get("damage", 0))
+	combat_damage_dealt += maxi(damage, 0)
+	combat_highest_hit = maxi(combat_highest_hit, damage)
+	if bool(event.get("critical", false)) and damage > 0:
+		combat_critical_hits += 1
+	if bool(event.get("defeated", false)):
+		combat_kills += 1
+	_update_combat_summary()
 	# CombatEvent health belongs to its target, not necessarily the currently
 	# selected target. Never let an off-target hit corrupt the target HUD.
 	var health_target_id := str(event.get("target_entity_id", ""))
