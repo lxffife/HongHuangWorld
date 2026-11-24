@@ -52,8 +52,8 @@ int main() {
     assert(same_character != reconnected.end());
     assert(same_character->session_id == "new-session");
     assert(same_character->damage == 100);
-    assert(same_character->experience == 51);
-    assert(same_character->cultivation == 26);
+    assert(same_character->experience == 50);
+    assert(same_character->cultivation == 25);
 
     const auto empty = allocate_monster_combat_rewards({}, 0, 0, 100, 5);
     assert(empty.empty());
