@@ -2160,8 +2160,7 @@ func _create_monster(monster_name: String, monster_level: int) -> Node3D:
 	var archetype := str(visual_root.get_meta("visual_archetype", ""))
 	var is_wraith := archetype in ["life_soul", "wind_soul", "fire_soul", "frost_soul", "wraith"]
 	var is_war_god := monster_name.contains("战神") or monster_name.contains("战魂")
-	if archetype in ["fire_soul", "frost_soul"]:
-		var elemental_telegraph := MeshInstance3D.new()
+	var elemental_telegraph := MeshInstance3D.new()
 		elemental_telegraph.name = "ElementalTelegraph"
 		var elemental_ring := TorusMesh.new()
 		elemental_ring.inner_radius = 0.54
@@ -2170,7 +2169,11 @@ func _create_monster(monster_name: String, monster_level: int) -> Node3D:
 		elemental_ring.ring_segments = 8
 		elemental_telegraph.mesh = elemental_ring
 		var elemental_material := StandardMaterial3D.new()
-		var elemental_color := Color("#ff9b42") if archetype == "fire_soul" else Color("#72dfff")
+		var elemental_color := Color("#c18aff")
+		if archetype == "fire_soul":
+			elemental_color = Color("#ff9b42")
+		elif archetype == "frost_soul":
+			elemental_color = Color("#72dfff")
 		elemental_material.albedo_color = Color(elemental_color.r, elemental_color.g, elemental_color.b, 0.28)
 		elemental_material.emission_enabled = true
 		elemental_material.emission = elemental_color
@@ -4432,7 +4435,7 @@ func _on_monster_action_event(event: Dictionary) -> void:
 		if attack_style == "heavy_slam":
 			_set_iron_slam_telegraph(attacker, true)
 		if attack_style == "soul_bolt" or attack_style == "frost_bolt" or attack_style == "poison_bolt":
-			_set_elemental_telegraph(attacker, true)
+			_set_elemental_telegraph(attacker, true, attack_style)
 		var windup := maxf(float(event.get("windup_ms", 520)) / 1000.0, 0.1)
 		attacker.set_meta("attack_phase_duration", windup)
 		attacker.set_meta("attack_phase_time", windup)
@@ -4443,7 +4446,7 @@ func _on_monster_action_event(event: Dictionary) -> void:
 		if str(event.get("target_character_id", "")) == str(HHSession.world_snapshot.get("character_id", "")):
 			_set_incoming_attack_telegraph(attack_style, false)
 		_set_iron_slam_telegraph(attacker, false)
-		_set_elemental_telegraph(attacker, false)
+		_set_elemental_telegraph(attacker, false, attack_style)
 	elif phase == "impact":
 		attacker.set_meta("attack_phase", "impact")
 		attacker.set_meta("attack_phase_duration", 0.2)
@@ -4463,12 +4466,25 @@ func _on_monster_action_event(event: Dictionary) -> void:
 				else:
 					_spawn_soul_bolt_visual(attacker)
 
-func _set_elemental_telegraph(monster: Node3D, enabled: bool) -> void:
+func _set_elemental_telegraph(monster: Node3D, enabled: bool, attack_style: String = "") -> void:
 	var telegraph := monster.get_node_or_null("ElementalTelegraph") as MeshInstance3D
 	if not is_instance_valid(telegraph):
 		return
 	telegraph.visible = enabled
 	if enabled:
+		var material := telegraph.material_override as StandardMaterial3D
+		if material != null:
+			var tint := Color("#c18aff")
+			match attack_style:
+				"frost_bolt":
+					tint = Color("#72dfff")
+				"poison_bolt":
+					tint = Color("#9be66b")
+				"soul_bolt":
+					tint = Color("#c18aff")
+			material.albedo_color = Color(tint.r, tint.g, tint.b, 0.34)
+			material.emission = tint
+			material.emission_energy_multiplier = 1.6
 		var previous_tween: Variant = telegraph.get_meta("pulse_tween", null)
 		if previous_tween is Tween and (previous_tween as Tween).is_running():
 			(previous_tween as Tween).kill()
@@ -5942,8 +5958,8 @@ func _animate_monster_visuals(delta: float) -> void:
 			if attack_phase == "windup":
 				if str(monster.get_meta("attack_style", "")) == "heavy_slam":
 					_set_iron_slam_telegraph(monster, false)
-				elif str(monster.get_meta("attack_style", "")) == "soul_bolt":
-					_set_elemental_telegraph(monster, false)
+				elif str(monster.get_meta("attack_style", "")) in ["soul_bolt", "frost_bolt", "poison_bolt"]:
+					_set_elemental_telegraph(monster, false, str(monster.get_meta("attack_style", "")))
 			if attack_phase == "impact":
 				attack_phase = "recovery"
 				attack_phase_time = maxf(float(monster.get_meta("attack_recovery_duration", 0.42)), 0.1)
