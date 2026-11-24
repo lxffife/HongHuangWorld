@@ -5316,6 +5316,7 @@ struct EnetServer::Impl {
                 }
                 send_json(owner->first, honghuang::protocol::MessageType::CombatEvent,
                           Json{{"accepted", true}, {"source", "projectile"},
+                               {"attacker_character_id", owner->second.character_id},
                                {"source_entity_id", projectile->id},
                                {"projectile_type", projectile->projectile_type},
                                {"target_entity_id", target->runtime_id},
@@ -5335,6 +5336,7 @@ struct EnetServer::Impl {
                                {"soul_experience_reward", 0}, {"settlement_pending", damage.defeated}});
                 const Json visual_event{
                     {"accepted", true}, {"visual_only", true}, {"source", "projectile"},
+                    {"attacker_character_id", owner->second.character_id},
                     {"target_entity_id", target->runtime_id}, {"target_name", target->definition.name},
                     {"projectile_type", projectile->projectile_type}, {"damage", damage.damage},
                     {"critical", damage.critical}, {"health", damage.remaining_health},
@@ -5524,6 +5526,7 @@ struct EnetServer::Impl {
                 }
                 const Json burn_event{
                     {"accepted", true}, {"source", "status_effect"}, {"status_effect", "burn"},
+                    {"attacker_character_id", burn_owner != players.end() ? burn_owner->second.character_id : std::string{}},
                     {"source_entity_id", monster.runtime_id}, {"target_entity_id", monster.runtime_id},
                     {"target_name", monster.definition.name}, {"damage", std::min(burn_damage, previous_health)},
                     {"health", static_cast<std::int64_t>(monster.state.health)},
