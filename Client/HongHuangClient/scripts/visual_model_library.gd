@@ -100,8 +100,10 @@ static func _collect_mesh_bounds(node: Node, parent_transform: Transform3D, is_r
 				state["maximum"] = maximum
 				state["found"] = true
 			else:
-				state["minimum"] = (state["minimum"] as Vector3).min(minimum)
-				state["maximum"] = (state["maximum"] as Vector3).max(maximum)
+				var current_minimum: Vector3 = state["minimum"]
+				var current_maximum: Vector3 = state["maximum"]
+				state["minimum"] = current_minimum.min(minimum)
+				state["maximum"] = current_maximum.max(maximum)
 	for child in node.get_children():
 		_collect_mesh_bounds(child, current_transform, false, state)
 
