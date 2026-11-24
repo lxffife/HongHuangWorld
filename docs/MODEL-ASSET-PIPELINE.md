@@ -27,6 +27,17 @@
 
 没有对应文件时继续使用程序化模型，不会因为空目录而阻断进入世界。模型覆盖文件必须以 Node3D 为根，并至少包含一个带 Mesh 的 MeshInstance3D；空场景会被识别并回退到占位模型。
 
+## 动画接入（本轮新增）
+
+外部 GLB 若包含 AnimationPlayer，会自动附加 `model_animation_controller.gd`：
+- 根据模型根节点的实际位移，在 idle / walk / run 动画间切换。
+- 忽略异常大的位置跳变，避免网络快照纠正被误判为奔跑。
+- 暴露 `play_action("attack" | "hit" | "death")`，由已确认的怪物攻击、受击和死亡事件触发。
+- 找不到对应动画时不强行播放，原有程序化受击/死亡视觉仍然保留。
+- 玩家人形模型继续使用现有 `HHHumanoidAnimationDriver`，避免两个动画控制器争抢同一个 AnimationPlayer。
+
+首选动作资源：[Quaternius Universal Animation Library](https://quaternius.com/packs/universalanimationlibrary.html)。官方页面说明它包含 120+ 个通用 Humanoid 动作，支持 Godot、Unity、Unreal 重定向，覆盖多方向移动、战斗、表情动作和死亡动画；页面标注 CC0。建议先下载免费 glTF/GLB 导出，检查动作命名与骨架后再做导入映射。官方页面还说明免费版本为整包的 60–70%，Source 工程包属于额外档位；本项目不依赖付费版本。
+
 ## 模型交付检查表
 
 每个角色/怪物模型在进入主分支前应逐项验收：
