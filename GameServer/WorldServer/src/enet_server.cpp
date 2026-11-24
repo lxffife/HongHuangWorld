@@ -1656,7 +1656,10 @@ struct EnetServer::Impl {
                 if (status >= 300 && status < 500 && !retryable_client_status) {
                     std::string dead_error;
                     if (!durable_outbox->move_to_dead_letter(
-                            event->event_id, event->attempts + 1, delivery_error, dead_error))
+                            event->event_id,
+                            event->attempts == std::numeric_limits<std::uint32_t>::max()
+                                ? event->attempts : event->attempts + 1,
+                            delivery_error, dead_error))
                         std::cerr << "Outbox dead-letter update failed: " << dead_error << '\n';
                     else
                         std::cerr << "Outbox event dead-lettered (HTTP " << status << "): "
@@ -1768,7 +1771,10 @@ struct EnetServer::Impl {
                 if (honghuang::network::chat_delivery_is_permanent_http_error(status)) {
                     std::string dead_error;
                     if (!durable_outbox->move_to_dead_letter(
-                            event->event_id, event->attempts + 1, delivery_error, dead_error)) {
+                            event->event_id,
+                            event->attempts == std::numeric_limits<std::uint32_t>::max()
+                                ? event->attempts : event->attempts + 1,
+                            delivery_error, dead_error)) {
                         std::cerr << "Nearby chat dead-letter update failed: " << dead_error << '\n';
                     } else {
                         std::cerr << "Nearby chat outbox event dead-lettered (HTTP " << status
