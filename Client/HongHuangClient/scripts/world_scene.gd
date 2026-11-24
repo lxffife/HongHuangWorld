@@ -1314,8 +1314,16 @@ func _build_combat_hud() -> void:
 	# Persistent threat-pressure indicator: the toast is transient, while this
 	# compact meter keeps the tank/healer warning readable during the response window.
 	threat_alert_panel = PanelContainer.new()
-	threat_alert_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	threat_alert_panel.position = Vector2(-190.0, 152.0)
+	# Explicit center-X/top-Y offsets: position alone writes the same left and
+	# right offset when both horizontal anchors are 0.5, leaving a zero-width rect.
+	threat_alert_panel.anchor_left = 0.5
+	threat_alert_panel.anchor_right = 0.5
+	threat_alert_panel.anchor_top = 0.0
+	threat_alert_panel.anchor_bottom = 0.0
+	threat_alert_panel.offset_left = -180.0
+	threat_alert_panel.offset_right = 180.0
+	threat_alert_panel.offset_top = 152.0
+	threat_alert_panel.offset_bottom = 204.0
 	threat_alert_panel.custom_minimum_size = Vector2(360.0, 52.0)
 	threat_alert_panel.visible = false
 	_apply_panel_theme(threat_alert_panel)
@@ -1401,8 +1409,16 @@ func _build_combat_hud() -> void:
 	hud.add_child(combat_reticle)
 
 	target_info_panel = PanelContainer.new()
-	target_info_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	target_info_panel.position = Vector2(-210.0, 72.0)
+	# Pin the target card to a real top-left rectangle. Center-anchor + position
+	# was being overwritten later by the HUD layout and could collapse its offsets.
+	target_info_panel.anchor_left = 0.0
+	target_info_panel.anchor_right = 0.0
+	target_info_panel.anchor_top = 0.0
+	target_info_panel.anchor_bottom = 0.0
+	target_info_panel.offset_left = 18.0
+	target_info_panel.offset_right = 438.0
+	target_info_panel.offset_top = 300.0
+	target_info_panel.offset_bottom = 410.0
 	target_info_panel.custom_minimum_size = Vector2(420.0, 110.0)
 	target_info_panel.visible = false
 	_apply_panel_theme(target_info_panel)
@@ -2912,18 +2928,19 @@ func _layout_hud() -> void:
 	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
 		return
 
-	# Keep the target card centered and fully inside narrow viewports. The Tab hint
-	# gets its own line so it cannot be clipped by a long health/distance string.
+	# Keep the Tab target card wholly inside the upper-left HUD column. Use
+	# top-left anchors and four explicit offsets so later position writes cannot
+	# push half of the panel outside the viewport.
 	if is_instance_valid(target_info_panel):
-		var target_width := minf(420.0, maxf(260.0, viewport_size.x - 32.0))
-		target_info_panel.anchor_left = 0.5
-		target_info_panel.anchor_right = 0.5
+		var target_width := minf(420.0, maxf(250.0, viewport_size.x - 36.0))
+		target_info_panel.anchor_left = 0.0
+		target_info_panel.anchor_right = 0.0
 		target_info_panel.anchor_top = 0.0
 		target_info_panel.anchor_bottom = 0.0
-		target_info_panel.offset_left = -target_width * 0.5
-		target_info_panel.offset_right = target_width * 0.5
-		target_info_panel.offset_top = 72.0
-		target_info_panel.offset_bottom = 182.0
+		target_info_panel.offset_left = 18.0
+		target_info_panel.offset_right = 18.0 + target_width
+		target_info_panel.offset_top = 300.0
+		target_info_panel.offset_bottom = 410.0
 		target_info_panel.custom_minimum_size = Vector2(target_width, 110.0)
 		if is_instance_valid(target_health_bar):
 			target_health_bar.custom_minimum_size = Vector2(target_width - 32.0, 12.0)
@@ -3046,12 +3063,17 @@ func _layout_hud() -> void:
 		minimap_panel.offset_right = -18.0
 		minimap_panel.offset_top = 64.0
 		minimap_panel.offset_bottom = 354.0
-	if is_instance_valid(target_info_panel):
-		var target_width := minf(420.0, maxf(250.0, viewport_size.x - 32.0))
-		target_info_panel.position = Vector2(-target_width * 0.5, 72.0)
-		target_info_panel.custom_minimum_size.x = target_width
-		if is_instance_valid(target_health_bar):
-			target_health_bar.custom_minimum_size.x = target_width - 40.0
+	if is_instance_valid(threat_alert_panel):
+		var threat_width := minf(360.0, maxf(250.0, viewport_size.x - 32.0))
+		threat_alert_panel.anchor_left = 0.5
+		threat_alert_panel.anchor_right = 0.5
+		threat_alert_panel.anchor_top = 0.0
+		threat_alert_panel.anchor_bottom = 0.0
+		threat_alert_panel.offset_left = -threat_width * 0.5
+		threat_alert_panel.offset_right = threat_width * 0.5
+		threat_alert_panel.offset_top = 152.0
+		threat_alert_panel.offset_bottom = 204.0
+		threat_alert_panel.custom_minimum_size = Vector2(threat_width, 52.0)
 	if is_instance_valid(notification_panel):
 		_layout_notification_panel()
 	var vitals_height := minf(382.0, maxf(270.0, viewport_size.y - 210.0))
