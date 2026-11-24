@@ -2105,7 +2105,14 @@ func _upsert_monster(entity: Dictionary) -> void:
 	if slow_ring != null:
 		slow_ring.visible = bool(entity.get("slowed", false))
 	_set_monster_freeze_visual(monster_node, bool(entity.get("frozen", false)))
-	monster_entities[monster_id] = entity.duplicate(true)
+	var merged_entity := entity.duplicate(true)
+	var previous_entity: Dictionary = monster_entities.get(monster_id, {})
+	# World snapshots may omit transient aggro fields. Keep the latest combat event
+	# until the server explicitly sends a newer target state.
+	for transient_key in ["aggro_target_character_id", "aggro_target_name"]:
+		if not merged_entity.has(transient_key) and previous_entity.has(transient_key):
+			merged_entity[transient_key] = previous_entity[transient_key]
+	monster_entities[monster_id] = merged_entity
 	if monster_id == selected_monster_id:
 		_update_target_info()
 	_refresh_monster_nameplate(monster_id)
