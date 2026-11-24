@@ -5900,6 +5900,7 @@ struct EnetServer::Impl {
                 monster.state.target_id.empty()) {
                 if (monster.attack_phase == MonsterAttackPhase::Windup) {
                     monster.attack_phase = MonsterAttackPhase::Ready;
+                    broadcast_attack_phase("cancelled");
                     monster.attack_target_character_id.clear();
                 } else if (monster.attack_phase == MonsterAttackPhase::Recovery &&
                            now - monster.attack_phase_started_at >= recovery_duration) {
@@ -5914,6 +5915,7 @@ struct EnetServer::Impl {
             if (victim == players.end() || victim->second.health <= 0) {
                 if (monster.attack_phase == MonsterAttackPhase::Windup) {
                     monster.attack_phase = MonsterAttackPhase::Ready;
+                    broadcast_attack_phase("cancelled");
                     monster.attack_target_character_id.clear();
                 }
                 continue;
@@ -5935,6 +5937,7 @@ struct EnetServer::Impl {
             if (monster.attack_phase == MonsterAttackPhase::Windup) {
                 if (!in_attack_range || monster.attack_target_character_id != player.character_id) {
                     monster.attack_phase = MonsterAttackPhase::Ready;
+                    broadcast_attack_phase("cancelled");
                     monster.attack_target_character_id.clear();
                     continue;
                 }
