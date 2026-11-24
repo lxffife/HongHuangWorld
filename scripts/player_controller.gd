@@ -20,6 +20,7 @@ var camera: Camera3D
 var visual: MeshInstance3D
 var player_humanoid: Node3D
 var humanoid_animation_time := 0.0
+var footstep_audio_remaining := 0.0
 var attack_animation_time := 0.0
 var attack_animation_style := "melee"
 var hit_animation_time := 0.0
@@ -518,6 +519,10 @@ func _apply_soul_affinity_visuals(affinities: Dictionary) -> void:
 
 
 func play_hit_reaction(damage: int, attack_style: String = "") -> void:
+	if attack_style == "heavy_slam":
+		HHAudio.play_combat("heavy_hit", 0.92)
+	else:
+		HHAudio.play_combat("hit", randf_range(0.94, 1.06))
 	# A confirmed hit interrupts an in-progress attack instead of letting it resume afterward.
 	attack_animation_time = 0.0
 	var style_duration := 0.32
@@ -677,6 +682,7 @@ func _spawn_hit_reaction_visual(attack_style: String) -> void:
 func play_attack_animation() -> void:
 	if hit_animation_time > 0.0:
 		return
+	HHAudio.play_combat("attack", randf_range(0.94, 1.06))
 	# The underworld avatar is a soul orb rather than a humanoid rig. It still
 	# needs a clear attack tell when the server accepts an attack command.
 	if not soul_form_enabled and not is_instance_valid(player_humanoid):
@@ -756,6 +762,13 @@ func _spawn_attack_sweep_visual() -> void:
 
 
 func _process(delta: float) -> void:
+	if not is_dead and current_move_input.length() > 0.12 and is_on_floor():
+		footstep_audio_remaining -= delta
+		if footstep_audio_remaining <= 0.0:
+			HHAudio.play_world("footstep", global_position, randf_range(0.92, 1.08), 16.0)
+			footstep_audio_remaining = 0.48
+	else:
+		footstep_audio_remaining = minf(footstep_audio_remaining, 0.12)
 	hit_reaction_time = maxf(hit_reaction_time - delta, 0.0)
 	if soul_form_enabled and is_instance_valid(visual):
 		attack_animation_time = maxf(attack_animation_time - delta, 0.0)
