@@ -2659,10 +2659,10 @@ func _build_chat_hud() -> void:
 	chat_panel.offset_bottom = -20.0
 	chat_panel.custom_minimum_size = Vector2(418.0, 54.0)
 	var shell := StyleBoxFlat.new()
-	shell.bg_color = Color("#101923")
-	shell.border_color = Color("#35495c")
+	shell.bg_color = Color("#0b1420")
+	shell.border_color = Color("#65563e")
 	shell.set_border_width_all(1)
-	shell.set_corner_radius_all(12)
+	shell.set_corner_radius_all(14)
 	shell.content_margin_left = 14
 	shell.content_margin_right = 14
 	shell.content_margin_top = 10
@@ -3225,8 +3225,9 @@ func _render_chat_lines() -> void:
 		chat_log.add_child(row)
 		var avatar := PanelContainer.new()
 		avatar.custom_minimum_size = Vector2(30, 30)
+		var is_local_message := _is_local_chat_message(entry)
 		var avatar_style := StyleBoxFlat.new()
-		avatar_style.bg_color = Color("#30465a")
+		avatar_style.bg_color = Color("#594b36") if is_local_message else Color("#263b4d")
 		avatar_style.set_corner_radius_all(15)
 		avatar.add_theme_stylebox_override("panel", avatar_style)
 		row.add_child(avatar)
@@ -3245,7 +3246,7 @@ func _render_chat_lines() -> void:
 		message_column.add_child(meta)
 		var sender_label := Label.new()
 		sender_label.text = sender
-		sender_label.add_theme_color_override("font_color", Color("#d9bc85"))
+		sender_label.add_theme_color_override("font_color", Color("#e2c58d") if is_local_message else Color("#9fc3d6"))
 		sender_label.add_theme_font_size_override("font_size", 11)
 		sender_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		meta.add_child(sender_label)
@@ -3257,8 +3258,10 @@ func _render_chat_lines() -> void:
 		meta.add_child(time_label)
 		var bubble := PanelContainer.new()
 		var bubble_style := StyleBoxFlat.new()
-		bubble_style.bg_color = Color("#1b2a37")
-		bubble_style.set_corner_radius_all(7)
+		bubble_style.bg_color = Color("#30291f") if is_local_message else Color("#172735")
+		bubble_style.border_color = Color("#806b46") if is_local_message else Color("#2c4658")
+		bubble_style.set_border_width_all(1)
+		bubble_style.set_corner_radius_all(9)
 		bubble_style.content_margin_left = 9
 		bubble_style.content_margin_right = 9
 		bubble_style.content_margin_top = 5
@@ -3273,7 +3276,7 @@ func _render_chat_lines() -> void:
 		message_text.context_menu_enabled = true
 		message_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		message_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		message_text.add_theme_color_override("default_color", Color("#e0e8ee"))
+		message_text.add_theme_color_override("default_color", Color("#f0e5d1") if is_local_message else Color("#dce8ef"))
 		message_text.add_theme_font_size_override("normal_font_size", 12)
 		bubble.add_child(message_text)
 
