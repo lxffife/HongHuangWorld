@@ -4813,6 +4813,18 @@ func _on_combat_event(event: Dictionary) -> void:
 			_set_player_poison_visual(local_player, false)
 		_show_notification(str(event.get("source_name", "净秽符")) + " 施展净秽符，清除了你的异常状态（" + str(int(event.get("cleansed_effects", 0))) + " 项）。", 3.0)
 		return
+	if str(event.get("action", "")) == "monster_target_changed":
+		var monster_name := str(event.get("monster_name", "怪物"))
+		var target_name := str(event.get("target_name", ""))
+		var target_cleared := bool(event.get("target_cleared", false))
+		var local_character_id := str(HHSession.world_snapshot.get("character_id", ""))
+		if target_cleared:
+			_show_notification(monster_name + " 已失去攻击目标。", 2.2)
+		elif str(event.get("target_character_id", "")) == local_character_id:
+			_show_notification("仇恨锁定！" + monster_name + " 正在攻击你。", 3.0)
+		else:
+			_show_notification(monster_name + " 转而攻击 " + target_name + "。", 2.2)
+		return
 	if str(event.get("action", "")) == "threat_warning":
 		var monster_name := str(event.get("monster_name", "怪物"))
 		var current_name := str(event.get("current_target_name", "当前目标"))
