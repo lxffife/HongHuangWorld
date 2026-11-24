@@ -2161,29 +2161,29 @@ func _create_monster(monster_name: String, monster_level: int) -> Node3D:
 	var is_wraith := archetype in ["life_soul", "wind_soul", "fire_soul", "frost_soul", "wraith"]
 	var is_war_god := monster_name.contains("战神") or monster_name.contains("战魂")
 	var elemental_telegraph := MeshInstance3D.new()
-		elemental_telegraph.name = "ElementalTelegraph"
-		var elemental_ring := TorusMesh.new()
-		elemental_ring.inner_radius = 0.54
-		elemental_ring.outer_radius = 0.62
-		elemental_ring.rings = 36
-		elemental_ring.ring_segments = 8
-		elemental_telegraph.mesh = elemental_ring
-		var elemental_material := StandardMaterial3D.new()
-		var elemental_color := Color("#c18aff")
-		if archetype == "fire_soul":
-			elemental_color = Color("#ff9b42")
-		elif archetype == "frost_soul":
-			elemental_color = Color("#72dfff")
-		elemental_material.albedo_color = Color(elemental_color.r, elemental_color.g, elemental_color.b, 0.28)
-		elemental_material.emission_enabled = true
-		elemental_material.emission = elemental_color
-		elemental_material.emission_energy_multiplier = 1.1
-		elemental_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		elemental_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		elemental_telegraph.material_override = elemental_material
-		elemental_telegraph.position.y = 0.07
-		elemental_telegraph.visible = false
-		visual_root.add_child(elemental_telegraph)
+	elemental_telegraph.name = "ElementalTelegraph"
+	var elemental_ring := TorusMesh.new()
+	elemental_ring.inner_radius = 0.54
+	elemental_ring.outer_radius = 0.62
+	elemental_ring.rings = 36
+	elemental_ring.ring_segments = 8
+	elemental_telegraph.mesh = elemental_ring
+	var elemental_material := StandardMaterial3D.new()
+	var elemental_color := Color("#c18aff")
+	if archetype == "fire_soul":
+		elemental_color = Color("#ff9b42")
+	elif archetype == "frost_soul":
+		elemental_color = Color("#72dfff")
+	elemental_material.albedo_color = Color(elemental_color.r, elemental_color.g, elemental_color.b, 0.28)
+	elemental_material.emission_enabled = true
+	elemental_material.emission = elemental_color
+	elemental_material.emission_energy_multiplier = 1.1
+	elemental_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	elemental_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	elemental_telegraph.material_override = elemental_material
+	elemental_telegraph.position.y = 0.07
+	elemental_telegraph.visible = false
+	visual_root.add_child(elemental_telegraph)
 	if archetype == "iron_beast":
 		var telegraph := MeshInstance3D.new()
 		telegraph.name = "SlamTelegraph"
