@@ -623,7 +623,9 @@ func _clear_hit_flash_visual(root: Node, material: StandardMaterial3D) -> void:
 func _spawn_hit_flash(attack_style: String) -> void:
 	if not is_instance_valid(visual):
 		return
-	var previous := visual.get_meta("hit_flash_material", null) as StandardMaterial3D
+	var previous: StandardMaterial3D = null
+	if visual.has_meta("hit_flash_material"):
+		previous = visual.get_meta("hit_flash_material") as StandardMaterial3D
 	if is_instance_valid(previous):
 		_clear_hit_flash_recursive(visual, previous)
 	var flash := StandardMaterial3D.new()
