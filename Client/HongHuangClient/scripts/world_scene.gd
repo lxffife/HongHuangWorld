@@ -4432,7 +4432,10 @@ func _on_monster_action_event(event: Dictionary) -> void:
 		attacker.set_meta("attack_radius", maxf(float(event.get("attack_radius", 3.6)), 0.5))
 	if phase == "windup":
 		attacker.set_meta("attack_phase", "windup")
-		if str(event.get("target_character_id", "")) == str(HHSession.world_snapshot.get("character_id", "")):
+		# Heavy slam is a ground-targeted area attack centered on the monster.
+		# Its expanding SlamTelegraph is the authoritative danger zone; a ring
+		# under the selected victim would incorrectly imply single-target damage.
+		if attack_style != "heavy_slam" and str(event.get("target_character_id", "")) == str(HHSession.world_snapshot.get("character_id", "")):
 			_set_incoming_attack_telegraph(attack_style, true, attacker_id)
 		if attack_style == "heavy_slam":
 			_set_iron_slam_telegraph(attacker, true)
@@ -4447,7 +4450,8 @@ func _on_monster_action_event(event: Dictionary) -> void:
 		attacker.set_meta("attack_phase_time", 0.0)
 		# Removing an unknown source is harmless; do not depend on a possibly stale
 		# local snapshot character ID to clean up a warning already registered.
-		_set_incoming_attack_telegraph(attack_style, false, attacker_id)
+		if attack_style != "heavy_slam":
+			_set_incoming_attack_telegraph(attack_style, false, attacker_id)
 		_set_iron_slam_telegraph(attacker, false)
 		_set_elemental_telegraph(attacker, false, attack_style)
 	elif phase == "impact":
@@ -4455,7 +4459,8 @@ func _on_monster_action_event(event: Dictionary) -> void:
 		attacker.set_meta("attack_phase_duration", 0.2)
 		# Remove only this monster; other monsters may still be winding up on us.
 		# Cleanup is idempotent even for observers who never displayed this warning.
-		_set_incoming_attack_telegraph(attack_style, false, attacker_id)
+		if attack_style != "heavy_slam":
+			_set_incoming_attack_telegraph(attack_style, false, attacker_id)
 		attacker.set_meta("attack_phase_time", 0.2)
 		if attack_style == "heavy_slam":
 			_set_iron_slam_telegraph(attacker, false)
