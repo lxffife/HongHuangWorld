@@ -4304,13 +4304,16 @@ func _update_spell_cooldown_hud() -> void:
 			continue
 		var spell_key := _spell_hotkey(spell_id)
 		var spell_name := _spell_display_name(spell_id)
+		var compact_name := spell_name.substr(0, mini(2, spell_name.length()))
 		if spell_id in ["ice_bolt", "taunt"] and not _is_spell_known(spell_id):
-			label.text = spell_key + " · " + spell_name + "：未掌握（需技能典籍）"
+			label.text = spell_key + " " + compact_name + " 未掌握"
+			label.tooltip_text = spell_key + " · " + spell_name + "：未掌握（需技能典籍）"
 			label.add_theme_color_override("font_color", Color("#d69a78"))
 			continue
 		label.add_theme_color_override("font_color", Color("#e7b77a") if spell_id == "taunt" else Color("#c4d2df"))
 		var remaining := float(spell_cooldown_remaining.get(spell_id, 0.0))
-		label.text = spell_key + " · " + spell_name + "：冷却 " + ("%.1f" % remaining) + " 秒" if remaining > 0.0 else spell_key + " · " + spell_name + "：就绪"
+		label.text = spell_key + " " + compact_name + (" %.0f秒" % remaining) if remaining > 0.0 else spell_key + " " + compact_name + " 就绪"
+		label.tooltip_text = spell_key + " · " + spell_name + ("：冷却 %.1f 秒" % remaining) if remaining > 0.0 else spell_key + " · " + spell_name + "：就绪"
 
 
 func _request_fireball() -> void:
