@@ -653,8 +653,8 @@ bool deliver_character_reward(const ServerConfig& config, const CharacterRewardE
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body.size()));
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, collect_response);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 1500L);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 4000L);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, std::min(1500L, timeout_ms));
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, timeout_ms);
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
     const auto result = curl_easy_perform(curl);
     http_status = 0;
@@ -681,7 +681,8 @@ bool fetch_spell_mastery(const ServerConfig& config, const std::string& session_
                           const std::string& character_id,
                           std::unordered_map<std::string, honghuang::simulation::SpellMastery>& mastery,
                           std::unordered_set<std::string>& known_spells,
-                          long& http_status, std::string& error) {
+                          long& http_status, std::string& error,
+                          long timeout_ms = 4000L) {
     CURL* curl = curl_easy_init();
     if (curl == nullptr) { error = "could not initialize spell mastery HTTP client"; return false; }
     const std::string url = config.backend_url +
@@ -4459,7 +4460,7 @@ struct EnetServer::Impl {
                 long sync_status = 0;
                 std::string sync_error;
                 (void)fetch_spell_mastery(config, player.session_id, player.character_id,
-                    player.spell_mastery, player.known_spells, sync_status, sync_error);
+                    player.spell_mastery, player.known_spells, sync_status, sync_error, 500L);
                 player.last_spell_ownership_sync_at = sync_now;
             }
             if (!player.known_spells.contains(spell_id)) {
