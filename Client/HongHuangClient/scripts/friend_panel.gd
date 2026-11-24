@@ -1,6 +1,7 @@
 extends PanelContainer
 
 signal open_private_chat(character_id: String, character_name: String)
+signal panel_closed
 
 var status_label: Label
 var search_input: LineEdit
@@ -124,6 +125,7 @@ func open_panel() -> void:
 func _close_panel() -> void:
 	visible = false
 	refresh_timer.stop()
+	panel_closed.emit()
 
 func _refresh_presence() -> void:
 	if visible:
