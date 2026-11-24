@@ -5488,10 +5488,13 @@ func _on_player_action_event(event: Dictionary) -> void:
 				duration = 0.36
 			"melee":
 				duration = 0.34
+	var resolved_duration := duration
+	if current_priority == incoming_priority:
+		resolved_duration = maxf(float(remote.get_meta("remote_action_duration", duration)), duration)
 	remote.set_meta("remote_action_state", action)
 	remote.set_meta("remote_action_priority", incoming_priority)
-	remote.set_meta("remote_action_time", maxf(current_time, duration) if current_priority == incoming_priority else duration)
-	remote.set_meta("remote_action_duration", duration)
+	remote.set_meta("remote_action_time", maxf(current_time, resolved_duration) if current_priority == incoming_priority else resolved_duration)
+	remote.set_meta("remote_action_duration", resolved_duration)
 	remote.set_meta("remote_action_style", str(event.get("attack_style", "")))
 
 func _combat_hit_flash_color(attack_style: String) -> Color:
