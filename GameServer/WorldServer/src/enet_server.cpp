@@ -1974,25 +1974,46 @@ struct EnetServer::Impl {
     void record_monster_threat(MonsterRuntime& monster, const std::string& character_id,
                                double threat_value) {
         if (character_id.empty() || !std::isfinite(threat_value) || threat_value <= 0.0) return;
+        const auto now = Clock::now();
         auto threat = monster.threat_by_character.find(character_id);
         if (threat == monster.threat_by_character.end()) {
             constexpr std::size_t kMaximumThreatTargets = 256;
             if (monster.threat_by_character.size() >= kMaximumThreatTargets) {
-                auto weakest = std::min_element(monster.threat_by_character.begin(),
-                    monster.threat_by_character.end(), [](const auto& left, const auto& right) {
-                        if (left.second.value != right.second.value)
-                            return left.second.value < right.second.value;
-                        return left.first > right.first;
-                    });
-                if (weakest != monster.threat_by_character.end()) {
-                    const auto now = Clock::now();
-                    const auto weakest_age = std::chrono::duration_cast<std::chrono::seconds>(
-                        now - weakest->second.last_update).count();
-                    // Prefer reclaiming expired threat entries. Never evict a
-                    // stronger active combatant just because a new player lands
-                    // one small hit after the ledger reaches its safety cap.
-                    if (weakest_age >= 0 && weakest_age < 30 &&
-                        threat_value <= weakest->second.value) return;
+                // Expired entries are reclaimed before active combatants. Do not
+                // compare raw lifetime threat here: a long-idle tank may have a
+                // large raw value but no longer be a valid target.
+                auto expired = monster.threat_by_character.end();
+                for (auto it = monster.threat_by_character.begin();
+                     it != monster.threat_by_character.end(); ++it) {
+                    const auto age = std::chrono::duration_cast<std::chrono::seconds>(
+                        now - it->second.last_update).count();
+                    if (age < 0 || age >= 30) {
+                        if (expired == monster.threat_by_character.end() ||
+                            it->second.last_update < expired->second.last_update)
+                            expired = it;
+                    }
+                }
+                if (expired != monster.threat_by_character.end()) {
+                    monster.threat_by_character.erase(expired);
+                } else {
+                    // The ledger is full of active players. Admit a newcomer
+                    // only when this hit alone exceeds the weakest player's
+                    // decayed threat; otherwise preserve the established target.
+                    auto weakest = monster.threat_by_character.end();
+                    double weakest_effective = std::numeric_limits<double>::infinity();
+                    for (auto it = monster.threat_by_character.begin();
+                         it != monster.threat_by_character.end(); ++it) {
+                        const auto age = std::chrono::duration_cast<std::chrono::seconds>(
+                            now - it->second.last_update).count();
+                        const double effective = honghuang::simulation::decayed_monster_threat(
+                            it->second.value, std::max<std::int64_t>(0, age));
+                        if (effective < weakest_effective) {
+                            weakest_effective = effective;
+                            weakest = it;
+                        }
+                    }
+                    if (weakest == monster.threat_by_character.end() ||
+                        threat_value <= weakest_effective) return;
                     monster.threat_by_character.erase(weakest);
                 }
             }
@@ -2000,7 +2021,7 @@ struct EnetServer::Impl {
                 MonsterRuntime::ThreatEntry{}).first;
         }
         threat->second.value = std::min(1.0e12, threat->second.value + threat_value);
-        threat->second.last_update = Clock::now();
+        threat->second.last_update = now;
     }
 
     void record_monster_damage(MonsterRuntime& monster, const std::string& session_id,
