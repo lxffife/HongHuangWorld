@@ -2944,20 +2944,49 @@ struct EnetServer::Impl {
             monster->death_reward_eligible = false;
             monster->pending_death_drops.clear();
 
-            // Notify currently connected contributors only after the durable
-            // reward batch is committed. Clients then refresh authoritative progression.
+            // Notify connected contributors only after the durable reward batch commits.
+            // Mirror the exact proportional allocation used by the outbox builder so
+            // the UI reports rewards without granting them a second time.
+            const bool underworld_economy = monster->death_world_id == "underworld_fengdu";
+            const auto reward_recipients = honghuang::persistence::allocate_monster_combat_rewards(
+                monster_contribution_snapshot(*monster),
+                20 + static_cast<std::int64_t>(monster->death_level) * 10,
+                10 + static_cast<std::int64_t>(monster->death_level) * 5,
+                underworld_economy ? std::min<std::int64_t>(2000, 5 + static_cast<std::int64_t>(monster->death_level) * 3) : 0,
+                (underworld_economy && monster->death_level >= 10 &&
+                 (monster->death_level % 5 == 0 ||
+                  monster->death_definition_id.find("elite") != std::string::npos ||
+                  monster->death_definition_id.find("ancient") != std::string::npos ||
+                  monster->death_definition_id.find("boss") != std::string::npos))
+                    ? std::min<std::int64_t>(5, 1 + monster->death_level / 20) : 0);
+            Json killer_drops = Json::array();
+            for (const auto& drop : monster->pending_death_drops) {
+                killer_drops.push_back(Json{
+                    {"item_id", drop.item_id}, {"quantity", drop.quantity},
+                    {"drop_id", drop.id}
+                });
+            }
             std::unordered_set<std::string> notified_characters;
             for (const auto& [contributor_key, contribution] : monster->damage_contributions) {
                 (void)contributor_key;
-                if (contribution.character_id.empty() ||
-                    !notified_characters.insert(contribution.character_id).second) continue;
+                const auto& character_id = contribution.character_id;
+                if (character_id.empty() || !notified_characters.insert(character_id).second) continue;
+                const auto reward = std::find_if(reward_recipients.begin(), reward_recipients.end(),
+                    [&](const auto& candidate) { return candidate.character_id == character_id; });
                 for (const auto& [peer, player] : players) {
-                    if (player.character_id != contribution.character_id) continue;
-                    send_json(peer, honghuang::protocol::MessageType::CombatEvent, Json{
+                    if (player.character_id != character_id) continue;
+                    Json settlement{
                         {"accepted", true}, {"action", "monster_death_settlement"},
-                        {"target_entity_id", monster->runtime_id}, {"committed", true},
-                        {"contribution_only", true}
-                    });
+                        {"target_entity_id", monster->runtime_id}, {"monster_name", monster->definition.name},
+                        {"monster_level", monster->death_level}, {"committed", true},
+                        {"experience", reward == reward_recipients.end() ? 0 : reward->experience},
+                        {"cultivation", reward == reward_recipients.end() ? 0 : reward->cultivation},
+                        {"ghost_cash", reward == reward_recipients.end() ? 0 : reward->ghost_cash},
+                        {"nether_stone", reward == reward_recipients.end() ? 0 : reward->nether_stone}
+                    };
+                    if (character_id == monster->death_killer_character_id)
+                        settlement["drops"] = killer_drops;
+                    send_json(peer, honghuang::protocol::MessageType::CombatEvent, settlement);
                     break;
                 }
             }
