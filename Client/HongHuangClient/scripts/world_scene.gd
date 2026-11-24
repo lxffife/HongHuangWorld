@@ -4823,6 +4823,8 @@ func _on_combat_event(event: Dictionary) -> void:
 		elif str(event.get("phase", "")) == "released":
 			if spell_id == "revive":
 				_stop_revive_channel_ui()
+			elif spell_id == "taunt":
+				_show_ghost_gate_chain_effect(str(event.get("target_entity_id", "")))
 			_show_notification(spell_name + "已释放！", 1.5)
 		elif str(event.get("phase", "")) == "interrupted" and spell_id == "revive":
 			_stop_revive_channel_ui()
