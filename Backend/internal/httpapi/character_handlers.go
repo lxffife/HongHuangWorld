@@ -343,7 +343,6 @@ func (h *characterHandlers) learnSpell(w http.ResponseWriter,r *http.Request){
 	case err==nil:writeJSON(w,http.StatusOK,result)
 	case errors.Is(err,character.ErrSpellLearningInvalid):http.Error(w,"skill tome is not owned or is not valid for this world",http.StatusBadRequest)
 	case errors.Is(err,character.ErrSpellAlreadyKnown):http.Error(w,"spell is already learned",http.StatusConflict)
-	case errors.Is(err,character.ErrSpellLearningInWorld):http.Error(w,"leave the world before learning a skill tome",http.StatusConflict)
 	default:h.logger.Error("learn spell from skill tome failed","error",err);http.Error(w,"internal server error",http.StatusInternalServerError)
 	}
 }
