@@ -1277,15 +1277,15 @@ func _build_combat_hud() -> void:
 	notification_panel.anchor_bottom = 0.0
 	notification_panel.offset_left = -230.0
 	notification_panel.offset_right = 230.0
-	notification_panel.offset_top = 140.0
-	notification_panel.offset_bottom = 220.0
-	notification_panel.custom_minimum_size = Vector2(460.0, 80.0)
+	notification_panel.offset_top = 84.0
+	notification_panel.offset_bottom = 140.0
+	notification_panel.custom_minimum_size = Vector2(460.0, 56.0)
 	notification_panel.visible = false
 	_apply_panel_theme(notification_panel)
 	# Semi-transparent glass panel; keep the text itself fully readable.
 	var notification_style := StyleBoxFlat.new()
-	notification_style.bg_color = Color(0.035, 0.055, 0.075, 0.58)
-	notification_style.border_color = Color(0.55, 0.68, 0.78, 0.24)
+	notification_style.bg_color = Color(0.035, 0.055, 0.075, 0.36)
+	notification_style.border_color = Color(0.55, 0.68, 0.78, 0.18)
 	notification_style.set_border_width_all(1)
 	notification_style.set_corner_radius_all(12)
 	notification_style.content_margin_left = 16.0
@@ -1295,7 +1295,7 @@ func _build_combat_hud() -> void:
 	notification_panel.add_theme_stylebox_override("panel", notification_style)
 	hud.add_child(notification_panel)
 	notification_label = Label.new()
-	notification_label.custom_minimum_size = Vector2(420.0, 48.0)
+	notification_label.custom_minimum_size = Vector2(420.0, 40.0)
 	notification_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	notification_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	notification_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1303,7 +1303,7 @@ func _build_combat_hud() -> void:
 	notification_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	notification_label.clip_text = false
 	notification_label.add_theme_color_override("font_color", Color("#f2e8d6"))
-	notification_label.add_theme_font_size_override("font_size", 14)
+	notification_label.add_theme_font_size_override("font_size", 12)
 	notification_panel.add_child(notification_label)
 	notification_timer = Timer.new()
 	notification_timer.one_shot = true
@@ -1316,9 +1316,19 @@ func _build_combat_hud() -> void:
 	threat_alert_panel = PanelContainer.new()
 	threat_alert_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	threat_alert_panel.position = Vector2(-190.0, 152.0)
-	threat_alert_panel.custom_minimum_size = Vector2(380.0, 58.0)
+	threat_alert_panel.custom_minimum_size = Vector2(360.0, 52.0)
 	threat_alert_panel.visible = false
 	_apply_panel_theme(threat_alert_panel)
+	var threat_alert_style := StyleBoxFlat.new()
+	threat_alert_style.bg_color = Color(0.035, 0.055, 0.075, 0.38)
+	threat_alert_style.border_color = Color(0.72, 0.58, 0.34, 0.18)
+	threat_alert_style.set_border_width_all(1)
+	threat_alert_style.set_corner_radius_all(10)
+	threat_alert_style.content_margin_left = 10.0
+	threat_alert_style.content_margin_right = 10.0
+	threat_alert_style.content_margin_top = 6.0
+	threat_alert_style.content_margin_bottom = 6.0
+	threat_alert_panel.add_theme_stylebox_override("panel", threat_alert_style)
 	hud.add_child(threat_alert_panel)
 	var threat_alert_layout := VBoxContainer.new()
 	threat_alert_layout.add_theme_constant_override("separation", 4)
@@ -1326,10 +1336,10 @@ func _build_combat_hud() -> void:
 	threat_alert_label = Label.new()
 	threat_alert_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	threat_alert_label.add_theme_color_override("font_color", Color("#f0c78d"))
-	threat_alert_label.add_theme_font_size_override("font_size", 12)
+	threat_alert_label.add_theme_font_size_override("font_size", 10)
 	threat_alert_layout.add_child(threat_alert_label)
 	threat_alert_bar = ProgressBar.new()
-	threat_alert_bar.custom_minimum_size = Vector2(350.0, 8.0)
+	threat_alert_bar.custom_minimum_size = Vector2(330.0, 7.0)
 	threat_alert_bar.min_value = 0.0
 	threat_alert_bar.max_value = 1.2
 	threat_alert_bar.value = 0.0
@@ -1393,7 +1403,7 @@ func _build_combat_hud() -> void:
 	target_info_panel = PanelContainer.new()
 	target_info_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	target_info_panel.position = Vector2(-210.0, 72.0)
-	target_info_panel.custom_minimum_size = Vector2(420.0, 92.0)
+	target_info_panel.custom_minimum_size = Vector2(420.0, 110.0)
 	target_info_panel.visible = false
 	_apply_panel_theme(target_info_panel)
 	target_panel_style = StyleBoxFlat.new()
@@ -1414,10 +1424,13 @@ func _build_combat_hud() -> void:
 	target_info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	target_info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	target_info_label.add_theme_color_override("font_color", Color("#f2e8d6"))
-	target_info_label.add_theme_font_size_override("font_size", 13)
+	target_info_label.add_theme_font_size_override("font_size", 12)
+	target_info_label.clip_text = false
 	target_layout.add_child(target_info_label)
 	target_status_label = Label.new()
 	target_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	target_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	target_status_label.clip_text = false
 	target_status_label.add_theme_font_size_override("font_size", 10)
 	target_status_label.add_theme_color_override("font_color", Color("#aebdca"))
 	target_layout.add_child(target_status_label)
@@ -1578,18 +1591,18 @@ func _layout_notification_panel() -> void:
 	var viewport_size := get_viewport().get_visible_rect().size
 	var notice_width := minf(520.0, maxf(250.0, viewport_size.x - 32.0))
 	var notice_height := 76.0
-	# Center transient world-entry and combat notices, slightly above the crosshair.
+	# World-entry and combat feedback live in the upper-middle, clear of the crosshair.
 	notification_panel.anchor_left = 0.5
 	notification_panel.anchor_right = 0.5
-	notification_panel.anchor_top = 0.5
-	notification_panel.anchor_bottom = 0.5
+	notification_panel.anchor_top = 0.0
+	notification_panel.anchor_bottom = 0.0
 	notification_panel.offset_left = -notice_width * 0.5
 	notification_panel.offset_right = notice_width * 0.5
-	notification_panel.offset_top = -notice_height * 0.5 - 54.0
-	notification_panel.offset_bottom = notification_panel.offset_top + notice_height
-	notification_panel.custom_minimum_size = Vector2(notice_width, notice_height)
+	notification_panel.offset_top = 84.0
+	notification_panel.offset_bottom = 84.0 + 56.0
+	notification_panel.custom_minimum_size = Vector2(notice_width, 56.0)
 	if is_instance_valid(notification_label):
-		notification_label.custom_minimum_size = Vector2(notice_width - 36.0, notice_height - 16.0)
+		notification_label.custom_minimum_size = Vector2(notice_width - 36.0, 40.0)
 
 func _update_vitals(current_health: int, max_health: int) -> void:
 	if max_health <= 0 or current_health < 0:
@@ -2899,6 +2912,21 @@ func _layout_hud() -> void:
 	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
 		return
 
+	# Keep the target card centered and fully inside narrow viewports. The Tab hint
+	# gets its own line so it cannot be clipped by a long health/distance string.
+	if is_instance_valid(target_info_panel):
+		var target_width := minf(420.0, maxf(260.0, viewport_size.x - 32.0))
+		target_info_panel.anchor_left = 0.5
+		target_info_panel.anchor_right = 0.5
+		target_info_panel.anchor_top = 0.0
+		target_info_panel.anchor_bottom = 0.0
+		target_info_panel.offset_left = -target_width * 0.5
+		target_info_panel.offset_right = target_width * 0.5
+		target_info_panel.offset_top = 72.0
+		target_info_panel.offset_bottom = 182.0
+		target_info_panel.custom_minimum_size = Vector2(target_width, 110.0)
+		if is_instance_valid(target_health_bar):
+			target_health_bar.custom_minimum_size = Vector2(target_width - 32.0, 12.0)
 	# Four-corner MMORPG HUD: identity at upper-left, navigation at upper-right,
 	# combat/vitals at lower-left and social chat at lower-right.
 	if is_instance_valid(compact_hud_panel):
@@ -4213,7 +4241,7 @@ func _update_target_info() -> void:
 		var current_hp := maxi(0, int(entity.get("health", 0)))
 		var maximum_hp := maxi(1, int(entity.get("max_health", 1)))
 		var health_ratio := clampf(float(current_hp) / float(maximum_hp), 0.0, 1.0)
-		hp_line += "    ·    生命 " + str(current_hp) + " / " + str(maximum_hp) + "    ·    Tab 切换目标"
+		hp_line += "    ·    生命 " + str(current_hp) + " / " + str(maximum_hp)
 		if is_instance_valid(target_health_bar):
 			target_health_bar.max_value = maximum_hp
 			target_health_bar.value = current_hp
@@ -4232,8 +4260,8 @@ func _update_target_info() -> void:
 	else:
 		if is_instance_valid(target_health_bar):
 			target_health_bar.visible = false
-		hp_line += "    ·    Tab 切换目标"
-	target_info_label.text = title + "\n" + hp_line
+		hp_line += "    ·    目标状态同步中"
+	target_info_label.text = title + "\n" + hp_line + "\nTab 切换目标"
 	target_info_panel.visible = hud_visible
 
 func _pick_monster_target_at_screen_position(screen_position: Vector2) -> String:
@@ -5381,6 +5409,9 @@ func _on_combat_event(event: Dictionary) -> void:
 			_show_notification("攻击冷却中 · 还需 %.1f 秒" % cooldown_seconds, 1.8)
 			return
 		var rejection_detail := rejection_reason
+		var persistence_detail := str(event.get("persistence_error", "")).strip_edges()
+		if not persistence_detail.is_empty():
+			rejection_detail += "（服务端持久化诊断：" + persistence_detail + "）"
 		if rejection_reason == "距离目标太远。" and monster_targets.has(selected_monster_id) and is_instance_valid(local_player):
 			var rejected_position: Vector3 = monster_targets[selected_monster_id]
 			var rejected_distance: float = _horizontal_distance_to_target(local_player.global_position, rejected_position)
@@ -5391,7 +5422,7 @@ func _on_combat_event(event: Dictionary) -> void:
 			_update_target_info()
 			target_info_label.text += "\n攻击未成功：" + rejection_detail
 			target_info_panel.visible = hud_visible
-		_show_notification("攻击未成功：" + rejection_detail + "。目标保持锁定。", 4.0)
+		_show_notification("攻击未成功：" + rejection_detail + "。目标保持锁定。", 4.5)
 		return
 	if bool(event.get("projectile_spawned", false)):
 		_show_notification("箭矢已发射，等待命中……")
