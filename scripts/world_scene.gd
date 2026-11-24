@@ -5577,10 +5577,12 @@ func _on_combat_event(event: Dictionary) -> void:
 	var health_target_id := str(event.get("target_entity_id", ""))
 	# Keep the authoritative health cache current for every monster, not only
 	# the currently selected one. Switching targets must never reveal stale HP.
-	if not health_target_id.is_empty() and monster_entities.has(health_target_id):
-		var health_entity: Dictionary = monster_entities[health_target_id]
-		if event.has("health") or event.has("remaining_health"):
-			health_entity["health"] = int(event.get("health", event.get("remaining_health", 0)))
+	if not health_target_id.is_empty() and (event.has("health") or event.has("remaining_health")):
+		# Combat events are authoritative even if a snapshot briefly omitted the
+		# monster from the presentation cache; never discard the HP transition.
+		var health_entity: Dictionary = monster_entities.get(health_target_id, {})
+		health_entity["name"] = str(health_entity.get("name", monster_name))
+		health_entity["health"] = int(event.get("health", event.get("remaining_health", 0)))
 		if event.has("max_health"):
 			health_entity["max_health"] = int(event.get("max_health", 0))
 		monster_entities[health_target_id] = health_entity
