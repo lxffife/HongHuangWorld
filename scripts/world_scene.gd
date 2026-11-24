@@ -4192,7 +4192,7 @@ func _request_purify_self() -> void:
 		return
 	var error: Error = network.send_spell_cast("purify", character_id)
 	if error != OK:
-		_show_notification("净化术请求发送失败：" + str(error))
+		_show_notification("净秽符请求发送失败：" + str(error))
 
 
 func _request_revive_nearest() -> void:
@@ -4581,7 +4581,7 @@ func _on_combat_event(event: Dictionary) -> void:
 			player_poison_visual_remaining = 0.0
 			_set_player_slow_visual(false)
 			_set_player_poison_visual(local_player, false)
-		_show_notification(str(event.get("source_name", "净化术")) + " 净化了你的异常状态（" + str(int(event.get("cleansed_effects", 0))) + " 项）。", 3.0)
+		_show_notification(str(event.get("source_name", "净秽符")) + " 施展净秽符，清除了你的异常状态（" + str(int(event.get("cleansed_effects", 0))) + " 项）。", 3.0)
 		return
 	if str(event.get("action", "")) == "threat_warning":
 		var monster_name := str(event.get("monster_name", "怪物"))
@@ -4619,7 +4619,7 @@ func _on_combat_event(event: Dictionary) -> void:
 		shield_remaining = float(event.get("duration_ms", 8000)) / 1000.0
 		if is_instance_valid(shield_status_label):
 			shield_status_label.text = "护盾 " + str(shield_amount) + " · " + ("%.1f" % shield_remaining) + " 秒"
-		_show_notification(str(event.get("source_name", "队友")) + " 为你施加守护灵盾（" + str(shield_amount) + "）。", 3.0)
+		_show_notification(str(event.get("source_name", "队友")) + " 为你施展罡气护体（" + str(shield_amount) + "）。", 3.0)
 		return
 	if event.has("shield_remaining"):
 		shield_amount = int(event.get("shield_remaining", 0))
