@@ -1473,6 +1473,36 @@ struct EnetServer::Impl {
                 active->respawn_at = Clock::now();
             }
         }
+
+        // Runtime life-state recovery happens before the wave checkpoint is loaded.
+        // Re-validate every inactive trial monster here so a stale positive-health
+        // snapshot cannot resurrect a locked wave or a boss after floor completion.
+        const auto* floor = hell_trial_encounter.spec();
+        if (floor == nullptr) return false;
+        for (auto& candidate : monsters) {
+            const bool is_trial_monster =
+                candidate.definition.id == floor->guardian_id ||
+                std::find(floor->objective_monster_ids.begin(),
+                          floor->objective_monster_ids.end(),
+                          candidate.definition.id) != floor->objective_monster_ids.end();
+            if (!is_trial_monster || candidate.definition.id == active_id) continue;
+            if (candidate.state.health > 0.0F) {
+                std::cerr << "[HellTrialWave] inactive wave has persisted live health; "
+                          << "refusing unsafe recovery runtime=" << candidate.runtime_id
+                          << " definition=" << candidate.definition.id
+                          << " stage=" << hell_trial_waves.stage() << std::endl;
+                return false;
+            }
+            candidate.state.health = 0.0F;
+            candidate.state.mode = honghuang::simulation::MonsterMode::Dead;
+            candidate.state.target_id.clear();
+            candidate.attack_target_character_id.clear();
+            candidate.attack_phase = MonsterAttackPhase::Ready;
+            candidate.respawn_at = Clock::time_point{};
+            honghuang::simulation::clear_negative_statuses(
+                candidate.slow_effect, candidate.freeze_effect, candidate.burn_effect);
+        }
+        if (hell_trial_waves.completed()) hell_trial_boss_phase.reset();
         std::cout << "[HellTrialWave] restored instance=" << config.instance_key
                   << " floor=" << hell_trial_encounter.floor()
                   << " stage=" << hell_trial_waves.stage()
