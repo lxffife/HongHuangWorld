@@ -970,7 +970,7 @@ func _update_minimap_data() -> void:
 		minimap_view.set("player_position", local_player.global_position)
 		minimap_view.set("player_yaw", local_player.global_rotation.y)
 		if is_instance_valid(minimap_coordinate_label):
-			var player_pos := local_player.global_position
+			var player_pos: Vector3 = local_player.global_position
 			minimap_coordinate_label.text = "坐标  %.0f  /  %.0f" % [player_pos.x, player_pos.z]
 	minimap_view.set("exploration_points", exploration_point_data.values())
 	minimap_view.set("npc_points", npc_definitions)
