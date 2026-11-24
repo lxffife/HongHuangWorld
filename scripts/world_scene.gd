@@ -5434,10 +5434,13 @@ func _on_combat_event(event: Dictionary) -> void:
 		var persistence_detail := str(event.get("persistence_error", "")).strip_edges()
 		if not persistence_detail.is_empty():
 			rejection_detail += "（服务端持久化诊断：" + persistence_detail + "）"
-		if rejection_reason == "距离目标太远。" and monster_targets.has(selected_monster_id) and is_instance_valid(local_player):
-			var rejected_position: Vector3 = monster_targets[selected_monster_id]
-			var rejected_distance: float = _horizontal_distance_to_target(local_player.global_position, rejected_position)
-			rejection_detail = "距离目标太远（当前 %.1f m）。继续靠近后再次点击左键，按住左键会在进入攻击距离后自动继续攻击。" % rejected_distance
+		if rejection_reason == "距离目标太远。":
+			var rejected_distance := float(event.get("distance_m", -1.0))
+			var server_attack_range := float(event.get("attack_range_m", HHSession.world_snapshot.get("attack_range", 2.5)))
+			if rejected_distance < 0.0 and monster_targets.has(selected_monster_id) and is_instance_valid(local_player):
+				var rejected_position: Vector3 = monster_targets[selected_monster_id]
+				rejected_distance = _horizontal_distance_to_target(local_player.global_position, rejected_position)
+			rejection_detail = "距离目标太远（当前 %.1f m，武器攻击距离 %.1f m）。靠近后再次点击，按住左键会自动继续攻击。" % [rejected_distance, server_attack_range]
 			if attack_button_held:
 				attack_repeat_remaining = 0.15
 		if is_instance_valid(target_info_label) and not selected_monster_id.is_empty():
