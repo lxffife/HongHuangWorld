@@ -533,6 +533,77 @@ func play_attack_animation() -> void:
 	if not soul_form_enabled and not is_instance_valid(player_humanoid):
 		return
 	attack_animation_time = 0.34
+	_spawn_attack_sweep_visual()
+
+
+func _spawn_attack_sweep_visual() -> void:
+	if not is_instance_valid(visual):
+		return
+	var slash := MeshInstance3D.new()
+	slash.name = "AttackSweepVisual"
+	var mesh := ImmediateMesh.new()
+	var material := StandardMaterial3D.new()
+	var tint := Color("#8fd8ff")
+	var half_angle := 0.92
+	var inner_radius := 0.52
+	var outer_radius := 1.18
+	match attack_animation_style:
+		"spear_thrust":
+			tint = Color("#d8eaff")
+			half_angle = 0.25
+			inner_radius = 0.18
+			outer_radius = 1.25
+		"staff_cast":
+			tint = Color("#9b8cff")
+			half_angle = 0.72
+			inner_radius = 0.38
+			outer_radius = 1.05
+		"ranged_shot":
+			tint = Color("#f4d58a")
+			half_angle = 0.16
+			inner_radius = 0.12
+			outer_radius = 0.92
+		"heavy_swing":
+			tint = Color("#ffb36b")
+			half_angle = 1.18
+			inner_radius = 0.46
+			outer_radius = 1.34
+		"sword_slash":
+			tint = Color("#b8f0ff")
+		material.albedo_color = Color(tint.r, tint.g, tint.b, 0.72)
+	material.emission_enabled = true
+	material.emission = tint
+	material.emission_energy_multiplier = 2.2
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES, material)
+	var segments := 14
+	for index in range(segments):
+		var angle_a := lerpf(-half_angle, half_angle, float(index) / float(segments))
+		var angle_b := lerpf(-half_angle, half_angle, float(index + 1) / float(segments))
+		var inner_a := Vector3(sin(angle_a) * inner_radius, cos(angle_a) * inner_radius, 0.0)
+		var outer_a := Vector3(sin(angle_a) * outer_radius, cos(angle_a) * outer_radius, 0.0)
+		var inner_b := Vector3(sin(angle_b) * inner_radius, cos(angle_b) * inner_radius, 0.0)
+		var outer_b := Vector3(sin(angle_b) * outer_radius, cos(angle_b) * outer_radius, 0.0)
+		mesh.surface_add_vertex(inner_a)
+		mesh.surface_add_vertex(outer_a)
+		mesh.surface_add_vertex(outer_b)
+		mesh.surface_add_vertex(inner_a)
+		mesh.surface_add_vertex(outer_b)
+		mesh.surface_add_vertex(inner_b)
+	mesh.surface_end()
+	slash.mesh = mesh
+	slash.position = Vector3(0.0, 0.72, -0.58)
+	slash.rotation.z = -0.22 if attack_animation_style == "heavy_swing" else 0.12
+	slash.scale = Vector3(0.72, 0.72, 0.72)
+	visual.add_child(slash)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(slash, "scale", Vector3(1.12, 1.12, 1.12), 0.22)
+	tween.tween_property(material, "albedo_color:a", 0.0, 0.22)
+	tween.tween_property(material, "emission_energy_multiplier", 0.0, 0.22)
+	tween.chain().tween_callback(Callable(slash, "queue_free"))
 
 
 func _process(delta: float) -> void:
