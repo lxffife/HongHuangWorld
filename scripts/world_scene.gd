@@ -1102,10 +1102,10 @@ func _build_combat_hud() -> void:
 	vitals_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	vitals_panel.custom_minimum_size = Vector2(340.0, 226.0)
 	var vitals_style := StyleBoxFlat.new()
-	vitals_style.bg_color = Color("#0c1724", 0.94)
-	vitals_style.border_color = Color("#3b5368")
+	vitals_style.bg_color = Color("#0a1420", 0.94)
+	vitals_style.border_color = Color("#6b5940")
 	vitals_style.set_border_width_all(1)
-	vitals_style.set_corner_radius_all(10)
+	vitals_style.set_corner_radius_all(14)
 	vitals_style.content_margin_left = 12.0
 	vitals_style.content_margin_right = 12.0
 	vitals_style.content_margin_top = 9.0
@@ -1115,19 +1115,26 @@ func _build_combat_hud() -> void:
 	var vitals_layout := VBoxContainer.new()
 	vitals_layout.add_theme_constant_override("separation", 6)
 	vitals_panel.add_child(vitals_layout)
+	var status_header := HBoxContainer.new()
+	status_header.add_theme_constant_override("separation", 8)
+	vitals_layout.add_child(status_header)
+	var status_title := Label.new()
+	status_title.text = "角色状态"
+	status_title.add_theme_color_override("font_color", Color("#f0dfbd"))
+	status_title.add_theme_font_size_override("font_size", 13)
+	status_header.add_child(status_title)
 	wallet_label = Label.new()
-	wallet_label.text = "钱袋  冥币 --  ·  冥石 --"
-	wallet_label.add_theme_color_override("font_color", Color("#e5c98d"))
-	wallet_label.add_theme_font_size_override("font_size", 12)
-	vitals_layout.add_child(wallet_label)
+	wallet_label.text = "冥币 --  ·  冥石 --"
+	wallet_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	wallet_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	wallet_label.add_theme_color_override("font_color", Color("#d8bd86"))
+	wallet_label.add_theme_font_size_override("font_size", 11)
+	status_header.add_child(wallet_label)
 	health_label = Label.new()
 	health_label.text = "生命  ·  等待服务端战斗状态"
 	health_label.add_theme_color_override("font_color", Color("#f0c4b8"))
 	health_label.add_theme_font_size_override("font_size", 13)
 	vitals_layout.add_child(health_label)
-	mana_label = Label.new()
-	mana_label.text = "灵力  " + str(int(HHSession.world_snapshot.get("mana", 0))) + " / " + str(int(HHSession.world_snapshot.get("max_mana", 0)))
-	vitals_layout.add_child(mana_label)
 	health_bar = ProgressBar.new()
 	health_bar.custom_minimum_size = Vector2(270.0, 16.0)
 	health_bar.min_value = 0.0
@@ -1164,52 +1171,71 @@ func _build_combat_hud() -> void:
 	mana_bar.add_theme_stylebox_override("fill", mana_fill)
 	vitals_layout.add_child(mana_bar)
 	var spell_hint := Label.new()
-	spell_hint.text = "修行神通 · Q/R/T/Y/U/G/H"
+	spell_hint.text = "神通快捷栏"
 	spell_hint.add_theme_color_override("font_color", Color("#d6bd8b"))
 	spell_hint.add_theme_font_size_override("font_size", 11)
 	vitals_layout.add_child(spell_hint)
+	var spell_grid := GridContainer.new()
+	spell_grid.columns = 4
+	spell_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	spell_grid.add_theme_constant_override("h_separation", 6)
+	spell_grid.add_theme_constant_override("v_separation", 3)
+	vitals_layout.add_child(spell_grid)
 	for spell_id in ["fireball", "ice_bolt"]:
 		var cooldown_label := Label.new()
 		cooldown_label.text = "Q  幽冥磷火：就绪" if spell_id == "fireball" else "R  镇邪符：就绪"
 		cooldown_label.add_theme_color_override("font_color", Color("#c4d2df"))
-		cooldown_label.add_theme_font_size_override("font_size", 11)
+		cooldown_label.add_theme_font_size_override("font_size", 10)
+		cooldown_label.clip_text = true
+		cooldown_label.custom_minimum_size = Vector2(68.0, 22.0)
 		spell_cooldown_labels[spell_id] = cooldown_label
-		vitals_layout.add_child(cooldown_label)
+		spell_grid.add_child(cooldown_label)
 		var mastery_label := Label.new()
 		mastery_label.add_theme_color_override("font_color", Color("#9db9a7"))
 		mastery_label.add_theme_font_size_override("font_size", 10)
+		mastery_label.visible = false
 		spell_mastery_labels[spell_id] = mastery_label
 		vitals_layout.add_child(mastery_label)
 	var taunt_label := Label.new()
 	taunt_label.text = "T  ·  鬼门锁链：就绪"
 	taunt_label.add_theme_color_override("font_color", Color("#e7b77a"))
-	taunt_label.add_theme_font_size_override("font_size", 11)
+	taunt_label.add_theme_font_size_override("font_size", 10)
+	taunt_label.custom_minimum_size = Vector2(68.0, 22.0)
+	taunt_label.clip_text = true
 	spell_cooldown_labels["taunt"] = taunt_label
-	vitals_layout.add_child(taunt_label)
+	spell_grid.add_child(taunt_label)
 	var revive_label := Label.new()
 	revive_label.text = "Y  ·  回魂术：就绪"
 	revive_label.add_theme_color_override("font_color", Color("#9ed7bd"))
-	revive_label.add_theme_font_size_override("font_size", 11)
+	revive_label.add_theme_font_size_override("font_size", 10)
+	revive_label.custom_minimum_size = Vector2(68.0, 22.0)
+	revive_label.clip_text = true
 	spell_cooldown_labels["revive"] = revive_label
-	vitals_layout.add_child(revive_label)
+	spell_grid.add_child(revive_label)
 	var heal_label := Label.new()
 	heal_label.text = "U  ·  养气归元：就绪"
 	heal_label.add_theme_color_override("font_color", Color("#8fd9b4"))
-	heal_label.add_theme_font_size_override("font_size", 11)
+	heal_label.add_theme_font_size_override("font_size", 10)
+	heal_label.custom_minimum_size = Vector2(68.0, 22.0)
+	heal_label.clip_text = true
 	spell_cooldown_labels["life_mend"] = heal_label
-	vitals_layout.add_child(heal_label)
+	spell_grid.add_child(heal_label)
 	var aegis_label := Label.new()
 	aegis_label.text = "G  ·  罡气护体：就绪"
 	aegis_label.add_theme_color_override("font_color", Color("#9bc9ed"))
-	aegis_label.add_theme_font_size_override("font_size", 11)
+	aegis_label.add_theme_font_size_override("font_size", 10)
+	aegis_label.custom_minimum_size = Vector2(68.0, 22.0)
+	aegis_label.clip_text = true
 	spell_cooldown_labels["guardian_aegis"] = aegis_label
-	vitals_layout.add_child(aegis_label)
+	spell_grid.add_child(aegis_label)
 	var purify_label := Label.new()
 	purify_label.text = "H · 净秽符：就绪"
 	purify_label.add_theme_color_override("font_color", Color("#c5b6e8"))
-	purify_label.add_theme_font_size_override("font_size", 11)
+	purify_label.add_theme_font_size_override("font_size", 10)
+	purify_label.custom_minimum_size = Vector2(68.0, 22.0)
+	purify_label.clip_text = true
 	spell_cooldown_labels["purify"] = purify_label
-	vitals_layout.add_child(purify_label)
+	spell_grid.add_child(purify_label)
 	shield_status_label = Label.new()
 	shield_status_label.text = ""
 	shield_status_label.add_theme_color_override("font_color", Color("#9bc9ed"))
