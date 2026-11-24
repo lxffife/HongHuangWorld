@@ -1572,7 +1572,7 @@ func _build_controls_help_panel(hud: CanvasLayer) -> void:
 	var divider := HSeparator.new()
 	layout.add_child(divider)
 	var body := Label.new()
-	body.text = "角色移动\nW / A / S / D    前进、左移、后退、右移\n空格键    跳跃（地形允许时）\n鼠标移动    转动视角\n鼠标左键    点击攻击；按住可连续攻击，进入攻击距离后自动出手\nTab    切换附近怪物目标\n\n交互与界面\nF    与附近 NPC 交互\nE    拾取附近掉落物\nI    打开背包\nC 或 Enter    打开聊天\nF1    显示 / 隐藏游戏 HUD\nF2    打开 / 关闭本操作指南\nF3    显示 / 隐藏输入诊断\nEsc    关闭当前地图、聊天或帮助面板\n\n战斗技能\nQ    火球术       R    冰锥术\nT    嘲讽术       Y    回魂术\nU    回春术       G    守护灵盾\nH    净化术\n\n提示：打开聊天或面板时，部分移动与战斗输入会暂停。技能是否可用仍以服务器判定为准。"
+	body.text = "角色移动\nW / A / S / D    前进、左移、后退、右移\n空格键    跳跃（地形允许时）\n鼠标移动    转动视角\n鼠标左键    点击攻击；按住可连续攻击，进入攻击距离后自动出手\nTab    切换附近怪物目标\n\n交互与界面\nF    与附近 NPC 交互\nE    拾取附近掉落物\nI    打开背包\nC 或 Enter    打开聊天\nF1    显示 / 隐藏游戏 HUD\nF2    打开 / 关闭本操作指南\nF3    显示 / 隐藏输入诊断\nEsc    关闭当前地图、聊天或帮助面板\n\n修行神通\nQ    幽冥磷火     R    镇邪符\nT    冥司敕令     Y    回魂术\nU    养气归元     G    罡气护体\nH    净秽符\n\n提示：打开聊天或面板时，部分移动与战斗输入会暂停。技能是否可用仍以服务器判定为准。"
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.add_theme_color_override("font_color", Color("#d7e0e9"))
 	body.add_theme_font_size_override("font_size", 14)
@@ -1775,7 +1775,7 @@ func _update_hud() -> void:
 	var world_id := str(snapshot.get("world_id", ""))
 	var world_name := _world_display_name(world_id)
 	var character_name := str(snapshot.get("name", "初入洪荒"))
-	hud_label.text = character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\nF NPC交互 · E 拾取 · I 背包 · Q 火球术 · R 冰锥术 · T 嘲讽 · Y 救援 · U 回春术 · G 守护灵盾 · C 聊天 · 鼠标左键攻击（按住连续攻击） · F2 网络诊断"
+	hud_label.text = character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\nF NPC交互 · E 拾取 · I 背包 · Q 幽冥磷火 · R 镇邪符 · T 冥司敕令 · Y 回魂术 · U 养气归元 · G 罡气护体 · H 净秽符 · C 聊天 · 鼠标左键攻击（按住连续攻击） · F2 网络诊断"
 	_update_compact_hud()
 
 func _exit_tree() -> void:
@@ -2183,10 +2183,10 @@ func _create_fireball_projectile() -> Node3D:
 	root.name = "AuthoritativeNetherPhosphor"
 	var core := MeshInstance3D.new()
 	var sphere := SphereMesh.new()
-	sphere.radius = 0.22
-	sphere.height = 0.44
+	sphere.radius = 0.15
+	sphere.height = 0.52
 	sphere.radial_segments = 12
-	sphere.rings = 6
+	sphere.rings = 8
 	core.mesh = sphere
 	var material := StandardMaterial3D.new()
 	material.albedo_color = Color("#b6a0d8")
@@ -2212,6 +2212,22 @@ func _create_fireball_projectile() -> Node3D:
 	glow_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	glow.material_override = glow_material
 	root.add_child(glow)
+	for wisp_index in range(3):
+		var wisp := MeshInstance3D.new()
+		var wisp_mesh := SphereMesh.new()
+		wisp_mesh.radius = 0.075 - float(wisp_index) * 0.012
+		wisp_mesh.height = wisp_mesh.radius * 2.0
+		wisp.mesh = wisp_mesh
+		wisp.position = Vector3(0.0, 0.0, 0.18 + float(wisp_index) * 0.13)
+		var wisp_material := StandardMaterial3D.new()
+		wisp_material.albedo_color = Color(0.55, 0.34, 0.82, 0.62 - float(wisp_index) * 0.12)
+		wisp_material.emission_enabled = true
+		wisp_material.emission = Color("#8153c4")
+		wisp_material.emission_energy_multiplier = 1.1
+		wisp_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		wisp_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		wisp.material_override = wisp_material
+		root.add_child(wisp)
 	add_child(root)
 	return root
 
@@ -2232,6 +2248,20 @@ func _create_ice_bolt_projectile() -> Node3D:
 	material.roughness = 0.24
 	core.material_override = material
 	root.add_child(core)
+	for stroke in [Vector3(0.0, 0.014, 0.0), Vector3(0.0, -0.014, 0.0)]:
+		var rune_stroke := MeshInstance3D.new()
+		var rune_mesh := BoxMesh.new()
+		rune_mesh.size = Vector3(0.025, 0.008, 0.30)
+		rune_stroke.mesh = rune_mesh
+		rune_stroke.position = stroke
+		rune_stroke.rotation.y = PI * 0.25 if stroke.y > 0.0 else -PI * 0.25
+		var rune_material := StandardMaterial3D.new()
+		rune_material.albedo_color = Color("#fff0bd")
+		rune_material.emission_enabled = true
+		rune_material.emission = Color("#e6bd68")
+		rune_material.emission_energy_multiplier = 1.8
+		rune_stroke.material_override = rune_material
+		root.add_child(rune_stroke)
 	var halo := MeshInstance3D.new()
 	var halo_mesh := TorusMesh.new()
 	halo_mesh.inner_radius = 0.23
@@ -4113,7 +4143,7 @@ func _request_ice_bolt() -> void:
 		return
 	var error: Error = network.send_spell_cast("ice_bolt", target_id)
 	if error != OK:
-		_show_notification("冰锥术请求发送失败：" + str(error))
+		_show_notification("镇邪符请求发送失败：" + str(error))
 
 func _request_support_spell(spell_id: String) -> void:
 	var network := HHSession.world_network
