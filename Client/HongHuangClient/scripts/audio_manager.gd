@@ -102,7 +102,11 @@ func _play(cue: String, bus_name: String, world_position: Vector3, pitch_scale: 
 		spatial_player.pitch_scale = clampf(pitch_scale, 0.65, 1.5)
 		spatial_player.max_distance = max_distance
 		spatial_player.unit_size = 5.0
-		add_child(spatial_player)
+		var world_root := get_tree().current_scene
+		if world_root == null:
+			spatial_player.queue_free()
+			return
+		world_root.add_child(spatial_player)
 		spatial_player.global_position = world_position
 		spatial_player.finished.connect(spatial_player.queue_free)
 		spatial_player.play()
