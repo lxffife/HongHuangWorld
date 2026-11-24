@@ -4688,8 +4688,8 @@ struct EnetServer::Impl {
         }
         // Cultivation abilities are not gated by a Western-style staff slot.
         // Talismans, seals, sword arts and bare-handed techniques are valid
-        // manifestations; each skill's own learned-state and resource rules
-        // remain authoritative on the server.
+        // manifestations; target, range, resource, cooldown and hit resolution
+        // remain authoritative on the world server.
         if (spell == nullptr || !spell->enabled || !honghuang::simulation::valid_spell_definition(*spell)) {
             reject("未知或未开放的法术。"); return;
         }
@@ -5099,13 +5099,13 @@ struct EnetServer::Impl {
                 spell->defense_penetration_basis_points,
                 roll_critical_hit(player.agility),
                 now + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<float>(spell->projectile_lifetime_seconds)),
-                spell->element == honghuang::simulation::SpellElement::Ice ? "ice_bolt" : "fireball",
+                spell->element == honghuang::simulation::SpellElement::Talisman ? "suppressing_talisman" : "nether_phosphor",
                 spell->slow_duration_ms, spell->slow_multiplier, spell->freeze_duration_ms,
                  spell->burn_duration_ms, spell->burn_interval_ms,
                  spell->burn_damage_basis_points
             });
             broadcast_player_action_event(player, "cast", target->runtime_id,
-                spell->element == honghuang::simulation::SpellElement::Ice ? "spell_ice_bolt" : "spell_fireball", peer);
+                spell->element == honghuang::simulation::SpellElement::Talisman ? "spell_talisman" : "spell_nether_phosphor", peer);
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", true}, {"action", "spell_cast"}, {"phase", "released"},
                            {"spell_id", std::string(spell->id)}, {"projectile_id", projectile_id},
@@ -5124,7 +5124,7 @@ struct EnetServer::Impl {
             }
             if (projectile->expires_at <= now) {
                 send_json(owner->first, honghuang::protocol::MessageType::CombatEvent,
-                          Json{{"accepted", false}, {"reason", projectile->projectile_type == "fireball" ? "火球术未命中目标。" : (projectile->projectile_type == "ice_bolt" ? "冰锥术未命中目标。" : "箭矢未命中目标。")}});
+                          Json{{"accepted", false}, {"reason", projectile->projectile_type == "nether_phosphor" ? "幽冥磷火未命中目标。" : (projectile->projectile_type == "suppressing_talisman" ? "镇邪符未命中目标。" : "箭矢未命中目标。")}});
                 projectile = projectiles.erase(projectile);
                 continue;
             }
