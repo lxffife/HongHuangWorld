@@ -524,6 +524,38 @@ func play_hit_reaction(damage: int, attack_style: String = "") -> void:
 	var style_strength := 0.115 if attack_style == "heavy_slam" else 0.055
 	var damage_strength := clampf(float(maxi(damage, 0)) / 240.0, 0.0, 0.045)
 	hit_reaction_strength = maxf(hit_reaction_strength, style_strength + damage_strength)
+	_spawn_hit_reaction_visual(attack_style)
+
+
+func _spawn_hit_reaction_visual(attack_style: String) -> void:
+	if not is_instance_valid(visual):
+		return
+	var ring := MeshInstance3D.new()
+	ring.name = "PlayerHitReactionRing"
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.42
+	ring_mesh.outer_radius = 0.52
+	ring_mesh.rings = 24
+	ring_mesh.ring_segments = 8
+	ring.mesh = ring_mesh
+	ring.position = Vector3(0.0, 0.08, 0.0)
+	ring.rotation.x = PI / 2.0
+	var tint := Color("#ffad75") if attack_style == "heavy_slam" else Color("#b8dfff")
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(tint.r, tint.g, tint.b, 0.82)
+	material.emission_enabled = true
+	material.emission = tint
+	material.emission_energy_multiplier = 2.0
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring.material_override = material
+	visual.add_child(ring)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(ring, "scale", Vector3.ONE * 2.0, 0.34)
+	tween.tween_property(material, "albedo_color:a", 0.0, 0.34)
+	tween.tween_property(material, "emission_energy_multiplier", 0.0, 0.34)
+	tween.chain().tween_callback(Callable(ring, "queue_free"))
 
 func play_attack_animation() -> void:
 	if hit_animation_time > 0.0:
