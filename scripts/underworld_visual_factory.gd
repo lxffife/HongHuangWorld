@@ -110,6 +110,92 @@ static func _box(size: Vector3) -> BoxMesh:
 
 
 
+static func create_fengdu_wall_segment() -> Node3D:
+	var root := StaticBody3D.new()
+	root.name = "FengduWallSegment"
+	var stone := Color("#45414f")
+	var trim := Color("#786b73")
+	_part(root, "WallBase", _box(Vector3(8.0, 0.72, 1.2)), Vector3(0.0, 0.36, 0.0), Color("#302e3a"))
+	_part(root, "WallBody", _box(Vector3(7.4, 3.8, 0.92)), Vector3(0.0, 2.55, 0.0), stone)
+	_part(root, "WallCoping", _box(Vector3(8.2, 0.34, 1.25)), Vector3(0.0, 4.62, 0.0), trim)
+	for x in [-3.4, -1.7, 0.0, 1.7, 3.4]:
+		_part(root, "Battlement_" + str(x), _box(Vector3(0.72, 0.82, 1.0)), Vector3(x, 5.18, 0.0), stone)
+	_part(root, "WallRune", _box(Vector3(0.16, 1.7, 0.08)), Vector3(0.0, 2.55, -0.51), Color("#a77d59"), Vector3.ZERO, 0.28, 0.22)
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(7.4, 4.2, 1.0)
+	collision.shape = shape
+	collision.position = Vector3(0.0, 2.5, 0.0)
+	root.add_child(collision)
+	return root
+
+
+static func create_ghost_lantern() -> Node3D:
+	var root := Node3D.new()
+	root.name = "GhostLantern"
+	var dark_iron := Color("#34313c")
+	var bronze := Color("#8e7657")
+	var ghost_fire := Color("#85c8c1")
+	var base := CylinderMesh.new()
+	base.top_radius = 0.48
+	base.bottom_radius = 0.62
+	base.height = 0.28
+	base.radial_segments = 10
+	_part(root, "LanternBase", base, Vector3(0.0, 0.14, 0.0), dark_iron, Vector3.ZERO, 0.0, 0.5)
+	var post := CylinderMesh.new()
+	post.top_radius = 0.12
+	post.bottom_radius = 0.18
+	post.height = 2.4
+	post.radial_segments = 10
+	_part(root, "LanternPost", post, Vector3(0.0, 1.48, 0.0), bronze, Vector3.ZERO, 0.0, 0.55)
+	_part(root, "LanternBowl", _box(Vector3(0.92, 0.18, 0.92)), Vector3(0.0, 2.64, 0.0), dark_iron, Vector3.ZERO, 0.0, 0.42)
+	_part(root, "LanternGlass", _box(Vector3(0.66, 0.88, 0.66)), Vector3(0.0, 3.16, 0.0), ghost_fire, Vector3.ZERO, 1.8, 0.12, 0.48)
+	_part(root, "LanternCap", _box(Vector3(1.08, 0.18, 1.08)), Vector3(0.0, 3.68, 0.0), bronze, Vector3.ZERO, 0.0, 0.5)
+	var point := OmniLight3D.new()
+	point.name = "GhostLanternLight"
+	point.position = Vector3(0.0, 3.12, 0.0)
+	point.light_color = ghost_fire
+	point.light_energy = 1.15
+	point.omni_range = 8.0
+	root.add_child(point)
+	return root
+
+
+static func create_soul_tombstone() -> Node3D:
+	var root := StaticBody3D.new()
+	root.name = "SoulTombstone"
+	var stone := Color("#55515d")
+	var inscription := Color("#92aaa8")
+	_part(root, "TombBase", _box(Vector3(1.25, 0.24, 0.72)), Vector3(0.0, 0.12, 0.0), Color("#373641"))
+	_part(root, "TombBody", _box(Vector3(0.86, 1.35, 0.30)), Vector3(0.0, 0.91, 0.0), stone)
+	_part(root, "TombCrown", _sphere(0.44, 0.48), Vector3(0.0, 1.55, 0.0), stone)
+	_part(root, "TombInscription", _box(Vector3(0.08, 0.72, 0.035)), Vector3(0.0, 0.96, -0.17), inscription, Vector3.ZERO, 0.25)
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(0.9, 1.8, 0.38)
+	collision.shape = shape
+	collision.position = Vector3(0.0, 0.9, 0.0)
+	root.add_child(collision)
+	return root
+
+
+static func create_soul_pillar() -> Node3D:
+	var root := StaticBody3D.new()
+	root.name = "SoulPillar"
+	var stone := Color("#3c3948")
+	var rune := Color("#8bbec4")
+	_part(root, "PillarFoot", _box(Vector3(1.7, 0.35, 1.7)), Vector3(0.0, 0.18, 0.0), stone)
+	var shaft := CylinderMesh.new()
+	shaft.top_radius = 0.42
+	shaft.bottom_radius = 0.58
+	shaft.height = 4.8
+	shaft.radial_segments = 8
+	_part(root, "PillarShaft", shaft, Vector3(0.0, 2.72, 0.0), stone, Vector3.ZERO, 0.0, 0.24)
+	_part(root, "PillarCap", _box(Vector3(1.25, 0.32, 1.25)), Vector3(0.0, 5.2, 0.0), Color("#65596b"))
+	_part(root, "PillarSigil", _box(Vector3(0.10, 2.5, 0.12)), Vector3(0.0, 2.85, -0.48), rune, Vector3.ZERO, 1.0, 0.15)
+	return root
+
+
 static func create_fengdu_gate() -> Node3D:
 	var root := StaticBody3D.new()
 	root.name = "FengduGhostGate"
