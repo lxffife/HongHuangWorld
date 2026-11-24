@@ -25,9 +25,13 @@ inline WeaponCombatProfile weapon_combat_profile(std::string_view weapon_type) {
     if (weapon_type == "bow") return {22.0F, std::chrono::milliseconds(900), 10000, 0};
     if (weapon_type == "staff" || weapon_type == "focus")
         return {3.5F, std::chrono::milliseconds(700), 10000, 0};
-    // Unarmed attacks need a little more reach to account for character capsule
-    // separation and client/server position sampling at the moment of the click.
-    return {3.0F, std::chrono::milliseconds(700), 8000, 0};
+    // Empty equipment snapshots represent genuinely unarmed characters. Keep
+    // their reach forgiving for capsule separation and network position sampling.
+    if (weapon_type.empty() || weapon_type == "unarmed")
+        return {3.0F, std::chrono::milliseconds(700), 8000, 0};
+    // Unknown non-empty weapon identifiers use a conservative fallback instead
+    // of inheriting the unarmed reach intended for players with no weapon equipped.
+    return {2.4F, std::chrono::milliseconds(700), 8000, 0};
 }
 
 
