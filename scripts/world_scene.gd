@@ -2809,30 +2809,31 @@ func _layout_hud() -> void:
 	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
 		return
 
-	# Keep the character card and its controls in a single, non-overlapping
-	# top-left stack. The original fixed Y=118 placed the button over the card.
+	# Four-corner MMORPG HUD: identity at upper-left, navigation at upper-right,
+	# combat/vitals at lower-left and social chat at lower-right.
 	if is_instance_valid(compact_hud_panel):
 		var is_underworld := str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu"
-		var card_width := minf(520.0 if is_underworld else 360.0, maxf(280.0, viewport_size.x - 48.0))
+		var card_width := minf(440.0 if is_underworld else 340.0, maxf(260.0, viewport_size.x - 420.0))
 		var card_height := compact_hud_panel.custom_minimum_size.y
-		compact_hud_panel.position = Vector2(18.0, 60.0)
+		compact_hud_panel.position = Vector2(18.0, 66.0)
 		compact_hud_panel.custom_minimum_size = Vector2(card_width, card_height)
 		compact_hud_panel.size = Vector2(card_width, card_height)
 		if is_instance_valid(compact_hud_label):
 			compact_hud_label.custom_minimum_size = Vector2(card_width - 24.0, card_height - 20.0)
-		var controls_y := 60.0 + card_height + 8.0
+		var controls_y := 66.0 + card_height + 8.0
 		if is_instance_valid(details_toggle_button):
 			details_toggle_button.position = Vector2(18.0, controls_y)
 		if is_instance_valid(soul_choice_button):
 			soul_choice_button.position = Vector2(140.0, controls_y)
+	var utility_left := maxf(18.0, viewport_size.x - 374.0)
 	if is_instance_valid(hud_toggle_button):
-		hud_toggle_button.position = Vector2(18.0, 18.0)
+		hud_toggle_button.position = Vector2(utility_left, 16.0)
 	if is_instance_valid(hud_restore_button):
-		hud_restore_button.position = Vector2(18.0, 18.0)
+		hud_restore_button.position = Vector2(utility_left, 16.0)
 	if is_instance_valid(help_button):
-		help_button.position = Vector2(138.0, 18.0)
+		help_button.position = Vector2(utility_left + 120.0, 16.0)
 	if is_instance_valid(leave_world_button):
-		leave_world_button.position = Vector2(258.0, 18.0)
+		leave_world_button.position = Vector2(utility_left + 240.0, 16.0)
 	if is_instance_valid(help_panel):
 		var help_width := minf(540.0, maxf(320.0, viewport_size.x - 32.0))
 		var help_height := minf(500.0, maxf(360.0, viewport_size.y - 32.0))
@@ -2851,11 +2852,11 @@ func _layout_hud() -> void:
 		friend_panel.offset_top = 72.0
 		friend_panel.offset_right = -18.0
 		friend_panel.offset_bottom = 548.0
-	var chat_height := 54.0
+	var chat_height := 56.0
 	if chat_expanded:
-		chat_height = minf(430.0, maxf(300.0, viewport_size.y - 48.0))
+		chat_height = minf(440.0, maxf(280.0, viewport_size.y - 48.0))
 	if is_instance_valid(chat_panel):
-		var chat_width := minf(430.0, maxf(290.0, viewport_size.x - 36.0))
+		var chat_width := minf(410.0, maxf(280.0, viewport_size.x - 36.0))
 		chat_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 		chat_panel.offset_left = -chat_width - 18.0
 		chat_panel.offset_right = -18.0
@@ -2923,10 +2924,10 @@ func _layout_hud() -> void:
 		var map_visible: bool = viewport_size.x >= 520.0 and hud_visible and not (is_instance_valid(friend_panel) and friend_panel.visible)
 		minimap_panel.visible = map_visible
 		minimap_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-		minimap_panel.offset_left = -202.0
+		minimap_panel.offset_left = -210.0
 		minimap_panel.offset_right = -18.0
-		minimap_panel.offset_top = 18.0
-		minimap_panel.offset_bottom = 318.0
+		minimap_panel.offset_top = 64.0
+		minimap_panel.offset_bottom = 354.0
 	if is_instance_valid(target_info_panel):
 		var target_width := minf(380.0, maxf(250.0, viewport_size.x - 32.0))
 		target_info_panel.position = Vector2(-target_width * 0.5, 18.0)
@@ -2936,11 +2937,12 @@ func _layout_hud() -> void:
 	if is_instance_valid(notification_panel):
 		_layout_notification_panel()
 	if is_instance_valid(vitals_panel):
-		var vitals_width := minf(340.0, maxf(250.0, viewport_size.x - 36.0))
-		vitals_panel.custom_minimum_size = Vector2(vitals_width, 154.0)
-		vitals_panel.size = Vector2(vitals_width, 154.0)
+		var vitals_width := minf(326.0, maxf(250.0, viewport_size.x - 36.0))
+		var vitals_height := minf(382.0, maxf(270.0, viewport_size.y - 210.0))
+		vitals_panel.custom_minimum_size = Vector2(vitals_width, vitals_height)
+		vitals_panel.size = Vector2(vitals_width, vitals_height)
 		vitals_panel.offset_left = 18.0
-		vitals_panel.offset_top = -172.0
+		vitals_panel.offset_top = -vitals_height - 18.0
 		vitals_panel.offset_right = 18.0 + vitals_width
 		vitals_panel.offset_bottom = -18.0
 		if is_instance_valid(health_bar):
@@ -2951,9 +2953,9 @@ func _layout_hud() -> void:
 		# Keep exploration below the vitals card at bottom-left.
 		exploration_open_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 		exploration_open_button.offset_left = 18.0
-		exploration_open_button.offset_top = -218.0
+		exploration_open_button.offset_top = -vitals_height - 66.0
 		exploration_open_button.offset_right = 180.0
-		exploration_open_button.offset_bottom = -172.0
+		exploration_open_button.offset_bottom = -vitals_height - 20.0
 
 func _on_chat_input_gui_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
