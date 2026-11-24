@@ -9,14 +9,17 @@
 namespace honghuang::simulation {
 
 enum class SpellElement {
-    Fire,
-    Ice,
+    NetherFlame,
+    Talisman,
     Lightning,
     Life
 };
 
 struct SpellDefinition {
     std::string_view id;
+    std::string_view display_name;
+    std::string_view discipline_id;
+    std::string_view visual_style;
     SpellElement element;
     std::int32_t mana_cost;
     std::int32_t cast_time_ms;
@@ -38,12 +41,12 @@ struct SpellDefinition {
 // Spell IDs and all combat values are selected by the server. The client may
 // request an ID, but it must never submit or override any value in this table.
 inline constexpr SpellDefinition kFireballSpell{
-    "fireball", SpellElement::Fire, 18, 350, 1800,
+    "fireball", "幽冥磷火", "underworld_hell", "nether_phosphor", SpellElement::NetherFlame, 18, 350, 1800,
     20.0F, 16.0F, 1.8F, 12500, 0, 0, 1.0F, 0, 3000, 1000, 2000, true
 };
 
 inline constexpr SpellDefinition kIceBoltSpell{
-    "ice_bolt", SpellElement::Ice, 16, 300, 2200,
+    "ice_bolt", "镇邪符", "general_talisman", "suppressing_talisman", SpellElement::Talisman, 16, 300, 2200,
     18.0F, 18.0F, 1.5F, 8500, 0, 3000, 0.55F, 700, 0, 0, 0, true
 };
 
@@ -54,7 +57,8 @@ inline const SpellDefinition* find_spell_definition(std::string_view id) {
 }
 
 inline bool valid_spell_definition(const SpellDefinition& spell) {
-    return !spell.id.empty() &&
+    return !spell.id.empty() && !spell.display_name.empty() &&
+        !spell.discipline_id.empty() && !spell.visual_style.empty() &&
         spell.mana_cost > 0 && spell.mana_cost <= 100000 &&
         spell.cast_time_ms >= 0 && spell.cast_time_ms <= 30000 &&
         spell.cooldown_ms > 0 && spell.cooldown_ms <= 300000 &&
