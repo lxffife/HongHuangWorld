@@ -82,15 +82,19 @@ func start_ambience(cue: String) -> void:
 	_ambience_player.name = "RegionAmbience"
 	_ambience_player.stream = stream
 	_ambience_player.bus = "Music"
-	_ambience_player.volume_db = -5.0
+	_ambience_player.volume_db = -42.0
 	add_child(_ambience_player)
 	_ambience_cue = cue
 	_ambience_player.play()
+	var fade_in := create_tween()
+	fade_in.tween_property(_ambience_player, "volume_db", -5.0, 1.4).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
 func stop_ambience() -> void:
 	if is_instance_valid(_ambience_player):
-		_ambience_player.stop()
-		_ambience_player.queue_free()
+		var old_player := _ambience_player
+		var fade_out := create_tween()
+		fade_out.tween_property(old_player, "volume_db", -42.0, 0.65).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+		fade_out.tween_callback(old_player.queue_free)
 	_ambience_player = null
 	_ambience_cue = ""
 
