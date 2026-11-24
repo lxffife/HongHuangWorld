@@ -145,6 +145,10 @@ var combat_damage_taken := 0
 var combat_highest_hit := 0
 var combat_critical_hits := 0
 var combat_kills := 0
+var combat_elapsed_seconds := 0.0
+var combat_summary_refresh_remaining := 0.0
+var combat_has_started := false
+var combat_summary_reset_button: Button
 var minimap_panel: PanelContainer
 var world_map_panel: PanelContainer
 var world_map_canvas: Control
@@ -1091,7 +1095,7 @@ func _build_combat_hud() -> void:
 	vitals_panel = PanelContainer.new()
 	vitals_panel.position = Vector2(18.0, -104.0)
 	vitals_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	vitals_panel.custom_minimum_size = Vector2(320.0, 196.0)
+	vitals_panel.custom_minimum_size = Vector2(340.0, 226.0)
 	var vitals_style := StyleBoxFlat.new()
 	vitals_style.bg_color = Color("#0c1724", 0.94)
 	vitals_style.border_color = Color("#3b5368")
@@ -1369,15 +1373,39 @@ func _build_combat_hud() -> void:
 	combat_summary_label.add_theme_font_size_override("font_size", 11)
 	combat_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vitals_layout.add_child(combat_summary_label)
+	combat_summary_reset_button = Button.new()
+	combat_summary_reset_button.text = "重置战斗统计"
+	combat_summary_reset_button.custom_minimum_size = Vector2(112.0, 26.0)
+	combat_summary_reset_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	combat_summary_reset_button.add_theme_font_size_override("font_size", 11)
+	combat_summary_reset_button.pressed.connect(_reset_combat_summary)
+	vitals_layout.add_child(combat_summary_reset_button)
 	_update_combat_summary()
 
 
 func _update_combat_summary() -> void:
 	if not is_instance_valid(combat_summary_label):
 		return
-	combat_summary_label.text = "本次战斗  伤害 %d  ·  最高 %d  ·  暴击 %d  ·  击杀 %d  ·  受伤 %d" % [
-		combat_damage_dealt, combat_highest_hit, combat_critical_hits, combat_kills, combat_damage_taken
+	var total_seconds := int(floor(combat_elapsed_seconds))
+	var duration_text := "%02d:%02d" % [int(total_seconds / 60), total_seconds % 60]
+	var damage_per_second := int(round(float(combat_damage_dealt) / maxf(combat_elapsed_seconds, 1.0))) if combat_has_started else 0
+	combat_summary_label.text = "战斗 %s  ·  DPS %d\n伤害 %d  ·  最高 %d  ·  暴击 %d  ·  击杀 %d  ·  受伤 %d" % [
+		duration_text, damage_per_second, combat_damage_dealt, combat_highest_hit,
+		combat_critical_hits, combat_kills, combat_damage_taken
 	]
+
+
+func _reset_combat_summary() -> void:
+	combat_damage_dealt = 0
+	combat_damage_taken = 0
+	combat_highest_hit = 0
+	combat_critical_hits = 0
+	combat_kills = 0
+	combat_elapsed_seconds = 0.0
+	combat_summary_refresh_remaining = 0.0
+	combat_has_started = false
+	_update_combat_summary()
+	_show_notification("本次战斗统计已重置。", 2.0)
 
 
 func _start_revive_channel_ui(actor_name: String, duration_ms: int) -> void:
@@ -5029,6 +5057,8 @@ func _on_combat_event(event: Dictionary) -> void:
 			_set_player_poison_visual(local_player, player_poison_visual_remaining > 0.0)
 		var incoming_damage := int(event.get("damage", 0))
 		combat_damage_taken += maxi(incoming_damage, 0)
+		if incoming_damage > 0:
+			combat_has_started = true
 		_update_combat_summary()
 		if str(event.get("attack_style", "")) != "poison_tick" and is_instance_valid(local_player) and local_player.has_method("play_hit_reaction"):
 			local_player.call("play_hit_reaction", incoming_damage, str(event.get("attack_style", "")))
@@ -5088,6 +5118,8 @@ func _on_combat_event(event: Dictionary) -> void:
 				defeated_nameplate.visible = false
 	var damage := int(event.get("damage", 0))
 	combat_damage_dealt += maxi(damage, 0)
+	if damage > 0:
+		combat_has_started = true
 	combat_highest_hit = maxi(combat_highest_hit, damage)
 	if bool(event.get("critical", false)) and damage > 0:
 		combat_critical_hits += 1
@@ -5453,6 +5485,12 @@ func _update_input_debug_hud() -> void:
 	input_debug_label.text = "按键：" + keys + "\n输入：" + movement_text + " (" + ("%.1f" % move_input.x) + ", " + ("%.1f" % move_input.y) + ")\n世界网络：" + network_text + " · " + send_text + "\n客户端坐标：" + ("%.1f, %.1f, %.1f" % [player_position.x, player_position.y, player_position.z])
 
 func _process(delta: float) -> void:
+	if combat_has_started:
+		combat_elapsed_seconds += delta
+		combat_summary_refresh_remaining -= delta
+		if combat_summary_refresh_remaining <= 0.0:
+			combat_summary_refresh_remaining = 1.0
+			_update_combat_summary()
 	_process_held_monster_attack(delta)
 	if is_instance_valid(combat_reticle):
 		combat_reticle.visible = Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and hud_visible
