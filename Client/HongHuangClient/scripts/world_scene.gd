@@ -2800,14 +2800,6 @@ func _build_chat_hud() -> void:
 	chat_unread_badge.add_theme_font_size_override("font_size", 11)
 	chat_unread_badge.visible = false
 	heading.add_child(chat_unread_badge)
-	var friends_button := Button.new()
-	friends_button.text = "好友"
-	friends_button.pressed.connect(func():
-		if is_instance_valid(friend_panel):
-			friend_panel.open_panel()
-	)
-	_style_chat_button(friends_button, false)
-	heading.add_child(friends_button)
 	chat_toggle_button = Button.new()
 	chat_toggle_button.text = "展开"
 	chat_toggle_button.pressed.connect(func(): _set_chat_expanded(not chat_expanded))
@@ -2818,7 +2810,7 @@ func _build_chat_hud() -> void:
 	channels.add_theme_constant_override("separation", 6)
 	layout.add_child(channels)
 	chat_channel_buttons.clear()
-	for channel_data in [["nearby", "附近"], ["world", "世界"], ["cross_world", "跨界"], ["system", "系统"]]:
+	for channel_data in [["system", "系统"], ["nearby", "附近"], ["friends", "好友"], ["world", "世界"], ["cross_world", "跨界"]]:
 		var channel_button := Button.new()
 		channel_button.text = str(channel_data[1])
 		channel_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -3004,11 +2996,15 @@ func _layout_hud() -> void:
 	# The chat drawer owns the lower-right corner. Its width and height adapt
 	# to small windows, and the interaction prompt is placed above it.
 	if is_instance_valid(friend_panel):
-		friend_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-		friend_panel.offset_left = -378.0
-		friend_panel.offset_top = 72.0
-		friend_panel.offset_right = -18.0
-		friend_panel.offset_bottom = 548.0
+		# Social hub behaves like a modal, not a small panel layered over chat.
+		var social_width := minf(520.0, viewport_size.x - 32.0)
+		var social_height := minf(620.0, viewport_size.y - 48.0)
+		friend_panel.set_anchors_preset(Control.PRESET_CENTER)
+		friend_panel.offset_left = -social_width * 0.5
+		friend_panel.offset_right = social_width * 0.5
+		friend_panel.offset_top = -social_height * 0.5
+		friend_panel.offset_bottom = social_height * 0.5
+		friend_panel.custom_minimum_size = Vector2(social_width, social_height)
 	var chat_height := 56.0
 	if chat_expanded:
 		chat_height = minf(440.0, maxf(280.0, viewport_size.y - 48.0))
@@ -3191,6 +3187,10 @@ func _on_chat_conversation_history_received(character_id: String, messages: Arra
 		call_deferred("_scroll_chat_to_bottom")
 
 func _select_chat_channel(channel: String) -> void:
+	if channel == "friends":
+		if is_instance_valid(friend_panel):
+			friend_panel.open_panel()
+		return
 	if channel not in ["nearby", "world", "cross_world", "system"]:
 		return
 	selected_chat_channel = channel
@@ -3198,7 +3198,7 @@ func _select_chat_channel(channel: String) -> void:
 	selected_friend_character_name = ""
 	var names := {"nearby": "附近", "world": "世界", "cross_world": "跨界", "system": "系统"}
 	chat_title_label.text = "万界传音 · " + str(names[channel])
-	var channel_ids := ["nearby", "world", "cross_world", "system"]
+	var channel_ids := ["system", "nearby", "friends", "world", "cross_world"]
 	for index in range(chat_channel_buttons.size()):
 		_style_chat_button(chat_channel_buttons[index], index == channel_ids.find(channel))
 	if channel == "system":
