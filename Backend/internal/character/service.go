@@ -774,7 +774,7 @@ func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward 
 		`SELECT c.id::text, c.world_id, soul.account_id::text
 		 FROM world_sessions ws
 		 JOIN characters c ON c.id = ws.character_id
-		 JOIN souls soul ON soul.current_character_id = c.id
+		 JOIN souls soul ON soul.id = c.soul_id
 		 WHERE ws.id = $1::uuid AND ws.server_id = $2 AND c.id = $3::uuid
 		   AND c.status = 'alive'
 		   AND ws.session_state IN ('active', 'closed')
