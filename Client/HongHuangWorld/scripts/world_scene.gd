@@ -2612,6 +2612,8 @@ func _request_nearest_monster_attack() -> void:
 	if nearest_id.is_empty():
 		hud_label.text = "附近没有可攻击的怪物。"
 		return
+	if selected_monster_id != nearest_id:
+		_set_monster_target(nearest_id)
 	var error: Error = network.send_attack(nearest_id)
 	if error != OK:
 		hud_label.text = "攻击指令发送失败：" + str(error)
@@ -2646,6 +2648,8 @@ func _request_fireball() -> void:
 	if target_id.is_empty():
 		_show_notification("20 米内没有可施法的目标。")
 		return
+	if selected_monster_id != target_id:
+		_set_monster_target(target_id)
 	var error: Error = network.send_spell_cast("fireball", target_id)
 	if error != OK:
 		_show_notification("火球术请求发送失败：" + str(error))
@@ -2666,6 +2670,8 @@ func _request_ice_bolt() -> void:
 	if target_id.is_empty():
 		_show_notification("18 米内没有可施法的目标。")
 		return
+	if selected_monster_id != target_id:
+		_set_monster_target(target_id)
 	var error: Error = network.send_spell_cast("ice_bolt", target_id)
 	if error != OK:
 		_show_notification("冰锥术请求发送失败：" + str(error))
@@ -2999,6 +3005,15 @@ func _on_combat_event(event: Dictionary) -> void:
 		var visual_target_id := str(event.get("target_entity_id", ""))
 		if monsters.has(visual_target_id):
 			var visual_target := monsters[visual_target_id] as Node3D
+			var visual_entity: Dictionary = monster_entities.get(visual_target_id, {})
+			if event.has("health"):
+				visual_entity["health"] = int(event.get("health", 0))
+			if event.has("max_health"):
+				visual_entity["max_health"] = int(event.get("max_health", 1))
+			monster_entities[visual_target_id] = visual_entity
+			if visual_target_id == selected_monster_id:
+				_update_target_info()
+			_spawn_combat_number(int(event.get("damage", 0)), false, bool(event.get("critical", false)), visual_target)
 			if bool(event.get("burn_applied", false)):
 				visual_target.set_meta("burn_visual_remaining", maxf(float(event.get("burn_duration_ms", 0)) / 1000.0, 0.0))
 				_set_monster_burn_visual(visual_target, true)
@@ -3083,15 +3098,19 @@ func _on_combat_event(event: Dictionary) -> void:
 			if is_instance_valid(defeated_nameplate):
 				defeated_nameplate.visible = false
 	var damage := int(event.get("damage", 0))
-	if not selected_monster_id.is_empty() and monster_entities.has(selected_monster_id):
-		var selected_entity: Dictionary = monster_entities[selected_monster_id]
+	if monsters.has(hit_target_id):
+		var hit_entity: Dictionary = monster_entities.get(hit_target_id, {})
 		if event.has("health"):
-			selected_entity["health"] = int(event.get("health", 0))
+			hit_entity["health"] = int(event.get("health", 0))
 		if event.has("max_health"):
-			selected_entity["max_health"] = int(event.get("max_health", 0))
-		monster_entities[selected_monster_id] = selected_entity
-		_update_target_info()
-	_spawn_combat_number(damage, false, bool(event.get("critical", false)))
+			hit_entity["max_health"] = int(event.get("max_health", 1))
+		monster_entities[hit_target_id] = hit_entity
+		# Keep the health panel attached to the monster that actually took damage.
+		if selected_monster_id != hit_target_id:
+			_set_monster_target(hit_target_id)
+		else:
+			_update_target_info()
+	_spawn_combat_number(damage, false, bool(event.get("critical", false)), monsters.get(hit_target_id) as Node3D)
 	if bool(event.get("defeated", false)):
 		if str(event.get("target_entity_id", "")) == selected_monster_id:
 			_clear_monster_target()
@@ -3146,29 +3165,19 @@ func _spawn_monster_hit_visual(monster: Node3D, critical: bool) -> void:
 	tween.tween_property(material, "emission_energy_multiplier", 0.0, 0.22)
 	tween.chain().tween_callback(Callable(flash, "queue_free"))
 
-func _spawn_combat_number(amount: int, incoming: bool, critical: bool) -> void:
+func _spawn_combat_number(amount: int, incoming: bool, critical: bool, target: Node3D = null) -> void:
 	if amount <= 0:
 		return
 	var origin := Vector3.ZERO
 	if incoming and is_instance_valid(local_player):
 		origin = local_player.global_position + Vector3(0.0, 1.8, 0.0)
+	elif is_instance_valid(target):
+		origin = target.global_position + Vector3(0.0, 2.0, 0.0)
 	elif is_instance_valid(local_player):
-		var nearest_id := ""
-		var nearest_distance := INF
-		for monster_id in monster_targets.keys():
-			var target: Vector3 = monster_targets[monster_id]
-			var distance: float = local_player.global_position.distance_to(target)
-			if distance < nearest_distance:
-				nearest_distance = distance
-				nearest_id = str(monster_id)
-		if not nearest_id.is_empty() and monsters.has(nearest_id):
-			var target_node := monsters[nearest_id] as Node3D
-			origin = target_node.global_position + Vector3(0.0, 2.0, 0.0)
-		else:
-			origin = local_player.global_position + Vector3(0.0, 1.8, 0.0)
+		origin = local_player.global_position + Vector3(0.0, 1.8, 0.0)
 	var label := Label3D.new()
 	label.name = "CombatDamageNumber"
-	label.text = ("受击 -" if incoming else ("暴击 +" if critical else "+")) + str(amount)
+	label.text = ("受击 -" if incoming else ("暴击 -" if critical else "-")) + str(amount)
 	label.font_size = 42 if critical else 32
 	label.outline_size = 8
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
