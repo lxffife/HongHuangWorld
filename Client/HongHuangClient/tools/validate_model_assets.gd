@@ -2,7 +2,7 @@ extends SceneTree
 
 # Run after the first editor import:
 # godot --headless --path . --script res://tools/validate_model_assets.gd
-# Add --require-all to fail when any optional model file is missing.
+# Add -- --require-all to fail when any optional model file is missing.
 
 const MODEL_FILES := {
 	"player_humanoid": "res://assets/models/player_humanoid.glb",
@@ -41,6 +41,7 @@ func _run_validation() -> void:
 			"skeleton_count": 0,
 			"animation_player_count": 0,
 			"animations": [],
+			"animation_categories": {"idle": false, "walk": false, "run": false, "attack": false, "hit": false, "death": false},
 			"material_surface_count": 0,
 			"largest_mesh_dimension": 0.0,
 			"warnings": []
@@ -75,6 +76,7 @@ func _run_validation() -> void:
 			continue
 
 		_inspect_node(instance, item)
+		_classify_animation_coverage(item)
 		if int(item["mesh_count"]) <= 0:
 			item["status"] = "invalid"
 			item["warnings"].append("No MeshInstance3D with a valid Mesh was found")
@@ -87,8 +89,13 @@ func _run_validation() -> void:
 				item["warnings"].append("No Skeleton3D found; this may be intentional for a static or spirit model")
 				report["summary"]["warnings"] += 1
 			if int(item["animation_player_count"]) == 0:
-				item["warnings"].append("No AnimationPlayer found; locomotion and action clips will not be available")
+				item["warnings"].append("No AnimationPlayer found; the imported animation driver cannot control this model")
 				report["summary"]["warnings"] += 1
+			else:
+				for category in item["animation_categories"]:
+					if not item["animation_categories"][category]:
+						item["warnings"].append("No animation clip matched category: " + str(category))
+						report["summary"]["warnings"] += 1
 
 		instance.free()
 		report["models"].append(item)
@@ -133,3 +140,23 @@ func _inspect_node(node: Node, item: Dictionary) -> void:
 
 	for child in node.get_children():
 		_inspect_node(child, item)
+
+
+func _classify_animation_coverage(item: Dictionary) -> void:
+	var keywords := {
+		"idle": ["idle", "stand", "breath", "wait"],
+		"walk": ["walk", "walking", "locomotion"],
+		"run": ["run", "sprint", "jog", "walk"],
+		"attack": ["attack", "slash", "swing", "bite", "combat"],
+		"hit": ["hit", "damage", "hurt", "react"],
+		"death": ["death", "die", "dead"]
+	}
+	for animation_name in item["animations"]:
+		var normalized := str(animation_name).to_lower()
+		for category in keywords:
+			if item["animation_categories"][category]:
+				continue
+			for keyword in keywords[category]:
+				if normalized.contains(keyword):
+					item["animation_categories"][category] = true
+					break
