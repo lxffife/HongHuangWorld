@@ -22,6 +22,7 @@
 #include "persistence/monster_death_finalizer.hpp"
 #include "persistence/monster_reward_distribution.hpp"
 #include "persistence/bounty_contribution_aggregation.hpp"
+#include "persistence/outbox_delivery_policy.hpp"
 #include "network/chat_delivery_policy.hpp"
 
 #include <enet/enet.h>
@@ -1651,9 +1652,9 @@ struct EnetServer::Impl {
                 // Timeouts and rate limiting are transient even though HTTP classifies
                 // them as client errors. Keep these durable events queued instead of
                 // permanently losing rewards or bounty progress during backend pressure.
-                const bool retryable_client_status =
-                    status == 408 || status == 425 || status == 429;
-                if (status >= 300 && status < 500 && !retryable_client_status) {
+                const bool retryable =
+                    honghuang::persistence::is_retryable_outbox_http_status(status);
+                if (!retryable) {
                     std::string dead_error;
                     if (!durable_outbox->move_to_dead_letter(
                             event->event_id,
