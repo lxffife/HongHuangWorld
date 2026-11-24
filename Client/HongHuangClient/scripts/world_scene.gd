@@ -5294,16 +5294,49 @@ func _on_combat_event(event: Dictionary) -> void:
 	# Death rewards are acknowledged only after the server has committed the
 	# durable settlement batch. Do not treat this as a normal zero-damage hit.
 	if str(event.get("action", "")) == "monster_death_settlement":
-		if bool(event.get("committed", false)):
-			if bool(event.get("contribution_only", false)):
-				_show_notification("参与战斗奖励已提交，经验、修为与货币正在同步", 4.5)
-			else:
-				var settled_experience := int(event.get("experience_reward", 0))
-				var settled_cultivation := int(event.get("cultivation_reward", 0))
-				_show_notification("击败奖励已提交：经验 +" + str(settled_experience) + " · 修为 +" + str(settled_cultivation) + " · 钱袋同步中", 4.5)
-			_refresh_reward_status_later()
-		else:
+		if not bool(event.get("committed", false)):
 			_show_notification("怪物已击败，奖励正在安全结算……", 3.0)
+			return
+		var monster_name := str(event.get("monster_name", "怪物"))
+		var monster_level := int(event.get("monster_level", 0))
+		var reward_parts: Array[String] = []
+		var settled_experience := int(event.get("experience", 0))
+		var settled_cultivation := int(event.get("cultivation", 0))
+		var settled_ghost_cash := int(event.get("ghost_cash", 0))
+		var settled_nether_stone := int(event.get("nether_stone", 0))
+		if settled_experience > 0:
+			reward_parts.append("经验 +" + str(settled_experience))
+		if settled_cultivation > 0:
+			reward_parts.append("修为 +" + str(settled_cultivation))
+		if settled_ghost_cash > 0:
+			reward_parts.append("冥币 +" + str(settled_ghost_cash))
+		if settled_nether_stone > 0:
+			reward_parts.append("冥石 +" + str(settled_nether_stone))
+		var reward_text := ("参与击败 " if bool(event.get("contribution_only", false)) else "击败 ") + monster_name
+		if monster_level > 0:
+			reward_text += "（Lv." + str(monster_level) + "）"
+		if reward_parts.is_empty():
+			reward_text += " · 本次无个人奖励"
+		else:
+			reward_text += " · " + "、".join(PackedStringArray(reward_parts))
+		var drops: Array = event.get("drops", [])
+		if not drops.is_empty():
+			var quality_names := ["普通", "优秀", "精良", "稀有", "传说"]
+			var drop_parts: Array[String] = []
+			for drop_variant in drops:
+				if not drop_variant is Dictionary:
+					continue
+				var drop: Dictionary = drop_variant
+				var item_name := str(drop.get("item_name", drop.get("item_id", "未知物品")))
+				var quality := clampi(int(drop.get("quality", 1)), 1, quality_names.size())
+				var quantity := int(drop.get("quantity", 1))
+				drop_parts.append(quality_names[quality - 1] + "·" + item_name + " ×" + str(quantity))
+			reward_text += " · 掉落：" + "、".join(PackedStringArray(drop_parts)) + "（按 E 拾取）"
+		elif not bool(event.get("contribution_only", false)):
+			reward_text += " · 未掉落装备或材料"
+		_show_notification(reward_text, 6.0)
+		_append_chat_line("[系统] " + reward_text, "nearby")
+		_refresh_reward_status_later()
 		return
 	if str(event.get("action", "")) == "equipment_refresh":
 		if not bool(event.get("accepted", false)):
