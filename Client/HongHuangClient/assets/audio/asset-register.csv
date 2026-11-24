@@ -1,0 +1,11 @@
+asset_id,category,name,source_url,creator,package_version,license,credit,project_path,modifications,status,verified_date,notes
+synth_attack_v1,sfx,近战挥击,original_runtime_synthesis,OpenAI-assisted project code,1,original_project_code,none,scripts/audio_manager.gd,generated_at_runtime,prototype,,Replaceable original placeholder
+synth_hit_v1,sfx,普通受击,original_runtime_synthesis,OpenAI-assisted project code,1,original_project_code,none,scripts/audio_manager.gd,generated_at_runtime,prototype,,Replaceable original placeholder
+synth_heavy_hit_v1,sfx,重型冲击,original_runtime_synthesis,OpenAI-assisted project code,1,original_project_code,none,scripts/audio_manager.gd,generated_at_runtime,prototype,,Replaceable original placeholder
+synth_monster_attack_v1,sfx,怪物攻击,original_runtime_synthesis,OpenAI-assisted project code,1,original_project_code,none,scripts/audio_manager.gd,generated_at_runtime,prototype,,Replaceable original placeholder
+synth_death_v1,sfx,死亡消散,original_runtime_synthesis,OpenAI-assisted project code,1,original_project_code,none,scripts/audio_manager.gd,generated_at_runtime,prototype,,Replaceable original placeholder
+synth_spell_v1,sfx,法术释放,original_runtime_synthesis,OpenAI-assisted project code,1,original_project_code,none,scripts/audio_manager.gd,generated_at_runtime,prototype,,Replaceable original placeholder
+synth_footstep_v1,sfx,脚步,original_runtime_synthesis,OpenAI-assisted project code,1,original_project_code,none,scripts/audio_manager.gd,generated_at_runtime,prototype,,Replaceable original placeholder
+kenney_audio_candidate,sfx,Kenney Audio Pack,https://kenney.nl/assets?q=audio,Kenney,per_pack,CC0_only_after_specific_pack_review,as_pack_requires,assets/audio/sfx/,none,candidate,,Do not import until exact pack page and included license are archived
+sonniss_gdc_candidate,sfx,Sonniss GameAudioGDC,https://sonniss.com/gameaudiogdc/,Sonniss,per_year,verify_current_EULA,as_EULA_requires,assets/audio/sfx/,none,candidate,,Check year-specific license and redistribution restrictions
+freesound_cc0_candidate,sfx,Freesound CC0 files,https://freesound.org/,individual_creator,per_file,CC0_only,none_if_CC0,assets/audio/sfx/,none,candidate,,Only individual CC0 files; never assume all Freesound uploads are commercial-use
