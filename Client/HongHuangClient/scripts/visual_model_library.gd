@@ -21,15 +21,27 @@ static func instantiate_model(model_key: String, fallback_factory: Callable) -> 
 		var packed_scene := load(model_path) as PackedScene
 		if packed_scene != null:
 			var instance := packed_scene.instantiate()
-			if instance is Node3D:
+			if instance is Node3D and _contains_renderable_mesh(instance):
 				instance.set_meta("model_source", model_path)
+				instance.set_meta("model_key", model_key)
 				return instance as Node3D
 			if instance != null:
 				instance.queue_free()
+			push_warning("Model override has no usable MeshInstance3D; using procedural fallback: " + model_path)
 	if fallback_factory.is_valid():
 		var fallback: Variant = fallback_factory.call()
 		if fallback is Node3D:
 			(fallback as Node3D).set_meta("model_source", "procedural_fallback")
+			(fallback as Node3D).set_meta("model_key", model_key)
 			return fallback as Node3D
 	push_error("No model or fallback available for visual key: " + model_key)
 	return Node3D.new()
+
+
+static func _contains_renderable_mesh(root: Node) -> bool:
+	if root is MeshInstance3D and (root as MeshInstance3D).mesh != null:
+		return true
+	for child in root.get_children():
+		if _contains_renderable_mesh(child):
+			return true
+	return false
