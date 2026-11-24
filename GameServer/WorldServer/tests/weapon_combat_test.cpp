@@ -57,7 +57,16 @@ int main() {
     assert(agility_adjusted_attack_cooldown(std::chrono::milliseconds(1), 200).count() == 100);
     assert(agility_adjusted_attack_cooldown(std::chrono::milliseconds::zero(), 100).count() == 0);
 
+    const auto unarmed = weapon_combat_profile("");
+    assert(unarmed.range == 3.0F);
+    assert(unarmed.cooldown.count() == 700);
+    assert(unarmed.power_basis_points == 8000);
+
+    const auto named_unarmed = weapon_combat_profile("unarmed");
+    assert(named_unarmed.range == unarmed.range);
+
     const auto unknown = weapon_combat_profile("unknown");
+    assert(unknown.range == 2.4F);
     assert(unknown.range < dagger.range);
     assert(unknown.power_basis_points < sword.power_basis_points);
 
