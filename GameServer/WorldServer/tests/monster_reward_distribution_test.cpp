@@ -34,6 +34,27 @@ int main() {
     assert(total_cash == 10);
     assert(total_stone == 3);
 
+    // Reconnecting during the same monster life must not split one character's
+    // reward into multiple independently rounded session shares.
+    const std::vector<MonsterContributionRecord> reconnected_contributions{
+        MonsterContributionRecord{"write-e", "life-2", "wraith", "old-session", "same-character", 60, 3,
+                                  1000, 2000},
+        MonsterContributionRecord{"write-f", "life-2", "wraith", "new-session", "same-character", 40, 2,
+                                  3000, 4000},
+        MonsterContributionRecord{"write-g", "life-2", "wraith", "other-session", "other-character", 100, 4,
+                                  1500, 2500}
+    };
+    const auto reconnected = allocate_monster_combat_rewards(
+        reconnected_contributions, 101, 51);
+    assert(reconnected.size() == 2);
+    const auto same_character = std::find_if(reconnected.begin(), reconnected.end(),
+        [](const auto& share) { return share.character_id == "same-character"; });
+    assert(same_character != reconnected.end());
+    assert(same_character->session_id == "new-session");
+    assert(same_character->damage == 100);
+    assert(same_character->experience == 51);
+    assert(same_character->cultivation == 26);
+
     const auto empty = allocate_monster_combat_rewards({}, 0, 0, 100, 5);
     assert(empty.empty());
     return 0;
