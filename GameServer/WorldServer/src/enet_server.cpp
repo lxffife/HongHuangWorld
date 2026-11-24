@@ -202,6 +202,7 @@ struct MonsterRuntime {
     // contribution writer; threat is rebuilt naturally as players fight.
     std::unordered_map<std::string, ThreatEntry> threat_by_character;
     Clock::time_point last_threat_warning_at{};
+    Clock::time_point last_invalid_simulation_log_at{};
     std::string taunt_target_character_id;
     Clock::time_point taunt_expires_at{};
     bool rare_spawn{false};
@@ -2432,6 +2433,27 @@ struct EnetServer::Impl {
                 return false;
             }
             monster.contribution_instance_id = persisted.monster_instance_id;
+            if (!std::isfinite(persisted.health) || persisted.health < 0.0) {
+                std::cerr << "[MonsterLifeState] invalid persisted health; runtime="
+                          << monster.runtime_id << " health=" << persisted.health << std::endl;
+                return false;
+            }
+            if (persisted.health > static_cast<double>(monster.definition.max_health)) {
+                const double previous_health = persisted.health;
+                if (!durable_outbox->apply_monster_health_transition(
+                        monster.runtime_id, monster.contribution_instance_id,
+                        previous_health, static_cast<double>(monster.definition.max_health), error)) {
+                    std::cerr << "[MonsterLifeState] startup max-health reconciliation failed; runtime="
+                              << monster.runtime_id << " persisted=" << previous_health
+                              << " max=" << monster.definition.max_health
+                              << " reason=" << error << std::endl;
+                    return false;
+                }
+                persisted.health = monster.definition.max_health;
+                std::cout << "[MonsterLifeState] reconciled persisted health; runtime="
+                          << monster.runtime_id << " from=" << previous_health
+                          << " to=" << persisted.health << std::endl;
+            }
             monster.state.health = static_cast<float>(persisted.health);
             if (persisted.health <= 0.0) {
                 monster.state.mode = honghuang::simulation::MonsterMode::Dead;
@@ -3410,6 +3432,28 @@ struct EnetServer::Impl {
                         continue;
                     }
                     next.contribution_instance_id = persisted.monster_instance_id;
+                    if (!std::isfinite(persisted.health) || persisted.health < 0.0) {
+                        std::cerr << "[MonsterLifeState] invalid persisted health; runtime="
+                                  << next.runtime_id << " health=" << persisted.health << std::endl;
+                        continue;
+                    }
+                    if (persisted.health > static_cast<double>(next.definition.max_health)) {
+                        const double previous_health = persisted.health;
+                        if (!durable_outbox->apply_monster_health_transition(
+                                next.runtime_id, next.contribution_instance_id,
+                                previous_health, static_cast<double>(next.definition.max_health),
+                                state_error)) {
+                            std::cerr << "[MonsterLifeState] new spawn max-health reconciliation failed; runtime="
+                                      << next.runtime_id << " persisted=" << previous_health
+                                      << " max=" << next.definition.max_health
+                                      << " reason=" << state_error << std::endl;
+                            continue;
+                        }
+                        persisted.health = next.definition.max_health;
+                        std::cout << "[MonsterLifeState] reconciled persisted health; runtime="
+                                  << next.runtime_id << " from=" << previous_health
+                                  << " to=" << persisted.health << std::endl;
+                    }
                     next.state.health = static_cast<float>(persisted.health);
                     if (persisted.health <= 0.0) {
                         next.state.mode = honghuang::simulation::MonsterMode::Dead;
@@ -4509,6 +4553,12 @@ struct EnetServer::Impl {
             critical_hit
         };
         if (!honghuang::simulation::calculate_damage(attacker, defender, attack_profile, damage)) {
+            std::cerr << "[CombatAttack] rejected_damage_validation character=" << player.character_id
+                      << " target=" << target->runtime_id
+                      << " target_hp=" << target->state.health
+                      << " max_hp=" << target->definition.max_health
+                      << " target_defense=" << target->definition.defense
+                      << " attack=" << player.attack << std::endl;
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", false}, {"attacker_character_id", player.character_id},
                            {"target_entity_id", target->runtime_id}, {"reason", "伤害计算未通过校验。"}});
@@ -5932,8 +5982,31 @@ struct EnetServer::Impl {
             const std::string previous_target_id = monster.state.target_id;
             if (!honghuang::simulation::tick_monster(
                     monster.definition, monster.state, nearest_target, monster_delta, &attack_profile)) {
-                std::cerr << "Skipping invalid monster simulation state: "
-                          << monster.runtime_id << '\n';
+                const char* invalid_reason = "unknown";
+                if (!honghuang::simulation::valid_monster_definition(monster.definition)) {
+                    invalid_reason = "invalid_definition";
+                } else if (!std::isfinite(monster.state.x) || !std::isfinite(monster.state.z)) {
+                    invalid_reason = "invalid_position";
+                } else if (!std::isfinite(monster.state.health)) {
+                    invalid_reason = "non_finite_health";
+                } else if (monster.state.health < 0.0F) {
+                    invalid_reason = "negative_health";
+                } else if (monster.state.health > monster.definition.max_health) {
+                    invalid_reason = "health_exceeds_max";
+                } else if (!std::isfinite(monster_delta) || monster_delta < 0.0F) {
+                    invalid_reason = "invalid_delta";
+                }
+                if (monster.last_invalid_simulation_log_at == Clock::time_point{} ||
+                    now - monster.last_invalid_simulation_log_at >= std::chrono::seconds(5)) {
+                    std::cerr << "[MonsterSimulation] skipped reason=" << invalid_reason
+                              << " runtime=" << monster.runtime_id
+                              << " definition=" << monster.definition.id
+                              << " hp=" << monster.state.health
+                              << " max_hp=" << monster.definition.max_health
+                              << " x=" << monster.state.x << " z=" << monster.state.z
+                              << " delta=" << monster_delta << std::endl;
+                    monster.last_invalid_simulation_log_at = now;
+                }
                 continue;
             }
             if (monster.state.target_id != previous_target_id) {
