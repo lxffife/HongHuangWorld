@@ -6,8 +6,9 @@
 #include <cmath>
 #include <cstdint>
 #include <string>
-#include <unordered_map>
 #include <limits>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace honghuang::persistence {
@@ -36,6 +37,8 @@ inline std::vector<MonsterCombatRewardShare> allocate_monster_combat_rewards(
     // ties use a stable session-id order for deterministic recovery/replay.
     std::vector<MonsterCombatRewardShare> shares;
     std::unordered_map<std::string, std::size_t> share_index_by_character;
+    std::unordered_map<std::string, std::pair<std::int64_t, std::string>>
+        latest_session_by_character;
     for (const auto& record : records) {
         if (record.total_damage <= 0 || record.hit_count <= 0 ||
             record.session_id.empty() || record.character_id.empty()) continue;
@@ -45,6 +48,8 @@ inline std::vector<MonsterCombatRewardShare> allocate_monster_combat_rewards(
             shares.push_back(MonsterCombatRewardShare{
                 record.session_id, record.character_id, record.total_damage, 0, 0, 0, 0
             });
+            latest_session_by_character.emplace(
+                record.character_id, std::make_pair(record.last_hit_at_ms, record.session_id));
             continue;
         }
         auto& share = shares[found->second];
@@ -52,15 +57,10 @@ inline std::vector<MonsterCombatRewardShare> allocate_monster_combat_rewards(
             share.damage = std::numeric_limits<std::int64_t>::max();
         else
             share.damage += record.total_damage;
-        const auto existing = std::find_if(records.begin(), records.end(),
-            [&](const MonsterContributionRecord& candidate) {
-                return candidate.character_id == share.character_id &&
-                       candidate.session_id == share.session_id;
-            });
-        if (existing == records.end() ||
-            record.last_hit_at_ms > existing->last_hit_at_ms ||
-            (record.last_hit_at_ms == existing->last_hit_at_ms &&
-             record.session_id < share.session_id)) {
+        auto& latest = latest_session_by_character.at(record.character_id);
+        if (record.last_hit_at_ms > latest.first ||
+            (record.last_hit_at_ms == latest.first && record.session_id < latest.second)) {
+            latest = std::make_pair(record.last_hit_at_ms, record.session_id);
             share.session_id = record.session_id;
         }
     }
