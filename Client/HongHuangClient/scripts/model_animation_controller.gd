@@ -61,6 +61,7 @@ func play_action(action_name: String) -> bool:
 	var clip := _resolve_clip(normalized)
 	if clip.is_empty():
 		return false
+	_set_clip_looping(clip, false)
 	_animation_player.play(clip, 0.12)
 	_current_state = normalized
 	_locked_action = normalized
@@ -88,8 +89,16 @@ func _play_state(state_name: String) -> void:
 	var clip := _resolve_clip(state_name)
 	if clip.is_empty():
 		return
+	_set_clip_looping(clip, true)
 	_animation_player.play(clip, 0.18)
 	_current_state = state_name
+
+
+func _set_clip_looping(clip_name: String, should_loop: bool) -> void:
+	var animation := _animation_player.get_animation(clip_name)
+	if animation == null:
+		return
+	animation.loop_mode = Animation.LOOP_LINEAR if should_loop else Animation.LOOP_NONE
 
 
 func _resolve_clip(state_name: String) -> String:
