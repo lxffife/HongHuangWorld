@@ -1,5 +1,6 @@
 #include "persistence/monster_reward_distribution.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <vector>
