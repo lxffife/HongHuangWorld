@@ -840,7 +840,29 @@ bool DurableOutbox::enqueue(const OutboxEvent& event, std::string& error) {
 
 
 bool DurableOutbox::enqueue_batch(const std::vector<OutboxEvent>& events, std::string& error) {
-    if (events.empty()) { error = "outbox batch must not be empty"; return false; }
+    return enqueue_batch_internal(events, nullptr, error);
+}
+
+bool DurableOutbox::enqueue_batch_and_save_hell_trial_checkpoint(
+    const std::vector<OutboxEvent>& events, const HellTrialWaveCheckpoint& checkpoint,
+    std::string& error) {
+    return enqueue_batch_internal(events, &checkpoint, error);
+}
+
+bool DurableOutbox::enqueue_batch_internal(
+    const std::vector<OutboxEvent>& events, const HellTrialWaveCheckpoint* checkpoint,
+    std::string& error) {
+    if (events.empty() && checkpoint == nullptr) {
+        error = "outbox batch must not be empty";
+        return false;
+    }
+    if (checkpoint != nullptr &&
+        (checkpoint->instance_key.empty() || checkpoint->floor < 1 || checkpoint->floor > 18 ||
+         checkpoint->stage < 0 || checkpoint->stage > 4 ||
+         checkpoint->completed != (checkpoint->stage == 4))) {
+        error = "invalid hell trial wave checkpoint";
+        return false;
+    }
     for (const auto& event : events) {
         if (event.event_id.empty() || event.event_type.empty() || event.event_type == "nearby_chat" || event.payload.empty()) {
             error = "monster finalization requires non-chat events with id/type/payload";
@@ -913,6 +935,22 @@ bool DurableOutbox::enqueue_batch(const std::vector<OutboxEvent>& events, std::s
             sqlite3_bind_int64(insert.get(), 6, event.created_at_ms);
             sqlite3_bind_int64(insert.get(), 7, event.created_at_ms);
             if (sqlite3_step(insert.get()) != SQLITE_DONE) throw std::runtime_error(sqlite3_errmsg(db_));
+        }
+
+        if (checkpoint != nullptr) {
+            Stmt upsert(db_,
+                "INSERT INTO hell_trial_wave_checkpoints(instance_key,floor,stage,completed,updated_at_ms) "
+                "VALUES(?,?,?,?,?) ON CONFLICT(instance_key,floor) DO UPDATE SET "
+                "stage=MAX(hell_trial_wave_checkpoints.stage,excluded.stage),"
+                "completed=MAX(hell_trial_wave_checkpoints.completed,excluded.completed),"
+                "updated_at_ms=MAX(hell_trial_wave_checkpoints.updated_at_ms,excluded.updated_at_ms)");
+            bind_text(upsert.get(), 1, checkpoint->instance_key);
+            sqlite3_bind_int(upsert.get(), 2, checkpoint->floor);
+            sqlite3_bind_int(upsert.get(), 3, checkpoint->stage);
+            sqlite3_bind_int(upsert.get(), 4, checkpoint->completed ? 1 : 0);
+            sqlite3_bind_int64(upsert.get(), 5, checkpoint->updated_at_ms);
+            if (sqlite3_step(upsert.get()) != SQLITE_DONE)
+                throw std::runtime_error(sqlite3_errmsg(db_));
         }
 
         if (!execute("COMMIT", error)) {
