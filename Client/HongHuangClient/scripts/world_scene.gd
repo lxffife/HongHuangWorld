@@ -4101,6 +4101,11 @@ func _update_spell_cooldown_hud() -> void:
 			continue
 		var spell_key := _spell_hotkey(spell_id)
 		var spell_name := _spell_display_name(spell_id)
+		if spell_id in ["ice_bolt", "taunt"] and not _is_spell_known(spell_id):
+			label.text = spell_key + " · " + spell_name + "：未掌握（需技能典籍）"
+			label.add_theme_color_override("font_color", Color("#d69a78"))
+			continue
+		label.add_theme_color_override("font_color", Color("#e7b77a") if spell_id == "taunt" else Color("#c4d2df"))
 		var remaining := float(spell_cooldown_remaining.get(spell_id, 0.0))
 		label.text = spell_key + " · " + spell_name + "：冷却 " + ("%.1f" % remaining) + " 秒" if remaining > 0.0 else spell_key + " · " + spell_name + "：就绪"
 
@@ -4126,6 +4131,9 @@ func _request_fireball() -> void:
 		_show_notification("幽冥磷火请求发送失败：" + str(error))
 
 func _request_ice_bolt() -> void:
+	if not _is_spell_known("ice_bolt"):
+		_show_notification("尚未掌握镇邪符，请先在酆都镇魂符箓铺购买并研读《镇邪符箓初解》。", 3.0)
+		return
 	var network := HHSession.world_network
 	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
 		return
@@ -4218,6 +4226,9 @@ func _request_revive_nearest() -> void:
 		_show_notification("回魂术请求发送失败：" + str(error))
 
 func _request_taunt() -> void:
+	if not _is_spell_known("taunt"):
+		_show_notification("尚未掌握鬼门锁链，请先在酆都镇魂符箓铺购买并研读《鬼门锁链真诀》。", 3.0)
+		return
 	var network := HHSession.world_network
 	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
 		return
@@ -4524,6 +4535,11 @@ func _set_monster_freeze_visual(monster: Node3D, enabled: bool) -> void:
 		ring.visible = enabled
 
 
+func _is_spell_known(spell_id: String) -> bool:
+	var known: Variant = HHSession.world_snapshot.get("known_spells", ["fireball"])
+	return known is Array and spell_id in known
+
+
 func _update_spell_mastery_hud() -> void:
 	var entries: Variant = HHSession.world_snapshot.get("spell_mastery", [])
 	for spell_id in ["fireball", "ice_bolt"]:
@@ -4538,6 +4554,11 @@ func _update_spell_mastery_hud() -> void:
 		var label: Label = spell_mastery_labels.get(spell_id) as Label
 		if not is_instance_valid(label):
 			continue
+		if not _is_spell_known(spell_id):
+			label.text = "尚未掌握 · 前往酆都镇魂符箓铺购买典籍"
+			label.add_theme_color_override("font_color", Color("#d69a78"))
+			continue
+		label.add_theme_color_override("font_color", Color("#9db9a7"))
 		var next_thresholds := [100, 300, 600, 1000, 1500, 2100, 2800, 3600, 4500]
 		var progress_text := "已达上限"
 		if level < 10:
