@@ -2355,9 +2355,18 @@ func _begin_monster_death_visual(monster: Node3D) -> void:
 	_set_monster_freeze_visual(monster, false)
 	monster.set_meta("death_reaction_time", 1.15)
 	monster.set_meta("defeated_visual", true)
+	_play_model_animation_action(monster, "death")
 	var nameplate := monster.get_node_or_null("Nameplate") as Label3D
 	if is_instance_valid(nameplate):
 		nameplate.visible = false
+
+func _play_model_animation_action(entity_root: Node, action_name: String) -> void:
+	if not is_instance_valid(entity_root):
+		return
+	var controller := entity_root.find_child("ModelAnimationController", true, false)
+	if controller != null and controller.has_method("play_action"):
+		controller.call("play_action", action_name)
+
 
 func _refresh_monster_nameplate(monster_id: String) -> void:
 	var monster_node := monsters.get(monster_id) as Node3D
@@ -4825,6 +4834,7 @@ func _on_monster_action_event(event: Dictionary) -> void:
 		attacker.set_meta("attack_radius", maxf(float(event.get("attack_radius", 3.6)), 0.5))
 	if phase == "windup":
 		attacker.set_meta("attack_phase", "windup")
+		_play_model_animation_action(attacker, "attack")
 		# Heavy slam is a ground-targeted area attack centered on the monster.
 		# Its expanding SlamTelegraph is the authoritative danger zone; a ring
 		# under the selected victim would incorrectly imply single-target damage.
