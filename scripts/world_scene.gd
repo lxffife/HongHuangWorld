@@ -2936,9 +2936,9 @@ func _layout_hud() -> void:
 			target_health_bar.custom_minimum_size.x = target_width - 40.0
 	if is_instance_valid(notification_panel):
 		_layout_notification_panel()
+	var vitals_height := minf(382.0, maxf(270.0, viewport_size.y - 210.0))
 	if is_instance_valid(vitals_panel):
 		var vitals_width := minf(326.0, maxf(250.0, viewport_size.x - 36.0))
-		var vitals_height := minf(382.0, maxf(270.0, viewport_size.y - 210.0))
 		vitals_panel.custom_minimum_size = Vector2(vitals_width, vitals_height)
 		vitals_panel.size = Vector2(vitals_width, vitals_height)
 		vitals_panel.offset_left = 18.0
