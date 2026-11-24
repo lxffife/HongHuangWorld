@@ -1407,7 +1407,7 @@ func _update_combat_summary() -> void:
 		combat_melee_damage, combat_projectile_damage, combat_effect_damage
 	]
 	if is_instance_valid(combat_log_label):
-		combat_log_label.text = "最近命中：暂无" if combat_recent_entries.is_empty() else "最近命中：\n" + "\n".join(combat_recent_entries)
+		combat_log_label.text = "最近命中：暂无" if combat_recent_entries.is_empty() else "最近命中：\n" + "\n".join(PackedStringArray(combat_recent_entries))
 
 
 func _reset_combat_summary() -> void:
@@ -5072,7 +5072,7 @@ func _on_combat_event(event: Dictionary) -> void:
 					var visual_max_health := int(visual_entity.get("max_health", 0))
 					visual_plate.text = str(visual_entity.get("name", event.get("target_name", "怪物"))) + " · Lv." + str(int(visual_entity.get("level", 1)))
 					if visual_max_health > 0:
-						visual_plate.text += "\\n生命 " + str(maxi(int(visual_entity.get("health", 0)), 0)) + " / " + str(visual_max_health)
+						visual_plate.text += "\n生命 " + str(maxi(int(visual_entity.get("health", 0)), 0)) + " / " + str(visual_max_health)
 				if visual_target_id == selected_monster_id:
 					_update_target_info()
 			_spawn_monster_hit_visual(visual_target, bool(event.get("critical", false)))
