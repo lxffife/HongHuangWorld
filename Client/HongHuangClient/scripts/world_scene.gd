@@ -2107,11 +2107,17 @@ func _upsert_monster(entity: Dictionary) -> void:
 	_set_monster_freeze_visual(monster_node, bool(entity.get("frozen", false)))
 	var merged_entity := entity.duplicate(true)
 	var previous_entity: Dictionary = monster_entities.get(monster_id, {})
-	# World snapshots may omit transient aggro fields. Keep the latest combat event
-	# until the server explicitly sends a newer target state.
-	for transient_key in ["aggro_target_character_id", "aggro_target_name"]:
-		if not merged_entity.has(transient_key) and previous_entity.has(transient_key):
-			merged_entity[transient_key] = previous_entity[transient_key]
+	if bool(merged_entity.get("death_pending", false)) or int(merged_entity.get("health", 1)) <= 0:
+		# A monster life ending invalidates its old aggro marker. Runtime IDs can
+		# survive respawns, so never carry the previous life target into the next one.
+		merged_entity["aggro_target_character_id"] = ""
+		merged_entity["aggro_target_name"] = ""
+	else:
+		# World snapshots may omit transient aggro fields. Keep the latest combat
+		# event until the server explicitly sends a newer target state.
+		for transient_key in ["aggro_target_character_id", "aggro_target_name"]:
+			if not merged_entity.has(transient_key) and previous_entity.has(transient_key):
+				merged_entity[transient_key] = previous_entity[transient_key]
 	monster_entities[monster_id] = merged_entity
 	if monster_id == selected_monster_id:
 		_update_target_info()
