@@ -5924,7 +5924,10 @@ struct EnetServer::Impl {
             const double attack_dx = static_cast<double>(player.x) - monster.state.x;
             const double attack_dz = static_cast<double>(player.z) - monster.state.z;
             const bool heavy_slam = std::string(attack_profile.style) == "heavy_slam";
-            const double attack_range = heavy_slam
+            // Keep the authoritative hit radius identical to the radius advertised
+            // by the windup telegraph. Some legacy profiles leave splash_radius at
+            // zero; in that case both visuals and damage must fall back to range.
+            const double attack_range = heavy_slam && attack_profile.splash_radius > 0.0F
                 ? static_cast<double>(attack_profile.splash_radius)
                 : static_cast<double>(attack_profile.range);
             const bool in_attack_range = attack_dx * attack_dx + attack_dz * attack_dz <=
