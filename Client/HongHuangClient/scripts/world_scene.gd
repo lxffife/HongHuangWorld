@@ -4196,7 +4196,8 @@ func _update_target_info() -> void:
 			threat_color = Color("#e8bd78")
 	if str(party_data.get("focus_target_entity_id", "")) == selected_monster_id:
 		threat_text += "  ·  队伍集火"
-		threat_color = Color("#f0d18d")
+		if aggro_target_id.is_empty() or aggro_target_id != str(HHSession.world_snapshot.get("character_id", "")):
+			threat_color = Color("#f0d18d")
 	if target_distance >= 0.0:
 		var player_attack_range := maxf(float(HHSession.world_snapshot.get("attack_range", 2.5)), 0.5)
 		if target_distance <= player_attack_range + 0.2:
