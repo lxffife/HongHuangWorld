@@ -41,17 +41,30 @@ func (h *spellMasteryHandlers) current(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	nodeKey := strings.TrimSpace(r.Header.Get("X-World-Server-Node"))
-	items, err := h.characterService.SpellMasteryForSession(r.Context(), nodeKey,
-		r.URL.Query().Get("session_id"), r.URL.Query().Get("character_id"))
+	sessionID, characterID := r.URL.Query().Get("session_id"), r.URL.Query().Get("character_id")
+	items, err := h.characterService.SpellMasteryForSession(r.Context(), nodeKey, sessionID, characterID)
+	if err != nil {
+		h.writeCurrentError(w, err)
+		return
+	}
+	known, err := h.characterService.KnownSpellsForSession(r.Context(), nodeKey, sessionID, characterID)
 	switch {
 	case err == nil:
-		writeJSON(w, http.StatusOK, map[string]any{"spell_mastery": items})
+		writeJSON(w, http.StatusOK, map[string]any{"spell_mastery": items, "known_spells": known})
 	case errors.Is(err, character.ErrInvalidSpellMasteryReward):
 		http.Error(w, "invalid spell mastery query", http.StatusBadRequest)
 	case errors.Is(err, character.ErrRewardSession):
 		http.Error(w, "character has no active session on this server", http.StatusConflict)
 	default:
-		h.logger.Error("load spell mastery for world session failed", "error", err)
+		h.logger.Error("load spell mastery and known spells for world session failed", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
+}
+
+func (h *spellMasteryHandlers) writeCurrentError(w http.ResponseWriter,err error){
+	switch{
+	case errors.Is(err,character.ErrInvalidSpellMasteryReward):http.Error(w,"invalid spell mastery query",http.StatusBadRequest)
+	case errors.Is(err,character.ErrRewardSession):http.Error(w,"character has no active session on this server",http.StatusConflict)
+	default:h.logger.Error("load spell mastery for world session failed","error",err);http.Error(w,"internal server error",http.StatusInternalServerError)
 	}
 }
