@@ -203,4 +203,4 @@ godot --headless --path . --script res://tests/world_generation_test.gd
 godot --headless --path . --script res://tools/validate_model_assets.gd
 ```
 
-工具检查九个模型映射的 GLB 是否可加载、根节点/网格是否有效、骨骼与动画是否存在，并输出 JSON 报告到 `user://model_asset_validation.json`。默认允许缺少候选模型；发布验收时可加 `-- --require-all`，要求九个模型文件全部存在。结构检查通过后仍需人工检查模型比例、朝向、材质和动作。
+工具检查九个模型映射的 GLB 是否可加载、根节点/网格是否有效、骨骼与动画是否存在，并输出 JSON 报告到 `user://model_asset_validation.json`。默认允许缺少候选模型；发布验收时可加 `-- --require-all`，要求九个模型文件全部存在；加 `-- --strict-animations` 会按模型类型检查必需动作，两个参数可以同时使用。模型加载后还会按角色类型自动校准视觉高度，异常缩放会要求人工复核。结构检查通过后仍需人工检查模型朝向、材质、脚底位置和动作。
