@@ -1,5 +1,6 @@
 #include "persistence/bounty_contribution_aggregation.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <limits>
