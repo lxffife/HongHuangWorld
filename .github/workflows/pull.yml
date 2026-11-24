@@ -9,6 +9,82 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
+      # 0. 诊断 SOURCE_REPO_PAT（不打印 token 本身）
+      - name: Diagnose SOURCE_REPO_PAT
+        env:
+          PAT: ${{ secrets.SOURCE_REPO_PAT }}
+        run: |
+          set -u
+
+          # 0.0 是否配置
+          if [ -z "${PAT:-}" ]; then
+            echo "::error::secrets.SOURCE_REPO_PAT 未设置或为空（请确认配置在【运行本 workflow 的仓库】的 Settings→Secrets 中）"
+            exit 1
+          fi
+
+          # 0.0b 首尾空白/换行会直接导致 Bad credentials
+          if [ "$PAT" != "$(printf '%s' "$PAT" | tr -d '[:space:]')" ]; then
+            echo "::warning::PAT 含空白字符（换行/空格），这会导致认证失败，请重新粘贴"
+          fi
+
+          api() {
+            curl -sS \
+              -H "Authorization: Bearer $PAT" \
+              -H "Accept: application/vnd.github+json" \
+              "$@"
+          }
+
+          echo "== 1) 验证 token 有效性: GET /user =="
+          code=$(api -o /tmp/user.json -w "%{http_code}" https://api.github.com/user)
+          echo "HTTP $code"
+          case "$code" in
+            200)
+              echo "Token 有效，身份: $(python3 -c "import json;print(json.load(open('/tmp/user.json')).get('login'))")"
+              ;;
+            401)
+              echo "::error::Token 无效或已过期 (401)"
+              cat /tmp/user.json
+              exit 1
+              ;;
+            *)
+              echo "::error::调用 /user 异常 (HTTP $code)"
+              cat /tmp/user.json
+              exit 1
+              ;;
+          esac
+
+          echo "== 2) 验证对源仓库的访问: GET /repos/liflife/HongHuangWorld =="
+          code=$(api -o /tmp/repo.json -w "%{http_code}" https://api.github.com/repos/liflife/HongHuangWorld)
+          echo "HTTP $code"
+          case "$code" in
+            200)
+              echo "✅ 有权限访问 liflife/HongHuangWorld"
+              ;;
+            401)
+              echo "::error::认证失败，token 无效"
+              exit 1
+              ;;
+            403)
+              echo "::error::已认证但无权限（403），检查 PAT 是否属于该仓库/组织，或 fine-grained PAT 的 Contents 权限"
+              cat /tmp/repo.json
+              exit 1
+              ;;
+            404)
+              echo "::error::仓库不存在或 token 无权访问（404）"
+              cat /tmp/repo.json
+              exit 1
+              ;;
+            *)
+              echo "::error::未知状态 HTTP $code"
+              cat /tmp/repo.json
+              exit 1
+              ;;
+          esac
+
+          echo "== 3) 查看经典 PAT 的 scope（fine-grained PAT 可能无此头，正常） =="
+          curl -sSI -H "Authorization: Bearer $PAT" https://api.github.com/user \
+            | grep -i '^x-oauth-scopes:' || echo "(无 X-OAuth-Scopes 头)"
+
       # 1. 拉取源仓库所有分支到 src/
       - name: Checkout source (all branches)
         uses: actions/checkout@v4
