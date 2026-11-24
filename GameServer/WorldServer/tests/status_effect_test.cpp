@@ -91,6 +91,19 @@ int main() {
     assert(monster_freeze_duration_ms(700,"elite_wolf","精英荒原狼",false)==245);
     assert(monster_freeze_duration_ms(700,"wolf","荒原狼",true)==245);
     assert(monster_freeze_duration_ms(700,"boss_dragon","龙首领",false)==245);
+
+    // Ghost Gate Chain combines a brief bind with a longer movement slow.
+    TimedFreezeEffect chain_bind;
+    TimedSlowEffect chain_slow;
+    const auto chain_bind_ms = monster_freeze_duration_ms(900, "elite_guard", "精英守卫", false);
+    assert(chain_bind_ms == 315);
+    assert(apply_freeze(chain_bind, 10000, chain_bind_ms));
+    assert(apply_slow(chain_slow, 10000, 2400, 0.42F));
+    assert(freeze_is_active(chain_bind, 10314));
+    assert(!freeze_is_active(chain_bind, 10315));
+    assert(slow_is_active(chain_slow, 12399));
+    assert(std::abs(movement_delta_with_effect(0.1F, chain_slow, 11000) - 0.042F) < 0.00001F);
+    assert(!slow_is_active(chain_slow, 12400));
     TimedSlowEffect cs; TimedFreezeEffect cf; PeriodicDamageEffect cd;
     assert(apply_slow(cs,100,1000,0.5F)); assert(apply_freeze(cf,100,500));
     assert(apply_periodic_damage(cd,100,2000,1000,2)); clear_negative_statuses(cs,cf,cd);
