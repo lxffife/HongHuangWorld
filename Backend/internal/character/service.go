@@ -22,6 +22,9 @@ var (
 	ErrInvalidReward = errors.New("invalid character reward")
 	ErrRewardSession = errors.New("character has no active session on this server")
 	ErrInvalidSpellMasteryReward = errors.New("invalid spell mastery reward")
+	ErrSpellLearningInvalid = errors.New("invalid spell learning request")
+	ErrSpellAlreadyKnown = errors.New("spell is already learned")
+	ErrSpellLearningInWorld = errors.New("leave the world before learning a spell")
 	ErrInvalidRace = errors.New("race has no configured default cultivation system")
 	ErrInsufficientCultivation = errors.New("not enough cultivation for breakthrough")
 	ErrMaxRealm = errors.New("character has reached the highest configured realm")
@@ -1932,4 +1935,130 @@ func (s *Service) SpellMasteryForSession(ctx context.Context, nodeKey, sessionID
 	}
 	if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate character spell mastery: %w", err) }
 	return result, nil
+}
+
+
+type SpellLearningResult struct {
+	Applied bool `json:"applied"`
+	SpellID string `json:"spell_id"`
+	SpellName string `json:"spell_name"`
+	KnownSpells []string `json:"known_spells"`
+}
+
+// LearnSpell consumes an owned skill tome and records the learned technique
+// atomically. Learning is performed outside an active world session so the
+// authoritative WorldServer can load the new ownership snapshot on next entry.
+func (s *Service) LearnSpell(ctx context.Context, accountID, requestID, itemID string) (SpellLearningResult, error) {
+	if strings.TrimSpace(accountID) == "" || !validUUID(requestID) ||
+		strings.TrimSpace(itemID) == "" || len(itemID) > 64 {
+		return SpellLearningResult{}, ErrSpellLearningInvalid
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil { return SpellLearningResult{}, fmt.Errorf("begin spell learning: %w", err) }
+	defer tx.Rollback()
+
+	var characterID, worldID string
+	err = tx.QueryRowContext(ctx, `SELECT c.id::text,c.world_id
+		FROM souls soul JOIN characters c ON c.id=soul.current_character_id
+		WHERE soul.account_id=$1 AND c.status='alive' FOR UPDATE OF c`, accountID).Scan(&characterID,&worldID)
+	if errors.Is(err,sql.ErrNoRows) { return SpellLearningResult{}, ErrSpellLearningInvalid }
+	if err != nil { return SpellLearningResult{}, fmt.Errorf("resolve current character for spell learning: %w",err) }
+
+	var active bool
+	if err := tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM world_sessions
+		WHERE character_id=$1::uuid AND session_state IN ('connecting','active','saving'))`,characterID).Scan(&active); err != nil {
+		return SpellLearningResult{},fmt.Errorf("check active session before spell learning: %w",err)
+	}
+	if active { return SpellLearningResult{},ErrSpellLearningInWorld }
+
+	var previousItemID, previousSpellID string
+	err = tx.QueryRowContext(ctx,`SELECT item_id,spell_id FROM character_spell_learning_events
+		WHERE character_id=$1::uuid AND request_id=$2::uuid`,characterID,requestID).Scan(&previousItemID,&previousSpellID)
+	if err == nil {
+		if previousItemID != itemID { return SpellLearningResult{},ErrSpellLearningInvalid }
+		var spellName string
+		if err := tx.QueryRowContext(ctx,`SELECT display_name FROM spell_tome_definitions WHERE spell_id=$1`,previousSpellID).Scan(&spellName); err != nil {
+			return SpellLearningResult{},fmt.Errorf("load replayed spell name: %w",err)
+		}
+		known,err:=knownSpellsInTx(ctx,tx,characterID);if err!=nil{return SpellLearningResult{},err}
+		if err:=tx.Commit();err!=nil{return SpellLearningResult{},fmt.Errorf("commit spell learning replay: %w",err)}
+		return SpellLearningResult{Applied:false,SpellID:previousSpellID,SpellName:spellName,KnownSpells:known},nil
+	}
+	if !errors.Is(err,sql.ErrNoRows) { return SpellLearningResult{},fmt.Errorf("check spell learning idempotency: %w",err) }
+
+	var spellID,spellName,requiredWorld string
+	err = tx.QueryRowContext(ctx,`SELECT spell_id,display_name,required_world_id
+		FROM spell_tome_definitions WHERE item_id=$1 AND enabled`,itemID).Scan(&spellID,&spellName,&requiredWorld)
+	if errors.Is(err,sql.ErrNoRows) { return SpellLearningResult{},ErrSpellLearningInvalid }
+	if err != nil { return SpellLearningResult{},fmt.Errorf("load skill tome definition: %w",err) }
+	if requiredWorld != "" && requiredWorld != worldID { return SpellLearningResult{},ErrSpellLearningInvalid }
+
+	var alreadyKnown bool
+	if err := tx.QueryRowContext(ctx,`SELECT EXISTS(SELECT 1 FROM character_known_spells
+		WHERE character_id=$1::uuid AND spell_id=$2)`,characterID,spellID).Scan(&alreadyKnown); err != nil {
+		return SpellLearningResult{},fmt.Errorf("check known spell: %w",err)
+	}
+	if alreadyKnown { return SpellLearningResult{},ErrSpellAlreadyKnown }
+
+	var quantity int
+	if err := tx.QueryRowContext(ctx,`SELECT quantity FROM character_inventory
+		WHERE character_id=$1::uuid AND item_id=$2 FOR UPDATE`,characterID,itemID).Scan(&quantity); err != nil {
+		if errors.Is(err,sql.ErrNoRows) { return SpellLearningResult{},ErrSpellLearningInvalid }
+		return SpellLearningResult{},fmt.Errorf("lock skill tome inventory: %w",err)
+	}
+	if quantity < 1 { return SpellLearningResult{},ErrSpellLearningInvalid }
+	if quantity == 1 {
+		if _,err:=tx.ExecContext(ctx,`DELETE FROM character_inventory WHERE character_id=$1::uuid AND item_id=$2`,characterID,itemID);err!=nil {
+			return SpellLearningResult{},fmt.Errorf("consume skill tome: %w",err)
+		}
+	} else if _,err:=tx.ExecContext(ctx,`UPDATE character_inventory SET quantity=quantity-1,updated_at=now()
+		WHERE character_id=$1::uuid AND item_id=$2 AND quantity>1`,characterID,itemID);err!=nil {
+		return SpellLearningResult{},fmt.Errorf("decrement skill tome stack: %w",err)
+	}
+	if _,err:=tx.ExecContext(ctx,`INSERT INTO character_known_spells(character_id,spell_id,learned_from_item_id)
+		VALUES($1::uuid,$2,$3)`,characterID,spellID,itemID);err!=nil {
+		return SpellLearningResult{},fmt.Errorf("record learned spell: %w",err)
+	}
+	if _,err:=tx.ExecContext(ctx,`INSERT INTO character_spell_learning_events(character_id,request_id,item_id,spell_id)
+		VALUES($1::uuid,$2::uuid,$3,$4)`,characterID,requestID,itemID,spellID);err!=nil {
+		return SpellLearningResult{},fmt.Errorf("record spell learning event: %w",err)
+	}
+	known,err:=knownSpellsInTx(ctx,tx,characterID);if err!=nil{return SpellLearningResult{},err}
+	if err:=tx.Commit();err!=nil{return SpellLearningResult{},fmt.Errorf("commit spell learning: %w",err)}
+	return SpellLearningResult{Applied:true,SpellID:spellID,SpellName:spellName,KnownSpells:known},nil
+}
+
+func knownSpellsInTx(ctx context.Context,tx *sql.Tx,characterID string)([]string,error){
+	rows,err:=tx.QueryContext(ctx,`SELECT spell_id FROM character_known_spells
+		WHERE character_id=$1::uuid ORDER BY spell_id`,characterID)
+	if err!=nil{return nil,fmt.Errorf("query learned spells: %w",err)}
+	defer rows.Close()
+	known:=make([]string,0,4)
+	for rows.Next(){var id string;if err:=rows.Scan(&id);err!=nil{return nil,fmt.Errorf("scan learned spell: %w",err)};known=append(known,id)}
+	if err:=rows.Err();err!=nil{return nil,fmt.Errorf("iterate learned spells: %w",err)}
+	return known,nil
+}
+
+// KnownSpellsForSession returns the learned spell IDs only to the trusted
+// WorldServer hosting the exact active character session.
+func (s *Service) KnownSpellsForSession(ctx context.Context,nodeKey,sessionID,characterID string)([]string,error){
+	if strings.TrimSpace(nodeKey)==""||!validUUID(sessionID)||!validUUID(characterID){return nil,ErrInvalidSpellMasteryReward}
+	var serverID string
+	if err:=s.db.QueryRowContext(ctx,`SELECT id::text FROM server_registry WHERE node_key=$1`,nodeKey).Scan(&serverID);err!=nil{
+		if errors.Is(err,sql.ErrNoRows){return nil,ErrRewardSession};return nil,fmt.Errorf("resolve server for known spells: %w",err)
+	}
+	var verified string
+	err:=s.db.QueryRowContext(ctx,`SELECT ws.id::text FROM world_sessions ws JOIN characters c ON c.id=ws.character_id
+		WHERE ws.id=$1::uuid AND ws.server_id=$2 AND c.id=$3::uuid AND c.status='alive'
+		AND ws.session_state='active'`,sessionID,serverID,characterID).Scan(&verified)
+	if errors.Is(err,sql.ErrNoRows){return nil,ErrRewardSession}
+	if err!=nil{return nil,fmt.Errorf("verify known spell session: %w",err)}
+	rows,err:=s.db.QueryContext(ctx,`SELECT spell_id FROM character_known_spells
+		WHERE character_id=$1::uuid ORDER BY spell_id`,characterID)
+	if err!=nil{return nil,fmt.Errorf("load known spells: %w",err)}
+	defer rows.Close()
+	known:=make([]string,0,4)
+	for rows.Next(){var id string;if err:=rows.Scan(&id);err!=nil{return nil,fmt.Errorf("scan known spell: %w",err)};known=append(known,id)}
+	if err:=rows.Err();err!=nil{return nil,fmt.Errorf("iterate known spells: %w",err)}
+	return known,nil
 }
