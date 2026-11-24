@@ -164,3 +164,13 @@ godot --headless --path . --script res://tests/world_generation_test.gd
 - 每层数据补充环境主题、危险机制、试炼目标、守狱者定位和奖励主题。
 - 新增 `underworld_hell_floor_builder.gd`，可按 `underworld_hell_01` 至 `underworld_hell_18` 的世界实例 ID 生成独立试炼场景：竞技场地面、四周墙体、柱阵、危险标记、守狱者平台、入口和下一层出口标记。
 - 当前危险标记、守狱者和出口均为场景灰盒，不包含真实伤害结算、首领 AI、任务完成或楼层传送；这些仍需由世界服/任务服务实现。当前中心服尚未开放十八层独立 world instance，因此这套生成器是场景模块，不代表玩家已经能从酆都进入地狱。
+
+## 视听资产第一轮接入（开发中）
+
+- 新增 `scripts/audio_manager.gd`，通过 `HHAudio` Autoload 统一管理音效总线、独立音量、静音和音效播放。
+- 第一批攻击、受击、重击、怪物攻击、死亡、法术和脚步音效由项目代码运行时合成，属于原创占位反馈；不是最终录制音效或正式配乐。
+- 玩家攻击/受击、玩家脚步、怪物服务器确认攻击阶段、怪物死亡结算和法术释放已接入声音反馈。
+- 音频设置保存到本机 `user://honghuang_audio.cfg`；当前还没有正式音量设置 UI。
+- 音频资源目录与授权台账位于 `assets/audio/`，详细规范见 `docs/AUDIO-PIPELINE.md`。外部 Kenney、Sonniss、Freesound 资源仍为候选，尚未下载或导入，必须逐包/逐文件核实商用许可。
+- 新增独立美术检查场景 `scenes/ArtPreviewStage.tscn`，可在 Godot 编辑器中运行，用于同一镜头下对比玩家、荒原狼、铁骨兽、战魂、游祟和酆都鬼门关灰盒。它不替换正式游戏场景，也不影响联机逻辑。
+- 当前外部 GLB 尚未导入；程序化模型仍是占位模型。美术验收前不将其标记为正式资产。
