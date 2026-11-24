@@ -5899,8 +5899,8 @@ struct EnetServer::Impl {
             const bool heavy_slam = std::string(attack_profile.style) == "heavy_slam";
             const bool slam_windup = heavy_slam &&
                 monster.attack_phase == MonsterAttackPhase::Windup;
-            if (monster.state.mode != honghuang::simulation::MonsterMode::Chasing ||
-                (monster.state.target_id.empty() && !slam_windup)) {
+            if ((monster.state.mode != honghuang::simulation::MonsterMode::Chasing ||
+                 monster.state.target_id.empty()) && !slam_windup) {
                 if (monster.attack_phase == MonsterAttackPhase::Windup) {
                     monster.attack_phase = MonsterAttackPhase::Ready;
                     broadcast_attack_phase("cancelled");
