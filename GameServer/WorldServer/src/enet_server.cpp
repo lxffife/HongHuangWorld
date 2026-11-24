@@ -2019,6 +2019,14 @@ struct EnetServer::Impl {
                     });
                 if (weakest == monster.damage_contributions.end() ||
                     effective_damage <= weakest->second.total_damage) {
+                    // The bounded compatibility snapshot must never suppress
+                    // combat-side effects for a hit already admitted by the
+                    // durable contribution writer. A participant beyond this
+                    // cache limit still earns threat and hell-trial credit.
+                    if (hell_trial_encounter.enabled())
+                        (void)hell_trial_contributions.record_damage(
+                            character_id, session_id, effective_damage);
+                    record_monster_threat(monster, character_id, static_cast<double>(effective_damage));
                     return;
                 }
                 monster.damage_contributions.erase(weakest);
