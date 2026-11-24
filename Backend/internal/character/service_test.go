@@ -1,6 +1,6 @@
 package character
 
-import "testing"
+import ("testing"; "strings")
 
 func TestValidUUID(t *testing.T) {
 	tests := []struct {
@@ -214,6 +214,27 @@ func TestApplyPartyCombatBonus(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			if got := applyPartyCombatBonus(test.value); got != test.want {
 				t.Fatalf("applyPartyCombatBonus(%d) = %d, want %d", test.value, got, test.want)
+			}
+		})
+	}
+}
+
+func TestValidSpellLearningRequest(t *testing.T) {
+	const requestID = "00000000-0000-4000-8000-000000000001"
+	tests := []struct {
+		name, accountID, requestID, itemID string
+		want bool
+	}{
+		{"valid skill tome", "account-1", requestID, "tome_suppressing_talisman", true},
+		{"empty account", "", requestID, "tome_suppressing_talisman", false},
+		{"invalid request ID", "account-1", "not-a-uuid", "tome_suppressing_talisman", false},
+		{"empty item", "account-1", requestID, "", false},
+		{"oversized item", "account-1", requestID, strings.Repeat("x", 65), false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := validSpellLearningRequest(test.accountID,test.requestID,test.itemID); got != test.want {
+				t.Fatalf("validSpellLearningRequest() = %v, want %v",got,test.want)
 			}
 		})
 	}
