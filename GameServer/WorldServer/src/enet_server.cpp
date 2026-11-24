@@ -4686,8 +4686,10 @@ struct EnetServer::Impl {
             }
             return;
         }
-        const auto weapon = player_weapon_type(player);
-        if (weapon != "staff" && weapon != "focus") { reject("装备法杖或法器后才能施展法术。"); return; }
+        // Cultivation abilities are not gated by a Western-style staff slot.
+        // Talismans, seals, sword arts and bare-handed techniques are valid
+        // manifestations; each skill's own learned-state and resource rules
+        // remain authoritative on the server.
         if (spell == nullptr || !spell->enabled || !honghuang::simulation::valid_spell_definition(*spell)) {
             reject("未知或未开放的法术。"); return;
         }
