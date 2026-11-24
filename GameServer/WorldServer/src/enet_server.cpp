@@ -203,6 +203,8 @@ struct MonsterRuntime {
     std::unordered_map<std::string, ThreatEntry> threat_by_character;
     Clock::time_point last_threat_warning_at{};
     Clock::time_point last_invalid_simulation_log_at{};
+    // Rate-limit authoritative combat diagnostics without hiding state transitions.
+    Clock::time_point last_combat_diagnostic_at{};
     std::string taunt_target_character_id;
     Clock::time_point taunt_expires_at{};
     bool rare_spawn{false};
@@ -4583,8 +4585,13 @@ struct EnetServer::Impl {
                     contribution_error);
         }
         if (!admitted) {
-            std::cerr << "Rejected melee hit because monster contribution was not admitted: "
-                      << contribution_error << '\n';
+            std::cerr << "[CombatAttack] rejected_persistence character=" << player.character_id
+                      << " target=" << target->runtime_id
+                      << " runtime_hp=" << target->state.health
+                      << " attempted_hp=" << damage.remaining_health
+                      << " writer_available=" << (monster_contribution_writer ? "true" : "false")
+                      << " reason=" << (contribution_error.empty() ? "unknown" : contribution_error)
+                      << std::endl;
             send_json(peer, honghuang::protocol::MessageType::CombatEvent,
                       Json{{"accepted", false}, {"attacker_character_id", player.character_id},
                            {"target_entity_id", target->runtime_id},
@@ -5929,6 +5936,18 @@ struct EnetServer::Impl {
                     nearest_player->z, true};
                 nearest_target = &target_storage;
             }
+            if (nearest_target == nullptr &&
+                (monster.last_combat_diagnostic_at == Clock::time_point{} ||
+                 now - monster.last_combat_diagnostic_at >= std::chrono::seconds(5))) {
+                std::cout << "[MonsterAI] no_target monster=" << monster.runtime_id
+                          << " mode=" << static_cast<int>(monster.state.mode)
+                          << " players=" << players.size()
+                          << " position=" << monster.state.x << "," << monster.state.z
+                          << " aggro_radius=" << monster.definition.aggro_radius
+                          << " leash_radius=" << monster.definition.leash_radius
+                          << std::endl;
+                monster.last_combat_diagnostic_at = now;
+            }
             if (nearest_target != nullptr &&
                 honghuang::simulation::monster_attack_profile(monster.definition).style == std::string("wolf_lunge")) {
                 // Give each wolf a deterministic point on a small ring around its victim.
@@ -6009,7 +6028,28 @@ struct EnetServer::Impl {
                 }
                 continue;
             }
+            if (monster.state.mode != honghuang::simulation::MonsterMode::Chasing &&
+                nearest_target != nullptr &&
+                (monster.last_combat_diagnostic_at == Clock::time_point{} ||
+                 now - monster.last_combat_diagnostic_at >= std::chrono::seconds(5))) {
+                const double candidate_dx = static_cast<double>(nearest_target->x) - monster.state.x;
+                const double candidate_dz = static_cast<double>(nearest_target->z) - monster.state.z;
+                std::cout << "[MonsterAI] aggro_not_acquired monster=" << monster.runtime_id
+                          << " candidate=" << nearest_target->id
+                          << " distance=" << std::hypot(candidate_dx, candidate_dz)
+                          << " aggro_radius=" << monster.definition.aggro_radius
+                          << " leash_radius=" << monster.definition.leash_radius
+                          << " mode=" << static_cast<int>(monster.state.mode)
+                          << std::endl;
+                monster.last_combat_diagnostic_at = now;
+            }
             if (monster.state.target_id != previous_target_id) {
+                std::cout << "[MonsterAI] target_changed monster=" << monster.runtime_id
+                          << " from=" << (previous_target_id.empty() ? "none" : previous_target_id)
+                          << " to=" << (monster.state.target_id.empty() ? "none" : monster.state.target_id)
+                          << " mode=" << static_cast<int>(monster.state.mode)
+                          << " position=" << monster.state.x << "," << monster.state.z
+                          << std::endl;
                 std::string new_target_name;
                 if (!monster.state.target_id.empty()) {
                     const auto selected_target = std::find_if(players.begin(), players.end(),
@@ -6135,8 +6175,23 @@ struct EnetServer::Impl {
             const double attack_range = heavy_slam && attack_profile.splash_radius > 0.0F
                 ? static_cast<double>(attack_profile.splash_radius)
                 : static_cast<double>(attack_profile.range);
+            const double victim_distance = std::hypot(attack_dx, attack_dz);
             const bool in_attack_range = attack_dx * attack_dx + attack_dz * attack_dz <=
                 attack_range * attack_range;
+            if (monster.last_combat_diagnostic_at == Clock::time_point{} ||
+                now - monster.last_combat_diagnostic_at >= std::chrono::seconds(5)) {
+                std::cout << "[MonsterAI] combat_state monster=" << monster.runtime_id
+                          << " target=" << player.character_id
+                          << " mode=" << static_cast<int>(monster.state.mode)
+                          << " phase=" << static_cast<int>(monster.attack_phase)
+                          << " distance=" << victim_distance
+                          << " attack_range=" << attack_range
+                          << " in_range=" << (in_attack_range ? "true" : "false")
+                          << " hp=" << monster.state.health << "/" << monster.definition.max_health
+                          << " player_hp=" << player.health << "/" << player.max_health
+                          << std::endl;
+                monster.last_combat_diagnostic_at = now;
+            }
 
             if (monster.attack_phase == MonsterAttackPhase::Recovery) {
                 if (now - monster.attack_phase_started_at < recovery_duration) continue;
@@ -6163,6 +6218,12 @@ struct EnetServer::Impl {
                 monster.attack_phase = MonsterAttackPhase::Windup;
                 monster.attack_phase_started_at = now;
                 monster.attack_target_character_id = player.character_id;
+                std::cout << "[MonsterAI] attack_windup monster=" << monster.runtime_id
+                          << " target=" << player.character_id
+                          << " style=" << attack_profile.style
+                          << " distance=" << victim_distance
+                          << " range=" << attack_range
+                          << " windup_ms=" << windup_duration.count() << std::endl;
                 broadcast_attack_phase("windup");
                 continue;
             }
@@ -6289,6 +6350,11 @@ struct EnetServer::Impl {
                                         player.poison_effect.interval_ms
                                     : (applied_slow ? 2200 : 0)}});
             }
+            std::cout << "[MonsterAI] attack_impact monster=" << monster.runtime_id
+                      << " target=" << player.character_id
+                      << " style=" << attack_profile.style
+                      << " player_hp=" << player.health << "/" << player.max_health
+                      << std::endl;
             monster.last_attack_at = now;
             monster.attack_phase = MonsterAttackPhase::Recovery;
             monster.attack_phase_started_at = now;
