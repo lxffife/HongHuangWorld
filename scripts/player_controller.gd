@@ -717,7 +717,7 @@ func _spawn_attack_sweep_visual() -> void:
 			outer_radius = 1.34
 		"sword_slash":
 			tint = Color("#b8f0ff")
-		material.albedo_color = Color(tint.r, tint.g, tint.b, 0.72)
+	material.albedo_color = Color(tint.r, tint.g, tint.b, 0.72)
 	material.emission_enabled = true
 	material.emission = tint
 	material.emission_energy_multiplier = 2.2
