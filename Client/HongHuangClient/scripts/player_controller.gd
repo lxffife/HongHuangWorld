@@ -758,7 +758,7 @@ func _process(delta: float) -> void:
 		var soul_attack_pulse: float = sin(clampf(soul_attack_progress, 0.0, 1.0) * PI) if attack_animation_time > 0.0 else 0.0
 		visual.scale = Vector3.ONE * soul_form_scale * (1.0 + soul_attack_pulse * 0.24)
 	if is_instance_valid(camera_pivot):
-			var shake_weight := hit_reaction_time / maxf(hit_reaction_duration, 0.01)
+		var shake_weight := hit_reaction_time / maxf(hit_reaction_duration, 0.01)
 		var shake_time := hit_reaction_duration - hit_reaction_time
 		var shake_frequency := 58.0 if hit_reaction_duration < 0.4 else 43.0
 		var shake := sin(shake_time * shake_frequency) * hit_reaction_strength * shake_weight
