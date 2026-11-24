@@ -66,7 +66,7 @@ var chat_unread_count := 0
 var chat_expanded := false
 var chat_restore_mouse_captured := false
 var chat_order_sequence := 0
-var chat_lines_by_channel: Dictionary = {"nearby": [], "world": [], "cross_world": []}
+var chat_lines_by_channel: Dictionary = {"nearby": [], "world": [], "cross_world": [], "system": []}
 var chat_seen_ids: Dictionary = {}
 var selected_chat_channel := "nearby"
 
@@ -2238,9 +2238,23 @@ func _upsert_monster(entity: Dictionary) -> void:
 			if not merged_entity.has(transient_key) and previous_entity.has(transient_key):
 				merged_entity[transient_key] = previous_entity[transient_key]
 	monster_entities[monster_id] = merged_entity
+	if bool(merged_entity.get("death_pending", false)) or int(merged_entity.get("health", 1)) <= 0:
+		_begin_monster_death_visual(monster_node)
 	if monster_id == selected_monster_id:
 		_update_target_info()
 	_refresh_monster_nameplate(monster_id)
+
+func _begin_monster_death_visual(monster: Node3D) -> void:
+	if not is_instance_valid(monster) or bool(monster.get_meta("defeated_visual", false)):
+		return
+	monster.set_meta("burn_visual_remaining", 0.0)
+	_set_monster_burn_visual(monster, false)
+	_set_monster_freeze_visual(monster, false)
+	monster.set_meta("death_reaction_time", 1.15)
+	monster.set_meta("defeated_visual", true)
+	var nameplate := monster.get_node_or_null("Nameplate") as Label3D
+	if is_instance_valid(nameplate):
+		nameplate.visible = false
 
 func _refresh_monster_nameplate(monster_id: String) -> void:
 	var monster_node := monsters.get(monster_id) as Node3D
@@ -2804,7 +2818,7 @@ func _build_chat_hud() -> void:
 	channels.add_theme_constant_override("separation", 6)
 	layout.add_child(channels)
 	chat_channel_buttons.clear()
-	for channel_data in [["nearby", "附近"], ["world", "世界"], ["cross_world", "跨界"]]:
+	for channel_data in [["nearby", "附近"], ["world", "世界"], ["cross_world", "跨界"], ["system", "系统"]]:
 		var channel_button := Button.new()
 		channel_button.text = str(channel_data[1])
 		channel_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -3107,6 +3121,9 @@ func _on_chat_input_submitted(value: String) -> void:
 	var normalized := value.strip_edges()
 	if normalized.is_empty():
 		return
+	if selected_chat_channel == "system":
+		chat_status.text = "系统频道仅用于接收游戏通知。"
+		return
 	var error: Error
 	if selected_chat_channel == "nearby":
 		var network := HHSession.world_network
@@ -3166,20 +3183,26 @@ func _on_chat_conversation_history_received(character_id: String, messages: Arra
 		call_deferred("_scroll_chat_to_bottom")
 
 func _select_chat_channel(channel: String) -> void:
-	if channel not in ["nearby", "world", "cross_world"]:
+	if channel not in ["nearby", "world", "cross_world", "system"]:
 		return
 	selected_chat_channel = channel
 	selected_friend_character_id = ""
 	selected_friend_character_name = ""
-	var names := {"nearby": "附近", "world": "世界", "cross_world": "跨界"}
+	var names := {"nearby": "附近", "world": "世界", "cross_world": "跨界", "system": "系统"}
 	chat_title_label.text = "万界传音 · " + str(names[channel])
+	var channel_ids := ["nearby", "world", "cross_world", "system"]
 	for index in range(chat_channel_buttons.size()):
-		_style_chat_button(chat_channel_buttons[index], index == ["nearby", "world", "cross_world"].find(channel))
-	chat_input.placeholder_text = "输入" + str(names[channel]) + "消息（最多 200 字）"
+		_style_chat_button(chat_channel_buttons[index], index == channel_ids.find(channel))
+	if channel == "system":
+		chat_input.placeholder_text = "系统频道 · 仅接收游戏通知"
+	else:
+		chat_input.placeholder_text = "输入" + str(names[channel]) + "消息（最多 200 字）"
 	_render_chat_lines()
 	if chat_expanded:
 		call_deferred("_scroll_chat_to_bottom")
-	if channel == "nearby":
+	if channel == "system":
+		chat_status.text = "系统频道 · 击杀奖励、掉落、升级与玩法通知"
+	elif channel == "nearby":
 		chat_status.text = "附近频道 · 仅当前实例 AOI 范围内可见"
 	elif HHChatNetwork.socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
 		chat_status.text = str(names[channel]) + "频道 · 独立聊天连接已建立"
@@ -5335,7 +5358,7 @@ func _on_combat_event(event: Dictionary) -> void:
 		elif not bool(event.get("contribution_only", false)):
 			reward_text += " · 未掉落装备或材料"
 		_show_notification(reward_text, 6.0)
-		_append_chat_line("[系统] " + reward_text, "nearby")
+		_append_chat_line("[系统] " + reward_text, "system")
 		_refresh_reward_status_later()
 		return
 	if str(event.get("action", "")) == "equipment_refresh":
@@ -5518,14 +5541,7 @@ func _on_combat_event(event: Dictionary) -> void:
 					_update_target_info()
 			_spawn_monster_hit_visual(visual_target, bool(event.get("critical", false)))
 			if bool(event.get("defeated", false)):
-				visual_target.set_meta("burn_visual_remaining", 0.0)
-				_set_monster_burn_visual(visual_target, false)
-				_set_monster_freeze_visual(visual_target, false)
-				visual_target.set_meta("death_reaction_time", 1.15)
-				visual_target.set_meta("defeated_visual", true)
-				var visual_nameplate := visual_target.get_node_or_null("Nameplate") as Label3D
-				if is_instance_valid(visual_nameplate):
-					visual_nameplate.visible = false
+				_begin_monster_death_visual(visual_target)
 		return
 	if str(event.get("source", "")) == "monster":
 		if str(event.get("status_effect", "")) == "slow":
@@ -5599,11 +5615,7 @@ func _on_combat_event(event: Dictionary) -> void:
 		hit_monster.set_meta("hit_reaction_time", 0.24)
 		_spawn_monster_hit_visual(hit_monster, bool(event.get("critical", false)))
 		if bool(event.get("defeated", false)):
-			hit_monster.set_meta("death_reaction_time", 1.15)
-			hit_monster.set_meta("defeated_visual", true)
-			var defeated_nameplate := hit_monster.get_node_or_null("Nameplate") as Label3D
-			if is_instance_valid(defeated_nameplate):
-				defeated_nameplate.visible = false
+			_begin_monster_death_visual(hit_monster)
 	var damage := int(event.get("damage", 0))
 	combat_damage_dealt += maxi(damage, 0)
 	var damage_source := str(event.get("source", "melee"))
