@@ -181,6 +181,8 @@ var equipment_http: HTTPRequest
 var equipment_action_http: HTTPRequest
 var consumable_http: HTTPRequest
 var consumable_busy := false
+var spell_learning_http: HTTPRequest
+var spell_learning_busy := false
 var equipment_action_busy := false
 var inventory_visible := false
 var inventory_request_busy := false
@@ -3710,6 +3712,10 @@ func _build_inventory_ui() -> void:
 	consumable_http.timeout = 10.0
 	add_child(consumable_http)
 	consumable_http.request_completed.connect(_on_consumable_completed)
+	spell_learning_http = HTTPRequest.new()
+	spell_learning_http.timeout = 12.0
+	add_child(spell_learning_http)
+	spell_learning_http.request_completed.connect(_on_spell_learning_completed)
 
 func _on_inventory_button_pressed() -> void:
 	inventory_visible = not inventory_visible
@@ -3810,6 +3816,15 @@ func _render_inventory_items() -> void:
 		_apply_button_theme(detail_button)
 		detail_button.pressed.connect(_show_item_details.bind(item))
 		row.add_child(detail_button)
+		var item_id := str(item.get("item_id", ""))
+		if item_id in ["tome_suppressing_talisman", "tome_ghost_gate_chain"]:
+			var study_button := Button.new()
+			study_button.text = "研读"
+			study_button.disabled = spell_learning_busy
+			study_button.text = "研读中…" if spell_learning_busy else "研读"
+			_apply_button_theme(study_button, true)
+			study_button.pressed.connect(_on_learn_spell_pressed.bind(item_id))
+			row.add_child(study_button)
 		if str(item.get("item_type", "")) == "equipment":
 			var equip_button := Button.new()
 			equip_button.text = "穿戴"
@@ -6162,6 +6177,47 @@ func _on_equipment_action_completed(result: int, response_code: int, _headers: P
 func _make_request_uuid() -> String:
 	var hex := Crypto.new().generate_random_bytes(16).hex_encode()
 	return hex.substr(0,8) + "-" + hex.substr(8,4) + "-4" + hex.substr(13,3) + "-a" + hex.substr(17,3) + "-" + hex.substr(20,12)
+
+func _on_learn_spell_pressed(item_id: String) -> void:
+	if spell_learning_busy or item_id.is_empty() or spell_learning_http == null:
+		return
+	if HHSession.access_token.is_empty():
+		inventory_status.text = "请先登录后研读技能典籍。"
+		return
+	spell_learning_busy = true
+	inventory_status.text = "正在研读技能典籍，验证背包归属并保存掌握记录……"
+	_render_inventory_items()
+	var payload := {"request_id": _make_request_uuid(), "item_id": item_id}
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token, "Content-Type: application/json"])
+	var error := spell_learning_http.request(
+		HHSession.api_base + "/api/v1/characters/current/spells/learn",
+		headers, HTTPClient.METHOD_POST, JSON.stringify(payload)
+	)
+	if error != OK:
+		spell_learning_busy = false
+		inventory_status.text = "研读请求发送失败，错误码：" + str(error)
+		_render_inventory_items()
+
+
+func _on_spell_learning_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	spell_learning_busy = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		inventory_status.text = "研读失败：" + body.get_string_from_utf8()
+		_render_inventory_items()
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if not (parsed is Dictionary) or not (parsed.get("known_spells", []) is Array):
+		inventory_status.text = "技能学习响应格式无效，请重新同步。"
+		_render_inventory_items()
+		return
+	HHSession.world_snapshot["known_spells"] = parsed.get("known_spells", [])
+	_update_spell_cooldown_hud()
+	_update_spell_mastery_hud()
+	var spell_name := str(parsed.get("spell_name", "新神通"))
+	_show_notification("研读成功，已永久掌握：" + spell_name + "。", 3.0)
+	inventory_status.text = "研读成功：" + spell_name + " · 已永久掌握"
+	_refresh_inventory()
+
 
 func _on_use_consumable_pressed(item_id: String) -> void:
 	if consumable_busy or item_id.is_empty():
