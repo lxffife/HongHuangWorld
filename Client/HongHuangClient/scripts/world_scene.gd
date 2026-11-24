@@ -5063,14 +5063,17 @@ func _on_combat_event(event: Dictionary) -> void:
 	# CombatEvent health belongs to its target, not necessarily the currently
 	# selected target. Never let an off-target hit corrupt the target HUD.
 	var health_target_id := str(event.get("target_entity_id", ""))
-	if not selected_monster_id.is_empty() and health_target_id == selected_monster_id and monster_entities.has(selected_monster_id):
-		var selected_entity: Dictionary = monster_entities[selected_monster_id]
+	# Keep the authoritative health cache current for every monster, not only
+	# the currently selected one. Switching targets must never reveal stale HP.
+	if not health_target_id.is_empty() and monster_entities.has(health_target_id):
+		var health_entity: Dictionary = monster_entities[health_target_id]
 		if event.has("health") or event.has("remaining_health"):
-			selected_entity["health"] = int(event.get("health", event.get("remaining_health", 0)))
+			health_entity["health"] = int(event.get("health", event.get("remaining_health", 0)))
 		if event.has("max_health"):
-			selected_entity["max_health"] = int(event.get("max_health", 0))
-		monster_entities[selected_monster_id] = selected_entity
-		_update_target_info()
+			health_entity["max_health"] = int(event.get("max_health", 0))
+		monster_entities[health_target_id] = health_entity
+		if health_target_id == selected_monster_id:
+			_update_target_info()
 	_spawn_combat_number(damage, false, bool(event.get("critical", false)), health_target_id)
 	if bool(event.get("defeated", false)):
 		if str(event.get("target_entity_id", "")) == selected_monster_id:
@@ -5126,10 +5129,37 @@ func _spawn_monster_hit_visual(monster: Node3D, critical: bool) -> void:
 	flash.global_position = monster.global_position + Vector3(0.0, 1.0, 0.0)
 	var tween := create_tween()
 	tween.set_parallel(true)
-	tween.tween_property(flash, "scale", Vector3.ONE * (2.3 if critical else 1.65), 0.22)
-	tween.tween_property(material, "albedo_color:a", 0.0, 0.22)
-	tween.tween_property(material, "emission_energy_multiplier", 0.0, 0.22)
+	tween.tween_property(flash, "scale", Vector3.ONE * (2.8 if critical else 2.0), 0.26)
+	tween.tween_property(material, "albedo_color:a", 0.0, 0.26)
+	tween.tween_property(material, "emission_energy_multiplier", 0.0, 0.26)
 	tween.chain().tween_callback(Callable(flash, "queue_free"))
+
+	# A ground-plane shock ring makes a successful melee hit readable even
+	# when the monster model has no detailed hit animation or collision mesh.
+	var impact_ring := MeshInstance3D.new()
+	impact_ring.name = "MonsterImpactRing"
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.13
+	ring_mesh.outer_radius = 0.20
+	ring_mesh.rings = 8
+	ring_mesh.ring_segments = 18
+	impact_ring.mesh = ring_mesh
+	var ring_material := StandardMaterial3D.new()
+	ring_material.albedo_color = tint
+	ring_material.emission_enabled = true
+	ring_material.emission = tint
+	ring_material.emission_energy_multiplier = 2.4 if critical else 1.5
+	ring_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	ring_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	impact_ring.material_override = ring_material
+	add_child(impact_ring)
+	impact_ring.global_position = monster.global_position + Vector3.UP * 0.12
+	var ring_tween := create_tween()
+	ring_tween.set_parallel(true)
+	ring_tween.tween_property(impact_ring, "scale", Vector3.ONE * (3.4 if critical else 2.6), 0.30)
+	ring_tween.tween_property(ring_material, "albedo_color:a", 0.0, 0.30)
+	ring_tween.tween_property(ring_material, "emission_energy_multiplier", 0.0, 0.30)
+	ring_tween.chain().tween_callback(Callable(impact_ring, "queue_free"))
 
 func _spawn_combat_number(amount: int, incoming: bool, critical: bool, target_entity_id: String = "") -> void:
 	if amount <= 0:
@@ -5606,7 +5636,9 @@ func _animate_monster_visuals(delta: float) -> void:
 			_apply_monster_death_fade(monster, death_weight)
 		else:
 			monster.rotation.z = move_toward(monster.rotation.z, 0.0, delta * 2.0)
-			monster.scale = monster.scale.lerp(base_scale, minf(delta * 8.0, 1.0))
+			var hit_weight := sin(clampf((0.24 - hit_time) / 0.24, 0.0, 1.0) * PI) if hit_time > 0.0 else 0.0
+			var hit_scale := base_scale * Vector3(1.0 + hit_weight * 0.10, 1.0 - hit_weight * 0.10, 1.0 + hit_weight * 0.10)
+			monster.scale = monster.scale.lerp(hit_scale, minf(delta * 14.0, 1.0))
 			if bool(monster.get_meta("pending_corpse_cleanup", false)):
 				monsters.erase(monster_id)
 				monster.queue_free()
