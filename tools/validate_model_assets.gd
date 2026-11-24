@@ -3,6 +3,7 @@ extends SceneTree
 # Run after the first editor import:
 # godot --headless --path . --script res://tools/validate_model_assets.gd
 # Add -- --require-all to fail when any optional model file is missing.
+# Add -- --strict-animations to fail when required clips are absent.
 
 const MODEL_FILES := {
 	"player_humanoid": "res://assets/models/player_humanoid.glb",
@@ -16,16 +17,33 @@ const MODEL_FILES := {
 	"wraith": "res://assets/models/wraith.glb"
 }
 
+# Animation requirements are model-specific: floating souls do not need
+# quadruped locomotion, and the player uses its existing humanoid driver.
+const REQUIRED_ANIMATIONS := {
+	"player_humanoid": ["idle", "walk"],
+	"wolf": ["idle", "walk", "attack", "death"],
+	"iron_beast": ["idle", "walk", "attack", "death"],
+	"warrior": ["idle", "walk", "attack", "death"],
+	"life_soul": ["idle", "attack", "death"],
+	"wind_soul": ["idle", "attack", "death"],
+	"fire_soul": ["idle", "attack", "death"],
+	"frost_soul": ["idle", "attack", "death"],
+	"wraith": ["idle", "attack", "death"]
+}
+
 func _initialize() -> void:
 	call_deferred("_run_validation")
 
 
 func _run_validation() -> void:
-	var require_all := OS.get_cmdline_user_args().has("--require-all")
+	var args := OS.get_cmdline_user_args()
+	var require_all := args.has("--require-all")
+	var strict_animations := args.has("--strict-animations")
 	var report: Dictionary = {
 		"project": "HongHuangClient",
-		"validator_version": 1,
+		"validator_version": 2,
 		"require_all": require_all,
+		"strict_animations": strict_animations,
 		"models": [],
 		"summary": {"valid": 0, "missing": 0, "invalid": 0, "warnings": 0}
 	}
@@ -41,6 +59,9 @@ func _run_validation() -> void:
 			"skeleton_count": 0,
 			"animation_player_count": 0,
 			"animations": [],
+			"animation_clips": [],
+			"required_animation_categories": REQUIRED_ANIMATIONS.get(model_key, []),
+			"missing_required_animation_categories": [],
 			"animation_categories": {"idle": false, "walk": false, "run": false, "attack": false, "hit": false, "death": false},
 			"material_surface_count": 0,
 			"largest_mesh_dimension": 0.0,
@@ -77,6 +98,14 @@ func _run_validation() -> void:
 
 		_inspect_node(instance, item)
 		_classify_animation_coverage(item)
+		var missing_animations := _apply_animation_requirements(model_key, item)
+		if not missing_animations.is_empty():
+			for category in missing_animations:
+				item["warnings"].append("Required animation missing: " + category)
+			report["summary"]["warnings"] += missing_animations.size()
+			if strict_animations:
+				exit_code = 1
+
 		if int(item["mesh_count"]) <= 0:
 			item["status"] = "invalid"
 			item["warnings"].append("No MeshInstance3D with a valid Mesh was found")
@@ -89,13 +118,8 @@ func _run_validation() -> void:
 				item["warnings"].append("No Skeleton3D found; this may be intentional for a static or spirit model")
 				report["summary"]["warnings"] += 1
 			if int(item["animation_player_count"]) == 0:
-				item["warnings"].append("No AnimationPlayer found; the imported animation driver cannot control this model")
+				item["warnings"].append("No AnimationPlayer found; imported animation playback is unavailable")
 				report["summary"]["warnings"] += 1
-			else:
-				for category in item["animation_categories"]:
-					if not item["animation_categories"][category]:
-						item["warnings"].append("No animation clip matched category: " + str(category))
-						report["summary"]["warnings"] += 1
 
 		instance.free()
 		report["models"].append(item)
@@ -136,7 +160,16 @@ func _inspect_node(node: Node, item: Dictionary) -> void:
 		var player := node as AnimationPlayer
 		item["animation_player_count"] += 1
 		for animation_name in player.get_animation_list():
-			item["animations"].append(str(animation_name))
+			var clip_name := str(animation_name)
+			item["animations"].append(clip_name)
+			var animation := player.get_animation(clip_name)
+			if animation != null:
+				item["animation_clips"].append({
+					"name": clip_name,
+					"length_seconds": snappedf(animation.length, 0.001),
+					"loop_mode": int(animation.loop_mode),
+					"track_count": animation.get_track_count()
+				})
 
 	for child in node.get_children():
 		_inspect_node(child, item)
@@ -146,7 +179,7 @@ func _classify_animation_coverage(item: Dictionary) -> void:
 	var keywords := {
 		"idle": ["idle", "stand", "breath", "wait"],
 		"walk": ["walk", "walking", "locomotion"],
-		"run": ["run", "sprint", "jog", "walk"],
+		"run": ["run", "sprint", "jog"],
 		"attack": ["attack", "slash", "swing", "bite", "combat"],
 		"hit": ["hit", "damage", "hurt", "react"],
 		"death": ["death", "die", "dead"]
@@ -160,3 +193,13 @@ func _classify_animation_coverage(item: Dictionary) -> void:
 				if normalized.contains(keyword):
 					item["animation_categories"][category] = true
 					break
+
+
+func _apply_animation_requirements(model_key: String, item: Dictionary) -> Array[String]:
+	var missing: Array[String] = []
+	for category in REQUIRED_ANIMATIONS.get(model_key, []):
+		if not bool(item["animation_categories"].get(category, false)):
+			missing.append(str(category))
+	item["missing_required_animation_categories"] = missing
+	item["animation_requirements_passed"] = missing.is_empty()
+	return missing
