@@ -51,6 +51,15 @@
 | [Poly Haven](https://polyhaven.com/models) | 写实石材、树木、环境道具、PBR 材质与 HDRI | 官方资源页声明模型/贴图/HDRI 为 CC0，可商用且无需署名 | 每个资源仍保存来源记录；风格偏写实，需评估是否匹配洪荒美术方向 |
 | [Kenney](https://kenney.nl/assets) | 简洁道具、UI、基础环境模块 | 官方支持页说明其资源页上的游戏素材采用 CC0 | 仍需核对具体资源页和下载包内 LICENSE；部分素材风格偏卡通 |
 
+首批优先下载/评估的具体包（这些包页面明确列出 CC0；仍需保存下载包内 LICENSE）：
+
+| 资源包 | 页面明确内容 | 洪荒用途 | 评估顺序 |
+|---|---|---|---|
+| [Ultimate Monsters](https://quaternius.com/packs/ultimatemonsters.html) | 50 个带动画怪物，含 glTF，页面标注 CC0 | 怪物骨架与动画参考；筛选兽类和大型怪物 | 1 |
+| [Ultimate Animated Animal Pack](https://quaternius.com/packs/ultimateanimatedanimals.html) | 12 种动物，每种 12+ 动画，含 glTF，页面标注 CC0 | 荒原狼、四足怪物的动作基础 | 2 |
+| [Universal Base Characters](https://quaternius.com/packs/universalbasecharacters.html) | 6 个可重定向 Humanoid 基础角色，含 glTF，页面标注 CC0 | 玩家人形骨架与动画兼容基底 | 3 |
+| [Ultimate Fantasy RTS](https://quaternius.com/packs/ultimatefantasyrts.html) | 128 个建筑/自然资产，含 glTF，页面标注 CC0 | 酆都城墙、塔楼、建筑模块的素材参考 | 4 |
+
 官方依据：
 - Quaternius FAQ: https://quaternius.com/faq.html
 - Quaternius QAL: https://quaternius.com/license.html
