@@ -97,3 +97,27 @@ scripts/visual_model_library.gd 负责可选 GLB 覆盖。它会：
 - 缺失、格式不符或空模型时回退到程序化模型。
 
 这只是资源接入保护，不代表已下载、导入或验收任何第三方模型。当前模型替换仍处于候选资源筛选阶段。
+
+
+## 自动化模型验收工具（新增）
+
+新增 `tools/validate_model_assets.gd`，用于在模型资源放入映射目录后进行无界面检查。它会遍历上面的九个固定模型键，并输出每个模型的：
+- 文件是否存在、是否能加载为 PackedScene、根节点是否为 Node3D；
+- 可渲染 MeshInstance3D 数量、材质表面数；
+- Skeleton3D 与 AnimationPlayer 数量，以及发现的动画名称；
+- 最大网格尺寸参考值，便于发现明显的尺寸异常；
+- 缺少骨骼/动画等警告，以及无可渲染网格等阻断错误。
+
+首次导入 GLB 时，先用 Godot 编辑器打开项目并等待导入完成，然后在客户端目录执行：
+
+```bash
+godot --headless --path . --script res://tools/validate_model_assets.gd
+```
+
+缺失文件属于当前阶段的正常情况，默认只列为 missing，不会让干净仓库验收失败。准备发布或要求九个模型全部齐备时，增加严格参数：
+
+```bash
+godot --headless --path . --script res://tools/validate_model_assets.gd -- --require-all
+```
+
+报告同时打印到控制台，并保存到 Godot 用户目录的 `user://model_asset_validation.json`。该脚本只检查资源，不会下载、改写、移动模型，也不会改动服务器战斗数据。注意：通过结构检查不等于美术验收；比例、朝向、骨骼变形、材质和实际动作仍需在 ArtPreviewStage 与游戏镜头中人工检查。
