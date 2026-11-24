@@ -3540,9 +3540,11 @@ func _on_pickup_event(event: Dictionary) -> void:
 		_show_notification(str(event.get("reason", "正在结算拾取……")))
 		return
 	if bool(event.get("accepted", false)):
+		HHAudio.play_ui("pickup", randf_range(0.96, 1.04))
 		_show_notification("拾取成功：" + str(event.get("item_id", "物品")) + " ×" + str(event.get("quantity", 1)))
 		_refresh_inventory()
 	else:
+		HHAudio.play_ui("warning", 0.92)
 		_show_notification(str(event.get("reason", "拾取失败。")))
 
 func _apply_panel_theme(panel: PanelContainer) -> void:
@@ -5302,6 +5304,7 @@ func _on_combat_event(event: Dictionary) -> void:
 				target_info_label.text = target_info_label.text.split("\n攻击指令已发送")[0] + "\n" + rejection_reason
 			return
 	if action == "hell_trial_wave_transition":
+		HHAudio.play_ui("warning", 0.9)
 		var floor_number := int(event.get("floor", 0))
 		var wave_label := str(event.get("label", "试炼阶段变化"))
 		if bool(event.get("completed", false)):
