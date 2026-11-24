@@ -65,15 +65,13 @@ func play_action(action_name: String) -> bool:
 	_animation_player.play(clip, 0.12)
 	_current_state = normalized
 	_locked_action = normalized
-	match normalized:
-		"attack":
-			_action_lock_remaining = 0.72
-		"hit":
-			_action_lock_remaining = 0.42
-		"death":
-			_action_lock_remaining = 999999.0
-		_:
-			_action_lock_remaining = 0.5
+	if normalized == "death":
+		_action_lock_remaining = 999999.0
+	else:
+		# Imported clips vary in length. Keep the action locked for the real clip
+		# duration instead of cutting long attacks/hit reactions off at a fixed timer.
+		var animation := _animation_player.get_animation(clip)
+		_action_lock_remaining = maxf(0.18, animation.length if animation != null else 0.5)
 	return true
 
 
