@@ -5476,6 +5476,18 @@ func _on_player_action_event(event: Dictionary) -> void:
 	if current_time > 0.0 and current_priority > incoming_priority:
 		return
 	var duration := 0.42 if action == "cast" else (0.36 if action == "attack" else 0.32)
+	if action == "hit":
+		match str(event.get("attack_style", "")):
+			"heavy_slam":
+				duration = 0.48
+			"frost_bolt":
+				duration = 0.27
+			"poison_bolt":
+				duration = 0.30
+			"soul_bolt":
+				duration = 0.36
+			"melee":
+				duration = 0.34
 	remote.set_meta("remote_action_state", action)
 	remote.set_meta("remote_action_priority", incoming_priority)
 	remote.set_meta("remote_action_time", maxf(current_time, duration) if current_priority == incoming_priority else duration)
@@ -5763,7 +5775,7 @@ func _process(delta: float) -> void:
 			var remote_body := remote.get_node_or_null("RemoteBody") as MeshInstance3D
 			if is_instance_valid(remote_body):
 				remote_body.position.y = 0.42 + bob
-				remote_body.scale = Vector3.ONE * (1.0 + action_weight * (0.30 if action_state == "attack" else 0.18))
+				remote_body.scale = Vector3.ONE * (1.0 + action_weight * (0.30 if action_state == "attack" else (0.30 if str(remote.get_meta("remote_action_style", "")) == "heavy_slam" else 0.16)))
 		else:
 			var remote_humanoid := remote.get_node_or_null("RemoteHumanoid") as Node3D
 			if is_instance_valid(remote_humanoid):
@@ -5776,6 +5788,16 @@ func _process(delta: float) -> void:
 					var remote_left_leg := remote_humanoid.get_node_or_null("LegPivotLeft") as Node3D
 					var remote_right_leg := remote_humanoid.get_node_or_null("LegPivotRight") as Node3D
 					var remote_style := str(remote.get_meta("remote_action_style", ""))
+					var remote_hit_recoil := 0.34
+					match remote_style:
+						"heavy_slam":
+							remote_hit_recoil = 0.54
+						"frost_bolt":
+							remote_hit_recoil = 0.22
+						"poison_bolt":
+							remote_hit_recoil = 0.28
+						"soul_bolt":
+							remote_hit_recoil = 0.40
 					var remote_left_lift := 0.20
 					var remote_right_lift := 1.18
 					var remote_sweep := 0.28
@@ -5797,9 +5819,9 @@ func _process(delta: float) -> void:
 							remote_right_lift = 1.42
 							remote_sweep = 0.62
 					if is_instance_valid(remote_left_arm):
-						remote_left_arm.rotation.x = remote_stride - action_weight * (remote_left_lift if action_state == "attack" else -0.34)
+						remote_left_arm.rotation.x = remote_stride - action_weight * (remote_left_lift if action_state == "attack" else -remote_hit_recoil)
 					if is_instance_valid(remote_right_arm):
-						remote_right_arm.rotation.x = -remote_stride - action_weight * (remote_right_lift if action_state == "attack" else -0.48)
+						remote_right_arm.rotation.x = -remote_stride - action_weight * (remote_right_lift if action_state == "attack" else -remote_hit_recoil * 1.4)
 						remote_right_arm.rotation.z = -action_weight * remote_sweep if action_state == "attack" else action_weight * 0.16
 					if is_instance_valid(remote_left_leg):
 						remote_left_leg.rotation.x = -remote_stride * 0.82
