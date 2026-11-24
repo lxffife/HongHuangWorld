@@ -86,6 +86,7 @@ struct BountyObjectiveSubscription {
 struct PlayerState {
     std::vector<BountyObjectiveSubscription> bounty_objectives;
     std::unordered_map<std::string, honghuang::simulation::SpellMastery> spell_mastery;
+    std::unordered_set<std::string> known_spells{"fireball"};
     std::string session_id;
     std::string character_id;
     std::string name;
@@ -678,6 +679,7 @@ bool backend_inventory_request(const ServerConfig& config, const std::string& pa
 bool fetch_spell_mastery(const ServerConfig& config, const std::string& session_id,
                           const std::string& character_id,
                           std::unordered_map<std::string, honghuang::simulation::SpellMastery>& mastery,
+                          std::unordered_set<std::string>& known_spells,
                           long& http_status, std::string& error) {
     CURL* curl = curl_easy_init();
     if (curl == nullptr) { error = "could not initialize spell mastery HTTP client"; return false; }
@@ -729,7 +731,20 @@ bool fetch_spell_mastery(const ServerConfig& config, const std::string& session_
             parsed.emplace(spell_id, honghuang::simulation::SpellMastery{
                 spell_id == "fireball" ? "fireball" : "ice_bolt", experience, level});
         }
+        std::unordered_set<std::string> parsed_known;
+        const auto known_items = response.value("known_spells", Json::array());
+        if (!known_items.is_array()) throw std::runtime_error("known_spells must be an array");
+        for (const auto& value : known_items) {
+            if (!value.is_string()) throw std::runtime_error("known spell ID must be a string");
+            const auto learned_id = value.get<std::string>();
+            if (learned_id != "fireball" && learned_id != "ice_bolt" && learned_id != "taunt") {
+                throw std::runtime_error("unknown learned spell ID");
+            }
+            parsed_known.insert(learned_id);
+        }
+        parsed_known.insert("fireball");
         mastery = std::move(parsed);
+        known_spells = std::move(parsed_known);
         return true;
     } catch (const std::exception& exception) {
         error = std::string("invalid spell mastery response: ") + exception.what();
@@ -4435,7 +4450,13 @@ struct EnetServer::Impl {
             send_json(peer, honghuang::protocol::MessageType::CombatEvent, response);
         };
         if (player.health <= 0) { reject("角色已倒地，无法施法。"); return; }
-        if (player.pending_spell.has_value()) { reject("正在施法，请稍候。"); return; }
+        if ((spell_id == "fireball" || spell_id == "ice_bolt" || spell_id == "taunt") &&
+            !player.known_spells.contains(spell_id)) {
+            const std::string technique = spell_id == "ice_bolt" ? "镇邪符" : "鬼门锁链";
+            reject("尚未掌握" + technique + "，请先研读对应技能典籍。");
+            return;
+        }
+        if (player.pending_spell.has_value()) { reject("正在施法，请稍候。"); return;
         if (!player.revive_target_character_id.empty() && spell_id != "revive") {
             reject("回魂术引导中，不能同时施展其他法术。"); return;
         }
@@ -6173,7 +6194,8 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                         long mastery_http_status = 0;
                         std::string mastery_error;
                         if (!fetch_spell_mastery(impl_->config, player.session_id, player.character_id,
-                                                 player.spell_mastery, mastery_http_status, mastery_error)) {
+                                                 player.spell_mastery, player.known_spells,
+                                                 mastery_http_status, mastery_error)) {
                             std::cerr << "Spell mastery unavailable for character "
                                       << player.character_id << ": " << mastery_error << '\n';
                         }
@@ -6250,6 +6272,10 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                             mastery_snapshot.push_back({{"spell_id", spell_id}, {"experience", mastery.experience}, {"level", mastery.level}});
                         }
                         client_welcome["spell_mastery"] = std::move(mastery_snapshot);
+                        client_welcome["known_spells"] = Json::array();
+                        for (const auto& spell_id : welcomed_player.known_spells) {
+                            client_welcome["known_spells"].push_back(spell_id);
+                        }
                         client_welcome.erase("session_id");
                         send_json(event.peer, honghuang::protocol::MessageType::ServerWelcome, client_welcome);
                         std::cout << "Authenticated character entered world: "
