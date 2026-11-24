@@ -32,6 +32,17 @@ int main() {
     assert(merged[1].damage == 30);
     assert(merged[1].hit_count == 3);
 
+    auto reversed_records = records;
+    std::reverse(reversed_records.begin(), reversed_records.end());
+    const auto reversed = aggregate_bounty_monster_contributors(reversed_records);
+    assert(reversed.size() == merged.size());
+    for (std::size_t index = 0; index < merged.size(); ++index) {
+        assert(reversed[index].character_id == merged[index].character_id);
+        assert(reversed[index].session_id == merged[index].session_id);
+        assert(reversed[index].damage == merged[index].damage);
+        assert(reversed[index].hit_count == merged[index].hit_count);
+    }
+
     const std::vector<MonsterContributionRecord> older_replay{
         {"write-latest", "life-2", "wraith", "session-latest", "character-c", 10, 1, 9000, 9000},
         {"write-stale", "life-2", "wraith", "session-stale", "character-c", 5, 1, 1000, 1000}
@@ -50,6 +61,15 @@ int main() {
     assert(saturated.size() == 1);
     assert(saturated[0].damage == std::numeric_limits<std::int64_t>::max());
     assert(saturated[0].hit_count == 2);
+
+    const std::vector<MonsterContributionRecord> hit_overflow{
+        {"write-hit-max", "life-4", "wraith", "session-hit-max", "character-hit-overflow",
+         1, std::numeric_limits<std::int64_t>::max(), 1, 1},
+        {"write-hit-extra", "life-4", "wraith", "session-hit-extra", "character-hit-overflow", 1, 1, 2, 2}
+    };
+    const auto saturated_hits = aggregate_bounty_monster_contributors(hit_overflow);
+    assert(saturated_hits.size() == 1);
+    assert(saturated_hits[0].hit_count == std::numeric_limits<std::int64_t>::max());
 
     const auto empty = aggregate_bounty_monster_contributors({});
     assert(empty.empty());
