@@ -4477,6 +4477,20 @@ func _clear_incoming_attack_source_for_monster(monster_id: String, monster: Node
 	_set_incoming_attack_telegraph(attack_style, false, monster_id)
 
 
+func _clear_all_incoming_attack_warnings() -> void:
+	if not is_instance_valid(local_player):
+		return
+	local_player.set_meta("incoming_attack_sources", {})
+	var marker := local_player.get_node_or_null("IncomingAttackTelegraph") as MeshInstance3D
+	if not is_instance_valid(marker):
+		return
+	var active_tween: Variant = marker.get_meta("pulse_tween", null)
+	if active_tween is Tween and (active_tween as Tween).is_running():
+		(active_tween as Tween).kill()
+	marker.visible = false
+	marker.scale = Vector3.ONE
+
+
 func _set_elemental_telegraph(monster: Node3D, enabled: bool, attack_style: String = "") -> void:
 	var telegraph := monster.get_node_or_null("ElementalTelegraph") as MeshInstance3D
 	if not is_instance_valid(telegraph):
@@ -6459,6 +6473,7 @@ func _on_reconnected_welcomed(snapshot: Dictionary) -> void:
 		monsters[monster_id].queue_free()
 	monsters.clear()
 	monster_targets.clear()
+	_clear_all_incoming_attack_warnings()
 	for drop_id in drops.keys():
 		drops[drop_id].queue_free()
 	drops.clear()
