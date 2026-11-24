@@ -5941,7 +5941,6 @@ struct EnetServer::Impl {
                     victim = replacement;
                     monster.state.target_id = victim->second.character_id;
                     monster.attack_target_character_id = victim->second.character_id;
-                    broadcast_attack_phase("windup");
                 } else {
                     if (monster.attack_phase == MonsterAttackPhase::Windup) {
                         monster.attack_phase = MonsterAttackPhase::Ready;
@@ -5979,7 +5978,6 @@ struct EnetServer::Impl {
                     // The slam remains committed even if aggro moves to another
                     // living player. Keep the original impact deadline.
                     monster.attack_target_character_id = player.character_id;
-                    broadcast_attack_phase("windup");
                 }
                 if (now - monster.attack_phase_started_at < windup_duration) continue;
             } else {
