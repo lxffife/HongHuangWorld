@@ -4436,6 +4436,23 @@ struct EnetServer::Impl {
             {"soul_experience_reward", 0}, {"settlement_pending", damage.defeated}
         };
         send_json(peer, honghuang::protocol::MessageType::CombatEvent, event);
+        // Nearby players need the same hit/death feedback and authoritative HP,
+        // but must never receive the attacker's private reward settlement event.
+        const Json visual_event{
+            {"accepted", true}, {"visual_only", true}, {"source", "melee"},
+            {"attacker_character_id", player.character_id},
+            {"target_entity_id", target->runtime_id}, {"target_name", target->definition.name},
+            {"attack_style", player_attack_style(player)}, {"damage", damage.damage},
+            {"critical", damage.critical}, {"health", damage.remaining_health},
+            {"remaining_health", damage.remaining_health}, {"max_health", target->definition.max_health},
+            {"defeated", damage.defeated}
+        };
+        for (const auto& [recipient_peer, recipient] : players) {
+            if (recipient_peer == peer ||
+                !honghuang::simulation::within_interest_radius(
+                    target->state.x, target->state.z, recipient.x, recipient.z, kInterestRadius)) continue;
+            send_json(recipient_peer, honghuang::protocol::MessageType::CombatEvent, visual_event);
+        }
     }
 
     void handle_spell_cast(ENetPeer* peer, const Json& command) {
