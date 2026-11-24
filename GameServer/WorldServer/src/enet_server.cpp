@@ -2785,9 +2785,11 @@ struct EnetServer::Impl {
                     [&](const MonsterRuntime& candidate) {
                         return candidate.definition.id == wave_transition.unlocked_definition_id;
                     });
-                if (next_wave == monsters.end()) {
-                    std::cerr << "[HellTrialWave] next wave monster is missing: "
-                              << wave_transition.unlocked_definition_id << std::endl;
+                if (next_wave == monsters.end() || next_wave->state.health > 0.0F) {
+                    std::cerr << "[HellTrialWave] next wave is not safely dormant: "
+                              << wave_transition.unlocked_definition_id
+                              << (next_wave == monsters.end() ? " (missing)" : " (positive health)")
+                              << std::endl;
                     (void)hell_trial_waves.restore_stage(previous_stage);
                     wave_checkpoint_failed = true;
                 }
