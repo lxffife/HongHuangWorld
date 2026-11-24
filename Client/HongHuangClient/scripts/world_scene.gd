@@ -1368,10 +1368,20 @@ func _build_combat_hud() -> void:
 
 	target_info_panel = PanelContainer.new()
 	target_info_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	target_info_panel.position = Vector2(-180.0, 18.0)
-	target_info_panel.custom_minimum_size = Vector2(360.0, 82.0)
+	target_info_panel.position = Vector2(-210.0, 72.0)
+	target_info_panel.custom_minimum_size = Vector2(420.0, 92.0)
 	target_info_panel.visible = false
 	_apply_panel_theme(target_info_panel)
+	var target_panel_style := StyleBoxFlat.new()
+	target_panel_style.bg_color = Color("#0a1420", 0.94)
+	target_panel_style.border_color = Color("#806b46")
+	target_panel_style.set_border_width_all(1)
+	target_panel_style.set_corner_radius_all(12)
+	target_panel_style.content_margin_left = 14.0
+	target_panel_style.content_margin_right = 14.0
+	target_panel_style.content_margin_top = 8.0
+	target_panel_style.content_margin_bottom = 8.0
+	target_info_panel.add_theme_stylebox_override("panel", target_panel_style)
 	hud.add_child(target_info_panel)
 	var target_layout := VBoxContainer.new()
 	target_layout.add_theme_constant_override("separation", 5)
@@ -1380,20 +1390,20 @@ func _build_combat_hud() -> void:
 	target_info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	target_info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	target_info_label.add_theme_color_override("font_color", Color("#f2e8d6"))
-	target_info_label.add_theme_font_size_override("font_size", 14)
+	target_info_label.add_theme_font_size_override("font_size", 13)
 	target_layout.add_child(target_info_label)
 	target_health_bar = ProgressBar.new()
-	target_health_bar.custom_minimum_size = Vector2(320.0, 10.0)
+	target_health_bar.custom_minimum_size = Vector2(388.0, 12.0)
 	target_health_bar.min_value = 0.0
 	target_health_bar.max_value = 1.0
 	target_health_bar.value = 1.0
 	target_health_bar.show_percentage = false
 	var target_track := StyleBoxFlat.new()
-	target_track.bg_color = Color("#202f40")
-	target_track.set_corner_radius_all(5)
+	target_track.bg_color = Color("#1a2a38")
+	target_track.set_corner_radius_all(6)
 	var target_fill := StyleBoxFlat.new()
-	target_fill.bg_color = Color("#c65d5d")
-	target_fill.set_corner_radius_all(5)
+	target_fill.bg_color = Color("#c45c5c")
+	target_fill.set_corner_radius_all(6)
 	target_health_bar.add_theme_stylebox_override("background", target_track)
 	target_health_bar.add_theme_stylebox_override("fill", target_fill)
 	target_layout.add_child(target_health_bar)
