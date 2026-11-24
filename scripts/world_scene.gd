@@ -4724,7 +4724,7 @@ func _clear_all_incoming_attack_warnings() -> void:
 	var marker := local_player.get_node_or_null("IncomingAttackTelegraph") as MeshInstance3D
 	if not is_instance_valid(marker):
 		return
-	var active_tween: Variant = marker.get_meta("pulse_tween", null)
+	var active_tween: Variant = marker.get_meta("pulse_tween") if marker.has_meta("pulse_tween") else null
 	if active_tween is Tween and (active_tween as Tween).is_running():
 		(active_tween as Tween).kill()
 	marker.visible = false
@@ -4750,7 +4750,7 @@ func _set_elemental_telegraph(monster: Node3D, enabled: bool, attack_style: Stri
 			material.albedo_color = Color(tint.r, tint.g, tint.b, 0.34)
 			material.emission = tint
 			material.emission_energy_multiplier = 1.6
-		var previous_tween: Variant = telegraph.get_meta("pulse_tween", null)
+		var previous_tween: Variant = telegraph.get_meta("pulse_tween") if telegraph.has_meta("pulse_tween") else null
 		if previous_tween is Tween and (previous_tween as Tween).is_running():
 			(previous_tween as Tween).kill()
 		telegraph.scale = Vector3.ONE * 0.88
@@ -4760,7 +4760,7 @@ func _set_elemental_telegraph(monster: Node3D, enabled: bool, attack_style: Stri
 		tween.tween_property(telegraph, "scale", Vector3.ONE * 0.88, 0.32)
 		telegraph.set_meta("pulse_tween", tween)
 	else:
-		var active_tween: Variant = telegraph.get_meta("pulse_tween", null)
+		var active_tween: Variant = telegraph.get_meta("pulse_tween") if telegraph.has_meta("pulse_tween") else null
 		if active_tween is Tween and active_tween.is_running():
 			(active_tween as Tween).kill()
 		telegraph.scale = Vector3.ONE
@@ -4778,7 +4778,7 @@ func _set_incoming_attack_telegraph(attack_style: String, enabled: bool, source_
 	var marker := local_player.get_node_or_null("IncomingAttackTelegraph") as MeshInstance3D
 	if active_sources.is_empty():
 		if marker != null:
-			var old_tween: Variant = marker.get_meta("pulse_tween", null)
+			var old_tween: Variant = marker.get_meta("pulse_tween") if marker.has_meta("pulse_tween") else null
 			if old_tween is Tween and (old_tween as Tween).is_running():
 				(old_tween as Tween).kill()
 			marker.visible = false
@@ -4829,7 +4829,7 @@ func _set_incoming_attack_telegraph(attack_style: String, enabled: bool, source_
 	material.emission = tint
 	material.emission_energy_multiplier = 2.6
 	marker.visible = true
-	var previous_tween: Variant = marker.get_meta("pulse_tween", null)
+	var previous_tween: Variant = marker.get_meta("pulse_tween") if marker.has_meta("pulse_tween") else null
 	if previous_tween is Tween and (previous_tween as Tween).is_running():
 		(previous_tween as Tween).kill()
 	marker.scale = Vector3.ONE * 0.86
