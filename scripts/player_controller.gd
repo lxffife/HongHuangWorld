@@ -15,6 +15,7 @@ var camera_pivot: Node3D
 var camera_pivot_base_position := Vector3(0.0, 1.45, 0.0)
 var hit_reaction_time := 0.0
 var hit_reaction_strength := 0.0
+var hit_reaction_duration := 0.32
 var camera: Camera3D
 var visual: MeshInstance3D
 var player_humanoid: Node3D
@@ -519,13 +520,66 @@ func _apply_soul_affinity_visuals(affinities: Dictionary) -> void:
 func play_hit_reaction(damage: int, attack_style: String = "") -> void:
 	# A confirmed hit interrupts an in-progress attack instead of letting it resume afterward.
 	attack_animation_time = 0.0
-	hit_animation_time = maxf(hit_animation_time, 0.32)
-	hit_reaction_time = maxf(hit_reaction_time, 0.32)
-	var style_strength := 0.115 if attack_style == "heavy_slam" else 0.055
+	var style_duration := 0.32
+	var style_strength := 0.055
+	match attack_style:
+		"heavy_slam":
+			style_duration = 0.48
+			style_strength = 0.14
+		"frost_bolt":
+			style_duration = 0.27
+			style_strength = 0.045
+		"poison_bolt", "poison_tick":
+			style_duration = 0.30
+			style_strength = 0.05
+		"soul_bolt":
+			style_duration = 0.36
+			style_strength = 0.075
+		"melee":
+			style_duration = 0.34
+			style_strength = 0.065
+	hit_reaction_duration = style_duration
+	hit_animation_time = maxf(hit_animation_time, style_duration)
+	hit_reaction_time = maxf(hit_reaction_time, style_duration)
 	var damage_strength := clampf(float(maxi(damage, 0)) / 240.0, 0.0, 0.045)
 	hit_reaction_strength = maxf(hit_reaction_strength, style_strength + damage_strength)
 	_spawn_hit_flash(attack_style)
 	_spawn_hit_reaction_visual(attack_style)
+
+
+func play_shield_absorb(absorbed: int, attack_style: String = "") -> void:
+	if absorbed <= 0 or not is_instance_valid(visual):
+		return
+	var ring := MeshInstance3D.new()
+	ring.name = "PlayerShieldAbsorbRing"
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.48
+	ring_mesh.outer_radius = 0.55
+	ring_mesh.rings = 28
+	ring_mesh.ring_segments = 8
+	ring.mesh = ring_mesh
+	ring.position = Vector3(0.0, 0.92, 0.0)
+	ring.rotation.x = PI / 2.0
+	var tint := Color("#8bdfff")
+	if attack_style == "poison_bolt":
+		tint = Color("#9cffb0")
+	elif attack_style == "heavy_slam":
+		tint = Color("#b6c9ff")
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(tint.r, tint.g, tint.b, 0.88)
+	material.emission_enabled = true
+	material.emission = tint
+	material.emission_energy_multiplier = 2.8
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring.material_override = material
+	visual.add_child(ring)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(ring, "scale", Vector3(1.8, 1.8, 1.8), 0.30)
+	tween.tween_property(material, "albedo_color:a", 0.0, 0.30)
+	tween.tween_property(material, "emission_energy_multiplier", 0.0, 0.30)
+	tween.chain().tween_callback(Callable(ring, "queue_free"))
 
 
 func _hit_flash_color(attack_style: String) -> Color:
@@ -704,10 +758,11 @@ func _process(delta: float) -> void:
 		var soul_attack_pulse: float = sin(clampf(soul_attack_progress, 0.0, 1.0) * PI) if attack_animation_time > 0.0 else 0.0
 		visual.scale = Vector3.ONE * soul_form_scale * (1.0 + soul_attack_pulse * 0.24)
 	if is_instance_valid(camera_pivot):
-		var shake_weight := hit_reaction_time / 0.32
-		var shake_time := 0.32 - hit_reaction_time
-		var shake := sin(shake_time * 58.0) * hit_reaction_strength * shake_weight
-		var vertical := absf(cos(shake_time * 34.0)) * hit_reaction_strength * 0.28 * shake_weight
+			var shake_weight := hit_reaction_time / maxf(hit_reaction_duration, 0.01)
+		var shake_time := hit_reaction_duration - hit_reaction_time
+		var shake_frequency := 58.0 if hit_reaction_duration < 0.4 else 43.0
+		var shake := sin(shake_time * shake_frequency) * hit_reaction_strength * shake_weight
+		var vertical := absf(cos(shake_time * (34.0 if hit_reaction_duration < 0.4 else 25.0))) * hit_reaction_strength * 0.32 * shake_weight
 		camera_pivot.position = camera_pivot_base_position + Vector3(shake, vertical, 0.0)
 	if hit_reaction_time <= 0.0:
 		hit_reaction_strength = 0.0
@@ -722,7 +777,7 @@ func _process(delta: float) -> void:
 		if attack_animation_time > 0.0:
 			attack_weight = sin((1.0 - attack_animation_time / 0.34) * PI)
 		var animation_state := "hit" if hit_animation_time > 0.0 else ("attack" if attack_animation_time > 0.0 else ("walk" if moving else "idle"))
-		var hit_weight := sin(clampf(1.0 - hit_animation_time / 0.32, 0.0, 1.0) * PI) if hit_animation_time > 0.0 else 0.0
+		var hit_weight := sin(clampf(1.0 - hit_animation_time / maxf(hit_reaction_duration, 0.01), 0.0, 1.0) * PI) if hit_animation_time > 0.0 else 0.0
 		var native_animation := HumanoidAnimationDriver.apply_state(player_humanoid, animation_state, 0.16, attack_animation_style)
 		if not native_animation:
 			var left_arm := player_humanoid.get_node_or_null("ArmPivotLeft") as Node3D
