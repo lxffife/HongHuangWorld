@@ -1590,7 +1590,7 @@ func _layout_notification_panel() -> void:
 		return
 	var viewport_size := get_viewport().get_visible_rect().size
 	var notice_width := minf(520.0, maxf(250.0, viewport_size.x - 32.0))
-	var notice_height := 76.0
+	var notice_height := 56.0
 	# World-entry and combat feedback live in the upper-middle, clear of the crosshair.
 	notification_panel.anchor_left = 0.5
 	notification_panel.anchor_right = 0.5
@@ -1599,10 +1599,10 @@ func _layout_notification_panel() -> void:
 	notification_panel.offset_left = -notice_width * 0.5
 	notification_panel.offset_right = notice_width * 0.5
 	notification_panel.offset_top = 84.0
-	notification_panel.offset_bottom = 84.0 + 56.0
-	notification_panel.custom_minimum_size = Vector2(notice_width, 56.0)
+	notification_panel.offset_bottom = 84.0 + notice_height
+	notification_panel.custom_minimum_size = Vector2(notice_width, notice_height)
 	if is_instance_valid(notification_label):
-		notification_label.custom_minimum_size = Vector2(notice_width - 36.0, 40.0)
+		notification_label.custom_minimum_size = Vector2(notice_width - 36.0, notice_height - 16.0)
 
 func _update_vitals(current_health: int, max_health: int) -> void:
 	if max_health <= 0 or current_health < 0:
