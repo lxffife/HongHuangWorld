@@ -2338,6 +2338,18 @@ func _create_drop(item_name: String, quality: int, quantity: int) -> Node3D:
 	add_child(root)
 	return root
 
+func _is_combat_click_over_interactive_ui(control: Control) -> bool:
+	# Full-screen HUD containers often use MOUSE_FILTER_STOP even when the
+	# player clicks empty world space. Only real interactive widgets should
+	# reserve the left mouse button; decorative panels/labels must pass it through.
+	var current: Node = control
+	while is_instance_valid(current):
+		if current is BaseButton or current is LineEdit or current is TextEdit or current is Range or current is OptionButton or current is MenuButton or current is PopupMenu:
+			return true
+		current = current.get_parent()
+	return false
+
+
 func _input(event: InputEvent) -> void:
 	# Route combat clicks at the world root so GUI focus cannot silently swallow them.
 	if not (event is InputEventMouseButton):
@@ -2357,7 +2369,7 @@ func _input(event: InputEvent) -> void:
 	var was_captured := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 	if not was_captured:
 		var hovered_control := viewport.gui_get_hovered_control()
-		if is_instance_valid(hovered_control) and hovered_control.mouse_filter == Control.MOUSE_FILTER_STOP:
+		if is_instance_valid(hovered_control) and _is_combat_click_over_interactive_ui(hovered_control):
 			return
 	var target_screen_position: Vector2 = viewport.get_visible_rect().size * 0.5 if was_captured else mouse_event.position
 	if not was_captured:
@@ -4013,6 +4025,45 @@ func _pick_monster_target_at_screen_position(screen_position: Vector2) -> String
 			best_id = monster_id
 	return best_id
 
+func _pick_nearest_visible_monster_in_front(max_distance: float) -> String:
+	if not is_instance_valid(local_player):
+		return ""
+	var player_camera := local_player.get("camera") as Camera3D
+	if not is_instance_valid(player_camera) or not player_camera.is_inside_tree():
+		return ""
+	var camera_forward := -player_camera.global_transform.basis.z.normalized()
+	var viewport_size := get_viewport().get_visible_rect().size
+	var viewport_center := viewport_size * 0.5
+	var best_id := ""
+	var best_score := INF
+	for monster_id_variant in monster_targets.keys():
+		var monster_id := str(monster_id_variant)
+		if not monsters.has(monster_id):
+			continue
+		var monster_node := monsters[monster_id] as Node3D
+		if not is_instance_valid(monster_node) or not monster_node.is_visible_in_tree():
+			continue
+		var world_position: Vector3 = monster_targets[monster_id]
+		var offset := world_position + Vector3.UP * 1.0 - player_camera.global_position
+		var distance := Vector2(offset.x, offset.z).length()
+		if distance > max_distance or distance < 0.1:
+			continue
+		var direction := offset.normalized()
+		if camera_forward.dot(direction) < 0.35 or player_camera.is_position_behind(world_position + Vector3.UP):
+			continue
+		var screen_point := player_camera.unproject_position(world_position + Vector3.UP)
+		if screen_point.x < 0.0 or screen_point.y < 0.0 or screen_point.x > viewport_size.x or screen_point.y > viewport_size.y:
+			continue
+		var pixel_distance := screen_point.distance_to(viewport_center)
+		if pixel_distance > minf(viewport_size.x * 0.22, 320.0):
+			continue
+		var score := distance + pixel_distance * 0.012
+		if score < best_score:
+			best_score = score
+			best_id = monster_id
+	return best_id
+
+
 func _request_nearest_monster_attack(screen_position: Vector2 = Vector2(-1.0, -1.0)) -> void:
 	var network := HHSession.world_network
 	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
@@ -4028,6 +4079,13 @@ func _request_nearest_monster_attack(screen_position: Vector2 = Vector2(-1.0, -1
 	var target_id := picked_id
 	if target_id.is_empty() and monsters.has(selected_monster_id) and monster_targets.has(selected_monster_id):
 		target_id = selected_monster_id
+	# If the click lands on empty ground while a hostile is already engaging
+	# the player, acquire the closest visible enemy in the forward combat cone.
+	# This avoids requiring pixel-perfect crosshair placement for the first hit.
+	if target_id.is_empty():
+		target_id = _pick_nearest_visible_monster_in_front(12.0)
+		if not target_id.is_empty():
+			_set_monster_target(target_id)
 	if target_id.is_empty():
 		_show_notification("未选中怪物：请将屏幕中心对准怪物，再点击左键；按 Tab 可切换目标。", 4.0)
 		return
@@ -4634,6 +4692,20 @@ func _show_ghost_gate_chain_effect(target_entity_id: String) -> void:
 
 func _on_combat_event(event: Dictionary) -> void:
 	var action := str(event.get("action", ""))
+	# Attack rejection is a first-class response. Previously it fell through
+	# the hit-event renderer and could look like a silent zero-damage attack.
+	if event.has("accepted") and not bool(event.get("accepted", true)):
+		var rejected_attacker := str(event.get("attacker_character_id", ""))
+		var own_character_id := str(HHSession.world_snapshot.get("character_id", ""))
+		if not rejected_attacker.is_empty() and rejected_attacker == own_character_id:
+			var rejection_reason := str(event.get("reason", "服务器拒绝了本次攻击。"))
+			var cooldown_left := int(event.get("cooldown_ms", 0))
+			if cooldown_left > 0:
+				attack_repeat_remaining = maxf(attack_repeat_remaining, float(cooldown_left) / 1000.0)
+			_show_notification("攻击未生效 · " + rejection_reason, 3.0)
+			if is_instance_valid(target_info_label) and not selected_monster_id.is_empty():
+				target_info_label.text = target_info_label.text.split("\n攻击指令已发送")[0] + "\n" + rejection_reason
+			return
 	if action == "hell_trial_wave_transition":
 		var floor_number := int(event.get("floor", 0))
 		var wave_label := str(event.get("label", "试炼阶段变化"))
