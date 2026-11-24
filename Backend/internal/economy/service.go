@@ -191,12 +191,14 @@ func (s *Service) ApplyIssuanceInTx(
 	// A committed ledger key is an idempotent replay, even when the daily cap
 	// has since been reached.
 	var existing LedgerResult
-	var existingType string
-	err := tx.QueryRowContext(ctx, `SELECT currency_id, entry_type, delta, available_after, frozen_after
+	var existingType, existingSourceType string
+	err := tx.QueryRowContext(ctx, `SELECT currency_id, entry_type, delta, available_after, frozen_after, source_type
 		FROM economy_ledger_entries WHERE account_id = $1 AND event_key = $2`, accountID, eventKey).
-		Scan(&existing.CurrencyID, &existingType, &existing.Delta, &existing.AvailableAfter, &existing.FrozenAfter)
+		Scan(&existing.CurrencyID, &existingType, &existing.Delta, &existing.AvailableAfter, &existing.FrozenAfter, &existingSourceType)
 	if err == nil {
-		if existing.CurrencyID != currencyID || existing.Delta != amount || existingType != "grant" {
+		// A previous attempt may have been clipped to the remaining daily cap.
+		if existing.CurrencyID != currencyID || existing.Delta <= 0 || existing.Delta > amount ||
+			existingType != "grant" || existingSourceType != sourceType {
 			return LedgerResult{}, ErrIdempotencyConflict
 		}
 		existing.Applied = false
@@ -235,8 +237,15 @@ func (s *Service) ApplyIssuanceInTx(
 		accountID, currencyID, sourceType).Scan(&issuedToday); err != nil {
 		return LedgerResult{}, fmt.Errorf("calculate daily currency issuance: %w", err)
 	}
-	if issuedToday > dailyCap-amount { return LedgerResult{}, ErrIssuanceNotAllowed }
-
+	remainingToday := dailyCap - issuedToday
+	if remainingToday <= 0 {
+		return LedgerResult{Applied: false, CurrencyID: currencyID}, nil
+	}
+	// Do not discard experience or cultivation when a player is near the cap:
+	// grant only the remaining allowance for this currency and event.
+	if amount > remainingToday {
+		amount = remainingToday
+	}
 	return s.ApplyDeltaInTx(ctx, tx, accountID, currencyID, eventKey, "grant", amount,
 		sourceType, sourceID, note)
 }
