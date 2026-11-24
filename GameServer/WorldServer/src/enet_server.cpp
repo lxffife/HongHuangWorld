@@ -2990,6 +2990,7 @@ struct EnetServer::Impl {
                         {"accepted", true}, {"action", "monster_death_settlement"},
                         {"target_entity_id", monster->runtime_id}, {"monster_name", monster->definition.name},
                         {"monster_level", monster->death_level}, {"committed", true},
+                        {"contribution_only", character_id != death_killer_character_id},
                         {"experience", reward == reward_recipients.end() ? 0 : reward->experience},
                         {"cultivation", reward == reward_recipients.end() ? 0 : reward->cultivation},
                         {"ghost_cash", reward == reward_recipients.end() ? 0 : reward->ghost_cash},
