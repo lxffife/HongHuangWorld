@@ -5155,6 +5155,8 @@ func _on_combat_event(event: Dictionary) -> void:
 			aggro_entity["aggro_target_name"] = "" if target_cleared else target_name
 			monster_entities[monster_id] = aggro_entity
 			_refresh_monster_nameplate(monster_id)
+			if monster_id == selected_monster_id:
+				_update_target_info()
 		if target_cleared:
 			_show_notification(monster_name + " 已失去攻击目标。", 2.2)
 		elif target_id == local_character_id:
