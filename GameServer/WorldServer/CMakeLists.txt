@@ -191,6 +191,12 @@ if(BUILD_TESTING)
     target_include_directories(monster_reward_distribution_test PRIVATE include)
     add_test(NAME monster_reward_distribution_test COMMAND monster_reward_distribution_test)
 
+    add_executable(bounty_contribution_aggregation_test
+        tests/bounty_contribution_aggregation_test.cpp
+    )
+    target_include_directories(bounty_contribution_aggregation_test PRIVATE include)
+    add_test(NAME bounty_contribution_aggregation_test COMMAND bounty_contribution_aggregation_test)
+
     add_executable(monster_death_finalizer_test
         tests/monster_death_finalizer_test.cpp
         src/monster_death_finalizer.cpp
