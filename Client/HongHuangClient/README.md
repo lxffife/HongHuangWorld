@@ -193,6 +193,8 @@ godot --headless --path . --script res://tests/world_generation_test.gd
 - 外部 GLB 若包含 AnimationPlayer，怪物模型会自动按位移切换 idle/walk/run；已接入服务端确认的怪物攻击、受击、死亡动画触发。玩家人形仍走现有动画驱动，避免控制冲突。动作缺失时保留程序化表现。
 
 
+正式 GLB 接入时，视觉模型会按角色/怪物类型自动校准高度（玩家 1.8m、荒原狼 1.15m、铁骨兽 2.8m 等），缩放范围有限制，异常单位不会被静默放大；详细规则见模型资源接入规范。
+
 ## GLB 模型资源自动验收
 
 模型资源放入 `assets/models/` 并完成 Godot 首次导入后，在客户端目录运行：
