@@ -3818,10 +3818,11 @@ func _render_inventory_items() -> void:
 		row.add_child(detail_button)
 		var item_id := str(item.get("item_id", ""))
 		if item_id in ["tome_suppressing_talisman", "tome_ghost_gate_chain"]:
+			var tome_spell_id := "ice_bolt" if item_id == "tome_suppressing_talisman" else "taunt"
+			var tome_known := _is_spell_known(tome_spell_id)
 			var study_button := Button.new()
-			study_button.text = "研读"
-			study_button.disabled = spell_learning_busy
-			study_button.text = "研读中…" if spell_learning_busy else "研读"
+			study_button.text = "已掌握" if tome_known else ("研读中…" if spell_learning_busy else "研读")
+			study_button.disabled = spell_learning_busy or tome_known
 			_apply_button_theme(study_button, true)
 			study_button.pressed.connect(_on_learn_spell_pressed.bind(item_id))
 			row.add_child(study_button)
