@@ -2927,10 +2927,22 @@ struct EnetServer::Impl {
             }
             const auto now = Clock::now();
             const auto death_killer_character_id = monster->death_killer_character_id;
+            std::vector<LootEntry> loot_metadata;
+            {
+                std::lock_guard lock(loot_table_mutex);
+                loot_metadata = loot_table;
+            }
             Json killer_drops = Json::array();
             for (const auto& drop : monster->pending_death_drops) {
+                const auto item = std::find_if(loot_metadata.begin(), loot_metadata.end(),
+                    [&](const LootEntry& entry) { return entry.item_id == drop.item_id; });
                 killer_drops.push_back(Json{
-                    {"item_id", drop.item_id}, {"quantity", drop.quantity},
+                    {"item_id", drop.item_id},
+                    {"item_name", item == loot_metadata.end() || item->item_name.empty()
+                        ? drop.item_id : item->item_name},
+                    {"quality", item == loot_metadata.end() ? 1 : item->quality},
+                    {"icon_key", item == loot_metadata.end() ? std::string{} : item->icon_key},
+                    {"quantity", drop.quantity},
                     {"drop_id", drop.id}
                 });
                 const auto remaining_ms = std::max<std::int64_t>(0, drop.expires_at_unix_ms - wall_clock_ms());
