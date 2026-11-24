@@ -2867,6 +2867,7 @@ func _build_chat_hud() -> void:
 	layout.add_child(chat_status)
 	friend_panel = FriendPanelScript.new()
 	friend_panel.open_private_chat.connect(_open_friend_conversation)
+	friend_panel.panel_closed.connect(_on_friend_panel_closed)
 	hud.add_child(friend_panel)
 	_set_chat_expanded(false)
 
@@ -3156,6 +3157,12 @@ func _active_chat_storage_key() -> String:
 		return "whisper:" + selected_friend_character_id
 	return selected_chat_channel
 
+func _on_friend_panel_closed() -> void:
+	var channel_ids := ["system", "nearby", "friends", "world", "cross_world"]
+	var active_index := channel_ids.find(selected_chat_channel)
+	for index in range(chat_channel_buttons.size()):
+		_style_chat_button(chat_channel_buttons[index], index == active_index)
+
 func _open_friend_conversation(character_id: String, character_name: String) -> void:
 	if character_id.is_empty():
 		return
@@ -3188,6 +3195,8 @@ func _on_chat_conversation_history_received(character_id: String, messages: Arra
 
 func _select_chat_channel(channel: String) -> void:
 	if channel == "friends":
+		for index in range(chat_channel_buttons.size()):
+			_style_chat_button(chat_channel_buttons[index], index == 2)
 		if is_instance_valid(friend_panel):
 			friend_panel.open_panel()
 		return
