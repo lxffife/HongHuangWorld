@@ -4427,6 +4427,8 @@ func _on_monster_action_event(event: Dictionary) -> void:
 		attacker.set_meta("attack_radius", maxf(float(event.get("attack_radius", 3.6)), 0.5))
 	if phase == "windup":
 		attacker.set_meta("attack_phase", "windup")
+		if str(event.get("target_character_id", "")) == str(HHSession.world_snapshot.get("character_id", "")):
+			_set_incoming_attack_telegraph(attack_style, true)
 		if attack_style == "heavy_slam":
 			_set_iron_slam_telegraph(attacker, true)
 		if attack_style == "soul_bolt" or attack_style == "frost_bolt" or attack_style == "poison_bolt":
@@ -4438,11 +4440,15 @@ func _on_monster_action_event(event: Dictionary) -> void:
 	elif phase == "cancelled":
 		attacker.set_meta("attack_phase", "idle")
 		attacker.set_meta("attack_phase_time", 0.0)
+		if str(event.get("target_character_id", "")) == str(HHSession.world_snapshot.get("character_id", "")):
+			_set_incoming_attack_telegraph(attack_style, false)
 		_set_iron_slam_telegraph(attacker, false)
 		_set_elemental_telegraph(attacker, false)
 	elif phase == "impact":
 		attacker.set_meta("attack_phase", "impact")
 		attacker.set_meta("attack_phase_duration", 0.2)
+		if str(event.get("target_character_id", "")) == str(HHSession.world_snapshot.get("character_id", "")):
+			_set_incoming_attack_telegraph(attack_style, false)
 		attacker.set_meta("attack_phase_time", 0.2)
 		if attack_style == "heavy_slam":
 			_set_iron_slam_telegraph(attacker, false)
@@ -4477,6 +4483,62 @@ func _set_elemental_telegraph(monster: Node3D, enabled: bool) -> void:
 		if active_tween is Tween and active_tween.is_running():
 			(active_tween as Tween).kill()
 		telegraph.scale = Vector3.ONE
+
+func _set_incoming_attack_telegraph(attack_style: String, enabled: bool) -> void:
+	if not is_instance_valid(local_player):
+		return
+	var marker := local_player.get_node_or_null("IncomingAttackTelegraph") as MeshInstance3D
+	if enabled and marker == null:
+		marker = MeshInstance3D.new()
+		marker.name = "IncomingAttackTelegraph"
+		var ring_mesh := TorusMesh.new()
+		ring_mesh.inner_radius = 0.82
+		ring_mesh.outer_radius = 0.94
+		ring_mesh.rings = 36
+		ring_mesh.ring_segments = 8
+		marker.mesh = ring_mesh
+		marker.position.y = 0.075
+		local_player.add_child(marker)
+	if marker == null:
+		return
+	if not enabled:
+		var old_tween: Variant = marker.get_meta("pulse_tween", null)
+		if old_tween is Tween and (old_tween as Tween).is_running():
+			(old_tween as Tween).kill()
+		marker.visible = false
+		marker.scale = Vector3.ONE
+		return
+	var tint := Color("#ff6547")
+	match attack_style:
+		"heavy_slam":
+			tint = Color("#ff6547")
+		"frost_bolt":
+			tint = Color("#75ddff")
+		"poison_bolt":
+			tint = Color("#9be66b")
+		"soul_bolt":
+			tint = Color("#c18aff")
+	var material := marker.material_override as StandardMaterial3D
+	if material == null:
+		material = StandardMaterial3D.new()
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		marker.material_override = material
+	material.albedo_color = Color(tint.r, tint.g, tint.b, 0.72)
+	material.emission_enabled = true
+	material.emission = tint
+	material.emission_energy_multiplier = 2.6
+	marker.visible = true
+	var previous_tween: Variant = marker.get_meta("pulse_tween", null)
+	if previous_tween is Tween and (previous_tween as Tween).is_running():
+		(previous_tween as Tween).kill()
+	marker.scale = Vector3.ONE * 0.86
+	var tween := create_tween()
+	tween.set_loops()
+	tween.tween_property(marker, "scale", Vector3.ONE * 1.12, 0.24)
+	tween.tween_property(marker, "scale", Vector3.ONE * 0.86, 0.24)
+	marker.set_meta("pulse_tween", tween)
+
 
 func _set_iron_slam_telegraph(monster: Node3D, enabled: bool) -> void:
 	var telegraph := monster.get_node_or_null("SlamTelegraph") as MeshInstance3D
