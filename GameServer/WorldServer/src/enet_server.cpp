@@ -1452,10 +1452,10 @@ struct EnetServer::Impl {
             std::cerr << "[HellTrialWave] checkpoint load failed: " << error << std::endl;
             return false;
         }
-        if (!found) return true;
-        if (!hell_trial_waves.restore_stage(checkpoint.stage) ||
-            !hell_trial_encounter.restore_stage(checkpoint.stage) ||
-            hell_trial_waves.completed() != checkpoint.completed) {
+        if (found &&
+            (!hell_trial_waves.restore_stage(checkpoint.stage) ||
+             !hell_trial_encounter.restore_stage(checkpoint.stage) ||
+             hell_trial_waves.completed() != checkpoint.completed)) {
             std::cerr << "[HellTrialWave] stored checkpoint is inconsistent" << std::endl;
             return false;
         }
@@ -1474,8 +1474,8 @@ struct EnetServer::Impl {
             }
         }
 
-        // Runtime life-state recovery happens before the wave checkpoint is loaded.
-        // Re-validate every inactive trial monster here so a stale positive-health
+        // Monster life-state snapshots are restored before this checkpoint is applied.
+        // Validate even a brand-new stage-zero floor so stale positive-health rows
         // snapshot cannot resurrect a locked wave or a boss after floor completion.
         const auto* floor = hell_trial_encounter.spec();
         if (floor == nullptr) return false;
