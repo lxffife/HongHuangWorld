@@ -328,3 +328,22 @@ func (h *characterHandlers) trainTechnique(w http.ResponseWriter, r *http.Reques
 	default: h.logger.Error("train technique failed", "error", err); http.Error(w, "internal server error", http.StatusInternalServerError)
 	}
 }
+
+type learnSpellRequest struct {
+	RequestID string `json:"request_id"`
+	ItemID string `json:"item_id"`
+}
+
+func (h *characterHandlers) learnSpell(w http.ResponseWriter,r *http.Request){
+	account,ok:=h.currentAccount(w,r);if !ok{return}
+	var request learnSpellRequest
+	if err:=decodeJSON(w,r,&request);err!=nil{http.Error(w,"invalid request body",http.StatusBadRequest);return}
+	result,err:=h.characterService.LearnSpell(r.Context(),account.ID,request.RequestID,request.ItemID)
+	switch{
+	case err==nil:writeJSON(w,http.StatusOK,result)
+	case errors.Is(err,character.ErrSpellLearningInvalid):http.Error(w,"skill tome is not owned or is not valid for this world",http.StatusBadRequest)
+	case errors.Is(err,character.ErrSpellAlreadyKnown):http.Error(w,"spell is already learned",http.StatusConflict)
+	case errors.Is(err,character.ErrSpellLearningInWorld):http.Error(w,"leave the world before learning a skill tome",http.StatusConflict)
+	default:h.logger.Error("learn spell from skill tome failed","error",err);http.Error(w,"internal server error",http.StatusInternalServerError)
+	}
+}
