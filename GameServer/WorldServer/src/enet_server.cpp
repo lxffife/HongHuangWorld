@@ -2798,10 +2798,22 @@ struct EnetServer::Impl {
                     if (event) completion_events.push_back(std::move(*event));
                 }
                 std::string completion_error;
-                if (enqueue_durable_events(completion_events, completion_error)) {
-                    // Stage four is committed only after every eligible completion
-                    // event is safely in the same SQLite transaction.
-                    (void)persist_hell_trial_wave_checkpoint();
+                bool completion_committed = false;
+                if (durable_outbox) {
+                    const honghuang::persistence::HellTrialWaveCheckpoint checkpoint{
+                        config.instance_key, hell_trial_encounter.floor(), 4, true, wall_clock_ms()
+                    };
+                    completion_committed = durable_outbox->enqueue_batch_and_save_hell_trial_checkpoint(
+                        completion_events, checkpoint, completion_error);
+                    if (completion_committed && !completion_events.empty()) {
+                        outbox_cv.notify_one();
+                        chat_outbox_cv.notify_one();
+                    }
+                } else {
+                    completion_error = "durable outbox is not initialized";
+                }
+                if (completion_committed) {
+                    // Reward events and stage four now share one SQLite transaction.
                     Json wave_event = hell_trial_runtime_snapshot();
                     wave_event["action"] = "hell_trial_wave_transition";
                     for (const auto& [recipient_peer, recipient] : players) {
