@@ -1,6 +1,7 @@
 #include "simulation/hell_trial_wave_director.hpp"
 
 #include <cassert>
+#include <cstddef>
 #include <string>
 
 using honghuang::simulation::HellTrialWaveDirector;
@@ -56,7 +57,7 @@ int main() {
 
     // Every configured floor must preserve the same strict four-stage gate.
     const auto& floor_specs = honghuang::simulation::hell_trial_floor_specs();
-    for (int floor = 1; floor <= HellTrialEncounter::floor_count; ++floor) {
+    for (int floor = 1; floor <= honghuang::simulation::HellTrialEncounter::floor_count; ++floor) {
         HellTrialWaveDirector sequence(floor);
         const auto& spec = floor_specs[static_cast<std::size_t>(floor - 1)];
         for (std::size_t wave = 0; wave < spec.objective_monster_ids.size(); ++wave) {
