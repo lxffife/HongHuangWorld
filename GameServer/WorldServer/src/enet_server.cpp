@@ -2966,8 +2966,19 @@ struct EnetServer::Impl {
             // Mirror the exact proportional allocation used by the outbox builder so
             // the UI reports rewards without granting them a second time.
             const bool underworld_economy = monster->death_world_id == "underworld_fengdu";
+            std::vector<honghuang::persistence::MonsterContributionRecord> reward_contributions;
+            reward_contributions.reserve(monster->damage_contributions.size());
+            for (const auto& [contributor_key, contribution] : monster->damage_contributions) {
+                (void)contributor_key;
+                honghuang::persistence::MonsterContributionRecord record;
+                record.session_id = contribution.session_id;
+                record.character_id = contribution.character_id;
+                record.total_damage = contribution.total_damage;
+                record.hit_count = contribution.hit_count;
+                reward_contributions.push_back(std::move(record));
+            }
             const auto reward_recipients = honghuang::persistence::allocate_monster_combat_rewards(
-                monster_contribution_snapshot(*monster),
+                reward_contributions,
                 20 + static_cast<std::int64_t>(monster->death_level) * 10,
                 10 + static_cast<std::int64_t>(monster->death_level) * 5,
                 underworld_economy ? std::min<std::int64_t>(2000, 5 + static_cast<std::int64_t>(monster->death_level) * 3) : 0,
@@ -2986,16 +2997,22 @@ struct EnetServer::Impl {
                     [&](const auto& candidate) { return candidate.character_id == character_id; });
                 for (const auto& [peer, player] : players) {
                     if (player.character_id != character_id) continue;
-                    Json settlement{
-                        {"accepted", true}, {"action", "monster_death_settlement"},
-                        {"target_entity_id", monster->runtime_id}, {"monster_name", monster->definition.name},
-                        {"monster_level", monster->death_level}, {"committed", true},
-                        {"contribution_only", character_id != death_killer_character_id},
-                        {"experience", reward == reward_recipients.end() ? 0 : reward->experience},
-                        {"cultivation", reward == reward_recipients.end() ? 0 : reward->cultivation},
-                        {"ghost_cash", reward == reward_recipients.end() ? 0 : reward->ghost_cash},
-                        {"nether_stone", reward == reward_recipients.end() ? 0 : reward->nether_stone}
-                    };
+                    Json settlement = Json::object();
+                    settlement["accepted"] = true;
+                    settlement["action"] = "monster_death_settlement";
+                    settlement["target_entity_id"] = monster->runtime_id;
+                    settlement["monster_name"] = monster->definition.name;
+                    settlement["monster_level"] = monster->death_level;
+                    settlement["committed"] = true;
+                    settlement["contribution_only"] = character_id != death_killer_character_id;
+                    settlement["experience"] = reward == reward_recipients.end()
+                        ? std::int64_t{0} : reward->experience;
+                    settlement["cultivation"] = reward == reward_recipients.end()
+                        ? std::int64_t{0} : reward->cultivation;
+                    settlement["ghost_cash"] = reward == reward_recipients.end()
+                        ? std::int64_t{0} : reward->ghost_cash;
+                    settlement["nether_stone"] = reward == reward_recipients.end()
+                        ? std::int64_t{0} : reward->nether_stone;
                     if (character_id == death_killer_character_id)
                         settlement["drops"] = killer_drops;
                     send_json(peer, honghuang::protocol::MessageType::CombatEvent, settlement);
