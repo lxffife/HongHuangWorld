@@ -5904,7 +5904,9 @@ func _clear_remote_hit_flash(remote: Node3D, material: StandardMaterial3D) -> vo
 
 
 func _apply_remote_hit_flash(remote: Node3D, tint: Color) -> void:
-	var previous := remote.get_meta("hit_flash_material", null) as StandardMaterial3D
+	var previous: StandardMaterial3D = null
+	if remote.has_meta("hit_flash_material"):
+		previous = remote.get_meta("hit_flash_material") as StandardMaterial3D
 	if is_instance_valid(previous):
 		_clear_remote_hit_flash_recursive(remote, previous)
 	var flash := StandardMaterial3D.new()
