@@ -4443,16 +4443,17 @@ func _on_monster_action_event(event: Dictionary) -> void:
 	elif phase == "cancelled":
 		attacker.set_meta("attack_phase", "idle")
 		attacker.set_meta("attack_phase_time", 0.0)
-		if str(event.get("target_character_id", "")) == str(HHSession.world_snapshot.get("character_id", "")):
-			_set_incoming_attack_telegraph(attack_style, false, attacker_id)
+		# Removing an unknown source is harmless; do not depend on a possibly stale
+		# local snapshot character ID to clean up a warning already registered.
+		_set_incoming_attack_telegraph(attack_style, false, attacker_id)
 		_set_iron_slam_telegraph(attacker, false)
 		_set_elemental_telegraph(attacker, false, attack_style)
 	elif phase == "impact":
 		attacker.set_meta("attack_phase", "impact")
 		attacker.set_meta("attack_phase_duration", 0.2)
-		if str(event.get("target_character_id", "")) == str(HHSession.world_snapshot.get("character_id", "")):
-			# Remove this monster only; other monsters may still be winding up on us.
-			_set_incoming_attack_telegraph(attack_style, false, attacker_id)
+		# Remove only this monster; other monsters may still be winding up on us.
+		# Cleanup is idempotent even for observers who never displayed this warning.
+		_set_incoming_attack_telegraph(attack_style, false, attacker_id)
 		attacker.set_meta("attack_phase_time", 0.2)
 		if attack_style == "heavy_slam":
 			_set_iron_slam_telegraph(attacker, false)
