@@ -2974,7 +2974,11 @@ func _layout_hud() -> void:
 			details_toggle_button.position = Vector2(18.0, controls_y)
 		if is_instance_valid(soul_choice_button):
 			soul_choice_button.position = Vector2(140.0, controls_y)
-	var utility_left := maxf(18.0, viewport_size.x - 374.0)
+	# Reserve one continuous top-right toolbar for all utility actions.
+	# The inventory shortcut used to sit at the far-right edge and overlap
+	# the "退出世界" button. Move it into the same row and shift the group
+	# left so every control has its own 112px slot.
+	var utility_left := maxf(12.0, viewport_size.x - 488.0)
 	if is_instance_valid(hud_toggle_button):
 		hud_toggle_button.position = Vector2(utility_left, 16.0)
 	if is_instance_valid(hud_restore_button):
@@ -2983,6 +2987,10 @@ func _layout_hud() -> void:
 		help_button.position = Vector2(utility_left + 120.0, 16.0)
 	if is_instance_valid(leave_world_button):
 		leave_world_button.position = Vector2(utility_left + 240.0, 16.0)
+	if is_instance_valid(inventory_button):
+		inventory_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		inventory_button.position = Vector2(utility_left + 360.0, 16.0)
+		inventory_button.custom_minimum_size = Vector2(112.0, 34.0)
 	if is_instance_valid(help_panel):
 		var help_width := minf(540.0, maxf(320.0, viewport_size.x - 32.0))
 		var help_height := minf(500.0, maxf(360.0, viewport_size.y - 32.0))
