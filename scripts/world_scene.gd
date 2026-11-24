@@ -2108,34 +2108,31 @@ func _upsert_monster(entity: Dictionary) -> void:
 	monster_entities[monster_id] = entity.duplicate(true)
 	if monster_id == selected_monster_id:
 		_update_target_info()
+	_refresh_monster_nameplate(monster_id)
+
+func _refresh_monster_nameplate(monster_id: String) -> void:
+	var monster_node := monsters.get(monster_id) as Node3D
+	if not is_instance_valid(monster_node):
+		return
 	var nameplate := monster_node.get_node_or_null("Nameplate") as Label3D
-	if nameplate != null:
-		var base_text := str(entity.get("name", "野兽")) + " · Lv." + str(int(entity.get("level", 1)))
-		if entity.has("health") and entity.has("max_health"):
-			var hp := int(entity.get("health", 0))
-			var max_hp := int(entity.get("max_health", 0))
-			if max_hp > 0:
-				base_text += "\n生命 " + str(maxi(hp, 0)) + " / " + str(max_hp)
-		if str(party_data.get("focus_target_entity_id", "")) == monster_id:
-			base_text += "\n⚑ 队伍集火目标"
-		nameplate.text = base_text
+	if nameplate == null:
+		return
+	var entity: Dictionary = monster_entities.get(monster_id, {})
+	var base_text := str(entity.get("name", "野兽")) + " · Lv." + str(int(entity.get("level", 1)))
+	if entity.has("health") and int(entity.get("max_health", 0)) > 0:
+		base_text += "\n生命 " + str(maxi(int(entity.get("health", 0)), 0)) + " / " + str(int(entity.get("max_health", 0)))
+	var aggro_target_id := str(entity.get("aggro_target_character_id", ""))
+	var aggro_target_name := str(entity.get("aggro_target_name", ""))
+	if not aggro_target_id.is_empty():
+		var local_id := str(HHSession.world_snapshot.get("character_id", ""))
+		base_text += "\n⚔ " + ("正在攻击你" if aggro_target_id == local_id else "目标：" + (aggro_target_name if not aggro_target_name.is_empty() else "队友"))
+	if str(party_data.get("focus_target_entity_id", "")) == monster_id:
+		base_text += "\n⚑ 队伍集火目标"
+	nameplate.text = base_text
 
 func _refresh_party_focus_visual() -> void:
-	var focus_id := str(party_data.get("focus_target_entity_id", ""))
 	for monster_id in monsters.keys():
-		var monster_node := monsters[monster_id] as Node3D
-		if not is_instance_valid(monster_node):
-			continue
-		var nameplate := monster_node.get_node_or_null("Nameplate") as Label3D
-		if nameplate == null:
-			continue
-		var entity: Dictionary = monster_entities.get(str(monster_id), {})
-		var base_text := str(entity.get("name", "野兽")) + " · Lv." + str(int(entity.get("level", 1)))
-		if entity.has("health") and int(entity.get("max_health", 0)) > 0:
-			base_text += "\n生命 " + str(maxi(int(entity.get("health", 0)), 0)) + " / " + str(int(entity.get("max_health", 0)))
-		if str(monster_id) == focus_id:
-			base_text += "\n⚑ 队伍集火目标"
-		nameplate.text = base_text
+		_refresh_monster_nameplate(str(monster_id))
 
 func _create_monster(monster_name: String, monster_level: int) -> Node3D:
 	var visual_root: Node3D = UnderworldVisualFactory.create_monster(monster_name, monster_level)
@@ -4814,13 +4811,21 @@ func _on_combat_event(event: Dictionary) -> void:
 		_show_notification(str(event.get("source_name", "净秽符")) + " 施展净秽符，清除了你的异常状态（" + str(int(event.get("cleansed_effects", 0))) + " 项）。", 3.0)
 		return
 	if str(event.get("action", "")) == "monster_target_changed":
+		var monster_id := str(event.get("monster_id", ""))
 		var monster_name := str(event.get("monster_name", "怪物"))
 		var target_name := str(event.get("target_name", ""))
+		var target_id := str(event.get("target_character_id", ""))
 		var target_cleared := bool(event.get("target_cleared", false))
 		var local_character_id := str(HHSession.world_snapshot.get("character_id", ""))
+		if not monster_id.is_empty():
+			var aggro_entity: Dictionary = monster_entities.get(monster_id, {})
+			aggro_entity["aggro_target_character_id"] = "" if target_cleared else target_id
+			aggro_entity["aggro_target_name"] = "" if target_cleared else target_name
+			monster_entities[monster_id] = aggro_entity
+			_refresh_monster_nameplate(monster_id)
 		if target_cleared:
 			_show_notification(monster_name + " 已失去攻击目标。", 2.2)
-		elif str(event.get("target_character_id", "")) == local_character_id:
+		elif target_id == local_character_id:
 			_show_notification("仇恨锁定！" + monster_name + " 正在攻击你。", 3.0)
 		else:
 			_show_notification(monster_name + " 转而攻击 " + target_name + "。", 2.2)
