@@ -80,6 +80,9 @@ var hud_visible := true
 var hud_toggle_button: Button
 var hud_restore_button: Button
 var help_button: Button
+var audio_settings_button: Button
+var audio_settings_panel: PanelContainer
+var audio_settings_restore_mouse_captured := false
 var leave_world_button: Button
 var leave_world_dialog: ConfirmationDialog
 var leaving_world := false
@@ -618,6 +621,11 @@ func _build_compact_hud() -> void:
 	help_button.custom_minimum_size = Vector2(112.0, 34.0)
 	help_button.pressed.connect(_toggle_help_panel)
 	hud.add_child(help_button)
+	audio_settings_button = Button.new()
+	audio_settings_button.text = "声音设置"
+	audio_settings_button.custom_minimum_size = Vector2(112.0, 34.0)
+	audio_settings_button.pressed.connect(_toggle_audio_settings_panel)
+	hud.add_child(audio_settings_button)
 	leave_world_button = Button.new()
 	leave_world_button.text = "退出世界"
 	leave_world_button.custom_minimum_size = Vector2(112.0, 34.0)
@@ -637,6 +645,7 @@ func _build_compact_hud() -> void:
 	hud_restore_button.pressed.connect(_toggle_hud_visibility)
 	hud.add_child(hud_restore_button)
 	_build_controls_help_panel(hud)
+	_build_audio_settings_panel(hud)
 	soul_choice_button = Button.new()
 	soul_choice_button.text = "分配无相灵魄"
 	soul_choice_button.position = Vector2(140.0, 118.0)
@@ -1734,6 +1743,94 @@ func _toggle_help_panel() -> void:
 		if help_restore_mouse_captured and not is_gameplay_input_blocked():
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		help_restore_mouse_captured = false
+
+func _toggle_audio_settings_panel() -> void:
+	if not is_instance_valid(audio_settings_panel):
+		return
+	var opening := not audio_settings_panel.visible
+	if opening:
+		audio_settings_restore_mouse_captured = Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		audio_settings_panel.visible = true
+	else:
+		audio_settings_panel.visible = false
+		if audio_settings_restore_mouse_captured and not is_gameplay_input_blocked():
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		audio_settings_restore_mouse_captured = false
+
+func _build_audio_settings_panel(hud: CanvasLayer) -> void:
+	audio_settings_panel = PanelContainer.new()
+	audio_settings_panel.name = "AudioSettingsPanel"
+	audio_settings_panel.set_anchors_preset(Control.PRESET_CENTER)
+	audio_settings_panel.custom_minimum_size = Vector2(500.0, 430.0)
+	audio_settings_panel.visible = false
+	_apply_panel_theme(audio_settings_panel)
+	hud.add_child(audio_settings_panel)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 12)
+	audio_settings_panel.add_child(layout)
+	var heading := HBoxContainer.new()
+	layout.add_child(heading)
+	var title := Label.new()
+	title.text = "洪荒 · 音频设置"
+	title.add_theme_color_override("font_color", Color("#e7c98e"))
+	title.add_theme_font_size_override("font_size", 20)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_child(title)
+	var close_button := Button.new()
+	close_button.text = "关闭"
+	close_button.pressed.connect(_toggle_audio_settings_panel)
+	heading.add_child(close_button)
+	var hint := Label.new()
+	hint.text = "调整后立即生效，并保存在本机。"
+	hint.add_theme_color_override("font_color", Color("#91a5b8"))
+	layout.add_child(hint)
+	_add_audio_volume_row(layout, "Master", "总音量")
+	_add_audio_volume_row(layout, "Music", "音乐 / 环境")
+	_add_audio_volume_row(layout, "SFX", "战斗 / 环境音效")
+	_add_audio_volume_row(layout, "UI", "界面音效")
+	var mute := CheckButton.new()
+	mute.text = "静音全部声音"
+	mute.button_pressed = HHAudio.is_muted()
+	mute.toggled.connect(func(enabled: bool) -> void: HHAudio.set_muted(enabled))
+	layout.add_child(mute)
+	var preview_title := Label.new()
+	preview_title.text = "音效试听"
+	preview_title.add_theme_color_override("font_color", Color("#e7c98e"))
+	layout.add_child(preview_title)
+	var previews := HBoxContainer.new()
+	layout.add_child(previews)
+	for cue in ["attack", "spell", "footstep", "warning"]:
+		var preview := Button.new()
+		preview.text = {"attack": "攻击", "spell": "法术", "footstep": "脚步", "warning": "警告"}[cue]
+		preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		preview.pressed.connect(func() -> void: HHAudio.play_ui(cue) if cue == "warning" else HHAudio.play_combat(cue))
+		previews.add_child(preview)
+
+func _add_audio_volume_row(parent: VBoxContainer, bus_name: String, display_name: String) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	parent.add_child(row)
+	var label := Label.new()
+	label.text = display_name
+	label.custom_minimum_size = Vector2(116.0, 0.0)
+	row.add_child(label)
+	var slider := HSlider.new()
+	slider.min_value = 0.0
+	slider.max_value = 1.0
+	slider.step = 0.01
+	slider.value = HHAudio.get_volume(bus_name)
+	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var value_label := Label.new()
+	value_label.custom_minimum_size = Vector2(42.0, 0.0)
+	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	value_label.text = str(roundi(slider.value * 100.0)) + "%"
+	slider.value_changed.connect(func(value: float) -> void:
+		HHAudio.set_volume(bus_name, value)
+		value_label.text = str(roundi(value * 100.0)) + "%"
+	)
+	row.add_child(slider)
+	row.add_child(value_label)
 
 func _build_controls_help_panel(hud: CanvasLayer) -> void:
 	help_panel = PanelContainer.new()
@@ -2971,18 +3068,20 @@ func _layout_hud() -> void:
 	# The inventory shortcut used to sit at the far-right edge and overlap
 	# the "退出世界" button. Move it into the same row and shift the group
 	# left so every control has its own 112px slot.
-	var utility_left := maxf(12.0, viewport_size.x - 488.0)
+	var utility_left := maxf(12.0, viewport_size.x - 608.0)
 	if is_instance_valid(hud_toggle_button):
 		hud_toggle_button.position = Vector2(utility_left, 16.0)
 	if is_instance_valid(hud_restore_button):
 		hud_restore_button.position = Vector2(utility_left, 16.0)
 	if is_instance_valid(help_button):
 		help_button.position = Vector2(utility_left + 120.0, 16.0)
+	if is_instance_valid(audio_settings_button):
+		audio_settings_button.position = Vector2(utility_left + 240.0, 16.0)
 	if is_instance_valid(leave_world_button):
-		leave_world_button.position = Vector2(utility_left + 240.0, 16.0)
+		leave_world_button.position = Vector2(utility_left + 360.0, 16.0)
 	if is_instance_valid(inventory_button):
 		inventory_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
-		inventory_button.position = Vector2(utility_left + 360.0, 16.0)
+		inventory_button.position = Vector2(utility_left + 480.0, 16.0)
 		inventory_button.custom_minimum_size = Vector2(112.0, 34.0)
 	if is_instance_valid(help_panel):
 		var help_width := minf(540.0, maxf(320.0, viewport_size.x - 32.0))
