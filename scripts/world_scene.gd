@@ -141,6 +141,7 @@ var target_info_label: Label
 var target_health_bar: ProgressBar
 var target_status_label: Label
 var target_health_fill_style: StyleBoxFlat
+var target_panel_style: StyleBoxFlat
 var combat_summary_label: Label
 var combat_summary_toggle_button: Button
 var combat_summary_expanded := false
@@ -1395,7 +1396,7 @@ func _build_combat_hud() -> void:
 	target_info_panel.custom_minimum_size = Vector2(420.0, 92.0)
 	target_info_panel.visible = false
 	_apply_panel_theme(target_info_panel)
-	var target_panel_style := StyleBoxFlat.new()
+	target_panel_style = StyleBoxFlat.new()
 	target_panel_style.bg_color = Color("#0a1420", 0.94)
 	target_panel_style.border_color = Color("#806b46")
 	target_panel_style.set_border_width_all(1)
@@ -4172,6 +4173,10 @@ func _update_target_info() -> void:
 		elif rank_value in ["elite", "精英"]:
 			rank_text = "  ·  精英"
 	title += rank_text
+	var is_boss_target := rank_text.contains("首领")
+	var is_elite_target := rank_text.contains("精英")
+	if is_instance_valid(target_panel_style):
+		target_panel_style.border_color = Color("#b99a55") if is_boss_target else Color("#8e79b8") if is_elite_target else Color("#806b46")
 	var hp_line := "目标已锁定"
 	var target_distance := -1.0
 	if is_instance_valid(local_player) and monster_targets.has(selected_monster_id):
@@ -4217,6 +4222,10 @@ func _update_target_info() -> void:
 				target_health_fill_style.bg_color = Color("#d94f4f")
 			elif health_ratio <= 0.55:
 				target_health_fill_style.bg_color = Color("#d69a45")
+			elif is_boss_target:
+				target_health_fill_style.bg_color = Color("#c6a45d")
+			elif is_elite_target:
+				target_health_fill_style.bg_color = Color("#9b83c8")
 			else:
 				target_health_fill_style.bg_color = Color("#b85b58")
 	else:
