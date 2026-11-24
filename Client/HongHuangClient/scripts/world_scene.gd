@@ -139,6 +139,8 @@ var target_info_panel: PanelContainer
 var combat_reticle: Label
 var target_info_label: Label
 var target_health_bar: ProgressBar
+var target_status_label: Label
+var target_health_fill_style: StyleBoxFlat
 var combat_summary_label: Label
 var combat_summary_toggle_button: Button
 var combat_summary_expanded := false
@@ -1413,6 +1415,11 @@ func _build_combat_hud() -> void:
 	target_info_label.add_theme_color_override("font_color", Color("#f2e8d6"))
 	target_info_label.add_theme_font_size_override("font_size", 13)
 	target_layout.add_child(target_info_label)
+	target_status_label = Label.new()
+	target_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	target_status_label.add_theme_font_size_override("font_size", 10)
+	target_status_label.add_theme_color_override("font_color", Color("#aebdca"))
+	target_layout.add_child(target_status_label)
 	target_health_bar = ProgressBar.new()
 	target_health_bar.custom_minimum_size = Vector2(388.0, 12.0)
 	target_health_bar.min_value = 0.0
@@ -1422,11 +1429,11 @@ func _build_combat_hud() -> void:
 	var target_track := StyleBoxFlat.new()
 	target_track.bg_color = Color("#1a2a38")
 	target_track.set_corner_radius_all(6)
-	var target_fill := StyleBoxFlat.new()
-	target_fill.bg_color = Color("#c45c5c")
-	target_fill.set_corner_radius_all(6)
+	target_health_fill_style = StyleBoxFlat.new()
+	target_health_fill_style.bg_color = Color("#c45c5c")
+	target_health_fill_style.set_corner_radius_all(6)
 	target_health_bar.add_theme_stylebox_override("background", target_track)
-	target_health_bar.add_theme_stylebox_override("fill", target_fill)
+	target_health_bar.add_theme_stylebox_override("fill", target_health_fill_style)
 	target_layout.add_child(target_health_bar)
 
 	combat_summary_toggle_button = Button.new()
@@ -4145,19 +4152,57 @@ func _update_target_info() -> void:
 		return
 	var entity: Dictionary = monster_entities.get(selected_monster_id, {})
 	var title := str(entity.get("name", "怪物")) + "  ·  Lv." + str(int(entity.get("level", 1)))
+	var rank_text := ""
+	if bool(entity.get("is_boss", false)):
+		rank_text = "  ·  首领"
+	elif bool(entity.get("is_elite", false)):
+		rank_text = "  ·  精英"
+	else:
+		var rank_value := str(entity.get("rank", entity.get("rarity", ""))).to_lower()
+		if rank_value in ["boss", "world_boss", "首领"]:
+			rank_text = "  ·  首领"
+		elif rank_value in ["elite", "精英"]:
+			rank_text = "  ·  精英"
+	title += rank_text
 	var hp_line := "目标已锁定"
+	var target_distance := -1.0
 	if is_instance_valid(local_player) and monster_targets.has(selected_monster_id):
 		var target_position: Vector3 = monster_targets[selected_monster_id]
-		var target_distance: float = _horizontal_distance_to_target(local_player.global_position, target_position)
+		target_distance = _horizontal_distance_to_target(local_player.global_position, target_position)
 		hp_line = "距离 %.1f m" % target_distance
+	var threat_text := "仇恨状态：尚未交战"
+	var threat_color := Color("#9eafbd")
+	var aggro_target_id := str(entity.get("aggro_target_character_id", ""))
+	if not aggro_target_id.is_empty():
+		if aggro_target_id == str(HHSession.world_snapshot.get("character_id", "")):
+			threat_text = "⚠ 仇恨锁定：正在攻击你"
+			threat_color = Color("#ff8580")
+		else:
+			var aggro_name := str(entity.get("aggro_target_name", "队友"))
+			threat_text = "仇恨目标：" + aggro_name
+			threat_color = Color("#e8bd78")
+	if str(party_data.get("focus_target_entity_id", "")) == selected_monster_id:
+		threat_text += "  ·  队伍集火"
+		threat_color = Color("#f0d18d")
+	if is_instance_valid(target_status_label):
+		target_status_label.text = threat_text
+		target_status_label.add_theme_color_override("font_color", threat_color)
 	if entity.has("health") and entity.has("max_health"):
 		var current_hp := maxi(0, int(entity.get("health", 0)))
 		var maximum_hp := maxi(1, int(entity.get("max_health", 1)))
+		var health_ratio := clampf(float(current_hp) / float(maximum_hp), 0.0, 1.0)
 		hp_line += "    ·    生命 " + str(current_hp) + " / " + str(maximum_hp) + "    ·    Tab 切换目标"
 		if is_instance_valid(target_health_bar):
 			target_health_bar.max_value = maximum_hp
-			target_health_bar.value = clampi(current_hp, 0, maximum_hp)
+			target_health_bar.value = current_hp
 			target_health_bar.visible = true
+		if is_instance_valid(target_health_fill_style):
+			if health_ratio <= 0.25:
+				target_health_fill_style.bg_color = Color("#d94f4f")
+			elif health_ratio <= 0.55:
+				target_health_fill_style.bg_color = Color("#d69a45")
+			else:
+				target_health_fill_style.bg_color = Color("#b85b58")
 	else:
 		if is_instance_valid(target_health_bar):
 			target_health_bar.visible = false
