@@ -234,7 +234,42 @@ Windows Godot 客户端 API Base URL 填写：
 
 不要填写 127.0.0.1（它指向 Windows 自己），也不要填写 0.0.0.0。WorldServer 返回给客户端的地址同样由 WORLD_SERVER_ADVERTISE_HOST 决定。
 
-PostgreSQL 5432、Redis 6379、NATS 4222/8222 在 Compose 中绑定到 127.0.0.1，不接受局域网远程连接。Admin 默认监听 `0.0.0.0:8790` 以便局域网访问；请只在可信局域网放行该端口，使用强管理员密码，不要配置路由器公网端口转发。当前方案没有配置 TLS、反向代理和生产级密钥管理。
+### PostgreSQL / Redis / NATS 局域网访问
+
+`05-infra.sh` 会先安全升级现有 `/etc/honghuang-world.env`，自动识别树莓派默认路由网卡的 IPv4，并将 `HH_LAN_BIND_IP` 写入环境文件。也可以在运行前显式指定本机已配置的地址：
+
+    HH_LAN_BIND_IP=192.168.1.50 bash Deployment/raspberry-pi/05-infra.sh
+
+请将示例 IP 替换为树莓派真实 LAN IP。脚本会验证该地址确实配置在树莓派网卡上。Compose 仅把以下服务端口绑定到这个地址，不监听所有网卡：
+
+| 服务 | 局域网地址 | 认证 |
+|---|---|---|
+| PostgreSQL | `树莓派IP:5432` | 现有 PostgreSQL 用户名/密码 |
+| Redis | `树莓派IP:6379` | 现有 Redis 密码 |
+| NATS | `树莓派IP:4222` | 新增 NATS token |
+| NATS monitor | `127.0.0.1:8222` | 仅树莓派本机，不对 LAN 开放 |
+
+NATS token 首次升级时生成并保存到权限为 600 的环境文件。原有 PostgreSQL、Redis 和业务 API 密钥不会轮换。脚本同时更新 `NATS_URL`、`GAME_NATS_URL` 和 `CHAT_NATS_URL` 为带认证的本机地址，并写入 `NATS_LAN_URL` 供局域网客户端使用。不要把真实 token 写进仓库或聊天记录。
+
+在树莓派上查看局域网连接信息（不会打印密码/token）：
+
+    bash Deployment/raspberry-pi/09-status.sh
+
+局域网其他机器连接时，使用 `/etc/honghuang-world.env` 中对应的用户名、密码和 NATS token。例如 NATS 客户端 URL 格式为：
+
+    nats://<NATS_AUTH_TOKEN>@<树莓派LAN-IP>:4222
+
+PostgreSQL 与 Redis 同样必须提供原有密码。只允许可信局域网设备访问，不要配置路由器公网端口转发，也不要把数据库端口暴露到公网。当前方案没有配置 TLS、反向代理和生产级密钥管理。
+
+### 数据保护
+
+运行 `05-infra.sh` 前会检查现有三个容器的 Compose project 标签和数据挂载：
+- 必须找到原有 PostgreSQL、Redis、NATS 的 named volume。
+- 自动沿用现有容器的 Compose project 名称，避免因为项目名变化而悄悄创建一套空卷。
+- 如果容器没有 Compose 标签、数据挂载不是 named volume，脚本会停止并提示检查，不会擅自重建。
+- 只执行 `docker compose up -d` 更新端口映射；不会执行 `down -v`、删除卷、清空数据库或重置 Redis/NATS 数据。
+
+Docker 可能会重建容器以应用端口绑定，但数据库、Redis AOF 和 NATS JetStream 数据仍使用原有 named volume。脚本完成后会重启已经安装的 NATS 客户端服务，让它们读取新的认证 URL。
 
 ## 9. 部署检查
 

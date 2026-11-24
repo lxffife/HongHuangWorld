@@ -37,10 +37,55 @@ load_env() {
   set +a
 }
 
-compose() {
+docker_cmd() {
   if docker info >/dev/null 2>&1; then
-    docker compose --env-file "$HH_ENV_FILE" -f "$HH_PROJECT_DIR/Deployment/docker-compose.yml" "$@"
+    docker "$@"
   else
-    sudo docker compose --env-file "$HH_ENV_FILE" -f "$HH_PROJECT_DIR/Deployment/docker-compose.yml" "$@"
+    sudo docker "$@"
   fi
+}
+
+resolve_compose_project_name() {
+  local container label discovered=""
+  if [[ -n "${HH_COMPOSE_PROJECT_NAME:-}" ]]; then
+    printf '%s' "$HH_COMPOSE_PROJECT_NAME"
+    return
+  fi
+  for container in honghuang-postgres honghuang-redis honghuang-nats; do
+    if docker_cmd inspect "$container" >/dev/null 2>&1; then
+      label="$(docker_cmd inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "$container" 2>/dev/null || true)"
+      if [[ -n "$label" && "$label" != "<no value>" ]]; then
+        if [[ -n "$discovered" && "$discovered" != "$label" ]]; then
+          die "现有容器的 Compose project 标签不一致：$discovered / $label"
+        fi
+        discovered="$label"
+      fi
+    fi
+  done
+  printf '%s' "${discovered:-deployment}"
+}
+
+compose() {
+  local project_name
+  project_name="$(resolve_compose_project_name)"
+  docker_cmd compose --project-name "$project_name" --env-file "$HH_ENV_FILE" -f "$HH_PROJECT_DIR/Deployment/docker-compose.yml" "$@"
+}
+
+detect_lan_ipv4() {
+  local iface
+  iface="$(ip -4 route show default 2>/dev/null | awk 'NR==1 {print $5}')"
+  if [[ -n "$iface" ]]; then
+    ip -4 -o addr show dev "$iface" scope global 2>/dev/null |
+      awk 'NR==1 {split($4, a, "/"); print a[1]}'
+    return
+  fi
+  hostname -I 2>/dev/null | tr ' ' '\n' | awk '$1 !~ /^127\./ && index($1, ":") == 0 {print; exit}'
+}
+
+is_local_ipv4() {
+  local candidate="$1"
+  [[ "$candidate" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || return 1
+  ip -4 -o addr show scope global 2>/dev/null |
+    awk '{split($4, a, "/"); print a[1]}' |
+    grep -Fxq "$candidate"
 }

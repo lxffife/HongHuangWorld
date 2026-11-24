@@ -17,4 +17,13 @@ echo "=== API ==="; systemctl --no-pager --full status honghuang-api || true
 echo "=== Qingyun WorldServer ==="; systemctl --no-pager --full status honghuang-world-server || true
 echo "=== Fengdu Underworld WorldServer ==="; systemctl --no-pager --full status honghuang-underworld-server || true
 echo "=== API readiness ==="; curl -i --max-time 5 http://127.0.0.1:8787/ready || true
-if [[ -f "$HH_ENV_FILE" ]]; then load_env; echo "=== Containers ==="; compose ps; fi
+if [[ -f "$HH_ENV_FILE" ]]; then
+  load_env
+  echo "=== Containers ==="
+  compose ps
+  echo "=== LAN data endpoints (credentials are stored in $HH_ENV_FILE) ==="
+  printf 'PostgreSQL: %s:%s\n' "${HH_LAN_BIND_IP:-127.0.0.1}" "${POSTGRES_PORT:-5432}"
+  printf 'Redis:      %s:%s\n' "${HH_LAN_BIND_IP:-127.0.0.1}" "${REDIS_PORT:-6379}"
+  printf 'NATS:       %s:%s (token authentication)\n' "${HH_LAN_BIND_IP:-127.0.0.1}" "${NATS_PORT:-4222}"
+  printf 'NATS monitor: 127.0.0.1:%s (local only)\n' "${NATS_MONITOR_PORT:-8222}"
+fi
