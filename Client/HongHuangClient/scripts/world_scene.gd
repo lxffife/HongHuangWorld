@@ -5473,6 +5473,60 @@ func _on_player_action_event(event: Dictionary) -> void:
 	remote.set_meta("remote_action_duration", duration)
 	remote.set_meta("remote_action_style", str(event.get("attack_style", "")))
 
+func _combat_hit_flash_color(attack_style: String) -> Color:
+	match attack_style:
+		"heavy_slam":
+			return Color("#ff985e")
+		"poison_bolt", "poison_tick":
+			return Color("#8cff72")
+		"frost_bolt":
+			return Color("#75e7ff")
+		"soul_bolt":
+			return Color("#d39aff")
+		_:
+			return Color("#d9f2ff")
+
+
+func _apply_remote_hit_flash_recursive(node: Node, material: StandardMaterial3D) -> void:
+	if node is GeometryInstance3D:
+		(node as GeometryInstance3D).material_overlay = material
+	for child in node.get_children():
+		_apply_remote_hit_flash_recursive(child, material)
+
+
+func _clear_remote_hit_flash_recursive(node: Node, material: StandardMaterial3D) -> void:
+	if node is GeometryInstance3D:
+		var geometry := node as GeometryInstance3D
+		if geometry.material_overlay == material:
+			geometry.material_overlay = null
+	for child in node.get_children():
+		_clear_remote_hit_flash_recursive(child, material)
+
+
+func _clear_remote_hit_flash(remote: Node3D, material: StandardMaterial3D) -> void:
+	if is_instance_valid(remote):
+		_clear_remote_hit_flash_recursive(remote, material)
+
+
+func _apply_remote_hit_flash(remote: Node3D, tint: Color) -> void:
+	var previous := remote.get_meta("hit_flash_material") as StandardMaterial3D
+	if is_instance_valid(previous):
+		_clear_remote_hit_flash_recursive(remote, previous)
+	var flash := StandardMaterial3D.new()
+	flash.albedo_color = Color(tint.r, tint.g, tint.b, 0.58)
+	flash.emission_enabled = true
+	flash.emission = tint
+	flash.emission_energy_multiplier = 1.5
+	flash.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	flash.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	remote.set_meta("hit_flash_material", flash)
+	_apply_remote_hit_flash_recursive(remote, flash)
+	var tween := create_tween()
+	tween.tween_property(flash, "albedo_color:a", 0.0, 0.22)
+	tween.parallel().tween_property(flash, "emission_energy_multiplier", 0.0, 0.22)
+	tween.tween_callback(Callable(self, "_clear_remote_hit_flash").bind(remote, flash))
+
+
 func _spawn_remote_player_hit_visual(remote: Node3D, attack_style: String) -> void:
 	if not is_instance_valid(remote):
 		return
@@ -5489,7 +5543,8 @@ func _spawn_remote_player_hit_visual(remote: Node3D, attack_style: String) -> vo
 	ring.mesh = ring_mesh
 	ring.position.y = 0.06
 	ring.rotation.x = PI / 2.0
-	var tint := Color("#ffad75") if attack_style == "heavy_slam" else Color("#b8dfff")
+	var tint := _combat_hit_flash_color(attack_style)
+	_apply_remote_hit_flash(remote, tint)
 	var material := StandardMaterial3D.new()
 	material.albedo_color = Color(tint.r, tint.g, tint.b, 0.82)
 	material.emission_enabled = true
