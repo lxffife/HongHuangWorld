@@ -2130,9 +2130,17 @@ func _refresh_monster_nameplate(monster_id: String) -> void:
 		base_text += "\n生命 " + str(maxi(int(entity.get("health", 0)), 0)) + " / " + str(int(entity.get("max_health", 0)))
 	var aggro_target_id := str(entity.get("aggro_target_character_id", ""))
 	var aggro_target_name := str(entity.get("aggro_target_name", ""))
+	var base_color: Color = monster_node.get_meta("base_nameplate_color", Color("#ffd0a8"))
 	if not aggro_target_id.is_empty():
 		var local_id := str(HHSession.world_snapshot.get("character_id", ""))
-		base_text += "\n⚔ " + ("正在攻击你" if aggro_target_id == local_id else "目标：" + (aggro_target_name if not aggro_target_name.is_empty() else "队友"))
+		if aggro_target_id == local_id:
+			base_text += "\n⚔ 正在攻击你"
+			nameplate.modulate = Color("#ff7777")
+		else:
+			base_text += "\n目标：" + (aggro_target_name if not aggro_target_name.is_empty() else "队友")
+			nameplate.modulate = Color("#ffc36b")
+	else:
+		nameplate.modulate = base_color
 	if str(party_data.get("focus_target_entity_id", "")) == monster_id:
 		base_text += "\n⚑ 队伍集火目标"
 	nameplate.text = base_text
@@ -2212,6 +2220,7 @@ func _create_monster(monster_name: String, monster_level: int) -> Node3D:
 	label.position.y = 2.05 if is_war_god else (1.85 if is_wraith else 1.75)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.modulate = Color("#ff9b55") if is_war_god else (Color("#b9d9ff") if is_wraith else Color("#ffd0a8"))
+	visual_root.set_meta("base_nameplate_color", label.modulate)
 	visual_root.add_child(label)
 	visual_root.set_meta("base_visual_scale", visual_root.scale)
 	visual_root.set_meta("death_reaction_time", 0.0)
