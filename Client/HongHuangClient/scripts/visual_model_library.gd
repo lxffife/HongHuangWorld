@@ -24,7 +24,7 @@ static func instantiate_model(model_key: String, fallback_factory: Callable) -> 
 			if instance is Node3D and _contains_renderable_mesh(instance):
 				instance.set_meta("model_source", model_path)
 				instance.set_meta("model_key", model_key)
-				_attach_animation_driver(instance as Node3D)
+				_attach_animation_driver(instance as Node3D, model_key)
 				return instance as Node3D
 			if instance != null:
 				instance.queue_free()
@@ -49,8 +49,10 @@ static func _contains_renderable_mesh(root: Node) -> bool:
 
 
 
-static func _attach_animation_driver(model_root: Node3D) -> void:
-	if model_root.get_node_or_null("ModelAnimationController") != null:
+static func _attach_animation_driver(model_root: Node3D, model_key: String) -> void:
+	# Humanoid player scenes already use HHHumanoidAnimationDriver from world_scene.
+	# Avoid two AnimationPlayers competing to change the same imported character.
+	if model_key == "player_humanoid" or model_root.get_node_or_null("ModelAnimationController") != null:
 		return
 	var controller := Node.new()
 	controller.name = "ModelAnimationController"
