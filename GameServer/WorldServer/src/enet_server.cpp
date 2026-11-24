@@ -5826,11 +5826,40 @@ struct EnetServer::Impl {
                     }
                 }
             }
+            const std::string previous_target_id = monster.state.target_id;
             if (!honghuang::simulation::tick_monster(
                     monster.definition, monster.state, nearest_target, monster_delta, &attack_profile)) {
                 std::cerr << "Skipping invalid monster simulation state: "
                           << monster.runtime_id << '\n';
                 continue;
+            }
+            if (monster.state.target_id != previous_target_id) {
+                std::string new_target_name;
+                if (!monster.state.target_id.empty()) {
+                    const auto selected_target = std::find_if(players.begin(), players.end(),
+                        [&](const auto& entry) {
+                            return entry.second.character_id == monster.state.target_id;
+                        });
+                    if (selected_target != players.end())
+                        new_target_name = selected_target->second.name;
+                }
+                const Json target_event{
+                    {"action", "monster_target_changed"},
+                    {"monster_id", monster.runtime_id},
+                    {"monster_name", monster.definition.name},
+                    {"previous_target_character_id", previous_target_id},
+                    {"target_character_id", monster.state.target_id},
+                    {"target_name", new_target_name},
+                    {"target_cleared", monster.state.target_id.empty()},
+                    {"reason", taunt_override_active ? "taunt" :
+                        (highest_threat_player != nullptr ? "threat" : "acquire")}
+                };
+                for (const auto& [observer_peer, observer] : players) {
+                    if (!honghuang::simulation::within_interest_radius(
+                            monster.state.x, monster.state.z, observer.x, observer.z, kInterestRadius))
+                        continue;
+                    send_json(observer_peer, honghuang::protocol::MessageType::CombatEvent, target_event);
+                }
             }
             const auto rare_scale = monster.rare_spawn ? 1.25 : 1.0;
             const auto windup_duration = std::chrono::milliseconds(
