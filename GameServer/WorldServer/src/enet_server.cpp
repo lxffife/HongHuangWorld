@@ -1984,8 +1984,17 @@ struct EnetServer::Impl {
                             return left.second.value < right.second.value;
                         return left.first > right.first;
                     });
-                if (weakest != monster.threat_by_character.end())
+                if (weakest != monster.threat_by_character.end()) {
+                    const auto now = Clock::now();
+                    const auto weakest_age = std::chrono::duration_cast<std::chrono::seconds>(
+                        now - weakest->second.last_update).count();
+                    // Prefer reclaiming expired threat entries. Never evict a
+                    // stronger active combatant just because a new player lands
+                    // one small hit after the ledger reaches its safety cap.
+                    if (weakest_age >= 0 && weakest_age < 30 &&
+                        threat_value <= weakest->second.value) return;
                     monster.threat_by_character.erase(weakest);
+                }
             }
             threat = monster.threat_by_character.emplace(character_id,
                 MonsterRuntime::ThreatEntry{}).first;
