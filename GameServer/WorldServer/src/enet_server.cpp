@@ -87,6 +87,7 @@ struct PlayerState {
     std::vector<BountyObjectiveSubscription> bounty_objectives;
     std::unordered_map<std::string, honghuang::simulation::SpellMastery> spell_mastery;
     std::unordered_set<std::string> known_spells{"fireball"};
+    Clock::time_point last_spell_ownership_sync_at{};
     std::string session_id;
     std::string character_id;
     std::string name;
@@ -4452,9 +4453,20 @@ struct EnetServer::Impl {
         if (player.health <= 0) { reject("角色已倒地，无法施法。"); return; }
         if ((spell_id == "fireball" || spell_id == "ice_bolt" || spell_id == "taunt") &&
             !player.known_spells.contains(spell_id)) {
-            const std::string technique = spell_id == "ice_bolt" ? "镇邪符" : "鬼门锁链";
-            reject("尚未掌握" + technique + "，请先研读对应技能典籍。");
-            return;
+            const auto sync_now = Clock::now();
+            if (player.last_spell_ownership_sync_at == Clock::time_point{} ||
+                sync_now - player.last_spell_ownership_sync_at >= std::chrono::seconds(2)) {
+                long sync_status = 0;
+                std::string sync_error;
+                (void)fetch_spell_mastery(config, player.session_id, player.character_id,
+                    player.spell_mastery, player.known_spells, sync_status, sync_error);
+                player.last_spell_ownership_sync_at = sync_now;
+            }
+            if (!player.known_spells.contains(spell_id)) {
+                const std::string technique = spell_id == "ice_bolt" ? "镇邪符" : "鬼门锁链";
+                reject("尚未掌握" + technique + "，请先研读对应技能典籍。");
+                return;
+            }
         }
         if (player.pending_spell.has_value()) { reject("正在施法，请稍候。"); return;
         if (!player.revive_target_character_id.empty() && spell_id != "revive") {
