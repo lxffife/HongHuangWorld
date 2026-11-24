@@ -31,6 +31,7 @@
 
 外部 GLB 若包含 AnimationPlayer，会自动附加 `model_animation_controller.gd`：
 - 根据模型根节点的实际位移，在 idle / walk / run 动画间切换。
+- idle / walk / run 强制循环播放；attack / hit / death 按一次性动作播放，避免攻击或死亡动作无限循环。
 - 忽略异常大的位置跳变，避免网络快照纠正被误判为奔跑。
 - 暴露 `play_action("attack" | "hit" | "death")`，由已确认的怪物攻击、受击和死亡事件触发。
 - 找不到对应动画时不强行播放，原有程序化受击/死亡视觉仍然保留。
