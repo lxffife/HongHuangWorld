@@ -7,11 +7,14 @@ var search_input: LineEdit
 var results_list: VBoxContainer
 var requests_list: VBoxContainer
 var friends_list: VBoxContainer
+var friend_items: Array = []
+var friend_filter := "all"
+var friend_filter_buttons: Array[Button] = []
 var allow_requests_toggle: CheckButton
 var refresh_timer: Timer
 
 func _ready() -> void:
-	custom_minimum_size = Vector2(360.0, 460.0)
+	custom_minimum_size = Vector2(520.0, 620.0)
 	size = custom_minimum_size
 	_build_ui()
 	refresh_timer = Timer.new()
@@ -22,10 +25,14 @@ func _ready() -> void:
 
 func _build_ui() -> void:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.035, 0.055, 0.085, 0.97)
-	style.border_color = Color("#526783")
+	style.bg_color = Color("#0b1420")
+	style.border_color = Color("#a88956")
 	style.set_border_width_all(1)
-	style.set_corner_radius_all(10)
+	style.set_corner_radius_all(16)
+	style.content_margin_left = 16
+	style.content_margin_right = 16
+	style.content_margin_top = 14
+	style.content_margin_bottom = 14
 	add_theme_stylebox_override("panel", style)
 
 	var root := VBoxContainer.new()
@@ -43,6 +50,25 @@ func _build_ui() -> void:
 	close_button.text = "关闭"
 	close_button.pressed.connect(_close_panel)
 	header.add_child(close_button)
+
+	var subtitle := Label.new()
+	subtitle.text = "在线状态 · 好友管理 · 私聊"
+	subtitle.add_theme_color_override("font_color", Color("#91a7ba"))
+	subtitle.add_theme_font_size_override("font_size", 11)
+	root.add_child(subtitle)
+
+	var filter_row := HBoxContainer.new()
+	filter_row.add_theme_constant_override("separation", 6)
+	root.add_child(filter_row)
+	friend_filter_buttons.clear()
+	for filter_data in [["all", "全部"], ["game", "游戏中"], ["online", "在线"], ["offline", "离线"]]:
+		var filter_button := Button.new()
+		filter_button.text = str(filter_data[1])
+		filter_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		filter_button.pressed.connect(_set_friend_filter.bind(str(filter_data[0])))
+		_style_filter_button(filter_button, str(filter_data[0]) == friend_filter)
+		filter_row.add_child(filter_button)
+		friend_filter_buttons.append(filter_button)
 
 	allow_requests_toggle = CheckButton.new()
 	allow_requests_toggle.text = "允许陌生人发送好友申请"
@@ -167,28 +193,101 @@ func _on_request_completed(result: int, response_code: int, _headers: PackedStri
 			status_label.text = "陌生人好友申请设置已保存。"
 
 func _render_friends(items: Array) -> void:
+	friend_items = items.duplicate(true)
+	_render_friend_cards()
+
+func _render_friend_cards() -> void:
 	_clear(friends_list)
-	for value in items:
+	var visible_count := 0
+	for value in friend_items:
 		if not (value is Dictionary):
 			continue
 		var item: Dictionary = value
+		var in_game := bool(item.get("in_game", false))
+		var online := in_game or bool(item.get("chat_online", false))
+		if friend_filter == "game" and not in_game:
+			continue
+		if friend_filter == "online" and not online:
+			continue
+		if friend_filter == "offline" and online:
+			continue
+		visible_count += 1
+		var card := PanelContainer.new()
+		var card_style := StyleBoxFlat.new()
+		card_style.bg_color = Color("#172635")
+		card_style.border_color = Color("#31495c")
+		card_style.set_border_width_all(1)
+		card_style.set_corner_radius_all(10)
+		card_style.content_margin_left = 10
+		card_style.content_margin_right = 10
+		card_style.content_margin_top = 8
+		card_style.content_margin_bottom = 8
+		card.add_theme_stylebox_override("panel", card_style)
+		friends_list.add_child(card)
 		var row := HBoxContainer.new()
-		friends_list.add_child(row)
-		var label := Label.new()
-		var state := "游戏中" if bool(item.get("in_game", false)) else ("聊天在线" if bool(item.get("chat_online", false)) else "离线")
-		label.text = str(item.get("name", "未知角色")) + " · " + state
-		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(label)
+		row.add_theme_constant_override("separation", 10)
+		card.add_child(row)
+		var avatar := PanelContainer.new()
+		avatar.custom_minimum_size = Vector2(42, 42)
+		var avatar_style := StyleBoxFlat.new()
+		avatar_style.bg_color = Color("#594b36") if in_game else Color("#294052")
+		avatar_style.set_corner_radius_all(12)
+		avatar.add_theme_stylebox_override("panel", avatar_style)
+		row.add_child(avatar)
+		var avatar_label := Label.new()
+		avatar_label.text = str(item.get("name", "友")).substr(0, 1)
+		avatar_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		avatar_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		avatar_label.add_theme_color_override("font_color", Color("#f0d49a"))
+		avatar.add_child(avatar_label)
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_theme_constant_override("separation", 2)
+		row.add_child(info)
+		var name_label := Label.new()
+		name_label.text = str(item.get("name", "未知角色"))
+		name_label.add_theme_color_override("font_color", Color("#f0e6d5"))
+		name_label.add_theme_font_size_override("font_size", 13)
+		info.add_child(name_label)
+		var state_label := Label.new()
+		state_label.text = "● 游戏中" if in_game else ("● 聊天在线" if online else "● 离线")
+		state_label.add_theme_color_override("font_color", Color("#72c99a") if online else Color("#788999"))
+		state_label.add_theme_font_size_override("font_size", 10)
+		info.add_child(state_label)
+		var actions := VBoxContainer.new()
+		actions.add_theme_constant_override("separation", 4)
+		row.add_child(actions)
 		var chat_button := Button.new()
 		chat_button.text = "私聊"
+		chat_button.custom_minimum_size = Vector2(62, 28)
 		chat_button.pressed.connect(_open_friend_from_row.bind(str(item.get("character_id", "")), str(item.get("name", "好友"))))
-		row.add_child(chat_button)
+		actions.add_child(chat_button)
 		var remove_button := Button.new()
-		remove_button.text = "删除"
+		remove_button.text = "移除"
+		remove_button.custom_minimum_size = Vector2(62, 24)
 		remove_button.pressed.connect(_remove_friend.bind(str(item.get("character_id", ""))))
-		row.add_child(remove_button)
-	if items.is_empty():
-		_add_empty(friends_list, "还没有好友，搜索角色名添加吧。")
+		actions.add_child(remove_button)
+	if visible_count == 0:
+		_add_empty(friends_list, "这个分类暂时没有好友。")
+
+func _set_friend_filter(next_filter: String) -> void:
+	friend_filter = next_filter
+	for index in range(friend_filter_buttons.size()):
+		var filter_ids := ["all", "game", "online", "offline"]
+		_style_filter_button(friend_filter_buttons[index], index < filter_ids.size() and filter_ids[index] == friend_filter)
+	_render_friend_cards()
+
+func _style_filter_button(button: Button, active: bool) -> void:
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color("#5b4a30") if active else Color("#182735")
+	normal.border_color = Color("#c3a16a") if active else Color("#34495b")
+	normal.set_border_width_all(1)
+	normal.set_corner_radius_all(8)
+	button.add_theme_stylebox_override("normal", normal)
+	var hover := normal.duplicate()
+	hover.bg_color = Color("#6c5837") if active else Color("#243b4d")
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_color_override("font_color", Color("#f4e5c7") if active else Color("#aebdca"))
 
 func _render_requests(items: Array) -> void:
 	_clear(requests_list)
