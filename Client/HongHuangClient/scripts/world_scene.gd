@@ -4095,11 +4095,13 @@ func _request_nearest_monster_attack(screen_position: Vector2 = Vector2(-1.0, -1
 	var target_name := str(monster_entities.get(target_id, {}).get("name", "怪物"))
 	var server_interval_ms := int(HHSession.world_snapshot.get("attack_interval_ms", 1200))
 	attack_repeat_interval = clampf(float(server_interval_ms) / 1000.0, 0.45, 3.0)
-	attack_repeat_remaining = attack_repeat_interval
 	var error: Error = network.send_attack(target_id)
 	if error != OK:
+		attack_repeat_remaining = 0.0
 		_show_notification("攻击指令发送失败（错误码 " + str(error) + "），目标仍保持锁定。", 4.0)
 		return
+	# Start the local repeat timer only after the network accepted the send.
+	attack_repeat_remaining = attack_repeat_interval
 	# Give immediate feedback for the click; damage and hit effects are still
 	# driven exclusively by the authoritative server combat event.
 	if local_player.has_method("play_attack_animation"):
