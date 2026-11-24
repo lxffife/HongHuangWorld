@@ -851,14 +851,14 @@ func (s *Service) ApplyServerReward(ctx context.Context, nodeKey string, reward 
 	if reward.GhostCash > 0 {
 		if _, err := economy.NewService(s.db).ApplyIssuanceInTx(ctx, tx, accountID, worldID,
 			"ghost_cash", "monster_kill:"+reward.EventID+":ghost_cash", reward.GhostCash,
-			"monster_kill", reward.EventID, "怪物击杀奖励"); err != nil {
+			"monster_kill", reward.EventID, "怪物击杀奖励"); err != nil && !errors.Is(err, economy.ErrIssuanceNotAllowed) {
 			return RewardResult{}, fmt.Errorf("issue monster ghost cash: %w", err)
 		}
 	}
 	if reward.NetherStone > 0 {
 		if _, err := economy.NewService(s.db).ApplyIssuanceInTx(ctx, tx, accountID, worldID,
 			"nether_stone", "monster_kill:"+reward.EventID+":nether_stone", reward.NetherStone,
-			"monster_kill", reward.EventID, "精英怪物击杀奖励"); err != nil {
+			"monster_kill", reward.EventID, "精英怪物击杀奖励"); err != nil && !errors.Is(err, economy.ErrIssuanceNotAllowed) {
 			return RewardResult{}, fmt.Errorf("issue monster nether stone: %w", err)
 		}
 	}
