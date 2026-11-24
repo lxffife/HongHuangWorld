@@ -1949,8 +1949,7 @@ type SpellLearningResult struct {
 // atomically. Learning is performed outside an active world session so the
 // authoritative WorldServer can load the new ownership snapshot on next entry.
 func (s *Service) LearnSpell(ctx context.Context, accountID, requestID, itemID string) (SpellLearningResult, error) {
-	if strings.TrimSpace(accountID) == "" || !validUUID(requestID) ||
-		strings.TrimSpace(itemID) == "" || len(itemID) > 64 {
+	if !validSpellLearningRequest(accountID,requestID,itemID) {
 		return SpellLearningResult{}, ErrSpellLearningInvalid
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -2061,4 +2060,9 @@ func (s *Service) KnownSpellsForSession(ctx context.Context,nodeKey,sessionID,ch
 	for rows.Next(){var id string;if err:=rows.Scan(&id);err!=nil{return nil,fmt.Errorf("scan known spell: %w",err)};known=append(known,id)}
 	if err:=rows.Err();err!=nil{return nil,fmt.Errorf("iterate known spells: %w",err)}
 	return known,nil
+}
+
+func validSpellLearningRequest(accountID,requestID,itemID string)bool{
+	return strings.TrimSpace(accountID)!=""&&validUUID(requestID)&&
+		strings.TrimSpace(itemID)!=""&&len(itemID)<=64
 }
