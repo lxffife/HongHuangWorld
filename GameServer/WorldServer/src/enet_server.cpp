@@ -4733,6 +4733,28 @@ struct EnetServer::Impl {
             player.mana -= kManaCost;
             target->taunt_target_character_id = player.character_id;
             target->taunt_expires_at = now + kTauntDuration;
+
+            // Taunt must leave a real threat lead after the forced-target window
+            // expires; otherwise the monster immediately snaps back to its old
+            // damage dealer and the tank ability has no lasting combat value.
+            double highest_recent_threat = 0.0;
+            for (const auto& [character_id, entry] : target->threat_by_character) {
+                (void)character_id;
+                const auto age = std::chrono::duration_cast<std::chrono::seconds>(
+                    now - entry.last_update).count();
+                if (age < 0 || age >= 30) continue;
+                highest_recent_threat = std::max(
+                    highest_recent_threat,
+                    honghuang::simulation::decayed_monster_threat(entry.value, age));
+            }
+            const auto own_threat = target->threat_by_character.find(player.character_id);
+            const double current_taunter_threat = own_threat == target->threat_by_character.end()
+                ? 0.0 : own_threat->second.value;
+            const double desired_taunter_threat = std::max(1.0, highest_recent_threat * 1.25);
+            if (desired_taunter_threat > current_taunter_threat) {
+                record_monster_threat(
+                    *target, player.character_id, desired_taunter_threat - current_taunter_threat);
+            }
             target->state.target_id = player.character_id;
             target->state.mode = honghuang::simulation::MonsterMode::Chasing;
             player.last_taunt_at = now;
