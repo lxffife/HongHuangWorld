@@ -76,7 +76,7 @@ func start_ambience(cue: String) -> void:
 		stream = _build_stream(cue)
 		stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
 		stream.loop_begin = 0
-		stream.loop_end = stream.data.size() / 2
+		stream.loop_end = int(stream.data.size() / 2)
 		_cache[cue] = stream
 	_ambience_player = AudioStreamPlayer.new()
 	_ambience_player.name = "RegionAmbience"
