@@ -1164,7 +1164,7 @@ func _build_combat_hud() -> void:
 		spell_mastery_labels[spell_id] = mastery_label
 		vitals_layout.add_child(mastery_label)
 	var taunt_label := Label.new()
-	taunt_label.text = "T  ·  冥司敕令：就绪"
+	taunt_label.text = "T  ·  鬼门锁链：就绪"
 	taunt_label.add_theme_color_override("font_color", Color("#e7b77a"))
 	taunt_label.add_theme_font_size_override("font_size", 11)
 	spell_cooldown_labels["taunt"] = taunt_label
@@ -1572,7 +1572,7 @@ func _build_controls_help_panel(hud: CanvasLayer) -> void:
 	var divider := HSeparator.new()
 	layout.add_child(divider)
 	var body := Label.new()
-	body.text = "角色移动\nW / A / S / D    前进、左移、后退、右移\n空格键    跳跃（地形允许时）\n鼠标移动    转动视角\n鼠标左键    点击攻击；按住可连续攻击，进入攻击距离后自动出手\nTab    切换附近怪物目标\n\n交互与界面\nF    与附近 NPC 交互\nE    拾取附近掉落物\nI    打开背包\nC 或 Enter    打开聊天\nF1    显示 / 隐藏游戏 HUD\nF2    打开 / 关闭本操作指南\nF3    显示 / 隐藏输入诊断\nEsc    关闭当前地图、聊天或帮助面板\n\n修行神通\nQ    幽冥磷火     R    镇邪符\nT    冥司敕令     Y    回魂术\nU    养气归元     G    罡气护体\nH    净秽符\n\n提示：打开聊天或面板时，部分移动与战斗输入会暂停。技能是否可用仍以服务器判定为准。"
+	body.text = "角色移动\nW / A / S / D    前进、左移、后退、右移\n空格键    跳跃（地形允许时）\n鼠标移动    转动视角\n鼠标左键    点击攻击；按住可连续攻击，进入攻击距离后自动出手\nTab    切换附近怪物目标\n\n交互与界面\nF    与附近 NPC 交互\nE    拾取附近掉落物\nI    打开背包\nC 或 Enter    打开聊天\nF1    显示 / 隐藏游戏 HUD\nF2    打开 / 关闭本操作指南\nF3    显示 / 隐藏输入诊断\nEsc    关闭当前地图、聊天或帮助面板\n\n修行神通\nQ    幽冥磷火     R    镇邪符\nT    鬼门锁链     Y    回魂术\nU    养气归元     G    罡气护体\nH    净秽符\n\n提示：打开聊天或面板时，部分移动与战斗输入会暂停。技能是否可用仍以服务器判定为准。"
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.add_theme_color_override("font_color", Color("#d7e0e9"))
 	body.add_theme_font_size_override("font_size", 14)
@@ -1775,7 +1775,7 @@ func _update_hud() -> void:
 	var world_id := str(snapshot.get("world_id", ""))
 	var world_name := _world_display_name(world_id)
 	var character_name := str(snapshot.get("name", "初入洪荒"))
-	hud_label.text = character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\nF NPC交互 · E 拾取 · I 背包 · Q 幽冥磷火 · R 镇邪符 · T 冥司敕令 · Y 回魂术 · U 养气归元 · G 罡气护体 · H 净秽符 · C 聊天 · 鼠标左键攻击（按住连续攻击） · F2 网络诊断"
+	hud_label.text = character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\nF NPC交互 · E 拾取 · I 背包 · Q 幽冥磷火 · R 镇邪符 · T 鬼门锁链 · Y 回魂术 · U 养气归元 · G 罡气护体 · H 净秽符 · C 聊天 · 鼠标左键攻击（按住连续攻击） · F2 网络诊断"
 	_update_compact_hud()
 
 func _exit_tree() -> void:
@@ -4074,7 +4074,7 @@ func _spell_display_name(spell_id: String) -> String:
 	match spell_id:
 		"fireball": return "幽冥磷火"
 		"ice_bolt": return "镇邪符"
-		"taunt": return "冥司敕令"
+		"taunt": return "鬼门锁链"
 		"life_mend": return "养气归元"
 		"guardian_aegis": return "罡气护体"
 		"purify": return "净秽符"
@@ -4231,7 +4231,7 @@ func _request_taunt() -> void:
 				nearest_distance = distance
 				target_id = str(monster_id)
 	if target_id.is_empty():
-		_show_notification("8 米内没有可嘲讽的怪物，请靠近目标。")
+		_show_notification("8 米内没有可施展鬼门锁链的目标，请靠近目标。")
 		return
 	var error: Error = network.send_spell_cast("taunt", target_id)
 	if error != OK:
@@ -4546,6 +4546,55 @@ func _update_spell_mastery_hud() -> void:
 		label.text = _spell_display_name(spell_id) + " · 熟练 Lv." + str(level) + " · " + progress_text
 
 
+func _show_ghost_gate_chain_effect(target_entity_id: String) -> void:
+	if target_entity_id.is_empty() or not monsters.has(target_entity_id):
+		return
+	var target := monsters[target_entity_id] as Node3D
+	if not is_instance_valid(target):
+		return
+	var previous := target.get_node_or_null("GhostGateChainVisual")
+	if previous != null:
+		previous.queue_free()
+	var effect := Node3D.new()
+	effect.name = "GhostGateChainVisual"
+	effect.position.y = 0.18
+	target.add_child(effect)
+	for ring_index in range(3):
+		var ring := MeshInstance3D.new()
+		var torus := TorusMesh.new()
+		torus.inner_radius = 0.42 + float(ring_index) * 0.08
+		torus.outer_radius = torus.inner_radius + 0.045
+		torus.rings = 20
+		torus.ring_segments = 6
+		ring.mesh = torus
+		ring.position.y = 0.30 + float(ring_index) * 0.48
+		ring.rotation.x = PI * 0.5
+		var iron := StandardMaterial3D.new()
+		iron.albedo_color = Color("#718092")
+		iron.metallic = 0.82
+		iron.roughness = 0.28
+		iron.emission_enabled = true
+		iron.emission = Color("#526b91")
+		iron.emission_energy_multiplier = 0.7
+		ring.material_override = iron
+		effect.add_child(ring)
+		for link_index in range(6):
+			var link := MeshInstance3D.new()
+			var link_mesh := BoxMesh.new()
+			link_mesh.size = Vector3(0.12, 0.045, 0.065)
+			link.mesh = link_mesh
+			var angle := TAU * float(link_index) / 6.0
+			link.position = Vector3(cos(angle) * (torus.outer_radius + 0.015), ring.position.y, sin(angle) * (torus.outer_radius + 0.015))
+			link.rotation.y = -angle
+			link.material_override = iron
+			effect.add_child(link)
+	var rotation_tween := create_tween()
+	rotation_tween.tween_property(effect, "rotation:y", TAU, 1.1)
+	await get_tree().create_timer(1.35).timeout
+	if is_instance_valid(effect):
+		effect.queue_free()
+
+
 func _on_combat_event(event: Dictionary) -> void:
 	var action := str(event.get("action", ""))
 	if action == "hell_trial_wave_transition":
@@ -4603,9 +4652,10 @@ func _on_combat_event(event: Dictionary) -> void:
 			threat_alert_timer.start(6.0)
 		_show_notification(warning_text, 3.8)
 		return
-	if str(event.get("action", "")) == "monster_taunt":
-		var taunter := str(event.get("character_name", "队友"))
-		_show_notification(taunter + " 嘲讽了怪物，怪物将优先攻击他！", 2.8)
+	if str(event.get("action", "")) == "monster_chain_bound":
+		var binder := str(event.get("character_name", "队友"))
+		_show_ghost_gate_chain_effect(str(event.get("target_entity_id", "")))
+		_show_notification(binder + " 施展鬼门锁链，目标被短暂定身并转向攻击他！", 2.8)
 		return
 	if str(event.get("action", "")) == "player_healed":
 		var healed_id := str(event.get("character_id", ""))
