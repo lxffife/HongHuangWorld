@@ -5133,13 +5133,18 @@ func _on_combat_event(event: Dictionary) -> void:
 			player_poison_visual_remaining = maxf(float(event.get("status_duration_ms", 0)) / 1000.0, 0.0)
 			_set_player_poison_visual(local_player, player_poison_visual_remaining > 0.0)
 		var incoming_damage := int(event.get("damage", 0))
+		var shield_absorbed := int(event.get("shield_absorbed", 0))
 		combat_damage_taken += maxi(incoming_damage, 0)
-		if incoming_damage > 0:
+		if incoming_damage > 0 or shield_absorbed > 0:
 			combat_has_started = true
 		_update_combat_summary()
-		if str(event.get("attack_style", "")) != "poison_tick" and is_instance_valid(local_player) and local_player.has_method("play_hit_reaction"):
-			local_player.call("play_hit_reaction", incoming_damage, str(event.get("attack_style", "")))
-		_spawn_combat_number(incoming_damage, true, false)
+		var incoming_style := str(event.get("attack_style", ""))
+		if shield_absorbed > 0 and is_instance_valid(local_player) and local_player.has_method("play_shield_absorb"):
+			local_player.call("play_shield_absorb", shield_absorbed, incoming_style)
+		if incoming_damage > 0 and incoming_style != "poison_tick" and is_instance_valid(local_player) and local_player.has_method("play_hit_reaction"):
+			local_player.call("play_hit_reaction", incoming_damage, incoming_style)
+		if incoming_damage > 0:
+			_spawn_combat_number(incoming_damage, true, false)
 		var current_health := int(event.get("health", 0))
 		var max_health := int(event.get("max_health", 0))
 		_update_vitals(current_health, max_health)
@@ -5157,6 +5162,10 @@ func _on_combat_event(event: Dictionary) -> void:
 			death_panel.visible = true
 		else:
 			var hit_message := "受到怪物攻击 -" + str(incoming_damage) + " 生命"
+			if shield_absorbed > 0:
+				if incoming_damage <= 0:
+					hit_message = "护盾成功抵挡攻击"
+				hit_message += " · 护盾吸收 " + str(shield_absorbed)
 			if str(event.get("status_effect", "")) == "slow":
 				hit_message += " · 冰霜减速"
 			elif str(event.get("status_effect", "")) == "poison":
