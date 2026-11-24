@@ -6,6 +6,8 @@
 #include <cmath>
 #include <cstdint>
 #include <string>
+#include <unordered_map>
+#include <limits>
 #include <vector>
 
 namespace honghuang::persistence {
@@ -28,16 +30,44 @@ inline std::vector<MonsterCombatRewardShare> allocate_monster_combat_rewards(
     std::int64_t total_cultivation,
     std::int64_t total_ghost_cash = 0,
     std::int64_t total_nether_stone = 0) {
+    // A character may contribute through multiple sessions after reconnecting.
+    // Merge damage by character so one life grants one proportional reward per
+    // character. Route that reward through the session with the latest contribution;
+    // ties use a stable session-id order for deterministic recovery/replay.
     std::vector<MonsterCombatRewardShare> shares;
-    long double total_damage = 0.0L;
+    std::unordered_map<std::string, std::size_t> share_index_by_character;
     for (const auto& record : records) {
         if (record.total_damage <= 0 || record.hit_count <= 0 ||
             record.session_id.empty() || record.character_id.empty()) continue;
-        shares.push_back(MonsterCombatRewardShare{
-            record.session_id, record.character_id, record.total_damage, 0, 0, 0, 0
-        });
-        total_damage += static_cast<long double>(record.total_damage);
+        const auto [found, inserted] = share_index_by_character.emplace(
+            record.character_id, shares.size());
+        if (inserted) {
+            shares.push_back(MonsterCombatRewardShare{
+                record.session_id, record.character_id, record.total_damage, 0, 0, 0, 0
+            });
+            continue;
+        }
+        auto& share = shares[found->second];
+        if (share.damage > std::numeric_limits<std::int64_t>::max() - record.total_damage)
+            share.damage = std::numeric_limits<std::int64_t>::max();
+        else
+            share.damage += record.total_damage;
+        const auto existing = std::find_if(records.begin(), records.end(),
+            [&](const MonsterContributionRecord& candidate) {
+                return candidate.character_id == share.character_id &&
+                       candidate.session_id == share.session_id;
+            });
+        if (existing == records.end() ||
+            record.last_hit_at_ms > existing->last_hit_at_ms ||
+            (record.last_hit_at_ms == existing->last_hit_at_ms &&
+             record.session_id < share.session_id)) {
+            share.session_id = record.session_id;
+        }
     }
+
+    long double total_damage = 0.0L;
+    for (const auto& share : shares)
+        total_damage += static_cast<long double>(share.damage);
     if (shares.empty() || total_damage <= 0.0L) return {};
 
     std::sort(shares.begin(), shares.end(),
