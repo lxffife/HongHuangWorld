@@ -166,6 +166,7 @@ var world_map_hint_label: Label
 var world_map_restore_mouse_captured := false
 var minimap_view: Control
 var minimap_region_label: Label
+var minimap_coordinate_label: Label
 var minimap_exploration_label: Label
 var minimap_navigation_label: Label
 var minimap_clear_navigation_button: Button
@@ -694,8 +695,18 @@ func _build_minimap_hud() -> void:
 		return
 	minimap_panel = PanelContainer.new()
 	minimap_panel.name = "WorldMiniMapPanel"
-	minimap_panel.custom_minimum_size = Vector2(184.0, 300.0)
+	minimap_panel.custom_minimum_size = Vector2(196.0, 312.0)
 	_apply_panel_theme(minimap_panel)
+	var minimap_style := StyleBoxFlat.new()
+	minimap_style.bg_color = Color("#091521", 0.94)
+	minimap_style.border_color = Color("#766344")
+	minimap_style.set_border_width_all(1)
+	minimap_style.set_corner_radius_all(12)
+	minimap_style.content_margin_left = 9.0
+	minimap_style.content_margin_right = 9.0
+	minimap_style.content_margin_top = 8.0
+	minimap_style.content_margin_bottom = 8.0
+	minimap_panel.add_theme_stylebox_override("panel", minimap_style)
 	hud.add_child(minimap_panel)
 	var layout := VBoxContainer.new()
 	layout.add_theme_constant_override("separation", 4)
@@ -716,6 +727,11 @@ func _build_minimap_hud() -> void:
 	minimap_region_label.add_theme_color_override("font_color", Color("#a9bac7"))
 	minimap_region_label.add_theme_font_size_override("font_size", 11)
 	layout.add_child(minimap_region_label)
+	minimap_coordinate_label = Label.new()
+	minimap_coordinate_label.text = "坐标  --  /  --"
+	minimap_coordinate_label.add_theme_color_override("font_color", Color("#8fa9bd"))
+	minimap_coordinate_label.add_theme_font_size_override("font_size", 10)
+	layout.add_child(minimap_coordinate_label)
 	minimap_exploration_label = Label.new()
 	minimap_exploration_label.text = "本区域探索 0 / 0"
 	minimap_exploration_label.add_theme_color_override("font_color", Color("#d6c49f"))
@@ -950,6 +966,9 @@ func _update_minimap_data() -> void:
 	if is_instance_valid(local_player):
 		minimap_view.set("player_position", local_player.global_position)
 		minimap_view.set("player_yaw", local_player.global_rotation.y)
+		if is_instance_valid(minimap_coordinate_label):
+			var player_pos := local_player.global_position
+			minimap_coordinate_label.text = "坐标  %.0f  /  %.0f" % [player_pos.x, player_pos.z]
 	minimap_view.set("exploration_points", exploration_point_data.values())
 	minimap_view.set("npc_points", npc_definitions)
 	var current_world_id := _map_world_id()
