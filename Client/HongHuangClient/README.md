@@ -190,3 +190,4 @@ godot --headless --path . --script res://tests/world_generation_test.gd
 - 没有模型文件或 GLB 场景不含可渲染网格时，会回退到程序化模型，避免资源缺失阻断进入世界。
 - 免费商用来源、逐包授权核验、模型比例/骨骼/动画验收和导入步骤见 [MODEL-ASSET-PIPELINE.md](docs/MODEL-ASSET-PIPELINE.md)。
 - 当前登记的是候选来源与接入机制；尚未把第三方模型包下载并导入游戏，也尚未完成 Godot 实机验收。
+- 外部 GLB 若包含 AnimationPlayer，怪物模型会自动按位移切换 idle/walk/run；已接入服务端确认的怪物攻击、受击、死亡动画触发。玩家人形仍走现有动画驱动，避免控制冲突。动作缺失时保留程序化表现。
