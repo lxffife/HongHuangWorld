@@ -80,32 +80,32 @@ func is_muted() -> bool:
 	return _muted
 
 func play_ui(cue: String = "ui", pitch_scale: float = 1.0) -> void:
-	_play(cue, "UI", null, Vector3.ZERO, pitch_scale)
+	_play(cue, "UI", Vector3.ZERO, pitch_scale, 28.0, false)
 
 func play_combat(cue: String = "attack", pitch_scale: float = 1.0) -> void:
-	_play(cue, "SFX", null, Vector3.ZERO, pitch_scale)
+	_play(cue, "SFX", Vector3.ZERO, pitch_scale, 28.0, false)
 
 func play_world(cue: String, world_position: Vector3, pitch_scale: float = 1.0, max_distance: float = 28.0) -> void:
-	_play(cue, "SFX", null, world_position, pitch_scale, max_distance)
+	_play(cue, "SFX", world_position, pitch_scale, max_distance, true)
 
-func _play(cue: String, bus_name: String, _unused: Node, world_position: Vector3, pitch_scale: float, max_distance: float = 28.0) -> void:
+func _play(cue: String, bus_name: String, world_position: Vector3, pitch_scale: float, max_distance: float, spatial: bool) -> void:
 	if _muted or not CUES.has(cue):
 		return
 	var stream: AudioStreamWAV = _cache.get(cue)
 	if stream == null:
 		stream = _build_stream(cue)
 		_cache[cue] = stream
-	if world_position != Vector3.ZERO:
-		var spatial := AudioStreamPlayer3D.new()
-		spatial.stream = stream
-		spatial.bus = bus_name
-		spatial.pitch_scale = clampf(pitch_scale, 0.65, 1.5)
-		spatial.max_distance = max_distance
-		spatial.unit_size = 5.0
-		add_child(spatial)
-		spatial.global_position = world_position
-		spatial.finished.connect(spatial.queue_free)
-		spatial.play()
+	if spatial:
+		var spatial_player := AudioStreamPlayer3D.new()
+		spatial_player.stream = stream
+		spatial_player.bus = bus_name
+		spatial_player.pitch_scale = clampf(pitch_scale, 0.65, 1.5)
+		spatial_player.max_distance = max_distance
+		spatial_player.unit_size = 5.0
+		add_child(spatial_player)
+		spatial_player.global_position = world_position
+		spatial_player.finished.connect(spatial_player.queue_free)
+		spatial_player.play()
 	else:
 		var player := AudioStreamPlayer.new()
 		player.stream = stream
