@@ -1950,12 +1950,14 @@ func _on_entities_updated(entities: Array) -> void:
 		if not seen_monsters.has(monster_id):
 			var missing_monster := monsters[monster_id] as Node3D
 			if float(missing_monster.get_meta("death_reaction_time", 0.0)) > 0.0:
+				_clear_incoming_attack_source_for_monster(str(monster_id), missing_monster)
 				missing_monster.set_meta("pending_corpse_cleanup", true)
 				monster_targets.erase(monster_id)
 				monster_entities.erase(monster_id)
 				if monster_id == selected_monster_id:
 					_clear_monster_target()
 				continue
+			_clear_incoming_attack_source_for_monster(str(monster_id), missing_monster)
 			missing_monster.queue_free()
 			monsters.erase(monster_id)
 			monster_targets.erase(monster_id)
@@ -4468,6 +4470,13 @@ func _on_monster_action_event(event: Dictionary) -> void:
 				else:
 					_spawn_soul_bolt_visual(attacker)
 
+func _clear_incoming_attack_source_for_monster(monster_id: String, monster: Node3D) -> void:
+	if monster_id.is_empty():
+		return
+	var attack_style := str(monster.get_meta("attack_style", "melee")) if is_instance_valid(monster) else "melee"
+	_set_incoming_attack_telegraph(attack_style, false, monster_id)
+
+
 func _set_elemental_telegraph(monster: Node3D, enabled: bool, attack_style: String = "") -> void:
 	var telegraph := monster.get_node_or_null("ElementalTelegraph") as MeshInstance3D
 	if not is_instance_valid(telegraph):
@@ -6041,6 +6050,7 @@ func _animate_monster_visuals(delta: float) -> void:
 			var hit_scale := base_scale * Vector3(1.0 + hit_weight * 0.10, 1.0 - hit_weight * 0.10, 1.0 + hit_weight * 0.10)
 			monster.scale = monster.scale.lerp(hit_scale, minf(delta * 14.0, 1.0))
 			if bool(monster.get_meta("pending_corpse_cleanup", false)):
+				_clear_incoming_attack_source_for_monster(str(monster_id), monster)
 				monsters.erase(monster_id)
 				monster.queue_free()
 			elif bool(monster.get_meta("defeated_visual", false)):
