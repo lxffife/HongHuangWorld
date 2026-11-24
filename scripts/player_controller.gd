@@ -538,6 +538,9 @@ func play_hit_reaction(damage: int, attack_style: String = "") -> void:
 		"melee":
 			style_duration = 0.34
 			style_strength = 0.065
+	# Keep the longer active reaction when hits overlap; the animation phase
+	# and camera shake must use the same duration denominator.
+	style_duration = maxf(style_duration, hit_reaction_time)
 	hit_reaction_duration = style_duration
 	hit_animation_time = maxf(hit_animation_time, style_duration)
 	hit_reaction_time = maxf(hit_reaction_time, style_duration)
