@@ -1147,13 +1147,13 @@ func _build_combat_hud() -> void:
 	mana_bar.add_theme_stylebox_override("fill", mana_fill)
 	vitals_layout.add_child(mana_bar)
 	var spell_hint := Label.new()
-	spell_hint.text = "快捷技能"
+	spell_hint.text = "修行神通 · Q/R/T/Y/U/G/H"
 	spell_hint.add_theme_color_override("font_color", Color("#d6bd8b"))
 	spell_hint.add_theme_font_size_override("font_size", 11)
 	vitals_layout.add_child(spell_hint)
 	for spell_id in ["fireball", "ice_bolt"]:
 		var cooldown_label := Label.new()
-		cooldown_label.text = "Q  火球术：就绪" if spell_id == "fireball" else "R  冰锥术：就绪"
+		cooldown_label.text = "Q  幽冥磷火：就绪" if spell_id == "fireball" else "R  镇邪符：就绪"
 		cooldown_label.add_theme_color_override("font_color", Color("#c4d2df"))
 		cooldown_label.add_theme_font_size_override("font_size", 11)
 		spell_cooldown_labels[spell_id] = cooldown_label
@@ -1164,7 +1164,7 @@ func _build_combat_hud() -> void:
 		spell_mastery_labels[spell_id] = mastery_label
 		vitals_layout.add_child(mastery_label)
 	var taunt_label := Label.new()
-	taunt_label.text = "T  ·  嘲讽：就绪"
+	taunt_label.text = "T  ·  冥司敕令：就绪"
 	taunt_label.add_theme_color_override("font_color", Color("#e7b77a"))
 	taunt_label.add_theme_font_size_override("font_size", 11)
 	spell_cooldown_labels["taunt"] = taunt_label
@@ -1176,19 +1176,19 @@ func _build_combat_hud() -> void:
 	spell_cooldown_labels["revive"] = revive_label
 	vitals_layout.add_child(revive_label)
 	var heal_label := Label.new()
-	heal_label.text = "U  ·  回春术：就绪"
+	heal_label.text = "U  ·  养气归元：就绪"
 	heal_label.add_theme_color_override("font_color", Color("#8fd9b4"))
 	heal_label.add_theme_font_size_override("font_size", 11)
 	spell_cooldown_labels["life_mend"] = heal_label
 	vitals_layout.add_child(heal_label)
 	var aegis_label := Label.new()
-	aegis_label.text = "G  ·  守护灵盾：就绪"
+	aegis_label.text = "G  ·  罡气护体：就绪"
 	aegis_label.add_theme_color_override("font_color", Color("#9bc9ed"))
 	aegis_label.add_theme_font_size_override("font_size", 11)
 	spell_cooldown_labels["guardian_aegis"] = aegis_label
 	vitals_layout.add_child(aegis_label)
 	var purify_label := Label.new()
-	purify_label.text = "H · 净化术：就绪"
+	purify_label.text = "H · 净秽符：就绪"
 	purify_label.add_theme_color_override("font_color", Color("#c5b6e8"))
 	purify_label.add_theme_font_size_override("font_size", 11)
 	spell_cooldown_labels["purify"] = purify_label
@@ -2180,7 +2180,7 @@ func _upsert_projectile(entity: Dictionary) -> void:
 
 func _create_fireball_projectile() -> Node3D:
 	var root := Node3D.new()
-	root.name = "AuthoritativeFireball"
+	root.name = "AuthoritativeNetherPhosphor"
 	var core := MeshInstance3D.new()
 	var sphere := SphereMesh.new()
 	sphere.radius = 0.22
@@ -2189,9 +2189,9 @@ func _create_fireball_projectile() -> Node3D:
 	sphere.rings = 6
 	core.mesh = sphere
 	var material := StandardMaterial3D.new()
-	material.albedo_color = Color("#ff8a32")
+	material.albedo_color = Color("#b6a0d8")
 	material.emission_enabled = true
-	material.emission = Color("#ff4b12")
+	material.emission = Color("#8e55d6")
 	material.emission_energy_multiplier = 2.8
 	material.roughness = 0.3
 	core.material_override = material
@@ -2204,9 +2204,9 @@ func _create_fireball_projectile() -> Node3D:
 	glow_mesh.rings = 5
 	glow.mesh = glow_mesh
 	var glow_material := StandardMaterial3D.new()
-	glow_material.albedo_color = Color(1.0, 0.28, 0.06, 0.28)
+	glow_material.albedo_color = Color(0.48, 0.28, 0.82, 0.24)
 	glow_material.emission_enabled = true
-	glow_material.emission = Color("#ff5b18")
+	glow_material.emission = Color("#7143b8")
 	glow_material.emission_energy_multiplier = 1.4
 	glow_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	glow_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -2217,19 +2217,16 @@ func _create_fireball_projectile() -> Node3D:
 
 func _create_ice_bolt_projectile() -> Node3D:
 	var root := Node3D.new()
-	root.name = "AuthoritativeIceBolt"
+	root.name = "AuthoritativeSuppressingTalisman"
 	var core := MeshInstance3D.new()
-	var crystal := SphereMesh.new()
-	crystal.radius = 0.19
-	crystal.height = 0.42
-	crystal.radial_segments = 8
-	crystal.rings = 4
-	core.mesh = crystal
+	var talisman := BoxMesh.new()
+	talisman.size = Vector3(0.32, 0.025, 0.46)
+	core.mesh = talisman
 	core.rotation.z = PI * 0.25
 	var material := StandardMaterial3D.new()
-	material.albedo_color = Color("#a7efff")
+	material.albedo_color = Color("#d9bd76")
 	material.emission_enabled = true
-	material.emission = Color("#54cfff")
+	material.emission = Color("#d49b3f")
 	material.emission_energy_multiplier = 2.2
 	material.metallic = 0.18
 	material.roughness = 0.24
@@ -2244,9 +2241,9 @@ func _create_ice_bolt_projectile() -> Node3D:
 	halo.mesh = halo_mesh
 	halo.rotation.x = PI * 0.5
 	var halo_material := StandardMaterial3D.new()
-	halo_material.albedo_color = Color("#80e4ff", 0.58)
+	halo_material.albedo_color = Color("#e8c778", 0.58)
 	halo_material.emission_enabled = true
-	halo_material.emission = Color("#4ccfff")
+	halo_material.emission = Color("#c18b38")
 	halo_material.emission_energy_multiplier = 1.8
 	halo_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	halo_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -4043,13 +4040,37 @@ func _process_held_monster_attack(delta: float) -> void:
 	attack_repeat_remaining = attack_repeat_interval
 
 
+func _spell_display_name(spell_id: String) -> String:
+	match spell_id:
+		"fireball": return "幽冥磷火"
+		"ice_bolt": return "镇邪符"
+		"taunt": return "冥司敕令"
+		"life_mend": return "养气归元"
+		"guardian_aegis": return "罡气护体"
+		"purify": return "净秽符"
+		"revive": return "回魂术"
+	return "神通"
+
+
+func _spell_hotkey(spell_id: String) -> String:
+	match spell_id:
+		"fireball": return "Q"
+		"ice_bolt": return "R"
+		"taunt": return "T"
+		"revive": return "Y"
+		"life_mend": return "U"
+		"guardian_aegis": return "G"
+		"purify": return "H"
+	return "?"
+
+
 func _update_spell_cooldown_hud() -> void:
 	for spell_id in spell_cooldown_labels:
 		var label := spell_cooldown_labels[spell_id] as Label
 		if not is_instance_valid(label):
 			continue
-		var spell_key := "U" if spell_id == "life_mend" else ("G" if spell_id == "guardian_aegis" else ("H" if spell_id == "purify" else ("Y" if spell_id == "revive" else ("Q" if spell_id == "fireball" else ("R" if spell_id == "ice_bolt" else "T")))))
-		var spell_name := "回春术" if spell_id == "life_mend" else ("守护灵盾" if spell_id == "guardian_aegis" else ("净化术" if spell_id == "purify" else ("回魂术" if spell_id == "revive" else ("火球术" if spell_id == "fireball" else ("冰锥术" if spell_id == "ice_bolt" else "嘲讽")))))
+		var spell_key := _spell_hotkey(spell_id)
+		var spell_name := _spell_display_name(spell_id)
 		var remaining := float(spell_cooldown_remaining.get(spell_id, 0.0))
 		label.text = spell_key + " · " + spell_name + "：冷却 " + ("%.1f" % remaining) + " 秒" if remaining > 0.0 else spell_key + " · " + spell_name + "：就绪"
 
@@ -4068,11 +4089,11 @@ func _request_fireball() -> void:
 				nearest_distance = distance
 				target_id = str(monster_id)
 	if target_id.is_empty():
-		_show_notification("20 米内没有可施法的目标。")
+		_show_notification("20 米内没有可施展幽冥磷火的目标。")
 		return
 	var error: Error = network.send_spell_cast("fireball", target_id)
 	if error != OK:
-		_show_notification("火球术请求发送失败：" + str(error))
+		_show_notification("幽冥磷火请求发送失败：" + str(error))
 
 func _request_ice_bolt() -> void:
 	var network := HHSession.world_network
@@ -4088,7 +4109,7 @@ func _request_ice_bolt() -> void:
 				nearest_distance = distance
 				target_id = str(monster_id)
 	if target_id.is_empty():
-		_show_notification("18 米内没有可施法的目标。")
+		_show_notification("18 米内没有可施展镇邪符的目标。")
 		return
 	var error: Error = network.send_spell_cast("ice_bolt", target_id)
 	if error != OK:
@@ -4492,7 +4513,7 @@ func _update_spell_mastery_hud() -> void:
 		if level < 10:
 			var next_xp := int(next_thresholds[level - 1])
 			progress_text = str(experience) + " / " + str(next_xp) + " 熟练度"
-		label.text = ("火球术" if spell_id == "fireball" else "冰锥术") + " · 熟练 Lv." + str(level) + " · " + progress_text
+		label.text = _spell_display_name(spell_id) + " · 熟练 Lv." + str(level) + " · " + progress_text
 
 
 func _on_combat_event(event: Dictionary) -> void:
@@ -4700,7 +4721,7 @@ func _on_combat_event(event: Dictionary) -> void:
 			mana_label.text = "灵力  " + str(int(HHSession.world_snapshot.get("mana", 0))) + " / " + str(int(HHSession.world_snapshot.get("max_mana", 0)))
 		_update_compact_hud()
 		var spell_id := str(event.get("spell_id", ""))
-		var spell_name := "回春术" if spell_id == "life_mend" else ("守护灵盾" if spell_id == "guardian_aegis" else ("净化术" if spell_id == "purify" else ("回魂术" if spell_id == "revive" else ("嘲讽" if spell_id == "taunt" else ("冰锥术" if spell_id == "ice_bolt" else ("火球术" if spell_id == "fireball" else "法术"))))))
+		var spell_name := _spell_display_name(spell_id)
 		# Mirror the server: cooldown starts on successful release, not when
 		# the cast begins. An interrupted cast refunds mana and remains ready.
 		if bool(event.get("accepted", false)) and str(event.get("phase", "")) in ["released", "channeling"] and spell_cooldown_remaining.has(spell_id):
