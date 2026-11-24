@@ -1738,6 +1738,8 @@ func _toggle_help_panel() -> void:
 	if opening:
 		help_restore_mouse_captured = Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		if is_instance_valid(audio_settings_panel):
+			audio_settings_panel.visible = false
 		help_panel.visible = true
 	else:
 		help_panel.visible = false
@@ -1752,6 +1754,8 @@ func _toggle_audio_settings_panel() -> void:
 	if opening:
 		audio_settings_restore_mouse_captured = Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		if is_instance_valid(help_panel):
+			help_panel.visible = false
 		audio_settings_panel.visible = true
 	else:
 		audio_settings_panel.visible = false
@@ -3000,6 +3004,8 @@ func is_gameplay_input_blocked() -> bool:
 		return true
 	if is_instance_valid(help_panel) and help_panel.visible:
 		return true
+	if is_instance_valid(audio_settings_panel) and audio_settings_panel.visible:
+		return true
 	if is_instance_valid(leave_world_dialog) and leave_world_dialog.visible:
 		return true
 	var focused_control := get_viewport().gui_get_focus_owner()
@@ -3085,6 +3091,15 @@ func _layout_hud() -> void:
 		inventory_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		inventory_button.position = Vector2(utility_left + 480.0, 16.0)
 		inventory_button.custom_minimum_size = Vector2(112.0, 34.0)
+	if is_instance_valid(audio_settings_panel):
+		var audio_width := minf(500.0, maxf(320.0, viewport_size.x - 32.0))
+		var audio_height := minf(430.0, maxf(360.0, viewport_size.y - 32.0))
+		audio_settings_panel.set_anchors_preset(Control.PRESET_CENTER)
+		audio_settings_panel.offset_left = -audio_width * 0.5
+		audio_settings_panel.offset_right = audio_width * 0.5
+		audio_settings_panel.offset_top = -audio_height * 0.5
+		audio_settings_panel.offset_bottom = audio_height * 0.5
+		audio_settings_panel.custom_minimum_size = Vector2(audio_width, audio_height)
 	if is_instance_valid(help_panel):
 		var help_width := minf(540.0, maxf(320.0, viewport_size.x - 32.0))
 		var help_height := minf(500.0, maxf(360.0, viewport_size.y - 32.0))
