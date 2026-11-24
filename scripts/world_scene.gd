@@ -149,6 +149,11 @@ var combat_elapsed_seconds := 0.0
 var combat_summary_refresh_remaining := 0.0
 var combat_has_started := false
 var combat_summary_reset_button: Button
+var combat_melee_damage := 0
+var combat_projectile_damage := 0
+var combat_effect_damage := 0
+var combat_recent_entries: Array[String] = []
+var combat_log_label: Label
 var minimap_panel: PanelContainer
 var world_map_panel: PanelContainer
 var world_map_canvas: Control
@@ -1373,6 +1378,13 @@ func _build_combat_hud() -> void:
 	combat_summary_label.add_theme_font_size_override("font_size", 11)
 	combat_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vitals_layout.add_child(combat_summary_label)
+	combat_log_label = Label.new()
+	combat_log_label.text = "最近命中：暂无"
+	combat_log_label.add_theme_color_override("font_color", Color("#b6c4d0"))
+	combat_log_label.add_theme_font_size_override("font_size", 10)
+	combat_log_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	combat_log_label.custom_minimum_size = Vector2(300.0, 38.0)
+	vitals_layout.add_child(combat_log_label)
 	combat_summary_reset_button = Button.new()
 	combat_summary_reset_button.text = "重置战斗统计"
 	combat_summary_reset_button.custom_minimum_size = Vector2(112.0, 26.0)
@@ -1389,10 +1401,13 @@ func _update_combat_summary() -> void:
 	var total_seconds := int(floor(combat_elapsed_seconds))
 	var duration_text := "%02d:%02d" % [int(total_seconds / 60), total_seconds % 60]
 	var damage_per_second := int(round(float(combat_damage_dealt) / maxf(combat_elapsed_seconds, 1.0))) if combat_has_started else 0
-	combat_summary_label.text = "战斗 %s  ·  DPS %d\n伤害 %d  ·  最高 %d  ·  暴击 %d  ·  击杀 %d  ·  受伤 %d" % [
+	combat_summary_label.text = "战斗 %s  ·  DPS %d\n伤害 %d  ·  最高 %d  ·  暴击 %d  ·  击杀 %d  ·  受伤 %d\n近战 %d  ·  远程/法术 %d  ·  持续伤害 %d" % [
 		duration_text, damage_per_second, combat_damage_dealt, combat_highest_hit,
-		combat_critical_hits, combat_kills, combat_damage_taken
+		combat_critical_hits, combat_kills, combat_damage_taken,
+		combat_melee_damage, combat_projectile_damage, combat_effect_damage
 	]
+	if is_instance_valid(combat_log_label):
+		combat_log_label.text = "最近命中：暂无" if combat_recent_entries.is_empty() else "最近命中：\n" + "\n".join(combat_recent_entries)
 
 
 func _reset_combat_summary() -> void:
@@ -1401,6 +1416,10 @@ func _reset_combat_summary() -> void:
 	combat_highest_hit = 0
 	combat_critical_hits = 0
 	combat_kills = 0
+	combat_melee_damage = 0
+	combat_projectile_damage = 0
+	combat_effect_damage = 0
+	combat_recent_entries.clear()
 	combat_elapsed_seconds = 0.0
 	combat_summary_refresh_remaining = 0.0
 	combat_has_started = false
@@ -5118,6 +5137,22 @@ func _on_combat_event(event: Dictionary) -> void:
 				defeated_nameplate.visible = false
 	var damage := int(event.get("damage", 0))
 	combat_damage_dealt += maxi(damage, 0)
+	var damage_source := str(event.get("source", "melee"))
+	if damage_source == "status_effect":
+		combat_effect_damage += maxi(damage, 0)
+	elif damage_source == "projectile" or not str(event.get("projectile_type", "")).is_empty():
+		combat_projectile_damage += maxi(damage, 0)
+	else:
+		combat_melee_damage += maxi(damage, 0)
+	if damage > 0:
+		var source_name := "持续伤害" if damage_source == "status_effect" else ("远程/法术" if damage_source == "projectile" or not str(event.get("projectile_type", "")).is_empty() else "近战")
+		var hit_entry := "%s  %s -%d%s" % [
+			Time.get_time_string_from_system(), source_name, damage,
+			" 暴击" if bool(event.get("critical", false)) else ""
+		]
+		combat_recent_entries.push_front(hit_entry)
+		while combat_recent_entries.size() > 3:
+			combat_recent_entries.pop_back()
 	if damage > 0:
 		combat_has_started = true
 	combat_highest_hit = maxi(combat_highest_hit, damage)
