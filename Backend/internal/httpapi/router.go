@@ -110,6 +110,7 @@ func NewRouter(logger *slog.Logger, db *sql.DB) http.Handler {
 		mux.HandleFunc("GET /api/v1/souls/current/lives", characters.history)
 		mux.HandleFunc("GET /api/v1/souls/current/memories", characters.memories)
 		mux.HandleFunc("GET /api/v1/characters/current/status", characters.currentStatus)
+		mux.HandleFunc("POST /api/v1/characters/current/spells/learn", characters.learnSpell)
 		mux.HandleFunc("POST /api/v1/characters/current/breakthrough", characters.breakthrough)
 		mux.HandleFunc("POST /api/v1/characters/current/bloodlines/awaken", characters.awakenBloodline)
 		mux.HandleFunc("POST /api/v1/characters/current/techniques/train", characters.trainTechnique)
