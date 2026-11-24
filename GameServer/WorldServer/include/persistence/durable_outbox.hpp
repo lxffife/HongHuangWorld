@@ -63,6 +63,9 @@ public:
  DurableOutbox(const DurableOutbox&) = delete; DurableOutbox& operator=(const DurableOutbox&) = delete;
  bool enqueue(const OutboxEvent& event, std::string& error);
  bool enqueue_batch(const std::vector<OutboxEvent>& events, std::string& error);
+ bool enqueue_batch_and_save_hell_trial_checkpoint(
+     const std::vector<OutboxEvent>& events, const HellTrialWaveCheckpoint& checkpoint,
+     std::string& error);
  // Durable admission is the acceptance boundary for ordinary combat hits.
  bool admit_monster_contribution(const MonsterContributionRecord& contribution, std::string& error);
  // Persist current monster life identity and health; initialization never overwrites recovered state.
@@ -125,6 +128,8 @@ private:
  bool record_monster_contribution_internal(const MonsterContributionRecord& contribution,
                                            const PendingMonsterDeathRecord* death,
                                            std::string& error);
+ bool enqueue_batch_internal(const std::vector<OutboxEvent>& events,
+                             const HellTrialWaveCheckpoint* checkpoint, std::string& error);
  bool execute(const char* sql, std::string& error) const;
 };
 }
