@@ -183,3 +183,10 @@ godot --headless --path . --script res://tests/world_generation_test.gd
 - 新增酆都城墙模块、引魂灯、镇魂碑、镇界石柱，集中展示在 `scenes/ArtPreviewStage.tscn`。
 - 拾取成功/失败、十八层地狱试炼波次变化增加音效反馈。
 - 本轮仍未下载外部音频或模型；所有新视觉道具均为项目内原创程序化灰盒。
+
+## 3D 美术资源接入
+
+- 模型覆盖映射见 `scripts/visual_model_library.gd`；把核验后的 GLB 放入 `assets/models/` 并使用映射表中的固定文件名即可覆盖对应占位模型。
+- 没有模型文件或 GLB 场景不含可渲染网格时，会回退到程序化模型，避免资源缺失阻断进入世界。
+- 免费商用来源、逐包授权核验、模型比例/骨骼/动画验收和导入步骤见 [MODEL-ASSET-PIPELINE.md](docs/MODEL-ASSET-PIPELINE.md)。
+- 当前登记的是候选来源与接入机制；尚未把第三方模型包下载并导入游戏，也尚未完成 Godot 实机验收。
