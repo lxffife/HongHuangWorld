@@ -2774,8 +2774,13 @@ struct EnetServer::Impl {
                 }
             }
 
-            const auto encounter_result = hell_trial_encounter.record_monster_death(
-                monster.contribution_instance_id, monster.death_definition_id);
+            honghuang::simulation::HellTrialDeathResult encounter_result;
+            if (wave_transition.advanced) {
+                // Only the authoritative active wave may contribute to trial objectives.
+                // Out-of-order deaths must not inflate the floor's objective counter.
+                encounter_result = hell_trial_encounter.record_monster_death(
+                    monster.contribution_instance_id, monster.death_definition_id);
+            }
             if (wave_checkpoint_failed) {
                 (void)hell_trial_encounter.restore_stage(previous_stage);
             } else if (wave_transition.advanced && wave_transition.stage < 4) {
