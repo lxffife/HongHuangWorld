@@ -191,6 +191,57 @@ int main() {
     }
     remove_database(batch_capacity_path);
 
+    // The final trial reward batch and stage-four checkpoint are one transaction.
+    const std::string trial_completion_path = "world_outbox_trial_completion_test.sqlite";
+    remove_database(trial_completion_path);
+    const std::vector<honghuang::persistence::OutboxEvent> trial_completion_events{
+        {"trial-complete-a", "hell_trial_completion", R"({"event_id":"trial-complete-a"})", 0, 900, 900, {}},
+        {"trial-complete-b", "hell_trial_completion", R"({"event_id":"trial-complete-b"})", 0, 900, 900, {}}
+    };
+    const honghuang::persistence::HellTrialWaveCheckpoint completed_trial{
+        "trial-instance-atomic", 18, 4, true, 900
+    };
+    {
+        // Capacity failure must roll back both the reward events and checkpoint.
+        honghuang::persistence::DurableOutbox box(trial_completion_path, 1);
+        std::string error;
+        assert(!box.enqueue_batch_and_save_hell_trial_checkpoint(
+            trial_completion_events, completed_trial, error));
+        assert(box.pending_count(error) == 0);
+        honghuang::persistence::HellTrialWaveCheckpoint loaded;
+        bool found = false;
+        assert(box.load_hell_trial_wave_checkpoint(
+            completed_trial.instance_key, completed_trial.floor, loaded, found, error));
+        assert(!found);
+    }
+    {
+        honghuang::persistence::DurableOutbox box(trial_completion_path, 2);
+        std::string error;
+        assert(box.enqueue_batch_and_save_hell_trial_checkpoint(
+            trial_completion_events, completed_trial, error));
+        assert(box.pending_count(error) == 2);
+        // Replaying the exact batch after a crash is idempotent.
+        assert(box.enqueue_batch_and_save_hell_trial_checkpoint(
+            trial_completion_events, completed_trial, error));
+        assert(box.pending_count(error) == 2);
+        honghuang::persistence::HellTrialWaveCheckpoint loaded;
+        bool found = false;
+        assert(box.load_hell_trial_wave_checkpoint(
+            completed_trial.instance_key, completed_trial.floor, loaded, found, error));
+        assert(found && loaded.stage == 4 && loaded.completed);
+    }
+    {
+        honghuang::persistence::DurableOutbox reopened(trial_completion_path, 2, false);
+        std::string error;
+        honghuang::persistence::HellTrialWaveCheckpoint loaded;
+        bool found = false;
+        assert(reopened.load_hell_trial_wave_checkpoint(
+            completed_trial.instance_key, completed_trial.floor, loaded, found, error));
+        assert(found && loaded.stage == 4 && loaded.completed);
+        assert(reopened.pending_count(error) == 2);
+    }
+    remove_database(trial_completion_path);
+
     const std::string admin_path = "world_outbox_admin_test.sqlite";
     remove_database(admin_path);
     {
