@@ -172,7 +172,7 @@ godot --headless --path . --script res://tests/world_generation_test.gd
 - 玩家攻击/受击、玩家脚步、怪物服务器确认攻击阶段、怪物死亡结算和法术释放已接入声音反馈。
 - 音频设置保存到本机 `user://honghuang_audio.cfg`；当前还没有正式音量设置 UI。
 - 音频资源目录与授权台账位于 `assets/audio/`，详细规范见 `docs/AUDIO-PIPELINE.md`。外部 Kenney、Sonniss、Freesound 资源仍为候选，尚未下载或导入，必须逐包/逐文件核实商用许可。
-- 新增独立美术检查场景 `scenes/ArtPreviewStage.tscn`，可在 Godot 编辑器中运行，用于同一镜头下对比玩家、荒原狼、铁骨兽、战魂、游祟和酆都鬼门关灰盒。它不替换正式游戏场景，也不影响联机逻辑。
+- 新增独立美术检查场景 `scenes/ArtPreviewStage.tscn`，可在 Godot 编辑器中运行，用于同一镜头下对比玩家、荒原狼、铁骨兽、战魂、游祟和酆都鬼门关灰盒。玩家预览也走 GLB 模型库，怪物预览复用正式模型映射；有资源时可直接检查导入效果，没有资源时仍回退到程序化模型。它不替换正式游戏场景，也不影响联机逻辑。
 - 当前外部 GLB 尚未导入；程序化模型仍是占位模型。美术验收前不将其标记为正式资产。
 
 
