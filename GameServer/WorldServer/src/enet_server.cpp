@@ -5896,8 +5896,11 @@ struct EnetServer::Impl {
                 }
                 continue;
             }
+            const bool heavy_slam = std::string(attack_profile.style) == "heavy_slam";
+            const bool slam_windup = heavy_slam &&
+                monster.attack_phase == MonsterAttackPhase::Windup;
             if (monster.state.mode != honghuang::simulation::MonsterMode::Chasing ||
-                monster.state.target_id.empty()) {
+                (monster.state.target_id.empty() && !slam_windup)) {
                 if (monster.attack_phase == MonsterAttackPhase::Windup) {
                     monster.attack_phase = MonsterAttackPhase::Ready;
                     broadcast_attack_phase("cancelled");
@@ -5913,17 +5916,44 @@ struct EnetServer::Impl {
                 return entry.second.character_id == monster.state.target_id;
             });
             if (victim == players.end() || victim->second.health <= 0) {
-                if (monster.attack_phase == MonsterAttackPhase::Windup) {
-                    monster.attack_phase = MonsterAttackPhase::Ready;
-                    broadcast_attack_phase("cancelled");
-                    monster.attack_target_character_id.clear();
+                if (slam_windup) {
+                    // A circular slam is committed to its impact time, not to one
+                    // character. If its original target dies or disconnects, keep
+                    // the warning active and retarget a living participant.
+                    auto replacement = players.end();
+                    double nearest_distance_squared = std::numeric_limits<double>::max();
+                    for (auto candidate = players.begin(); candidate != players.end(); ++candidate) {
+                        if (candidate->second.health <= 0) continue;
+                        const double dx = static_cast<double>(candidate->second.x) - monster.state.x;
+                        const double dz = static_cast<double>(candidate->second.z) - monster.state.z;
+                        const double distance_squared = dx * dx + dz * dz;
+                        if (distance_squared < nearest_distance_squared) {
+                            nearest_distance_squared = distance_squared;
+                            replacement = candidate;
+                        }
+                    }
+                    if (replacement == players.end()) {
+                        monster.attack_phase = MonsterAttackPhase::Ready;
+                        broadcast_attack_phase("cancelled");
+                        monster.attack_target_character_id.clear();
+                        continue;
+                    }
+                    victim = replacement;
+                    monster.state.target_id = victim->second.character_id;
+                    monster.attack_target_character_id = victim->second.character_id;
+                    broadcast_attack_phase("windup");
+                } else {
+                    if (monster.attack_phase == MonsterAttackPhase::Windup) {
+                        monster.attack_phase = MonsterAttackPhase::Ready;
+                        broadcast_attack_phase("cancelled");
+                        monster.attack_target_character_id.clear();
+                    }
+                    continue;
                 }
-                continue;
             }
             auto& player = victim->second;
             const double attack_dx = static_cast<double>(player.x) - monster.state.x;
             const double attack_dz = static_cast<double>(player.z) - monster.state.z;
-            const bool heavy_slam = std::string(attack_profile.style) == "heavy_slam";
             // Keep the authoritative hit radius identical to the radius advertised
             // by the windup telegraph. Some legacy profiles leave splash_radius at
             // zero; in that case both visuals and damage must fall back to range.
