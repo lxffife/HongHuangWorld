@@ -197,6 +197,10 @@ if(BUILD_TESTING)
     target_include_directories(bounty_contribution_aggregation_test PRIVATE include)
     add_test(NAME bounty_contribution_aggregation_test COMMAND bounty_contribution_aggregation_test)
 
+    add_executable(outbox_delivery_policy_test tests/outbox_delivery_policy_test.cpp)
+    target_include_directories(outbox_delivery_policy_test PRIVATE include)
+    add_test(NAME outbox_delivery_policy_test COMMAND outbox_delivery_policy_test)
+
     add_executable(monster_death_finalizer_test
         tests/monster_death_finalizer_test.cpp
         src/monster_death_finalizer.cpp
