@@ -5968,12 +5968,18 @@ struct EnetServer::Impl {
                 monster.attack_phase = MonsterAttackPhase::Ready;
             }
             if (monster.attack_phase == MonsterAttackPhase::Windup) {
-                if ((!heavy_slam && !in_attack_range) ||
-                    monster.attack_target_character_id != player.character_id) {
+                if (!heavy_slam && (!in_attack_range ||
+                    monster.attack_target_character_id != player.character_id)) {
                     monster.attack_phase = MonsterAttackPhase::Ready;
                     broadcast_attack_phase("cancelled");
                     monster.attack_target_character_id.clear();
                     continue;
+                }
+                if (heavy_slam && monster.attack_target_character_id != player.character_id) {
+                    // The slam remains committed even if aggro moves to another
+                    // living player. Keep the original impact deadline.
+                    monster.attack_target_character_id = player.character_id;
+                    broadcast_attack_phase("windup");
                 }
                 if (now - monster.attack_phase_started_at < windup_duration) continue;
             } else {
