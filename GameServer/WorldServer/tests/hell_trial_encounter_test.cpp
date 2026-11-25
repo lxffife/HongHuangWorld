@@ -1,6 +1,7 @@
 #include "simulation/hell_trial_encounter.hpp"
 
 #include <cassert>
+#include <limits>
 #include <string>
 #include <unordered_set>
 
