@@ -1036,3 +1036,61 @@ static func _add_equipment_socket(root: Node3D, socket_name: String, socket_posi
 	socket.position = socket_position
 	socket.set_meta("equipment_socket", true)
 	root.add_child(socket)
+
+
+static func create_fengdu_civic_plaza() -> Node3D:
+	# Walkable civic square connecting residential, market and administrative streets.
+	var root := Node3D.new()
+	root.name = "FengduCivicPlaza"
+	var paving := Color("#57515b")
+	var border := Color("#393642")
+	var floor_body := StaticBody3D.new()
+	floor_body.name = "PlazaWalkableGround"
+	_part(floor_body, "PlazaFoundation", _box(Vector3(28.0, 0.24, 28.0)), Vector3(0.0, -0.12, 0.0), border)
+	var floor_collision := CollisionShape3D.new()
+	var floor_shape := BoxShape3D.new()
+	floor_shape.size = Vector3(28.0, 0.24, 28.0)
+	floor_collision.shape = floor_shape
+	floor_collision.position = Vector3(0.0, -0.12, 0.0)
+	floor_body.add_child(floor_collision)
+	root.add_child(floor_body)
+	for x_index in range(7):
+		for z_index in range(7):
+			_part(root, "Paving_%d_%d" % [x_index, z_index], _box(Vector3(3.92, 0.08, 3.92)), Vector3(-12.0 + float(x_index) * 4.0, 0.04, -12.0 + float(z_index) * 4.0), paving)
+	# Four open approaches connect the square to the street grid.
+	for side in [-1.0, 1.0]:
+		_part(root, "ApproachX" + str(side), _box(Vector3(3.8, 0.06, 4.0)), Vector3(side * 15.0, 0.035, 0.0), Color("#625a62"))
+		_part(root, "ApproachZ" + str(side), _box(Vector3(4.0, 0.06, 3.8)), Vector3(0.0, 0.035, side * 15.0), Color("#625a62"))
+	# Low boundary stones frame corners without closing entrances.
+	for side in [-1.0, 1.0]:
+		for offset in [-7.0, 7.0]:
+			_part(root, "BoundaryX_%s_%s" % [side, offset], _box(Vector3(0.55, 0.42, 5.0)), Vector3(side * 13.35, 0.21, offset), border)
+			_part(root, "BoundaryZ_%s_%s" % [side, offset], _box(Vector3(5.0, 0.42, 0.55)), Vector3(offset, 0.21, side * 13.35), border)
+	_part(root, "NoticeDais", _box(Vector3(4.8, 0.32, 4.8)), Vector3(0.0, 0.16, 0.0), border)
+	var notice := create_soul_tombstone()
+	notice.name = "CivicNoticeStone"
+	notice.position = Vector3(0.0, 0.32, 0.0)
+	notice.scale = Vector3.ONE * 1.15
+	root.add_child(notice)
+	for x in [-10.0, 10.0]:
+		for z in [-10.0, 10.0]:
+			var lantern := create_ghost_lantern()
+			lantern.position = Vector3(x, 0.0, z)
+			lantern.scale = Vector3.ONE * 0.72
+			root.add_child(lantern)
+	# Placement-only markers; server systems must own actual NPC spawning and patrol.
+	var npc_specs := [
+		{"name": "PlazaGuardWest", "role": "guard", "at": Vector3(-9.0, 0.0, 0.0), "patrol": 0},
+		{"name": "PlazaGuardEast", "role": "guard", "at": Vector3(9.0, 0.0, 0.0), "patrol": 1},
+		{"name": "PlazaNoticeClerk", "role": "civilian", "at": Vector3(0.0, 0.0, 4.0), "patrol": -1},
+		{"name": "PlazaGuide", "role": "trial_master", "at": Vector3(0.0, 0.0, -5.0), "patrol": -1}
+	]
+	for spec in npc_specs:
+		var marker := Marker3D.new()
+		marker.name = spec["name"]
+		marker.position = spec["at"]
+		marker.set_meta("npc_role", spec["role"])
+		marker.set_meta("patrol_order", spec["patrol"])
+		marker.set_meta("placement_only", true)
+		root.add_child(marker)
+	return root
