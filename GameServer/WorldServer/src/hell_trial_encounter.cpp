@@ -1,6 +1,7 @@
 #include "simulation/hell_trial_encounter.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 namespace honghuang::simulation {
 namespace {
@@ -61,7 +62,7 @@ double HellTrialShearHazard::phase_remaining_seconds() const {
 HellTrialHazardTransition HellTrialShearHazard::update(double delta_seconds) {
     HellTrialHazardTransition result{false, phase_, cycle_, phase_remaining_seconds()};
     if (!enabled_ || !std::isfinite(delta_seconds) || delta_seconds <= 0.0) return result;
-    double remaining = std::min(delta_seconds, 1.0);
+    double remaining = std::min(delta_seconds, 10.0);
     while (remaining > 0.0) {
         const double duration = phase_ == HellTrialHazardPhase::Warning ? 2.5 :
             (phase_ == HellTrialHazardPhase::Active ? 1.8 : 3.7);
