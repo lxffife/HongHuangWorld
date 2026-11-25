@@ -110,18 +110,18 @@ func _build_stage() -> void:
 
 func _build_gallery() -> void:
 	_add_model("转世人形", VisualModelLibrary.instantiate_model("player_humanoid", func() -> Node3D: return VisualFactory.create_player_humanoid()), Vector3(-5.2, 0.0, 1.0), 0.0, 2.35)
-	_add_model("荒原狼", VisualModelLibrary.instantiate_model("wolf", func() -> Node3D: return VisualFactory.create_monster("荒原狼", 1)), Vector3(-2.4, 0.0, 0.0), 0.0, 1.55)
-	_add_model("铁骨兽魂", VisualModelLibrary.instantiate_model("iron_beast", func() -> Node3D: return VisualFactory.create_monster("铁骨兽魂", 1)), Vector3(0.4, 0.0, 0.0), 0.0, 3.15)
-	_add_model("炽战残魂", VisualModelLibrary.instantiate_model("warrior", func() -> Node3D: return VisualFactory.create_monster("炽战残魂", 1)), Vector3(3.1, 0.0, 0.0), 0.0, 2.45)
-	_add_model("游祟", VisualModelLibrary.instantiate_model("wraith", func() -> Node3D: return VisualFactory.create_monster("游祟", 1)), Vector3(5.7, 0.0, 0.0), 0.0, 2.35)
+	_add_model("荒原狼", VisualFactory.create_monster("荒原狼", 1), Vector3(-2.4, 0.0, 0.0), 0.0, 1.55)
+	_add_model("铁骨兽魂", VisualFactory.create_monster("铁骨兽魂", 1), Vector3(0.4, 0.0, 0.0), 0.0, 3.15)
+	_add_model("炽战残魂", VisualFactory.create_monster("炽战残魂", 1), Vector3(3.1, 0.0, 0.0), 0.0, 2.45)
+	_add_model("游祟", VisualFactory.create_monster("游祟", 1), Vector3(5.7, 0.0, 0.0), 0.0, 2.35)
 
 	# Second review row: imported NPC overrides are visible in the same stage.
-	_add_model("孟婆", VisualModelLibrary.instantiate_model("npc_soup_keeper", func() -> Node3D: return VisualFactory.create_mengpo_npc()), Vector3(-6.0, 0.0, -10.0), 0.0, 2.1)
-	_add_model("阴司判官", VisualModelLibrary.instantiate_model("npc_judge", func() -> Node3D: return VisualFactory.create_judge_npc()), Vector3(-3.6, 0.0, -10.0), 0.0, 2.1)
-	_add_model("阴兵守卫", VisualModelLibrary.instantiate_model("npc_guard", func() -> Node3D: return VisualFactory.create_guard_npc()), Vector3(-1.2, 0.0, -10.0), 0.0, 2.1)
-	_add_model("试炼使者", VisualModelLibrary.instantiate_model("npc_trial_master", func() -> Node3D: return VisualFactory.create_trial_master_npc()), Vector3(1.2, 0.0, -10.0), 0.0, 2.1)
-	_add_model("鬼市铁匠", VisualModelLibrary.instantiate_model("npc_blacksmith", func() -> Node3D: return VisualFactory.create_blacksmith_npc()), Vector3(3.6, 0.0, -10.0), 0.0, 2.1)
-	_add_model("酆都城民", VisualModelLibrary.instantiate_model("npc_generic", func() -> Node3D: return VisualFactory.create_generic_npc()), Vector3(6.0, 0.0, -10.0), 0.0, 2.1)
+	_add_model("孟婆", VisualFactory.create_npc("soup_keeper", "孟婆"), Vector3(-6.0, 0.0, -10.0), 0.0, 2.1)
+	_add_model("阴司判官", VisualFactory.create_npc("judge", "阴司判官"), Vector3(-3.6, 0.0, -10.0), 0.0, 2.1)
+	_add_model("阴兵守卫", VisualFactory.create_npc("guard", "阴兵守卫"), Vector3(-1.2, 0.0, -10.0), 0.0, 2.1)
+	_add_model("试炼使者", VisualFactory.create_npc("trial_master", "试炼使者"), Vector3(1.2, 0.0, -10.0), 0.0, 2.1)
+	_add_model("鬼市铁匠", VisualFactory.create_npc("blacksmith", "鬼市铁匠"), Vector3(3.6, 0.0, -10.0), 0.0, 2.1)
+	_add_model("酆都城民", VisualFactory.create_npc("generic", "酆都城民"), Vector3(6.0, 0.0, -10.0), 0.0, 2.1)
 
 	var gate := VisualFactory.create_fengdu_gate()
 	gate.name = "FengduGatePreview"
