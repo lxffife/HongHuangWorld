@@ -4444,6 +4444,9 @@ func _on_inventory_request_completed(result: int, response_code: int, _headers: 
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
 	if not (parsed is Dictionary) or not (parsed.get("items", []) is Array):
 		inventory_status.text = "中心服返回了无效的背包数据。"
+		if inventory_refresh_pending:
+			inventory_refresh_pending = false
+			_refresh_inventory()
 		return
 	inventory_cache = parsed.get("items", [])
 	var capacity: Dictionary = parsed.get("capacity", {})
@@ -6318,10 +6321,16 @@ func _on_wallet_request_completed(result: int, response_code: int, _headers: Pac
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
 	if not (parsed is Dictionary):
 		push_warning("[Wallet] 钱包响应格式异常")
+		if wallet_refresh_pending:
+			wallet_refresh_pending = false
+			_request_wallet()
 		return
 	var balances_variant: Variant = parsed.get("balances", [])
 	if not (balances_variant is Array):
 		push_warning("[Wallet] 钱包余额列表格式异常")
+		if wallet_refresh_pending:
+			wallet_refresh_pending = false
+			_request_wallet()
 		return
 	var ghost_cash := 0
 	var nether_stone := 0
@@ -8553,7 +8562,7 @@ func _on_shop_request_completed(result: int, response_code: int, _headers: Packe
 			item_row.add_theme_constant_override("separation", 6)
 			npc_choice_container.add_child(item_row)
 			var item_label := Label.new()
-			item_label.text = "%s · %s%s · %d %s · %s" % [
+			item_label.text = "%s · %s %s · %d %s · %s" % [
 				str(item.get("name", "未知商品")),
 				quality_name,
 				str(category_names.get(str(item.get("category", "material")), "物品")),
@@ -8586,7 +8595,7 @@ func _on_shop_request_completed(result: int, response_code: int, _headers: Packe
 	back_button.text = "返回摊主对话"
 	back_button.pressed.connect(_restore_vendor_dialogue)
 	npc_choice_container.add_child(back_button)
-	npc_status_label.text = "价格、扣款、背包容量与库存均由中心服事务结算；每次购买只提交一件。"
+	npc_status_label.text = "价格、扣款、背包容量与库存均由中心服事务结算；可选择购买数量，库存与堆叠上限由服务器复核。"
 
 
 func _restore_vendor_dialogue() -> void:
