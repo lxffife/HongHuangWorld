@@ -2,6 +2,7 @@ package npc
 
 import (
 	"context"
+	"math"
 	"database/sql"
 	"encoding/json"
 	"errors"
