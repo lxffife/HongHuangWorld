@@ -7878,6 +7878,9 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			var npc_data: Dictionary = data.get("npc", {})
 			var dialogue: Dictionary = data.get("dialogue", {})
 			npc_current_interaction_id = str(npc_data.get("id", ""))
+			var interacting_marker := npc_nodes.get(npc_current_interaction_id) as Node3D
+			if is_instance_valid(interacting_marker):
+				interacting_marker.set_meta("npc_talk_until_msec", Time.get_ticks_msec() + 3200)
 			npc_fate_encounter_button.visible = bool(npc_data.get("fate_encounter_available", false))
 			npc_title_label.text = str(npc_data.get("name", "冥界来者")) + " · " + str(npc_data.get("title", ""))
 			var lines: Array[String] = []
@@ -8174,6 +8177,14 @@ func _animate_npc_visuals(delta: float) -> void:
 			if not route_state.is_empty():
 				marker.position = route_state.position
 				marker.rotation.y = float(route_state.yaw)
+		var talk_until_msec := int(marker.get_meta("npc_talk_until_msec", 0))
+		var is_talking := Time.get_ticks_msec() < talk_until_msec
+		if is_talking and is_instance_valid(local_player):
+			var to_player := local_player.global_position - marker.global_position
+			to_player.y = 0.0
+			if to_player.length_squared() > 0.01:
+				var talk_yaw := atan2(to_player.x, to_player.z)
+				marker.rotation.y = lerp_angle(marker.rotation.y, talk_yaw, clampf(delta * 5.0, 0.0, 1.0))
 		if marker.get_child_count() == 0:
 			continue
 		var visual := marker.get_child(0) as Node3D
@@ -8232,6 +8243,15 @@ func _animate_npc_visuals(delta: float) -> void:
 			_:
 				if is_instance_valid(head):
 					head.rotation.y = sin(npc_animation_time * 0.32 + phase) * 0.07
+		if is_talking:
+			# Short, readable greeting gesture while facing the player; it never changes gameplay state.
+			var talk_phase := sin(npc_animation_time * 5.2 + phase)
+			if is_instance_valid(right_arm):
+				right_arm.rotation.z = -0.18 + maxf(talk_phase, 0.0) * 0.34
+			if is_instance_valid(left_arm) and npc_type != "soup_keeper":
+				left_arm.rotation.z = -0.035 - maxf(talk_phase, 0.0) * 0.08
+			if is_instance_valid(head):
+				head.rotation.x = -0.035 + sin(npc_animation_time * 2.8 + phase) * 0.025
 		var mist := visual.get_node_or_null("BowlMist") as Node3D
 		if is_instance_valid(mist):
 			mist.position.y = 1.16 + sin(npc_animation_time * 2.4 + phase) * 0.045
