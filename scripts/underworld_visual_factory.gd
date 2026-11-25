@@ -362,12 +362,12 @@ static func create_ghost_market_shop() -> Node3D:
 	_part(root, "ShopFoundation", _box(Vector3(7.6, 0.48, 5.8)), Vector3(0.0, 0.24, 0.0), Color("#34313d"))
 	_part(root, "ShopBody", _box(Vector3(6.8, 4.5, 4.8)), Vector3(0.0, 2.70, 0.0), plaster)
 	_part(root, "ShopDoor", _box(Vector3(2.05, 2.65, 0.12)), Vector3(0.0, 1.56, -2.48), Color("#201d28"))
-	for side in [-1.0, 1.0]:
+	for side: float in [-1.0, 1.0]:
 		_part(root, "ShopFrontPillar" + str(side), _box(Vector3(0.24, 4.2, 0.28)), Vector3(side * 3.12, 2.35, -2.55), timber)
 		_part(root, "UpperWindowFrame" + str(side), _box(Vector3(1.35, 1.12, 0.16)), Vector3(side * 1.72, 3.65, -2.48), gold)
 		_part(root, "UpperWindow" + str(side), _box(Vector3(1.08, 0.84, 0.07)), Vector3(side * 1.72, 3.65, -2.58), jade, Vector3.ZERO, 0.35, 0.0, 0.62)
-	_part(root, "ShopColumnBase" + str(side), _box(Vector3(0.42, 0.28, 0.42)), Vector3(side * 3.12, 0.38, -2.55), gold)
-	_part(root, "ShopColumnCap" + str(side), _box(Vector3(0.42, 0.28, 0.42)), Vector3(side * 3.12, 4.38, -2.55), gold)
+		_part(root, "ShopColumnBase" + str(side), _box(Vector3(0.42, 0.28, 0.42)), Vector3(side * 3.12, 0.38, -2.55), gold)
+		_part(root, "ShopColumnCap" + str(side), _box(Vector3(0.42, 0.28, 0.42)), Vector3(side * 3.12, 4.38, -2.55), gold)
 	_part(root, "ShopSignboard", _box(Vector3(2.6, 0.72, 0.16)), Vector3(0.0, 4.42, -2.72), Color("#30283d"))
 	var sign := Label3D.new()
 	sign.name = "ShopName"
@@ -559,8 +559,8 @@ static func create_fengdu_inner_gate() -> Node3D:
 	var trim := Color("#a18461")
 	var roof := Color("#29283a")
 	_part(root, "GateBase", _box(Vector3(10.0, 0.35, 3.2)), Vector3(0.0, 0.18, 0.0), Color("#393543"))
-	for side in [-1.0, 1.0]:
-		var x := side * 4.0
+	for side: float in [-1.0, 1.0]:
+		var x: float = side * 4.0
 		_part(root, "GatePier" + str(side), _box(Vector3(1.15, 4.4, 1.55)), Vector3(x, 2.35, 0.0), stone)
 		_part(root, "GatePierCap" + str(side), _box(Vector3(1.5, 0.32, 1.85)), Vector3(x, 4.72, 0.0), trim)
 		var pier_collision := CollisionShape3D.new()
