@@ -4,7 +4,7 @@ extends SceneTree
 # godot --headless --path . --script res://tools/validate_model_assets.gd
 # Add -- --require-all to fail when any optional model file is missing.
 # Add -- --strict-animations to fail when required clips are absent.
-# Add -- --strict-rig to fail when a character has no Skeleton3D or AnimationPlayer.
+# Add -- --strict-rig to fail when a character has no usable Skeleton3D/AnimationPlayer or fewer than 15 bones.
 
 const MODEL_FILES := {
 	"player_humanoid": "res://assets/models/player_humanoid.glb",
@@ -32,7 +32,7 @@ const RIG_REQUIRED_MODELS := [
 ]
 
 const REQUIRED_ANIMATIONS := {
-	"player_humanoid": ["idle", "walk"],
+	"player_humanoid": ["idle", "walk", "attack", "hit"],
 	"wolf": ["idle", "walk", "attack", "death"],
 	"iron_beast": ["idle", "walk", "attack", "death"],
 	"warrior": ["idle", "walk", "attack", "death"],
@@ -60,7 +60,7 @@ func _run_validation() -> void:
 	var strict_rig := args.has("--strict-rig")
 	var report: Dictionary = {
 		"project": "HongHuangClient",
-		"validator_version": 2,
+		"validator_version": 3,
 		"require_all": require_all,
 		"strict_animations": strict_animations,
 		"strict_rig": strict_rig,
@@ -77,8 +77,9 @@ func _run_validation() -> void:
 			"status": "missing",
 			"mesh_count": 0,
 			"skeleton_count": 0,
+			"bone_count": 0,
 			"animation_player_count": 0,
-			"rig_validation": {"required": model_key in RIG_REQUIRED_MODELS, "skeleton_required": model_key in RIG_REQUIRED_MODELS, "animation_player_required": model_key in RIG_REQUIRED_MODELS, "passed": false},
+			"rig_validation": {"required": model_key in RIG_REQUIRED_MODELS, "skeleton_required": model_key in RIG_REQUIRED_MODELS, "animation_player_required": model_key in RIG_REQUIRED_MODELS, "minimum_bones": 15, "passed": false},
 			"animations": [],
 			"animation_clips": [],
 			"required_animation_categories": REQUIRED_ANIMATIONS.get(model_key, []),
@@ -121,12 +122,16 @@ func _run_validation() -> void:
 		_classify_animation_coverage(item)
 		var has_skeleton := int(item["skeleton_count"]) > 0
 		var has_animation_player := int(item["animation_player_count"]) > 0
+		var has_usable_bone_count := int(item["bone_count"]) >= int(item["rig_validation"]["minimum_bones"])
 		var rig_required := bool(item["rig_validation"]["required"])
-		item["rig_validation"]["passed"] = not rig_required or (has_skeleton and has_animation_player)
+		item["rig_validation"]["bone_count"] = int(item["bone_count"])
+		item["rig_validation"]["passed"] = not rig_required or (has_skeleton and has_animation_player and has_usable_bone_count)
 		if rig_required and not has_skeleton:
 			item["warnings"].append("Rigged character asset has no Skeleton3D")
 		if rig_required and not has_animation_player:
 			item["warnings"].append("Rigged character asset has no AnimationPlayer")
+		if rig_required and has_skeleton and not has_usable_bone_count:
+			item["warnings"].append("Rigged character has fewer than 15 bones; review whether it is a full humanoid/creature rig")
 		if strict_rig and rig_required and not bool(item["rig_validation"]["passed"]):
 			exit_code = 1
 		var missing_animations := _apply_animation_requirements(model_key, item)
@@ -148,6 +153,8 @@ func _run_validation() -> void:
 			if rig_required and not has_skeleton:
 				report["summary"]["warnings"] += 1
 			if rig_required and not has_animation_player:
+				report["summary"]["warnings"] += 1
+			if rig_required and has_skeleton and not has_usable_bone_count:
 				report["summary"]["warnings"] += 1
 
 		instance.free()
@@ -183,7 +190,9 @@ func _inspect_node(node: Node, item: Dictionary) -> void:
 			item["largest_mesh_dimension"] = maxf(float(item["largest_mesh_dimension"]), largest_dimension)
 
 	if node is Skeleton3D:
+		var skeleton := node as Skeleton3D
 		item["skeleton_count"] += 1
+		item["bone_count"] += skeleton.get_bone_count()
 
 	if node is AnimationPlayer:
 		var player := node as AnimationPlayer
