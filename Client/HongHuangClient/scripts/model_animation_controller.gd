@@ -11,6 +11,7 @@ var _last_world_position := Vector3.ZERO
 var _current_state := ""
 var _locked_action := ""
 var _action_lock_remaining := 0.0
+var _preview_state_override := false
 
 
 func _ready() -> void:
@@ -45,6 +46,10 @@ func _process(delta: float) -> void:
 	_last_world_position = current_position
 	if not _locked_action.is_empty():
 		return
+	# Static preview models must keep the requested locomotion clip instead of
+	# being forced back to idle by the zero-displacement gameplay observer.
+	if _preview_state_override:
+		return
 	# Ignore large snapshot corrections/teleports rather than playing a false run cycle.
 	if speed > TELEPORT_SPEED_LIMIT:
 		_play_state("idle")
@@ -61,6 +66,7 @@ func play_action(action_name: String) -> bool:
 	var clip := _resolve_clip(normalized)
 	if clip.is_empty():
 		return false
+	_preview_state_override = false
 	_set_clip_looping(clip, false)
 	_animation_player.play(clip, 0.12)
 	_current_state = normalized
@@ -85,6 +91,7 @@ func play_preview_state(state_name: String) -> bool:
 	var clip := _resolve_clip(normalized)
 	if clip.is_empty():
 		return false
+	_preview_state_override = true
 	_locked_action = ""
 	_action_lock_remaining = 0.0
 	_set_clip_looping(clip, true)
@@ -125,7 +132,7 @@ func _resolve_clip(state_name: String) -> String:
 		"walk":
 			keywords = ["walk", "walking", "locomotion"]
 		"run":
-			keywords = ["run", "sprint", "jog", "walk"]
+			keywords = ["run", "sprint", "jog"]
 		"attack":
 			keywords = ["attack", "slash", "swing", "bite", "combat"]
 		"hit":
