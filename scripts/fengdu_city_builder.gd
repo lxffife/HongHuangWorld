@@ -7,7 +7,12 @@ const BUILDING_MODELS := {
 	"wall": "res://assets/models/fengdu_wall.glb",
 	"tower": "res://assets/models/fengdu_watchtower.glb",
 	"hall": "res://assets/models/fengdu_hall.glb",
-	"house": "res://assets/models/fengdu_house.glb"
+	"house": "res://assets/models/fengdu_house.glb",
+	"east_asian_roof": "res://assets/models/fengdu_east_asian_roof.glb",
+	"east_asian_wall": "res://assets/models/fengdu_east_asian_wall.glb",
+	"column_base": "res://assets/models/fengdu_column_base.glb",
+	"lantern": "res://assets/models/fengdu_lantern.glb",
+	"bell": "res://assets/models/fengdu_bell.glb"
 }
 
 const CITY_SCALE := 0.12
@@ -106,6 +111,39 @@ static func _add_district(root: Node3D, entry: Dictionary) -> void:
 	if not has_imported_building:
 		district.add_child(_box_mesh("Roof", Vector3(main_width * 1.18, 0.85, main_depth * 1.16), Vector3(0.0, 1.1 + building_height, 0.0), Color("#282936")))
 		district.add_child(_box_mesh("RoofRidge", Vector3(main_width * 0.72, 0.28, 0.5), Vector3(0.0, 1.58 + building_height, 0.0), Color("#a88b60")))
+	else:
+		# Transition the imported medieval shell toward Fengdu's East Asian silhouette:
+		# the CC0 roof module adds broad eaves while gameplay collision stays unchanged.
+		_add_scaled_model(
+			district, str(BUILDING_MODELS["east_asian_roof"]),
+			Vector3(main_width * 1.24, 1.65, main_depth * 1.24),
+			Vector3(0.0, building_height + 1.25, 0.0)
+		)
+		if kind in ["palace", "court", "admin", "sacred"]:
+			for side in [-1.0, 1.0]:
+				for depth_side in [-1.0, 1.0]:
+					_add_scaled_model(
+						district, str(BUILDING_MODELS["column_base"]),
+						Vector3(0.72, 0.45, 0.72),
+						Vector3(side * main_width * 0.43, 0.72, depth_side * main_depth * 0.43)
+					)
+		if kind in ["palace", "court", "admin", "sacred", "gate"]:
+			_add_scaled_model(
+				district, str(BUILDING_MODELS["east_asian_wall"]),
+				Vector3(main_width * 0.42, building_height * 0.54, 0.28),
+				Vector3(0.0, 0.72 + building_height * 0.28, -main_depth * 0.46)
+			)
+			_add_scaled_model(
+				district, str(BUILDING_MODELS["east_asian_wall"]),
+				Vector3(main_width * 0.42, building_height * 0.54, 0.28),
+				Vector3(0.0, 0.72 + building_height * 0.28, main_depth * 0.46),
+				PI
+			)
+		if kind == "sacred":
+			_add_scaled_model(
+				district, str(BUILDING_MODELS["bell"]),
+				Vector3(3.0, 3.6, 3.0), Vector3(footprint.x * 0.31, 0.7, footprint.y * 0.28)
+			)
 	if kind == "palace":
 		district.add_child(_box_mesh("UpperHall", Vector3(main_width * 0.62, 4.0, main_depth * 0.58), Vector3(0.0, building_height + 3.0, 0.0), Color("#806044")))
 		district.add_child(_box_mesh("UpperRoof", Vector3(main_width * 0.76, 0.65, main_depth * 0.72), Vector3(0.0, building_height + 5.35, 0.0), Color("#332638")))
@@ -280,6 +318,12 @@ static func _add_wall(root: Node3D, node_name: String, dimensions: Vector3, posi
 			)
 			if _add_scaled_model(wall, model_path, segment_size, segment_position, 0.0 if along_x else PI * 0.5):
 				added_segments += 1
+				_add_scaled_model(
+					wall, str(BUILDING_MODELS["east_asian_roof"]),
+					Vector3(segment_length * 1.14, 0.82, maxf(dimensions.z * 1.8, 1.4)),
+					segment_position + Vector3(0.0, dimensions.y * 0.5 + 0.25, 0.0),
+					0.0 if along_x else PI * 0.5
+				)
 		if added_segments == 0:
 			wall.add_child(_box_mesh("WallVisual", dimensions, Vector3.ZERO, color))
 	else:

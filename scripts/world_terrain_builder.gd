@@ -1,6 +1,7 @@
 extends RefCounted
 
 const UnderworldVisualFactory = preload("res://scripts/underworld_visual_factory.gd")
+const VisualModelLibrary = preload("res://scripts/visual_model_library.gd")
 const QingyunVisualFactory = preload("res://scripts/qingyun_visual_factory.gd")
 const WorldChunkStreamerScript = preload("res://scripts/world_chunk_streamer.gd")
 const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
@@ -28,14 +29,17 @@ static func build(world_id: String) -> Node3D:
 		root.add_child(UnderworldVisualFactory.create_fengdu_gate())
 		for side in [-1.0, 1.0]:
 			var lantern_position := Vector3(side * 7.0, 2.1, -14.0)
-			_add_world_box(root, "SoulLanternStone_" + str(side), Vector3(0.8, 2.2, 0.8), lantern_position, Color("#393344"))
+			var lantern := VisualModelLibrary.instantiate_model("fengdu_lantern", func() -> Node3D: return _create_soul_lantern_fallback())
+			lantern.name = "SoulLantern_" + str(side)
+			lantern.position = lantern_position
+			root.add_child(lantern)
 			var flame := MeshInstance3D.new()
 			flame.name = "SoulLanternFlame_" + str(side)
 			var flame_mesh := SphereMesh.new()
 			flame_mesh.radius = 0.34
 			flame_mesh.height = 0.9
 			flame.mesh = flame_mesh
-			flame.position = lantern_position + Vector3(0.0, 1.45, 0.0)
+			flame.position = lantern_position + Vector3(0.0, 2.05, 0.0)
 			var flame_material := StandardMaterial3D.new()
 			flame_material.albedo_color = Color("#82a8d8")
 			flame_material.emission_enabled = true
@@ -109,7 +113,36 @@ static func build(world_id: String) -> Node3D:
 			root.add_child(rock)
 	return root
 
-static func _add_world_box(root: Node3D, node_name: String, size: Vector3, world_position: Vector3, color: Color, emissive: bool = false) -> void:
+static func _create_soul_lantern_fallback() -> Node3D:
+	var root := Node3D.new()
+	var stand := MeshInstance3D.new()
+	var stand_mesh := CylinderMesh.new()
+	stand_mesh.top_radius = 0.16
+	stand_mesh.bottom_radius = 0.24
+	stand_mesh.height = 1.65
+	stand.mesh = stand_mesh
+	stand.position.y = 0.82
+	var stone := StandardMaterial3D.new()
+	stone.albedo_color = Color("#393344")
+	stone.roughness = 0.92
+	stand.material_override = stone
+	root.add_child(stand)
+	var lamp := MeshInstance3D.new()
+	var lamp_mesh := BoxMesh.new()
+	lamp_mesh.size = Vector3(0.58, 0.52, 0.58)
+	lamp.mesh = lamp_mesh
+	lamp.position.y = 1.82
+	var lamp_material := StandardMaterial3D.new()
+	lamp_material.albedo_color = Color("#7b91bd")
+	lamp_material.emission_enabled = true
+	lamp_material.emission = Color("#537fc4")
+	lamp_material.emission_energy_multiplier = 1.8
+	lamp.material_override = lamp_material
+	root.add_child(lamp)
+	return root
+
+
+func _add_world_box(root: Node3D, node_name: String, size: Vector3, world_position: Vector3, color: Color, emissive: bool = false) -> void:
 	var instance := MeshInstance3D.new()
 	instance.name = node_name
 	var box := BoxMesh.new()

@@ -58,3 +58,12 @@
 见 THIRD_PARTY_ASSETS.md 与 ../3d/asset-register.csv。本批包含玩家、铁骨兽魂、城墙、塔楼、殿堂、民居、树木和岩石模型。当前状态为 imported_unverified，仍需在 Godot 4.6 中导入和实际镜头验收。
 
 - 荒原狼已加入 Quaternius Ultimate Animated Animal Pack 的 Wolf GLB，状态 imported_unverified；待检查四足动作和动画命名。
+
+
+## 第二批东方冥界与角色模型
+
+- 新增 Quaternius CC0 骷髅战士、幽魂、恶魔与蝙蝠模型，分别覆盖战魂、游祟、火魂和风魂外观槽位。
+- 新增 Polygonal Mind CC0 亚洲传统装饰模型：灯笼、钟、屋顶、墙面与柱础。
+- 酆都城区为现有建筑增加东方屋檐、墙面与柱础；轮回司增加钟楼视觉组件。
+- 引魂灯优先使用外部模型，缺失时回退到带灯体的程序化模型。
+- 全部资产仍为 imported_unverified，未在本机 Godot 4.6 验收。

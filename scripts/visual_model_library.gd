@@ -18,7 +18,12 @@ const MODEL_PATHS := {
 	"npc_guard": "res://assets/models/npc_guard.glb",
 	"npc_soup_keeper": "res://assets/models/npc_soup_keeper.glb",
 	"npc_blacksmith": "res://assets/models/npc_blacksmith.glb",
-	"npc_generic": "res://assets/models/npc_generic.glb"
+	"npc_generic": "res://assets/models/npc_generic.glb",
+	"fengdu_lantern": "res://assets/models/fengdu_lantern.glb",
+	"fengdu_bell": "res://assets/models/fengdu_bell.glb",
+	"fengdu_east_asian_roof": "res://assets/models/fengdu_east_asian_roof.glb",
+	"fengdu_east_asian_wall": "res://assets/models/fengdu_east_asian_wall.glb",
+	"fengdu_column_base": "res://assets/models/fengdu_column_base.glb"
 }
 
 # Target visual heights in metres. These affect presentation only; gameplay
@@ -38,7 +43,12 @@ const TARGET_HEIGHTS := {
 	"npc_guard": 1.9,
 	"npc_soup_keeper": 1.7,
 	"npc_blacksmith": 1.85,
-	"npc_generic": 1.8
+	"npc_generic": 1.8,
+	"fengdu_lantern": 2.4,
+	"fengdu_bell": 3.6,
+	"fengdu_east_asian_roof": 2.2,
+	"fengdu_east_asian_wall": 3.0,
+	"fengdu_column_base": 0.45
 }
 const MIN_SCALE_FACTOR := 0.25
 const MAX_SCALE_FACTOR := 4.0
