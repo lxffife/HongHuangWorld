@@ -610,8 +610,8 @@ func _build_compact_hud() -> void:
 	$HUD/Panel.offset_top = 146.0
 	$HUD/Panel.offset_bottom = 548.0
 	compact_hud_panel = PanelContainer.new()
-	compact_hud_panel.position = Vector2(18.0, 18.0)
-	compact_hud_panel.custom_minimum_size = Vector2(340.0, 112.0)
+	compact_hud_panel.position = Vector2(18.0, 66.0)
+	compact_hud_panel.custom_minimum_size = Vector2(380.0, 96.0)
 	var compact_style := StyleBoxFlat.new()
 	compact_style.bg_color = Color(0.035, 0.055, 0.085, 0.88)
 	compact_style.border_color = Color("#526783")
@@ -626,8 +626,8 @@ func _build_compact_hud() -> void:
 	compact_hud_label = Label.new()
 	compact_hud_label.text = "洪荒 · 正在载入角色状态……"
 	compact_hud_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	compact_hud_label.custom_minimum_size = Vector2(316.0, 92.0)
-	compact_hud_label.add_theme_font_size_override("font_size", 13)
+	compact_hud_label.custom_minimum_size = Vector2(356.0, 76.0)
+	compact_hud_label.add_theme_font_size_override("font_size", 12)
 	compact_hud_label.add_theme_color_override("font_color", Color("#e2e8f0"))
 	compact_hud_panel.add_child(compact_hud_label)
 	details_toggle_button = Button.new()
@@ -2225,70 +2225,38 @@ func _update_compact_hud(progression: Dictionary = {}) -> void:
 	var stage_name := str(progression.get("realm_stage_name", ""))
 	var cultivation := int(progression.get("cultivation", 0))
 	var region_name := current_region_name if not current_region_name.is_empty() else "区域载入中"
+	var mana_text := "灵力 %d / %d" % [int(snapshot.get("mana", 0)), int(snapshot.get("max_mana", 0))]
+	var realm_text := (system_name + " · " + realm_name + stage_name).strip_edges()
 	var lines := [
-		world_name + "  /  " + region_name,
-		character_name + "  ·  " + system_name + " " + realm_name + stage_name,
-		"修为 " + str(cultivation),
-		"灵力 " + str(int(snapshot.get("mana", 0))) + " / " + str(int(snapshot.get("max_mana", 0)))
+		world_name + "  ·  " + region_name,
+		character_name + "  |  " + realm_text,
+		"修为 " + str(cultivation) + "    " + mana_text
 	]
-	if snapshot.has("attack"):
-		var critical_rate := float(snapshot.get("critical_chance_basis_points", 0)) / 100.0
-		var critical_damage := float(snapshot.get("critical_damage_basis_points", 15000)) / 100.0
-		var attack_interval := maxf(0.1, float(snapshot.get("attack_interval_ms", 700)) / 1000.0)
-		lines.append("战斗 攻击 " + str(int(snapshot.get("attack", 0))) + " · 防御 " + str(int(snapshot.get("defense", 0))) + " · 暴击 " + str(snappedf(critical_rate, 0.1)) + "%")
-		lines.append("暴击伤害 " + str(snappedf(critical_damage, 1.0)) + "% · 攻击间隔 " + str(snappedf(attack_interval, 0.01)) + "秒")
 	if world_id == "underworld_fengdu":
-		lines.append("魂力 " + str(soul_essence_profile.get("soul_power", 0)) + "  ·  吞噬 " + str(soul_essence_profile.get("absorbed_count", 0)) + "  ·  " + str(soul_essence_profile.get("growth_name", "初生魂团")))
-		var progress_by_attribute: Dictionary = {}
-		for progress_variant in soul_essence_profile.get("attribute_progress", []):
-			if progress_variant is Dictionary:
-				var progress_item: Dictionary = progress_variant
-				progress_by_attribute[str(progress_item.get("attribute", ""))] = progress_item
-		var attribute_labels := {
-			"strength": "力",
-			"constitution": "体",
-			"agility": "敏",
-			"spirit": "灵",
-			"vitality": "气"
-		}
-		var progress_parts: Array[String] = []
-		for attribute in ["strength", "constitution", "agility", "spirit", "vitality"]:
-			if not progress_by_attribute.has(attribute):
-				continue
-			var progress_item: Dictionary = progress_by_attribute[attribute]
-			var next_threshold := int(progress_item.get("next_threshold", 0))
-			var absorbed := int(progress_item.get("absorbed_count", 0))
-			var applied := int(progress_item.get("applied_points", 0))
-			var max_points := int(progress_item.get("max_points", 10))
-			var milestone_text := "满" if next_threshold <= 0 or applied >= max_points else str(absorbed) + "/" + str(next_threshold)
-			progress_parts.append(str(attribute_labels.get(attribute, attribute)) + "+" + str(applied) + " " + milestone_text)
-		if not progress_parts.is_empty():
-			lines.append("来世资质 · " + "  ".join(PackedStringArray(progress_parts)))
-		# Underworld cards contain combat, soul-growth and attribute progress.
-		# Reserve enough vertical room so wrapped Chinese lines are never clipped.
-		compact_hud_panel.custom_minimum_size = Vector2(520.0, 280.0)
-		compact_hud_label.custom_minimum_size = Vector2(496.0, 260.0)
+		# Soul-growth counters remain available in the detailed cultivation panel.
+		# Keep the identity card compact; detailed soul growth belongs in the cultivation panel.
+		compact_hud_panel.custom_minimum_size = Vector2(380.0, 96.0)
+		compact_hud_label.custom_minimum_size = Vector2(356.0, 76.0)
 		compact_hud_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		compact_hud_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		compact_hud_label.clip_text = false
-		compact_hud_label.max_lines_visible = -1
+		compact_hud_label.clip_text = true
+		compact_hud_label.max_lines_visible = 3
 		var pending_choices: Array = soul_essence_profile.get("pending_rare_choices", [])
 		if is_instance_valid(soul_choice_button):
 			soul_choice_button.visible = not pending_choices.is_empty()
 			if not pending_choices.is_empty():
 				soul_choice_button.text = "分配无相灵魄 · " + str(pending_choices.size())
 	else:
-		compact_hud_panel.custom_minimum_size = Vector2(360.0, 190.0)
-		compact_hud_label.custom_minimum_size = Vector2(336.0, 170.0)
+		compact_hud_panel.custom_minimum_size = Vector2(360.0, 96.0)
+		compact_hud_label.custom_minimum_size = Vector2(336.0, 76.0)
 		compact_hud_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		compact_hud_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		compact_hud_label.clip_text = false
-		compact_hud_label.max_lines_visible = -1
+		compact_hud_label.clip_text = true
+		compact_hud_label.max_lines_visible = 3
 	compact_hud_label.text = "\n".join(PackedStringArray(lines))
-	# Preserve the wider underworld character card; the previous unconditional
-	# 460px cap silently overrode its 520px layout and caused Chinese text wrapping.
+	# Keep the identity card the same compact footprint across all world regions.
 	var compact_viewport_size: Vector2 = get_viewport().get_visible_rect().size
-	var preferred_compact_width: float = 520.0 if world_id == "underworld_fengdu" else 360.0
+	var preferred_compact_width: float = 380.0 if world_id == "underworld_fengdu" else 360.0
 	var compact_width: float = minf(preferred_compact_width, maxf(260.0, compact_viewport_size.x - 36.0))
 	compact_hud_panel.custom_minimum_size.x = compact_width
 	compact_hud_label.custom_minimum_size.x = compact_width - 24.0
@@ -3409,7 +3377,7 @@ func _layout_hud() -> void:
 	# combat/vitals at lower-left and social chat at lower-right.
 	if is_instance_valid(compact_hud_panel):
 		var is_underworld := str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu"
-		var card_width := minf(440.0 if is_underworld else 340.0, maxf(260.0, viewport_size.x - 420.0))
+		var card_width := minf(380.0 if is_underworld else 360.0, maxf(260.0, viewport_size.x - 420.0))
 		var card_height := compact_hud_panel.custom_minimum_size.y
 		compact_hud_panel.position = Vector2(18.0, 66.0)
 		compact_hud_panel.custom_minimum_size = Vector2(card_width, card_height)
@@ -3420,7 +3388,17 @@ func _layout_hud() -> void:
 		if is_instance_valid(details_toggle_button):
 			details_toggle_button.position = Vector2(18.0, controls_y)
 		if is_instance_valid(soul_choice_button):
-			soul_choice_button.position = Vector2(140.0, controls_y)
+			soul_choice_button.position = Vector2(146.0, controls_y)
+	var cultivation_panel := get_node_or_null("HUD/Panel") as Control
+	if cultivation_panel != null:
+		var details_width := minf(560.0, maxf(320.0, viewport_size.x - 48.0))
+		var details_height := minf(520.0, maxf(300.0, viewport_size.y - 96.0))
+		cultivation_panel.set_anchors_preset(Control.PRESET_CENTER)
+		cultivation_panel.offset_left = -details_width * 0.5
+		cultivation_panel.offset_right = details_width * 0.5
+		cultivation_panel.offset_top = -details_height * 0.5
+		cultivation_panel.offset_bottom = details_height * 0.5
+		cultivation_panel.custom_minimum_size = Vector2(details_width, details_height)
 	if is_instance_valid(hell_trial_hud_panel):
 		var trial_width := minf(420.0, maxf(280.0, viewport_size.x - 24.0))
 		hell_trial_hud_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
