@@ -3,6 +3,12 @@ extends RefCounted
 ## Schematic coordinates are scaled into the current 256 m prototype; this is not the final city scale.
 
 const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
+const BUILDING_MODELS := {
+	"wall": "res://assets/models/fengdu_wall.glb",
+	"tower": "res://assets/models/fengdu_watchtower.glb",
+	"hall": "res://assets/models/fengdu_hall.glb",
+	"house": "res://assets/models/fengdu_house.glb"
+}
 
 const CITY_SCALE := 0.12
 const CITY_CENTER_Z := -60.0
@@ -80,15 +86,26 @@ static func _add_district(root: Node3D, entry: Dictionary) -> void:
 		building_height = 4.0
 	var main_width := footprint.x * 0.68
 	var main_depth := footprint.y * 0.66
-	district.add_child(_box_mesh("MainHall", Vector3(main_width, building_height, main_depth), Vector3(0.0, 0.7 + building_height * 0.5, 0.0), base_color))
+	var building_model_key := "hall"
+	if kind == "residential" or kind == "market":
+		building_model_key = "house"
+	elif kind == "military" or kind == "gate":
+		building_model_key = "tower"
+	var has_imported_building := _add_scaled_model(
+		district, str(BUILDING_MODELS[building_model_key]),
+		Vector3(main_width, building_height + 1.2, main_depth), Vector3(0.0, 0.7, 0.0)
+	)
+	if not has_imported_building:
+		district.add_child(_box_mesh("MainHall", Vector3(main_width, building_height, main_depth), Vector3(0.0, 0.7 + building_height * 0.5, 0.0), base_color))
 	var building_collision := CollisionShape3D.new()
 	var building_shape := BoxShape3D.new()
 	building_shape.size = Vector3(main_width, building_height, main_depth)
 	building_collision.shape = building_shape
 	building_collision.position = Vector3(0.0, 0.7 + building_height * 0.5, 0.0)
 	district.add_child(building_collision)
-	district.add_child(_box_mesh("Roof", Vector3(main_width * 1.18, 0.85, main_depth * 1.16), Vector3(0.0, 1.1 + building_height, 0.0), Color("#282936")))
-	district.add_child(_box_mesh("RoofRidge", Vector3(main_width * 0.72, 0.28, 0.5), Vector3(0.0, 1.58 + building_height, 0.0), Color("#a88b60")))
+	if not has_imported_building:
+		district.add_child(_box_mesh("Roof", Vector3(main_width * 1.18, 0.85, main_depth * 1.16), Vector3(0.0, 1.1 + building_height, 0.0), Color("#282936")))
+		district.add_child(_box_mesh("RoofRidge", Vector3(main_width * 0.72, 0.28, 0.5), Vector3(0.0, 1.58 + building_height, 0.0), Color("#a88b60")))
 	if kind == "palace":
 		district.add_child(_box_mesh("UpperHall", Vector3(main_width * 0.62, 4.0, main_depth * 0.58), Vector3(0.0, building_height + 3.0, 0.0), Color("#806044")))
 		district.add_child(_box_mesh("UpperRoof", Vector3(main_width * 0.76, 0.65, main_depth * 0.72), Vector3(0.0, building_height + 5.35, 0.0), Color("#332638")))
@@ -134,12 +151,16 @@ static func _add_district_details(district: Node3D, kind: String, footprint: Vec
 		"residential":
 			for house_index in range(3):
 				var house_x := -footprint.x * 0.28 + float(house_index) * footprint.x * 0.28
-				district.add_child(_box_mesh("SoulHouse_" + str(house_index), Vector3(2.5, 2.8, 2.7), Vector3(house_x, 2.1, -footprint.y * 0.28), Color("#59645d")))
-				district.add_child(_box_mesh("SoulHouseRoof_" + str(house_index), Vector3(3.0, 0.42, 3.1), Vector3(house_x, 3.72, -footprint.y * 0.28), Color("#30323b")))
+				var house_position := Vector3(house_x, 0.0, -footprint.y * 0.28)
+				if not _add_scaled_model(district, str(BUILDING_MODELS["house"]), Vector3(2.8, 3.6, 2.8), house_position):
+					district.add_child(_box_mesh("SoulHouse_" + str(house_index), Vector3(2.5, 2.8, 2.7), house_position + Vector3(0.0, 2.1, 0.0), Color("#59645d")))
+					district.add_child(_box_mesh("SoulHouseRoof_" + str(house_index), Vector3(3.0, 0.42, 3.1), house_position + Vector3(0.0, 3.72, 0.0), Color("#30323b")))
 		"military":
 			for side in [-1.0, 1.0]:
-				district.add_child(_box_mesh("WatchTower", Vector3(2.0, 7.0, 2.0), Vector3(side * footprint.x * 0.34, 4.2, 0.0), Color("#414752")))
-				district.add_child(_box_mesh("WatchTowerRoof", Vector3(2.8, 0.55, 2.8), Vector3(side * footprint.x * 0.34, 8.0, 0.0), Color("#292b35")))
+				var tower_position := Vector3(side * footprint.x * 0.34, 0.0, 0.0)
+				if not _add_scaled_model(district, str(BUILDING_MODELS["tower"]), Vector3(3.2, 7.5, 3.2), tower_position):
+					district.add_child(_box_mesh("WatchTower", Vector3(2.0, 7.0, 2.0), tower_position + Vector3(0.0, 4.2, 0.0), Color("#414752")))
+					district.add_child(_box_mesh("WatchTowerRoof", Vector3(2.8, 0.55, 2.8), tower_position + Vector3(0.0, 8.0, 0.0), Color("#292b35")))
 		"gate":
 			for side in [-1.0, 1.0]:
 				district.add_child(_box_mesh("GateColumn", Vector3(0.8, building_height + 1.0, 0.9), Vector3(side * footprint.x * 0.34, (building_height + 1.0) * 0.5, 0.0), Color("#82705e")))
@@ -243,13 +264,80 @@ static func _add_wall(root: Node3D, node_name: String, dimensions: Vector3, posi
 	var wall := StaticBody3D.new()
 	wall.name = node_name
 	wall.position = position
-	wall.add_child(_box_mesh("WallVisual", dimensions, Vector3.ZERO, color))
+	var model_path := str(BUILDING_MODELS["wall"])
+	if ResourceLoader.exists(model_path):
+		var along_x := dimensions.x >= dimensions.z
+		var total_length := dimensions.x if along_x else dimensions.z
+		var segment_count := maxi(1, ceili(total_length / 4.0))
+		var segment_length := total_length / float(segment_count)
+		for index in range(segment_count):
+			var segment_size := Vector3(segment_length, dimensions.y, dimensions.z) if along_x else Vector3(dimensions.x, dimensions.y, segment_length)
+			var segment_position := Vector3(
+				-dimensions.x * 0.5 + segment_length * (float(index) + 0.5) if along_x else 0.0,
+				0.0,
+				0.0 if along_x else -dimensions.z * 0.5 + segment_length * (float(index) + 0.5)
+			)
+			_add_scaled_model(wall, model_path, segment_size, segment_position)
+	else:
+		wall.add_child(_box_mesh("WallVisual", dimensions, Vector3.ZERO, color))
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
 	shape.size = dimensions
 	collision.shape = shape
 	wall.add_child(collision)
 	root.add_child(wall)
+
+
+static func _add_scaled_model(parent: Node3D, model_path: String, target_size: Vector3, base_position: Vector3) -> bool:
+	if not ResourceLoader.exists(model_path):
+		return false
+	var packed := load(model_path) as PackedScene
+	if packed == null:
+		return false
+	var model := packed.instantiate() as Node3D
+	if model == null:
+		return false
+	var bounds := {"found": false, "min": Vector3.ZERO, "max": Vector3.ZERO}
+	_collect_model_bounds(model, Transform3D.IDENTITY, bounds)
+	if not bool(bounds["found"]):
+		model.free()
+		return false
+	var minimum: Vector3 = bounds["min"]
+	var maximum: Vector3 = bounds["max"]
+	var size := maximum - minimum
+	if size.x < 0.001 or size.y < 0.001 or size.z < 0.001:
+		model.free()
+		return false
+	var scale_factor := Vector3(target_size.x / size.x, target_size.y / size.y, target_size.z / size.z)
+	model.scale = scale_factor
+	var center := (minimum + maximum) * 0.5
+	model.position = base_position - Vector3(center.x * scale_factor.x, minimum.y * scale_factor.y, center.z * scale_factor.z)
+	model.set_meta("fengdu_imported_asset", model_path)
+	parent.add_child(model)
+	return true
+
+
+static func _collect_model_bounds(node: Node, parent_transform: Transform3D, state: Dictionary) -> void:
+	var current_transform := parent_transform
+	if node is Node3D:
+		current_transform = parent_transform * (node as Node3D).transform
+	if node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance.mesh != null:
+			var local_bounds := mesh_instance.mesh.get_aabb() * current_transform
+			var local_min := local_bounds.position
+			var local_max := local_bounds.position + local_bounds.size
+			if not bool(state["found"]):
+				state["min"] = local_min
+				state["max"] = local_max
+				state["found"] = true
+			else:
+				var previous_min: Vector3 = state["min"]
+				var previous_max: Vector3 = state["max"]
+				state["min"] = previous_min.min(local_min)
+				state["max"] = previous_max.max(local_max)
+	for child in node.get_children():
+		_collect_model_bounds(child, current_transform, state)
 
 
 static func _add_roads(root: Node3D, by_id: Dictionary, roads: Array) -> void:
