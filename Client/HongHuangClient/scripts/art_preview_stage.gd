@@ -14,6 +14,7 @@ func _ready() -> void:
 	_build_stage()
 	_build_gallery()
 	_build_controls()
+	_update_status(_selection_status())
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -23,16 +24,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	match key_event.keycode:
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
 			_selected_model_index = clampi(key_event.keycode - KEY_1, 0, _preview_models.size() - 1)
-			_update_status("已选择：" + _model_label(_selected_model_index))
+			_update_status(_selection_status())
 			get_viewport().set_input_as_handled()
 		KEY_0:
 			_selected_model_index = clampi(9, 0, _preview_models.size() - 1)
-			_update_status("已选择：" + _model_label(_selected_model_index))
+			_update_status(_selection_status())
 			get_viewport().set_input_as_handled()
 		KEY_BRACKETLEFT, KEY_BRACKETRIGHT:
 			var direction := -1 if key_event.keycode == KEY_BRACKETLEFT else 1
 			_selected_model_index = posmod(_selected_model_index + direction, _preview_models.size())
-			_update_status("已选择：" + _model_label(_selected_model_index))
+			_update_status(_selection_status())
 			get_viewport().set_input_as_handled()
 		KEY_I:
 			_play_selected_action("idle")
@@ -157,9 +158,12 @@ func _add_model(label_text: String, model: Node3D, at: Vector3, yaw: float, labe
 	model.position = at
 	model.rotation.y = yaw
 	model.set_meta("preview_label", label_text)
+	var source_path := str(model.get_meta("model_source", "procedural_fallback"))
+	var source_label := "GLB" if source_path != "procedural_fallback" else "程序化回退"
+	model.set_meta("preview_source_label", source_label)
 	_preview_models.append(model)
 	add_child(model)
-	_add_label(label_text, at + Vector3(0.0, label_height, 0.0), 0.24)
+	_add_label("%s · %s" % [label_text, source_label], at + Vector3(0.0, label_height, 0.0), 0.24)
 
 
 func _build_controls() -> void:
@@ -259,6 +263,15 @@ func _model_label(index: int) -> String:
 	if index < 0 or index >= _preview_models.size():
 		return "未知模型"
 	return str(_preview_models[index].get_meta("preview_label", "模型"))
+
+
+func _selection_status() -> String:
+	if _preview_models.is_empty():
+		return "预览库暂无角色模型"
+	var model: Node3D = _preview_models[_selected_model_index]
+	var source_label := str(model.get_meta("preview_source_label", "来源未知"))
+	var model_key := str(model.get_meta("model_key", "unknown"))
+	return "当前：%s · %s · key=%s" % [_model_label(_selected_model_index), source_label, model_key]
 
 
 func _update_status(message: String) -> void:
