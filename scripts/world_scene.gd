@@ -8126,6 +8126,11 @@ func _render_world_npcs() -> void:
 		marker.name = "NPC_" + npc_id
 		marker.position = Vector3(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_y", 0.0)), float(npc_data.get("position_z", 0.0)))
 		marker.rotation.y = float(npc_data.get("rotation_y", 0.0))
+		var patrol_route: Variant = npc_data.get("patrol_route", {})
+		if str(npc_data.get("behavior_profile", "stationary")) == "guard_patrol" and patrol_route is Dictionary:
+			marker.set_meta("npc_patrol_route", patrol_route)
+			marker.set_meta("npc_patrol_phase_seconds", float(npc_data.get("patrol_phase_seconds", 0.0)))
+			marker.set_meta("npc_patrol_phase_started_msec", Time.get_ticks_msec())
 
 		var npc_visual := UnderworldVisualFactory.create_npc(npc_type, npc_name)
 		marker.add_child(npc_visual)
@@ -8159,7 +8164,17 @@ func _animate_npc_visuals(delta: float) -> void:
 	npc_animation_time += delta
 	for npc_id in npc_nodes:
 		var marker := npc_nodes[npc_id] as Node3D
-		if not is_instance_valid(marker) or marker.get_child_count() == 0:
+		if not is_instance_valid(marker):
+			continue
+		var patrol_route: Variant = marker.get_meta("npc_patrol_route", {})
+		if patrol_route is Dictionary and not patrol_route.is_empty():
+			var started_msec := int(marker.get_meta("npc_patrol_phase_started_msec", Time.get_ticks_msec()))
+			var base_phase := float(marker.get_meta("npc_patrol_phase_seconds", 0.0))
+			var route_state := _resolve_client_patrol_transform(patrol_route, base_phase + float(Time.get_ticks_msec() - started_msec) / 1000.0)
+			if not route_state.is_empty():
+				marker.position = route_state.position
+				marker.rotation.y = float(route_state.yaw)
+		if marker.get_child_count() == 0:
 			continue
 		var visual := marker.get_child(0) as Node3D
 		if not is_instance_valid(visual):
@@ -8223,6 +8238,50 @@ func _animate_npc_visuals(delta: float) -> void:
 			var mist_scale := 1.0 + sin(npc_animation_time * 2.0 + phase) * 0.12
 			mist.scale = Vector3.ONE * mist_scale
 
+func _resolve_client_patrol_transform(route: Dictionary, phase_seconds: float) -> Dictionary:
+	var waypoints: Variant = route.get("waypoints", [])
+	if not waypoints is Array or waypoints.size() < 2 or waypoints.size() > 32:
+		return {}
+	var speed := float(route.get("speed_mps", 0.0))
+	if speed < 0.1 or speed > 8.0 or not bool(route.get("loop", false)):
+		return {}
+	var default_wait := clampf(float(route.get("default_wait_seconds", 0.0)), 0.0, 120.0)
+	var lengths: Array[float] = []
+	var total_duration := 0.0
+	for i in range(waypoints.size()):
+		var point: Dictionary = waypoints[i]
+		var next: Dictionary = waypoints[(i + 1) % waypoints.size()]
+		var from := Vector3(float(point.get("x", 0.0)), float(point.get("y", 0.0)), float(point.get("z", 0.0)))
+		var to := Vector3(float(next.get("x", 0.0)), float(next.get("y", 0.0)), float(next.get("z", 0.0)))
+		var segment_length := from.distance_to(to)
+		if segment_length < 0.05:
+			return {}
+		lengths.append(segment_length)
+		var wait := float(point.get("wait_seconds", 0.0))
+		if wait <= 0.0:
+			wait = default_wait
+		total_duration += clampf(wait, 0.0, 120.0) + segment_length / speed
+	if total_duration <= 0.0:
+		return {}
+	var phase := fposmod(phase_seconds, total_duration)
+	for i in range(waypoints.size()):
+		var point: Dictionary = waypoints[i]
+		var next: Dictionary = waypoints[(i + 1) % waypoints.size()]
+		var from := Vector3(float(point.get("x", 0.0)), float(point.get("y", 0.0)), float(point.get("z", 0.0)))
+		var to := Vector3(float(next.get("x", 0.0)), float(next.get("y", 0.0)), float(next.get("z", 0.0)))
+		var wait := float(point.get("wait_seconds", 0.0))
+		if wait <= 0.0:
+			wait = default_wait
+		if phase < wait:
+			return {"position": from, "yaw": atan2(to.x - from.x, to.z - from.z)}
+		phase -= wait
+		var travel_duration := lengths[i] / speed
+		if phase < travel_duration:
+			var progress := phase / travel_duration
+			return {"position": from.lerp(to, progress), "yaw": atan2(to.x - from.x, to.z - from.z)}
+		phase -= travel_duration
+	return {}
+
 func _update_nearest_npc_prompt() -> void:
 	if npc_interact_button == null or not is_instance_valid(local_player):
 		return
@@ -8232,8 +8291,9 @@ func _update_nearest_npc_prompt() -> void:
 		if not (npc_variant is Dictionary):
 			continue
 		var npc_data: Dictionary = npc_variant
-		var target := Vector3(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_y", 0.0)), float(npc_data.get("position_z", 0.0)))
-		var distance := Vector2(target.x - local_player.position.x, target.z - local_player.position.z).length()
+		var npc_marker := npc_nodes.get(str(npc_data.get("id", ""))) as Node3D
+		var target := npc_marker.global_position if is_instance_valid(npc_marker) else Vector3(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_y", 0.0)), float(npc_data.get("position_z", 0.0)))
+		var distance := Vector2(target.x - local_player.global_position.x, target.z - local_player.global_position.z).length()
 		var radius := float(npc_data.get("interaction_radius", 3.0))
 		if distance <= radius and distance < nearest_npc_distance:
 			nearest_npc_distance = distance
