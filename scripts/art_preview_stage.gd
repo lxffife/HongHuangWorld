@@ -290,7 +290,12 @@ func _selection_status() -> String:
 			EquipmentVisualFactory.get_or_create_socket(model, slot)
 			var binding := EquipmentVisualFactory.inspect_socket_binding(model, slot)
 			socket_states.append("%s:%s" % [slot, "骨骼挂接" if bool(binding.get("follows_bone", false)) else "非骨骼挂接"])
-		humanoid_summary += "\\n装备挂点：" + " / ".join(socket_states)
+		var socket_summary := ""
+		for socket_state in socket_states:
+			if not socket_summary.is_empty():
+				socket_summary += " / "
+			socket_summary += socket_state
+		humanoid_summary += "\\n装备挂点：" + socket_summary
 	return "当前：%s · %s · key=%s\\n网格 %d · 骨骼 %d · 动画播放器 %d · %s%s" % [
 		_model_label(_selected_model_index), source_label, model_key,
 		int(diagnostics["meshes"]), int(diagnostics["skeletons"]),
