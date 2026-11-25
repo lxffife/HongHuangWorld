@@ -274,12 +274,20 @@ func _selection_status() -> String:
 	var diagnostics := _collect_model_diagnostics(model)
 	var clip_names: Array = diagnostics["clips"]
 	var clip_summary := "无动画片段" if clip_names.is_empty() else "动画 %d 段" % clip_names.size()
-	return "当前：%s · %s · key=%s\n网格 %d · 骨骼 %d · 动画播放器 %d · %s" % [
+	var humanoid_summary := ""
+	if model.has_meta("humanoid_rig_ready"):
+		var rig_ready := bool(model.get_meta("humanoid_rig_ready", false))
+		var animation_ready := bool(model.get_meta("humanoid_animation_ready", false))
+		var bone_count := int(model.get_meta("humanoid_bone_count", 0))
+		humanoid_summary = "\\n人形验收：%s · %d骨骼 · 动画片段：%s" % [
+			"骨架通过" if rig_ready else "骨架未通过", bone_count,
+			"已发现" if animation_ready else "未发现"
+		]
+	return "当前：%s · %s · key=%s\\n网格 %d · 骨骼 %d · 动画播放器 %d · %s%s" % [
 		_model_label(_selected_model_index), source_label, model_key,
 		int(diagnostics["meshes"]), int(diagnostics["skeletons"]),
-		int(diagnostics["players"]), clip_summary
+		int(diagnostics["players"]), clip_summary, humanoid_summary
 	]
-
 
 func _collect_model_diagnostics(root: Node) -> Dictionary:
 	var result := {"meshes": 0, "skeletons": 0, "players": 0, "clips": []}
