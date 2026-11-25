@@ -3192,8 +3192,8 @@ func _layout_hud() -> void:
 		var trial_width := minf(420.0, maxf(280.0, viewport_size.x - 24.0))
 		hell_trial_hud_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		hell_trial_hud_panel.position = Vector2((viewport_size.x - trial_width) * 0.5, 62.0)
-		hell_trial_hud_panel.custom_minimum_size = Vector2(trial_width, 112.0)
-		hell_trial_hud_panel.size = Vector2(trial_width, 112.0)
+		hell_trial_hud_panel.custom_minimum_size = Vector2(trial_width, 126.0)
+		hell_trial_hud_panel.size = Vector2(trial_width, 126.0)
 		hell_trial_hud_panel.visible = hud_visible and not hell_trial_runtime_data.is_empty()
 
 	# Reserve one continuous top-right toolbar for all utility actions.
