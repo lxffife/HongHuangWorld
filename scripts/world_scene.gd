@@ -8242,6 +8242,8 @@ func _try_interact_nearest_npc() -> void:
 			nearest_npc_distance = distance
 			nearest_npc_id = str(npc_data.get("id", ""))
 	if not nearest_npc_id.is_empty():
+		if is_instance_valid(HHAudio):
+			HHAudio.play_ui("npc_interact")
 		# F should expose the cursor before the server response arrives, not require ESC.
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		npc_selected_id = nearest_npc_id
