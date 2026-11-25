@@ -73,6 +73,7 @@ func ResolvePatrolPosition(raw json.RawMessage, now time.Time) (x, y, z, yaw, ph
 	if phase < 0 {
 		phase += totalDuration
 	}
+	routePhase := phase
 
 	for i, point := range route.Waypoints {
 		next := route.Waypoints[(i+1)%len(route.Waypoints)]
@@ -81,7 +82,7 @@ func ResolvePatrolPosition(raw json.RawMessage, now time.Time) (x, y, z, yaw, ph
 			wait = route.DefaultWaitSeconds
 		}
 		if phase < wait {
-			return point.X, point.Y, point.Z, math.Atan2(next.X-point.X, next.Z-point.Z), phase, true
+			return point.X, point.Y, point.Z, math.Atan2(next.X-point.X, next.Z-point.Z), routePhase, true
 		}
 		phase -= wait
 		travel := segmentLengths[i] / route.SpeedMPS
@@ -89,7 +90,7 @@ func ResolvePatrolPosition(raw json.RawMessage, now time.Time) (x, y, z, yaw, ph
 			t := phase / travel
 			dx, dy, dz := next.X-point.X, next.Y-point.Y, next.Z-point.Z
 			return point.X + dx*t, point.Y + dy*t, point.Z + dz*t,
-				math.Atan2(dx, dz), phase, true
+				math.Atan2(dx, dz), routePhase, true
 		}
 		phase -= travel
 	}
