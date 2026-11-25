@@ -179,7 +179,10 @@ func _play_selected_action(action_name: String) -> void:
 		else:
 			played = bool(controller.call("play_action", action_name))
 		if played:
-			_update_status("%s：循环播放 %s" % [_model_label(_selected_model_index), action_name] if action_name in ["idle", "walk", "run"] else "%s：播放 %s" % [_model_label(_selected_model_index), action_name])
+			if action_name in ["idle", "walk", "run"]:
+				_update_status("%s：循环播放 %s" % [_model_label(_selected_model_index), action_name])
+			else:
+				_update_status("%s：播放 %s" % [_model_label(_selected_model_index), action_name])
 		else:
 			_update_status("%s：没有匹配的 %s 动画" % [_model_label(_selected_model_index), action_name])
 		get_viewport().set_input_as_handled()
