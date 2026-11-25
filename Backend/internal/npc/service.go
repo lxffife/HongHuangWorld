@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 )
 
 var (
@@ -34,6 +35,9 @@ type Definition struct {
 	FateTraitID string `json:"fate_trait_id,omitempty"`
 	FateReaction string `json:"fate_reaction,omitempty"`
 	FateEncounterAvailable bool `json:"fate_encounter_available"`
+	BehaviorProfile string `json:"behavior_profile"`
+	PatrolRoute json.RawMessage `json:"patrol_route,omitempty"`
+	PatrolPhaseSeconds float64 `json:"patrol_phase_seconds,omitempty"`
 }
 
 type Service struct { db *sql.DB }
@@ -54,21 +58,31 @@ func (s *Service) ListForAccount(ctx context.Context, accountID string) ([]Defin
 	if err != nil { return nil, fmt.Errorf("resolve active character world: %w", err) }
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id,world_id,name,title,npc_type,interaction_type,
-		        position_x,position_y,position_z,rotation_y,interaction_radius,dialogue
+		        position_x,position_y,position_z,rotation_y,interaction_radius,dialogue,
+		        behavior_profile,patrol_route
 		 FROM world_npc_definitions
 		 WHERE world_id=(SELECT world_id FROM characters WHERE id=$1::uuid)
 		   AND enabled=TRUE
 		 ORDER BY id`, characterID)
 	if err != nil { return nil, fmt.Errorf("query world NPCs: %w", err) }
 	defer rows.Close()
-	items := make([]Definition,0)
+	items := make([]Definition, 0)
+	now := time.Now().UTC()
 	for rows.Next() {
 		var item Definition
 		if err := rows.Scan(&item.ID,&item.WorldID,&item.Name,&item.Title,&item.Type,&item.InteractionType,
-			&item.PositionX,&item.PositionY,&item.PositionZ,&item.RotationY,&item.InteractionRadius,&item.Dialogue); err != nil {
+			&item.PositionX,&item.PositionY,&item.PositionZ,&item.RotationY,&item.InteractionRadius,&item.Dialogue,
+			&item.BehaviorProfile,&item.PatrolRoute); err != nil {
 			return nil, fmt.Errorf("scan world NPC: %w", err)
 		}
-		items=append(items,item)
+		if item.BehaviorProfile == "guard_patrol" {
+			x,y,z,yaw,phase,ok := ResolvePatrolPosition(item.PatrolRoute, now)
+			if ok {
+				item.PositionX,item.PositionY,item.PositionZ,item.RotationY = x,y,z,yaw
+				item.PatrolPhaseSeconds = phase
+			}
+		}
+		items = append(items,item)
 	}
 	if err:=rows.Err(); err!=nil { return nil, fmt.Errorf("iterate world NPCs: %w",err) }
 	return items,nil
@@ -78,6 +92,7 @@ func (s *Service) ListForAccount(ctx context.Context, accountID string) ([]Defin
 // position. A client cannot choose a world or submit its own coordinates.
 func (s *Service) Interact(ctx context.Context, accountID, npcID string) (Definition,error) {
 	var item Definition
+	var playerX, playerY, playerZ float64
 	err:=s.db.QueryRowContext(ctx,
 		`SELECT n.id,n.world_id,n.name,n.title,n.npc_type,n.interaction_type,
 		        n.position_x,n.position_y,n.position_z,n.rotation_y,n.interaction_radius,n.dialogue,
@@ -85,7 +100,8 @@ func (s *Service) Interact(ctx context.Context, accountID, npcID string) (Defini
 		        (COALESCE(n.dialogue->'fate_encounters'->trait.trait_id, '{}'::jsonb) <> '{}'::jsonb
 		         AND NOT EXISTS (SELECT 1 FROM soul_fate_encounter_claims claim
 		                         WHERE claim.soul_id=soul.id
-		                           AND claim.encounter_id=n.dialogue->'fate_encounters'->trait.trait_id->>'id'))
+		                           AND claim.encounter_id=n.dialogue->'fate_encounters'->trait.trait_id->>'id')),
+		        n.behavior_profile,n.patrol_route,c.position_x,c.position_y,c.position_z
 		 FROM souls soul
 		 JOIN characters c ON c.id=soul.current_character_id AND c.status='alive'
 		 JOIN world_sessions ws ON ws.character_id=c.id AND ws.session_state='active'
@@ -93,11 +109,11 @@ func (s *Service) Interact(ctx context.Context, accountID, npcID string) (Defini
 		 JOIN world_npc_definitions n ON n.world_id=wi.world_id AND n.id=$2 AND n.enabled=TRUE
 		 LEFT JOIN character_fate_traits trait ON trait.character_id=c.id
 		 WHERE soul.account_id=$1
-		   AND SQRT(POWER(c.position_x-n.position_x,2)+POWER(c.position_y-n.position_y,2)+POWER(c.position_z-n.position_z,2)) <= n.interaction_radius
 		 ORDER BY ws.connected_at DESC NULLS LAST LIMIT 1`,accountID,npcID).Scan(
 		&item.ID,&item.WorldID,&item.Name,&item.Title,&item.Type,&item.InteractionType,
 		&item.PositionX,&item.PositionY,&item.PositionZ,&item.RotationY,&item.InteractionRadius,&item.Dialogue,
-		&item.FateTraitID,&item.FateReaction,&item.FateEncounterAvailable)
+		&item.FateTraitID,&item.FateReaction,&item.FateEncounterAvailable,
+		&item.BehaviorProfile,&item.PatrolRoute,&playerX,&playerY,&playerZ)
 	if errors.Is(err,sql.ErrNoRows) {
 		var active bool
 		checkErr:=s.db.QueryRowContext(ctx,
@@ -116,6 +132,17 @@ func (s *Service) Interact(ctx context.Context, accountID, npcID string) (Defini
 		return Definition{},ErrTooFar
 	}
 	if err!=nil { return Definition{},fmt.Errorf("validate NPC interaction: %w",err) }
+	if item.BehaviorProfile == "guard_patrol" {
+		x,y,z,yaw,phase,ok := ResolvePatrolPosition(item.PatrolRoute,time.Now().UTC())
+		if ok {
+			item.PositionX,item.PositionY,item.PositionZ,item.RotationY = x,y,z,yaw
+			item.PatrolPhaseSeconds = phase
+		}
+	}
+	dx,dy,dz := playerX-item.PositionX,playerY-item.PositionY,playerZ-item.PositionZ
+	if math.Sqrt(dx*dx+dy*dy+dz*dz) > item.InteractionRadius {
+		return Definition{},ErrTooFar
+	}
 	return item,nil
 }
 
