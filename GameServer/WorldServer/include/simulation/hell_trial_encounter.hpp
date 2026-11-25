@@ -24,6 +24,7 @@ struct HellTrialFloorSpec {
 struct HellTrialEvidenceSpec {
     std::string_view id;
     std::string_view name;
+    std::string_view location_hint;
     std::string_view description;
     std::array<std::string_view, 3> option_ids;
     std::array<std::string_view, 3> option_labels;
