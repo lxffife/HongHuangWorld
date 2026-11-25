@@ -8224,7 +8224,7 @@ func _animate_npc_visuals(delta: float) -> void:
 		var talk_until_msec := int(marker.get_meta("npc_talk_until_msec", 0))
 		var is_talking := Time.get_ticks_msec() < talk_until_msec
 		if is_talking and is_instance_valid(local_player):
-			var to_player := local_player.global_position - marker.global_position
+			var to_player: Vector3 = local_player.global_position - marker.global_position
 			to_player.y = 0.0
 			if to_player.length_squared() > 0.01:
 				var talk_yaw := atan2(to_player.x, to_player.z)
