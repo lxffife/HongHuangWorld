@@ -22,8 +22,13 @@ const CUES := {
 	"pickup": {"duration": 0.18, "start": 660.0, "end": 990.0, "noise": 0.04, "gain": 0.20, "wave": "chime"},
 	"ui": {"duration": 0.075, "start": 520.0, "end": 420.0, "noise": 0.02, "gain": 0.13, "wave": "tone"},
 	"warning": {"duration": 0.28, "start": 220.0, "end": 180.0, "noise": 0.10, "gain": 0.26, "wave": "warning"},
+	"npc_interact": {"duration": 0.22, "start": 560.0, "end": 820.0, "noise": 0.025, "gain": 0.18, "wave": "jade_chime"},
+	"soul_bell": {"duration": 1.15, "start": 740.0, "end": 310.0, "noise": 0.035, "gain": 0.22, "wave": "bell"},
+	"gate_rumble": {"duration": 0.92, "start": 72.0, "end": 38.0, "noise": 0.72, "gain": 0.34, "wave": "rumble"},
+	"ghost_whisper": {"duration": 0.72, "start": 420.0, "end": 155.0, "noise": 0.78, "gain": 0.20, "wave": "whisper"},
 	"footstep": {"duration": 0.10, "start": 90.0, "end": 48.0, "noise": 0.72, "gain": 0.16, "wave": "step"},
 	"ambience_underworld": {"duration": 8.0, "start": 42.0, "end": 46.0, "noise": 0.18, "gain": 0.10, "wave": "ambient_dread"},
+	"ambience_fengdu": {"duration": 8.0, "start": 76.0, "end": 92.0, "noise": 0.24, "gain": 0.075, "wave": "ambient_city"},
 	"ambience_qingyun": {"duration": 8.0, "start": 110.0, "end": 116.0, "noise": 0.06, "gain": 0.07, "wave": "ambient_wind"}
 }
 
@@ -101,7 +106,7 @@ func stop_ambience() -> void:
 func set_region_ambience(world_id: String) -> void:
 	match world_id:
 		"underworld_fengdu":
-			start_ambience("ambience_underworld")
+			start_ambience("ambience_fengdu")
 		"qingyun_human":
 			start_ambience("ambience_qingyun")
 		_:
@@ -182,14 +187,20 @@ func _build_stream(cue: String) -> AudioStreamWAV:
 		var envelope := pow(maxf(0.0, 1.0 - t), 1.8)
 		if wave.begins_with("ambient_"):
 			envelope = 0.72 + 0.16 * sin(TAU * t * 2.0)
-		if wave == "chime" or wave == "magic":
+		if wave == "chime" or wave == "magic" or wave == "jade_chime" or wave == "bell":
 			envelope *= minf(1.0, t * 18.0)
 		var frequency := lerpf(start_frequency, end_frequency, t)
 		phase += TAU * frequency / float(SAMPLE_RATE)
 		var tone := sin(phase)
 		if wave.begins_with("ambient_"):
 			tone = sin(phase) * 0.72 + sin(phase * 0.503 + sin(TAU * t) * 0.3) * 0.28
-		var overtone := sin(phase * (2.01 if wave == "chime" else 1.48)) * 0.28
+		var overtone := sin(phase * (2.01 if wave == "chime" else 2.37 if wave == "jade_chime" else 2.76 if wave == "bell" else 1.48)) * (0.34 if wave == "jade_chime" or wave == "bell" else 0.28)
+		if wave == "bell":
+			overtone += sin(phase * 5.42) * 0.12
+		if wave == "rumble":
+			tone = sin(phase * 0.5) * 0.8 + sin(phase * 1.03) * 0.2
+		if wave == "whisper":
+			tone = sin(phase * 0.48) * 0.22
 		var noise := randf_range(-1.0, 1.0) * noise_amount
 		var sample := clampf((tone * (1.0 - noise_amount * 0.45) + overtone + noise) * envelope * gain, -1.0, 1.0)
 		data.encode_s16(index * 2, int(sample * 32767.0))
