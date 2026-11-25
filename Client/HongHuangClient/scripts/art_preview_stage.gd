@@ -131,7 +131,7 @@ func _build_gallery() -> void:
 	var city_block := VisualFactory.create_fengdu_city_block()
 	city_block.position = Vector3(0.0, 0.0, -24.0)
 	add_child(city_block)
-	_add_label("酆都街区模块 · 城墙 / 角楼 / 阴司 / 鬼市", Vector3(0.0, 7.0, -24.0), 0.22)
+	_add_label("酆都街区模块 · 内城街门 / 阴司 / 六道轮回殿 / 鬼市", Vector3(0.0, 7.0, -24.0), 0.22)
 
 
 func _add_model(label_text: String, model: Node3D, at: Vector3, yaw: float, label_height: float) -> void:
