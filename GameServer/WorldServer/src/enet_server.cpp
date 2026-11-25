@@ -132,6 +132,7 @@ struct PlayerState {
     Clock::time_point last_taunt_at{};
     std::optional<PendingSpellCast> pending_spell;
     Clock::time_point last_pickup_at{};
+    Clock::time_point last_hell_trial_action_at{};
     Clock::time_point last_chat_at{};
     Clock::time_point last_combat_refresh_at{};
     bool death_snapshot_queued{false};
@@ -1182,6 +1183,7 @@ bool deliver_chat_message(const ServerConfig& config, const ChatJob& job,
 struct EnetServer::Impl {
     ServerConfig config;
     honghuang::simulation::HellTrialEncounter hell_trial_encounter;
+    honghuang::simulation::HellTrialInvestigation hell_trial_investigation;
     honghuang::simulation::HellTrialWaveDirector hell_trial_waves;
     honghuang::simulation::HellTrialBossPhaseController hell_trial_boss_phase;
     ENetHost* host{};
@@ -1278,7 +1280,7 @@ struct EnetServer::Impl {
     Clock::time_point last_chat_outbox_metrics_at{};
 
     explicit Impl(ServerConfig value) : config(std::move(value)), hell_trial_encounter(config.hell_floor),
-        hell_trial_waves(config.hell_floor) {
+        hell_trial_investigation(config.hell_floor), hell_trial_waves(config.hell_floor) {
         const auto add_monster = [this](std::string runtime_id, std::string definition_id,
                                         std::string name, int level, float health,
                                         float attack, float defense, float speed,
@@ -1415,7 +1417,7 @@ struct EnetServer::Impl {
             (stage == 0 ? "第一波：" + active_name :
              (stage < 3 ? "第" + std::to_string(stage + 1) + "波：" + active_name :
               "守将：" + active_name));
-        return Json{
+        Json snapshot{
             {"floor", hell_trial_encounter.floor()},
             {"stage", stage},
             {"stage_count", 4},
@@ -1430,6 +1432,26 @@ struct EnetServer::Impl {
             {"objective_required", floor ? floor->objective_required : 0},
             {"boss_phase", stage == 3 ? hell_trial_boss_phase.phase() : 0}
         };
+        if (hell_trial_investigation.enabled()) {
+            Json clues = Json::array();
+            for (const auto& evidence : honghuang::simulation::hell_trial_evidence_specs()) {
+                Json options = Json::array();
+                for (std::size_t i = 0; i < evidence.option_ids.size(); ++i) {
+                    options.push_back({{"id", std::string(evidence.option_ids[i])},
+                                       {"label", std::string(evidence.option_labels[i])}});
+                }
+                clues.push_back({{"id", std::string(evidence.id)}, {"name", std::string(evidence.name)},
+                    {"description", std::string(evidence.description)}, {"options", std::move(options)},
+                    {"x", evidence.x}, {"z", evidence.z},
+                    {"solved", hell_trial_investigation.is_solved(evidence.id)}});
+            }
+            snapshot["investigation"] = Json{{"enabled", true},
+                {"solved_count", hell_trial_investigation.solved_count()},
+                {"required", 3}, {"completed", hell_trial_investigation.completed()},
+                {"conclusion", hell_trial_investigation.completed() ? "三份证词已互相印证，罪簿伪证成立。" : "核验三份现场证词，找出被替换的罪簿。"},
+                {"clues", std::move(clues)}};
+        }
+        return snapshot;
     }
 
     bool persist_hell_trial_wave_checkpoint() {
@@ -4384,6 +4406,69 @@ struct EnetServer::Impl {
         sender.last_chat_at = now;
     }
 
+    void handle_hell_trial_command(ENetPeer* peer, const Json& command) {
+        const auto player_it = players.find(peer);
+        if (player_it == players.end()) return;
+        auto& player = player_it->second;
+        const auto respond = [&](bool accepted, const std::string& message,
+                                 const std::string& evidence_id = std::string{}) {
+            Json event{{"action", "hell_trial_investigation"}, {"accepted", accepted},
+                       {"floor", hell_trial_encounter.floor()}, {"evidence_id", evidence_id},
+                       {"message", message}};
+            if (hell_trial_investigation.enabled()) {
+                event["hell_trial"] = hell_trial_runtime_snapshot();
+                event["solved_count"] = hell_trial_investigation.solved_count();
+                event["required"] = 3;
+                event["completed"] = hell_trial_investigation.completed();
+            }
+            if (accepted) {
+                for (const auto& [recipient_peer, recipient] : players) {
+                    (void)recipient;
+                    send_json(recipient_peer, honghuang::protocol::MessageType::CombatEvent, event);
+                }
+            } else {
+                send_json(peer, honghuang::protocol::MessageType::CombatEvent, event);
+            }
+        };
+        if (!hell_trial_investigation.enabled() || config.world_id != "underworld_fengdu") {
+            respond(false, "只有第一层拔舌地狱开放证词调查。");
+            return;
+        }
+        if (player.health <= 0) {
+            respond(false, "倒地状态无法核验证词。");
+            return;
+        }
+        const auto now = Clock::now();
+        if (player.last_hell_trial_action_at.time_since_epoch().count() != 0 &&
+            now - player.last_hell_trial_action_at < std::chrono::milliseconds(350)) {
+            respond(false, "调查操作过快，请稍候。");
+            return;
+        }
+        player.last_hell_trial_action_at = now;
+        const auto evidence_id = command.value("evidence_id", std::string{});
+        const auto option_id = command.value("option_id", std::string{});
+        if (evidence_id.empty() || evidence_id.size() > 48 ||
+            option_id.empty() || option_id.size() > 48) {
+            respond(false, "证词调查请求格式无效。");
+            return;
+        }
+        const auto& evidence_specs = honghuang::simulation::hell_trial_evidence_specs();
+        const auto evidence = std::find_if(evidence_specs.begin(), evidence_specs.end(),
+            [&](const auto& spec) { return spec.id == evidence_id; });
+        if (evidence == evidence_specs.end()) {
+            respond(false, "未找到这份证词线索。", evidence_id);
+            return;
+        }
+        const double dx = static_cast<double>(player.x) - evidence->x;
+        const double dz = static_cast<double>(player.z) - evidence->z;
+        if (dx * dx + dz * dz > 25.0) {
+            respond(false, "请靠近「" + std::string(evidence->name) + "」再进行核验。", evidence_id);
+            return;
+        }
+        const auto result = hell_trial_investigation.submit(evidence_id, option_id);
+        respond(result.accepted, result.message, evidence_id);
+    }
+
     void handle_pickup(ENetPeer* peer, const Json& command) {
         auto player_it = players.find(peer);
         if (player_it == players.end()) return;
@@ -6779,6 +6864,18 @@ void EnetServer::poll(std::uint32_t timeout_ms) {
                 } catch (const std::exception&) {
                     send_json(event.peer, honghuang::protocol::MessageType::PickupEvent,
                               Json{{"accepted", false}, {"reason", "拾取请求格式无效。"}});
+                }
+            } else if (frame.type == honghuang::protocol::MessageType::HellTrialCommand &&
+                       impl_->players.contains(event.peer)) {
+                try {
+                    const std::string payload(frame.payload.begin(), frame.payload.end());
+                    const auto command = Json::parse(payload);
+                    if (!command.is_object()) throw std::runtime_error("hell trial payload must be an object");
+                    impl_->handle_hell_trial_command(event.peer, command);
+                } catch (const std::exception&) {
+                    impl_->send_json(event.peer, honghuang::protocol::MessageType::CombatEvent,
+                        Json{{"action", "hell_trial_investigation"}, {"accepted", false},
+                             {"reason", "证词调查请求格式无效。"}});
                 }
             } else if (frame.type == honghuang::protocol::MessageType::AttackCommand &&
                        impl_->players.contains(event.peer)) {
