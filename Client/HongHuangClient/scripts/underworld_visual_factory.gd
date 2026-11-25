@@ -320,12 +320,33 @@ static func create_fengdu_residential_house() -> Node3D:
 	sign.outline_size = 5
 	sign.modulate = Color("#e0c99d")
 	root.add_child(sign)
-	var collision := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	shape.size = Vector3(5.65, 3.2, 4.55)
-	collision.shape = shape
-	collision.position = Vector3(0.0, 1.85, 0.0)
-	root.add_child(collision)
+	# Split the shell into wall sections so the front doorway remains passable.
+	for side in [-1.0, 1.0]:
+		var side_wall := CollisionShape3D.new()
+		var side_shape := BoxShape3D.new()
+		side_shape.size = Vector3(0.22, 3.0, 4.45)
+		side_wall.shape = side_shape
+		side_wall.position = Vector3(side * 2.68, 1.82, 0.0)
+		root.add_child(side_wall)
+	var rear_wall := CollisionShape3D.new()
+	var rear_shape := BoxShape3D.new()
+	rear_shape.size = Vector3(5.55, 3.0, 0.22)
+	rear_wall.shape = rear_shape
+	rear_wall.position = Vector3(0.0, 1.82, 2.12)
+	root.add_child(rear_wall)
+	for side in [-1.0, 1.0]:
+		var front_wall := CollisionShape3D.new()
+		var front_shape := BoxShape3D.new()
+		front_shape.size = Vector3(1.95, 3.0, 0.22)
+		front_wall.shape = front_shape
+		front_wall.position = Vector3(side * 1.82, 1.82, -2.18)
+		root.add_child(front_wall)
+	var door_lintel := CollisionShape3D.new()
+	var lintel_shape := BoxShape3D.new()
+	lintel_shape.size = Vector3(1.55, 0.48, 0.22)
+	door_lintel.shape = lintel_shape
+	door_lintel.position = Vector3(0.0, 3.10, -2.18)
+	root.add_child(door_lintel)
 	return root
 
 
@@ -361,12 +382,33 @@ static func create_ghost_market_shop() -> Node3D:
 	_part(root, "RoofLower", _box(Vector3(7.8, 0.34, 5.9)), Vector3(0.0, 5.05, 0.0), roof)
 	_part(root, "RoofUpper", _box(Vector3(6.4, 0.28, 4.8)), Vector3(0.0, 5.40, 0.0), roof)
 	_part(root, "RoofRidge", _box(Vector3(4.8, 0.20, 0.36)), Vector3(0.0, 5.66, 0.0), gold)
-	var collision := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	shape.size = Vector3(6.9, 4.7, 4.9)
-	collision.shape = shape
-	collision.position = Vector3(0.0, 2.65, 0.0)
-	root.add_child(collision)
+	# Keep a central shop entrance open; collision is split around the doorway.
+	for side in [-1.0, 1.0]:
+		var side_wall := CollisionShape3D.new()
+		var side_shape := BoxShape3D.new()
+		side_shape.size = Vector3(0.24, 4.5, 4.75)
+		side_wall.shape = side_shape
+		side_wall.position = Vector3(side * 3.25, 2.55, 0.0)
+		root.add_child(side_wall)
+	var rear_wall := CollisionShape3D.new()
+	var rear_shape := BoxShape3D.new()
+	rear_shape.size = Vector3(6.7, 4.5, 0.24)
+	rear_wall.shape = rear_shape
+	rear_wall.position = Vector3(0.0, 2.55, 2.28)
+	root.add_child(rear_wall)
+	for side in [-1.0, 1.0]:
+		var front_wall := CollisionShape3D.new()
+		var front_shape := BoxShape3D.new()
+		front_shape.size = Vector3(2.30, 4.5, 0.22)
+		front_wall.shape = front_shape
+		front_wall.position = Vector3(side * 2.27, 2.55, -2.36)
+		root.add_child(front_wall)
+	var door_lintel := CollisionShape3D.new()
+	var lintel_shape := BoxShape3D.new()
+	lintel_shape.size = Vector3(2.05, 1.10, 0.22)
+	door_lintel.shape = lintel_shape
+	door_lintel.position = Vector3(0.0, 4.25, -2.36)
+	root.add_child(door_lintel)
 	return root
 
 
