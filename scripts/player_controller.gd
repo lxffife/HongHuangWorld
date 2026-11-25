@@ -57,6 +57,7 @@ var auto_navigation_detour_remaining := 0.0
 var auto_navigation_blocked_time := 0.0
 var auto_navigation_last_position: Vector3 = Vector3.ZERO
 var auto_navigation_stuck_time := 0.0
+var auto_navigation_detour_side := 1.0
 var last_send_error: int = OK
 var movement_network_ready := false
 func _ready() -> void:
@@ -198,6 +199,7 @@ func set_auto_navigation_target(target: Vector3) -> void:
 	auto_navigation_detour_remaining = 0.0
 	auto_navigation_blocked_time = 0.0
 	auto_navigation_stuck_time = 0.0
+	auto_navigation_detour_side = 1.0
 	auto_navigation_last_position = global_position
 
 
@@ -271,6 +273,17 @@ func _physics_process(delta: float) -> void:
 	if auto_navigation_active:
 		var target_offset := auto_navigation_target - global_position
 		target_offset.y = 0.0
+		var travelled_since_last_tick := global_position.distance_to(auto_navigation_last_position)
+		if travelled_since_last_tick < 0.035:
+			auto_navigation_stuck_time += delta
+		else:
+			auto_navigation_stuck_time = 0.0
+		auto_navigation_last_position = global_position
+		if auto_navigation_stuck_time >= 0.95 and target_offset.length_squared() > 0.01:
+			auto_navigation_detour_direction = target_offset.normalized().rotated(Vector3.UP, 0.82 * auto_navigation_detour_side).normalized()
+			auto_navigation_detour_remaining = 0.9
+			auto_navigation_detour_side *= -1.0
+			auto_navigation_stuck_time = 0.0
 		if target_offset.length() <= auto_navigation_arrival_distance:
 			clear_auto_navigation_target()
 		else:
@@ -280,9 +293,7 @@ func _physics_process(delta: float) -> void:
 					clear_auto_navigation_target()
 					var parent := get_parent()
 					if parent != null and parent.has_method("_show_notification"):
-					parent.call("_show_notification", "前方道路被阻挡，已停止自动前往，请调整位置后重新导航。", 3.5)
-				else:
-					auto_navigation_blocked_time += delta
+						parent.call("_show_notification", "前方道路被阻挡，已停止自动前往，请调整位置后重新导航。", 3.5)
 			input_2d = Vector2(0.0, -1.0)
 	current_move_input = input_2d
 	if camera_pivot == null or not is_instance_valid(camera_pivot):
