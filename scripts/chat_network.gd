@@ -115,7 +115,7 @@ func _process(_delta: float) -> void:
 			_schedule_reconnect()
 
 func fetch_history(channel: String, limit: int = 50) -> void:
-	if channel not in ["nearby", "world", "cross_world"] or access_token.is_empty() or http_base_url.is_empty():
+	if channel not in ["nearby", "world", "cross_world", "party"] or access_token.is_empty() or http_base_url.is_empty():
 		return
 	var request := HTTPRequest.new()
 	request.timeout = 10.0
@@ -148,7 +148,7 @@ func _on_history_request_completed(result: int, response_code: int, _headers: Pa
 func send_message(channel: String, content: String, client_message_id: String, recipient_character_id: String = "") -> Error:
 	if socket.get_ready_state() != WebSocketPeer.STATE_OPEN:
 		return ERR_UNAVAILABLE
-	if channel not in ["world", "cross_world", "whisper"] or content.strip_edges().is_empty() or content.length() > 200 or client_message_id.is_empty():
+	if channel not in ["world", "cross_world", "whisper", "party"] or content.strip_edges().is_empty() or content.length() > 200 or client_message_id.is_empty():
 		return ERR_INVALID_PARAMETER
 	if channel == "whisper" and recipient_character_id.is_empty():
 		return ERR_INVALID_PARAMETER
