@@ -251,10 +251,10 @@ func _inspect_node(node: Node, item: Dictionary) -> void:
 
 func _classify_animation_coverage(item: Dictionary) -> void:
 	var keywords := {
-		"idle": ["idle", "stand", "breath", "wait"],
-		"walk": ["walk", "walking", "locomotion"],
-		"run": ["run", "sprint", "jog"],
-		"attack": ["attack", "slash", "swing", "bite", "combat"],
+		"idle": ["idle", "stand", "breath", "wait", "rest"],
+		"walk": ["walk", "walking", "locomotion", "trot"],
+		"run": ["run", "sprint", "jog", "gallop", "canter"],
+		"attack": ["attack", "slash", "swing", "bite", "pounce", "lunge", "maul", "smash", "charge", "stomp", "combat"],
 		"hit": ["hit", "damage", "hurt", "react"],
 		"death": ["death", "die", "dead"]
 	}
