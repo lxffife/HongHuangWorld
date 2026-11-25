@@ -14,7 +14,13 @@ const MODEL_FILES := {
 	"wind_soul": "res://assets/models/wind_soul.glb",
 	"fire_soul": "res://assets/models/fire_soul.glb",
 	"frost_soul": "res://assets/models/frost_soul.glb",
-	"wraith": "res://assets/models/wraith.glb"
+	"wraith": "res://assets/models/wraith.glb",
+	"npc_judge": "res://assets/models/npc_judge.glb",
+	"npc_trial_master": "res://assets/models/npc_trial_master.glb",
+	"npc_guard": "res://assets/models/npc_guard.glb",
+	"npc_soup_keeper": "res://assets/models/npc_soup_keeper.glb",
+	"npc_blacksmith": "res://assets/models/npc_blacksmith.glb",
+	"npc_generic": "res://assets/models/npc_generic.glb"
 }
 
 # Animation requirements are model-specific: floating souls do not need
@@ -28,7 +34,13 @@ const REQUIRED_ANIMATIONS := {
 	"wind_soul": ["idle", "attack", "death"],
 	"fire_soul": ["idle", "attack", "death"],
 	"frost_soul": ["idle", "attack", "death"],
-	"wraith": ["idle", "attack", "death"]
+	"wraith": ["idle", "attack", "death"],
+	"npc_judge": ["idle"],
+	"npc_trial_master": ["idle"],
+	"npc_guard": ["idle"],
+	"npc_soup_keeper": ["idle"],
+	"npc_blacksmith": ["idle"],
+	"npc_generic": ["idle"]
 }
 
 func _initialize() -> void:
