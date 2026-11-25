@@ -270,6 +270,7 @@ static func _add_wall(root: Node3D, node_name: String, dimensions: Vector3, posi
 		var total_length := dimensions.x if along_x else dimensions.z
 		var segment_count := maxi(1, ceili(total_length / 4.0))
 		var segment_length := total_length / float(segment_count)
+		var added_segments := 0
 		for index in range(segment_count):
 			var segment_size := Vector3(segment_length, dimensions.y, dimensions.z) if along_x else Vector3(dimensions.x, dimensions.y, segment_length)
 			var segment_position := Vector3(
@@ -277,7 +278,10 @@ static func _add_wall(root: Node3D, node_name: String, dimensions: Vector3, posi
 				0.0,
 				0.0 if along_x else -dimensions.z * 0.5 + segment_length * (float(index) + 0.5)
 			)
-			_add_scaled_model(wall, model_path, segment_size, segment_position)
+			if _add_scaled_model(wall, model_path, segment_size, segment_position, 0.0 if along_x else PI * 0.5):
+				added_segments += 1
+		if added_segments == 0:
+			wall.add_child(_box_mesh("WallVisual", dimensions, Vector3.ZERO, color))
 	else:
 		wall.add_child(_box_mesh("WallVisual", dimensions, Vector3.ZERO, color))
 	var collision := CollisionShape3D.new()
@@ -288,7 +292,7 @@ static func _add_wall(root: Node3D, node_name: String, dimensions: Vector3, posi
 	root.add_child(wall)
 
 
-static func _add_scaled_model(parent: Node3D, model_path: String, target_size: Vector3, base_position: Vector3) -> bool:
+static func _add_scaled_model(parent: Node3D, model_path: String, target_size: Vector3, base_position: Vector3, rotation_y: float = 0.0) -> bool:
 	if not ResourceLoader.exists(model_path):
 		return false
 	var packed := load(model_path) as PackedScene
@@ -297,6 +301,7 @@ static func _add_scaled_model(parent: Node3D, model_path: String, target_size: V
 	var model := packed.instantiate() as Node3D
 	if model == null:
 		return false
+	model.rotation.y = rotation_y
 	var bounds := {"found": false, "min": Vector3.ZERO, "max": Vector3.ZERO}
 	_collect_model_bounds(model, Transform3D.IDENTITY, bounds)
 	if not bool(bounds["found"]):
