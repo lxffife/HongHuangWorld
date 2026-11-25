@@ -8377,6 +8377,12 @@ func _shop_id_for_vendor(npc_id: String) -> String:
 			return "fengdu_general_shop"
 		"fengdu_ghost_market_vendor_east":
 			return "fengdu_talisman_shop"
+		"fengdu_blacksmith":
+			return "fengdu_weapon_shop"
+		"fengdu_mengpo":
+			return "fengdu_elixir_shop"
+		"fengdu_trial_master":
+			return "fengdu_formation_shop"
 		_:
 			return ""
 
