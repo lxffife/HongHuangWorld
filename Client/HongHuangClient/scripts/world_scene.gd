@@ -944,8 +944,10 @@ func _show_hell_trial_runtime_state(snapshot: Dictionary) -> void:
 	var trial: Variant = snapshot.get("hell_trial", {})
 	if not (trial is Dictionary) or trial.is_empty():
 		var floor_hint := int(snapshot.get("hell_floor", 0))
-		if floor_hint <= 0 and is_instance_valid(hell_trial_hud_panel):
-			hell_trial_hud_panel.visible = false
+		if floor_hint <= 0:
+			hell_trial_runtime_data.clear()
+			if is_instance_valid(hell_trial_hud_panel):
+				hell_trial_hud_panel.visible = false
 		return
 	var trial_data: Dictionary = trial
 	_render_hell_trial_hud(trial_data)
