@@ -3347,6 +3347,10 @@ func is_gameplay_input_blocked() -> bool:
 		return true
 	if is_instance_valid(party_panel) and party_panel.visible:
 		return true
+	if is_instance_valid(inventory_panel) and inventory_panel.visible:
+		return true
+	if is_instance_valid(npc_panel) and npc_panel.visible:
+		return true
 	if is_instance_valid(help_panel) and help_panel.visible:
 		return true
 	if is_instance_valid(audio_settings_panel) and audio_settings_panel.visible:
