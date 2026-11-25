@@ -15,6 +15,8 @@ struct HellTrialFloorSpec {
     std::array<std::string_view, 3> objective_monster_names;
     std::string_view guardian_id;
     std::string_view guardian_name;
+    std::string_view trial_hint;
+    std::string_view guardian_hint;
     int recommended_level{};
     int objective_required{3};
 };
