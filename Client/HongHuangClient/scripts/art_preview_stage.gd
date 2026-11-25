@@ -284,6 +284,13 @@ func _selection_status() -> String:
 			"骨架通过" if rig_ready else "骨架未通过", bone_count,
 			"已发现" if animation_ready else "未发现"
 		]
+	if model_key == "wolf" or model_key == "iron_beast":
+		var bone_names: Array = diagnostics["bone_names"]
+		var front_matches := _count_named_bones(bone_names, ["front", "fore"], ["leg", "limb", "paw", "foot", "shoulder"])
+		var rear_matches := _count_named_bones(bone_names, ["hind", "back", "rear"], ["leg", "limb", "paw", "foot", "thigh", "hip"])
+		humanoid_summary = "\\n四足骨架线索：前肢 %d · 后肢 %d · 骨骼名 %d（仅初筛）" % [
+			front_matches, rear_matches, bone_names.size()
+		]
 	if model_key == "player_humanoid":
 		var socket_states: Array[String] = []
 		for slot in ["weapon", "offhand", "back"]:
@@ -303,7 +310,7 @@ func _selection_status() -> String:
 	]
 
 func _collect_model_diagnostics(root: Node) -> Dictionary:
-	var result := {"meshes": 0, "skeletons": 0, "players": 0, "clips": []}
+	var result := {"meshes": 0, "skeletons": 0, "players": 0, "clips": [], "bone_names": []}
 	_collect_model_diagnostics_recursive(root, result)
 	return result
 
@@ -312,7 +319,12 @@ func _collect_model_diagnostics_recursive(node: Node, result: Dictionary) -> voi
 	if node is MeshInstance3D and (node as MeshInstance3D).mesh != null:
 		result["meshes"] = int(result["meshes"]) + 1
 	if node is Skeleton3D:
+		var skeleton := node as Skeleton3D
 		result["skeletons"] = int(result["skeletons"]) + 1
+		var bone_names: Array = result["bone_names"]
+		for bone_index in range(skeleton.get_bone_count()):
+			bone_names.append(skeleton.get_bone_name(bone_index))
+		result["bone_names"] = bone_names
 	if node is AnimationPlayer:
 		var player := node as AnimationPlayer
 		result["players"] = int(result["players"]) + 1
@@ -339,3 +351,22 @@ func _add_label(label_text: String, at: Vector3, font_size: float) -> void:
 	label.outline_size = 8
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	add_child(label)
+
+
+func _count_named_bones(bone_names: Array, side_tokens: Array[String], limb_tokens: Array[String]) -> int:
+	var matches := 0
+	for raw_name in bone_names:
+		var normalized := str(raw_name).to_lower().replace("_", "").replace("-", "").replace(" ", "").replace(":", "")
+		var has_side := false
+		var has_limb := false
+		for token in side_tokens:
+			if normalized.contains(token):
+				has_side = true
+				break
+		for token in limb_tokens:
+			if normalized.contains(token):
+				has_limb = true
+				break
+		if has_side and has_limb:
+			matches += 1
+	return matches
