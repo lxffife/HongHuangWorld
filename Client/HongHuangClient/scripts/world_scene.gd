@@ -80,6 +80,7 @@ var hell_trial_hud_panel: PanelContainer
 var hell_trial_hud_title: Label
 var hell_trial_hud_stage: Label
 var hell_trial_hud_objective: Label
+var hell_trial_hud_hint: Label
 var hell_trial_hud_progress: ProgressBar
 var hell_trial_runtime_data: Dictionary = {}
 var hud_visible := true
@@ -895,6 +896,12 @@ func _build_hell_trial_hud() -> void:
 	hell_trial_hud_objective.clip_text = true
 	hell_trial_hud_objective.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	layout.add_child(hell_trial_hud_objective)
+	hell_trial_hud_hint = Label.new()
+	hell_trial_hud_hint.add_theme_color_override("font_color", Color("#9aa9b8"))
+	hell_trial_hud_hint.add_theme_font_size_override("font_size", 10)
+	hell_trial_hud_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hell_trial_hud_hint.custom_minimum_size.y = 22.0
+	layout.add_child(hell_trial_hud_hint)
 	hell_trial_hud_progress = ProgressBar.new()
 	hell_trial_hud_progress.min_value = 0.0
 	hell_trial_hud_progress.max_value = 1.0
@@ -923,8 +930,14 @@ func _render_hell_trial_hud(trial_data: Dictionary) -> void:
 		stage_text += " · " + active_name
 	var kills := maxi(0, int(trial_data.get("objective_kills", 0)))
 	var required := maxi(0, int(trial_data.get("objective_required", 0)))
-	hell_trial_hud_title.text = "第 %02d 层 · 十八层刑狱试炼" % floor_number
+	var floor_name := str(trial_data.get("floor_name", "十八层刑狱试炼"))
+	hell_trial_hud_title.text = "第 %02d 层 · %s" % [floor_number, floor_name]
 	hell_trial_hud_stage.text = stage_text
+	var hint := str(trial_data.get("trial_hint", ""))
+	if stage >= 3 and not completed:
+		hint = str(trial_data.get("guardian_hint", hint))
+	hell_trial_hud_hint.text = hint
+	hell_trial_hud_hint.visible = not hint.is_empty()
 	if required > 0:
 		hell_trial_hud_objective.text = "本层目标进度：%d / %d" % [mini(kills, required), required]
 		hell_trial_hud_progress.max_value = float(required)
@@ -3179,8 +3192,8 @@ func _layout_hud() -> void:
 		var trial_width := minf(420.0, maxf(280.0, viewport_size.x - 24.0))
 		hell_trial_hud_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		hell_trial_hud_panel.position = Vector2((viewport_size.x - trial_width) * 0.5, 62.0)
-		hell_trial_hud_panel.custom_minimum_size = Vector2(trial_width, 88.0)
-		hell_trial_hud_panel.size = Vector2(trial_width, 88.0)
+		hell_trial_hud_panel.custom_minimum_size = Vector2(trial_width, 112.0)
+		hell_trial_hud_panel.size = Vector2(trial_width, 112.0)
 		hell_trial_hud_panel.visible = hud_visible and not hell_trial_runtime_data.is_empty()
 
 	# Reserve one continuous top-right toolbar for all utility actions.
