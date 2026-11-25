@@ -34,8 +34,10 @@ static func apply_state(root: Node3D, state: String, fade_seconds: float = 0.16,
 		# Locomotion must loop; combat reactions are one-shots. Some downloaded
 		# packs author all clips as loops, so normalize this at the adapter edge.
 		animation.loop_mode = Animation.LOOP_LINEAR if state in ["idle", "walk"] else Animation.LOOP_NONE
-	if animation_player.current_animation == selected and animation_player.is_playing():
-		root.set_meta("humanoid_animation_state", state)
+	var previous_state := str(root.get_meta("humanoid_animation_state", ""))
+	if animation_player.current_animation == selected and previous_state == state:
+		# A finished one-shot must not restart every frame while the gameplay
+		# state remains active; a later transition away and back can replay it.
 		return true
 	animation_player.play(selected, maxf(fade_seconds, 0.0))
 	root.set_meta("humanoid_animation_state", state)
