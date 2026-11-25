@@ -396,6 +396,70 @@ static func create_fengdu_residential_lane() -> Node3D:
 	return root
 
 
+static func create_fengdu_street_tile() -> Node3D:
+	# An 8 m modular paving tile with low curbs; tiles can be rotated and tiled.
+	var root := StaticBody3D.new()
+	root.name = "FengduStreetTile"
+	var paving := Color("#514c55")
+	var curb := Color("#716875")
+	var inset := Color("#393744")
+	_part(root, "RoadBed", _box(Vector3(8.0, 0.22, 8.0)), Vector3(0.0, -0.11, 0.0), inset)
+	_part(root, "PavingSurface", _box(Vector3(7.82, 0.12, 7.82)), Vector3(0.0, 0.06, 0.0), paving)
+	for side in [-1.0, 1.0]:
+		_part(root, "CurbX" + str(side), _box(Vector3(0.22, 0.28, 8.0)), Vector3(side * 3.89, 0.14, 0.0), curb)
+		_part(root, "CurbZ" + str(side), _box(Vector3(8.0, 0.28, 0.22)), Vector3(0.0, 0.14, side * 3.89), curb)
+	for offset in [-2.0, 0.0, 2.0]:
+		_part(root, "DrainGroove" + str(offset), _box(Vector3(0.045, 0.025, 7.4)), Vector3(offset, 0.13, 0.0), Color("#77717b"))
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(7.82, 0.18, 7.82)
+	collision.shape = shape
+	collision.position = Vector3(0.0, -0.02, 0.0)
+	root.add_child(collision)
+	return root
+
+
+static func create_fengdu_residential_district() -> Node3D:
+	# Compact district-scale review composition, not a production streaming chunk.
+	var root := Node3D.new()
+	root.name = "FengduResidentialDistrictPreview"
+	# 5 x 5 modular street tiles create a broad walkable grid.
+	for x_index in range(5):
+		for z_index in range(5):
+			var tile := create_fengdu_street_tile()
+			tile.position = Vector3(-16.0 + float(x_index) * 8.0, 0.0, -16.0 + float(z_index) * 8.0)
+			root.add_child(tile)
+	# Residential frontage on the west and east edges.
+	for z in [-10.0, 2.0, 14.0]:
+		var west_house := create_fengdu_residential_house()
+		west_house.position = Vector3(-21.0, 0.0, z)
+		root.add_child(west_house)
+		var east_house := create_fengdu_residential_house()
+		east_house.position = Vector3(21.0, 0.0, z)
+		east_house.rotation.y = PI
+		root.add_child(east_house)
+	# Permanent shops face the central market street from its far end.
+	for x in [-8.0, 0.0, 8.0]:
+		var shop := create_ghost_market_shop()
+		shop.position = Vector3(x, 0.0, 22.0)
+		shop.rotation.y = PI
+		root.add_child(shop)
+	# Repeated lantern rhythm marks the pedestrian route and corners.
+	for x in [-12.0, 12.0]:
+		for z in [-12.0, 0.0, 12.0]:
+			var lantern := create_ghost_lantern()
+			lantern.position = Vector3(x, 0.0, z)
+			lantern.scale = Vector3.ONE * 0.78
+			root.add_child(lantern)
+	# A central notice stone gives the district a recognizable gathering point.
+	var notice := create_soul_tombstone()
+	notice.name = "DistrictNoticeStone"
+	notice.position = Vector3(0.0, 0.0, -8.0)
+	notice.scale = Vector3.ONE * 0.85
+	root.add_child(notice)
+	return root
+
+
 static func create_fengdu_city_block() -> Node3D:
 	# A compact review layout: fortified perimeter, gate towers, inner paving,
 	# a small ghost market and the Yinsi office. This is a reusable kit preview,
