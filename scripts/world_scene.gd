@@ -67,7 +67,7 @@ var chat_unread_count := 0
 var chat_expanded := false
 var chat_restore_mouse_captured := false
 var chat_order_sequence := 0
-var chat_lines_by_channel: Dictionary = {"nearby": [], "world": [], "cross_world": [], "system": []}
+var chat_lines_by_channel: Dictionary = {"nearby": [], "world": [], "cross_world": [], "party": [], "system": []}
 var chat_seen_ids: Dictionary = {}
 var selected_chat_channel := "nearby"
 
@@ -3231,7 +3231,7 @@ func _build_chat_hud() -> void:
 	channels.add_theme_constant_override("separation", 6)
 	layout.add_child(channels)
 	chat_channel_buttons.clear()
-	for channel_data in [["system", "系统"], ["nearby", "附近"], ["friends", "好友"], ["world", "世界"], ["cross_world", "跨界"]]:
+	for channel_data in [["system", "系统"], ["nearby", "附近"], ["friends", "好友"], ["world", "世界"], ["cross_world", "跨界"], ["party", "队伍"]]:
 		var channel_button := Button.new()
 		channel_button.text = str(channel_data[1])
 		channel_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -3633,7 +3633,7 @@ func _active_chat_storage_key() -> String:
 	return selected_chat_channel
 
 func _on_friend_panel_closed() -> void:
-	var channel_ids := ["system", "nearby", "friends", "world", "cross_world"]
+	var channel_ids := ["system", "nearby", "friends", "world", "cross_world", "party"]
 	var active_index := channel_ids.find(selected_chat_channel)
 	for index in range(chat_channel_buttons.size()):
 		_style_chat_button(chat_channel_buttons[index], index == active_index)
@@ -3675,14 +3675,14 @@ func _select_chat_channel(channel: String) -> void:
 		if is_instance_valid(friend_panel):
 			friend_panel.open_panel()
 		return
-	if channel not in ["nearby", "world", "cross_world", "system"]:
+	if channel not in ["nearby", "world", "cross_world", "party", "system"]:
 		return
 	selected_chat_channel = channel
 	selected_friend_character_id = ""
 	selected_friend_character_name = ""
-	var names := {"nearby": "附近", "world": "世界", "cross_world": "跨界", "system": "系统"}
+	var names := {"nearby": "附近", "world": "世界", "cross_world": "跨界", "party": "队伍", "system": "系统"}
 	chat_title_label.text = "万界传音 · " + str(names[channel])
-	var channel_ids := ["system", "nearby", "friends", "world", "cross_world"]
+	var channel_ids := ["system", "nearby", "friends", "world", "cross_world", "party"]
 	for index in range(chat_channel_buttons.size()):
 		_style_chat_button(chat_channel_buttons[index], index == channel_ids.find(channel))
 	if channel == "system":
@@ -3696,6 +3696,13 @@ func _select_chat_channel(channel: String) -> void:
 		chat_status.text = "系统频道 · 击杀奖励、掉落、升级与玩法通知"
 	elif channel == "nearby":
 		chat_status.text = "附近频道 · 仅当前实例 AOI 范围内可见"
+	elif channel == "party":
+		if party_data.is_empty() or str(party_data.get("id", "")).is_empty():
+			chat_status.text = "队伍频道 · 你当前没有加入队伍"
+		elif HHChatNetwork.socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
+			chat_status.text = "队伍频道 · 仅当前队伍成员可见"
+		else:
+			chat_status.text = "队伍频道 · 正在连接聊天服务"
 	elif HHChatNetwork.socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
 		chat_status.text = str(names[channel]) + "频道 · 独立聊天连接已建立"
 	else:
@@ -3705,6 +3712,7 @@ func _on_chat_socket_connected() -> void:
 	HHChatNetwork.fetch_history("nearby", 50)
 	HHChatNetwork.fetch_history("world", 50)
 	HHChatNetwork.fetch_history("cross_world", 50)
+	HHChatNetwork.fetch_history("party", 50)
 	if selected_chat_channel == "whisper" and not selected_friend_character_id.is_empty():
 		HHChatNetwork.fetch_conversation_history(selected_friend_character_id, 50)
 	if is_instance_valid(chat_status):
@@ -3714,7 +3722,7 @@ func _on_chat_socket_connected() -> void:
 			chat_status.text = "聊天服务已连接 · " + ("世界频道" if selected_chat_channel == "world" else "跨界频道")
 
 func _on_chat_history_received(channel: String, messages: Array) -> void:
-	if channel not in ["nearby", "world", "cross_world"]:
+	if channel not in ["nearby", "world", "cross_world", "party"]:
 		return
 	for message in messages:
 		if not message is Dictionary:
@@ -3734,7 +3742,7 @@ func _on_chat_socket_message(message: Dictionary) -> void:
 			chat_status.text = str(message.get("reason", "聊天消息未送达。"))
 		return
 	var channel := str(message.get("channel", selected_chat_channel))
-	if channel not in ["nearby", "world", "cross_world", "whisper"]:
+	if channel not in ["nearby", "world", "cross_world", "party", "whisper"]:
 		return
 	var sender := str(message.get("sender_name", "未知玩家"))
 	var content := str(message.get("content", ""))
