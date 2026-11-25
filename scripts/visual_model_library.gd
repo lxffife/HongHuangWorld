@@ -101,8 +101,10 @@ static func _normalize_visual_height(model_root: Node3D, model_key: String) -> v
 
 
 static func _collect_mesh_bounds(node: Node, parent_transform: Transform3D, is_root: bool, state: Dictionary) -> void:
-	var local_transform := Transform3D.IDENTITY if is_root else node.transform
-	var current_transform := parent_transform * local_transform
+	var local_transform: Transform3D = Transform3D.IDENTITY
+	if not is_root and node is Node3D:
+		local_transform = (node as Node3D).transform
+	var current_transform: Transform3D = parent_transform * local_transform
 	if node is MeshInstance3D:
 		var mesh := (node as MeshInstance3D).mesh
 		if mesh != null:
