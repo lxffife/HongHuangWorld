@@ -77,3 +77,6 @@ Godot 客户端提供独立美术预览场景：`Client/HongHuangClient/scenes/A
 
 注意：当前街区与角色仍包含程序化原型；尚未代表已导入第三方 GLB 模型。正式地图仍需按区域拆分和流式加载，街区预览不直接等同于完整酆都世界。
 
+另有独立酆都内城总览场景：`Client/HongHuangClient/scenes/FengduCityLayoutPreview.tscn`，用于检查城墙、南门、轮回大道、中央广场、阴司官署区、六道轮回区、鬼市坊区与居民坊区的空间关系。它仍是美术/关卡灰盒，不是正式联机地图。
+
+
