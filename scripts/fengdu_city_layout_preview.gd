@@ -93,7 +93,7 @@ func _add_paving(node_name: String, size: Vector3, at: Vector3, color: Color) ->
 func _build_perimeter() -> void:
 	for index in range(WALL_SEGMENTS):
 		var offset := -CITY_HALF_EXTENT + WALL_STEP * 0.5 + float(index) * WALL_STEP
-		if index != WALL_SEGMENTS / 2:
+		if index != 4:
 			_add_wall(Vector3(offset, 0.0, -CITY_HALF_EXTENT), 0.0, "North")
 			_add_wall(Vector3(offset, 0.0, CITY_HALF_EXTENT), 0.0, "South")
 		_add_wall(Vector3(-CITY_HALF_EXTENT, 0.0, offset), PI * 0.5, "West")
