@@ -195,6 +195,7 @@ static func _build_severed_fate_setpiece(root: Node3D, palette: Dictionary) -> v
 	hinge.height = 3.0
 	_add_mesh_prop(root, "FateShearHinge", hinge, Vector3(0.0, 2.4, -2.0), Vector3.ZERO, metal, 0.12)
 	for side in [-1.0, 1.0]:
+		_add_box_prop(root, "ShearSafeLane_%s" % str(side), Vector3(9.0, 0.12, 30.0), Vector3(side * 19.5, 0.12, -2.0), Color("#6f9b86").darkened(0.18))
 		for index in range(4):
 			var chain := TorusMesh.new()
 			chain.inner_radius = 0.45
