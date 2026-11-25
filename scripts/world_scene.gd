@@ -35,6 +35,7 @@ var respawn_busy := false
 var progression_http: HTTPRequest
 var wallet_http: HTTPRequest
 var wallet_request_busy := false
+var wallet_refresh_pending := false
 var wallet_label: Label
 var wallet_refresh_timer: Timer
 var soul_essence_http: HTTPRequest
@@ -224,6 +225,7 @@ var spell_learning_busy := false
 var equipment_action_busy := false
 var inventory_visible := false
 var inventory_request_busy := false
+var inventory_refresh_pending := false
 
 var party_http: HTTPRequest
 var party_refresh_timer: Timer
@@ -4418,6 +4420,7 @@ func _refresh_inventory() -> void:
 			inventory_status.text = "请先登录后查看背包。"
 		return
 	if inventory_request_busy:
+		inventory_refresh_pending = true
 		return
 	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token])
 	var error := inventory_http.request(
@@ -4434,6 +4437,9 @@ func _on_inventory_request_completed(result: int, response_code: int, _headers: 
 	inventory_request_busy = false
 	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
 		inventory_status.text = "背包读取失败：" + body.get_string_from_utf8()
+		if inventory_refresh_pending:
+			inventory_refresh_pending = false
+			_refresh_inventory()
 		return
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
 	if not (parsed is Dictionary) or not (parsed.get("items", []) is Array):
@@ -4446,6 +4452,9 @@ func _on_inventory_request_completed(result: int, response_code: int, _headers: 
 	var free_slots := int(capacity.get("free_slots", max(0, max_slots - used_slots)))
 	inventory_status.text = "背包格子：" + str(used_slots) + " / " + str(max_slots) + " · 空余 " + str(free_slots) + " · 物品种类 " + str(inventory_cache.size())
 	_render_inventory_items()
+	if inventory_refresh_pending:
+		inventory_refresh_pending = false
+		_refresh_inventory()
 
 func _on_inventory_filter_pressed(filter_type: String) -> void:
 	inventory_filter = filter_type
@@ -6284,7 +6293,10 @@ func _update_floating_combat_labels(delta: float) -> void:
 			floating_combat_lifetimes.erase(label_id)
 
 func _request_wallet() -> void:
-	if wallet_http == null or wallet_request_busy or HHSession.access_token.is_empty():
+	if wallet_http == null or HHSession.access_token.is_empty():
+		return
+	if wallet_request_busy:
+		wallet_refresh_pending = true
 		return
 	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token])
 	var error := wallet_http.request(HHSession.api_base + "/api/v1/economy/wallet", headers, HTTPClient.METHOD_GET)
@@ -6299,6 +6311,9 @@ func _on_wallet_request_completed(result: int, response_code: int, _headers: Pac
 	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
 		if is_instance_valid(wallet_label):
 			wallet_label.text = "钱袋  余额同步中……"
+		if wallet_refresh_pending:
+			wallet_refresh_pending = false
+			_request_wallet()
 		return
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
 	if not (parsed is Dictionary):
@@ -6325,6 +6340,9 @@ func _on_wallet_request_completed(result: int, response_code: int, _headers: Pac
 				nether_stone = int(entry.get("available", 0))
 	if is_instance_valid(wallet_label):
 		wallet_label.text = "钱袋  冥币 %s  ·  冥石 %s" % [str(ghost_cash), str(nether_stone)]
+	if wallet_refresh_pending:
+		wallet_refresh_pending = false
+		_request_wallet()
 
 
 func _refresh_reward_status_later() -> void:
