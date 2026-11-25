@@ -191,7 +191,9 @@ var minimap_coordinate_label: Label
 var minimap_exploration_label: Label
 var minimap_navigation_label: Label
 var minimap_clear_navigation_button: Button
+var minimap_auto_navigation_button: Button
 var minimap_navigation_target: Dictionary = {}
+var minimap_auto_navigation_enabled := false
 var minimap_refresh_accumulator := 0.0
 var target_selection_ring: MeshInstance3D
 var floating_combat_labels: Dictionary = {}
@@ -795,6 +797,13 @@ func _build_minimap_hud() -> void:
 	minimap_clear_navigation_button.pressed.connect(_clear_minimap_navigation)
 	minimap_clear_navigation_button.visible = false
 	layout.add_child(minimap_clear_navigation_button)
+	minimap_auto_navigation_button = Button.new()
+	minimap_auto_navigation_button.text = "开启自动前往"
+	minimap_auto_navigation_button.custom_minimum_size.y = 28.0
+	_apply_button_theme(minimap_auto_navigation_button)
+	minimap_auto_navigation_button.pressed.connect(_toggle_minimap_auto_navigation)
+	minimap_auto_navigation_button.disabled = true
+	layout.add_child(minimap_auto_navigation_button)
 	_update_minimap_data()
 
 
@@ -1237,7 +1246,9 @@ func _update_minimap_data() -> void:
 		minimap_panel.visible = hud_visible and viewport_width >= 520.0 and not (is_instance_valid(friend_panel) and friend_panel.visible)
 	if is_instance_valid(local_player):
 		minimap_view.set("player_position", local_player.global_position)
-		minimap_view.set("player_yaw", local_player.global_rotation.y)
+		var facing_node := local_player.get_node_or_null("PlaceholderBody") as Node3D
+		var facing_yaw: float = facing_node.global_rotation.y if is_instance_valid(facing_node) else local_player.global_rotation.y
+		minimap_view.set("player_yaw", facing_yaw)
 		if is_instance_valid(minimap_coordinate_label):
 			var player_pos: Vector3 = local_player.global_position
 			minimap_coordinate_label.text = "坐标  %.0f  /  %.0f" % [player_pos.x, player_pos.z]
@@ -1299,6 +1310,7 @@ func _update_minimap_data() -> void:
 		if is_instance_valid(minimap_clear_navigation_button):
 			minimap_clear_navigation_button.visible = false
 	minimap_view.set("navigation_target", minimap_navigation_target)
+	_sync_minimap_auto_navigation_button()
 	if is_instance_valid(minimap_region_label):
 		var world_name := _world_display_name(str(HHSession.world_snapshot.get("world_id", "")))
 		minimap_region_label.text = world_name + " · " + (current_region_name if not current_region_name.is_empty() else "区域载入中")
@@ -1356,6 +1368,8 @@ func _on_minimap_marker_selected(kind: String, marker_id: String, marker_name: S
 		_:
 			return
 	minimap_navigation_target = {"kind": kind, "id": marker_id, "name": marker_name, "x": target_position.x, "z": target_position.z}
+	if minimap_auto_navigation_enabled and is_instance_valid(local_player) and local_player.has_method("set_auto_navigation_target"):
+		local_player.call("set_auto_navigation_target", Vector3(target_position.x, local_player.global_position.y, target_position.z))
 	if kind != "monster":
 		_show_notification("导航目标：" + marker_name)
 	_update_minimap_data()
@@ -1380,8 +1394,42 @@ func _on_world_map_position_selected(world_position: Vector3) -> void:
 	_update_minimap_data()
 
 
+func _toggle_minimap_auto_navigation() -> void:
+	if minimap_navigation_target.is_empty():
+		_show_notification("请先点击小地图上的 NPC 或目标，设置导航目的地。", 3.0)
+		return
+	if not is_instance_valid(local_player):
+		return
+	if minimap_auto_navigation_enabled:
+		if local_player.has_method("clear_auto_navigation_target"):
+			local_player.call("clear_auto_navigation_target")
+		minimap_auto_navigation_enabled = false
+		_show_notification("已停止自动前往。", 2.0)
+	else:
+		if not local_player.has_method("set_auto_navigation_target"):
+			_show_notification("当前角色控制器不支持自动前往。", 3.0)
+			return
+		var target := Vector3(float(minimap_navigation_target.get("x", 0.0)), local_player.global_position.y, float(minimap_navigation_target.get("z", 0.0)))
+		local_player.call("set_auto_navigation_target", target)
+		minimap_auto_navigation_enabled = true
+		_show_notification("开始自动前往：" + str(minimap_navigation_target.get("name", "目标")), 3.0)
+	_sync_minimap_auto_navigation_button()
+
+
+func _sync_minimap_auto_navigation_button() -> void:
+	if not is_instance_valid(minimap_auto_navigation_button):
+		return
+	var controller_active := is_instance_valid(local_player) and bool(local_player.get("auto_navigation_active"))
+	minimap_auto_navigation_enabled = controller_active
+	minimap_auto_navigation_button.disabled = minimap_navigation_target.is_empty()
+	minimap_auto_navigation_button.text = "停止自动前往" if controller_active else "开启自动前往"
+
+
 func _clear_minimap_navigation() -> void:
 	minimap_navigation_target.clear()
+	minimap_auto_navigation_enabled = false
+	if is_instance_valid(local_player) and local_player.has_method("clear_auto_navigation_target"):
+		local_player.call("clear_auto_navigation_target")
 	if is_instance_valid(minimap_view):
 		minimap_view.set("navigation_target", {})
 	_update_minimap_data()
