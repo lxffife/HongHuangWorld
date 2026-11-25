@@ -6,6 +6,8 @@ extends SceneTree
 # Add -- --strict-animations to fail when required clips are absent.
 # Add -- --strict-rig to fail when a character has no usable Skeleton3D/AnimationPlayer or fewer than 15 bones.
 
+const EquipmentVisualFactory = preload("res://scripts/equipment_visual_factory.gd")
+
 const MODEL_FILES := {
 	"player_humanoid": "res://assets/models/player_humanoid.glb",
 	"wolf": "res://assets/models/wasteland_wolf.glb",
@@ -33,7 +35,7 @@ const RIG_REQUIRED_MODELS := [
 
 const REQUIRED_ANIMATIONS := {
 	"player_humanoid": ["idle", "walk", "attack", "hit"],
-	"wolf": ["idle", "walk", "attack", "death"],
+	"wolf": ["idle", "walk", "run", "attack", "death"],
 	"iron_beast": ["idle", "walk", "attack", "death"],
 	"warrior": ["idle", "walk", "attack", "death"],
 	"life_soul": ["idle", "attack", "death"],
@@ -78,6 +80,8 @@ func _run_validation() -> void:
 			"mesh_count": 0,
 			"skeleton_count": 0,
 			"bone_count": 0,
+			"equipment_bone_bindings": {},
+			"equipment_bindings_passed": model_key != "player_humanoid",
 			"animation_player_count": 0,
 			"rig_validation": {"required": model_key in RIG_REQUIRED_MODELS, "skeleton_required": model_key in RIG_REQUIRED_MODELS, "animation_player_required": model_key in RIG_REQUIRED_MODELS, "minimum_bones": 15, "passed": false},
 			"animations": [],
@@ -119,6 +123,8 @@ func _run_validation() -> void:
 			continue
 
 		_inspect_node(instance, item)
+		if model_key == "player_humanoid":
+			_validate_player_equipment_bindings(instance as Node3D, item)
 		_classify_animation_coverage(item)
 		var has_skeleton := int(item["skeleton_count"]) > 0
 		var has_animation_player := int(item["animation_player_count"]) > 0
@@ -133,6 +139,8 @@ func _run_validation() -> void:
 		if rig_required and has_skeleton and not has_usable_bone_count:
 			item["warnings"].append("Rigged character has fewer than 15 bones; review whether it is a full humanoid/creature rig")
 		if strict_rig and rig_required and not bool(item["rig_validation"]["passed"]):
+			exit_code = 1
+		if strict_rig and model_key == "player_humanoid" and not bool(item["equipment_bindings_passed"]):
 			exit_code = 1
 		var missing_animations := _apply_animation_requirements(model_key, item)
 		if not missing_animations.is_empty():
@@ -177,6 +185,24 @@ func _run_validation() -> void:
 		report["summary"]["warnings"]
 	])
 	quit(exit_code)
+
+
+func _validate_player_equipment_bindings(model_root: Node3D, item: Dictionary) -> void:
+	var bindings: Dictionary = {}
+	var all_required_bound := true
+	for slot in ["weapon", "offhand", "back"]:
+		var socket := EquipmentVisualFactory.get_or_create_socket(model_root, slot)
+		if not is_instance_valid(socket):
+			bindings[slot] = {"valid": false, "reason": "socket_unavailable"}
+			all_required_bound = false
+			continue
+		var binding := EquipmentVisualFactory.inspect_socket_binding(model_root, slot)
+		bindings[slot] = binding
+		if not bool(binding.get("follows_bone", false)):
+			all_required_bound = false
+			item["warnings"].append("Equipment slot does not follow an animated bone: " + slot)
+	item["equipment_bone_bindings"] = bindings
+	item["equipment_bindings_passed"] = all_required_bound
 
 
 func _inspect_node(node: Node, item: Dictionary) -> void:
