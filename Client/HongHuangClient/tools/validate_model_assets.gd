@@ -141,6 +141,7 @@ func _run_validation() -> void:
 		item["rig_validation"]["passed"] = not rig_required or (has_skeleton and has_animation_player and has_usable_bone_count and anatomy_passed)
 		if model_key == "wolf" and not anatomy_passed:
 			item["warnings"].append("Quadruped rig anatomy is incomplete; review root/spine/head and front/hind limb bone names")
+			report["summary"]["warnings"] += 1
 		if rig_required and not has_skeleton:
 			item["warnings"].append("Rigged character asset has no Skeleton3D")
 		if rig_required and not has_animation_player:
