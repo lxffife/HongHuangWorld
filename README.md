@@ -64,3 +64,16 @@ This repository is being initialized. See `Docs/Development/ROADMAP.md` for stag
 - 一键部署脚本：Deployment/deploy-raspberry-pi.sh
 - 详细部署说明：[Docs/Deployment/RASPBERRY_PI.md](Docs/Deployment/RASPBERRY_PI.md)
 - 当前支持 64 位 Raspberry Pi OS / Debian（aarch64），用于 P0 局域网联网测试。
+
+## 客户端美术预览
+
+Godot 客户端提供独立美术预览场景：`Client/HongHuangClient/scenes/ArtPreviewStage.tscn`。可在 Godot 编辑器中打开运行，检查玩家/怪物占位模型、酆都鬼门关以及模块化街区组合。
+
+- `1–5`：选择玩家、荒原狼、铁骨兽魂、炽战残魂、游祟。
+- `I / W / R`：待机、行走、奔跑（循环预览）。
+- `A / H / D`：攻击、受击、死亡（单次动作）。
+- `Esc`：返回待机。
+- 酆都街区预览包含城墙直段、城防角楼、阴司衙门、鬼市摊位、铺地和引魂灯。
+
+注意：当前街区与角色仍包含程序化原型；尚未代表已导入第三方 GLB 模型。正式地图仍需按区域拆分和流式加载，街区预览不直接等同于完整酆都世界。
+
