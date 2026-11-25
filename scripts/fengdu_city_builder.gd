@@ -145,8 +145,18 @@ static func _add_district(root: Node3D, entry: Dictionary) -> void:
 				Vector3(3.0, 3.6, 3.0), Vector3(footprint.x * 0.31, 0.7, footprint.y * 0.28)
 			)
 	if kind == "palace":
-		district.add_child(_box_mesh("UpperHall", Vector3(main_width * 0.62, 4.0, main_depth * 0.58), Vector3(0.0, building_height + 3.0, 0.0), Color("#806044")))
-		district.add_child(_box_mesh("UpperRoof", Vector3(main_width * 0.76, 0.65, main_depth * 0.72), Vector3(0.0, building_height + 5.35, 0.0), Color("#332638")))
+		if not _add_scaled_model(
+			district, str(BUILDING_MODELS["hall"]),
+			Vector3(main_width * 0.62, 4.0, main_depth * 0.58),
+			Vector3(0.0, building_height + 3.0, 0.0)
+		):
+			district.add_child(_box_mesh("UpperHall", Vector3(main_width * 0.62, 4.0, main_depth * 0.58), Vector3(0.0, building_height + 3.0, 0.0), Color("#806044")))
+		if not _add_scaled_model(
+			district, str(BUILDING_MODELS["east_asian_roof"]),
+			Vector3(main_width * 0.78, 1.1, main_depth * 0.76),
+			Vector3(0.0, building_height + 5.35, 0.0)
+		):
+			district.add_child(_box_mesh("UpperRoof", Vector3(main_width * 0.76, 0.65, main_depth * 0.72), Vector3(0.0, building_height + 5.35, 0.0), Color("#332638")))
 	_add_district_details(district, kind, footprint, base_color, building_height)
 	var label := Label3D.new()
 	label.name = "DistrictLabel"
@@ -180,7 +190,10 @@ static func _add_district_details(district: Node3D, kind: String, footprint: Vec
 					district.add_child(pillar_node)
 		"court", "admin":
 			for side in [-1.0, 1.0]:
-				district.add_child(_box_mesh("SideWing", Vector3(footprint.x * 0.2, building_height * 0.58, footprint.y * 0.52), Vector3(side * footprint.x * 0.39, 0.7 + building_height * 0.29, 0.0), base_color.lightened(0.12)))
+				var wing_size := Vector3(footprint.x * 0.2, building_height * 0.58, footprint.y * 0.52)
+				var wing_position := Vector3(side * footprint.x * 0.39, 0.7 + building_height * 0.29, 0.0)
+				if not _add_scaled_model(district, str(BUILDING_MODELS["east_asian_wall"]), wing_size, wing_position):
+					district.add_child(_box_mesh("SideWing", wing_size, wing_position, base_color.lightened(0.12)))
 		"market":
 			for stall_index in range(4):
 				var stall_x := -footprint.x * 0.34 + float(stall_index) * footprint.x * 0.22
