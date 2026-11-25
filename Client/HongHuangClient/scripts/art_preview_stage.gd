@@ -1,6 +1,6 @@
 extends Node3D
 ## Isolated visual review stage for imported models, materials and animation clips.
-## Keyboard: 1-5 select model; I/W/R/A/H/D play idle/walk/run/attack/hit/death.
+## Keyboard: 1-9 select; 0 selects slot 10; [ / ] previous/next; I/W/R/A/H/D play actions.
 
 const VisualFactory = preload("res://scripts/underworld_visual_factory.gd")
 const VisualModelLibrary = preload("res://scripts/visual_model_library.gd")
@@ -21,8 +21,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	var key_event := event as InputEventKey
 	match key_event.keycode:
-		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5:
+		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
 			_selected_model_index = clampi(key_event.keycode - KEY_1, 0, _preview_models.size() - 1)
+			_update_status("已选择：" + _model_label(_selected_model_index))
+			get_viewport().set_input_as_handled()
+		KEY_0:
+			_selected_model_index = clampi(9, 0, _preview_models.size() - 1)
+			_update_status("已选择：" + _model_label(_selected_model_index))
+			get_viewport().set_input_as_handled()
+		KEY_BRACKETLEFT, KEY_BRACKETRIGHT:
+			var direction := -1 if key_event.keycode == KEY_BRACKETLEFT else 1
+			_selected_model_index = posmod(_selected_model_index + direction, _preview_models.size())
 			_update_status("已选择：" + _model_label(_selected_model_index))
 			get_viewport().set_input_as_handled()
 		KEY_I:
@@ -101,10 +110,18 @@ func _build_stage() -> void:
 
 func _build_gallery() -> void:
 	_add_model("转世人形", VisualModelLibrary.instantiate_model("player_humanoid", func() -> Node3D: return VisualFactory.create_player_humanoid()), Vector3(-5.2, 0.0, 1.0), 0.0, 2.35)
-	_add_model("荒原狼", VisualFactory.create_monster("荒原狼", 1), Vector3(-2.4, 0.0, 0.0), 0.0, 1.55)
-	_add_model("铁骨兽魂", VisualFactory.create_monster("铁骨兽魂", 1), Vector3(0.4, 0.0, 0.0), 0.0, 3.15)
-	_add_model("炽战残魂", VisualFactory.create_monster("炽战残魂", 1), Vector3(3.1, 0.0, 0.0), 0.0, 2.45)
-	_add_model("游祟", VisualFactory.create_monster("游祟", 1), Vector3(5.7, 0.0, 0.0), 0.0, 2.35)
+	_add_model("荒原狼", VisualModelLibrary.instantiate_model("wolf", func() -> Node3D: return VisualFactory.create_monster("荒原狼", 1)), Vector3(-2.4, 0.0, 0.0), 0.0, 1.55)
+	_add_model("铁骨兽魂", VisualModelLibrary.instantiate_model("iron_beast", func() -> Node3D: return VisualFactory.create_monster("铁骨兽魂", 1)), Vector3(0.4, 0.0, 0.0), 0.0, 3.15)
+	_add_model("炽战残魂", VisualModelLibrary.instantiate_model("warrior", func() -> Node3D: return VisualFactory.create_monster("炽战残魂", 1)), Vector3(3.1, 0.0, 0.0), 0.0, 2.45)
+	_add_model("游祟", VisualModelLibrary.instantiate_model("wraith", func() -> Node3D: return VisualFactory.create_monster("游祟", 1)), Vector3(5.7, 0.0, 0.0), 0.0, 2.35)
+
+	# Second review row: imported NPC overrides are visible in the same stage.
+	_add_model("孟婆", VisualModelLibrary.instantiate_model("npc_soup_keeper", func() -> Node3D: return VisualFactory.create_mengpo_npc()), Vector3(-6.0, 0.0, -10.0), 0.0, 2.1)
+	_add_model("阴司判官", VisualModelLibrary.instantiate_model("npc_judge", func() -> Node3D: return VisualFactory.create_judge_npc()), Vector3(-3.6, 0.0, -10.0), 0.0, 2.1)
+	_add_model("阴兵守卫", VisualModelLibrary.instantiate_model("npc_guard", func() -> Node3D: return VisualFactory.create_guard_npc()), Vector3(-1.2, 0.0, -10.0), 0.0, 2.1)
+	_add_model("试炼使者", VisualModelLibrary.instantiate_model("npc_trial_master", func() -> Node3D: return VisualFactory.create_trial_master_npc()), Vector3(1.2, 0.0, -10.0), 0.0, 2.1)
+	_add_model("鬼市铁匠", VisualModelLibrary.instantiate_model("npc_blacksmith", func() -> Node3D: return VisualFactory.create_blacksmith_npc()), Vector3(3.6, 0.0, -10.0), 0.0, 2.1)
+	_add_model("酆都城民", VisualModelLibrary.instantiate_model("npc_generic", func() -> Node3D: return VisualFactory.create_generic_npc()), Vector3(6.0, 0.0, -10.0), 0.0, 2.1)
 
 	var gate := VisualFactory.create_fengdu_gate()
 	gate.name = "FengduGatePreview"
@@ -158,7 +175,7 @@ func _build_controls() -> void:
 	layout.add_theme_constant_override("separation", 5)
 	panel.add_child(layout)
 	var title := Label.new()
-	title.text = "美术资源预览台 · 1-5 选择模型"
+	title.text = "美术资源预览台 · 1-9 / 0 选择 · [ ] 切换"
 	title.add_theme_font_size_override("font_size", 17)
 	layout.add_child(title)
 	_status_label = Label.new()
