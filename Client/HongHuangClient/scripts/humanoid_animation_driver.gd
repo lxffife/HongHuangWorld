@@ -1,11 +1,11 @@
 extends RefCounted
 class_name HHHumanoidAnimationDriver
 
-# Optional animation adapter for imported GLB scenes. Procedural pivots remain
-# the fallback when a model has no compatible AnimationPlayer/clip.
+# Drives imported humanoid GLBs from the existing player animation state machine.
+# Procedural pivots remain the fallback when an asset has no compatible clip.
 const STATE_TOKENS := {
 	"idle": ["idle", "stand", "breath", "wait"],
-	"walk": ["walk", "run", "move", "locomotion"],
+	"walk": ["walk", "walking", "run", "move", "locomotion"],
 	"attack": ["attack", "atk", "slash", "swing"],
 	"hit": ["hit", "hurt", "damage", "react"]
 }
@@ -21,20 +21,56 @@ const ATTACK_STYLE_TOKENS := {
 static func apply_state(root: Node3D, state: String, fade_seconds: float = 0.16, attack_style: String = "") -> bool:
 	if not is_instance_valid(root) or not STATE_TOKENS.has(state):
 		return false
-	var players := root.find_children("*", "AnimationPlayer", true, false)
-	if players.is_empty():
-		return false
-	var animation_player := players[0] as AnimationPlayer
+	var animation_player := _find_best_animation_player(root, state, attack_style)
 	if not is_instance_valid(animation_player):
+		root.set_meta("humanoid_animation_state_unavailable", state)
 		return false
 	var selected := _find_clip(animation_player, state, attack_style)
 	if selected.is_empty():
+		root.set_meta("humanoid_animation_state_unavailable", state)
 		return false
-	if animation_player.current_animation == selected:
-		# Do not restart a short one-shot clip every frame after it naturally ends.
+	var animation := animation_player.get_animation(selected)
+	if animation != null:
+		# Locomotion must loop; combat reactions are one-shots. Some downloaded
+		# packs author all clips as loops, so normalize this at the adapter edge.
+		animation.loop_mode = Animation.LOOP_LINEAR if state in ["idle", "walk"] else Animation.LOOP_NONE
+	if animation_player.current_animation == selected and animation_player.is_playing():
+		root.set_meta("humanoid_animation_state", state)
 		return true
 	animation_player.play(selected, maxf(fade_seconds, 0.0))
+	root.set_meta("humanoid_animation_state", state)
+	root.set_meta("humanoid_animation_clip", selected)
 	return true
+
+
+static func _find_best_animation_player(root: Node, state: String, attack_style: String) -> AnimationPlayer:
+	var players := root.find_children("*", "AnimationPlayer", true, false)
+	var best_player: AnimationPlayer
+	var best_score := -1
+	for candidate in players:
+		var player := candidate as AnimationPlayer
+		if not is_instance_valid(player):
+			continue
+		var score := _clip_match_score(player, state, attack_style)
+		if score > best_score:
+			best_score = score
+			best_player = player
+	return best_player if best_score >= 0 else null
+
+
+static func _clip_match_score(player: AnimationPlayer, state: String, attack_style: String) -> int:
+	var selected := _find_clip(player, state, attack_style)
+	if selected.is_empty():
+		return -1
+	var normalized := selected.to_lower()
+	if state == "attack" and ATTACK_STYLE_TOKENS.has(attack_style):
+		for token in ATTACK_STYLE_TOKENS[attack_style]:
+			if normalized.contains(token):
+				return 200 + str(token).length()
+	for token in STATE_TOKENS[state]:
+		if normalized.contains(token):
+			return 100 + str(token).length()
+	return 0
 
 
 static func _find_clip(player: AnimationPlayer, state: String, attack_style: String = "") -> String:
