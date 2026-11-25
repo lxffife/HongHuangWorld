@@ -6073,6 +6073,12 @@ func _on_combat_event(event: Dictionary) -> void:
 			_set_player_poison_visual(local_player, player_poison_visual_remaining > 0.0)
 		var incoming_damage := int(event.get("damage", 0))
 		var shield_absorbed := int(event.get("shield_absorbed", 0))
+		if incoming_damage > 0 or shield_absorbed > 0:
+			if is_instance_valid(local_player) and local_player.has_method("clear_auto_navigation_target"):
+				local_player.call("clear_auto_navigation_target")
+			minimap_auto_navigation_enabled = false
+			_sync_minimap_auto_navigation_button()
+			_show_notification("遭到怪物攻击，自动导航已中断。", 2.5)
 		combat_damage_taken += maxi(incoming_damage, 0)
 		if incoming_damage > 0 or shield_absorbed > 0:
 			combat_has_started = true
