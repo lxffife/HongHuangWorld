@@ -12,7 +12,13 @@ const MODEL_PATHS := {
 	"wind_soul": "res://assets/models/wind_soul.glb",
 	"fire_soul": "res://assets/models/fire_soul.glb",
 	"frost_soul": "res://assets/models/frost_soul.glb",
-	"wraith": "res://assets/models/wraith.glb"
+	"wraith": "res://assets/models/wraith.glb",
+	"npc_judge": "res://assets/models/npc_judge.glb",
+	"npc_trial_master": "res://assets/models/npc_trial_master.glb",
+	"npc_guard": "res://assets/models/npc_guard.glb",
+	"npc_soup_keeper": "res://assets/models/npc_soup_keeper.glb",
+	"npc_blacksmith": "res://assets/models/npc_blacksmith.glb",
+	"npc_generic": "res://assets/models/npc_generic.glb"
 }
 
 # Target visual heights in metres. These affect presentation only; gameplay
@@ -26,7 +32,13 @@ const TARGET_HEIGHTS := {
 	"wind_soul": 1.65,
 	"fire_soul": 1.65,
 	"frost_soul": 1.65,
-	"wraith": 1.85
+	"wraith": 1.85,
+	"npc_judge": 1.85,
+	"npc_trial_master": 1.85,
+	"npc_guard": 1.9,
+	"npc_soup_keeper": 1.7,
+	"npc_blacksmith": 1.85,
+	"npc_generic": 1.8
 }
 const MIN_SCALE_FACTOR := 0.25
 const MAX_SCALE_FACTOR := 4.0
