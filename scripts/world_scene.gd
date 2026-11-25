@@ -5540,6 +5540,21 @@ func _on_combat_event(event: Dictionary) -> void:
 			_show_hell_trial_runtime_state({"hell_floor": int(event.get("floor", 1)), "hell_trial": investigation_snapshot})
 		_show_notification(str(event.get("message", event.get("reason", "证词调查状态已更新。"))), 3.5)
 		return
+	if action == "hell_trial_hazard":
+		var hazard_phase := str(event.get("phase", ""))
+		var hazard_label := str(event.get("phase_label", "刑具状态变化"))
+		if hazard_phase == "warning":
+			HHAudio.play_ui("warning", 1.0)
+			_show_notification("第二层 · " + hazard_label, 3.2)
+		elif hazard_phase == "active":
+			HHAudio.play_ui("warning", 0.75)
+			_show_notification("第二层 · " + hazard_label, 2.4)
+		else:
+			_show_notification("第二层 · " + hazard_label, 2.2)
+		return
+	if action == "hell_trial_hazard_hit":
+		_show_notification("被断缘剪刃击中，受到 %d 点伤害！" % int(event.get("damage", 0)), 2.5)
+		return
 	if action == "hell_trial_wave_transition":
 		HHAudio.play_ui("warning", 0.9)
 		var floor_number := int(event.get("floor", 0))
