@@ -27,3 +27,14 @@ Original source and license mapping: https://github.com/ilrein/warptracker/blob/
 The collection is listed as CC0 in the registry project metadata. The repository includes the CC0 1.0 legal text at LICENSE-PolygonalMind-CC0.txt. Source repository: https://github.com/ToxSam/cc0-models-Polygonal-Mind
 
 All assets are imported unchanged. This project only scales and places them at runtime. All imported files remain imported_unverified until Godot 4.6 import, animation, material, scale and in-scene visual checks are completed.
+
+## Additional Quaternius models
+
+| Project asset | Original source pack | Official license evidence |
+|---|---|---|
+| life_soul.glb (Deer) | Quaternius Ultimate Animated Animal Pack | https://quaternius.com/packs/ultimateanimatedanimals.html — CC0 |
+| frost_soul.glb (Stag) | Quaternius Ultimate Animated Animal Pack | https://quaternius.com/packs/ultimateanimatedanimals.html — CC0 |
+| npc_guard.glb (KnightCharacter) | Quaternius Animated Knight Pack | https://quaternius.com/packs/knightcharacter.html — CC0 |
+
+Retrieval mirror: https://github.com/trebeljahr/quaternius-showcase/tree/main/public/glb
+The mirror's LICENSES.md maps the animal and knight directories to the official Quaternius CC0 pack pages. The mirror's MIT license covers showcase code only, not these models.
