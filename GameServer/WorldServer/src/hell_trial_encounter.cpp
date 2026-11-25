@@ -62,6 +62,15 @@ double HellTrialSoulRescue::remaining_seconds(double now_seconds) const {
     return std::max(0.0, deadline_seconds_ - now_seconds);
 }
 
+bool HellTrialSoulRescue::update(double now_seconds) {
+    if (!enabled_ || completed_ || first_lantern_id_.empty() || !std::isfinite(now_seconds) ||
+        now_seconds < deadline_seconds_) return false;
+    first_lantern_id_.clear();
+    first_rescuer_id_.clear();
+    deadline_seconds_ = 0.0;
+    return true;
+}
+
 HellTrialSoulRescueResult HellTrialSoulRescue::activate(
     std::string_view lantern_id, std::string_view rescuer_id, double now_seconds) {
     HellTrialSoulRescueResult result;
