@@ -7914,7 +7914,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			if not vendor_shop_id.is_empty():
 				var market_button := Button.new()
 				_apply_button_theme(market_button, true)
-				market_button.text = "打开鬼市摊位 · 查看商品"
+				market_button.text = ("打开鬼市摊位 · 查看商品" if npc_current_interaction_id.begins_with("fengdu_ghost_market_vendor_") else "打开商铺 · 查看商品")
 				market_button.pressed.connect(_open_vendor_shop.bind(vendor_shop_id, str(npc_data.get("name", "鬼市摊主"))))
 				npc_choice_container.add_child(market_button)
 			var choices: Variant = dialogue.get("choices", [])
@@ -8469,6 +8469,12 @@ func _on_shop_request_completed(result: int, response_code: int, _headers: Packe
 			item_name, int(data.get("quantity", 1)), int(data.get("total_price", 0)), int(data.get("balance_after", 0))
 		]
 		_show_notification("鬼市购得 · " + item_name, 3.0)
+		# The purchase transaction updates wallet and inventory on the server.
+		# Refresh all three client projections immediately instead of waiting for
+		# the periodic wallet timer or the player opening the backpack again.
+		_request_wallet()
+		_refresh_inventory()
+		_refresh_equipment()
 		_send_shop_request("GET", "/api/v1/shops", "list")
 		return
 	if context != "list":
@@ -8506,8 +8512,14 @@ func _on_shop_request_completed(result: int, response_code: int, _headers: Packe
 			var stock_text := "不限量" if not item.has("stock_quantity") else ("库存 %d" % int(item.get("stock_quantity", 0)))
 			var purchase_button := Button.new()
 			_apply_button_theme(purchase_button, true)
-			purchase_button.text = "%s  ·  %d %s  ·  %s  ·  购买 ×1" % [
+			var quality_names := ["普通", "优秀", "精良", "稀有", "传说"]
+			var quality := int(item.get("quality", 1))
+			var quality_name: String = quality_names[clampi(quality - 1, 0, quality_names.size() - 1)]
+			var category_names := {"material":"材料", "consumable":"丹药", "equipment":"装备", "quest":"任务物品"}
+			purchase_button.text = "%s  ·  %s %s  ·  %d %s  ·  %s  ·  购买 ×1" % [
 				str(item.get("name", "未知商品")),
+				quality_name,
+				str(category_names.get(str(item.get("category", "material")), "物品")),
 				int(item.get("unit_price", 0)),
 				str(selected_shop.get("currency_name", "冥币")),
 				stock_text
