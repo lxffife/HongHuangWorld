@@ -15,6 +15,8 @@ int main() {
     int previous_recommended_level = 0;
     for (const auto& spec : specs) {
         assert(guardian_ids.emplace(spec.guardian_id).second);
+        assert(!spec.trial_hint.empty());
+        assert(!spec.guardian_hint.empty());
         assert(spec.recommended_level > previous_recommended_level);
         previous_recommended_level = spec.recommended_level;
         for (const auto id : spec.objective_monster_ids) assert(objective_ids.emplace(id).second);
@@ -26,6 +28,8 @@ int main() {
         assert(encounter.spec() != nullptr);
         assert(!encounter.spec()->name.empty());
         assert(!encounter.spec()->guardian_id.empty());
+        assert(!encounter.spec()->trial_hint.empty());
+        assert(!encounter.spec()->guardian_hint.empty());
         assert(encounter.spec()->objective_required == 3);
         assert(!encounter.completed());
     }
