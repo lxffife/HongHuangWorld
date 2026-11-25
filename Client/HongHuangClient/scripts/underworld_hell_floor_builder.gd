@@ -15,6 +15,7 @@ static func build(floor_number: int) -> Node3D:
 	_add_arena_walls(root, palette["wall"])
 	_add_pillars(root, palette["pillar"])
 	_add_hazard_blockout(root, floor_number, palette["hazard"])
+	_add_floor_signature_setpiece(root, floor_number, palette)
 	_add_guardian_platform(root, str(data.get("guardian", "守狱者")), palette["accent"])
 	_add_portal(root, "EntrancePortal", "来路 · 返回阴司", Vector3(0.0, 0.0, 27.0), palette["accent"])
 	_add_portal(root, "TrialExitPortal", "下一层入口 · 请通过试炼名册进入", Vector3(0.0, 0.0, -27.0), palette["accent"])
@@ -131,6 +132,117 @@ static func _add_hazard_blockout(root: Node3D, floor_number: int, color: Color) 
 		material.emission_energy_multiplier = 0.5
 		mesh_instance.material_override = material
 		root.add_child(mesh_instance)
+
+
+static func _add_floor_signature_setpiece(root: Node3D, floor_number: int, palette: Dictionary) -> void:
+	match floor_number:
+		1:
+			_build_tongue_echo_setpiece(root, palette)
+		2:
+			_build_severed_fate_setpiece(root, palette)
+		3:
+			_build_iron_tree_setpiece(root, palette)
+
+
+## Floor 1: a low-voice evidence corridor. The three tablets are visual landmarks;
+## objective completion remains driven by the server trial encounter.
+static func _build_tongue_echo_setpiece(root: Node3D, palette: Dictionary) -> void:
+	var accent: Color = palette["accent"]
+	var stone: Color = palette["pillar"]
+	for index in range(3):
+		var x := float(index - 1) * 10.0
+		_add_box_prop(root, "ContradictoryEvidenceStand_%02d" % (index + 1), Vector3(4.2, 1.0, 3.2), Vector3(x, 0.55, -3.0 - float(index % 2) * 7.0), stone)
+		_add_box_prop(root, "EvidenceTablet_%02d" % (index + 1), Vector3(2.2, 4.8, 0.65), Vector3(x, 3.4, -3.0 - float(index % 2) * 7.0), accent.darkened(0.28))
+		_add_box_prop(root, "EvidenceGlyph_%02d" % (index + 1), Vector3(1.1, 0.16, 0.12), Vector3(x, 4.0, -3.36 - float(index % 2) * 7.0), accent)
+	for index in range(4):
+		var z := 16.0 - float(index) * 10.0
+		var arch := TorusMesh.new()
+		arch.inner_radius = 3.1
+		arch.outer_radius = 3.45
+		arch.rings = 28
+		arch.ring_segments = 8
+		_add_mesh_prop(root, "EchoResonanceArch_%02d" % index, arch, Vector3(0.0, 4.0, z), Vector3(deg_to_rad(90.0), 0.0, 0.0), accent, 0.28)
+
+
+## Floor 2: severed oath chains and crossed shears communicate the timing hazard.
+## They are static set dressing, not a client-side damage or collision authority.
+static func _build_severed_fate_setpiece(root: Node3D, palette: Dictionary) -> void:
+	var metal: Color = palette["pillar"]
+	var edge: Color = palette["accent"]
+	_add_box_prop(root, "FateShearBlade_A", Vector3(1.2, 0.55, 25.0), Vector3(-1.0, 2.2, -2.0), edge, Vector3(0.0, deg_to_rad(-31.0), deg_to_rad(-5.0)))
+	_add_box_prop(root, "FateShearBlade_B", Vector3(1.2, 0.55, 25.0), Vector3(1.0, 2.2, -2.0), edge, Vector3(0.0, deg_to_rad(31.0), deg_to_rad(5.0)))
+	var hinge := SphereMesh.new()
+	hinge.radius = 1.5
+	hinge.height = 3.0
+	_add_mesh_prop(root, "FateShearHinge", hinge, Vector3(0.0, 2.4, -2.0), Vector3.ZERO, metal, 0.12)
+	for side in [-1.0, 1.0]:
+		for index in range(4):
+			var chain := TorusMesh.new()
+			chain.inner_radius = 0.45
+			chain.outer_radius = 0.68
+			chain.rings = 16
+			chain.ring_segments = 6
+			_add_mesh_prop(root, "SeveredOathChain_%s_%02d" % [str(side), index], chain, Vector3(side * 21.0, 3.0 + float(index) * 1.4, -13.0 + float(index) * 8.0), Vector3(deg_to_rad(90.0), 0.0, deg_to_rad(24.0 * side)), metal, 0.0)
+		_add_box_prop(root, "FateAnchor_%s" % str(side), Vector3(1.6, 6.5, 1.6), Vector3(side * 23.0, 3.25, 0.0), metal)
+
+
+## Floor 3: an iron-tree grove with thorned boughs and trapped soul lanterns.
+static func _build_iron_tree_setpiece(root: Node3D, palette: Dictionary) -> void:
+	var bark: Color = palette["pillar"]
+	var thorn: Color = palette["accent"]
+	var trunk := CylinderMesh.new()
+	trunk.top_radius = 0.8
+	trunk.bottom_radius = 2.1
+	trunk.height = 16.0
+	trunk.radial_segments = 12
+	_add_mesh_prop(root, "IronTreeTrunk", trunk, Vector3(0.0, 8.0, -8.0), Vector3.ZERO, bark, 0.0)
+	for index in range(6):
+		var side := -1.0 if index % 2 == 0 else 1.0
+		var branch := CylinderMesh.new()
+		branch.top_radius = 0.18
+		branch.bottom_radius = 0.72
+		branch.height = 10.0
+		branch.radial_segments = 8
+		var branch_rotation := Vector3(deg_to_rad(float(index % 3) * 12.0), 0.0, deg_to_rad(side * (34.0 + float(index % 3) * 9.0)))
+		_add_mesh_prop(root, "IronTreeBough_%02d" % index, branch, Vector3(side * (3.0 + float(index % 2) * 2.0), 10.0 + float(index % 3) * 1.2, -8.0), branch_rotation, bark.lightened(0.08), 0.0)
+	for index in range(12):
+		var angle := TAU * float(index) / 12.0
+		var spike := CylinderMesh.new()
+		spike.top_radius = 0.0
+		spike.bottom_radius = 0.42
+		spike.height = 2.6
+		spike.radial_segments = 6
+		var at := Vector3(cos(angle) * 7.0, 1.25, -8.0 + sin(angle) * 7.0)
+		_add_mesh_prop(root, "IronTreeGroundThorn_%02d" % index, spike, at, Vector3(0.0, -angle, deg_to_rad(-12.0)), thorn, 0.18)
+	for side in [-1.0, 1.0]:
+		var lantern := SphereMesh.new()
+		lantern.radius = 0.72
+		lantern.height = 1.45
+		_add_mesh_prop(root, "TrappedSoulLantern_%s" % str(side), lantern, Vector3(side * 12.0, 2.2, -18.0), Vector3.ZERO, Color("#9fc7bd"), 0.8)
+
+
+static func _add_box_prop(root: Node3D, node_name: String, dimensions: Vector3, at: Vector3, color: Color, rotation: Vector3 = Vector3.ZERO) -> MeshInstance3D:
+	var mesh := BoxMesh.new()
+	mesh.size = dimensions
+	return _add_mesh_prop(root, node_name, mesh, at, rotation, color, 0.0)
+
+
+static func _add_mesh_prop(root: Node3D, node_name: String, mesh: Mesh, at: Vector3, rotation: Vector3, color: Color, emission: float) -> MeshInstance3D:
+	var instance := MeshInstance3D.new()
+	instance.name = node_name
+	instance.mesh = mesh
+	instance.position = at
+	instance.rotation = rotation
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = 0.82
+	if emission > 0.0:
+		material.emission_enabled = true
+		material.emission = color
+		material.emission_energy_multiplier = emission
+	instance.material_override = material
+	root.add_child(instance)
+	return instance
 
 
 static func _add_guardian_platform(root: Node3D, guardian_name: String, color: Color) -> void:
