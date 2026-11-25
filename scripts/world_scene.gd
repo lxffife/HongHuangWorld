@@ -8429,9 +8429,10 @@ func _new_shop_request_id() -> String:
 	return hex.substr(0, 8) + "-" + hex.substr(8, 4) + "-" + hex.substr(12, 4) + "-" + hex.substr(16, 4) + "-" + hex.substr(20, 12)
 
 
-func _purchase_market_item(shop_id: String, item_id: String) -> void:
-	if shop_request_busy or shop_id.is_empty() or item_id.is_empty():
+func _purchase_market_item(shop_id: String, item_id: String, quantity_option: OptionButton) -> void:
+	if shop_request_busy or shop_id.is_empty() or item_id.is_empty() or not is_instance_valid(quantity_option):
 		return
+	var quantity := maxi(1, quantity_option.get_selected_id())
 	var request_id := _new_shop_request_id()
 	if request_id.is_empty():
 		npc_status_label.text = "无法生成安全交易编号，请稍后重试。"
@@ -8440,7 +8441,7 @@ func _purchase_market_item(shop_id: String, item_id: String) -> void:
 	_send_shop_request("POST", "/api/v1/shops/" + shop_id + "/purchase", "purchase", {
 		"request_id": request_id,
 		"item_id": item_id,
-		"quantity": 1
+		"quantity": quantity
 	})
 
 
@@ -8509,14 +8510,17 @@ func _on_shop_request_completed(result: int, response_code: int, _headers: Packe
 			if not item_variant is Dictionary:
 				continue
 			var item: Dictionary = item_variant
-			var stock_text := "不限量" if not item.has("stock_quantity") else ("库存 %d" % int(item.get("stock_quantity", 0)))
-			var purchase_button := Button.new()
-			_apply_button_theme(purchase_button, true)
+			var stock_available := int(item.get("stock_quantity", 999999))
+			var stock_text := "不限量" if not item.has("stock_quantity") else ("库存 %d" % stock_available)
 			var quality_names := ["普通", "优秀", "精良", "稀有", "传说"]
 			var quality := int(item.get("quality", 1))
 			var quality_name: String = quality_names[clampi(quality - 1, 0, quality_names.size() - 1)]
 			var category_names := {"material":"材料", "consumable":"丹药", "equipment":"装备", "quest":"任务物品"}
-			purchase_button.text = "%s  ·  %s %s  ·  %d %s  ·  %s  ·  购买 ×1" % [
+			var item_row := HBoxContainer.new()
+			item_row.add_theme_constant_override("separation", 6)
+			npc_choice_container.add_child(item_row)
+			var item_label := Label.new()
+			item_label.text = "%s · %s%s · %d %s · %s" % [
 				str(item.get("name", "未知商品")),
 				quality_name,
 				str(category_names.get(str(item.get("category", "material")), "物品")),
@@ -8524,10 +8528,28 @@ func _on_shop_request_completed(result: int, response_code: int, _headers: Packe
 				str(selected_shop.get("currency_name", "冥币")),
 				stock_text
 			]
+			item_label.tooltip_text = str(item.get("description", ""))
+			item_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			item_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			item_row.add_child(item_label)
+			var quantity_option := OptionButton.new()
+			_apply_button_theme(quantity_option)
+			quantity_option.add_item("1件", 1)
+			for quantity in [5, 10, 20, 50, 99]:
+				if quantity <= int(item.get("max_stack", 99)) and quantity <= stock_available:
+					quantity_option.add_item(str(quantity) + "件", quantity)
+			if int(item.get("max_stack", 99)) < 5 or stock_available < 5:
+				# The default one-item option remains available when stock is positive.
+				pass
+			quantity_option.disabled = stock_available <= 0
+			item_row.add_child(quantity_option)
+			var purchase_button := Button.new()
+			_apply_button_theme(purchase_button, true)
+			purchase_button.text = "购买"
+			purchase_button.disabled = stock_available <= 0
 			purchase_button.tooltip_text = str(item.get("description", ""))
-			purchase_button.disabled = item.has("stock_quantity") and int(item.get("stock_quantity", 0)) <= 0
-			purchase_button.pressed.connect(_purchase_market_item.bind(shop_selected_id, str(item.get("item_id", ""))))
-			npc_choice_container.add_child(purchase_button)
+			purchase_button.pressed.connect(_purchase_market_item.bind(shop_selected_id, str(item.get("item_id", "")), quantity_option))
+			item_row.add_child(purchase_button)
 	var back_button := Button.new()
 	_apply_button_theme(back_button)
 	back_button.text = "返回摊主对话"
