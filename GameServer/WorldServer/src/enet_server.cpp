@@ -1435,19 +1435,6 @@ struct EnetServer::Impl {
             {"objective_required", floor ? floor->objective_required : 0},
             {"boss_phase", stage == 3 ? hell_trial_boss_phase.phase() : 0}
         };
-        if (hell_trial_soul_rescue.enabled()) {
-            const double rescue_now_seconds = std::chrono::duration<double>(now.time_since_epoch()).count();
-            if (hell_trial_soul_rescue.update(rescue_now_seconds)) {
-                const Json rescue_event{{"action", "hell_trial_soul_rescue"},
-                    {"accepted", false}, {"floor", 3},
-                    {"message", "魂灯接应超时，第一盏魂灯熄灭；请两名队友重新协作。"},
-                    {"hell_trial", hell_trial_runtime_snapshot()}};
-                for (const auto& [observer_peer, observer] : players) {
-                    (void)observer;
-                    send_json(observer_peer, honghuang::protocol::MessageType::CombatEvent, rescue_event);
-                }
-            }
-        }
         if (hell_trial_shear_hazard.enabled()) {
             const char* hazard_phase =
                 hell_trial_shear_hazard.phase() == honghuang::simulation::HellTrialHazardPhase::Warning ? "warning" :
@@ -5470,6 +5457,19 @@ struct EnetServer::Impl {
         const auto elapsed = now - last_snapshot;
         if (elapsed < kSnapshotInterval) return;
         const float delta = std::clamp(std::chrono::duration<float>(elapsed).count(), 0.0F, 0.1F);
+        if (hell_trial_soul_rescue.enabled()) {
+            const double rescue_now_seconds = std::chrono::duration<double>(now.time_since_epoch()).count();
+            if (hell_trial_soul_rescue.update(rescue_now_seconds)) {
+                const Json rescue_event{{"action", "hell_trial_soul_rescue"},
+                    {"accepted", false}, {"floor", 3},
+                    {"message", "魂灯接应超时，第一盏魂灯熄灭；请两名队友重新协作。"},
+                    {"hell_trial", hell_trial_runtime_snapshot()}};
+                for (const auto& [observer_peer, observer] : players) {
+                    (void)observer;
+                    send_json(observer_peer, honghuang::protocol::MessageType::CombatEvent, rescue_event);
+                }
+            }
+        }
         if (hell_trial_shear_hazard.enabled()) {
             const auto transition = hell_trial_shear_hazard.update(static_cast<double>(delta));
             if (transition.changed) {
