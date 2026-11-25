@@ -953,6 +953,12 @@ func _render_hell_trial_hud(trial_data: Dictionary) -> void:
 	var hint := str(trial_data.get("trial_hint", ""))
 	if stage >= 3 and not completed:
 		hint = str(trial_data.get("guardian_hint", hint))
+	if floor_number == 2:
+		var hazard_state: Dictionary = trial_data.get("hazard", {})
+		if not hazard_state.is_empty():
+			var hazard_phase := str(hazard_state.get("phase", "warning"))
+			var hazard_text := "预警中：离开中央刑道" if hazard_phase == "warning" else ("剪刃合拢：中央区域危险" if hazard_phase == "active" else "剪刃回收：可以通行")
+			hint += "\n断缘剪刃 · " + hazard_text + " · %.1f 秒" % float(hazard_state.get("remaining_seconds", 0.0))
 	hell_trial_hud_hint.text = hint
 	hell_trial_hud_hint.visible = not hint.is_empty()
 	var investigation: Dictionary = trial_data.get("investigation", {})
@@ -5541,6 +5547,12 @@ func _on_combat_event(event: Dictionary) -> void:
 		_show_notification(str(event.get("message", event.get("reason", "证词调查状态已更新。"))), 3.5)
 		return
 	if action == "hell_trial_hazard":
+		if not hell_trial_runtime_data.is_empty():
+			var hazard_trial := hell_trial_runtime_data.duplicate(true)
+			hazard_trial["hazard"] = event.duplicate(true)
+			_render_hell_trial_hud(hazard_trial)
+		var hazard_phase := str(event.get("phase", ""))
+
 		var hazard_phase := str(event.get("phase", ""))
 		var hazard_label := str(event.get("phase_label", "刑具状态变化"))
 		if hazard_phase == "warning":
