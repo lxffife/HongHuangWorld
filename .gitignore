@@ -1,0 +1,36 @@
+# Godot editor/import cache
+.godot/
+
+# Native and CMake build outputs
+build/
+build-*/
+NativeNet/build/
+NativeNet/_deps/
+bin/*.dll
+bin/*.so
+bin/*.dylib
+*.obj
+*.o
+*.lib
+*.exp
+*.pdb
+*.ilk
+
+# IDE and temporary files
+.vs/
+.idea/
+.vscode/
+*.tmp
+*.log
+*.bak
+
+# Generated asset-register translations/import sidecars
+ASSET-REGISTER.*.translation
+ASSET-REGISTER.csv.import
+assets/3d/asset-register.*.translation
+assets/3d/asset-register.csv.import
+assets/audio/asset-register.*.translation
+assets/audio/asset-register.csv.import
+
+# Local Godot MCP editor integration (install separately)
+addons/godot-mcp/

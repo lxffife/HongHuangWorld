@@ -1,6 +1,6 @@
 extends SceneTree
 ## Headless companion player for real multiplayer / combat verification.
-## Run with: godot --headless --path Client/HongHuangClient --script res://scripts/ai_test_player.gd
+## Run with: godot --headless --path  --script res://scripts/ai_test_player.gd
 ## Configure HH_API_BASE, HH_AI_BOT_USERNAME, HH_AI_BOT_PASSWORD, HH_AI_BOT_NAME.
 
 const DEFAULT_API_BASE := "http://127.0.0.1:8787"

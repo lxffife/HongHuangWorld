@@ -11,7 +11,7 @@
 
 ## 资源目录与当前替换键
 
-把经过许可核验和人工检查的模型放到 Client/HongHuangClient/assets/models/，文件名必须与 scripts/visual_model_library.gd 中的映射一致：
+把经过许可核验和人工检查的模型放到 assets/models/，文件名必须与 scripts/visual_model_library.gd 中的映射一致：
 
 | 模型键 | 目标文件 | 用途 |
 |---|---|---|

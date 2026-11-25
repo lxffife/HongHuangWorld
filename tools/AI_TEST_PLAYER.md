@@ -25,7 +25,7 @@ export HH_API_BASE=http://你的API服务器地址:8787
 
 也可以直接运行：
 ```sh
-godot --headless --path Client/HongHuangClient --script res://scripts/ai_test_player.gd
+godot --headless --path  --script res://scripts/ai_test_player.gd
 ```
 
 ## 账号与数据

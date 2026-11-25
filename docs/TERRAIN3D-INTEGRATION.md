@@ -8,10 +8,9 @@
 
 ## 仓库版本现状（核对后）
 
-- `Client/HongHuangClient/README.md` 当前仍写 Godot 4.3。
-- `Client/NativeNet/README.md` 写明 NativeNet 使用 Godot 4.3 的 godot-cpp；原生扩展也必须与最终客户端引擎版本保持兼容。
-- `Client/HongHuangClient/project.godot` 当前没有 `config/features` 引擎版本声明。
-- 因此仓库本身尚不能证明正式开发环境已经统一为 4.3 或 4.6。不要只凭项目配置缺失的版本号推断已升级，也不要单独升级 Terrain3D。
+- project.godot 声明项目特性版本为 Godot 4.6。
+- NativeNet/CMakeLists.txt 仍固定拉取 godot-cpp 4.3-stable，扩展描述文件最低兼容版本为 4.3。
+- 因此项目引擎与原生扩展构建链尚未统一；必须先升级并验证 NativeNet，再决定 Terrain3D 二进制版本。不要只升级 Terrain3D。
 
 ## 官方版本兼容矩阵
 

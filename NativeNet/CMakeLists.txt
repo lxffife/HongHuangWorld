@@ -39,7 +39,7 @@ else()
     target_compile_options(honghuang_native_net PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-set(_client_bin "${CMAKE_CURRENT_SOURCE_DIR}/../HongHuangClient/bin")
+set(_client_bin "${CMAKE_CURRENT_SOURCE_DIR}/../bin")
 set_target_properties(honghuang_native_net PROPERTIES
     PREFIX ""
     OUTPUT_NAME "honghuang_native_net"

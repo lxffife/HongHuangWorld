@@ -30,7 +30,7 @@ func _ready() -> void:
 	if not ClassDB.class_exists("EnetClient"):
 		var load_status: int = GDExtensionManager.load_extension(EXTENSION_PATH)
 		if load_status != 0 and not ClassDB.class_exists("EnetClient"):
-			connection_error.emit("原生 ENet 扩展加载失败，状态码：" + str(load_status) + "。请先编译 Client/NativeNet。")
+			connection_error.emit("原生 ENet 扩展加载失败，状态码：" + str(load_status) + "。请先编译 NativeNet。")
 			return
 	if not ClassDB.class_exists("EnetClient"):
 		connection_error.emit("扩展已加载但没有注册 EnetClient 类。")

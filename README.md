@@ -1,6 +1,6 @@
 # Godot 客户端
 
-使用 Godot 4.3，GDScript 负责界面与游戏逻辑，GDExtension + ENet 负责与独立 C++ 世界服通信。
+项目配置目标为 Godot 4.6，GDScript 负责界面与游戏逻辑，GDExtension + ENet 负责与独立 C++ 世界服通信。注意：NativeNet 当前仍固定使用 godot-cpp 4.3-stable，正式联机前必须确认本机 DLL 与编辑器版本兼容。
 
 ## 当前客户端流程
 
@@ -14,15 +14,15 @@
 
 ## 构建原生网络扩展
 
-请先构建扩展，具体步骤见 [NativeNet README](../NativeNet/README.md)。
+请先构建扩展，具体步骤见 [NativeNet README](NativeNet/README.md)。
 
 Windows 开发机在仓库根目录运行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\Client\NativeNet\build_windows.ps1
+powershell -ExecutionPolicy Bypass -File .\NativeNet\build_windows.ps1
 ```
 
-然后使用与 NativeNet godot-cpp 构建版本一致的 Godot 编辑器打开本目录中的 `project.godot`。仓库当前 NativeNet 仍固定 Godot 4.3；如果开发机已使用 Godot 4.6，必须先同步升级 NativeNet 构建链，不能只替换编辑器。确保 `bin/honghuang_native_net.dll` 已生成。
+然后使用与 NativeNet godot-cpp 构建版本一致的 Godot 编辑器打开本目录中的 `project.godot`。项目配置目标为 Godot 4.6，但 NativeNet 目前仍固定 godot-cpp 4.3-stable；如果使用 Godot 4.6，必须先用匹配版本重新构建并验证原生扩展，不能只替换编辑器。确保 `bin/honghuang_native_net.dll` 已生成。
 
 ## 服务端前置条件
 

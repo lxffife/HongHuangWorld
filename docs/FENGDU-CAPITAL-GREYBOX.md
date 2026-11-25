@@ -126,7 +126,7 @@ NPC 仍没有完整寻路、战斗、经济、任务对话树、持久化身份�
 
 ## 7. 如何运行
 
-1. 在 Godot 4 编辑器中打开 `Client/HongHuangClient/project.godot`。
+1. 在 Godot 4 编辑器中打开 `project.godot`。
 2. 在文件系统中打开 `res://scenes/experiments/FengduCapitalGreybox.tscn`。
 3. 使用“运行当前场景”（F6），不要将它设为项目主场景。
 4. 首次点击场景窗口捕获鼠标。
