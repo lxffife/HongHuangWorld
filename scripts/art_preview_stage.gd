@@ -125,6 +125,30 @@ func _build_gallery() -> void:
 	_add_model("鬼市铁匠", VisualFactory.create_npc("blacksmith", "鬼市铁匠"), Vector3(3.6, 0.0, -10.0), 0.0, 2.1)
 	_add_model("酆都城民", VisualFactory.create_npc("generic", "酆都城民"), Vector3(6.0, 0.0, -10.0), 0.0, 2.1)
 
+	# Imported Fengdu architecture is reviewed in a dedicated two-row gallery.
+	# Bracket keys continue cycling through all entries, including these static props.
+	var environment_gallery := [
+		{"key": "fengdu_wall", "label": "酆都城墙", "x": -7.5, "z": -21.0, "height": 4.8, "size": Vector3(4.2, 2.0, 1.2)},
+		{"key": "fengdu_watchtower", "label": "酆都望楼", "x": -4.5, "z": -21.0, "height": 8.5, "size": Vector3(2.0, 5.0, 2.0)},
+		{"key": "fengdu_hall", "label": "阴司殿堂", "x": -1.5, "z": -21.0, "height": 8.0, "size": Vector3(3.4, 5.0, 3.4)},
+		{"key": "fengdu_house", "label": "酆都民居", "x": 1.5, "z": -21.0, "height": 4.2, "size": Vector3(2.5, 2.7, 2.5)},
+		{"key": "fengdu_tree", "label": "冥界古树", "x": 4.5, "z": -21.0, "height": 5.5, "size": Vector3(2.0, 4.0, 2.0)},
+		{"key": "fengdu_rock", "label": "冥界山岩", "x": 7.5, "z": -21.0, "height": 2.2, "size": Vector3(2.0, 1.5, 1.8)},
+		{"key": "fengdu_lantern", "label": "引魂灯模型", "x": -6.0, "z": -31.0, "height": 2.4, "size": Vector3(0.8, 2.0, 0.8)},
+		{"key": "fengdu_bell", "label": "镇魂铜钟", "x": -3.0, "z": -31.0, "height": 3.6, "size": Vector3(1.8, 3.0, 1.8)},
+		{"key": "fengdu_east_asian_roof", "label": "中式飞檐屋顶", "x": 0.0, "z": -31.0, "height": 2.2, "size": Vector3(3.4, 1.2, 3.0)},
+		{"key": "fengdu_east_asian_wall", "label": "中式院墙", "x": 3.0, "z": -31.0, "height": 3.0, "size": Vector3(3.0, 2.2, 0.5)},
+		{"key": "fengdu_column_base", "label": "宫殿柱础", "x": 6.0, "z": -31.0, "height": 0.45, "size": Vector3(1.2, 0.4, 1.2)}
+	]
+	for item in environment_gallery:
+		var model_key := str(item["key"])
+		var model := VisualModelLibrary.instantiate_model(
+			model_key,
+			func() -> Node3D: return _create_environment_preview_fallback(item)
+		)
+		_add_model(str(item["label"]), model, Vector3(float(item["x"]), 0.0, float(item["z"])), 0.0, float(item["height"]))
+
+
 	var gate := VisualFactory.create_fengdu_gate()
 	gate.name = "FengduGatePreview"
 	gate.position = Vector3(0.0, 0.0, 8.0)
@@ -148,9 +172,27 @@ func _build_gallery() -> void:
 	_add_label("镇界石柱", Vector3(-7.0, 5.7, 1.0), 0.20)
 
 	var city_block := VisualFactory.create_fengdu_city_block()
-	city_block.position = Vector3(0.0, 0.0, -24.0)
+	city_block.position = Vector3(0.0, 0.0, -46.0)
 	add_child(city_block)
-	_add_label("酆都街区模块 · 内城街门 / 阴司 / 六道轮回殿 / 鬼市", Vector3(0.0, 7.0, -24.0), 0.22)
+	_add_label("酆都街区模块 · 内城街门 / 阴司 / 六道轮回殿 / 鬼市", Vector3(0.0, 7.0, -46.0), 0.22)
+
+
+func _create_environment_preview_fallback(item: Dictionary) -> Node3D:
+	var root := Node3D.new()
+	root.name = "EnvironmentModelFallback"
+	var mesh_instance := MeshInstance3D.new()
+	mesh_instance.name = "FallbackMesh"
+	var box := BoxMesh.new()
+	box.size = item.get("size", Vector3.ONE)
+	mesh_instance.mesh = box
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#56515f")
+	material.roughness = 0.9
+	mesh_instance.material_override = material
+	mesh_instance.position.y = box.size.y * 0.5
+	root.add_child(mesh_instance)
+	root.set_meta("preview_fallback_reason", "optional_glb_missing")
+	return root
 
 
 func _add_model(label_text: String, model: Node3D, at: Vector3, yaw: float, label_height: float) -> void:
@@ -180,7 +222,7 @@ func _build_controls() -> void:
 	layout.add_theme_constant_override("separation", 5)
 	panel.add_child(layout)
 	var title := Label.new()
-	title.text = "美术资源预览台 · 1-9 / 0 选择 · [ ] 切换"
+	title.text = "美术资源预览台 · 1-9 / 0 选择 · [ ] 切换（含建筑模型）"
 	title.add_theme_font_size_override("font_size", 17)
 	layout.add_child(title)
 	_status_label = Label.new()
@@ -268,7 +310,7 @@ func _model_label(index: int) -> String:
 
 func _selection_status() -> String:
 	if _preview_models.is_empty():
-		return "预览库暂无角色模型"
+		return "预览库暂无模型"
 	var model: Node3D = _preview_models[_selected_model_index]
 	var source_label := str(model.get_meta("preview_source_label", "来源未知"))
 	var model_key := str(model.get_meta("model_key", "unknown"))
