@@ -196,6 +196,140 @@ static func create_soul_pillar() -> Node3D:
 	return root
 
 
+static func create_fengdu_watchtower() -> Node3D:
+	var root := StaticBody3D.new()
+	root.name = "FengduWatchtower"
+	var stone := Color("#45414f")
+	var trim := Color("#897783")
+	var dark_roof := Color("#242638")
+	_part(root, "TowerFoot", _box(Vector3(3.8, 0.55, 3.8)), Vector3(0.0, 0.28, 0.0), Color("#302e3a"))
+	_part(root, "TowerBase", _box(Vector3(3.1, 2.0, 3.1)), Vector3(0.0, 1.45, 0.0), stone)
+	_part(root, "TowerUpper", _box(Vector3(2.7, 2.4, 2.7)), Vector3(0.0, 3.55, 0.0), trim)
+	for side in [-1.0, 1.0]:
+		_part(root, "ArrowSlit" + str(side), _box(Vector3(0.12, 0.9, 0.08)), Vector3(side * 0.72, 3.65, -1.37), Color("#b6a0a0"), Vector3.ZERO, 0.18)
+	_part(root, "RoofLower", _box(Vector3(4.0, 0.35, 4.0)), Vector3(0.0, 4.92, 0.0), dark_roof)
+	_part(root, "RoofUpper", _box(Vector3(3.0, 0.32, 3.0)), Vector3(0.0, 5.34, 0.0), dark_roof)
+	_part(root, "RoofRidge", _box(Vector3(2.1, 0.22, 0.42)), Vector3(0.0, 5.62, 0.0), trim)
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(3.2, 5.0, 3.2)
+	collision.shape = shape
+	collision.position = Vector3(0.0, 2.55, 0.0)
+	root.add_child(collision)
+	return root
+
+
+static func create_ghost_market_stall() -> Node3D:
+	var root := StaticBody3D.new()
+	root.name = "GhostMarketStall"
+	var wood := Color("#51443f")
+	var cloth := Color("#59475f")
+	var gold := Color("#b18a5a")
+	_part(root, "Counter", _box(Vector3(3.4, 1.05, 1.25)), Vector3(0.0, 0.58, 0.0), wood)
+	_part(root, "CounterTop", _box(Vector3(3.65, 0.16, 1.42)), Vector3(0.0, 1.16, 0.0), gold, Vector3.ZERO, 0.0, 0.22)
+	for x in [-1.48, 1.48]:
+		for z in [-0.48, 0.48]:
+			_part(root, "CanopyPost_%s_%s" % [x, z], _box(Vector3(0.12, 2.65, 0.12)), Vector3(x, 1.35, z), wood)
+	_part(root, "Canopy", _box(Vector3(3.9, 0.18, 1.85)), Vector3(0.0, 2.72, 0.0), cloth)
+	_part(root, "CanopyValance", _box(Vector3(3.9, 0.42, 0.12)), Vector3(0.0, 2.42, -0.91), Color("#806078"))
+	for x in [-0.9, 0.0, 0.9]:
+		_part(root, "SpiritJar" + str(x), _sphere(0.22, 0.36), Vector3(x, 1.48, -0.18), Color("#83b8ad"), Vector3.ZERO, 0.5, 0.1, 0.82)
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(3.5, 2.8, 1.35)
+	collision.shape = shape
+	collision.position = Vector3(0.0, 1.4, 0.0)
+	root.add_child(collision)
+	return root
+
+
+static func create_yinsi_office_facade() -> Node3D:
+	var root := StaticBody3D.new()
+	root.name = "YinsiOfficeFacade"
+	var stone := Color("#48414e")
+	var timber := Color("#493b3c")
+	var trim := Color("#a78a65")
+	var roof := Color("#252638")
+	_part(root, "OfficeFoundation", _box(Vector3(10.0, 0.55, 4.8)), Vector3(0.0, 0.28, 0.0), Color("#302d39"))
+	_part(root, "OfficeWall", _box(Vector3(8.8, 3.3, 3.2)), Vector3(0.0, 2.05, 0.35), stone)
+	_part(root, "DoorFrame", _box(Vector3(2.5, 2.9, 0.28)), Vector3(0.0, 1.75, -1.34), timber)
+	_part(root, "DoorOpening", _box(Vector3(1.8, 2.45, 0.10)), Vector3(0.0, 1.48, -1.51), Color("#171722"))
+	for x in [-4.1, -2.8, 2.8, 4.1]:
+		var pillar := CylinderMesh.new()
+		pillar.top_radius = 0.18
+		pillar.bottom_radius = 0.24
+		pillar.height = 3.9
+		pillar.radial_segments = 10
+		_part(root, "FrontPillar" + str(x), pillar, Vector3(x, 2.05, -1.55), timber, Vector3.ZERO, 0.0, 0.18)
+	_part(root, "FrontBeam", _box(Vector3(9.6, 0.38, 0.48)), Vector3(0.0, 4.0, -1.52), trim, Vector3.ZERO, 0.0, 0.2)
+	_part(root, "RoofLower", _box(Vector3(10.4, 0.38, 5.2)), Vector3(0.0, 4.32, 0.0), roof)
+	_part(root, "RoofUpper", _box(Vector3(8.6, 0.28, 3.8)), Vector3(0.0, 4.72, 0.0), roof)
+	_part(root, "RoofRidge", _box(Vector3(6.8, 0.22, 0.42)), Vector3(0.0, 4.98, 0.0), trim)
+	var plaque := _box(Vector3(3.0, 0.82, 0.18))
+	_part(root, "OfficePlaque", plaque, Vector3(0.0, 3.42, -1.82), Color("#30283d"))
+	var sign := Label3D.new()
+	sign.name = "OfficeName"
+	sign.text = "陰 司 衙 門"
+	sign.position = Vector3(0.0, 3.35, -1.70)
+	sign.font_size = 30
+	sign.outline_size = 6
+	sign.modulate = Color("#e0c99d")
+	root.add_child(sign)
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(9.0, 4.3, 3.5)
+	collision.shape = shape
+	collision.position = Vector3(0.0, 2.15, 0.3)
+	root.add_child(collision)
+	return root
+
+
+static func create_fengdu_city_block() -> Node3D:
+	# A compact review layout: fortified perimeter, gate towers, inner paving,
+	# a small ghost market and the Yinsi office. This is a reusable kit preview,
+	# not a replacement for the streamed production city map.
+	var root := Node3D.new()
+	root.name = "FengduCityBlockPreview"
+	var paving := Color("#514c55")
+	for x_index in range(4):
+		for z_index in range(4):
+			var tile := _box(Vector3(4.35, 0.16, 4.35))
+			_part(root, "StreetPaving_%d_%d" % [x_index, z_index], tile,
+				Vector3(-6.6 + float(x_index) * 4.4, 0.02, -6.6 + float(z_index) * 4.4), paving)
+	for index in range(2):
+		var north := create_fengdu_wall_segment()
+		north.position = Vector3(-4.0 + float(index) * 8.0, 0.0, -9.0)
+		root.add_child(north)
+		var south := create_fengdu_wall_segment()
+		south.position = Vector3(-4.0 + float(index) * 8.0, 0.0, 9.0)
+		root.add_child(south)
+		var west := create_fengdu_wall_segment()
+		west.position = Vector3(-9.0, 0.0, -4.0 + float(index) * 8.0)
+		west.rotation.y = PI * 0.5
+		root.add_child(west)
+		var east := create_fengdu_wall_segment()
+		east.position = Vector3(9.0, 0.0, -4.0 + float(index) * 8.0)
+		east.rotation.y = PI * 0.5
+		root.add_child(east)
+	for x in [-9.0, 9.0]:
+		for z in [-9.0, 9.0]:
+			var tower := create_fengdu_watchtower()
+			tower.position = Vector3(x, 0.0, z)
+			root.add_child(tower)
+	var office := create_yinsi_office_facade()
+	office.position = Vector3(0.0, 0.0, -5.0)
+	root.add_child(office)
+	for x in [-4.2, 4.2]:
+		var stall := create_ghost_market_stall()
+		stall.position = Vector3(x, 0.0, 3.8)
+		root.add_child(stall)
+	for x in [-6.0, 6.0]:
+		var lantern := create_ghost_lantern()
+		lantern.position = Vector3(x, 0.0, -0.2)
+		root.add_child(lantern)
+	return root
+
+
 static func create_fengdu_gate() -> Node3D:
 	var root := StaticBody3D.new()
 	root.name = "FengduGhostGate"
