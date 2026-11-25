@@ -205,3 +205,15 @@ ArtPreviewStage 选中狼或铁骨兽魂时，会读取 Skeleton3D 骨骼名称�
 - 独立预览入口：scenes/FengduCivicPlazaPreview.tscn。
 
 这些 Marker3D 只是场景布点数据，不会自行生成 NPC、驱动巡逻或覆盖服务端权威位置。正式接入时需要由世界地图装配器读取锚点，并由服务端决定 NPC 实际出生、巡逻路径和交互状态。当前没有运行 Godot 验证，需检查地面碰撞、入口衔接、镜头比例和灯光预算后才能进入 production map。
+
+
+## P. 酆都民居室内基础壳体与交互锚点（2026-11-25）
+
+新增 `create_fengdu_residential_interior()` 和独立预览场景 `scenes/FengduResidentialInteriorPreview.tscn`：
+
+- 室内尺寸约 8m × 10m，地板独立碰撞；后墙、两侧墙连续，正面墙拆分为左右墙段与门楣，保留 1.8m 门洞。
+- 木梁、桌案、卧榻、储物箱作为视觉家具；中央保留通行空间，避免家具占满房间。
+- 预留 ResidentTalkPoint、StorageInspectPoint、RestPoint 三个 Marker3D，附带 interaction_kind 元数据。
+- 交互锚点只是位置标记，不会自行触发对话、储物或休息逻辑；实际操作必须经过现有服务端权限与状态校验。
+
+当前仅为单层室内灰盒原型，不包含可开关门、楼梯、完整屋顶、动态灯光交互、室内导航网格或服务端房屋实例化。门洞宽度、家具碰撞（目前家具仅视觉）、镜头与实际玩家胶囊通过情况仍需在 Godot 中验证。
