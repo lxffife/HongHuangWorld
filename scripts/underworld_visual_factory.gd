@@ -1292,3 +1292,180 @@ static func create_ghost_market_shop_interior() -> Node3D:
 	root.set_meta("clear_central_aisle_width", 3.0)
 	root.set_meta("transactions_server_authoritative", true)
 	return root
+
+
+
+static func create_yinsi_courtroom_interior() -> Node3D:
+	# Large, walkable judgment hall; all gameplay decisions remain server-authoritative.
+	var root := Node3D.new()
+	root.name = "YinsiCourtroomInterior"
+	var stone := Color("#514b56")
+	var plaster := Color("#65545a")
+	var timber := Color("#3c2d30")
+	var dark_wood := Color("#29242d")
+	var bronze := Color("#a88961")
+	var jade := Color("#83b9ad")
+	var seal_red := Color("#8f3e3e")
+
+	# 18m x 22m public hall floor.
+	var floor_body := StaticBody3D.new()
+	floor_body.name = "CourtroomWalkableFloor"
+	_part(floor_body, "CourtFloorVisual", _box(Vector3(18.0, 0.24, 22.0)), Vector3(0.0, -0.12, 0.0), stone)
+	var floor_hit := CollisionShape3D.new()
+	var floor_shape := BoxShape3D.new()
+	floor_shape.size = Vector3(18.0, 0.24, 22.0)
+	floor_hit.shape = floor_shape
+	floor_hit.position = Vector3(0.0, -0.12, 0.0)
+	floor_body.add_child(floor_hit)
+	root.add_child(floor_body)
+
+	# Rear, side and split entrance walls preserve a 3.6m-wide front opening.
+	var wall_specs := [
+		{"name":"CourtRearWall", "size":Vector3(18.0, 6.0, 0.32), "at":Vector3(0.0, 3.0, 10.84)},
+		{"name":"CourtWestWall", "size":Vector3(0.32, 6.0, 22.0), "at":Vector3(-8.84, 3.0, 0.0)},
+		{"name":"CourtEastWall", "size":Vector3(0.32, 6.0, 22.0), "at":Vector3(8.84, 3.0, 0.0)},
+		{"name":"CourtFrontLeft", "size":Vector3(7.0, 6.0, 0.32), "at":Vector3(-5.5, 3.0, -10.84)},
+		{"name":"CourtFrontRight", "size":Vector3(7.0, 6.0, 0.32), "at":Vector3(5.5, 3.0, -10.84)},
+		{"name":"CourtEntryLintel", "size":Vector3(4.0, 0.8, 0.32), "at":Vector3(0.0, 5.6, -10.84)}
+	]
+	for spec in wall_specs:
+		var wall_body := StaticBody3D.new()
+		wall_body.name = str(spec["name"])
+		_part(wall_body, "WallVisual", _box(spec["size"]), spec["at"], plaster)
+		var wall_hit := CollisionShape3D.new()
+		var wall_shape := BoxShape3D.new()
+		wall_shape.size = spec["size"]
+		wall_hit.shape = wall_shape
+		wall_hit.position = spec["at"]
+		wall_body.add_child(wall_hit)
+		root.add_child(wall_body)
+
+	# Timber columns and overhead cross-beams define the ceremonial axis.
+	for x in [-7.8, -4.0, 4.0, 7.8]:
+		for z in [-8.8, -2.8, 3.2, 9.0]:
+			_part(root, "CourtColumn_%s_%s" % [x, z], _box(Vector3(0.32, 5.4, 0.32)), Vector3(x, 2.7, z), timber)
+	for z in [-7.0, -1.0, 5.0, 9.7]:
+		_part(root, "CourtCrossBeam" + str(z), _box(Vector3(16.0, 0.24, 0.32)), Vector3(0.0, 5.35, z), dark_wood)
+
+	# Raised judge dais and broad steps; side access remains open.
+	var dais := StaticBody3D.new()
+	dais.name = "JudgeDais"
+	_part(dais, "DaisFoundation", _box(Vector3(10.0, 0.72, 5.0)), Vector3(0.0, 0.48, 7.45), dark_wood)
+	_part(dais, "DaisTop", _box(Vector3(9.6, 0.18, 4.7)), Vector3(0.0, 0.93, 7.45), bronze, Vector3.ZERO, 0.0, 0.22)
+	var dais_hit := CollisionShape3D.new()
+	var dais_shape := BoxShape3D.new()
+	dais_shape.size = Vector3(10.0, 0.72, 5.0)
+	dais_hit.shape = dais_shape
+	dais_hit.position = Vector3(0.0, 0.48, 7.45)
+	dais.add_child(dais_hit)
+	root.add_child(dais)
+	var steps := StaticBody3D.new()
+	steps.name = "DaisSteps"
+	_part(steps, "StepLower", _box(Vector3(5.0, 0.22, 0.75)), Vector3(0.0, 0.11, 4.55), stone)
+	_part(steps, "StepUpper", _box(Vector3(4.2, 0.22, 0.62)), Vector3(0.0, 0.33, 5.15), stone)
+	for spec in [{"size":Vector3(5.0,0.22,0.75),"at":Vector3(0.0,0.11,4.55)}, {"size":Vector3(4.2,0.22,0.62),"at":Vector3(0.0,0.33,5.15)}]:
+		var step_hit := CollisionShape3D.new()
+		var step_shape := BoxShape3D.new()
+		step_shape.size = spec["size"]
+		step_hit.shape = step_shape
+		step_hit.position = spec["at"]
+		steps.add_child(step_hit)
+	root.add_child(steps)
+
+	# Judge's desk, command tablet, seal and chair.
+	var desk := StaticBody3D.new()
+	desk.name = "JudgeBench"
+	_part(desk, "BenchBody", _box(Vector3(4.8, 1.0, 1.25)), Vector3(0.0, 1.48, 8.15), timber)
+	_part(desk, "BenchTop", _box(Vector3(5.15, 0.18, 1.45)), Vector3(0.0, 2.07, 8.15), bronze, Vector3.ZERO, 0.0, 0.3)
+	var desk_hit := CollisionShape3D.new()
+	var desk_shape := BoxShape3D.new()
+	desk_shape.size = Vector3(4.8, 1.0, 1.25)
+	desk_hit.shape = desk_shape
+	desk_hit.position = Vector3(0.0, 1.48, 8.15)
+	desk.add_child(desk_hit)
+	root.add_child(desk)
+	_part(root, "JudgeCommandTablet", _box(Vector3(0.75, 0.10, 0.48)), Vector3(0.0, 2.22, 8.05), jade, Vector3(-0.16, 0.0, 0.0), 0.12, 0.18)
+	_part(root, "JudgeSeal", _box(Vector3(0.34, 0.24, 0.34)), Vector3(1.75, 2.25, 8.05), seal_red, Vector3.ZERO, 0.08, 0.12)
+	var chair := StaticBody3D.new()
+	chair.name = "JudgeChair"
+	_part(chair, "ChairSeat", _box(Vector3(1.5, 0.32, 1.25)), Vector3(0.0, 1.25, 9.55), timber)
+	_part(chair, "ChairBack", _box(Vector3(1.5, 1.65, 0.24)), Vector3(0.0, 2.15, 10.0), dark_wood)
+	var chair_hit := CollisionShape3D.new()
+	var chair_shape := BoxShape3D.new()
+	chair_shape.size = Vector3(1.5, 1.9, 1.25)
+	chair_hit.shape = chair_shape
+	chair_hit.position = Vector3(0.0, 1.95, 9.65)
+	chair.add_child(chair_hit)
+	root.add_child(chair)
+
+	# Side benches and archive cabinets, each with collision.
+	for side in [-1.0, 1.0]:
+		for row in range(3):
+			var bench := StaticBody3D.new()
+			bench.name = "AudienceBench_%s_%d" % [side, row]
+			var z := -5.0 + float(row) * 3.1
+			_part(bench, "BenchSeat", _box(Vector3(3.0, 0.24, 0.82)), Vector3(side * 5.25, 0.62, z), timber)
+			_part(bench, "BenchLegA", _box(Vector3(0.16, 0.60, 0.16)), Vector3(side * 5.25 - 1.2, 0.30, z), dark_wood)
+			_part(bench, "BenchLegB", _box(Vector3(0.16, 0.60, 0.16)), Vector3(side * 5.25 + 1.2, 0.30, z), dark_wood)
+			var bench_hit := CollisionShape3D.new()
+			var bench_shape := BoxShape3D.new()
+			bench_shape.size = Vector3(3.0, 0.85, 0.82)
+			bench_hit.shape = bench_shape
+			bench_hit.position = Vector3(side * 5.25, 0.42, z)
+			bench.add_child(bench_hit)
+			root.add_child(bench)
+
+		var archive := StaticBody3D.new()
+		archive.name = "CaseArchiveCabinet" + str(side)
+		_part(archive, "ArchiveBody", _box(Vector3(1.05, 2.6, 3.6)), Vector3(side * 7.65, 1.3, 4.0), dark_wood)
+		for shelf_y in [0.65, 1.45, 2.25]:
+			_part(archive, "ArchiveShelf" + str(shelf_y), _box(Vector3(1.12, 0.10, 3.68)), Vector3(side * 7.65, shelf_y, 4.0), bronze)
+		var archive_hit := CollisionShape3D.new()
+		var archive_shape := BoxShape3D.new()
+		archive_shape.size = Vector3(1.05, 2.6, 3.6)
+		archive_hit.shape = archive_shape
+		archive_hit.position = Vector3(side * 7.65, 1.3, 4.0)
+		archive.add_child(archive_hit)
+		root.add_child(archive)
+		for shelf_index in range(3):
+			_part(root, "CaseScroll_%s_%d" % [side, shelf_index], _box(Vector3(0.46, 0.12, 0.22)), Vector3(side * 7.65, 0.86 + float(shelf_index) * 0.8, 2.85 + float(shelf_index) * 0.9), Color("#b69b77"))
+
+	# Brass rail guides the accused toward the hearing point without closing the hall.
+	for side in [-1.0, 1.0]:
+		_part(root, "ProcessionRail" + str(side), _box(Vector3(0.12, 0.85, 5.2)), Vector3(side * 2.55, 0.43, -1.3), bronze, Vector3.ZERO, 0.0, 0.32)
+		for z in [-3.7, -1.3, 1.1]:
+			_part(root, "RailPost_%s_%s" % [side, z], _box(Vector3(0.18, 1.0, 0.18)), Vector3(side * 2.55, 0.5, z), timber)
+
+	# Judge, clerks, guards and accused are spawn/placement anchors only.
+	var anchors := [
+		{"name":"JudgeSpawnPoint", "at":Vector3(0.0, 0.0, 9.8), "role":"judge", "kind":"judge_seat"},
+		{"name":"ClerkSpawnPoint", "at":Vector3(-2.8, 0.0, 7.0), "role":"clerk", "kind":"case_record"},
+		{"name":"GuardWestPoint", "at":Vector3(-3.35, 0.0, 3.2), "role":"guard", "kind":"guard_post"},
+		{"name":"GuardEastPoint", "at":Vector3(3.35, 0.0, 3.2), "role":"guard", "kind":"guard_post"},
+		{"name":"AccusedStandPoint", "at":Vector3(0.0, 0.0, -0.5), "role":"accused", "kind":"hearing_position"},
+		{"name":"WitnessStandPoint", "at":Vector3(0.0, 0.0, 2.2), "role":"witness", "kind":"witness_position"},
+		{"name":"PublicEntryPoint", "at":Vector3(0.0, 0.0, -9.2), "role":"visitor", "kind":"entry"}
+	]
+	for spec in anchors:
+		var marker := Marker3D.new()
+		marker.name = spec["name"]
+		marker.position = spec["at"]
+		marker.set_meta("npc_role", spec["role"])
+		marker.set_meta("interaction_kind", spec["kind"])
+		marker.set_meta("placement_only", true)
+		root.add_child(marker)
+
+	var title := Label3D.new()
+	title.name = "CourtroomTitle"
+	title.text = "陰 司 審 判 大 堂"
+	title.position = Vector3(0.0, 4.2, 10.55)
+	title.font_size = 34
+	title.outline_size = 7
+	title.modulate = Color("#e2c99a")
+	root.add_child(title)
+
+	root.set_meta("interior_dimensions", Vector3(18.0, 6.0, 22.0))
+	root.set_meta("central_procession_lane_width", 3.8)
+	root.set_meta("npc_anchors_are_placement_only", true)
+	root.set_meta("case_records_server_authoritative", true)
+	return root
