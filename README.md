@@ -189,7 +189,7 @@ godot --headless --path . --script res://tests/world_generation_test.gd
 - 模型覆盖映射见 `scripts/visual_model_library.gd`；把核验后的 GLB 放入 `assets/models/` 并使用映射表中的固定文件名即可覆盖对应占位模型。
 - 没有模型文件或 GLB 场景不含可渲染网格时，会回退到程序化模型，避免资源缺失阻断进入世界。
 - 免费商用来源、逐包授权核验、模型比例/骨骼/动画验收和导入步骤见 [MODEL-ASSET-PIPELINE.md](docs/MODEL-ASSET-PIPELINE.md)。
-- 当前登记的是候选来源与接入机制；尚未把第三方模型包下载并导入游戏，也尚未完成 Godot 实机验收。
+- 已导入首批 CC0 玩家/怪物/阴兵与酆都建筑环境 GLB，来源、作者、资源包版本和许可文本记录在 `assets/models/THIRD_PARTY_ASSETS.md` 与 `assets/models/licenses/`。当前统一标记为 `imported_unverified`：尚未完成 Godot 4.6 本机导入、第三人称镜头和动画验收，不得视为正式美术验收通过。
 - 外部 GLB 若包含 AnimationPlayer，怪物模型会自动按位移切换 idle/walk/run；已接入服务端确认的怪物攻击、受击、死亡动画触发。玩家人形仍走现有动画驱动，避免控制冲突。动作缺失时保留程序化表现。
 
 
@@ -203,4 +203,4 @@ godot --headless --path . --script res://tests/world_generation_test.gd
 godot --headless --path . --script res://tools/validate_model_assets.gd
 ```
 
-工具检查九个模型映射的 GLB 是否可加载、根节点/网格是否有效、骨骼与动画是否存在，并输出 JSON 报告到 `user://model_asset_validation.json`。默认允许缺少候选模型；发布验收时可加 `-- --require-all`，要求九个模型文件全部存在；加 `-- --strict-animations` 会按模型类型检查必需动作，两个参数可以同时使用。模型加载后还会按角色类型自动校准视觉高度，异常缩放会要求人工复核。结构检查通过后仍需人工检查模型朝向、材质、脚底位置和动作。
+工具逐项检查角色、怪物、酆都建筑与环境模型映射的 GLB 是否可加载、根节点/网格是否有效，并统计材质面数、骨骼、动画片段和网格尺寸；结果输出到 `user://model_asset_validation.json`。默认允许缺少候选模型；加 `-- --require-all` 要求全部映射文件存在；加 `-- --strict-animations` 检查模型类型所需动作；加 `-- --strict-rig` 检查角色骨架与玩家装备挂点。模型加载后还会按角色类型自动校准视觉高度，异常缩放会要求人工复核。结构检查通过后仍需人工检查模型朝向、材质、脚底位置和动作。
