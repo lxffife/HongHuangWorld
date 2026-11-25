@@ -3319,7 +3319,7 @@ func _release_mouse_for_modal() -> void:
 
 
 func _restore_mouse_after_modal() -> void:
-	var another_modal_open := (
+	var another_modal_open: bool = (
 		(is_instance_valid(inventory_panel) and inventory_panel.visible)
 		or (is_instance_valid(party_panel) and party_panel.visible)
 		or (is_instance_valid(npc_panel) and npc_panel.visible)
