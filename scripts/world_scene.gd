@@ -8340,8 +8340,9 @@ func _try_interact_nearest_npc() -> void:
 		if not (npc_variant is Dictionary):
 			continue
 		var npc_data: Dictionary = npc_variant
-		var target := Vector3(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_y", 0.0)), float(npc_data.get("position_z", 0.0)))
-		var distance := Vector2(target.x - local_player.position.x, target.z - local_player.position.z).length()
+		var npc_marker := npc_nodes.get(str(npc_data.get("id", ""))) as Node3D
+		var target := npc_marker.global_position if is_instance_valid(npc_marker) else Vector3(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_y", 0.0)), float(npc_data.get("position_z", 0.0)))
+		var distance := Vector2(target.x - local_player.global_position.x, target.z - local_player.global_position.z).length()
 		if distance <= float(npc_data.get("interaction_radius", 3.0)) and distance < nearest_npc_distance:
 			nearest_npc_distance = distance
 			nearest_npc_id = str(npc_data.get("id", ""))
