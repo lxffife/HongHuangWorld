@@ -49,6 +49,9 @@ var input_sequence := 0
 var jump_pending := false
 var is_dead := false
 var current_move_input := Vector2.ZERO
+var auto_navigation_target: Vector3 = Vector3.ZERO
+var auto_navigation_active := false
+var auto_navigation_arrival_distance := 1.6
 var last_send_error: int = OK
 var movement_network_ready := false
 func _ready() -> void:
@@ -183,8 +186,19 @@ func _unhandled_input(event: InputEvent) -> void:
 		pitch = clampf(pitch - event.relative.y * mouse_sensitivity, -0.9, 0.35)
 		camera_pivot.rotation = Vector3(pitch, yaw, 0.0)
 
+func set_auto_navigation_target(target: Vector3) -> void:
+	auto_navigation_target = target
+	auto_navigation_active = true
+
+
+func clear_auto_navigation_target() -> void:
+	auto_navigation_active = false
+	auto_navigation_target = Vector3.ZERO
+
+
 func _physics_process(delta: float) -> void:
 	if is_dead:
+		clear_auto_navigation_target()
 		velocity = Vector3.ZERO
 		return
 	if _is_text_input_focused():
@@ -192,15 +206,28 @@ func _physics_process(delta: float) -> void:
 		# while the player is composing or typing in chat/another text field.
 		jump_pending = false
 	var input_2d := _get_move_input()
+	if auto_navigation_active and input_2d.length_squared() > 0.01:
+		# Manual WASD input always takes priority over automatic movement.
+		clear_auto_navigation_target()
+	var direction := Vector3.ZERO
+	if auto_navigation_active:
+		var target_offset := auto_navigation_target - global_position
+		target_offset.y = 0.0
+		if target_offset.length() <= auto_navigation_arrival_distance:
+			clear_auto_navigation_target()
+		else:
+			direction = target_offset.normalized()
+			input_2d = Vector2(0.0, -1.0)
 	current_move_input = input_2d
 	if camera_pivot == null or not is_instance_valid(camera_pivot):
 		return
 	if visual == null or not is_instance_valid(visual):
 		return
-	var camera_basis := camera_pivot.global_transform.basis
-	var direction := camera_basis.x * input_2d.x + camera_basis.z * input_2d.y
-	direction.y = 0.0
-	direction = direction.normalized()
+	if not auto_navigation_active:
+		var camera_basis := camera_pivot.global_transform.basis
+		direction = camera_basis.x * input_2d.x + camera_basis.z * input_2d.y
+		direction.y = 0.0
+		direction = direction.normalized()
 	if direction.length_squared() > 0.001:
 		var target_yaw := atan2(-direction.x, -direction.z)
 		visual.rotation.y = lerp_angle(visual.rotation.y, target_yaw, 12.0 * delta)

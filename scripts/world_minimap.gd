@@ -138,6 +138,11 @@ func _draw() -> void:
 		var npc_pos := _map_point(float(npc.get("position_x", 0.0)), float(npc.get("position_z", 0.0)), center, radius)
 		if _is_inside_radar(npc_pos, center, radius):
 			draw_circle(npc_pos, 3.5, Color("#63d6c5"))
+			var npc_name := str(npc.get("name", "NPC"))
+			if not npc_name.is_empty():
+				var label_position := npc_pos + Vector2(5.0, -4.0)
+				draw_string(ThemeDB.fallback_font, label_position + Vector2(0.6, 0.6), npc_name.left(6), HORIZONTAL_ALIGNMENT_LEFT, 66.0, 8, Color("#07111a", 0.95))
+				draw_string(ThemeDB.fallback_font, label_position, npc_name.left(6), HORIZONTAL_ALIGNMENT_LEFT, 66.0, 8, Color("#bde9df"))
 			if str(navigation_target.get("id", "")) == str(npc.get("id", "")) and navigation_target.get("kind", "") == "npc":
 				draw_arc(npc_pos, 7.0, 0.0, TAU, 24, Color("#f4d27f"), 1.8)
 	for monster_item in monster_points:
@@ -169,10 +174,12 @@ func _draw() -> void:
 		var target_point := _map_point(float(navigation_target.get("x", 0.0)), float(navigation_target.get("z", 0.0)), center, radius)
 		if _is_inside_radar(target_point, center, radius):
 			draw_line(center, target_point, Color("#f4d27f", 0.8), 1.4)
+	# Godot characters face -Z at yaw 0. The north-up map inverts world Z,
+	# so the actual forward vector points down at yaw 0 and rotates with yaw.
 	var player_triangle := PackedVector2Array([
-		center + Vector2(0.0, -8.0).rotated(-player_yaw),
-		center + Vector2(-6.0, 6.0).rotated(-player_yaw),
-		center + Vector2(6.0, 6.0).rotated(-player_yaw)
+		center + Vector2(0.0, 8.0).rotated(player_yaw),
+		center + Vector2(-6.0, -6.0).rotated(player_yaw),
+		center + Vector2(6.0, -6.0).rotated(player_yaw)
 	])
 	draw_colored_polygon(player_triangle, Color("#f2e8d6"))
 	draw_string(ThemeDB.fallback_font, Vector2(5.0, 13.0), "N", HORIZONTAL_ALIGNMENT_LEFT, -1.0, 10, Color("#a9bac7"))
