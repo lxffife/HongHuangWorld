@@ -26,6 +26,11 @@ const MODEL_FILES := {
 
 # Animation requirements are model-specific: floating souls do not need
 # quadruped locomotion, and the player uses its existing humanoid driver.
+const RIG_REQUIRED_MODELS := [
+	"player_humanoid", "wolf", "iron_beast", "warrior",
+	"npc_judge", "npc_trial_master", "npc_guard", "npc_soup_keeper", "npc_blacksmith", "npc_generic"
+]
+
 const REQUIRED_ANIMATIONS := {
 	"player_humanoid": ["idle", "walk"],
 	"wolf": ["idle", "walk", "attack", "death"],
@@ -73,7 +78,7 @@ func _run_validation() -> void:
 			"mesh_count": 0,
 			"skeleton_count": 0,
 			"animation_player_count": 0,
-			"rig_validation": {"skeleton_required": true, "animation_player_required": true, "passed": false},
+			"rig_validation": {"required": model_key in RIG_REQUIRED_MODELS, "skeleton_required": model_key in RIG_REQUIRED_MODELS, "animation_player_required": model_key in RIG_REQUIRED_MODELS, "passed": false},
 			"animations": [],
 			"animation_clips": [],
 			"required_animation_categories": REQUIRED_ANIMATIONS.get(model_key, []),
@@ -116,12 +121,13 @@ func _run_validation() -> void:
 		_classify_animation_coverage(item)
 		var has_skeleton := int(item["skeleton_count"]) > 0
 		var has_animation_player := int(item["animation_player_count"]) > 0
-		item["rig_validation"]["passed"] = has_skeleton and has_animation_player
-		if not has_skeleton:
-			item["warnings"].append("Character asset has no Skeleton3D; verify whether a static mesh is intentional")
-		if not has_animation_player:
-			item["warnings"].append("Character asset has no AnimationPlayer; imported animation playback is unavailable")
-		if strict_rig and not bool(item["rig_validation"]["passed"]):
+		var rig_required := bool(item["rig_validation"]["required"])
+		item["rig_validation"]["passed"] = not rig_required or (has_skeleton and has_animation_player)
+		if rig_required and not has_skeleton:
+			item["warnings"].append("Rigged character asset has no Skeleton3D")
+		if rig_required and not has_animation_player:
+			item["warnings"].append("Rigged character asset has no AnimationPlayer")
+		if strict_rig and rig_required and not bool(item["rig_validation"]["passed"]):
 			exit_code = 1
 		var missing_animations := _apply_animation_requirements(model_key, item)
 		if not missing_animations.is_empty():
@@ -139,9 +145,9 @@ func _run_validation() -> void:
 		else:
 			item["status"] = "valid"
 			report["summary"]["valid"] += 1
-			if not has_skeleton:
+			if rig_required and not has_skeleton:
 				report["summary"]["warnings"] += 1
-			if not has_animation_player:
+			if rig_required and not has_animation_player:
 				report["summary"]["warnings"] += 1
 
 		instance.free()
