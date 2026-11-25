@@ -330,6 +330,92 @@ static func create_fengdu_city_block() -> Node3D:
 	return root
 
 
+static func create_fengdu_inner_gate() -> Node3D:
+	# Smaller street gate; the central passage remains open.
+	var root := StaticBody3D.new()
+	root.name = "FengduInnerGate"
+	var stone := Color("#514b5c")
+	var trim := Color("#a18461")
+	var roof := Color("#29283a")
+	_part(root, "GateBase", _box(Vector3(10.0, 0.35, 3.2)), Vector3(0.0, 0.18, 0.0), Color("#393543"))
+	for side in [-1.0, 1.0]:
+		var x := side * 4.0
+		_part(root, "GatePier" + str(side), _box(Vector3(1.15, 4.4, 1.55)), Vector3(x, 2.35, 0.0), stone)
+		_part(root, "GatePierCap" + str(side), _box(Vector3(1.5, 0.32, 1.85)), Vector3(x, 4.72, 0.0), trim)
+		var pier_collision := CollisionShape3D.new()
+		var pier_shape := BoxShape3D.new()
+		pier_shape.size = Vector3(1.15, 4.4, 1.55)
+		pier_collision.shape = pier_shape
+		pier_collision.position = Vector3(x, 2.35, 0.0)
+		root.add_child(pier_collision)
+	_part(root, "GateLintel", _box(Vector3(8.6, 0.82, 1.6)), Vector3(0.0, 5.0, 0.0), stone)
+	_part(root, "GateRoofLower", _box(Vector3(10.8, 0.32, 3.3)), Vector3(0.0, 5.62, 0.0), roof)
+	_part(root, "GateRoofUpper", _box(Vector3(8.6, 0.24, 2.5)), Vector3(0.0, 5.94, 0.0), roof)
+	_part(root, "GateRoofRidge", _box(Vector3(6.8, 0.20, 0.32)), Vector3(0.0, 6.16, 0.0), trim)
+	_part(root, "GatePlaque", _box(Vector3(2.8, 0.72, 0.16)), Vector3(0.0, 4.95, -0.88), Color("#332b3d"))
+	var title := Label3D.new()
+	title.name = "GateTitle"
+	title.text = "酆 都 内 城"
+	title.position = Vector3(0.0, 4.92, -0.98)
+	title.font_size = 28
+	title.outline_size = 6
+	title.modulate = Color("#e0c99d")
+	root.add_child(title)
+	var lintel_collision := CollisionShape3D.new()
+	var lintel_shape := BoxShape3D.new()
+	lintel_shape.size = Vector3(8.6, 0.82, 1.6)
+	lintel_collision.shape = lintel_shape
+	lintel_collision.position = Vector3(0.0, 5.0, 0.0)
+	root.add_child(lintel_collision)
+	return root
+
+
+static func create_reincarnation_hall() -> Node3D:
+	var root := StaticBody3D.new()
+	root.name = "ReincarnationHall"
+	var stone := Color("#494452")
+	var timber := Color("#493b42")
+	var bronze := Color("#b18c5c")
+	var roof := Color("#252638")
+	_part(root, "HallFoundation", _box(Vector3(8.8, 0.55, 6.8)), Vector3(0.0, 0.28, 0.0), Color("#302d39"))
+	_part(root, "HallBody", _box(Vector3(7.4, 3.1, 5.0)), Vector3(0.0, 1.98, 0.0), stone)
+	_part(root, "HallDoor", _box(Vector3(2.0, 2.55, 0.14)), Vector3(0.0, 1.56, -2.58), Color("#171722"))
+	for x in [-3.0, -1.9, 1.9, 3.0]:
+		var pillar := CylinderMesh.new()
+		pillar.top_radius = 0.15
+		pillar.bottom_radius = 0.20
+		pillar.height = 3.7
+		pillar.radial_segments = 10
+		_part(root, "HallPillar" + str(x), pillar, Vector3(x, 1.95, -2.55), timber)
+	_part(root, "HallBeam", _box(Vector3(8.0, 0.34, 0.38)), Vector3(0.0, 3.82, -2.55), bronze)
+	_part(root, "HallRoofLower", _box(Vector3(9.4, 0.38, 7.2)), Vector3(0.0, 4.0, 0.0), roof)
+	_part(root, "HallRoofUpper", _box(Vector3(7.5, 0.30, 5.5)), Vector3(0.0, 4.42, 0.0), roof)
+	_part(root, "HallRoofRidge", _box(Vector3(5.6, 0.22, 0.38)), Vector3(0.0, 4.70, 0.0), bronze)
+	_part(root, "WheelHalo", _sphere(0.82, 0.16), Vector3(0.0, 2.95, -2.72), Color("#86b9b4"), Vector3(PI * 0.5, 0.0, 0.0), 1.0, 0.22)
+	_part(root, "WheelHub", _sphere(0.22), Vector3(0.0, 2.95, -2.84), Color("#e1c38a"), Vector3.ZERO, 1.2, 0.25)
+	for index in range(8):
+		var angle := TAU * float(index) / 8.0
+		_part(root, "WheelSpoke" + str(index), _box(Vector3(0.08, 1.35, 0.08)),
+			Vector3(sin(angle) * 0.48, 2.95 + cos(angle) * 0.48, -2.82),
+			Color("#c5aa7b"), Vector3(0.0, 0.0, -angle), 0.25, 0.2)
+	_part(root, "HallPlaque", _box(Vector3(3.0, 0.72, 0.16)), Vector3(0.0, 3.45, -2.78), Color("#30283d"))
+	var sign := Label3D.new()
+	sign.name = "HallTitle"
+	sign.text = "六 道 轮 回 殿"
+	sign.position = Vector3(0.0, 3.43, -2.88)
+	sign.font_size = 28
+	sign.outline_size = 6
+	sign.modulate = Color("#e0c99d")
+	root.add_child(sign)
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(7.5, 4.0, 5.1)
+	collision.shape = shape
+	collision.position = Vector3(0.0, 2.0, 0.0)
+	root.add_child(collision)
+	return root
+
+
 static func create_fengdu_gate() -> Node3D:
 	var root := StaticBody3D.new()
 	root.name = "FengduGhostGate"
