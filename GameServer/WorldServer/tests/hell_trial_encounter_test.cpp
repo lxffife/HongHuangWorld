@@ -99,6 +99,24 @@ int main() {
     result = boss_first.record_monster_death("mob-18c", "hell_f18_last_sinner");
     assert(result.objective_kills == 3 && result.completion_ready);
 
+    HellTrialInvestigation investigation(1);
+    assert(investigation.enabled() && !investigation.completed());
+    auto evidence = investigation.submit("registry_seal", "before_third_bell");
+    assert(!evidence.accepted && investigation.solved_count() == 0);
+    evidence = investigation.submit("unknown_clue", "after_third_bell");
+    assert(!evidence.accepted);
+    evidence = investigation.submit("registry_seal", "after_third_bell");
+    assert(evidence.accepted && evidence.newly_solved && evidence.solved_count == 1);
+    evidence = investigation.submit("registry_seal", "after_third_bell");
+    assert(evidence.accepted && evidence.already_solved && evidence.solved_count == 1);
+    evidence = investigation.submit("echo_stone", "west_corridor");
+    assert(evidence.accepted && evidence.solved_count == 2 && !evidence.completed);
+    evidence = investigation.submit("soul_lantern", "after_replacement");
+    assert(evidence.accepted && evidence.completed && investigation.completed());
+    HellTrialInvestigation other_floor(2);
+    assert(!other_floor.enabled());
+    assert(!other_floor.submit("registry_seal", "after_third_bell").accepted);
+
     HellTrialEncounter unrelated(7);
     result = unrelated.record_monster_death("mob-x", "hell_f01_tongue_wraith");
     assert(!result.objective_kill_recorded);
