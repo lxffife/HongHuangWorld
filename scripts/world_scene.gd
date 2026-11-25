@@ -76,10 +76,27 @@ var world_terrain_root: Node3D
 var hell_floor_visual_root: Node3D
 var hell_trial_panel: Variant
 var hell_trial_open_button: Button
+var hell_trial_hud_panel: PanelContainer
+var hell_trial_hud_title: Label
+var hell_trial_hud_stage: Label
+var hell_trial_hud_objective: Label
+var hell_trial_hud_hint: Label
+var hell_trial_hud_progress: ProgressBar
+var hell_trial_hud_evidence_toggle: Button
+var hell_trial_hud_evidence_container: VBoxContainer
+var hell_trial_hud_evidence_status: Label
+var hell_trial_hud_rescue_container: VBoxContainer
+var hell_trial_hud_rescue_status: Label
+var hell_trial_hud_rescue_west_button: Button
+var hell_trial_hud_rescue_east_button: Button
+var hell_trial_runtime_data: Dictionary = {}
 var hud_visible := true
 var hud_toggle_button: Button
 var hud_restore_button: Button
 var help_button: Button
+var audio_settings_button: Button
+var audio_settings_panel: PanelContainer
+var audio_settings_restore_mouse_captured := false
 var leave_world_button: Button
 var leave_world_dialog: ConfirmationDialog
 var leaving_world := false
@@ -298,6 +315,7 @@ func _ready() -> void:
 	if not HHSession.access_token.is_empty():
 		HHChatNetwork.connect_chat(HHSession.get_chat_api_base(), HHSession.access_token)
 	_build_combat_hud()
+	_build_hell_trial_hud()
 	_build_minimap_hud()
 	_build_world_map_hud()
 	_build_input_debug_hud()
@@ -618,6 +636,11 @@ func _build_compact_hud() -> void:
 	help_button.custom_minimum_size = Vector2(112.0, 34.0)
 	help_button.pressed.connect(_toggle_help_panel)
 	hud.add_child(help_button)
+	audio_settings_button = Button.new()
+	audio_settings_button.text = "声音设置"
+	audio_settings_button.custom_minimum_size = Vector2(112.0, 34.0)
+	audio_settings_button.pressed.connect(_toggle_audio_settings_panel)
+	hud.add_child(audio_settings_button)
 	leave_world_button = Button.new()
 	leave_world_button.text = "退出世界"
 	leave_world_button.custom_minimum_size = Vector2(112.0, 34.0)
@@ -637,6 +660,7 @@ func _build_compact_hud() -> void:
 	hud_restore_button.pressed.connect(_toggle_hud_visibility)
 	hud.add_child(hud_restore_button)
 	_build_controls_help_panel(hud)
+	_build_audio_settings_panel(hud)
 	soul_choice_button = Button.new()
 	soul_choice_button.text = "分配无相灵魄"
 	soul_choice_button.position = Vector2(140.0, 118.0)
@@ -840,13 +864,252 @@ func _map_world_id() -> String:
 	var hell_floor := int(HHSession.world_snapshot.get("hell_floor", 0))
 	return "underworld_hell_%02d" % hell_floor if hell_floor > 0 else world_id
 
+func _build_hell_trial_hud() -> void:
+	var hud_root := get_node_or_null("HUD") as Control
+	if hud_root == null:
+		return
+	hell_trial_hud_panel = PanelContainer.new()
+	hell_trial_hud_panel.name = "HellTrialProgressPanel"
+	hell_trial_hud_panel.visible = false
+	hell_trial_hud_panel.z_index = 24
+	hell_trial_hud_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color("#111722ee")
+	panel_style.border_color = Color("#98764f")
+	panel_style.set_border_width_all(1)
+	panel_style.set_corner_radius_all(8)
+	panel_style.content_margin_left = 12.0
+	panel_style.content_margin_right = 12.0
+	panel_style.content_margin_top = 7.0
+	panel_style.content_margin_bottom = 7.0
+	hell_trial_hud_panel.add_theme_stylebox_override("panel", panel_style)
+	hud_root.add_child(hell_trial_hud_panel)
+
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 3)
+	hell_trial_hud_panel.add_child(layout)
+	hell_trial_hud_title = Label.new()
+	hell_trial_hud_title.text = "幽冥刑狱 · 试炼进度"
+	hell_trial_hud_title.add_theme_color_override("font_color", Color("#e7c995"))
+	hell_trial_hud_title.add_theme_font_size_override("font_size", 14)
+	layout.add_child(hell_trial_hud_title)
+	hell_trial_hud_stage = Label.new()
+	hell_trial_hud_stage.add_theme_color_override("font_color", Color("#d7c7a8"))
+	hell_trial_hud_stage.add_theme_font_size_override("font_size", 12)
+	layout.add_child(hell_trial_hud_stage)
+	hell_trial_hud_objective = Label.new()
+	hell_trial_hud_objective.add_theme_color_override("font_color", Color("#aebdca"))
+	hell_trial_hud_objective.add_theme_font_size_override("font_size", 11)
+	hell_trial_hud_objective.clip_text = true
+	hell_trial_hud_objective.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	layout.add_child(hell_trial_hud_objective)
+	hell_trial_hud_hint = Label.new()
+	hell_trial_hud_hint.add_theme_color_override("font_color", Color("#9aa9b8"))
+	hell_trial_hud_hint.add_theme_font_size_override("font_size", 10)
+	hell_trial_hud_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hell_trial_hud_hint.custom_minimum_size.y = 22.0
+	layout.add_child(hell_trial_hud_hint)
+	hell_trial_hud_progress = ProgressBar.new()
+	hell_trial_hud_progress.min_value = 0.0
+	hell_trial_hud_progress.max_value = 1.0
+	hell_trial_hud_progress.value = 0.0
+	hell_trial_hud_progress.show_percentage = false
+	hell_trial_hud_progress.custom_minimum_size.y = 8.0
+	layout.add_child(hell_trial_hud_progress)
+	hell_trial_hud_evidence_toggle = Button.new()
+	hell_trial_hud_evidence_toggle.text = "查验三份证词"
+	hell_trial_hud_evidence_toggle.visible = false
+	hell_trial_hud_evidence_toggle.custom_minimum_size.y = 28.0
+	hell_trial_hud_evidence_toggle.pressed.connect(_toggle_hell_trial_evidence_panel)
+	layout.add_child(hell_trial_hud_evidence_toggle)
+	hell_trial_hud_evidence_container = VBoxContainer.new()
+	hell_trial_hud_evidence_container.visible = false
+	hell_trial_hud_evidence_container.add_theme_constant_override("separation", 5)
+	layout.add_child(hell_trial_hud_evidence_container)
+	hell_trial_hud_evidence_status = Label.new()
+	hell_trial_hud_evidence_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hell_trial_hud_evidence_status.add_theme_color_override("font_color", Color("#e7c995"))
+	hell_trial_hud_evidence_container.add_child(hell_trial_hud_evidence_status)
+	hell_trial_hud_rescue_container = VBoxContainer.new()
+	hell_trial_hud_rescue_container.visible = false
+	hell_trial_hud_rescue_container.add_theme_constant_override("separation", 4)
+	layout.add_child(hell_trial_hud_rescue_container)
+	hell_trial_hud_rescue_status = Label.new()
+	hell_trial_hud_rescue_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hell_trial_hud_rescue_status.add_theme_color_override("font_color", Color("#a9d8c7"))
+	hell_trial_hud_rescue_container.add_child(hell_trial_hud_rescue_status)
+	hell_trial_hud_rescue_west_button = Button.new()
+	hell_trial_hud_rescue_west_button.text = "点亮西侧魂灯"
+	hell_trial_hud_rescue_west_button.custom_minimum_size.y = 28.0
+	hell_trial_hud_rescue_west_button.pressed.connect(_on_hell_trial_soul_lantern_pressed.bind("west"))
+	hell_trial_hud_rescue_container.add_child(hell_trial_hud_rescue_west_button)
+	hell_trial_hud_rescue_east_button = Button.new()
+	hell_trial_hud_rescue_east_button.text = "点亮东侧魂灯"
+	hell_trial_hud_rescue_east_button.custom_minimum_size.y = 28.0
+	hell_trial_hud_rescue_east_button.pressed.connect(_on_hell_trial_soul_lantern_pressed.bind("east"))
+	hell_trial_hud_rescue_container.add_child(hell_trial_hud_rescue_east_button)
+	_layout_hud()
+
+
+func _on_hell_trial_soul_lantern_pressed(lantern_id: String) -> void:
+	if HHSession.world_network == null:
+		_show_notification("当前世界连接不可用。", 2.0)
+		return
+	var send_error: Error = HHSession.world_network.send_hell_trial_soul_lantern(lantern_id)
+	if send_error != OK:
+		_show_notification("魂灯交互发送失败，请稍后重试。", 2.5)
+
+
+func _render_hell_trial_hud(trial_data: Dictionary) -> void:
+	if not is_instance_valid(hell_trial_hud_panel):
+		return
+	var floor_number := int(trial_data.get("floor", HHSession.world_snapshot.get("hell_floor", 0)))
+	if floor_number < 1 or floor_number > 18:
+		hell_trial_hud_panel.visible = false
+		return
+	hell_trial_runtime_data = trial_data.duplicate(true)
+	var stage := int(trial_data.get("stage", 0))
+	var stage_count := maxi(1, int(trial_data.get("stage_count", 4)))
+	var completed := bool(trial_data.get("completed", false))
+	var boss_phase := int(trial_data.get("boss_phase", 0))
+	var active_name := str(trial_data.get("active_name", ""))
+	var stage_text := "试炼完成" if completed else ("守将阶段 · 第 %d 阶段" % maxi(1, boss_phase) if stage >= 3 else "第 %d / %d 波" % [mini(stage + 1, stage_count), stage_count])
+	if not completed and not active_name.is_empty():
+		stage_text += " · " + active_name
+	var kills := maxi(0, int(trial_data.get("objective_kills", 0)))
+	var required := maxi(0, int(trial_data.get("objective_required", 0)))
+	var floor_name := str(trial_data.get("floor_name", "十八层刑狱试炼"))
+	hell_trial_hud_title.text = "第 %02d 层 · %s" % [floor_number, floor_name]
+	hell_trial_hud_stage.text = stage_text
+	var hint := str(trial_data.get("trial_hint", ""))
+	if stage >= 3 and not completed:
+		hint = str(trial_data.get("guardian_hint", hint))
+	if floor_number == 2:
+		var hazard_state: Dictionary = trial_data.get("hazard", {})
+		if not hazard_state.is_empty():
+			var hazard_phase := str(hazard_state.get("phase", "warning"))
+			var hazard_text := "预警中：离开中央刑道" if hazard_phase == "warning" else ("剪刃合拢：中央区域危险" if hazard_phase == "active" else "剪刃回收：可以通行")
+			hint += "\n断缘剪刃 · " + hazard_text + " · %.1f 秒" % float(hazard_state.get("remaining_seconds", 0.0))
+	hell_trial_hud_hint.text = hint
+	hell_trial_hud_hint.visible = not hint.is_empty()
+	var soul_rescue: Dictionary = trial_data.get("soul_rescue", {})
+	var rescue_enabled := floor_number == 3 and bool(soul_rescue.get("enabled", false))
+	hell_trial_hud_rescue_container.visible = rescue_enabled
+	if rescue_enabled:
+		var rescued_count := int(soul_rescue.get("rescued_count", 0))
+		var first_lantern := str(soul_rescue.get("first_lantern_id", ""))
+		var rescue_done := bool(soul_rescue.get("completed", false))
+		var rescue_remaining := float(soul_rescue.get("remaining_seconds", 0.0))
+		if rescue_done:
+			hell_trial_hud_rescue_status.text = "两名亡魂已获救 · 2 / 2"
+		elif rescued_count == 1:
+			var first_side := "西侧" if first_lantern == "west" else "东侧"
+			hell_trial_hud_rescue_status.text = "%s魂灯已点亮，等待另一名队友接应 · %.1f 秒" % [first_side, rescue_remaining]
+		else:
+			hell_trial_hud_rescue_status.text = "两名不同队友分别点亮两侧魂灯，限时 15 秒"
+		hell_trial_hud_rescue_west_button.disabled = rescue_done
+		hell_trial_hud_rescue_east_button.disabled = rescue_done
+	else:
+		hell_trial_hud_rescue_west_button.disabled = false
+		hell_trial_hud_rescue_east_button.disabled = false
+	var investigation: Dictionary = trial_data.get("investigation", {})
+	var investigation_enabled := floor_number == 1 and bool(investigation.get("enabled", false))
+	hell_trial_hud_evidence_toggle.visible = investigation_enabled
+	if investigation_enabled:
+		var solved_count := int(investigation.get("solved_count", 0))
+		hell_trial_hud_evidence_toggle.text = "查验三份证词 · %d / 3" % solved_count
+		_render_hell_trial_evidence(investigation)
+	else:
+		hell_trial_hud_evidence_container.visible = false
+	if required > 0:
+		hell_trial_hud_objective.text = "本层目标进度：%d / %d" % [mini(kills, required), required]
+		hell_trial_hud_progress.max_value = float(required)
+		hell_trial_hud_progress.value = float(clampi(kills, 0, required))
+	else:
+		hell_trial_hud_objective.text = "本层目标：" + str(trial_data.get("label", "等待服务器目标"))
+		hell_trial_hud_progress.max_value = 1.0
+		hell_trial_hud_progress.value = 1.0 if completed else 0.0
+	hell_trial_hud_panel.visible = hud_visible
+	if completed:
+		hell_trial_hud_stage.add_theme_color_override("font_color", Color("#9bd4ad"))
+	else:
+		hell_trial_hud_stage.add_theme_color_override("font_color", Color("#d7c7a8"))
+
+
+func _toggle_hell_trial_evidence_panel() -> void:
+	if not is_instance_valid(hell_trial_hud_evidence_container):
+		return
+	hell_trial_hud_evidence_container.visible = not hell_trial_hud_evidence_container.visible
+	_layout_hud()
+
+
+func _render_hell_trial_evidence(investigation: Dictionary) -> void:
+	if not is_instance_valid(hell_trial_hud_evidence_container):
+		return
+	hell_trial_hud_evidence_status.text = str(investigation.get("conclusion", "核验三份现场证词。"))
+	for child in hell_trial_hud_evidence_container.get_children():
+		if child != hell_trial_hud_evidence_status:
+			child.queue_free()
+	var clues: Variant = investigation.get("clues", [])
+	if not (clues is Array):
+		return
+	for clue_value in clues:
+		if not (clue_value is Dictionary):
+			continue
+		var clue: Dictionary = clue_value
+		var card := VBoxContainer.new()
+		card.add_theme_constant_override("separation", 2)
+		hell_trial_hud_evidence_container.add_child(card)
+		var solved := bool(clue.get("solved", false))
+		var heading := Label.new()
+		heading.text = str(clue.get("name", "证词线索")) + " · " + str(clue.get("location", "刑狱现场")) + (" · 已核验" if solved else " · 待核验")
+		heading.add_theme_color_override("font_color", Color("#9bd4ad") if solved else Color("#e7c995"))
+		card.add_child(heading)
+		var description := Label.new()
+		description.text = str(clue.get("description", ""))
+		description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		description.add_theme_font_size_override("font_size", 10)
+		card.add_child(description)
+		var options_row := HBoxContainer.new()
+		options_row.add_theme_constant_override("separation", 4)
+		card.add_child(options_row)
+		var options: Variant = clue.get("options", [])
+		if options is Array:
+			for option_value in options:
+				if not (option_value is Dictionary):
+					continue
+				var option: Dictionary = option_value
+				var choice_id := str(option.get("id", ""))
+				var choice_button := Button.new()
+				choice_button.text = str(option.get("label", "核验"))
+				choice_button.disabled = solved or choice_id.is_empty()
+				choice_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				choice_button.custom_minimum_size.y = 26.0
+				choice_button.add_theme_font_size_override("font_size", 10)
+				choice_button.pressed.connect(_submit_hell_trial_evidence.bind(str(clue.get("id", "")), choice_id))
+				options_row.add_child(choice_button)
+
+
+func _submit_hell_trial_evidence(evidence_id: String, option_id: String) -> void:
+	if HHSession.world_network == null:
+		_show_notification("世界连接尚未就绪，无法提交证词。", 2.5)
+		return
+	var error: Error = HHSession.world_network.send_hell_trial_evidence(evidence_id, option_id)
+	if error != OK:
+		_show_notification("证词提交失败，错误码：" + str(error), 2.5)
+
+
 func _show_hell_trial_runtime_state(snapshot: Dictionary) -> void:
 	var trial: Variant = snapshot.get("hell_trial", {})
-	if not (trial is Dictionary):
+	if not (trial is Dictionary) or trial.is_empty():
+		var floor_hint := int(snapshot.get("hell_floor", 0))
+		if floor_hint <= 0:
+			hell_trial_runtime_data.clear()
+			if is_instance_valid(hell_trial_hud_panel):
+				hell_trial_hud_panel.visible = false
 		return
 	var trial_data: Dictionary = trial
-	if trial_data.is_empty():
-		return
+	_render_hell_trial_hud(trial_data)
 	var floor_number := int(trial_data.get("floor", snapshot.get("hell_floor", 0)))
 	var label := str(trial_data.get("label", ""))
 	var boss_phase := int(trial_data.get("boss_phase", 0))
@@ -856,7 +1119,6 @@ func _show_hell_trial_runtime_state(snapshot: Dictionary) -> void:
 		_show_notification("第 %02d 层 · 试炼已完成" % floor_number, 4.0)
 	elif not label.is_empty():
 		_show_notification("第 %02d 层 · 当前挑战：%s" % [floor_number, label], 4.0)
-
 
 
 func _open_hell_trial_panel() -> void:
@@ -1678,6 +1940,7 @@ func _confirm_leave_world() -> void:
 
 
 func _leave_world_to_lobby() -> void:
+	HHAudio.stop_ambience()
 	if leaving_world:
 		return
 	leaving_world = true
@@ -1728,12 +1991,104 @@ func _toggle_help_panel() -> void:
 	if opening:
 		help_restore_mouse_captured = Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		if is_instance_valid(audio_settings_panel):
+			audio_settings_panel.visible = false
 		help_panel.visible = true
 	else:
 		help_panel.visible = false
 		if help_restore_mouse_captured and not is_gameplay_input_blocked():
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		help_restore_mouse_captured = false
+
+func _toggle_audio_settings_panel() -> void:
+	if not is_instance_valid(audio_settings_panel):
+		return
+	var opening := not audio_settings_panel.visible
+	if opening:
+		audio_settings_restore_mouse_captured = Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		if is_instance_valid(help_panel):
+			help_panel.visible = false
+		audio_settings_panel.visible = true
+	else:
+		audio_settings_panel.visible = false
+		if audio_settings_restore_mouse_captured and not is_gameplay_input_blocked():
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		audio_settings_restore_mouse_captured = false
+
+func _build_audio_settings_panel(hud: CanvasLayer) -> void:
+	audio_settings_panel = PanelContainer.new()
+	audio_settings_panel.name = "AudioSettingsPanel"
+	audio_settings_panel.set_anchors_preset(Control.PRESET_CENTER)
+	audio_settings_panel.custom_minimum_size = Vector2(500.0, 430.0)
+	audio_settings_panel.visible = false
+	_apply_panel_theme(audio_settings_panel)
+	hud.add_child(audio_settings_panel)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 12)
+	audio_settings_panel.add_child(layout)
+	var heading := HBoxContainer.new()
+	layout.add_child(heading)
+	var title := Label.new()
+	title.text = "洪荒 · 音频设置"
+	title.add_theme_color_override("font_color", Color("#e7c98e"))
+	title.add_theme_font_size_override("font_size", 20)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_child(title)
+	var close_button := Button.new()
+	close_button.text = "关闭"
+	close_button.pressed.connect(_toggle_audio_settings_panel)
+	heading.add_child(close_button)
+	var hint := Label.new()
+	hint.text = "调整后立即生效，并保存在本机。"
+	hint.add_theme_color_override("font_color", Color("#91a5b8"))
+	layout.add_child(hint)
+	_add_audio_volume_row(layout, "Master", "总音量")
+	_add_audio_volume_row(layout, "Music", "音乐 / 环境")
+	_add_audio_volume_row(layout, "SFX", "战斗 / 环境音效")
+	_add_audio_volume_row(layout, "UI", "界面音效")
+	var mute := CheckButton.new()
+	mute.text = "静音全部声音"
+	mute.button_pressed = HHAudio.is_muted()
+	mute.toggled.connect(func(enabled: bool) -> void: HHAudio.set_muted(enabled))
+	layout.add_child(mute)
+	var preview_title := Label.new()
+	preview_title.text = "音效试听"
+	preview_title.add_theme_color_override("font_color", Color("#e7c98e"))
+	layout.add_child(preview_title)
+	var previews := HBoxContainer.new()
+	layout.add_child(previews)
+	for cue in ["attack", "spell", "footstep", "warning"]:
+		var preview := Button.new()
+		preview.text = {"attack": "攻击", "spell": "法术", "footstep": "脚步", "warning": "警告"}[cue]
+		preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		preview.pressed.connect(func() -> void: HHAudio.play_ui(cue) if cue == "warning" else HHAudio.play_combat(cue))
+		previews.add_child(preview)
+
+func _add_audio_volume_row(parent: VBoxContainer, bus_name: String, display_name: String) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	parent.add_child(row)
+	var label := Label.new()
+	label.text = display_name
+	label.custom_minimum_size = Vector2(116.0, 0.0)
+	row.add_child(label)
+	var slider := HSlider.new()
+	slider.min_value = 0.0
+	slider.max_value = 1.0
+	slider.step = 0.01
+	slider.value = HHAudio.get_volume(bus_name)
+	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var value_label := Label.new()
+	value_label.custom_minimum_size = Vector2(42.0, 0.0)
+	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	value_label.text = str(roundi(slider.value * 100.0)) + "%"
+	slider.value_changed.connect(func(value: float) -> void:
+		HHAudio.set_volume(bus_name, value)
+		value_label.text = str(roundi(value * 100.0)) + "%"
+	)
+	row.add_child(slider)
+	row.add_child(value_label)
 
 func _build_controls_help_panel(hud: CanvasLayer) -> void:
 	help_panel = PanelContainer.new()
@@ -1797,6 +2152,7 @@ func _refresh_current_region(show_entry_notice: bool) -> void:
 		return
 	var previous_region := current_region_name
 	current_region_name = next_region
+	HHAudio.set_region_ambience(world_id)
 	_update_hud()
 	if show_entry_notice and not previous_region.is_empty():
 		_show_notification("已进入「" + next_region + "」", 2.8)
@@ -2252,9 +2608,18 @@ func _begin_monster_death_visual(monster: Node3D) -> void:
 	_set_monster_freeze_visual(monster, false)
 	monster.set_meta("death_reaction_time", 1.15)
 	monster.set_meta("defeated_visual", true)
+	_play_model_animation_action(monster, "death")
 	var nameplate := monster.get_node_or_null("Nameplate") as Label3D
 	if is_instance_valid(nameplate):
 		nameplate.visible = false
+
+func _play_model_animation_action(entity_root: Node, action_name: String) -> void:
+	if not is_instance_valid(entity_root):
+		return
+	var controller := entity_root.find_child("ModelAnimationController", true, false)
+	if controller != null and controller.has_method("play_action"):
+		controller.call("play_action", action_name)
+
 
 func _refresh_monster_nameplate(monster_id: String) -> void:
 	var monster_node := monsters.get(monster_id) as Node3D
@@ -2800,14 +3165,6 @@ func _build_chat_hud() -> void:
 	chat_unread_badge.add_theme_font_size_override("font_size", 11)
 	chat_unread_badge.visible = false
 	heading.add_child(chat_unread_badge)
-	var friends_button := Button.new()
-	friends_button.text = "好友"
-	friends_button.pressed.connect(func():
-		if is_instance_valid(friend_panel):
-			friend_panel.open_panel()
-	)
-	_style_chat_button(friends_button, false)
-	heading.add_child(friends_button)
 	chat_toggle_button = Button.new()
 	chat_toggle_button.text = "展开"
 	chat_toggle_button.pressed.connect(func(): _set_chat_expanded(not chat_expanded))
@@ -2818,7 +3175,7 @@ func _build_chat_hud() -> void:
 	channels.add_theme_constant_override("separation", 6)
 	layout.add_child(channels)
 	chat_channel_buttons.clear()
-	for channel_data in [["nearby", "附近"], ["world", "世界"], ["cross_world", "跨界"], ["system", "系统"]]:
+	for channel_data in [["system", "系统"], ["nearby", "附近"], ["friends", "好友"], ["world", "世界"], ["cross_world", "跨界"]]:
 		var channel_button := Button.new()
 		channel_button.text = str(channel_data[1])
 		channel_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2875,6 +3232,7 @@ func _build_chat_hud() -> void:
 	layout.add_child(chat_status)
 	friend_panel = FriendPanelScript.new()
 	friend_panel.open_private_chat.connect(_open_friend_conversation)
+	friend_panel.panel_closed.connect(_on_friend_panel_closed)
 	hud.add_child(friend_panel)
 	_set_chat_expanded(false)
 
@@ -2907,6 +3265,8 @@ func is_gameplay_input_blocked() -> bool:
 	if is_instance_valid(party_panel) and party_panel.visible:
 		return true
 	if is_instance_valid(help_panel) and help_panel.visible:
+		return true
+	if is_instance_valid(audio_settings_panel) and audio_settings_panel.visible:
 		return true
 	if is_instance_valid(leave_world_dialog) and leave_world_dialog.visible:
 		return true
@@ -2974,23 +3334,44 @@ func _layout_hud() -> void:
 			details_toggle_button.position = Vector2(18.0, controls_y)
 		if is_instance_valid(soul_choice_button):
 			soul_choice_button.position = Vector2(140.0, controls_y)
+	if is_instance_valid(hell_trial_hud_panel):
+		var trial_width := minf(420.0, maxf(280.0, viewport_size.x - 24.0))
+		hell_trial_hud_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		hell_trial_hud_panel.position = Vector2((viewport_size.x - trial_width) * 0.5, 62.0)
+		var evidence_open := is_instance_valid(hell_trial_hud_evidence_container) and hell_trial_hud_evidence_container.visible
+		var panel_height := 420.0 if evidence_open else 154.0
+		hell_trial_hud_panel.custom_minimum_size = Vector2(trial_width, panel_height)
+		hell_trial_hud_panel.size = Vector2(trial_width, panel_height)
+		hell_trial_hud_panel.visible = hud_visible and not hell_trial_runtime_data.is_empty()
+
 	# Reserve one continuous top-right toolbar for all utility actions.
 	# The inventory shortcut used to sit at the far-right edge and overlap
 	# the "退出世界" button. Move it into the same row and shift the group
 	# left so every control has its own 112px slot.
-	var utility_left := maxf(12.0, viewport_size.x - 488.0)
+	var utility_left := maxf(12.0, viewport_size.x - 608.0)
 	if is_instance_valid(hud_toggle_button):
 		hud_toggle_button.position = Vector2(utility_left, 16.0)
 	if is_instance_valid(hud_restore_button):
 		hud_restore_button.position = Vector2(utility_left, 16.0)
 	if is_instance_valid(help_button):
 		help_button.position = Vector2(utility_left + 120.0, 16.0)
+	if is_instance_valid(audio_settings_button):
+		audio_settings_button.position = Vector2(utility_left + 240.0, 16.0)
 	if is_instance_valid(leave_world_button):
-		leave_world_button.position = Vector2(utility_left + 240.0, 16.0)
+		leave_world_button.position = Vector2(utility_left + 360.0, 16.0)
 	if is_instance_valid(inventory_button):
 		inventory_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
-		inventory_button.position = Vector2(utility_left + 360.0, 16.0)
+		inventory_button.position = Vector2(utility_left + 480.0, 16.0)
 		inventory_button.custom_minimum_size = Vector2(112.0, 34.0)
+	if is_instance_valid(audio_settings_panel):
+		var audio_width := minf(500.0, maxf(320.0, viewport_size.x - 32.0))
+		var audio_height := minf(430.0, maxf(360.0, viewport_size.y - 32.0))
+		audio_settings_panel.set_anchors_preset(Control.PRESET_CENTER)
+		audio_settings_panel.offset_left = -audio_width * 0.5
+		audio_settings_panel.offset_right = audio_width * 0.5
+		audio_settings_panel.offset_top = -audio_height * 0.5
+		audio_settings_panel.offset_bottom = audio_height * 0.5
+		audio_settings_panel.custom_minimum_size = Vector2(audio_width, audio_height)
 	if is_instance_valid(help_panel):
 		var help_width := minf(540.0, maxf(320.0, viewport_size.x - 32.0))
 		var help_height := minf(500.0, maxf(360.0, viewport_size.y - 32.0))
@@ -3004,11 +3385,15 @@ func _layout_hud() -> void:
 	# The chat drawer owns the lower-right corner. Its width and height adapt
 	# to small windows, and the interaction prompt is placed above it.
 	if is_instance_valid(friend_panel):
-		friend_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-		friend_panel.offset_left = -378.0
-		friend_panel.offset_top = 72.0
-		friend_panel.offset_right = -18.0
-		friend_panel.offset_bottom = 548.0
+		# Social hub behaves like a modal, not a small panel layered over chat.
+		var social_width := minf(520.0, viewport_size.x - 32.0)
+		var social_height := minf(620.0, viewport_size.y - 48.0)
+		friend_panel.set_anchors_preset(Control.PRESET_CENTER)
+		friend_panel.offset_left = -social_width * 0.5
+		friend_panel.offset_right = social_width * 0.5
+		friend_panel.offset_top = -social_height * 0.5
+		friend_panel.offset_bottom = social_height * 0.5
+		friend_panel.custom_minimum_size = Vector2(social_width, social_height)
 	var chat_height := 56.0
 	if chat_expanded:
 		chat_height = minf(440.0, maxf(280.0, viewport_size.y - 48.0))
@@ -3160,6 +3545,12 @@ func _active_chat_storage_key() -> String:
 		return "whisper:" + selected_friend_character_id
 	return selected_chat_channel
 
+func _on_friend_panel_closed() -> void:
+	var channel_ids := ["system", "nearby", "friends", "world", "cross_world"]
+	var active_index := channel_ids.find(selected_chat_channel)
+	for index in range(chat_channel_buttons.size()):
+		_style_chat_button(chat_channel_buttons[index], index == active_index)
+
 func _open_friend_conversation(character_id: String, character_name: String) -> void:
 	if character_id.is_empty():
 		return
@@ -3191,6 +3582,12 @@ func _on_chat_conversation_history_received(character_id: String, messages: Arra
 		call_deferred("_scroll_chat_to_bottom")
 
 func _select_chat_channel(channel: String) -> void:
+	if channel == "friends":
+		for index in range(chat_channel_buttons.size()):
+			_style_chat_button(chat_channel_buttons[index], index == 2)
+		if is_instance_valid(friend_panel):
+			friend_panel.open_panel()
+		return
 	if channel not in ["nearby", "world", "cross_world", "system"]:
 		return
 	selected_chat_channel = channel
@@ -3198,7 +3595,7 @@ func _select_chat_channel(channel: String) -> void:
 	selected_friend_character_name = ""
 	var names := {"nearby": "附近", "world": "世界", "cross_world": "跨界", "system": "系统"}
 	chat_title_label.text = "万界传音 · " + str(names[channel])
-	var channel_ids := ["nearby", "world", "cross_world", "system"]
+	var channel_ids := ["system", "nearby", "friends", "world", "cross_world"]
 	for index in range(chat_channel_buttons.size()):
 		_style_chat_button(chat_channel_buttons[index], index == channel_ids.find(channel))
 	if channel == "system":
@@ -3430,9 +3827,11 @@ func _on_pickup_event(event: Dictionary) -> void:
 		_show_notification(str(event.get("reason", "正在结算拾取……")))
 		return
 	if bool(event.get("accepted", false)):
+		HHAudio.play_ui("pickup", randf_range(0.96, 1.04))
 		_show_notification("拾取成功：" + str(event.get("item_id", "物品")) + " ×" + str(event.get("quantity", 1)))
 		_refresh_inventory()
 	else:
+		HHAudio.play_ui("warning", 0.92)
 		_show_notification(str(event.get("reason", "拾取失败。")))
 
 func _apply_panel_theme(panel: PanelContainer) -> void:
@@ -4698,6 +5097,7 @@ func _on_monster_action_event(event: Dictionary) -> void:
 		attacker.set_meta("attack_radius", maxf(float(event.get("attack_radius", 3.6)), 0.5))
 	if phase == "windup":
 		attacker.set_meta("attack_phase", "windup")
+		_play_model_animation_action(attacker, "attack")
 		# Heavy slam is a ground-targeted area attack centered on the monster.
 		# Its expanding SlamTelegraph is the authoritative danger zone; a ring
 		# under the selected victim would incorrectly imply single-target damage.
@@ -4721,6 +5121,8 @@ func _on_monster_action_event(event: Dictionary) -> void:
 		_set_iron_slam_telegraph(attacker, false)
 		_set_elemental_telegraph(attacker, false, attack_style)
 	elif phase == "impact":
+		var impact_cue := "heavy_hit" if attack_style == "heavy_slam" else "monster_attack"
+		HHAudio.play_world(impact_cue, attacker.global_position, 0.94 if attack_style == "heavy_slam" else randf_range(0.94, 1.06), 32.0)
 		attacker.set_meta("attack_phase", "impact")
 		attacker.set_meta("attack_phase_duration", 0.2)
 		# Remove only this monster; other monsters may still be winding up on us.
@@ -5189,8 +5591,41 @@ func _on_combat_event(event: Dictionary) -> void:
 			if is_instance_valid(target_info_label) and not selected_monster_id.is_empty():
 				target_info_label.text = target_info_label.text.split("\n攻击指令已发送")[0] + "\n" + rejection_reason
 			return
+	if action == "hell_trial_soul_rescue":
+		var rescue_snapshot: Variant = event.get("hell_trial", {})
+		if rescue_snapshot is Dictionary and not rescue_snapshot.is_empty():
+			_show_hell_trial_runtime_state({"hell_floor": 3, "hell_trial": rescue_snapshot})
+		_show_notification(str(event.get("message", event.get("reason", "魂灯救援状态已更新。"))), 3.5)
+		return
+	if action == "hell_trial_investigation":
+		var investigation_snapshot: Variant = event.get("hell_trial", {})
+		if investigation_snapshot is Dictionary and not investigation_snapshot.is_empty():
+			_show_hell_trial_runtime_state({"hell_floor": int(event.get("floor", 1)), "hell_trial": investigation_snapshot})
+		_show_notification(str(event.get("message", event.get("reason", "证词调查状态已更新。"))), 3.5)
+		return
+	if action == "hell_trial_hazard":
+		if not hell_trial_runtime_data.is_empty():
+			var hazard_trial := hell_trial_runtime_data.duplicate(true)
+			hazard_trial["hazard"] = event.duplicate(true)
+			_render_hell_trial_hud(hazard_trial)
+		var hazard_phase := str(event.get("phase", ""))
+		var hazard_label := str(event.get("phase_label", "刑具状态变化"))
+		if hazard_phase == "warning":
+			HHAudio.play_ui("warning", 1.0)
+			_show_notification("第二层 · " + hazard_label, 3.2)
+		elif hazard_phase == "active":
+			HHAudio.play_ui("warning", 0.75)
+			_show_notification("第二层 · " + hazard_label, 2.4)
+		else:
+			_show_notification("第二层 · " + hazard_label, 2.2)
+		return
+	if action == "hell_trial_hazard_hit":
+		_show_notification("被断缘剪刃击中，受到 %d 点伤害！" % int(event.get("damage", 0)), 2.5)
+		return
 	if action == "hell_trial_wave_transition":
+		HHAudio.play_ui("warning", 0.9)
 		var floor_number := int(event.get("floor", 0))
+		_show_hell_trial_runtime_state({"hell_floor": floor_number, "hell_trial": event})
 		var wave_label := str(event.get("label", "试炼阶段变化"))
 		if bool(event.get("completed", false)):
 			_show_notification("第 %02d 层 · 试炼完成" % floor_number, 5.0)
@@ -5198,6 +5633,14 @@ func _on_combat_event(event: Dictionary) -> void:
 			_show_notification("第 %02d 层 · %s" % [floor_number, wave_label], 4.0)
 		return
 	if action == "hell_trial_boss_phase":
+		var phase_floor := int(event.get("floor", HHSession.world_snapshot.get("hell_floor", 0)))
+		if not hell_trial_runtime_data.is_empty():
+			var updated_trial := hell_trial_runtime_data.duplicate(true)
+			updated_trial["floor"] = phase_floor
+			updated_trial["stage"] = 3
+			updated_trial["boss_phase"] = int(event.get("phase", 1))
+			updated_trial["active_name"] = str(event.get("phase_name", "守将"))
+			_render_hell_trial_hud(updated_trial)
 		var phase_name := str(event.get("phase_name", "守将变招"))
 		var phase_number := int(event.get("phase", 1))
 		var attack_id := str(event.get("signature_attack", ""))
@@ -5325,6 +5768,9 @@ func _on_combat_event(event: Dictionary) -> void:
 	# Death rewards are acknowledged only after the server has committed the
 	# durable settlement batch. Do not treat this as a normal zero-damage hit.
 	if str(event.get("action", "")) == "monster_death_settlement":
+		var fallen_id := str(event.get("monster_id", event.get("entity_id", "")))
+		if monsters.has(fallen_id) and is_instance_valid(monsters[fallen_id]):
+			HHAudio.play_world("death", (monsters[fallen_id] as Node3D).global_position, 0.9, 34.0)
 		if not bool(event.get("committed", false)):
 			_show_notification("怪物已击败，奖励正在安全结算……", 3.0)
 			return
@@ -5468,6 +5914,7 @@ func _on_combat_event(event: Dictionary) -> void:
 		elif str(event.get("phase", "")) == "casting":
 			_show_notification("正在凝聚" + spell_name + " · 灵力 -" + str(int(event.get("mana_cost", 18))), 1.5)
 		elif str(event.get("phase", "")) == "released":
+			HHAudio.play_combat("spell", 1.0 if spell_id == "fireball" else 0.92)
 			if spell_id == "revive":
 				_stop_revive_channel_ui()
 			elif spell_id == "taunt":
@@ -5547,6 +5994,7 @@ func _on_combat_event(event: Dictionary) -> void:
 						visual_plate.text += "\n生命 " + str(maxi(int(visual_entity.get("health", 0)), 0)) + " / " + str(visual_max_health)
 				if visual_target_id == selected_monster_id:
 					_update_target_info()
+			_play_model_animation_action(visual_target, "hit")
 			_spawn_monster_hit_visual(visual_target, bool(event.get("critical", false)))
 			if bool(event.get("defeated", false)):
 				_begin_monster_death_visual(visual_target)
@@ -5621,6 +6069,7 @@ func _on_combat_event(event: Dictionary) -> void:
 			_set_monster_burn_visual(hit_monster, false)
 			_set_monster_freeze_visual(hit_monster, false)
 		hit_monster.set_meta("hit_reaction_time", 0.24)
+		_play_model_animation_action(hit_monster, "hit")
 		_spawn_monster_hit_visual(hit_monster, bool(event.get("critical", false)))
 		if bool(event.get("defeated", false)):
 			_begin_monster_death_visual(hit_monster)
@@ -7429,6 +7878,9 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			var npc_data: Dictionary = data.get("npc", {})
 			var dialogue: Dictionary = data.get("dialogue", {})
 			npc_current_interaction_id = str(npc_data.get("id", ""))
+			var interacting_marker := npc_nodes.get(npc_current_interaction_id) as Node3D
+			if is_instance_valid(interacting_marker):
+				interacting_marker.set_meta("npc_talk_until_msec", Time.get_ticks_msec() + 3200)
 			npc_fate_encounter_button.visible = bool(npc_data.get("fate_encounter_available", false))
 			npc_title_label.text = str(npc_data.get("name", "冥界来者")) + " · " + str(npc_data.get("title", ""))
 			var lines: Array[String] = []
@@ -7677,6 +8129,11 @@ func _render_world_npcs() -> void:
 		marker.name = "NPC_" + npc_id
 		marker.position = Vector3(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_y", 0.0)), float(npc_data.get("position_z", 0.0)))
 		marker.rotation.y = float(npc_data.get("rotation_y", 0.0))
+		var patrol_route: Variant = npc_data.get("patrol_route", {})
+		if str(npc_data.get("behavior_profile", "stationary")) == "guard_patrol" and patrol_route is Dictionary:
+			marker.set_meta("npc_patrol_route", patrol_route)
+			marker.set_meta("npc_patrol_phase_seconds", float(npc_data.get("patrol_phase_seconds", 0.0)))
+			marker.set_meta("npc_patrol_phase_started_msec", Time.get_ticks_msec())
 
 		var npc_visual := UnderworldVisualFactory.create_npc(npc_type, npc_name)
 		marker.add_child(npc_visual)
@@ -7710,13 +8167,33 @@ func _animate_npc_visuals(delta: float) -> void:
 	npc_animation_time += delta
 	for npc_id in npc_nodes:
 		var marker := npc_nodes[npc_id] as Node3D
-		if not is_instance_valid(marker) or marker.get_child_count() == 0:
+		if not is_instance_valid(marker):
+			continue
+		var patrol_route: Variant = marker.get_meta("npc_patrol_route", {})
+		if patrol_route is Dictionary and not patrol_route.is_empty():
+			var started_msec := int(marker.get_meta("npc_patrol_phase_started_msec", Time.get_ticks_msec()))
+			var base_phase := float(marker.get_meta("npc_patrol_phase_seconds", 0.0))
+			var route_state := _resolve_client_patrol_transform(patrol_route, base_phase + float(Time.get_ticks_msec() - started_msec) / 1000.0)
+			if not route_state.is_empty():
+				marker.position = route_state.position
+				marker.rotation.y = float(route_state.yaw)
+		var talk_until_msec := int(marker.get_meta("npc_talk_until_msec", 0))
+		var is_talking := Time.get_ticks_msec() < talk_until_msec
+		if is_talking and is_instance_valid(local_player):
+			var to_player := local_player.global_position - marker.global_position
+			to_player.y = 0.0
+			if to_player.length_squared() > 0.01:
+				var talk_yaw := atan2(to_player.x, to_player.z)
+				marker.rotation.y = lerp_angle(marker.rotation.y, talk_yaw, clampf(delta * 5.0, 0.0, 1.0))
+		if marker.get_child_count() == 0:
 			continue
 		var visual := marker.get_child(0) as Node3D
 		if not is_instance_valid(visual):
 			continue
 		var phase := float(abs(hash(str(npc_id))) % 100) * 0.0628
 		var breath := sin(npc_animation_time * 1.7 + phase)
+		var gesture := sin(npc_animation_time * 0.85 + phase)
+		var npc_type := str(visual.get_meta("npc_type", "guide"))
 		visual.position.y = breath * 0.018
 		var left_arm := visual.get_node_or_null("ArmPivotLeft") as Node3D
 		var right_arm := visual.get_node_or_null("ArmPivotRight") as Node3D
@@ -7724,11 +8201,115 @@ func _animate_npc_visuals(delta: float) -> void:
 			left_arm.rotation.z = -0.035 + breath * 0.025
 		if is_instance_valid(right_arm):
 			right_arm.rotation.z = 0.035 - breath * 0.025
+		var head := visual.get_node_or_null("Head") as Node3D
+		match npc_type:
+			"guard":
+				# A sentry periodically scans the approach instead of breathing in place.
+				if is_instance_valid(head):
+					head.rotation.y = sin(npc_animation_time * 0.42 + phase) * 0.20
+				if is_instance_valid(left_arm):
+					left_arm.rotation.z -= 0.035
+				if is_instance_valid(right_arm):
+					right_arm.rotation.z += 0.035
+			"judge":
+				# The magistrate makes a restrained, deliberate ruling gesture.
+				if is_instance_valid(right_arm):
+					right_arm.rotation.z = 0.10 + maxf(gesture, 0.0) * 0.16
+				if is_instance_valid(head):
+					head.rotation.x = -0.025 + maxf(gesture, 0.0) * 0.035
+			"trial_master":
+				if is_instance_valid(left_arm):
+					left_arm.rotation.z = -0.08 + sin(npc_animation_time * 0.55 + phase) * 0.045
+				var token := visual.get_node_or_null("TrialToken") as Node3D
+				if is_instance_valid(token):
+					token.rotation.z = sin(npc_animation_time * 0.8 + phase) * 0.045
+			"blacksmith":
+				# Slow hammering cadence; keep the tool motion readable, not frantic.
+				var hammer := visual.get_node_or_null("HammerHandle") as Node3D
+				var hammer_head := visual.get_node_or_null("HammerHead") as Node3D
+				var hammer_angle := -0.65 + maxf(sin(npc_animation_time * 1.8 + phase), 0.0) * 0.30
+				if is_instance_valid(hammer):
+					hammer.rotation.z = hammer_angle
+				if is_instance_valid(hammer_head):
+					hammer_head.rotation.z = hammer_angle
+				if is_instance_valid(right_arm):
+					right_arm.rotation.z = 0.10 + maxf(sin(npc_animation_time * 1.8 + phase), 0.0) * 0.10
+			"soup_keeper":
+				# A calm offering pose around the steaming bowl.
+				if is_instance_valid(left_arm):
+					left_arm.rotation.z = -0.12 + sin(npc_animation_time * 0.6 + phase) * 0.025
+				if is_instance_valid(right_arm):
+					right_arm.rotation.z = 0.10 + sin(npc_animation_time * 0.6 + phase) * 0.025
+			_:
+				if is_instance_valid(head):
+					head.rotation.y = sin(npc_animation_time * 0.32 + phase) * 0.07
+		if str(npc_id).begins_with("fengdu_ghost_market_vendor_"):
+			# Market vendors alternate between arranging wares and greeting passers-by.
+			var vendor_cycle := sin(npc_animation_time * 0.72 + phase)
+			if is_instance_valid(left_arm):
+				left_arm.rotation.z = -0.10 - maxf(vendor_cycle, 0.0) * 0.12
+			if is_instance_valid(right_arm):
+				right_arm.rotation.z = 0.08 + maxf(-vendor_cycle, 0.0) * 0.15
+			if is_instance_valid(head):
+				head.rotation.y = sin(npc_animation_time * 0.24 + phase) * 0.11
+		if is_talking:
+			# Short, readable greeting gesture while facing the player; it never changes gameplay state.
+			var talk_phase := sin(npc_animation_time * 5.2 + phase)
+			if is_instance_valid(right_arm):
+				right_arm.rotation.z = -0.18 + maxf(talk_phase, 0.0) * 0.34
+			if is_instance_valid(left_arm) and npc_type != "soup_keeper":
+				left_arm.rotation.z = -0.035 - maxf(talk_phase, 0.0) * 0.08
+			if is_instance_valid(head):
+				head.rotation.x = -0.035 + sin(npc_animation_time * 2.8 + phase) * 0.025
 		var mist := visual.get_node_or_null("BowlMist") as Node3D
 		if is_instance_valid(mist):
 			mist.position.y = 1.16 + sin(npc_animation_time * 2.4 + phase) * 0.045
 			var mist_scale := 1.0 + sin(npc_animation_time * 2.0 + phase) * 0.12
 			mist.scale = Vector3.ONE * mist_scale
+
+func _resolve_client_patrol_transform(route: Dictionary, phase_seconds: float) -> Dictionary:
+	var waypoints: Variant = route.get("waypoints", [])
+	if not waypoints is Array or waypoints.size() < 2 or waypoints.size() > 32:
+		return {}
+	var speed := float(route.get("speed_mps", 0.0))
+	if speed < 0.1 or speed > 8.0 or not bool(route.get("loop", false)):
+		return {}
+	var default_wait := clampf(float(route.get("default_wait_seconds", 0.0)), 0.0, 120.0)
+	var lengths: Array[float] = []
+	var total_duration := 0.0
+	for i in range(waypoints.size()):
+		var point: Dictionary = waypoints[i]
+		var next: Dictionary = waypoints[(i + 1) % waypoints.size()]
+		var from := Vector3(float(point.get("x", 0.0)), float(point.get("y", 0.0)), float(point.get("z", 0.0)))
+		var to := Vector3(float(next.get("x", 0.0)), float(next.get("y", 0.0)), float(next.get("z", 0.0)))
+		var segment_length := from.distance_to(to)
+		if segment_length < 0.05:
+			return {}
+		lengths.append(segment_length)
+		var wait := float(point.get("wait_seconds", 0.0))
+		if wait <= 0.0:
+			wait = default_wait
+		total_duration += clampf(wait, 0.0, 120.0) + segment_length / speed
+	if total_duration <= 0.0:
+		return {}
+	var phase := fposmod(phase_seconds, total_duration)
+	for i in range(waypoints.size()):
+		var point: Dictionary = waypoints[i]
+		var next: Dictionary = waypoints[(i + 1) % waypoints.size()]
+		var from := Vector3(float(point.get("x", 0.0)), float(point.get("y", 0.0)), float(point.get("z", 0.0)))
+		var to := Vector3(float(next.get("x", 0.0)), float(next.get("y", 0.0)), float(next.get("z", 0.0)))
+		var wait := float(point.get("wait_seconds", 0.0))
+		if wait <= 0.0:
+			wait = default_wait
+		if phase < wait:
+			return {"position": from, "yaw": atan2(to.x - from.x, to.z - from.z)}
+		phase -= wait
+		var travel_duration := lengths[i] / speed
+		if phase < travel_duration:
+			var progress := phase / travel_duration
+			return {"position": from.lerp(to, progress), "yaw": atan2(to.x - from.x, to.z - from.z)}
+		phase -= travel_duration
+	return {}
 
 func _update_nearest_npc_prompt() -> void:
 	if npc_interact_button == null or not is_instance_valid(local_player):
@@ -7739,8 +8320,9 @@ func _update_nearest_npc_prompt() -> void:
 		if not (npc_variant is Dictionary):
 			continue
 		var npc_data: Dictionary = npc_variant
-		var target := Vector3(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_y", 0.0)), float(npc_data.get("position_z", 0.0)))
-		var distance := Vector2(target.x - local_player.position.x, target.z - local_player.position.z).length()
+		var npc_marker := npc_nodes.get(str(npc_data.get("id", ""))) as Node3D
+		var target := npc_marker.global_position if is_instance_valid(npc_marker) else Vector3(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_y", 0.0)), float(npc_data.get("position_z", 0.0)))
+		var distance := Vector2(target.x - local_player.global_position.x, target.z - local_player.global_position.z).length()
 		var radius := float(npc_data.get("interaction_radius", 3.0))
 		if distance <= radius and distance < nearest_npc_distance:
 			nearest_npc_distance = distance
@@ -7787,12 +8369,15 @@ func _try_interact_nearest_npc() -> void:
 		if not (npc_variant is Dictionary):
 			continue
 		var npc_data: Dictionary = npc_variant
-		var target := Vector3(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_y", 0.0)), float(npc_data.get("position_z", 0.0)))
-		var distance := Vector2(target.x - local_player.position.x, target.z - local_player.position.z).length()
+		var npc_marker := npc_nodes.get(str(npc_data.get("id", ""))) as Node3D
+		var target := npc_marker.global_position if is_instance_valid(npc_marker) else Vector3(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_y", 0.0)), float(npc_data.get("position_z", 0.0)))
+		var distance := Vector2(target.x - local_player.global_position.x, target.z - local_player.global_position.z).length()
 		if distance <= float(npc_data.get("interaction_radius", 3.0)) and distance < nearest_npc_distance:
 			nearest_npc_distance = distance
 			nearest_npc_id = str(npc_data.get("id", ""))
 	if not nearest_npc_id.is_empty():
+		if is_instance_valid(HHAudio):
+			HHAudio.play_ui("npc_interact")
 		# F should expose the cursor before the server response arrives, not require ESC.
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		npc_selected_id = nearest_npc_id

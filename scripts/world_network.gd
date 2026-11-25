@@ -149,6 +149,28 @@ func send_consumable_use(item_id: String, quantity: int = 1) -> Error:
 		return ERR_INVALID_DATA
 	return transport.send_frame(frame)
 
+func send_hell_trial_soul_lantern(lantern_id: String) -> Error:
+	if not world_ready or transport == null:
+		return ERR_UNCONFIGURED
+	if lantern_id not in ["west", "east"]:
+		return ERR_INVALID_PARAMETER
+	var payload := JSON.stringify({"action": "rescue_soul_lantern", "lantern_id": lantern_id}).to_utf8_buffer()
+	var frame := HHProtocolCodec.encode_frame(HHProtocolCodec.MessageType.HELL_TRIAL_COMMAND, payload)
+	if frame.is_empty():
+		return ERR_INVALID_DATA
+	return transport.send_frame(frame, true)
+
+func send_hell_trial_evidence(evidence_id: String, option_id: String) -> Error:
+	if not world_ready or transport == null:
+		return ERR_UNCONFIGURED
+	if evidence_id.is_empty() or evidence_id.length() > 48 or option_id.is_empty() or option_id.length() > 48:
+		return ERR_INVALID_PARAMETER
+	var payload := JSON.stringify({"evidence_id": evidence_id, "option_id": option_id}).to_utf8_buffer()
+	var frame := HHProtocolCodec.encode_frame(HHProtocolCodec.MessageType.HELL_TRIAL_COMMAND, payload)
+	if frame.is_empty():
+		return ERR_INVALID_DATA
+	return transport.send_frame(frame, true)
+
 func send_pickup(drop_id: String) -> Error:
 	if not world_ready or transport == null or drop_id.is_empty() or drop_id.length() > 64:
 		return ERR_INVALID_PARAMETER

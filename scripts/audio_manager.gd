@@ -1,0 +1,212 @@
+extends Node
+## Original runtime-synthesized placeholder audio. No third-party recordings or copyrighted music.
+## Replace individual cues with reviewed CC0 files later without changing gameplay call sites.
+
+const SAMPLE_RATE := 22050
+const CONFIG_PATH := "user://honghuang_audio.cfg"
+const BUS_NAMES := ["Music", "SFX", "UI"]
+
+var _cache: Dictionary = {}
+var _ambience_player: AudioStreamPlayer
+var _ambience_cue := ""
+var _volumes := {"Master": 0.85, "Music": 0.55, "SFX": 0.8, "UI": 0.75}
+var _muted := false
+
+const CUES := {
+	"attack": {"duration": 0.24, "start": 210.0, "end": 95.0, "noise": 0.42, "gain": 0.30, "wave": "sweep"},
+	"hit": {"duration": 0.16, "start": 115.0, "end": 55.0, "noise": 0.70, "gain": 0.38, "wave": "impact"},
+	"heavy_hit": {"duration": 0.34, "start": 78.0, "end": 38.0, "noise": 0.82, "gain": 0.48, "wave": "impact"},
+	"monster_attack": {"duration": 0.30, "start": 145.0, "end": 62.0, "noise": 0.62, "gain": 0.34, "wave": "growl"},
+	"death": {"duration": 0.58, "start": 360.0, "end": 72.0, "noise": 0.24, "gain": 0.28, "wave": "fall"},
+	"spell": {"duration": 0.42, "start": 440.0, "end": 880.0, "noise": 0.12, "gain": 0.24, "wave": "magic"},
+	"pickup": {"duration": 0.18, "start": 660.0, "end": 990.0, "noise": 0.04, "gain": 0.20, "wave": "chime"},
+	"ui": {"duration": 0.075, "start": 520.0, "end": 420.0, "noise": 0.02, "gain": 0.13, "wave": "tone"},
+	"warning": {"duration": 0.28, "start": 220.0, "end": 180.0, "noise": 0.10, "gain": 0.26, "wave": "warning"},
+	"npc_interact": {"duration": 0.22, "start": 560.0, "end": 820.0, "noise": 0.025, "gain": 0.18, "wave": "jade_chime"},
+	"soul_bell": {"duration": 1.15, "start": 740.0, "end": 310.0, "noise": 0.035, "gain": 0.22, "wave": "bell"},
+	"gate_rumble": {"duration": 0.92, "start": 72.0, "end": 38.0, "noise": 0.72, "gain": 0.34, "wave": "rumble"},
+	"ghost_whisper": {"duration": 0.72, "start": 420.0, "end": 155.0, "noise": 0.78, "gain": 0.20, "wave": "whisper"},
+	"footstep": {"duration": 0.10, "start": 90.0, "end": 48.0, "noise": 0.72, "gain": 0.16, "wave": "step"},
+	"ambience_underworld": {"duration": 8.0, "start": 42.0, "end": 46.0, "noise": 0.18, "gain": 0.10, "wave": "ambient_dread"},
+	"ambience_fengdu": {"duration": 8.0, "start": 76.0, "end": 92.0, "noise": 0.24, "gain": 0.075, "wave": "ambient_city"},
+	"ambience_qingyun": {"duration": 8.0, "start": 110.0, "end": 116.0, "noise": 0.06, "gain": 0.07, "wave": "ambient_wind"}
+}
+
+func _ready() -> void:
+	_ensure_buses()
+	_load_settings()
+	_apply_volumes()
+
+func _ensure_buses() -> void:
+	for bus_name in BUS_NAMES:
+		if AudioServer.get_bus_index(bus_name) >= 0:
+			continue
+		AudioServer.add_bus()
+		AudioServer.set_bus_name(AudioServer.bus_count - 1, bus_name)
+		AudioServer.set_bus_send(AudioServer.bus_count - 1, "Master")
+
+func _load_settings() -> void:
+	var config := ConfigFile.new()
+	if config.load(CONFIG_PATH) != OK:
+		return
+	_muted = bool(config.get_value("audio", "muted", false))
+	for bus_name in ["Master", "Music", "SFX", "UI"]:
+		_volumes[bus_name] = clampf(float(config.get_value("audio", bus_name, _volumes[bus_name])), 0.0, 1.0)
+
+func _save_settings() -> void:
+	var config := ConfigFile.new()
+	config.set_value("audio", "muted", _muted)
+	for bus_name in _volumes:
+		config.set_value("audio", bus_name, _volumes[bus_name])
+	config.save(CONFIG_PATH)
+
+func _apply_volumes() -> void:
+	AudioServer.set_bus_mute(0, _muted)
+	for bus_name in _volumes:
+		var index := AudioServer.get_bus_index(bus_name)
+		if index < 0:
+			continue
+		var volume := float(_volumes[bus_name])
+		AudioServer.set_bus_volume_db(index, linear_to_db(maxf(volume, 0.001)))
+		AudioServer.set_bus_mute(index, _muted or volume <= 0.001)
+
+func start_ambience(cue: String) -> void:
+	if not CUES.has(cue) or not cue.begins_with("ambience_"):
+		return
+	if _ambience_cue == cue and is_instance_valid(_ambience_player):
+		return
+	stop_ambience()
+	var stream: AudioStreamWAV = _cache.get(cue)
+	if stream == null:
+		stream = _build_stream(cue)
+		stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		stream.loop_begin = 0
+		stream.loop_end = int(stream.data.size() / 2)
+		_cache[cue] = stream
+	_ambience_player = AudioStreamPlayer.new()
+	_ambience_player.name = "RegionAmbience"
+	_ambience_player.stream = stream
+	_ambience_player.bus = "Music"
+	_ambience_player.volume_db = -42.0
+	add_child(_ambience_player)
+	_ambience_cue = cue
+	_ambience_player.play()
+	var fade_in := create_tween()
+	fade_in.tween_property(_ambience_player, "volume_db", -5.0, 1.4).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+func stop_ambience() -> void:
+	if is_instance_valid(_ambience_player):
+		var old_player := _ambience_player
+		var fade_out := create_tween()
+		fade_out.tween_property(old_player, "volume_db", -42.0, 0.65).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+		fade_out.tween_callback(old_player.queue_free)
+	_ambience_player = null
+	_ambience_cue = ""
+
+func set_region_ambience(world_id: String) -> void:
+	match world_id:
+		"underworld_fengdu":
+			start_ambience("ambience_fengdu")
+		"qingyun_human":
+			start_ambience("ambience_qingyun")
+		_:
+			stop_ambience()
+
+func set_volume(bus_name: String, value: float) -> void:
+	if not _volumes.has(bus_name):
+		return
+	_volumes[bus_name] = clampf(value, 0.0, 1.0)
+	_apply_volumes()
+	_save_settings()
+
+func get_volume(bus_name: String) -> float:
+	return float(_volumes.get(bus_name, 0.0))
+
+func set_muted(value: bool) -> void:
+	_muted = value
+	_apply_volumes()
+	_save_settings()
+
+func is_muted() -> bool:
+	return _muted
+
+func play_ui(cue: String = "ui", pitch_scale: float = 1.0) -> void:
+	_play(cue, "UI", Vector3.ZERO, pitch_scale, 28.0, false)
+
+func play_combat(cue: String = "attack", pitch_scale: float = 1.0) -> void:
+	_play(cue, "SFX", Vector3.ZERO, pitch_scale, 28.0, false)
+
+func play_world(cue: String, world_position: Vector3, pitch_scale: float = 1.0, max_distance: float = 28.0) -> void:
+	_play(cue, "SFX", world_position, pitch_scale, max_distance, true)
+
+func _play(cue: String, bus_name: String, world_position: Vector3, pitch_scale: float, max_distance: float, spatial: bool) -> void:
+	if _muted or not CUES.has(cue):
+		return
+	var stream: AudioStreamWAV = _cache.get(cue)
+	if stream == null:
+		stream = _build_stream(cue)
+		_cache[cue] = stream
+	if spatial:
+		var spatial_player := AudioStreamPlayer3D.new()
+		spatial_player.stream = stream
+		spatial_player.bus = bus_name
+		spatial_player.pitch_scale = clampf(pitch_scale, 0.65, 1.5)
+		spatial_player.max_distance = max_distance
+		spatial_player.unit_size = 5.0
+		var world_root := get_tree().current_scene
+		if world_root == null:
+			spatial_player.queue_free()
+			return
+		world_root.add_child(spatial_player)
+		spatial_player.global_position = world_position
+		spatial_player.finished.connect(spatial_player.queue_free)
+		spatial_player.play()
+	else:
+		var player := AudioStreamPlayer.new()
+		player.stream = stream
+		player.bus = bus_name
+		player.pitch_scale = clampf(pitch_scale, 0.65, 1.5)
+		add_child(player)
+		player.finished.connect(player.queue_free)
+		player.play()
+
+func _build_stream(cue: String) -> AudioStreamWAV:
+	var profile: Dictionary = CUES[cue]
+	var duration := float(profile["duration"])
+	var sample_count := maxi(1, int(SAMPLE_RATE * duration))
+	var data := PackedByteArray()
+	data.resize(sample_count * 2)
+	var start_frequency := float(profile["start"])
+	var end_frequency := float(profile["end"])
+	var noise_amount := float(profile["noise"])
+	var gain := float(profile["gain"])
+	var wave := str(profile["wave"])
+	var phase := 0.0
+	for index in range(sample_count):
+		var t := float(index) / float(sample_count)
+		var envelope := pow(maxf(0.0, 1.0 - t), 1.8)
+		if wave.begins_with("ambient_"):
+			envelope = 0.72 + 0.16 * sin(TAU * t * 2.0)
+		if wave == "chime" or wave == "magic" or wave == "jade_chime" or wave == "bell":
+			envelope *= minf(1.0, t * 18.0)
+		var frequency := lerpf(start_frequency, end_frequency, t)
+		phase += TAU * frequency / float(SAMPLE_RATE)
+		var tone := sin(phase)
+		if wave.begins_with("ambient_"):
+			tone = sin(phase) * 0.72 + sin(phase * 0.503 + sin(TAU * t) * 0.3) * 0.28
+		var overtone := sin(phase * (2.01 if wave == "chime" else 2.37 if wave == "jade_chime" else 2.76 if wave == "bell" else 1.48)) * (0.34 if wave == "jade_chime" or wave == "bell" else 0.28)
+		if wave == "bell":
+			overtone += sin(phase * 5.42) * 0.12
+		if wave == "rumble":
+			tone = sin(phase * 0.5) * 0.8 + sin(phase * 1.03) * 0.2
+		if wave == "whisper":
+			tone = sin(phase * 0.48) * 0.22
+		var noise := randf_range(-1.0, 1.0) * noise_amount
+		var sample := clampf((tone * (1.0 - noise_amount * 0.45) + overtone + noise) * envelope * gain, -1.0, 1.0)
+		data.encode_s16(index * 2, int(sample * 32767.0))
+	var stream := AudioStreamWAV.new()
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = SAMPLE_RATE
+	stream.stereo = false
+	stream.data = data
+	return stream

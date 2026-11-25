@@ -82,7 +82,7 @@ func _build_ui() -> void:
 	header.add_child(close_button)
 
 	var subtitle := Label.new()
-	subtitle.text = "依次挑战十八层。每层需完成三项刑狱目标，并击败本层守将。"
+	subtitle.text = "逐层推进，完成本层刑狱目标并击败守将。每层的具体目标以阴司名册与服务器试炼状态为准。"
 	subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	subtitle.add_theme_color_override("font_color", Color("#b8c2ce"))
 	layout.add_child(subtitle)
@@ -213,9 +213,10 @@ func _render_floor_rows() -> void:
 		name_label.add_theme_color_override("font_color", Color("#f0e5d2") if unlocked else Color("#84909e"))
 		details.add_child(name_label)
 		var theme_name := str(metadata.get("theme", ""))
+		var objective := str(metadata.get("objective", "完成本层试炼"))
 		var guardian := str(metadata.get("guardian", "本层守将"))
 		var subline := Label.new()
-		subline.text = "目标：击败 3 类指定刑狱目标  ·  守将：" + guardian + ("  ·  " + theme_name if not theme_name.is_empty() else "")
+		subline.text = "目标：" + objective + "  ·  守将：" + guardian + ("  ·  " + theme_name if not theme_name.is_empty() else "")
 		subline.add_theme_color_override("font_color", Color("#a9b5c2"))
 		subline.add_theme_font_size_override("font_size", 11)
 		subline.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

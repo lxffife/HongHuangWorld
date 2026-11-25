@@ -15,14 +15,14 @@ const SOCKET_NAMES := {
 }
 
 const BONE_ALIASES := {
-	"weapon": ["RightHand", "Hand_R", "hand_r", "mixamorig:RightHand", "mixamorig_RightHand", "右手"],
-	"offhand": ["LeftHand", "Hand_L", "hand_l", "mixamorig:LeftHand", "mixamorig_LeftHand", "左手"],
-	"head": ["Head", "head", "mixamorig:Head", "头"],
-	"chest": ["Spine2", "Spine1", "Chest", "chest", "mixamorig:Spine2", "mixamorig:Spine1", "脊柱"],
-	"legs": ["Hips", "Pelvis", "mixamorig:Hips", "髋"],
+	"weapon": ["RightHand", "Hand_R", "hand_r", "mixamorig:RightHand", "mixamorig1:RightHand", "mixamorig_RightHand", "Right_Hand", "右手"],
+	"offhand": ["LeftHand", "Hand_L", "hand_l", "mixamorig:LeftHand", "mixamorig1:LeftHand", "mixamorig_LeftHand", "Left_Hand", "左手"],
+	"head": ["Head", "head", "mixamorig:Head", "mixamorig1:Head", "头"],
+	"chest": ["Spine2", "Spine1", "Chest", "chest", "mixamorig:Spine2", "mixamorig1:Spine2", "mixamorig:Spine1", "脊柱"],
+	"legs": ["Hips", "Pelvis", "mixamorig:Hips", "mixamorig1:Hips", "髋"],
 	"boots": ["RightFoot", "Foot_R", "foot_r", "mixamorig:RightFoot", "右脚"],
-	"back": ["Spine2", "Chest", "chest", "mixamorig:Spine2", "脊柱"],
-	"accessory": ["Spine2", "Chest", "chest", "mixamorig:Spine2", "脊柱"]
+	"back": ["Spine2", "Chest", "chest", "mixamorig:Spine2", "mixamorig1:Spine2", "脊柱"],
+	"accessory": ["Spine2", "Chest", "chest", "mixamorig:Spine2", "mixamorig1:Spine2", "脊柱"]
 }
 
 const FALLBACK_POSITIONS := {
@@ -53,32 +53,86 @@ static func get_or_create_socket(humanoid: Node3D, slot: String) -> Node3D:
 	if not pivot_name.is_empty():
 		var pivot := _find_named_node(humanoid, pivot_name) as Node3D
 		if is_instance_valid(pivot):
-			return _create_socket(pivot, socket_name, _hand_offset(slot), false)
+			var pivot_socket := _create_socket(pivot, socket_name, _hand_offset(slot), false)
+			pivot_socket.set_meta("equipment_attachment_type", "pivot")
+			pivot_socket.set_meta("equipment_slot", slot)
+			return pivot_socket
 
 	# Imported GLB models commonly expose Skeleton3D bones instead of named pivots.
 	var skeleton := _find_skeleton(humanoid)
 	if is_instance_valid(skeleton):
-		for alias in BONE_ALIASES.get(slot, []):
-			var bone_index := skeleton.find_bone(str(alias))
-			if bone_index < 0:
-				continue
+		var bone_index := _find_bone_index(skeleton, slot)
+		if bone_index >= 0:
+			var resolved_bone := skeleton.get_bone_name(bone_index)
 			var attachment := BoneAttachment3D.new()
 			attachment.name = socket_name
-			attachment.bone_name = str(alias)
+			attachment.bone_name = resolved_bone
 			attachment.position = _bone_offset(slot)
 			skeleton.add_child(attachment)
 			attachment.set_meta("equipment_socket", true)
 			attachment.set_meta("equipment_attachment_type", "bone")
+			attachment.set_meta("equipment_bone_name", resolved_bone)
+			attachment.set_meta("equipment_slot", slot)
 			return attachment
 
 	# Last resort keeps older assets and the procedural fallback compatible.
 	return _create_socket(humanoid, socket_name, FALLBACK_POSITIONS.get(slot, Vector3.ZERO), false)
+
+
+static func inspect_socket_binding(humanoid: Node3D, slot: String) -> Dictionary:
+	if not is_instance_valid(humanoid) or not SOCKET_NAMES.has(slot):
+		return {"slot": slot, "valid": false, "reason": "invalid_humanoid_or_slot"}
+	var socket := _find_named_node(humanoid, str(SOCKET_NAMES[slot])) as Node3D
+	if not is_instance_valid(socket):
+		return {"slot": slot, "valid": false, "reason": "socket_not_created"}
+	var attachment_type := str(socket.get_meta("equipment_attachment_type", "authored_or_pivot"))
+	var result := {
+		"slot": slot,
+		"valid": true,
+		"socket": str(humanoid.get_path_to(socket)),
+		"attachment_type": attachment_type,
+		"follows_bone": _socket_follows_pose(socket)
+	}
+	if socket.has_meta("equipment_bone_name"):
+		result["bone_name"] = str(socket.get_meta("equipment_bone_name"))
+	return result
+
+
+
+static func _socket_follows_pose(socket: Node3D) -> bool:
+	var cursor: Node = socket
+	while cursor != null:
+		if cursor is BoneAttachment3D:
+			return true
+		if cursor is Node3D and str(cursor.name).begins_with("ArmPivot"):
+			return true
+		cursor = cursor.get_parent()
+	return false
+
+static func _find_bone_index(skeleton: Skeleton3D, slot: String) -> int:
+	for alias_value in BONE_ALIASES.get(slot, []):
+		var exact := skeleton.find_bone(str(alias_value))
+		if exact >= 0:
+			return exact
+		var normalized_alias := _normalize_bone_name(str(alias_value))
+		for bone_index in range(skeleton.get_bone_count()):
+			if _normalize_bone_name(skeleton.get_bone_name(bone_index)) == normalized_alias:
+				return bone_index
+	return -1
+
+
+static func _normalize_bone_name(value: String) -> String:
+	var normalized := value.to_lower()
+	for prefix in ["mixamorig1:", "mixamorig:", "mixamorig1_", "mixamorig_"]:
+		normalized = normalized.replace(prefix, "")
+	return normalized.replace("_", "").replace("-", "").replace(" ", "").replace(":", "")
 
 static func _create_socket(parent: Node3D, socket_name: String, offset: Vector3, bone_attachment: bool) -> Node3D:
 	var socket := Node3D.new()
 	socket.name = socket_name
 	socket.position = offset
 	socket.set_meta("equipment_socket", true)
+	socket.set_meta("equipment_attachment_type", "root_offset")
 	if bone_attachment:
 		socket.set_meta("equipment_attachment_type", "bone")
 	parent.add_child(socket)
