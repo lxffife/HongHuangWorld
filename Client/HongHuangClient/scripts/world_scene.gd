@@ -82,6 +82,9 @@ var hell_trial_hud_stage: Label
 var hell_trial_hud_objective: Label
 var hell_trial_hud_hint: Label
 var hell_trial_hud_progress: ProgressBar
+var hell_trial_hud_evidence_toggle: Button
+var hell_trial_hud_evidence_container: VBoxContainer
+var hell_trial_hud_evidence_status: Label
 var hell_trial_runtime_data: Dictionary = {}
 var hud_visible := true
 var hud_toggle_button: Button
@@ -865,7 +868,7 @@ func _build_hell_trial_hud() -> void:
 	hell_trial_hud_panel.name = "HellTrialProgressPanel"
 	hell_trial_hud_panel.visible = false
 	hell_trial_hud_panel.z_index = 24
-	hell_trial_hud_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hell_trial_hud_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	var panel_style := StyleBoxFlat.new()
 	panel_style.bg_color = Color("#111722ee")
 	panel_style.border_color = Color("#98764f")
@@ -909,6 +912,20 @@ func _build_hell_trial_hud() -> void:
 	hell_trial_hud_progress.show_percentage = false
 	hell_trial_hud_progress.custom_minimum_size.y = 8.0
 	layout.add_child(hell_trial_hud_progress)
+	hell_trial_hud_evidence_toggle = Button.new()
+	hell_trial_hud_evidence_toggle.text = "查验三份证词"
+	hell_trial_hud_evidence_toggle.visible = false
+	hell_trial_hud_evidence_toggle.custom_minimum_size.y = 28.0
+	hell_trial_hud_evidence_toggle.pressed.connect(_toggle_hell_trial_evidence_panel)
+	layout.add_child(hell_trial_hud_evidence_toggle)
+	hell_trial_hud_evidence_container = VBoxContainer.new()
+	hell_trial_hud_evidence_container.visible = false
+	hell_trial_hud_evidence_container.add_theme_constant_override("separation", 5)
+	layout.add_child(hell_trial_hud_evidence_container)
+	hell_trial_hud_evidence_status = Label.new()
+	hell_trial_hud_evidence_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hell_trial_hud_evidence_status.add_theme_color_override("font_color", Color("#e7c995"))
+	hell_trial_hud_evidence_container.add_child(hell_trial_hud_evidence_status)
 	_layout_hud()
 
 
@@ -938,6 +955,15 @@ func _render_hell_trial_hud(trial_data: Dictionary) -> void:
 		hint = str(trial_data.get("guardian_hint", hint))
 	hell_trial_hud_hint.text = hint
 	hell_trial_hud_hint.visible = not hint.is_empty()
+	var investigation: Dictionary = trial_data.get("investigation", {})
+	var investigation_enabled := floor_number == 1 and bool(investigation.get("enabled", false))
+	hell_trial_hud_evidence_toggle.visible = investigation_enabled
+	if investigation_enabled:
+		var solved_count := int(investigation.get("solved_count", 0))
+		hell_trial_hud_evidence_toggle.text = "查验三份证词 · %d / 3" % solved_count
+		_render_hell_trial_evidence(investigation)
+	else:
+		hell_trial_hud_evidence_container.visible = false
 	if required > 0:
 		hell_trial_hud_objective.text = "本层目标进度：%d / %d" % [mini(kills, required), required]
 		hell_trial_hud_progress.max_value = float(required)
@@ -951,6 +977,70 @@ func _render_hell_trial_hud(trial_data: Dictionary) -> void:
 		hell_trial_hud_stage.add_theme_color_override("font_color", Color("#9bd4ad"))
 	else:
 		hell_trial_hud_stage.add_theme_color_override("font_color", Color("#d7c7a8"))
+
+
+func _toggle_hell_trial_evidence_panel() -> void:
+	if not is_instance_valid(hell_trial_hud_evidence_container):
+		return
+	hell_trial_hud_evidence_container.visible = not hell_trial_hud_evidence_container.visible
+	_layout_hud()
+
+
+func _render_hell_trial_evidence(investigation: Dictionary) -> void:
+	if not is_instance_valid(hell_trial_hud_evidence_container):
+		return
+	var solved_count := int(investigation.get("solved_count", 0))
+	hell_trial_hud_evidence_status.text = str(investigation.get("conclusion", "核验三份现场证词。"))
+	for child in hell_trial_hud_evidence_container.get_children():
+		if child != hell_trial_hud_evidence_status:
+			child.queue_free()
+	var clues: Variant = investigation.get("clues", [])
+	if not clues is Array:
+		return
+	for clue_value in clues:
+		if not clue_value is Dictionary:
+			continue
+		var clue: Dictionary = clue_value
+		var card := VBoxContainer.new()
+		card.add_theme_constant_override("separation", 2)
+		hell_trial_hud_evidence_container.add_child(card)
+		var solved := bool(clue.get("solved", false))
+		var heading := Label.new()
+		heading.text = str(clue.get("name", "证词线索")) + (" · 已核验" if solved else " · 待核验")
+		heading.add_theme_color_override("font_color", Color("#9bd4ad") if solved else Color("#e7c995"))
+		card.add_child(heading)
+		var description := Label.new()
+		description.text = str(clue.get("description", ""))
+		description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		description.add_theme_font_size_override("font_size", 10)
+		card.add_child(description)
+		var options_row := HBoxContainer.new()
+		options_row.add_theme_constant_override("separation", 4)
+		card.add_child(options_row)
+		var options: Variant = clue.get("options", [])
+		if options is Array:
+			for option_value in options:
+				if not option_value is Dictionary:
+					continue
+				var option: Dictionary = option_value
+				var choice_id := str(option.get("id", ""))
+				var choice_button := Button.new()
+				choice_button.text = str(option.get("label", "核验"))
+				choice_button.disabled = solved or choice_id.is_empty()
+				choice_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				choice_button.custom_minimum_size.y = 26.0
+				choice_button.add_theme_font_size_override("font_size", 10)
+				choice_button.pressed.connect(_submit_hell_trial_evidence.bind(str(clue.get("id", "")), choice_id))
+				options_row.add_child(choice_button)
+
+
+func _submit_hell_trial_evidence(evidence_id: String, option_id: String) -> void:
+	if HHSession.world_network == null:
+		_show_notification("世界连接尚未就绪，无法提交证词。", 2.5)
+		return
+	var error: Error = HHSession.world_network.send_hell_trial_evidence(evidence_id, option_id)
+	if error != OK:
+		_show_notification("证词提交失败，错误码：" + str(error), 2.5)
 
 
 func _show_hell_trial_runtime_state(snapshot: Dictionary) -> void:
@@ -3192,8 +3282,10 @@ func _layout_hud() -> void:
 		var trial_width := minf(420.0, maxf(280.0, viewport_size.x - 24.0))
 		hell_trial_hud_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		hell_trial_hud_panel.position = Vector2((viewport_size.x - trial_width) * 0.5, 62.0)
-		hell_trial_hud_panel.custom_minimum_size = Vector2(trial_width, 126.0)
-		hell_trial_hud_panel.size = Vector2(trial_width, 126.0)
+		var evidence_open := is_instance_valid(hell_trial_hud_evidence_container) and hell_trial_hud_evidence_container.visible
+		var panel_height := 420.0 if evidence_open else 154.0
+		hell_trial_hud_panel.custom_minimum_size = Vector2(trial_width, panel_height)
+		hell_trial_hud_panel.size = Vector2(trial_width, panel_height)
 		hell_trial_hud_panel.visible = hud_visible and not hell_trial_runtime_data.is_empty()
 
 	# Reserve one continuous top-right toolbar for all utility actions.
@@ -5443,6 +5535,12 @@ func _on_combat_event(event: Dictionary) -> void:
 			if is_instance_valid(target_info_label) and not selected_monster_id.is_empty():
 				target_info_label.text = target_info_label.text.split("\n攻击指令已发送")[0] + "\n" + rejection_reason
 			return
+	if action == "hell_trial_investigation":
+		var investigation_snapshot: Variant = event.get("hell_trial", {})
+		if investigation_snapshot is Dictionary and not investigation_snapshot.is_empty():
+			_show_hell_trial_runtime_state({"hell_floor": int(event.get("floor", 1)), "hell_trial": investigation_snapshot})
+		_show_notification(str(event.get("message", event.get("reason", "证词调查状态已更新。"))), 3.5)
+		return
 	if action == "hell_trial_wave_transition":
 		HHAudio.play_ui("warning", 0.9)
 		var floor_number := int(event.get("floor", 0))
