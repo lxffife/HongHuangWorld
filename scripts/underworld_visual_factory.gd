@@ -300,9 +300,6 @@ static func create_fengdu_city_block() -> Node3D:
 		var north := create_fengdu_wall_segment()
 		north.position = Vector3(-4.0 + float(index) * 8.0, 0.0, -9.0)
 		root.add_child(north)
-		var south := create_fengdu_wall_segment()
-		south.position = Vector3(-4.0 + float(index) * 8.0, 0.0, 9.0)
-		root.add_child(south)
 		var west := create_fengdu_wall_segment()
 		west.position = Vector3(-9.0, 0.0, -4.0 + float(index) * 8.0)
 		west.rotation.y = PI * 0.5
@@ -317,13 +314,19 @@ static func create_fengdu_city_block() -> Node3D:
 			tower.position = Vector3(x, 0.0, z)
 			root.add_child(tower)
 	var office := create_yinsi_office_facade()
-	office.position = Vector3(0.0, 0.0, -5.0)
+	office.position = Vector3(-5.2, 0.0, -5.0)
 	root.add_child(office)
-	for x in [-4.2, 4.2]:
+	var reincarnation_hall := create_reincarnation_hall()
+	reincarnation_hall.position = Vector3(4.8, 0.0, -4.8)
+	root.add_child(reincarnation_hall)
+	var inner_gate := create_fengdu_inner_gate()
+	inner_gate.position = Vector3(0.0, 0.0, 9.0)
+	root.add_child(inner_gate)
+	for x in [-6.0, 6.0]:
 		var stall := create_ghost_market_stall()
 		stall.position = Vector3(x, 0.0, 3.8)
 		root.add_child(stall)
-	for x in [-6.0, 6.0]:
+	for x in [-8.0, 8.0]:
 		var lantern := create_ghost_lantern()
 		lantern.position = Vector3(x, 0.0, -0.2)
 		root.add_child(lantern)
