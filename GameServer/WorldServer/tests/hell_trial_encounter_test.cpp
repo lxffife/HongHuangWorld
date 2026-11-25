@@ -100,6 +100,20 @@ int main() {
     result = boss_first.record_monster_death("mob-18c", "hell_f18_last_sinner");
     assert(result.objective_kills == 3 && result.completion_ready);
 
+    std::unordered_set<std::string> evidence_ids;
+    for (const auto& evidence_spec : honghuang::simulation::hell_trial_evidence_specs()) {
+        assert(evidence_ids.emplace(evidence_spec.id).second);
+        assert(!evidence_spec.name.empty() && !evidence_spec.location_hint.empty());
+        assert(!evidence_spec.description.empty());
+        assert(evidence_spec.x >= -27.0F && evidence_spec.x <= 27.0F);
+        assert(evidence_spec.z >= -27.0F && evidence_spec.z <= 27.0F);
+        bool correct_option_exists = false;
+        for (const auto option_id : evidence_spec.option_ids) {
+            if (option_id == evidence_spec.correct_option_id) correct_option_exists = true;
+        }
+        assert(correct_option_exists);
+    }
+
     HellTrialInvestigation investigation(1);
     assert(investigation.enabled() && !investigation.completed());
     auto evidence = investigation.submit("registry_seal", "before_third_bell");
