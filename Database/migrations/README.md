@@ -147,6 +147,11 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000069_party_loot
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000070_party_focus_target.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000071_repeatable_death_events.up.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000072_hell_trial_progress.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000073_underworld_npc_shops.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000074_underworld_monster_currency_rewards.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000075_character_spell_learning.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000076_underworld_combat_test_balance.up.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000077_npc_patrol_routes.up.sql
 
 - `000069_party_loot_rules` adds independent material/equipment loot policies to parties (`personal`, `free_for_all`, `round_robin`, `leader`), persistent rotation cursors, and per-drop eligible-character records. The API exposes leader-only policy changes through `PUT /api/v1/party/loot-rules`. The rules apply to newly created drops; existing available drops retain their persisted eligibility. `free_for_all` allows all party members to compete for one atomic pickup; `round_robin` assigns each new drop to the next connected member in the same world instance; `leader` assigns it to the leader character. The WorldServer restores the eligibility list after restart and still validates pickup distance before Backend performs the transactional ownership transfer.
 ```
@@ -156,3 +161,6 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000072_hell_trial
 
 - `000071_repeatable_death_events` 允许同一角色在同一世界会话中多次经历死亡与复活；保留已解决死亡历史，同时限制每个角色/会话最多一条未解决死亡记录。
 - `000072_hell_trial_progress` 为世界实例增加可空的 `hell_floor`（仅允许冥界 1–18 层），为每个肉身角色建立十八层地狱通关进度与幂等进入事件。中心服只接受当前活动会话所在 WorldServer、且世界实例 `hell_floor` 与请求一致的进入/通关回报；通关与下一层解锁在同一事务中完成，第十八层为最终层。
+
+
+- `000077_npc_patrol_routes` 为 `world_npc_definitions` 增加行为档案与闭环巡逻路线配置；轮回殿守卫使用服务端 UTC 时钟计算巡逻位置，NPC 列表向客户端提供路线相位，交互距离仍由中心服按角色实时坐标校验。
