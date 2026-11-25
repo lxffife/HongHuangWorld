@@ -75,6 +75,24 @@ func play_action(action_name: String) -> bool:
 	return true
 
 
+func play_preview_state(state_name: String) -> bool:
+	# Preview locomotion must loop and must not use the one-shot combat lock.
+	var normalized := state_name.strip_edges().to_lower()
+	if normalized not in ["idle", "walk", "run"]:
+		return false
+	if _animation_player == null or not is_instance_valid(_animation_player):
+		return false
+	var clip := _resolve_clip(normalized)
+	if clip.is_empty():
+		return false
+	_locked_action = ""
+	_action_lock_remaining = 0.0
+	_set_clip_looping(clip, true)
+	_animation_player.play(clip, 0.12)
+	_current_state = normalized
+	return true
+
+
 func clear_action() -> void:
 	_locked_action = ""
 	_action_lock_remaining = 0.0
