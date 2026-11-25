@@ -604,6 +604,34 @@ static func _build_frost_soul_details(root: Node3D) -> void:
 
 
 static func create_npc(npc_type: String, npc_name: String) -> Node3D:
+	var model_key := _resolve_npc_model_key(npc_type)
+	var root := VisualModelLibrary.instantiate_model(
+		model_key,
+		func() -> Node3D: return _create_procedural_npc(npc_type, npc_name)
+	)
+	root.name = "NPCModel_" + npc_type
+	root.set_meta("npc_type", npc_type)
+	root.set_meta("npc_name", npc_name)
+	return root
+
+
+static func _resolve_npc_model_key(npc_type: String) -> String:
+	match npc_type:
+		"judge":
+			return "npc_judge"
+		"trial_master":
+			return "npc_trial_master"
+		"guard":
+			return "npc_guard"
+		"soup_keeper":
+			return "npc_soup_keeper"
+		"blacksmith":
+			return "npc_blacksmith"
+		_:
+			return "npc_generic"
+
+
+static func _create_procedural_npc(npc_type: String, npc_name: String) -> Node3D:
 	var root := Node3D.new()
 	root.name = "NPCModel_" + npc_type
 	var robe := Color("#315d68")
