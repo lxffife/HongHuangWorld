@@ -81,9 +81,9 @@ func _build_stage() -> void:
 	var ground := MeshInstance3D.new()
 	ground.name = "PreviewGround"
 	var plane := PlaneMesh.new()
-	plane.size = Vector2(32.0, 28.0)
+	plane.size = Vector2(48.0, 54.0)
 	ground.mesh = plane
-	ground.position = Vector3(0.0, -0.04, -3.0)
+	ground.position = Vector3(0.0, -0.04, -12.0)
 	var ground_material := StandardMaterial3D.new()
 	ground_material.albedo_color = Color("#34343d")
 	ground_material.roughness = 0.92
