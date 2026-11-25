@@ -149,11 +149,30 @@ static func _add_floor_signature_setpiece(root: Node3D, floor_number: int, palet
 static func _build_tongue_echo_setpiece(root: Node3D, palette: Dictionary) -> void:
 	var accent: Color = palette["accent"]
 	var stone: Color = palette["pillar"]
+	var evidence_names := ["罪簿封蜡", "回声石", "魂灯残灰"]
+	var evidence_locations := ["西侧卷宗案台", "北侧回声石柱", "东侧魂灯台"]
 	for index in range(3):
 		var x := float(index - 1) * 10.0
-		_add_box_prop(root, "ContradictoryEvidenceStand_%02d" % (index + 1), Vector3(4.2, 1.0, 3.2), Vector3(x, 0.55, -3.0 - float(index % 2) * 7.0), stone)
-		_add_box_prop(root, "EvidenceTablet_%02d" % (index + 1), Vector3(2.2, 4.8, 0.65), Vector3(x, 3.4, -3.0 - float(index % 2) * 7.0), accent.darkened(0.28))
-		_add_box_prop(root, "EvidenceGlyph_%02d" % (index + 1), Vector3(1.1, 0.16, 0.12), Vector3(x, 4.0, -3.36 - float(index % 2) * 7.0), accent)
+		var z := -3.0 - float(index % 2) * 7.0
+		_add_box_prop(root, "ContradictoryEvidenceStand_%02d" % (index + 1), Vector3(4.2, 1.0, 3.2), Vector3(x, 0.55, z), stone)
+		_add_box_prop(root, "EvidenceTablet_%02d" % (index + 1), Vector3(2.2, 4.8, 0.65), Vector3(x, 3.4, z), accent.darkened(0.28))
+		_add_box_prop(root, "EvidenceGlyph_%02d" % (index + 1), Vector3(1.1, 0.16, 0.12), Vector3(x, 4.0, z - 0.36), accent)
+		_add_label(root, "EvidenceName_%02d" % (index + 1), evidence_names[index] + " · " + evidence_locations[index], Vector3(x, 6.2, z), accent, 16)
+		if index == 0:
+			var seal := BoxMesh.new()
+			seal.size = Vector3(1.3, 0.18, 0.9)
+			_add_mesh_prop(root, "EvidenceRelic_RegistrySeal", seal, Vector3(x, 1.18, z), Vector3.ZERO, accent, 0.18)
+		elif index == 1:
+			var echo := SphereMesh.new()
+			echo.radius = 0.72
+			echo.height = 1.44
+			_add_mesh_prop(root, "EvidenceRelic_EchoStone", echo, Vector3(x, 1.8, z), Vector3.ZERO, accent, 0.42)
+		else:
+			var lantern := CylinderMesh.new()
+			lantern.top_radius = 0.48
+			lantern.bottom_radius = 0.62
+			lantern.height = 1.3
+			_add_mesh_prop(root, "EvidenceRelic_SoulLantern", lantern, Vector3(x, 1.75, z), Vector3.ZERO, accent, 0.65)
 	for index in range(4):
 		var z := 16.0 - float(index) * 10.0
 		var arch := TorusMesh.new()
