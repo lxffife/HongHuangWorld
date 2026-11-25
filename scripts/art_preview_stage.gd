@@ -271,7 +271,36 @@ func _selection_status() -> String:
 	var model: Node3D = _preview_models[_selected_model_index]
 	var source_label := str(model.get_meta("preview_source_label", "来源未知"))
 	var model_key := str(model.get_meta("model_key", "unknown"))
-	return "当前：%s · %s · key=%s" % [_model_label(_selected_model_index), source_label, model_key]
+	var diagnostics := _collect_model_diagnostics(model)
+	var clip_names: Array = diagnostics["clips"]
+	var clip_summary := "无动画片段" if clip_names.is_empty() else "动画 %d 段" % clip_names.size()
+	return "当前：%s · %s · key=%s\n网格 %d · 骨骼 %d · 动画播放器 %d · %s" % [
+		_model_label(_selected_model_index), source_label, model_key,
+		int(diagnostics["meshes"]), int(diagnostics["skeletons"]),
+		int(diagnostics["players"]), clip_summary
+	]
+
+
+func _collect_model_diagnostics(root: Node) -> Dictionary:
+	var result := {"meshes": 0, "skeletons": 0, "players": 0, "clips": []}
+	_collect_model_diagnostics_recursive(root, result)
+	return result
+
+
+func _collect_model_diagnostics_recursive(node: Node, result: Dictionary) -> void:
+	if node is MeshInstance3D and (node as MeshInstance3D).mesh != null:
+		result["meshes"] = int(result["meshes"]) + 1
+	if node is Skeleton3D:
+		result["skeletons"] = int(result["skeletons"]) + 1
+	if node is AnimationPlayer:
+		var player := node as AnimationPlayer
+		result["players"] = int(result["players"]) + 1
+		var clips: Array = result["clips"]
+		for clip_name in player.get_animation_list():
+			clips.append(str(clip_name))
+		result["clips"] = clips
+	for child in node.get_children():
+		_collect_model_diagnostics_recursive(child, result)
 
 
 func _update_status(message: String) -> void:
