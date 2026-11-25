@@ -56,3 +56,5 @@
 ## 首批外部模型
 
 见 THIRD_PARTY_ASSETS.md 与 ../3d/asset-register.csv。本批包含玩家、铁骨兽魂、城墙、塔楼、殿堂、民居、树木和岩石模型。当前状态为 imported_unverified，仍需在 Godot 4.6 中导入和实际镜头验收。
+
+- 荒原狼已加入 Quaternius Ultimate Animated Animal Pack 的 Wolf GLB，状态 imported_unverified；待检查四足动作和动画命名。

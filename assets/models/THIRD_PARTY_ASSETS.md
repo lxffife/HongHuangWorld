@@ -23,3 +23,6 @@
 ## 验收状态
 
 所有本批模型状态均为 imported_unverified。在用户本机 Godot 4.6 导入后，还需检查脚底、朝向、材质、动作、缩放和性能。未完成镜头验收前，不标记为 accepted。
+| wasteland_wolf.glb | Wolf | Quaternius / Ultimate Animated Animal Pack | CC0 1.0（官方包页） | https://quaternius.com/packs/ultimateanimatedanimals.html |
+
+官方 Ultimate Animated Animal Pack 页面标注 CC0，包含 12 种动物，每种有 12 个以上动作。该 Wolf 模型来自公开模型展示仓库的再导出文件；原作者与授权以 Quaternius 官方资源页为准。
