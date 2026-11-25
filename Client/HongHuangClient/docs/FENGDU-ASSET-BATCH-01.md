@@ -100,3 +100,31 @@
 - **普通城民**：使用头巾、围巾和肩背货篓，区别于阴司官员。
 
 这些部件目前由 Godot 原始几何体拼装，**不具备正式角色骨骼、表情、布料或高质量动画**。它们只用于占位阶段的轮廓辨识与镜头评审；不能把资产登记状态改为 imported/verified。正式交付仍需独立 GLB、骨架/动画检查和实际画面验收。
+
+## G. 已核对的免费资产候选（2026-11-25）
+
+> 这里只登记官方资源页当前明确标注的许可，不代表已经下载、导入或通过游戏内验收。下载时必须保留压缩包内 LICENSE，并记录下载日期与文件哈希。
+
+| 用途 | 官方资源包 | 页面明确内容 | 对本项目的用途判断 |
+|---|---|---|---|
+| 玩家/人形 NPC 基础 | [Universal Base Characters](https://quaternius.com/packs/universalbasecharacters.html) | 页面标注 CC0；6 个 Humanoid rig 基础角色；glTF/FBX 等格式 | 第一优先。玩家先选 Regular 比例基底；孟婆、判官、阴兵再用配件/服装差异化，不要直接把同一裸模型复制成六个 NPC |
+| 玩家动作 | [Universal Animation Library](https://quaternius.com/packs/universalanimationlibrary.html) | 页面标注 CC0；120+ 通用 Humanoid 动作；含 GLB；页面说明适配 Godot/Unity/Unreal | 与基础人形配套，先测试 idle/walk/run/attack/hit/death 的 retarget 和现有玩家动画驱动冲突 |
+| 荒原狼 | [Ultimate Animated Animal Pack](https://quaternius.com/packs/ultimateanimatedanimals.html) | 页面标注 CC0；12 种动物；每种 12+ 动画；含 glTF | 四足怪物优先候选。下载后先确认具体 wolf 模型、骨架朝向、扑咬/死亡动作，再映射为 wasteland_wolf.glb |
+| 怪物备选 | [Ultimate Monsters](https://quaternius.com/packs/ultimatemonsters.html) | 需以下载时官方包页和 LICENSE 为准 | 先筛出适合洪荒的轮廓；不要只因包名含 Monsters 就默认有合适四足狼 |
+| 建筑/场景 | [Ultimate Fantasy RTS](https://quaternius.com/packs/ultimatefantasyrts.html) | 页面标注 CC0；128 个建筑与自然模型；含 glTF | 先拿墙段、塔楼、市场/建筑体块做模块评估；东方屋顶与酆都石木色调仍需二次统一 |
+| 建筑备选 | [Ultimate Buildings Pack](https://quaternius.com/packs/ultimatetexturedbuildings.html) | 页面标注 CC0；76 个模块化建筑 | 仅作民居体块与材质调色参考，不直接替代鬼门关/六道轮回殿的东方主地标设计 |
+
+### 许可边界必须区分
+
+- Quaternius 官方 FAQ 明确：每个资源包可能采用 CC0 或 QAL，具体看该包详情页及下载包内 LICENSE；不能把整个站点统一写成 CC0。
+- [Quaternius Asset License（QAL）](https://quaternius.com/license.html) v1.0（页面标注 2026-08-28 更新）允许个人、教育和商业项目使用、修改并随完成产品发布；但禁止把资产本身作为独立素材包/模板重新分发或转售。
+- 对当前列为 CC0 的旧包，仍须保存对应资源页与随包 LICENSE；如果下载时许可已变化，以实际下载包的许可文件和官方条款为准。
+- 本项目允许把资产集成进游戏成品，不会把第三方原始模型作为独立素材库向外分发。资产状态在完成导入和检查前一律保持 candidate。
+
+### 建议导入顺序（不擅自替用户下载/引入第三方二进制）
+
+1. Universal Base Characters：只选一个 Regular 人形做玩家基底，先检查骨骼命名、朝向、比例和脚底位置。
+2. Universal Animation Library：先独立验证 retarget；确认不会与 HHHumanoidAnimationDriver 双重驱动，再接入玩家。
+3. Ultimate Animated Animal Pack：单独挑狼模型，检查四足骨架与攻击/死亡动画。
+4. Ultimate Fantasy RTS：挑 3–5 个墙/塔/建筑部件做酆都风格适配试拼，不要整包导入发行资源。
+5. 通过 ArtPreviewStage 和严格模型校验后，再逐个替换 NPC、怪物与城区建筑。
