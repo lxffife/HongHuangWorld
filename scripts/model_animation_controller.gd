@@ -129,35 +129,10 @@ func _play_state(state_name: String) -> void:
 
 
 func _set_clip_looping(clip_name: String, should_loop: bool) -> void:
-	# Imported Animation resources may be shared by every instance of a PackedScene.
-	# Never mutate the source resource directly: install a per-AnimationPlayer copy.
-	if not is_instance_valid(_animation_player):
+	var animation := _animation_player.get_animation(clip_name)
+	if animation == null:
 		return
-	var loop_modes: Dictionary = _animation_player.get_meta("hh_loop_modes", {})
-	if bool(loop_modes.get(clip_name, not should_loop)) == should_loop:
-		return
-	var separator := clip_name.rfind("/")
-	var library_name := "" if separator < 0 else clip_name.substr(0, separator)
-	var animation_name := clip_name if separator < 0 else clip_name.substr(separator + 1)
-	var library := _animation_player.get_animation_library(library_name)
-	if library == null:
-		return
-	var source_animation := _animation_player.get_animation(clip_name)
-	if source_animation == null:
-		return
-	var instance_animation := source_animation.duplicate(true) as Animation
-	if instance_animation == null:
-		return
-	instance_animation.loop_mode = Animation.LOOP_LINEAR if should_loop else Animation.LOOP_NONE
-	library.remove_animation(animation_name)
-	var error := library.add_animation(animation_name, instance_animation)
-	if error != OK:
-		library.add_animation(animation_name, source_animation)
-		instance_animation.free()
-		return
-	loop_modes[clip_name] = should_loop
-	_animation_player.set_meta("hh_loop_modes", loop_modes)
-
+	animation.loop_mode = Animation.LOOP_LINEAR if should_loop else Animation.LOOP_NONE
 
 func _select_animation_player(state_name: String) -> AnimationPlayer:
 	var best_player: AnimationPlayer
