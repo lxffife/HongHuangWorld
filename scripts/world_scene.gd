@@ -7986,7 +7986,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_dialogue_label.text = exploration_feedback if not exploration_feedback.is_empty() else "探索点由中心服依据角色实际位置验证。发现记录属于灵魂，轮回后仍会保留。"
 			npc_status_label.text = "探索进度已同步。先调查地点，再回应已解锁的奇遇。"
 			npc_panel.visible = true
-		_release_mouse_for_modal()
+			_release_mouse_for_modal()
 			_send_npc_request("GET", "/api/v1/worlds/current/exploration-events", "exploration_events")
 		"exploration_events_bootstrap", "exploration_events":
 			_render_exploration_events(data.get("events", []))
@@ -8014,7 +8014,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_status_label.text = "本次结果已由中心服写入灵魂因果簿。"
 			_clear_npc_choice_buttons()
 			npc_panel.visible = true
-		_release_mouse_for_modal()
+			_release_mouse_for_modal()
 			_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_list")
 		"interact":
 			_clear_npc_choice_buttons()
@@ -8068,7 +8068,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_soul_breakthrough_button.visible = false
 			npc_fusion_button.visible = str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu"
 			npc_panel.visible = true
-		_release_mouse_for_modal()
+			_release_mouse_for_modal()
 		"fate_encounter":
 			npc_title_label.text = "命格奇遇 · " + str(data.get("title", "未知奇遇"))
 			npc_dialogue_label.text = str(data.get("description", "奇遇已记入因果簿。")) + "\n功德：" + str(data.get("merit", 0)) + "（+" + str(data.get("merit_delta", 0)) + "）\n业力：" + str(data.get("karma", 0)) + "（" + str(data.get("karma_delta", 0)) + "）"
@@ -8076,7 +8076,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_fate_encounter_button.visible = false
 			_clear_npc_choice_buttons()
 			npc_panel.visible = true
-		_release_mouse_for_modal()
+			_release_mouse_for_modal()
 		"fate_choice":
 			npc_title_label.text = "因果已记入 · " + str(data.get("npc_id", "NPC"))
 			npc_dialogue_label.text = str(data.get("result", "此事已记入因果簿。")) + "\n功德：" + str(data.get("merit", 0)) + "（" + ("+" if int(data.get("merit_delta", 0)) >= 0 else "") + str(data.get("merit_delta", 0)) + "）" + "\n业力：" + str(data.get("karma", 0)) + "（" + ("+" if int(data.get("karma_delta", 0)) >= 0 else "") + str(data.get("karma_delta", 0)) + "）"
@@ -8087,7 +8087,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_soul_button.visible = true
 			npc_soul_breakthrough_button.visible = false
 			npc_panel.visible = true
-		_release_mouse_for_modal()
+			_release_mouse_for_modal()
 		"trials":
 			var trials: Array = data.get("trials", [])
 			var lines: Array[String] = ["冥界试炼进度"]
@@ -8106,7 +8106,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_soul_breakthrough_button.visible = false
 			npc_reincarnation_leave_button.visible = false
 			npc_panel.visible = true
-		_release_mouse_for_modal()
+			_release_mouse_for_modal()
 		"soul_progression":
 			var experience := int(data.get("experience", 0))
 			var realm_name := str(data.get("realm_name", "未知"))
@@ -8125,7 +8125,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_eligibility_button.visible = false
 			npc_soul_button.visible = true
 			npc_panel.visible = true
-		_release_mouse_for_modal()
+			_release_mouse_for_modal()
 		"soul_breakthrough":
 			npc_title_label.text = "灵魂境界突破"
 			npc_dialogue_label.text = "灵魂境界突破成功：" + str(data.get("realm_name", "新境界"))
@@ -8134,7 +8134,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_trial_button.visible = false
 			npc_eligibility_button.visible = false
 			npc_panel.visible = true
-		_release_mouse_for_modal()
+			_release_mouse_for_modal()
 			_request_soul_progression()
 		"soul_fusions":
 			_clear_npc_choice_buttons()
@@ -8167,7 +8167,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_status_label.text = "融合由中心服验证异变材料并结算来世资质；五种魂质异变齐全可尝试五行混元魂。"
 			npc_fusion_button.visible = true
 			npc_panel.visible = true
-		_release_mouse_for_modal()
+			_release_mouse_for_modal()
 		"soul_fusion":
 			npc_title_label.text = "魂质融合成功 · " + str(data.get("name", "灵魂异变"))
 			npc_dialogue_label.text = str(data.get("description", "魂质已成功融合。")) + "\n融合结果已永久写入灵魂，并强化来世五维资质。"
@@ -8175,7 +8175,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			_show_notification("魂质融合成功 · " + str(data.get("name", "新魂印")), 5.0)
 			npc_fusion_button.visible = true
 			npc_panel.visible = true
-		_release_mouse_for_modal()
+			_release_mouse_for_modal()
 			_request_soul_essence()
 			_request_soul_fusions()
 		"eligibility":
@@ -8194,7 +8194,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_reincarnation_leave_button.visible = eligible
 			npc_reincarnation_leave_button.disabled = false
 			npc_panel.visible = true
-		_release_mouse_for_modal()
+			_release_mouse_for_modal()
 
 func _clear_npc_choice_buttons() -> void:
 	if npc_choice_container == null:
@@ -8814,6 +8814,7 @@ func _request_exploration_points() -> void:
 	npc_title_label.text = "正在读取区域探索点……"
 	npc_dialogue_label.text = "正在向中心服查询本世界的探索记录。"
 	npc_panel.visible = true
+	_release_mouse_for_modal()
 	_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_list")
 
 func _request_exploration_progress() -> void:
@@ -9021,6 +9022,7 @@ func _open_exploration_event(event_id: String) -> void:
 	npc_soul_breakthrough_button.visible = false
 	npc_reincarnation_leave_button.visible = false
 	npc_panel.visible = true
+	_release_mouse_for_modal()
 
 
 func _confirm_exploration_event(choice_id: String) -> void:
