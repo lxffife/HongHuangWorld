@@ -53,6 +53,8 @@ static func instantiate_model(model_key: String, fallback_factory: Callable) -> 
 				instance.set_meta("model_source", model_path)
 				instance.set_meta("model_key", model_key)
 				_normalize_visual_height(instance as Node3D, model_key)
+				if model_key == "player_humanoid":
+					_annotate_humanoid_asset(instance as Node3D)
 				_attach_animation_driver(instance as Node3D, model_key)
 				return instance as Node3D
 			if instance != null:
@@ -138,3 +140,45 @@ static func _attach_animation_driver(model_root: Node3D, model_key: String) -> v
 	controller.name = "ModelAnimationController"
 	controller.set_script(load("res://scripts/model_animation_controller.gd"))
 	model_root.add_child(controller)
+
+
+static func _annotate_humanoid_asset(model_root: Node3D) -> void:
+	# Record import-time facts so preview/QA can distinguish a usable rig from
+	# a mesh-only GLB before it is approved as the production player.
+	var report := {
+		"mesh_count": 0,
+		"skeleton_count": 0,
+		"animation_player_count": 0,
+		"bone_count": 0,
+		"animation_clips": []
+	}
+	_collect_humanoid_report(model_root, report)
+	var clips: Array = report["animation_clips"]
+	model_root.set_meta("humanoid_mesh_count", int(report["mesh_count"]))
+	model_root.set_meta("humanoid_skeleton_count", int(report["skeleton_count"]))
+	model_root.set_meta("humanoid_animation_player_count", int(report["animation_player_count"]))
+	model_root.set_meta("humanoid_bone_count", int(report["bone_count"]))
+	model_root.set_meta("humanoid_animation_clips", clips)
+	model_root.set_meta("humanoid_rig_ready", int(report["skeleton_count"]) > 0 and int(report["bone_count"]) >= 15)
+	model_root.set_meta("humanoid_animation_ready", not clips.is_empty())
+	model_root.set_meta("humanoid_asset_review_required", int(report["skeleton_count"]) == 0 or int(report["bone_count"]) < 15 or clips.is_empty())
+
+
+static func _collect_humanoid_report(node: Node, report: Dictionary) -> void:
+	if node is MeshInstance3D and (node as MeshInstance3D).mesh != null:
+		report["mesh_count"] = int(report["mesh_count"]) + 1
+	if node is Skeleton3D:
+		var skeleton := node as Skeleton3D
+		report["skeleton_count"] = int(report["skeleton_count"]) + 1
+		report["bone_count"] = int(report["bone_count"]) + skeleton.get_bone_count()
+	if node is AnimationPlayer:
+		var player := node as AnimationPlayer
+		report["animation_player_count"] = int(report["animation_player_count"]) + 1
+		var clips: Array = report["animation_clips"]
+		for clip_name in player.get_animation_list():
+			var normalized := str(clip_name).to_lower()
+			if normalized not in ["reset", "default", "tpose", "bindpose"]:
+				clips.append(str(clip_name))
+		report["animation_clips"] = clips
+	for child in node.get_children():
+		_collect_humanoid_report(child, report)
