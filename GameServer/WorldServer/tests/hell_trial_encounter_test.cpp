@@ -134,6 +134,32 @@ int main() {
     assert(!other_floor.submit("registry_seal", "after_third_bell").accepted);
 
 
+
+    HellTrialSoulRescue soul_rescue(3);
+    assert(soul_rescue.enabled() && !soul_rescue.completed());
+    auto rescue = soul_rescue.activate("west", "character-a", 100.0);
+    assert(rescue.accepted && rescue.rescued_count == 1 && !rescue.completed);
+    assert(soul_rescue.remaining_seconds(104.0) == 11.0);
+    rescue = soul_rescue.activate("east", "character-a", 105.0);
+    assert(!rescue.accepted && !rescue.completed); // Must be a different teammate.
+    rescue = soul_rescue.activate("west", "character-b", 106.0);
+    assert(!rescue.accepted && !rescue.completed); // Cannot double-activate one lantern.
+    rescue = soul_rescue.activate("east", "character-b", 107.0);
+    assert(rescue.accepted && rescue.completed && rescue.rescued_count == 2);
+    assert(soul_rescue.completed() && soul_rescue.rescued_count() == 2);
+    rescue = soul_rescue.activate("west", "character-c", 108.0);
+    assert(rescue.accepted && rescue.completed && rescue.rescued_count == 2);
+
+    HellTrialSoulRescue expired_rescue(3);
+    rescue = expired_rescue.activate("east", "character-a", 10.0);
+    assert(rescue.accepted && expired_rescue.rescued_count() == 1);
+    rescue = expired_rescue.activate("west", "character-b", 26.0);
+    assert(rescue.accepted && rescue.expired && !rescue.completed);
+    assert(rescue.rescued_count == 1 && rescue.first_lantern_id == "west");
+    HellTrialSoulRescue disabled_rescue(2);
+    assert(!disabled_rescue.enabled());
+    assert(!disabled_rescue.activate("west", "character-a", 1.0).accepted);
+
     HellTrialShearHazard shear(2);
     assert(shear.enabled() && shear.phase() == honghuang::simulation::HellTrialHazardPhase::Warning);
     assert(shear.is_inside_danger_zone(0.0F, 0.0F));
