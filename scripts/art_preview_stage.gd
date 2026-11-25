@@ -4,6 +4,7 @@ extends Node3D
 
 const VisualFactory = preload("res://scripts/underworld_visual_factory.gd")
 const VisualModelLibrary = preload("res://scripts/visual_model_library.gd")
+const EquipmentVisualFactory = preload("res://scripts/equipment_visual_factory.gd")
 
 var _preview_models: Array[Node3D] = []
 var _selected_model_index := 0
@@ -283,6 +284,13 @@ func _selection_status() -> String:
 			"骨架通过" if rig_ready else "骨架未通过", bone_count,
 			"已发现" if animation_ready else "未发现"
 		]
+	if model_key == "player_humanoid":
+		var socket_states: Array[String] = []
+		for slot in ["weapon", "offhand", "back"]:
+			EquipmentVisualFactory.get_or_create_socket(model, slot)
+			var binding := EquipmentVisualFactory.inspect_socket_binding(model, slot)
+			socket_states.append("%s:%s" % [slot, "骨骼挂接" if bool(binding.get("follows_bone", false)) else "非骨骼挂接"])
+		humanoid_summary += "\\n装备挂点：" + " / ".join(socket_states)
 	return "当前：%s · %s · key=%s\\n网格 %d · 骨骼 %d · 动画播放器 %d · %s%s" % [
 		_model_label(_selected_model_index), source_label, model_key,
 		int(diagnostics["meshes"]), int(diagnostics["skeletons"]),
