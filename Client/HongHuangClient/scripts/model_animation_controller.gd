@@ -6,7 +6,7 @@ const MOVE_START_SPEED := 0.16
 const TELEPORT_SPEED_LIMIT := 9.0
 
 var _animation_player: AnimationPlayer
-var _clips: Array[String] = []
+var _animation_players: Array[AnimationPlayer] = []
 var _last_world_position := Vector3.ZERO
 var _current_state := ""
 var _locked_action := ""
@@ -19,18 +19,24 @@ func _ready() -> void:
 	if visual_root == null:
 		set_process(false)
 		return
-	_animation_player = _find_animation_player(visual_root)
+	_collect_animation_players(visual_root)
+	_animation_player = _select_animation_player("idle")
 	if _animation_player == null:
 		set_process(false)
 		return
-	for animation_name in _animation_player.get_animation_list():
-		_clips.append(str(animation_name))
 	_last_world_position = visual_root.global_position
 	_play_state("idle")
 
 
+func _collect_animation_players(root: Node) -> void:
+	if root is AnimationPlayer:
+		_animation_players.append(root as AnimationPlayer)
+	for child in root.get_children():
+		_collect_animation_players(child)
+
+
 func _process(delta: float) -> void:
-	if _animation_player == null or not is_instance_valid(_animation_player):
+	if _animation_players.is_empty():
 		return
 	var visual_root := get_parent() as Node3D
 	if visual_root == null:
@@ -60,10 +66,11 @@ func _process(delta: float) -> void:
 
 
 func play_action(action_name: String) -> bool:
-	if _animation_player == null or not is_instance_valid(_animation_player):
-		return false
 	var normalized := action_name.strip_edges().to_lower()
-	var clip := _resolve_clip(normalized)
+	_animation_player = _select_animation_player(normalized)
+	if _animation_player == null:
+		return false
+	var clip := _resolve_clip_in_player(_animation_player, normalized)
 	if clip.is_empty():
 		return false
 	_preview_state_override = false
@@ -86,9 +93,10 @@ func play_preview_state(state_name: String) -> bool:
 	var normalized := state_name.strip_edges().to_lower()
 	if normalized not in ["idle", "walk", "run"]:
 		return false
-	if _animation_player == null or not is_instance_valid(_animation_player):
+	_animation_player = _select_animation_player(normalized)
+	if _animation_player == null:
 		return false
-	var clip := _resolve_clip(normalized)
+	var clip := _resolve_clip_in_player(_animation_player, normalized)
 	if clip.is_empty():
 		return false
 	_preview_state_override = true
@@ -109,7 +117,10 @@ func clear_action() -> void:
 func _play_state(state_name: String) -> void:
 	if state_name == _current_state:
 		return
-	var clip := _resolve_clip(state_name)
+	_animation_player = _select_animation_player(state_name)
+	if _animation_player == null:
+		return
+	var clip := _resolve_clip_in_player(_animation_player, state_name)
 	if clip.is_empty():
 		return
 	_set_clip_looping(clip, true)
@@ -124,7 +135,23 @@ func _set_clip_looping(clip_name: String, should_loop: bool) -> void:
 	animation.loop_mode = Animation.LOOP_LINEAR if should_loop else Animation.LOOP_NONE
 
 
-func _resolve_clip(state_name: String) -> String:
+func _select_animation_player(state_name: String) -> AnimationPlayer:
+	var best_player: AnimationPlayer
+	var best_score := -1
+	for player in _animation_players:
+		if not is_instance_valid(player):
+			continue
+		var clip := _resolve_clip_in_player(player, state_name)
+		if clip.is_empty():
+			continue
+		var score := _clip_score(clip, state_name)
+		if score > best_score:
+			best_score = score
+			best_player = player
+	return best_player
+
+
+func _resolve_clip_in_player(player: AnimationPlayer, state_name: String) -> String:
 	var keywords: Array[String] = []
 	match state_name:
 		"idle":
@@ -141,18 +168,23 @@ func _resolve_clip(state_name: String) -> String:
 			keywords = ["death", "die", "dead"]
 		_:
 			keywords = [state_name]
-	for keyword in keywords:
-		for clip_name in _clips:
-			if clip_name.to_lower().contains(keyword):
-				return clip_name
-	return ""
+	var best_clip := ""
+	var best_score := -1
+	for clip_name in player.get_animation_list():
+		var normalized := str(clip_name).to_lower().replace("_", "").replace("-", "").replace(" ", "")
+		if normalized in ["reset", "default", "tpose", "bindpose"]:
+			continue
+		for keyword in keywords:
+			if normalized.contains(keyword):
+				var score := 100 + keyword.length()
+				if score > best_score:
+					best_score = score
+					best_clip = str(clip_name)
+	return best_clip
 
 
-func _find_animation_player(root: Node) -> AnimationPlayer:
-	if root is AnimationPlayer:
-		return root as AnimationPlayer
-	for child in root.get_children():
-		var found := _find_animation_player(child)
-		if found != null:
-			return found
-	return null
+func _clip_score(clip_name: String, state_name: String) -> int:
+	var normalized := clip_name.to_lower()
+	var preferred := "walk" if state_name == "walk" else state_name
+	return 100 + preferred.length() if normalized.contains(preferred) else 10
+
