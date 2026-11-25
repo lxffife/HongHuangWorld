@@ -112,6 +112,7 @@ public:
     int rescued_count() const;
     std::string_view first_lantern_id() const;
     double remaining_seconds(double now_seconds) const;
+    bool update(double now_seconds);
     HellTrialSoulRescueResult activate(
         std::string_view lantern_id, std::string_view rescuer_id, double now_seconds);
 private:
