@@ -94,6 +94,34 @@ struct HellTrialDeathResult {
     bool guardian_defeated{};
 };
 
+
+struct HellTrialSoulRescueResult {
+    bool accepted{};
+    bool completed{};
+    bool expired{};
+    int rescued_count{};
+    std::string first_lantern_id;
+    std::string message;
+};
+
+class HellTrialSoulRescue {
+public:
+    explicit HellTrialSoulRescue(int floor = 0);
+    bool enabled() const;
+    bool completed() const;
+    int rescued_count() const;
+    std::string_view first_lantern_id() const;
+    double remaining_seconds(double now_seconds) const;
+    HellTrialSoulRescueResult activate(
+        std::string_view lantern_id, std::string_view rescuer_id, double now_seconds);
+private:
+    bool enabled_{};
+    bool completed_{};
+    std::string first_lantern_id_;
+    std::string first_rescuer_id_;
+    double deadline_seconds_{};
+};
+
 class HellTrialEncounter {
 public:
     static constexpr int floor_count = 18;
