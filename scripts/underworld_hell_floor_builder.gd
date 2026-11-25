@@ -235,6 +235,15 @@ static func _build_iron_tree_setpiece(root: Node3D, palette: Dictionary) -> void
 		var at := Vector3(cos(angle) * 7.0, 1.25, -8.0 + sin(angle) * 7.0)
 		_add_mesh_prop(root, "IronTreeGroundThorn_%02d" % index, spike, at, Vector3(0.0, -angle, deg_to_rad(-12.0)), thorn, 0.18)
 	for side in [-1.0, 1.0]:
+		var side_id := "west" if side < 0.0 else "east"
+		_add_box_prop(root, "SoulLanternPedestal_%s" % side_id, Vector3(3.8, 0.65, 3.8), Vector3(side * 12.0, 0.38, -18.0), bark.lightened(0.12))
+		var rune_ring := TorusMesh.new()
+		rune_ring.inner_radius = 1.05
+		rune_ring.outer_radius = 1.28
+		rune_ring.rings = 24
+		rune_ring.ring_segments = 8
+		_add_mesh_prop(root, "SoulLanternRune_%s" % side_id, rune_ring, Vector3(side * 12.0, 0.78, -18.0), Vector3(deg_to_rad(90.0), 0.0, 0.0), thorn, 0.65)
+		_add_label(root, "SoulLanternName_%s" % side_id, ("西侧魂灯 · 等待队友" if side < 0.0 else "东侧魂灯 · 等待队友"), Vector3(side * 12.0, 4.2, -18.0), Color("#a9d8c7"), 15)
 		var lantern := SphereMesh.new()
 		lantern.radius = 0.72
 		lantern.height = 1.45
