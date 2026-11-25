@@ -164,3 +164,4 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f Database/migrations/000077_npc_patrol
 
 
 - `000077_npc_patrol_routes` 为 `world_npc_definitions` 增加行为档案与闭环巡逻路线配置；轮回殿守卫使用服务端 UTC 时钟计算巡逻位置，NPC 列表向客户端提供路线相位，交互距离仍由中心服按角色实时坐标校验。
+- `000078_fengdu_gate_and_market_npcs` 在酆都南城门新增服务端权威巡逻阴兵，并在鬼市西市、东市新增固定商贩 NPC。城门巡逻使用与 000077 相同的闭环路线协议；商贩先提供对话与摊位定位，商品库存、价格和交易仍需独立的服务端交易系统，不在本迁移中伪造购买功能。
