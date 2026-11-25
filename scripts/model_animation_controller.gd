@@ -149,8 +149,10 @@ func _set_clip_looping(clip_name: String, should_loop: bool) -> void:
 	if instance_animation == null:
 		return
 	instance_animation.loop_mode = Animation.LOOP_LINEAR if should_loop else Animation.LOOP_NONE
+	library.remove_animation(animation_name)
 	var error := library.add_animation(animation_name, instance_animation)
 	if error != OK:
+		library.add_animation(animation_name, source_animation)
 		instance_animation.free()
 		return
 	loop_modes[clip_name] = should_loop
