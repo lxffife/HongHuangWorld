@@ -132,6 +132,27 @@ int main() {
     assert(!other_floor.enabled());
     assert(!other_floor.submit("registry_seal", "after_third_bell").accepted);
 
+
+    HellTrialShearHazard shear(2);
+    assert(shear.enabled() && shear.phase() == honghuang::simulation::HellTrialHazardPhase::Warning);
+    assert(shear.is_inside_danger_zone(0.0F, 0.0F));
+    assert(!shear.is_inside_danger_zone(-12.0F, 0.0F));
+    assert(!shear.is_inside_danger_zone(12.0F, 0.0F));
+    assert(!shear.is_inside_danger_zone(std::numeric_limits<float>::quiet_NaN(), 0.0F));
+    auto hazard = shear.update(2.4);
+    assert(!hazard.changed && hazard.phase == honghuang::simulation::HellTrialHazardPhase::Warning);
+    hazard = shear.update(0.2);
+    assert(hazard.changed && hazard.phase == honghuang::simulation::HellTrialHazardPhase::Active);
+    assert(hazard.cycle == 1);
+    hazard = shear.update(1.8);
+    assert(hazard.changed && hazard.phase == honghuang::simulation::HellTrialHazardPhase::Recovery);
+    hazard = shear.update(3.7);
+    assert(hazard.changed && hazard.phase == honghuang::simulation::HellTrialHazardPhase::Warning);
+    assert(hazard.cycle == 2);
+    HellTrialShearHazard disabled_shear(3);
+    assert(!disabled_shear.enabled());
+    assert(!disabled_shear.update(20.0).changed);
+
     HellTrialEncounter unrelated(7);
     result = unrelated.record_monster_death("mob-x", "hell_f01_tongue_wraith");
     assert(!result.objective_kill_recorded);
