@@ -1163,3 +1163,132 @@ static func create_fengdu_residential_interior() -> Node3D:
 		marker.set_meta("placement_only", true)
 		root.add_child(marker)
 	return root
+
+
+
+static func create_ghost_market_shop_interior() -> Node3D:
+	# Walkable 12m x 14m shop interior. Gameplay transactions remain server-authoritative.
+	var root := Node3D.new()
+	root.name = "GhostMarketShopInterior"
+	var stone := Color("#514a55")
+	var timber := Color("#493633")
+	var dark_wood := Color("#30272c")
+	var bronze := Color("#a8875c")
+	var jade := Color("#79b9a9")
+	var warm_glow := Color("#e0b77b")
+
+	# Floor has its own collision, independent from furniture.
+	var floor_body := StaticBody3D.new()
+	floor_body.name = "ShopWalkableFloor"
+	_part(floor_body, "ShopFloorVisual", _box(Vector3(12.0, 0.20, 14.0)), Vector3(0.0, -0.10, 0.0), stone)
+	var floor_hit := CollisionShape3D.new()
+	var floor_shape := BoxShape3D.new()
+	floor_shape.size = Vector3(12.0, 0.20, 14.0)
+	floor_hit.shape = floor_shape
+	floor_hit.position = Vector3(0.0, -0.10, 0.0)
+	floor_body.add_child(floor_hit)
+	root.add_child(floor_body)
+
+	# Four collision-backed walls, with a 2.2m front entrance.
+	var wall_specs := [
+		{"name":"RearWall", "size":Vector3(12.0, 3.6, 0.28), "at":Vector3(0.0, 1.8, 6.86)},
+		{"name":"WestWall", "size":Vector3(0.28, 3.6, 14.0), "at":Vector3(-5.86, 1.8, 0.0)},
+		{"name":"EastWall", "size":Vector3(0.28, 3.6, 14.0), "at":Vector3(5.86, 1.8, 0.0)},
+		{"name":"FrontWallLeft", "size":Vector3(4.8, 3.6, 0.28), "at":Vector3(-3.6, 1.8, -6.86)},
+		{"name":"FrontWallRight", "size":Vector3(4.8, 3.6, 0.28), "at":Vector3(3.6, 1.8, -6.86)},
+		{"name":"EntranceLintel", "size":Vector3(2.4, 0.55, 0.28), "at":Vector3(0.0, 3.325, -6.86)}
+	]
+	for spec in wall_specs:
+		var wall_body := StaticBody3D.new()
+		wall_body.name = str(spec["name"])
+		_part(wall_body, "WallVisual", _box(spec["size"]), spec["at"], Color("#65545a"))
+		var wall_hit := CollisionShape3D.new()
+		var wall_shape := BoxShape3D.new()
+		wall_shape.size = spec["size"]
+		wall_hit.shape = wall_shape
+		wall_hit.position = spec["at"]
+		wall_body.add_child(wall_hit)
+		root.add_child(wall_body)
+
+	# Ceiling joists and hanging lamps establish the shop's interior scale.
+	for z in [-4.8, -1.6, 1.6, 4.8]:
+		_part(root, "CeilingJoist" + str(z), _box(Vector3(11.4, 0.16, 0.22)), Vector3(0.0, 3.48, z), dark_wood)
+	for x in [-3.6, 3.6]:
+		var lantern := create_ghost_lantern()
+		lantern.name = "InteriorLantern" + str(x)
+		lantern.position = Vector3(x, 0.0, 0.0)
+		lantern.scale = Vector3.ONE * 0.52
+		root.add_child(lantern)
+
+	# Main counter at the back; the customer side remains open.
+	var counter := StaticBody3D.new()
+	counter.name = "MerchantCounter"
+	_part(counter, "CounterBody", _box(Vector3(5.0, 1.0, 0.9)), Vector3(0.0, 0.55, 3.65), timber)
+	_part(counter, "CounterTop", _box(Vector3(5.25, 0.16, 1.05)), Vector3(0.0, 1.13, 3.65), bronze, Vector3.ZERO, 0.0, 0.24)
+	var counter_hit := CollisionShape3D.new()
+	var counter_shape := BoxShape3D.new()
+	counter_shape.size = Vector3(5.0, 1.0, 0.9)
+	counter_hit.shape = counter_shape
+	counter_hit.position = Vector3(0.0, 0.55, 3.65)
+	counter.add_child(counter_hit)
+	root.add_child(counter)
+
+	# Two side shelves leave a 3m central aisle and are solid to player movement.
+	for side in [-1.0, 1.0]:
+		var shelf := StaticBody3D.new()
+		shelf.name = "DisplayShelf" + str(side)
+		_part(shelf, "ShelfBase", _box(Vector3(1.0, 0.22, 5.0)), Vector3(side * 4.65, 0.14, 0.2), dark_wood)
+		for level in [0, 1, 2]:
+			var y := 0.72 + float(level) * 0.88
+			_part(shelf, "ShelfBoard" + str(level), _box(Vector3(0.92, 0.12, 4.8)), Vector3(side * 4.65, y, 0.2), timber)
+		for z in [-2.0, 0.2, 2.4]:
+			_part(shelf, "ShelfUpright" + str(z), _box(Vector3(0.12, 2.7, 0.14)), Vector3(side * 4.65, 1.35, z), bronze)
+		var shelf_hit := CollisionShape3D.new()
+		var shelf_shape := BoxShape3D.new()
+		shelf_shape.size = Vector3(1.0, 2.8, 5.0)
+		shelf_hit.shape = shelf_shape
+		shelf_hit.position = Vector3(side * 4.65, 1.4, 0.2)
+		shelf.add_child(shelf_hit)
+		root.add_child(shelf)
+
+		# Stylized jars and sealed soul-scrolls are visual stock, not inventory items.
+		for item_index in range(4):
+			var item_z := -1.65 + float(item_index) * 1.15
+			var jar := _sphere(0.20, 0.34)
+			_part(root, "StockJar_%s_%d" % [side, item_index], jar, Vector3(side * 4.65, 0.92, item_z), jade, Vector3.ZERO, 0.45, 0.12, 0.86)
+			_part(root, "StockSeal_%s_%d" % [side, item_index], _box(Vector3(0.30, 0.08, 0.12)), Vector3(side * 4.65, 1.42, item_z), warm_glow, Vector3.ZERO, 0.18, 0.18)
+
+	# Low central display plinths sit outside the clear customer route.
+	for side in [-1.0, 1.0]:
+		var plinth := StaticBody3D.new()
+		plinth.name = "DisplayPlinth" + str(side)
+		_part(plinth, "PlinthBody", _box(Vector3(1.35, 0.72, 1.0)), Vector3(side * 2.35, 0.36, -1.0), dark_wood)
+		_part(plinth, "PlinthTop", _box(Vector3(1.48, 0.12, 1.12)), Vector3(side * 2.35, 0.78, -1.0), bronze, Vector3.ZERO, 0.0, 0.28)
+		var plinth_hit := CollisionShape3D.new()
+		var plinth_shape := BoxShape3D.new()
+		plinth_shape.size = Vector3(1.35, 0.72, 1.0)
+		plinth_hit.shape = plinth_shape
+		plinth_hit.position = Vector3(side * 2.35, 0.36, -1.0)
+		plinth.add_child(plinth_hit)
+		root.add_child(plinth)
+		_part(root, "DisplayRelic" + str(side), _sphere(0.25), Vector3(side * 2.35, 1.05, -1.0), warm_glow, Vector3.ZERO, 0.9, 0.22)
+
+	# Merchant, customer and interaction anchors are placement metadata only.
+	var anchors := [
+		{"name":"MerchantStandPoint", "at":Vector3(0.0, 0.0, 4.45), "kind":"merchant_stand"},
+		{"name":"ShopTradePoint", "at":Vector3(0.0, 0.0, 2.45), "kind":"shop_trade"},
+		{"name":"ShopBrowseWest", "at":Vector3(-2.0, 0.0, -3.4), "kind":"shop_browse"},
+		{"name":"ShopBrowseEast", "at":Vector3(2.0, 0.0, -3.4), "kind":"shop_browse"}
+	]
+	for spec in anchors:
+		var marker := Marker3D.new()
+		marker.name = spec["name"]
+		marker.position = spec["at"]
+		marker.set_meta("interaction_kind", spec["kind"])
+		marker.set_meta("placement_only", true)
+		root.add_child(marker)
+
+	root.set_meta("interior_dimensions", Vector3(12.0, 3.6, 14.0))
+	root.set_meta("clear_central_aisle_width", 3.0)
+	root.set_meta("transactions_server_authoritative", true)
+	return root
