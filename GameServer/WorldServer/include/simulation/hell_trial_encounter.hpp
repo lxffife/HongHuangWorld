@@ -59,6 +59,32 @@ private:
     std::unordered_set<std::string> solved_evidence_ids_;
 };
 
+
+enum class HellTrialHazardPhase { Warning, Active, Recovery };
+
+struct HellTrialHazardTransition {
+    bool changed{};
+    HellTrialHazardPhase phase{HellTrialHazardPhase::Warning};
+    int cycle{1};
+    double phase_remaining_seconds{};
+};
+
+class HellTrialShearHazard {
+public:
+    explicit HellTrialShearHazard(int floor = 0);
+    bool enabled() const;
+    HellTrialHazardPhase phase() const;
+    int cycle() const;
+    double phase_remaining_seconds() const;
+    HellTrialHazardTransition update(double delta_seconds);
+    bool is_inside_danger_zone(float x, float z) const;
+private:
+    bool enabled_{};
+    HellTrialHazardPhase phase_{HellTrialHazardPhase::Warning};
+    int cycle_{1};
+    double elapsed_seconds_{};
+};
+
 struct HellTrialDeathResult {
     bool objective_kill_recorded{};
     bool guardian_killed{};
