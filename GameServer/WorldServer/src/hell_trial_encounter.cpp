@@ -48,6 +48,75 @@ const std::array<HellTrialFloorSpec, HellTrialEncounter::floor_count> kFloorSpec
 } // namespace
 
 
+
+HellTrialSoulRescue::HellTrialSoulRescue(int floor) : enabled_(floor == 3) {}
+bool HellTrialSoulRescue::enabled() const { return enabled_; }
+bool HellTrialSoulRescue::completed() const { return enabled_ && completed_; }
+int HellTrialSoulRescue::rescued_count() const {
+    return completed_ ? 2 : (first_lantern_id_.empty() ? 0 : 1);
+}
+std::string_view HellTrialSoulRescue::first_lantern_id() const { return first_lantern_id_; }
+
+double HellTrialSoulRescue::remaining_seconds(double now_seconds) const {
+    if (!enabled_ || completed_ || first_lantern_id_.empty() || !std::isfinite(now_seconds)) return 0.0;
+    return std::max(0.0, deadline_seconds_ - now_seconds);
+}
+
+HellTrialSoulRescueResult HellTrialSoulRescue::activate(
+    std::string_view lantern_id, std::string_view rescuer_id, double now_seconds) {
+    HellTrialSoulRescueResult result;
+    result.completed = completed();
+    result.rescued_count = rescued_count();
+    result.first_lantern_id = first_lantern_id_;
+    if (!enabled_) {
+        result.message = "当前楼层没有开放魂灯救援。";
+        return result;
+    }
+    if (completed_) {
+        result.accepted = true;
+        result.message = "两盏魂灯已经复明，亡魂已脱离铁树刑阵。";
+        return result;
+    }
+    if ((lantern_id != "west" && lantern_id != "east") || rescuer_id.empty() ||
+        !std::isfinite(now_seconds)) {
+        result.message = "魂灯救援请求无效。";
+        return result;
+    }
+    if (!first_lantern_id_.empty() && now_seconds >= deadline_seconds_) {
+        first_lantern_id_.clear();
+        first_rescuer_id_.clear();
+        deadline_seconds_ = 0.0;
+        result.expired = true;
+    }
+    if (first_lantern_id_.empty()) {
+        first_lantern_id_ = std::string(lantern_id);
+        first_rescuer_id_ = std::string(rescuer_id);
+        deadline_seconds_ = now_seconds + 15.0;
+        result.accepted = true;
+        result.rescued_count = 1;
+        result.first_lantern_id = first_lantern_id_;
+        result.message = result.expired
+            ? "先前的接应时限已过，救援重新开始。守住这盏魂灯，等待另一名队友点亮对侧魂灯。"
+            : "魂灯暂时复明！请另一名队友在 15 秒内点亮另一侧魂灯。";
+        return result;
+    }
+    if (lantern_id == first_lantern_id_) {
+        result.message = "这盏魂灯已经点亮，请前往另一侧魂灯。";
+        return result;
+    }
+    if (rescuer_id == first_rescuer_id_) {
+        result.message = "需要另一名队友同时接应，独自无法稳住两盏魂灯。";
+        return result;
+    }
+    completed_ = true;
+    result.accepted = true;
+    result.completed = true;
+    result.rescued_count = 2;
+    result.first_lantern_id = first_lantern_id_;
+    result.message = "两名队友同时稳住魂灯，铁树刑阵松动！两名亡魂获救。";
+    return result;
+}
+
 HellTrialShearHazard::HellTrialShearHazard(int floor) : enabled_(floor == 2) {}
 bool HellTrialShearHazard::enabled() const { return enabled_; }
 HellTrialHazardPhase HellTrialShearHazard::phase() const { return phase_; }
