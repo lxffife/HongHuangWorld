@@ -46,6 +46,51 @@ const std::array<HellTrialFloorSpec, HellTrialEncounter::floor_count> kFloorSpec
 
 } // namespace
 
+
+HellTrialShearHazard::HellTrialShearHazard(int floor) : enabled_(floor == 2) {}
+bool HellTrialShearHazard::enabled() const { return enabled_; }
+HellTrialHazardPhase HellTrialShearHazard::phase() const { return phase_; }
+int HellTrialShearHazard::cycle() const { return cycle_; }
+
+double HellTrialShearHazard::phase_remaining_seconds() const {
+    const double duration = phase_ == HellTrialHazardPhase::Warning ? 2.5 :
+        (phase_ == HellTrialHazardPhase::Active ? 1.8 : 3.7);
+    return std::max(0.0, duration - elapsed_seconds_);
+}
+
+HellTrialHazardTransition HellTrialShearHazard::update(double delta_seconds) {
+    HellTrialHazardTransition result{false, phase_, cycle_, phase_remaining_seconds()};
+    if (!enabled_ || !std::isfinite(delta_seconds) || delta_seconds <= 0.0) return result;
+    double remaining = std::min(delta_seconds, 1.0);
+    while (remaining > 0.0) {
+        const double duration = phase_ == HellTrialHazardPhase::Warning ? 2.5 :
+            (phase_ == HellTrialHazardPhase::Active ? 1.8 : 3.7);
+        const double step = std::min(remaining, duration - elapsed_seconds_);
+        elapsed_seconds_ += step;
+        remaining -= step;
+        if (elapsed_seconds_ + 1e-9 < duration) break;
+        elapsed_seconds_ = 0.0;
+        if (phase_ == HellTrialHazardPhase::Warning) {
+            phase_ = HellTrialHazardPhase::Active;
+        } else if (phase_ == HellTrialHazardPhase::Active) {
+            phase_ = HellTrialHazardPhase::Recovery;
+        } else {
+            phase_ = HellTrialHazardPhase::Warning;
+            ++cycle_;
+        }
+        result.changed = true;
+    }
+    result.phase = phase_;
+    result.cycle = cycle_;
+    result.phase_remaining_seconds = phase_remaining_seconds();
+    return result;
+}
+
+bool HellTrialShearHazard::is_inside_danger_zone(float x, float z) const {
+    if (!enabled_ || !std::isfinite(x) || !std::isfinite(z)) return false;
+    return x >= -9.0F && x <= 9.0F && z >= -9.0F && z <= 5.0F;
+}
+
 const std::array<HellTrialFloorSpec, HellTrialEncounter::floor_count>&
 hell_trial_floor_specs() {
     return kFloorSpecs;
