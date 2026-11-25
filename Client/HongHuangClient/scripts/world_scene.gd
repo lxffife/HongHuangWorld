@@ -85,6 +85,10 @@ var hell_trial_hud_progress: ProgressBar
 var hell_trial_hud_evidence_toggle: Button
 var hell_trial_hud_evidence_container: VBoxContainer
 var hell_trial_hud_evidence_status: Label
+var hell_trial_hud_rescue_container: VBoxContainer
+var hell_trial_hud_rescue_status: Label
+var hell_trial_hud_rescue_west_button: Button
+var hell_trial_hud_rescue_east_button: Button
 var hell_trial_runtime_data: Dictionary = {}
 var hud_visible := true
 var hud_toggle_button: Button
@@ -926,7 +930,34 @@ func _build_hell_trial_hud() -> void:
 	hell_trial_hud_evidence_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hell_trial_hud_evidence_status.add_theme_color_override("font_color", Color("#e7c995"))
 	hell_trial_hud_evidence_container.add_child(hell_trial_hud_evidence_status)
+	hell_trial_hud_rescue_container = VBoxContainer.new()
+	hell_trial_hud_rescue_container.visible = false
+	hell_trial_hud_rescue_container.add_theme_constant_override("separation", 4)
+	layout.add_child(hell_trial_hud_rescue_container)
+	hell_trial_hud_rescue_status = Label.new()
+	hell_trial_hud_rescue_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hell_trial_hud_rescue_status.add_theme_color_override("font_color", Color("#a9d8c7"))
+	hell_trial_hud_rescue_container.add_child(hell_trial_hud_rescue_status)
+	hell_trial_hud_rescue_west_button = Button.new()
+	hell_trial_hud_rescue_west_button.text = "点亮西侧魂灯"
+	hell_trial_hud_rescue_west_button.custom_minimum_size.y = 28.0
+	hell_trial_hud_rescue_west_button.pressed.connect(_on_hell_trial_soul_lantern_pressed.bind("west"))
+	hell_trial_hud_rescue_container.add_child(hell_trial_hud_rescue_west_button)
+	hell_trial_hud_rescue_east_button = Button.new()
+	hell_trial_hud_rescue_east_button.text = "点亮东侧魂灯"
+	hell_trial_hud_rescue_east_button.custom_minimum_size.y = 28.0
+	hell_trial_hud_rescue_east_button.pressed.connect(_on_hell_trial_soul_lantern_pressed.bind("east"))
+	hell_trial_hud_rescue_container.add_child(hell_trial_hud_rescue_east_button)
 	_layout_hud()
+
+
+func _on_hell_trial_soul_lantern_pressed(lantern_id: String) -> void:
+	if HHSession.world_network == null:
+		_show_notification("当前世界连接不可用。", 2.0)
+		return
+	var send_error: Error = HHSession.world_network.send_hell_trial_soul_lantern(lantern_id)
+	if send_error != OK:
+		_show_notification("魂灯交互发送失败，请稍后重试。", 2.5)
 
 
 func _render_hell_trial_hud(trial_data: Dictionary) -> void:
@@ -961,6 +992,26 @@ func _render_hell_trial_hud(trial_data: Dictionary) -> void:
 			hint += "\n断缘剪刃 · " + hazard_text + " · %.1f 秒" % float(hazard_state.get("remaining_seconds", 0.0))
 	hell_trial_hud_hint.text = hint
 	hell_trial_hud_hint.visible = not hint.is_empty()
+	var soul_rescue: Dictionary = trial_data.get("soul_rescue", {})
+	var rescue_enabled := floor_number == 3 and bool(soul_rescue.get("enabled", false))
+	hell_trial_hud_rescue_container.visible = rescue_enabled
+	if rescue_enabled:
+		var rescued_count := int(soul_rescue.get("rescued_count", 0))
+		var first_lantern := str(soul_rescue.get("first_lantern_id", ""))
+		var rescue_done := bool(soul_rescue.get("completed", false))
+		var rescue_remaining := float(soul_rescue.get("remaining_seconds", 0.0))
+		if rescue_done:
+			hell_trial_hud_rescue_status.text = "两名亡魂已获救 · 2 / 2"
+		elif rescued_count == 1:
+			var first_side := "西侧" if first_lantern == "west" else "东侧"
+			hell_trial_hud_rescue_status.text = "%s魂灯已点亮，等待另一名队友接应 · %.1f 秒" % [first_side, rescue_remaining]
+		else:
+			hell_trial_hud_rescue_status.text = "两名不同队友分别点亮两侧魂灯，限时 15 秒"
+		hell_trial_hud_rescue_west_button.disabled = rescue_done
+		hell_trial_hud_rescue_east_button.disabled = rescue_done
+	else:
+		hell_trial_hud_rescue_west_button.disabled = false
+		hell_trial_hud_rescue_east_button.disabled = false
 	var investigation: Dictionary = trial_data.get("investigation", {})
 	var investigation_enabled := floor_number == 1 and bool(investigation.get("enabled", false))
 	hell_trial_hud_evidence_toggle.visible = investigation_enabled
@@ -5540,6 +5591,12 @@ func _on_combat_event(event: Dictionary) -> void:
 			if is_instance_valid(target_info_label) and not selected_monster_id.is_empty():
 				target_info_label.text = target_info_label.text.split("\n攻击指令已发送")[0] + "\n" + rejection_reason
 			return
+	if action == "hell_trial_soul_rescue":
+		var rescue_snapshot: Variant = event.get("hell_trial", {})
+		if rescue_snapshot is Dictionary and not rescue_snapshot.is_empty():
+			_show_hell_trial_runtime_state({"hell_floor": 3, "hell_trial": rescue_snapshot})
+		_show_notification(str(event.get("message", event.get("reason", "魂灯救援状态已更新。"))), 3.5)
+		return
 	if action == "hell_trial_investigation":
 		var investigation_snapshot: Variant = event.get("hell_trial", {})
 		if investigation_snapshot is Dictionary and not investigation_snapshot.is_empty():
@@ -5551,8 +5608,6 @@ func _on_combat_event(event: Dictionary) -> void:
 			var hazard_trial := hell_trial_runtime_data.duplicate(true)
 			hazard_trial["hazard"] = event.duplicate(true)
 			_render_hell_trial_hud(hazard_trial)
-		var hazard_phase := str(event.get("phase", ""))
-
 		var hazard_phase := str(event.get("phase", ""))
 		var hazard_label := str(event.get("phase_label", "刑具状态变化"))
 		if hazard_phase == "warning":
