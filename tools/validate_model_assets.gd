@@ -1,6 +1,6 @@
 extends SceneTree
 
-# Run after the first editor import:
+# Run after the first editor import. Character, creature and Fengdu environment GLBs are all inspected:
 # godot --headless --path . --script res://tools/validate_model_assets.gd
 # Add -- --require-all to fail when any optional model file is missing.
 # Add -- --strict-animations to fail when required clips are absent.
@@ -18,6 +18,17 @@ const MODEL_FILES := {
 	"fire_soul": "res://assets/models/fire_soul.glb",
 	"frost_soul": "res://assets/models/frost_soul.glb",
 	"wraith": "res://assets/models/wraith.glb",
+	"fengdu_wall": "res://assets/models/fengdu_wall.glb",
+	"fengdu_watchtower": "res://assets/models/fengdu_watchtower.glb",
+	"fengdu_hall": "res://assets/models/fengdu_hall.glb",
+	"fengdu_house": "res://assets/models/fengdu_house.glb",
+	"fengdu_tree": "res://assets/models/fengdu_tree.glb",
+	"fengdu_rock": "res://assets/models/fengdu_rock.glb",
+	"fengdu_lantern": "res://assets/models/fengdu_lantern.glb",
+	"fengdu_bell": "res://assets/models/fengdu_bell.glb",
+	"fengdu_east_asian_roof": "res://assets/models/fengdu_east_asian_roof.glb",
+	"fengdu_east_asian_wall": "res://assets/models/fengdu_east_asian_wall.glb",
+	"fengdu_column_base": "res://assets/models/fengdu_column_base.glb",
 	"npc_judge": "res://assets/models/npc_judge.glb",
 	"npc_trial_master": "res://assets/models/npc_trial_master.glb",
 	"npc_guard": "res://assets/models/npc_guard.glb",
