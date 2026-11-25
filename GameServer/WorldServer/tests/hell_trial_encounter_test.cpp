@@ -5,6 +5,7 @@
 #include <unordered_set>
 
 using honghuang::simulation::HellTrialEncounter;
+using honghuang::simulation::HellTrialInvestigation;
 using honghuang::simulation::hell_trial_floor_specs;
 
 int main() {
