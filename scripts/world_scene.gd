@@ -67,7 +67,7 @@ var chat_unread_count := 0
 var chat_expanded := false
 var chat_restore_mouse_captured := false
 var chat_order_sequence := 0
-var chat_lines_by_channel: Dictionary = {"nearby": [], "world": [], "cross_world": [], "system": []}
+var chat_lines_by_channel: Dictionary = {"nearby": [], "world": [], "cross_world": [], "party": [], "system": []}
 var chat_seen_ids: Dictionary = {}
 var selected_chat_channel := "nearby"
 
@@ -227,6 +227,7 @@ var spell_learning_busy := false
 var equipment_action_busy := false
 var inventory_visible := false
 var inventory_request_busy := false
+var ui_modal_restore_mouse_captured := false
 var inventory_refresh_pending := false
 
 var party_http: HTTPRequest
@@ -3230,7 +3231,7 @@ func _build_chat_hud() -> void:
 	channels.add_theme_constant_override("separation", 6)
 	layout.add_child(channels)
 	chat_channel_buttons.clear()
-	for channel_data in [["system", "系统"], ["nearby", "附近"], ["friends", "好友"], ["world", "世界"], ["cross_world", "跨界"]]:
+	for channel_data in [["system", "系统"], ["nearby", "附近"], ["friends", "好友"], ["world", "世界"], ["cross_world", "跨界"], ["party", "队伍"]]:
 		var channel_button := Button.new()
 		channel_button.text = str(channel_data[1])
 		channel_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -3309,6 +3310,33 @@ func _style_chat_button(button: Button, active: bool) -> void:
 	button.add_theme_color_override("font_color", Color("#f1e5cf") if active else Color("#b8c6d1"))
 	button.add_theme_font_size_override("font_size", 11)
 
+func _release_mouse_for_modal() -> void:
+	# Remember the gameplay cursor state only once so opening a second panel
+	# cannot overwrite the state that must be restored when all panels close.
+	if not ui_modal_restore_mouse_captured:
+		ui_modal_restore_mouse_captured = Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+func _restore_mouse_after_modal() -> void:
+	var another_modal_open := (
+		(is_instance_valid(inventory_panel) and inventory_panel.visible)
+		or (is_instance_valid(party_panel) and party_panel.visible)
+		or (is_instance_valid(npc_panel) and npc_panel.visible)
+		or (is_instance_valid(world_map_panel) and world_map_panel.visible)
+		or (is_instance_valid(friend_panel) and friend_panel.visible)
+		or chat_expanded
+		or (is_instance_valid(help_panel) and help_panel.visible)
+		or (is_instance_valid(audio_settings_panel) and audio_settings_panel.visible)
+		or (is_instance_valid(leave_world_dialog) and leave_world_dialog.visible)
+	)
+	if another_modal_open:
+		return
+	if ui_modal_restore_mouse_captured:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	ui_modal_restore_mouse_captured = false
+
+
 func is_gameplay_input_blocked() -> bool:
 	# Modal map and social drawers own keyboard/mouse input while visible.
 	if is_instance_valid(world_map_panel) and world_map_panel.visible:
@@ -3318,6 +3346,10 @@ func is_gameplay_input_blocked() -> bool:
 	if chat_expanded or (is_instance_valid(friend_panel) and friend_panel.visible):
 		return true
 	if is_instance_valid(party_panel) and party_panel.visible:
+		return true
+	if is_instance_valid(inventory_panel) and inventory_panel.visible:
+		return true
+	if is_instance_valid(npc_panel) and npc_panel.visible:
 		return true
 	if is_instance_valid(help_panel) and help_panel.visible:
 		return true
@@ -3403,7 +3435,7 @@ func _layout_hud() -> void:
 	# The inventory shortcut used to sit at the far-right edge and overlap
 	# the "退出世界" button. Move it into the same row and shift the group
 	# left so every control has its own 112px slot.
-	var utility_left := maxf(12.0, viewport_size.x - 608.0)
+	var utility_left := maxf(12.0, viewport_size.x - 728.0)
 	if is_instance_valid(hud_toggle_button):
 		hud_toggle_button.position = Vector2(utility_left, 16.0)
 	if is_instance_valid(hud_restore_button):
@@ -3418,6 +3450,10 @@ func _layout_hud() -> void:
 		inventory_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		inventory_button.position = Vector2(utility_left + 480.0, 16.0)
 		inventory_button.custom_minimum_size = Vector2(112.0, 34.0)
+	if is_instance_valid(party_button):
+		party_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		party_button.position = Vector2(utility_left + 600.0, 16.0)
+		party_button.custom_minimum_size = Vector2(112.0, 34.0)
 	if is_instance_valid(audio_settings_panel):
 		var audio_width := minf(500.0, maxf(320.0, viewport_size.x - 32.0))
 		var audio_height := minf(430.0, maxf(360.0, viewport_size.y - 32.0))
@@ -3601,7 +3637,7 @@ func _active_chat_storage_key() -> String:
 	return selected_chat_channel
 
 func _on_friend_panel_closed() -> void:
-	var channel_ids := ["system", "nearby", "friends", "world", "cross_world"]
+	var channel_ids := ["system", "nearby", "friends", "world", "cross_world", "party"]
 	var active_index := channel_ids.find(selected_chat_channel)
 	for index in range(chat_channel_buttons.size()):
 		_style_chat_button(chat_channel_buttons[index], index == active_index)
@@ -3643,14 +3679,14 @@ func _select_chat_channel(channel: String) -> void:
 		if is_instance_valid(friend_panel):
 			friend_panel.open_panel()
 		return
-	if channel not in ["nearby", "world", "cross_world", "system"]:
+	if channel not in ["nearby", "world", "cross_world", "party", "system"]:
 		return
 	selected_chat_channel = channel
 	selected_friend_character_id = ""
 	selected_friend_character_name = ""
-	var names := {"nearby": "附近", "world": "世界", "cross_world": "跨界", "system": "系统"}
+	var names := {"nearby": "附近", "world": "世界", "cross_world": "跨界", "party": "队伍", "system": "系统"}
 	chat_title_label.text = "万界传音 · " + str(names[channel])
-	var channel_ids := ["system", "nearby", "friends", "world", "cross_world"]
+	var channel_ids := ["system", "nearby", "friends", "world", "cross_world", "party"]
 	for index in range(chat_channel_buttons.size()):
 		_style_chat_button(chat_channel_buttons[index], index == channel_ids.find(channel))
 	if channel == "system":
@@ -3664,6 +3700,13 @@ func _select_chat_channel(channel: String) -> void:
 		chat_status.text = "系统频道 · 击杀奖励、掉落、升级与玩法通知"
 	elif channel == "nearby":
 		chat_status.text = "附近频道 · 仅当前实例 AOI 范围内可见"
+	elif channel == "party":
+		if party_data.is_empty() or str(party_data.get("id", "")).is_empty():
+			chat_status.text = "队伍频道 · 你当前没有加入队伍"
+		elif HHChatNetwork.socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
+			chat_status.text = "队伍频道 · 仅当前队伍成员可见"
+		else:
+			chat_status.text = "队伍频道 · 正在连接聊天服务"
 	elif HHChatNetwork.socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
 		chat_status.text = str(names[channel]) + "频道 · 独立聊天连接已建立"
 	else:
@@ -3673,16 +3716,22 @@ func _on_chat_socket_connected() -> void:
 	HHChatNetwork.fetch_history("nearby", 50)
 	HHChatNetwork.fetch_history("world", 50)
 	HHChatNetwork.fetch_history("cross_world", 50)
+	HHChatNetwork.fetch_history("party", 50)
 	if selected_chat_channel == "whisper" and not selected_friend_character_id.is_empty():
 		HHChatNetwork.fetch_conversation_history(selected_friend_character_id, 50)
 	if is_instance_valid(chat_status):
 		if selected_chat_channel == "whisper":
 			chat_status.text = "好友私聊 · 独立聊天连接已建立"
+		elif selected_chat_channel == "party":
+			if party_data.is_empty() or str(party_data.get("id", "")).is_empty():
+				chat_status.text = "队伍频道 · 当前未加入队伍"
+			else:
+				chat_status.text = "队伍频道 · 仅当前队伍成员可见"
 		elif selected_chat_channel != "nearby":
 			chat_status.text = "聊天服务已连接 · " + ("世界频道" if selected_chat_channel == "world" else "跨界频道")
 
 func _on_chat_history_received(channel: String, messages: Array) -> void:
-	if channel not in ["nearby", "world", "cross_world"]:
+	if channel not in ["nearby", "world", "cross_world", "party"]:
 		return
 	for message in messages:
 		if not message is Dictionary:
@@ -3702,7 +3751,7 @@ func _on_chat_socket_message(message: Dictionary) -> void:
 			chat_status.text = str(message.get("reason", "聊天消息未送达。"))
 		return
 	var channel := str(message.get("channel", selected_chat_channel))
-	if channel not in ["nearby", "world", "cross_world", "whisper"]:
+	if channel not in ["nearby", "world", "cross_world", "party", "whisper"]:
 		return
 	var sender := str(message.get("sender_name", "未知玩家"))
 	var content := str(message.get("content", ""))
@@ -3927,13 +3976,9 @@ func _build_party_ui() -> void:
 		return
 	party_button = Button.new()
 	party_button.text = "队伍"
-	party_button.custom_minimum_size = Vector2(92.0, 40.0)
-	party_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	# Place below the minimap and inventory shortcut so all top-right controls remain clickable.
-	party_button.offset_left = -118.0
-	party_button.offset_top = 326.0
-	party_button.offset_right = -18.0
-	party_button.offset_bottom = 366.0
+	party_button.custom_minimum_size = Vector2(112.0, 34.0)
+	party_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	party_button.position = Vector2(12.0, 16.0)
 	_apply_button_theme(party_button, true)
 	party_button.pressed.connect(_toggle_party_panel)
 	hud.add_child(party_button)
@@ -3962,7 +4007,7 @@ func _build_party_ui() -> void:
 	var close_button := Button.new()
 	close_button.text = "关闭"
 	_apply_button_theme(close_button)
-	close_button.pressed.connect(func(): party_panel.visible = false)
+	close_button.pressed.connect(_close_party_panel)
 	heading.add_child(close_button)
 	party_status_label = Label.new()
 	party_status_label.text = "正在读取队伍……"
@@ -4095,8 +4140,16 @@ func _toggle_party_panel() -> void:
 		return
 	party_panel.visible = not party_panel.visible
 	if party_panel.visible:
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		_release_mouse_for_modal()
 		_party_request("GET", "/api/v1/party/current", {}, "current")
+	else:
+		_restore_mouse_after_modal()
+
+
+func _close_party_panel() -> void:
+	if is_instance_valid(party_panel):
+		party_panel.visible = false
+	_restore_mouse_after_modal()
 
 func _party_request(method: String, path: String, payload: Dictionary, context: String) -> void:
 	if party_http == null or party_request_context != "" or HHSession.access_token.is_empty():
@@ -4386,6 +4439,7 @@ func _build_inventory_ui() -> void:
 	close_button.pressed.connect(func():
 		inventory_panel.visible = false
 		inventory_visible = false
+		_restore_mouse_after_modal()
 	)
 	heading.add_child(close_button)
 	var equipment_title := Label.new()
@@ -4459,8 +4513,11 @@ func _on_inventory_button_pressed() -> void:
 	inventory_visible = not inventory_visible
 	inventory_panel.visible = inventory_visible
 	if inventory_visible:
+		_release_mouse_for_modal()
 		_refresh_inventory()
 		_refresh_equipment()
+	else:
+		_restore_mouse_after_modal()
 
 func _refresh_inventory() -> void:
 	if inventory_http == null or HHSession.access_token.is_empty():
@@ -7936,6 +7993,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_dialogue_label.text = exploration_feedback if not exploration_feedback.is_empty() else "探索点由中心服依据角色实际位置验证。发现记录属于灵魂，轮回后仍会保留。"
 			npc_status_label.text = "探索进度已同步。先调查地点，再回应已解锁的奇遇。"
 			npc_panel.visible = true
+			_release_mouse_for_modal()
 			_send_npc_request("GET", "/api/v1/worlds/current/exploration-events", "exploration_events")
 		"exploration_events_bootstrap", "exploration_events":
 			_render_exploration_events(data.get("events", []))
@@ -7963,6 +8021,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_status_label.text = "本次结果已由中心服写入灵魂因果簿。"
 			_clear_npc_choice_buttons()
 			npc_panel.visible = true
+			_release_mouse_for_modal()
 			_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_list")
 		"interact":
 			_clear_npc_choice_buttons()
@@ -8016,6 +8075,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_soul_breakthrough_button.visible = false
 			npc_fusion_button.visible = str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu"
 			npc_panel.visible = true
+			_release_mouse_for_modal()
 		"fate_encounter":
 			npc_title_label.text = "命格奇遇 · " + str(data.get("title", "未知奇遇"))
 			npc_dialogue_label.text = str(data.get("description", "奇遇已记入因果簿。")) + "\n功德：" + str(data.get("merit", 0)) + "（+" + str(data.get("merit_delta", 0)) + "）\n业力：" + str(data.get("karma", 0)) + "（" + str(data.get("karma_delta", 0)) + "）"
@@ -8023,6 +8083,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_fate_encounter_button.visible = false
 			_clear_npc_choice_buttons()
 			npc_panel.visible = true
+			_release_mouse_for_modal()
 		"fate_choice":
 			npc_title_label.text = "因果已记入 · " + str(data.get("npc_id", "NPC"))
 			npc_dialogue_label.text = str(data.get("result", "此事已记入因果簿。")) + "\n功德：" + str(data.get("merit", 0)) + "（" + ("+" if int(data.get("merit_delta", 0)) >= 0 else "") + str(data.get("merit_delta", 0)) + "）" + "\n业力：" + str(data.get("karma", 0)) + "（" + ("+" if int(data.get("karma_delta", 0)) >= 0 else "") + str(data.get("karma_delta", 0)) + "）"
@@ -8033,6 +8094,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_soul_button.visible = true
 			npc_soul_breakthrough_button.visible = false
 			npc_panel.visible = true
+			_release_mouse_for_modal()
 		"trials":
 			var trials: Array = data.get("trials", [])
 			var lines: Array[String] = ["冥界试炼进度"]
@@ -8051,6 +8113,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_soul_breakthrough_button.visible = false
 			npc_reincarnation_leave_button.visible = false
 			npc_panel.visible = true
+			_release_mouse_for_modal()
 		"soul_progression":
 			var experience := int(data.get("experience", 0))
 			var realm_name := str(data.get("realm_name", "未知"))
@@ -8069,6 +8132,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_eligibility_button.visible = false
 			npc_soul_button.visible = true
 			npc_panel.visible = true
+			_release_mouse_for_modal()
 		"soul_breakthrough":
 			npc_title_label.text = "灵魂境界突破"
 			npc_dialogue_label.text = "灵魂境界突破成功：" + str(data.get("realm_name", "新境界"))
@@ -8077,6 +8141,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_trial_button.visible = false
 			npc_eligibility_button.visible = false
 			npc_panel.visible = true
+			_release_mouse_for_modal()
 			_request_soul_progression()
 		"soul_fusions":
 			_clear_npc_choice_buttons()
@@ -8109,6 +8174,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_status_label.text = "融合由中心服验证异变材料并结算来世资质；五种魂质异变齐全可尝试五行混元魂。"
 			npc_fusion_button.visible = true
 			npc_panel.visible = true
+			_release_mouse_for_modal()
 		"soul_fusion":
 			npc_title_label.text = "魂质融合成功 · " + str(data.get("name", "灵魂异变"))
 			npc_dialogue_label.text = str(data.get("description", "魂质已成功融合。")) + "\n融合结果已永久写入灵魂，并强化来世五维资质。"
@@ -8116,6 +8182,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			_show_notification("魂质融合成功 · " + str(data.get("name", "新魂印")), 5.0)
 			npc_fusion_button.visible = true
 			npc_panel.visible = true
+			_release_mouse_for_modal()
 			_request_soul_essence()
 			_request_soul_fusions()
 		"eligibility":
@@ -8134,6 +8201,7 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 			npc_reincarnation_leave_button.visible = eligible
 			npc_reincarnation_leave_button.disabled = false
 			npc_panel.visible = true
+			_release_mouse_for_modal()
 
 func _clear_npc_choice_buttons() -> void:
 	if npc_choice_container == null:
@@ -8666,8 +8734,7 @@ func _restore_vendor_dialogue() -> void:
 func _close_npc_panel() -> void:
 	if is_instance_valid(npc_panel):
 		npc_panel.visible = false
-	# Returning from the dialogue restores normal third-person gameplay controls.
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	_restore_mouse_after_modal()
 
 func _try_interact_nearest_npc() -> void:
 	if npc_request_busy or not is_instance_valid(local_player):
@@ -8685,6 +8752,7 @@ func _try_interact_nearest_npc() -> void:
 			nearest_npc_distance = distance
 			nearest_npc_id = str(npc_data.get("id", ""))
 	if not nearest_npc_id.is_empty():
+		_release_mouse_for_modal()
 		if is_instance_valid(HHAudio):
 			HHAudio.play_ui("npc_interact")
 		# F should expose the cursor before the server response arrives, not require ESC.
@@ -8753,6 +8821,7 @@ func _request_exploration_points() -> void:
 	npc_title_label.text = "正在读取区域探索点……"
 	npc_dialogue_label.text = "正在向中心服查询本世界的探索记录。"
 	npc_panel.visible = true
+	_release_mouse_for_modal()
 	_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_list")
 
 func _request_exploration_progress() -> void:
@@ -8960,6 +9029,7 @@ func _open_exploration_event(event_id: String) -> void:
 	npc_soul_breakthrough_button.visible = false
 	npc_reincarnation_leave_button.visible = false
 	npc_panel.visible = true
+	_release_mouse_for_modal()
 
 
 func _confirm_exploration_event(choice_id: String) -> void:
