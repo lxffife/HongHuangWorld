@@ -118,4 +118,69 @@ HellTrialDeathResult HellTrialEncounter::record_monster_death(
     return result;
 }
 
-} // namespace honghuang::simulation
+const std::array<HellTrialEvidenceSpec, 3> kFirstFloorEvidence{{
+    {"registry_seal", "罪簿封蜡", "封蜡边缘有新裂痕，蜡面仍残留未干的朱砂。值守簿记载：三更前封存的卷宗不应出现这道新裂口。", 
+     {"before_third_bell", "after_third_bell", "never_resealed"},
+     {"三更前已封存", "三更后有人重新封卷", "从未重新封卷"},
+     "after_third_bell", -8.0F, -10.0F},
+    {"echo_stone", "回声石", "石中残响记录了脚步方向：先有急促脚步穿过西廊，随后才传来封门铜铃声。", 
+     {"west_corridor", "east_corridor", "north_archive"},
+     {"从西廊进入", "从东廊进入", "从北侧档房进入"},
+     "west_corridor", 8.0F, -10.0F},
+    {"soul_lantern", "魂灯残灰", "灯盏内侧留有逆风卷灰，灯芯是在有人靠近时被从内侧吹灭，并非门外阴风所致。", 
+     {"outside_wind", "after_replacement", "before_sealing"},
+     {"被门外阴风吹灭", "有人进廊后吹灭魂灯", "封卷前便已熄灭"},
+     "after_replacement", 0.0F, 12.0F}
+}};
+
+} // namespace
+
+const std::array<HellTrialEvidenceSpec, 3>& hell_trial_evidence_specs() {
+    return kFirstFloorEvidence;
+}
+
+HellTrialInvestigation::HellTrialInvestigation(int floor) : enabled_(floor == 1) {}
+bool HellTrialInvestigation::enabled() const { return enabled_; }
+bool HellTrialInvestigation::completed() const { return enabled_ && solved_evidence_ids_.size() == kFirstFloorEvidence.size(); }
+int HellTrialInvestigation::solved_count() const { return static_cast<int>(solved_evidence_ids_.size()); }
+bool HellTrialInvestigation::is_solved(std::string_view evidence_id) const {
+    return solved_evidence_ids_.contains(std::string(evidence_id));
+}
+
+HellTrialEvidenceResult HellTrialInvestigation::submit(
+    std::string_view evidence_id, std::string_view option_id) {
+    HellTrialEvidenceResult result;
+    result.required = enabled_ ? static_cast<int>(kFirstFloorEvidence.size()) : 0;
+    result.solved_count = solved_count();
+    result.completed = completed();
+    result.evidence_id = std::string(evidence_id);
+    if (!enabled_) {
+        result.message = "当前楼层没有开放证词调查。";
+        return result;
+    }
+    const auto found = std::find_if(kFirstFloorEvidence.begin(), kFirstFloorEvidence.end(),
+        [&](const HellTrialEvidenceSpec& spec) { return spec.id == evidence_id; });
+    if (found == kFirstFloorEvidence.end()) {
+        result.message = "未找到这份证词线索。";
+        return result;
+    }
+    if (is_solved(evidence_id)) {
+        result.accepted = true;
+        result.already_solved = true;
+        result.message = "这份证词已经核验，无需重复提交。";
+        return result;
+    }
+    if (found->correct_option_id != option_id) {
+        result.message = "证词与现场痕迹不符，再检查线索。";
+        return result;
+    }
+    solved_evidence_ids_.emplace(evidence_id);
+    result.accepted = true;
+    result.newly_solved = true;
+    result.solved_count = solved_count();
+    result.completed = completed();
+    result.message = result.completed
+        ? "三份证词相互印证：有人在三更后从西廊进入并替换罪簿，拔舌判官的伪证已被揭穿。"
+        : "证词核验成功。继续寻找另外的线索。";
+    return result;
+}
