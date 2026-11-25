@@ -1,13 +1,45 @@
 extends Node3D
-## Isolated visual review stage for comparing the current replaceable blockout models.
-## This scene is intentionally separate from the live multiplayer world.
+## Isolated visual review stage for imported models, materials and animation clips.
+## Keyboard: 1-5 select model; I/W/R/A/H/D play idle/walk/run/attack/hit/death.
 
 const VisualFactory = preload("res://scripts/underworld_visual_factory.gd")
 const VisualModelLibrary = preload("res://scripts/visual_model_library.gd")
 
+var _preview_models: Array[Node3D] = []
+var _selected_model_index := 0
+var _status_label: Label
+
+
 func _ready() -> void:
 	_build_stage()
 	_build_gallery()
+	_build_controls()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not event is InputEventKey or not event.pressed or event.echo:
+		return
+	var key_event := event as InputEventKey
+	match key_event.keycode:
+		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5:
+			_selected_model_index = clampi(key_event.keycode - KEY_1, 0, _preview_models.size() - 1)
+			_update_status("已选择：" + _model_label(_selected_model_index))
+			get_viewport().set_input_as_handled()
+		KEY_I:
+			_play_selected_action("idle")
+		KEY_W:
+			_play_selected_action("walk")
+		KEY_R:
+			_play_selected_action("run")
+		KEY_A:
+			_play_selected_action("attack")
+		KEY_H:
+			_play_selected_action("hit")
+		KEY_D:
+			_play_selected_action("death")
+		KEY_ESCAPE:
+			_play_selected_action("idle")
+
 
 func _build_stage() -> void:
 	var environment := WorldEnvironment.new()
@@ -66,6 +98,7 @@ func _build_stage() -> void:
 	camera.look_at(Vector3(0.0, 1.6, -2.0), Vector3.UP)
 	camera.current = true
 
+
 func _build_gallery() -> void:
 	_add_model("转世人形", VisualModelLibrary.instantiate_model("player_humanoid", func() -> Node3D: return VisualFactory.create_player_humanoid()), Vector3(-5.2, 0.0, 1.0), 0.0, 2.35)
 	_add_model("荒原狼", VisualFactory.create_monster("荒原狼", 1), Vector3(-2.4, 0.0, 0.0), 0.0, 1.55)
@@ -95,13 +128,113 @@ func _build_gallery() -> void:
 	add_child(pillar)
 	_add_label("镇界石柱", Vector3(-7.0, 5.7, 1.0), 0.20)
 
+
 func _add_model(label_text: String, model: Node3D, at: Vector3, yaw: float, label_height: float) -> void:
 	if model == null:
 		return
 	model.position = at
 	model.rotation.y = yaw
+	model.set_meta("preview_label", label_text)
+	_preview_models.append(model)
 	add_child(model)
 	_add_label(label_text, at + Vector3(0.0, label_height, 0.0), 0.24)
+
+
+func _build_controls() -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "PreviewControls"
+	add_child(layer)
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	panel.position = Vector2(18.0, 18.0)
+	panel.custom_minimum_size = Vector2(440.0, 88.0)
+	layer.add_child(panel)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 5)
+	panel.add_child(layout)
+	var title := Label.new()
+	title.text = "美术资源预览台 · 1-5 选择模型"
+	title.add_theme_font_size_override("font_size", 17)
+	layout.add_child(title)
+	_status_label = Label.new()
+	_status_label.text = "I 待机  W 行走  R 奔跑  A 攻击  H 受击  D 死亡  Esc 待机"
+	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	layout.add_child(_status_label)
+
+
+func _play_selected_action(action_name: String) -> void:
+	if _preview_models.is_empty():
+		return
+	var model := _preview_models[_selected_model_index]
+	var controller := model.get_node_or_null("ModelAnimationController")
+	if controller != null and controller.has_method("play_action"):
+		if bool(controller.call("play_action", action_name)):
+			_update_status("%s：播放 %s" % [_model_label(_selected_model_index), action_name])
+		else:
+			_update_status("%s：没有匹配的 %s 动画" % [_model_label(_selected_model_index), action_name])
+		get_viewport().set_input_as_handled()
+		return
+
+	var player := _find_animation_player(model)
+	if player == null:
+		_update_status("%s：没有 AnimationPlayer，当前为静态占位模型" % _model_label(_selected_model_index))
+		get_viewport().set_input_as_handled()
+		return
+	var clip := _find_animation_clip(player, action_name)
+	if clip.is_empty():
+		_update_status("%s：未找到 %s 动画" % [_model_label(_selected_model_index), action_name])
+		get_viewport().set_input_as_handled()
+		return
+	var animation := player.get_animation(clip)
+	if animation != null:
+		animation.loop_mode = Animation.LOOP_LINEAR if action_name in ["idle", "walk", "run"] else Animation.LOOP_NONE
+	player.play(clip, 0.12)
+	_update_status("%s：播放 %s（%s）" % [_model_label(_selected_model_index), action_name, clip])
+	get_viewport().set_input_as_handled()
+
+
+func _find_animation_player(root: Node) -> AnimationPlayer:
+	if root is AnimationPlayer:
+		return root as AnimationPlayer
+	for child in root.get_children():
+		var found := _find_animation_player(child)
+		if found != null:
+			return found
+	return null
+
+
+func _find_animation_clip(player: AnimationPlayer, action_name: String) -> String:
+	var keywords: Array[String] = []
+	match action_name:
+		"idle":
+			keywords = ["idle", "stand", "breath", "wait"]
+		"walk":
+			keywords = ["walk", "walking", "locomotion"]
+		"run":
+			keywords = ["run", "sprint", "jog"]
+		"attack":
+			keywords = ["attack", "slash", "swing", "bite", "combat"]
+		"hit":
+			keywords = ["hit", "damage", "hurt", "react"]
+		"death":
+			keywords = ["death", "die", "dead"]
+	for keyword in keywords:
+		for clip_name in player.get_animation_list():
+			if str(clip_name).to_lower().contains(keyword):
+				return str(clip_name)
+	return ""
+
+
+func _model_label(index: int) -> String:
+	if index < 0 or index >= _preview_models.size():
+		return "未知模型"
+	return str(_preview_models[index].get_meta("preview_label", "模型"))
+
+
+func _update_status(message: String) -> void:
+	if is_instance_valid(_status_label):
+		_status_label.text = message
+
 
 func _add_label(label_text: String, at: Vector3, font_size: float) -> void:
 	var label := Label3D.new()
