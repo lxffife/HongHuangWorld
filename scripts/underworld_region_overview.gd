@@ -6,6 +6,8 @@ const FENGDU_CENTER := Vector3(-112.0, 0.0, 8.0)
 const BLOOD_SEA_CENTER := Vector3(132.0, 0.0, 10.0)
 const HELL_GATE_CENTER := Vector3(8.0, -1.0, -142.0)
 
+var overview_camera: Camera3D
+
 func _ready() -> void:
 	_build_atmosphere()
 	_build_continent()
@@ -14,6 +16,8 @@ func _ready() -> void:
 	_build_blood_sea_region()
 	_build_hell_region()
 	_build_routes_and_signs()
+	if is_instance_valid(overview_camera):
+		overview_camera.current = true
 
 
 func _build_atmosphere() -> void:
@@ -36,13 +40,12 @@ func _build_atmosphere() -> void:
 	sun.shadow_enabled = true
 	add_child(sun)
 
-	var camera := Camera3D.new()
-	camera.name = "UnderworldMacroOverviewCamera"
-	camera.position = Vector3(0.0, 310.0, 390.0)
-	camera.fov = 52.0
-	add_child(camera)
-	camera.look_at(Vector3(0.0, 0.0, -20.0), Vector3.UP)
-	camera.current = true
+	overview_camera = Camera3D.new()
+	overview_camera.name = "UnderworldMacroOverviewCamera"
+	overview_camera.position = Vector3(0.0, 310.0, 390.0)
+	overview_camera.fov = 52.0
+	add_child(overview_camera)
+	overview_camera.look_at(Vector3(0.0, 0.0, -20.0), Vector3.UP)
 
 
 func _build_continent() -> void:
@@ -60,6 +63,14 @@ func _build_fengdu_region() -> void:
 	city.position = FENGDU_CENTER
 	city.scale = Vector3.ONE * 1.15
 	add_child(city)
+	# The embedded city preview owns a camera and environment; disable those so
+	# this macro scene retains a single authoritative overview camera/environment.
+	var nested_camera := city.find_child("FengduOverviewCamera", true, false) as Camera3D
+	if nested_camera != null:
+		nested_camera.current = false
+	var nested_environment := city.find_child("WorldEnvironment", true, false) as WorldEnvironment
+	if nested_environment != null:
+		nested_environment.environment = null
 	_add_ring("FengduOuterDefenceRing", FENGDU_CENTER + Vector3(0.0, 0.05, 0.0), 58.0, 1.8, Color("#665a62"))
 	_add_sign("酆都城 · 冥界主城", FENGDU_CENTER + Vector3(0.0, 24.0, 0.0), 38)
 	_add_sign("内城 / 外城 / 城防区", FENGDU_CENTER + Vector3(0.0, 12.0, 64.0), 18)
