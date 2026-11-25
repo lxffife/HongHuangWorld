@@ -706,6 +706,16 @@ static func _create_procedural_npc(npc_type: String, npc_name: String) -> Node3D
 
 
 static func create_player_humanoid() -> Node3D:
+	var root := VisualModelLibrary.instantiate_model(
+		"player_humanoid",
+		func() -> Node3D: return _create_procedural_player_humanoid()
+	)
+	root.name = "PlayerHumanoid"
+	root.set_meta("visual_archetype", "player_humanoid")
+	return root
+
+
+static func _create_procedural_player_humanoid() -> Node3D:
 	var root := Node3D.new()
 	root.name = "PlayerHumanoidPrototype"
 	var robe := Color("#34445e")
