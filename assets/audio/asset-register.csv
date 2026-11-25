@@ -9,3 +9,6 @@ synth_footstep_v1,sfx,脚步,original_runtime_synthesis,OpenAI-assisted project 
 kenney_audio_candidate,sfx,Kenney Audio Pack,https://kenney.nl/assets?q=audio,Kenney,per_pack,CC0_only_after_specific_pack_review,as_pack_requires,assets/audio/sfx/,none,candidate,,Do not import until exact pack page and included license are archived
 sonniss_gdc_candidate,sfx,Sonniss GameAudioGDC,https://sonniss.com/gameaudiogdc/,Sonniss,per_year,verify_current_EULA,as_EULA_requires,assets/audio/sfx/,none,candidate,,Check year-specific license and redistribution restrictions
 freesound_cc0_candidate,sfx,Freesound CC0 files,https://freesound.org/,individual_creator,per_file,CC0_only,none_if_CC0,assets/audio/sfx/,none,candidate,,Only individual CC0 files; never assume all Freesound uploads are commercial-use
+fengdu_ambience_v1,ambience,酆都城区环境循环,,pending_creator,pending,license_pending,pending_credit,assets/audio/ambience/fengdu_ambience_loop.ogg,none,candidate,,需采购或制作原创音源；检查循环接缝与响度
+fengdu_distant_bell_v1,sfx,酆都远钟,,pending_creator,pending,license_pending,pending_credit,assets/audio/sfx/fengdu_distant_bell_01.ogg,none,candidate,,短音效；需核验来源许可与峰值
+soul_lantern_flame_v1,ambience,引魂灯魂火,,pending_creator,pending,license_pending,pending_credit,assets/audio/ambience/soul_lantern_flame_loop.ogg,none,candidate,,短循环；需测试距离衰减与重复播放
