@@ -284,6 +284,118 @@ static func create_yinsi_office_facade() -> Node3D:
 	return root
 
 
+static func create_fengdu_residential_house() -> Node3D:
+	# Reusable narrow-lot home for Fengdu's civilian quarter.
+	var root := StaticBody3D.new()
+	root.name = "FengduResidentialHouse"
+	var plaster := Color("#62545a")
+	var timber := Color("#382f38")
+	var roof := Color("#282938")
+	var bronze := Color("#987b5d")
+	var window_glow := Color("#a8c9b2")
+	_part(root, "StonePlinth", _box(Vector3(6.4, 0.42, 5.4)), Vector3(0.0, 0.21, 0.0), Color("#393640"))
+	_part(root, "HouseBody", _box(Vector3(5.6, 3.0, 4.5)), Vector3(0.0, 1.92, 0.0), plaster)
+	_part(root, "FrontDoorFrame", _box(Vector3(1.55, 2.5, 0.22)), Vector3(0.0, 1.55, -2.28), timber)
+	_part(root, "FrontDoor", _box(Vector3(1.20, 2.25, 0.10)), Vector3(0.0, 1.42, -2.42), Color("#211e29"))
+	for side in [-1.0, 1.0]:
+		_part(root, "WindowFrame" + str(side), _box(Vector3(1.10, 1.05, 0.18)), Vector3(side * 1.82, 2.05, -2.30), timber)
+		_part(root, "WindowPaper" + str(side), _box(Vector3(0.82, 0.78, 0.06)), Vector3(side * 1.82, 2.05, -2.41), window_glow, Vector3.ZERO, 0.25, 0.0, 0.72)
+		_part(root, "WindowCross" + str(side), _box(Vector3(0.07, 0.88, 0.08)), Vector3(side * 1.82, 2.05, -2.47), bronze)
+	for x in [-2.45, 2.45]:
+		var post := _box(Vector3(0.18, 3.15, 0.20))
+		_part(root, "VerandaPost" + str(x), post, Vector3(x, 1.78, -2.38), timber)
+	_part(root, "VerandaBeam", _box(Vector3(5.9, 0.20, 0.34)), Vector3(0.0, 3.28, -2.40), bronze)
+	_part(root, "RoofLower", _box(Vector3(6.8, 0.34, 5.8)), Vector3(0.0, 3.58, 0.0), roof)
+	_part(root, "RoofUpper", _box(Vector3(5.8, 0.28, 4.8)), Vector3(0.0, 3.94, 0.0), roof)
+	_part(root, "RoofRidge", _box(Vector3(4.4, 0.20, 0.34)), Vector3(0.0, 4.18, 0.0), bronze)
+	for side in [-1.0, 1.0]:
+		_part(root, "EaveTip" + str(side), _box(Vector3(0.55, 0.16, 0.38)), Vector3(side * 3.12, 3.62, -2.65), bronze, Vector3(0.0, 0.0, side * -0.12))
+	var plaque := _box(Vector3(1.65, 0.48, 0.12))
+	_part(root, "HousePlaque", plaque, Vector3(0.0, 2.92, -2.58), Color("#30283d"))
+	var sign := Label3D.new()
+	sign.name = "HouseSign"
+	sign.text = "酆 都 民 居"
+	sign.position = Vector3(0.0, 2.90, -2.66)
+	sign.font_size = 20
+	sign.outline_size = 5
+	sign.modulate = Color("#e0c99d")
+	root.add_child(sign)
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(5.65, 3.2, 4.55)
+	collision.shape = shape
+	collision.position = Vector3(0.0, 1.85, 0.0)
+	root.add_child(collision)
+	return root
+
+
+static func create_ghost_market_shop() -> Node3D:
+	# A permanent two-storey shop frontage; stalls remain separate props.
+	var root := StaticBody3D.new()
+	root.name = "GhostMarketShop"
+	var timber := Color("#4b3938")
+	var plaster := Color("#574955")
+	var roof := Color("#292638")
+	var gold := Color("#b18a5a")
+	var jade := Color("#78b6a9")
+	_part(root, "ShopFoundation", _box(Vector3(7.6, 0.48, 5.8)), Vector3(0.0, 0.24, 0.0), Color("#34313d"))
+	_part(root, "ShopBody", _box(Vector3(6.8, 4.5, 4.8)), Vector3(0.0, 2.70, 0.0), plaster)
+	_part(root, "ShopDoor", _box(Vector3(2.05, 2.65, 0.12)), Vector3(0.0, 1.56, -2.48), Color("#201d28"))
+	for side in [-1.0, 1.0]:
+		_part(root, "ShopFrontPillar" + str(side), _box(Vector3(0.24, 4.2, 0.28)), Vector3(side * 3.12, 2.35, -2.55), timber)
+		_part(root, "UpperWindowFrame" + str(side), _box(Vector3(1.35, 1.12, 0.16)), Vector3(side * 1.72, 3.65, -2.48), gold)
+		_part(root, "UpperWindow" + str(side), _box(Vector3(1.08, 0.84, 0.07)), Vector3(side * 1.72, 3.65, -2.58), jade, Vector3.ZERO, 0.35, 0.0, 0.62)
+	_part(root, "ShopColumnBase" + str(side), _box(Vector3(0.42, 0.28, 0.42)), Vector3(side * 3.12, 0.38, -2.55), gold)
+	_part(root, "ShopColumnCap" + str(side), _box(Vector3(0.42, 0.28, 0.42)), Vector3(side * 3.12, 4.38, -2.55), gold)
+	_part(root, "ShopSignboard", _box(Vector3(2.6, 0.72, 0.16)), Vector3(0.0, 4.42, -2.72), Color("#30283d"))
+	var sign := Label3D.new()
+	sign.name = "ShopName"
+	sign.text = "幽 都 鬼 市"
+	sign.position = Vector3(0.0, 4.40, -2.82)
+	sign.font_size = 26
+	sign.outline_size = 6
+	sign.modulate = Color("#e5c894")
+	root.add_child(sign)
+	_part(root, "Awning", _box(Vector3(7.4, 0.18, 1.25)), Vector3(0.0, 2.85, -3.05), Color("#60465b"))
+	_part(root, "AwningValance", _box(Vector3(7.4, 0.32, 0.12)), Vector3(0.0, 2.62, -3.64), Color("#98705f"))
+	_part(root, "RoofLower", _box(Vector3(7.8, 0.34, 5.9)), Vector3(0.0, 5.05, 0.0), roof)
+	_part(root, "RoofUpper", _box(Vector3(6.4, 0.28, 4.8)), Vector3(0.0, 5.40, 0.0), roof)
+	_part(root, "RoofRidge", _box(Vector3(4.8, 0.20, 0.36)), Vector3(0.0, 5.66, 0.0), gold)
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(6.9, 4.7, 4.9)
+	collision.shape = shape
+	collision.position = Vector3(0.0, 2.65, 0.0)
+	root.add_child(collision)
+	return root
+
+
+static func create_fengdu_residential_lane() -> Node3D:
+	# Review composition for narrow homes, a shop frontage and a lit pedestrian lane.
+	var root := Node3D.new()
+	root.name = "FengduResidentialLanePreview"
+	var paving := Color("#514c55")
+	for index in range(5):
+		_part(root, "LanePaving" + str(index), _box(Vector3(4.0, 0.14, 4.0)),
+			Vector3(0.0, 0.04, -8.0 + float(index) * 4.0), paving)
+	var left_house := create_fengdu_residential_house()
+	left_house.position = Vector3(-7.0, 0.0, -4.0)
+	root.add_child(left_house)
+	var right_house := create_fengdu_residential_house()
+	right_house.position = Vector3(7.0, 0.0, 0.0)
+	right_house.rotation.y = PI
+	root.add_child(right_house)
+	var shop := create_ghost_market_shop()
+	shop.position = Vector3(0.0, 0.0, -13.0)
+	root.add_child(shop)
+	for z in [-6.0, 2.0, 10.0]:
+		var lantern := create_ghost_lantern()
+		lantern.position = Vector3(0.0, 0.0, z)
+		lantern.scale = Vector3.ONE * 0.72
+		root.add_child(lantern)
+	return root
+
+
 static func create_fengdu_city_block() -> Node3D:
 	# A compact review layout: fortified perimeter, gate towers, inner paving,
 	# a small ghost market and the Yinsi office. This is a reusable kit preview,
