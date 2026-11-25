@@ -989,16 +989,15 @@ func _toggle_hell_trial_evidence_panel() -> void:
 func _render_hell_trial_evidence(investigation: Dictionary) -> void:
 	if not is_instance_valid(hell_trial_hud_evidence_container):
 		return
-	var solved_count := int(investigation.get("solved_count", 0))
 	hell_trial_hud_evidence_status.text = str(investigation.get("conclusion", "核验三份现场证词。"))
 	for child in hell_trial_hud_evidence_container.get_children():
 		if child != hell_trial_hud_evidence_status:
 			child.queue_free()
 	var clues: Variant = investigation.get("clues", [])
-	if not clues is Array:
+	if not (clues is Array):
 		return
 	for clue_value in clues:
-		if not clue_value is Dictionary:
+		if not (clue_value is Dictionary):
 			continue
 		var clue: Dictionary = clue_value
 		var card := VBoxContainer.new()
@@ -1006,7 +1005,7 @@ func _render_hell_trial_evidence(investigation: Dictionary) -> void:
 		hell_trial_hud_evidence_container.add_child(card)
 		var solved := bool(clue.get("solved", false))
 		var heading := Label.new()
-		heading.text = str(clue.get("name", "证词线索")) + (" · 已核验" if solved else " · 待核验")
+		heading.text = str(clue.get("name", "证词线索")) + " · " + str(clue.get("location", "刑狱现场")) + (" · 已核验" if solved else " · 待核验")
 		heading.add_theme_color_override("font_color", Color("#9bd4ad") if solved else Color("#e7c995"))
 		card.add_child(heading)
 		var description := Label.new()
@@ -1020,7 +1019,7 @@ func _render_hell_trial_evidence(investigation: Dictionary) -> void:
 		var options: Variant = clue.get("options", [])
 		if options is Array:
 			for option_value in options:
-				if not option_value is Dictionary:
+				if not (option_value is Dictionary):
 					continue
 				var option: Dictionary = option_value
 				var choice_id := str(option.get("id", ""))
