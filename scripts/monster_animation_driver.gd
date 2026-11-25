@@ -5,8 +5,8 @@ class_name HHMonsterAnimationDriver
 # procedural archetype animation remains the fallback for missing clips.
 const STATE_TOKENS := {
 	"idle": ["idle", "stand", "breath", "wait", "rest"],
-	"move": ["walk", "run", "move", "locomotion", "jog"],
-	"attack": ["attack", "atk", "slash", "swing", "bite", "cast", "strike"],
+	"move": ["walk", "run", "move", "locomotion", "jog", "gallop", "fly", "flap", "hover"],
+	"attack": ["attack", "atk", "slash", "swing", "bite", "cast", "strike", "kick", "kicks", "stomp", "pounce"],
 	"hit": ["hit", "hurt", "damage", "react", "stagger"],
 	"death": ["death", "die", "dead", "down", "fall"]
 }
