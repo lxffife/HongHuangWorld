@@ -286,6 +286,11 @@ var npc_current_interaction_id := ""
 var leaving_for_reincarnation := false
 var npc_selected_id := ""
 var npc_request_busy := false
+var shop_http: HTTPRequest
+var shop_request_busy := false
+var shop_request_context := ""
+var shop_selected_id := ""
+var shop_selected_name := ""
 
 func _ready() -> void:
 	# Keep the status text inside its HUD column at every viewport size.
@@ -7762,6 +7767,11 @@ func _build_npc_ui() -> void:
 	add_child(npc_http)
 	npc_http.request_completed.connect(_on_npc_request_completed)
 
+	shop_http = HTTPRequest.new()
+	shop_http.timeout = 12.0
+	add_child(shop_http)
+	shop_http.request_completed.connect(_on_shop_request_completed)
+
 func _request_world_npcs() -> void:
 	_send_npc_request("GET", "/api/v1/worlds/current/npcs", "list")
 
@@ -7900,6 +7910,13 @@ func _on_npc_request_completed(result: int, response_code: int, _headers: Packed
 				forge_button.text = "打开鬼工坊 · 装备打造"
 				forge_button.pressed.connect(_open_equipment_crafting)
 				npc_choice_container.add_child(forge_button)
+			var vendor_shop_id := _shop_id_for_vendor(npc_current_interaction_id)
+			if not vendor_shop_id.is_empty():
+				var market_button := Button.new()
+				_apply_button_theme(market_button, true)
+				market_button.text = "打开鬼市摊位 · 查看商品"
+				market_button.pressed.connect(_open_vendor_shop.bind(vendor_shop_id, str(npc_data.get("name", "鬼市摊主"))))
+				npc_choice_container.add_child(market_button)
 			var choices: Variant = dialogue.get("choices", [])
 			if choices is Array:
 				for choice_variant in choices:
@@ -8353,6 +8370,164 @@ func _update_nearest_npc_prompt() -> void:
 			npc_interact_button.text = "F · 发现：" + nearest_point_name
 		else:
 			npc_interact_button.text = "探索点：" + nearest_point_name + " · " + str(roundi(nearest_point_distance)) + "m"
+
+func _shop_id_for_vendor(npc_id: String) -> String:
+	match npc_id:
+		"fengdu_ghost_market_vendor_west":
+			return "fengdu_general_shop"
+		"fengdu_ghost_market_vendor_east":
+			return "fengdu_talisman_shop"
+		_:
+			return ""
+
+
+func _open_vendor_shop(shop_id: String, vendor_name: String) -> void:
+	if shop_request_busy or shop_id.is_empty():
+		return
+	shop_selected_id = shop_id
+	shop_selected_name = vendor_name
+	npc_status_label.text = "正在向中心服读取摊位商品、价格与库存……"
+	_send_shop_request("GET", "/api/v1/shops", "list")
+
+
+func _send_shop_request(method: String, path: String, context: String, payload: Dictionary = {}) -> void:
+	if shop_http == null or shop_request_busy:
+		return
+	if HHSession.access_token.is_empty():
+		npc_status_label.text = "登录状态已失效，请重新登录后交易。"
+		return
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token])
+	var http_method := HTTPClient.METHOD_GET
+	var body := ""
+	if method == "POST":
+		http_method = HTTPClient.METHOD_POST
+		headers.append("Content-Type: application/json")
+		body = JSON.stringify(payload)
+	shop_request_context = context
+	var error := shop_http.request(HHSession.api_base + path, headers, http_method, body)
+	if error != OK:
+		shop_request_context = ""
+		npc_status_label.text = "无法连接鬼市交易服务，错误码：" + str(error)
+		return
+	shop_request_busy = true
+
+
+func _new_shop_request_id() -> String:
+	var crypto := Crypto.new()
+	var bytes := crypto.generate_random_bytes(16)
+	if bytes.size() != 16:
+		return ""
+	bytes[6] = (bytes[6] & 0x0f) | 0x40
+	bytes[8] = (bytes[8] & 0x3f) | 0x80
+	var hex := bytes.hex_encode()
+	return hex.substr(0, 8) + "-" + hex.substr(8, 4) + "-" + hex.substr(12, 4) + "-" + hex.substr(16, 4) + "-" + hex.substr(20, 12)
+
+
+func _purchase_market_item(shop_id: String, item_id: String) -> void:
+	if shop_request_busy or shop_id.is_empty() or item_id.is_empty():
+		return
+	var request_id := _new_shop_request_id()
+	if request_id.is_empty():
+		npc_status_label.text = "无法生成安全交易编号，请稍后重试。"
+		return
+	npc_status_label.text = "正在向中心服提交购买请求……"
+	_send_shop_request("POST", "/api/v1/shops/" + shop_id + "/purchase", "purchase", {
+		"request_id": request_id,
+		"item_id": item_id,
+		"quantity": 1
+	})
+
+
+func _on_shop_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	shop_request_busy = false
+	var context := shop_request_context
+	shop_request_context = ""
+	var raw := body.get_string_from_utf8()
+	if result != HTTPRequest.RESULT_SUCCESS:
+		npc_status_label.text = "鬼市交易服务连接失败，请检查网络。"
+		return
+	if response_code < 200 or response_code >= 300:
+		var message := raw.strip_edges()
+		if message.length() > 180:
+			message = message.substr(0, 180) + "……"
+		npc_status_label.text = "交易未完成（HTTP " + str(response_code) + "）：" + message
+		return
+	var parser := JSON.new()
+	if parser.parse(raw) != OK or not parser.data is Dictionary:
+		npc_status_label.text = "鬼市返回的数据格式异常。"
+		return
+	var data: Dictionary = parser.data
+	if context == "purchase":
+		var item_name := str(data.get("item_name", "商品"))
+		npc_status_label.text = "购买成功：%s ×%d，花费 %d，余额 %d。正在刷新摊位库存……" % [
+			item_name, int(data.get("quantity", 1)), int(data.get("total_price", 0)), int(data.get("balance_after", 0))
+		]
+		_show_notification("鬼市购得 · " + item_name, 3.0)
+		_send_shop_request("GET", "/api/v1/shops", "list")
+		return
+	if context != "list":
+		return
+	var shops: Variant = data.get("shops", [])
+	var selected_shop: Dictionary = {}
+	if shops is Array:
+		for shop_variant in shops:
+			if shop_variant is Dictionary and str(shop_variant.get("id", "")) == shop_selected_id:
+				selected_shop = shop_variant
+				break
+	if selected_shop.is_empty():
+		npc_status_label.text = "此摊位当前没有开放商品，或尚未配置到本世界。"
+		return
+	for child in npc_choice_container.get_children():
+		child.queue_free()
+	var heading := Label.new()
+	heading.text = str(selected_shop.get("name", shop_selected_name)) + " · 中心服商品目录"
+	heading.add_theme_color_override("font_color", Color("#d4b47b"))
+	npc_choice_container.add_child(heading)
+	var description := Label.new()
+	description.text = str(selected_shop.get("description", ""))
+	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	npc_choice_container.add_child(description)
+	var items: Variant = selected_shop.get("items", [])
+	if not items is Array or items.is_empty():
+		var empty_label := Label.new()
+		empty_label.text = "摊位暂时没有可售商品。"
+		npc_choice_container.add_child(empty_label)
+	else:
+		for item_variant in items:
+			if not item_variant is Dictionary:
+				continue
+			var item: Dictionary = item_variant
+			var stock_text := "不限量" if not item.has("stock_quantity") else ("库存 %d" % int(item.get("stock_quantity", 0)))
+			var purchase_button := Button.new()
+			_apply_button_theme(purchase_button, true)
+			purchase_button.text = "%s  ·  %d %s  ·  %s  ·  购买 ×1" % [
+				str(item.get("name", "未知商品")),
+				int(item.get("unit_price", 0)),
+				str(selected_shop.get("currency_name", "冥币")),
+				stock_text
+			]
+			purchase_button.tooltip_text = str(item.get("description", ""))
+			purchase_button.disabled = item.has("stock_quantity") and int(item.get("stock_quantity", 0)) <= 0
+			purchase_button.pressed.connect(_purchase_market_item.bind(shop_selected_id, str(item.get("item_id", ""))))
+			npc_choice_container.add_child(purchase_button)
+	var back_button := Button.new()
+	_apply_button_theme(back_button)
+	back_button.text = "返回摊主对话"
+	back_button.pressed.connect(_restore_vendor_dialogue)
+	npc_choice_container.add_child(back_button)
+	npc_status_label.text = "价格、扣款、背包容量与库存均由中心服事务结算；每次购买只提交一件。"
+
+
+func _restore_vendor_dialogue() -> void:
+	_clear_npc_choice_buttons()
+	npc_dialogue_label.text = "摊主正在等候你的下一次询价。靠近摊位后可重新打开商品目录。"
+	npc_status_label.text = "交易尚未提交。"
+	var reopen_button := Button.new()
+	_apply_button_theme(reopen_button, true)
+	reopen_button.text = "重新查看商品"
+	reopen_button.pressed.connect(_open_vendor_shop.bind(shop_selected_id, shop_selected_name))
+	npc_choice_container.add_child(reopen_button)
+
 
 func _close_npc_panel() -> void:
 	if is_instance_valid(npc_panel):
