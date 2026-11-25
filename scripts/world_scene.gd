@@ -76,6 +76,12 @@ var world_terrain_root: Node3D
 var hell_floor_visual_root: Node3D
 var hell_trial_panel: Variant
 var hell_trial_open_button: Button
+var hell_trial_hud_panel: PanelContainer
+var hell_trial_hud_title: Label
+var hell_trial_hud_stage: Label
+var hell_trial_hud_objective: Label
+var hell_trial_hud_progress: ProgressBar
+var hell_trial_runtime_data: Dictionary = {}
 var hud_visible := true
 var hud_toggle_button: Button
 var hud_restore_button: Button
@@ -301,6 +307,7 @@ func _ready() -> void:
 	if not HHSession.access_token.is_empty():
 		HHChatNetwork.connect_chat(HHSession.get_chat_api_base(), HHSession.access_token)
 	_build_combat_hud()
+	_build_hell_trial_hud()
 	_build_minimap_hud()
 	_build_world_map_hud()
 	_build_input_debug_hud()
@@ -849,13 +856,99 @@ func _map_world_id() -> String:
 	var hell_floor := int(HHSession.world_snapshot.get("hell_floor", 0))
 	return "underworld_hell_%02d" % hell_floor if hell_floor > 0 else world_id
 
+func _build_hell_trial_hud() -> void:
+	var hud_root := get_node_or_null("HUD") as Control
+	if hud_root == null:
+		return
+	hell_trial_hud_panel = PanelContainer.new()
+	hell_trial_hud_panel.name = "HellTrialProgressPanel"
+	hell_trial_hud_panel.visible = false
+	hell_trial_hud_panel.z_index = 24
+	hell_trial_hud_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color("#111722ee")
+	panel_style.border_color = Color("#98764f")
+	panel_style.set_border_width_all(1)
+	panel_style.set_corner_radius_all(8)
+	panel_style.content_margin_left = 12.0
+	panel_style.content_margin_right = 12.0
+	panel_style.content_margin_top = 7.0
+	panel_style.content_margin_bottom = 7.0
+	hell_trial_hud_panel.add_theme_stylebox_override("panel", panel_style)
+	hud_root.add_child(hell_trial_hud_panel)
+
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 3)
+	hell_trial_hud_panel.add_child(layout)
+	hell_trial_hud_title = Label.new()
+	hell_trial_hud_title.text = "幽冥刑狱 · 试炼进度"
+	hell_trial_hud_title.add_theme_color_override("font_color", Color("#e7c995"))
+	hell_trial_hud_title.add_theme_font_size_override("font_size", 14)
+	layout.add_child(hell_trial_hud_title)
+	hell_trial_hud_stage = Label.new()
+	hell_trial_hud_stage.add_theme_color_override("font_color", Color("#d7c7a8"))
+	hell_trial_hud_stage.add_theme_font_size_override("font_size", 12)
+	layout.add_child(hell_trial_hud_stage)
+	hell_trial_hud_objective = Label.new()
+	hell_trial_hud_objective.add_theme_color_override("font_color", Color("#aebdca"))
+	hell_trial_hud_objective.add_theme_font_size_override("font_size", 11)
+	hell_trial_hud_objective.clip_text = true
+	hell_trial_hud_objective.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	layout.add_child(hell_trial_hud_objective)
+	hell_trial_hud_progress = ProgressBar.new()
+	hell_trial_hud_progress.min_value = 0.0
+	hell_trial_hud_progress.max_value = 1.0
+	hell_trial_hud_progress.value = 0.0
+	hell_trial_hud_progress.show_percentage = false
+	hell_trial_hud_progress.custom_minimum_size.y = 8.0
+	layout.add_child(hell_trial_hud_progress)
+	_layout_hud()
+
+
+func _render_hell_trial_hud(trial_data: Dictionary) -> void:
+	if not is_instance_valid(hell_trial_hud_panel):
+		return
+	var floor_number := int(trial_data.get("floor", HHSession.world_snapshot.get("hell_floor", 0)))
+	if floor_number < 1 or floor_number > 18:
+		hell_trial_hud_panel.visible = false
+		return
+	hell_trial_runtime_data = trial_data.duplicate(true)
+	var stage := int(trial_data.get("stage", 0))
+	var stage_count := maxi(1, int(trial_data.get("stage_count", 4)))
+	var completed := bool(trial_data.get("completed", false))
+	var boss_phase := int(trial_data.get("boss_phase", 0))
+	var active_name := str(trial_data.get("active_name", ""))
+	var stage_text := "试炼完成" if completed else ("守将阶段 · 第 %d 阶段" % maxi(1, boss_phase) if stage >= 3 else "第 %d / %d 波" % [mini(stage + 1, stage_count), stage_count])
+	if not completed and not active_name.is_empty():
+		stage_text += " · " + active_name
+	var kills := maxi(0, int(trial_data.get("objective_kills", 0)))
+	var required := maxi(0, int(trial_data.get("objective_required", 0)))
+	hell_trial_hud_title.text = "第 %02d 层 · 十八层刑狱试炼" % floor_number
+	hell_trial_hud_stage.text = stage_text
+	if required > 0:
+		hell_trial_hud_objective.text = "本层目标进度：%d / %d" % [mini(kills, required), required]
+		hell_trial_hud_progress.max_value = float(required)
+		hell_trial_hud_progress.value = float(clampi(kills, 0, required))
+	else:
+		hell_trial_hud_objective.text = "本层目标：" + str(trial_data.get("label", "等待服务器目标"))
+		hell_trial_hud_progress.max_value = 1.0
+		hell_trial_hud_progress.value = 1.0 if completed else 0.0
+	hell_trial_hud_panel.visible = hud_visible
+	if completed:
+		hell_trial_hud_stage.add_theme_color_override("font_color", Color("#9bd4ad"))
+	else:
+		hell_trial_hud_stage.add_theme_color_override("font_color", Color("#d7c7a8"))
+
+
 func _show_hell_trial_runtime_state(snapshot: Dictionary) -> void:
 	var trial: Variant = snapshot.get("hell_trial", {})
-	if not (trial is Dictionary):
+	if not (trial is Dictionary) or trial.is_empty():
+		var floor_hint := int(snapshot.get("hell_floor", 0))
+		if floor_hint <= 0 and is_instance_valid(hell_trial_hud_panel):
+			hell_trial_hud_panel.visible = false
 		return
 	var trial_data: Dictionary = trial
-	if trial_data.is_empty():
-		return
+	_render_hell_trial_hud(trial_data)
 	var floor_number := int(trial_data.get("floor", snapshot.get("hell_floor", 0)))
 	var label := str(trial_data.get("label", ""))
 	var boss_phase := int(trial_data.get("boss_phase", 0))
@@ -865,7 +958,6 @@ func _show_hell_trial_runtime_state(snapshot: Dictionary) -> void:
 		_show_notification("第 %02d 层 · 试炼已完成" % floor_number, 4.0)
 	elif not label.is_empty():
 		_show_notification("第 %02d 层 · 当前挑战：%s" % [floor_number, label], 4.0)
-
 
 
 func _open_hell_trial_panel() -> void:
@@ -3081,6 +3173,14 @@ func _layout_hud() -> void:
 			details_toggle_button.position = Vector2(18.0, controls_y)
 		if is_instance_valid(soul_choice_button):
 			soul_choice_button.position = Vector2(140.0, controls_y)
+	if is_instance_valid(hell_trial_hud_panel):
+		var trial_width := minf(420.0, maxf(280.0, viewport_size.x - 24.0))
+		hell_trial_hud_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		hell_trial_hud_panel.position = Vector2((viewport_size.x - trial_width) * 0.5, 62.0)
+		hell_trial_hud_panel.custom_minimum_size = Vector2(trial_width, 88.0)
+		hell_trial_hud_panel.size = Vector2(trial_width, 88.0)
+		hell_trial_hud_panel.visible = hud_visible and not hell_trial_runtime_data.is_empty()
+
 	# Reserve one continuous top-right toolbar for all utility actions.
 	# The inventory shortcut used to sit at the far-right edge and overlap
 	# the "退出世界" button. Move it into the same row and shift the group
@@ -5331,6 +5431,7 @@ func _on_combat_event(event: Dictionary) -> void:
 	if action == "hell_trial_wave_transition":
 		HHAudio.play_ui("warning", 0.9)
 		var floor_number := int(event.get("floor", 0))
+		_show_hell_trial_runtime_state({"hell_floor": floor_number, "hell_trial": event})
 		var wave_label := str(event.get("label", "试炼阶段变化"))
 		if bool(event.get("completed", false)):
 			_show_notification("第 %02d 层 · 试炼完成" % floor_number, 5.0)
@@ -5338,6 +5439,14 @@ func _on_combat_event(event: Dictionary) -> void:
 			_show_notification("第 %02d 层 · %s" % [floor_number, wave_label], 4.0)
 		return
 	if action == "hell_trial_boss_phase":
+		var phase_floor := int(event.get("floor", HHSession.world_snapshot.get("hell_floor", 0)))
+		if not hell_trial_runtime_data.is_empty():
+			var updated_trial := hell_trial_runtime_data.duplicate(true)
+			updated_trial["floor"] = phase_floor
+			updated_trial["stage"] = 3
+			updated_trial["boss_phase"] = int(event.get("phase", 1))
+			updated_trial["active_name"] = str(event.get("phase_name", "守将"))
+			_render_hell_trial_hud(updated_trial)
 		var phase_name := str(event.get("phase_name", "守将变招"))
 		var phase_number := int(event.get("phase", 1))
 		var attack_id := str(event.get("signature_attack", ""))
