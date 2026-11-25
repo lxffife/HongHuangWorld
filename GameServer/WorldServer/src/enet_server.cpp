@@ -1440,7 +1440,7 @@ struct EnetServer::Impl {
                     options.push_back({{"id", std::string(evidence.option_ids[i])},
                                        {"label", std::string(evidence.option_labels[i])}});
                 }
-                clues.push_back({{"id", std::string(evidence.id)}, {"name", std::string(evidence.name)},
+                clues.push_back({{"id", std::string(evidence.id)}, {"name", std::string(evidence.name)}, {"location", std::string(evidence.location_hint)},
                     {"description", std::string(evidence.description)}, {"options", std::move(options)},
                     {"x", evidence.x}, {"z", evidence.z},
                     {"solved", hell_trial_investigation.is_solved(evidence.id)}});
