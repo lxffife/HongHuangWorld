@@ -173,6 +173,6 @@ ArtPreviewStage 选中狼或铁骨兽魂时，会读取 Skeleton3D 骨骼名称�
 
 - `create_fengdu_residential_house()`：窄地块民居，包含石质基座、夯土墙体、木门窗、前廊立柱、双层屋面、门匾和近似阻挡碰撞体。
 - `create_ghost_market_shop()`：两层鬼市店铺门面，包含上下层窗格、店招、外挑布檐、双层屋面和阻挡碰撞体。
-- `create_fengdu_residential_lane()`：将两栋民居、一间店铺、铺地和魂灯组合成独立评审街巷，便于检查建筑比例与行人通道。
+- `create_fengdu_residential_lane()`：将两栋民居、一间店铺、铺地和魂灯组合成独立评审街巷，便于检查建筑比例与行人通道。 场景入口为 `scenes/FengduResidentialLanePreview.tscn`，可在Godot编辑器单独打开评审。
 
 注意：以上仍是项目内原创程序化灰盒/风格块，不是最终高模建筑，也没有替代正式酆都地图。当前碰撞体按建筑主体近似包围，门窗开口与檐廊细节尚未拆成可通行碰撞；接入正式城区前需要在Godot中检查尺度、朝向、导航可达性和碰撞穿行，并逐步替换为外部正式模型或原创高质量模型。
