@@ -8166,6 +8166,8 @@ func _animate_npc_visuals(delta: float) -> void:
 			continue
 		var phase := float(abs(hash(str(npc_id))) % 100) * 0.0628
 		var breath := sin(npc_animation_time * 1.7 + phase)
+		var gesture := sin(npc_animation_time * 0.85 + phase)
+		var npc_type := str(visual.get_meta("npc_type", "guide"))
 		visual.position.y = breath * 0.018
 		var left_arm := visual.get_node_or_null("ArmPivotLeft") as Node3D
 		var right_arm := visual.get_node_or_null("ArmPivotRight") as Node3D
@@ -8173,6 +8175,48 @@ func _animate_npc_visuals(delta: float) -> void:
 			left_arm.rotation.z = -0.035 + breath * 0.025
 		if is_instance_valid(right_arm):
 			right_arm.rotation.z = 0.035 - breath * 0.025
+		var head := visual.get_node_or_null("Head") as Node3D
+		match npc_type:
+			"guard":
+				# A sentry periodically scans the approach instead of breathing in place.
+				if is_instance_valid(head):
+					head.rotation.y = sin(npc_animation_time * 0.42 + phase) * 0.20
+				if is_instance_valid(left_arm):
+					left_arm.rotation.z -= 0.035
+				if is_instance_valid(right_arm):
+					right_arm.rotation.z += 0.035
+			"judge":
+				# The magistrate makes a restrained, deliberate ruling gesture.
+				if is_instance_valid(right_arm):
+					right_arm.rotation.z = 0.10 + maxf(gesture, 0.0) * 0.16
+				if is_instance_valid(head):
+					head.rotation.x = -0.025 + maxf(gesture, 0.0) * 0.035
+			"trial_master":
+				if is_instance_valid(left_arm):
+					left_arm.rotation.z = -0.08 + sin(npc_animation_time * 0.55 + phase) * 0.045
+				var token := visual.get_node_or_null("TrialToken") as Node3D
+				if is_instance_valid(token):
+					token.rotation.z = sin(npc_animation_time * 0.8 + phase) * 0.045
+			"blacksmith":
+				# Slow hammering cadence; keep the tool motion readable, not frantic.
+				var hammer := visual.get_node_or_null("HammerHandle") as Node3D
+				var hammer_head := visual.get_node_or_null("HammerHead") as Node3D
+				var hammer_angle := -0.65 + maxf(sin(npc_animation_time * 1.8 + phase), 0.0) * 0.30
+				if is_instance_valid(hammer):
+					hammer.rotation.z = hammer_angle
+				if is_instance_valid(hammer_head):
+					hammer_head.rotation.z = hammer_angle
+				if is_instance_valid(right_arm):
+					right_arm.rotation.z = 0.10 + maxf(sin(npc_animation_time * 1.8 + phase), 0.0) * 0.10
+			"soup_keeper":
+				# A calm offering pose around the steaming bowl.
+				if is_instance_valid(left_arm):
+					left_arm.rotation.z = -0.12 + sin(npc_animation_time * 0.6 + phase) * 0.025
+				if is_instance_valid(right_arm):
+					right_arm.rotation.z = 0.10 + sin(npc_animation_time * 0.6 + phase) * 0.025
+			_:
+				if is_instance_valid(head):
+					head.rotation.y = sin(npc_animation_time * 0.32 + phase) * 0.07
 		var mist := visual.get_node_or_null("BowlMist") as Node3D
 		if is_instance_valid(mist):
 			mist.position.y = 1.16 + sin(npc_animation_time * 2.4 + phase) * 0.045
