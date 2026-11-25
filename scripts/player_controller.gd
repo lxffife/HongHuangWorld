@@ -52,6 +52,11 @@ var current_move_input := Vector2.ZERO
 var auto_navigation_target: Vector3 = Vector3.ZERO
 var auto_navigation_active := false
 var auto_navigation_arrival_distance := 1.6
+var auto_navigation_detour_direction: Vector3 = Vector3.ZERO
+var auto_navigation_detour_remaining := 0.0
+var auto_navigation_blocked_time := 0.0
+var auto_navigation_last_position: Vector3 = Vector3.ZERO
+var auto_navigation_stuck_time := 0.0
 var last_send_error: int = OK
 var movement_network_ready := false
 func _ready() -> void:
@@ -189,11 +194,64 @@ func _unhandled_input(event: InputEvent) -> void:
 func set_auto_navigation_target(target: Vector3) -> void:
 	auto_navigation_target = target
 	auto_navigation_active = true
+	auto_navigation_detour_direction = Vector3.ZERO
+	auto_navigation_detour_remaining = 0.0
+	auto_navigation_blocked_time = 0.0
+	auto_navigation_stuck_time = 0.0
+	auto_navigation_last_position = global_position
 
 
 func clear_auto_navigation_target() -> void:
 	auto_navigation_active = false
 	auto_navigation_target = Vector3.ZERO
+	auto_navigation_detour_direction = Vector3.ZERO
+	auto_navigation_detour_remaining = 0.0
+	auto_navigation_blocked_time = 0.0
+	auto_navigation_stuck_time = 0.0
+
+
+func _get_auto_navigation_direction(target_direction: Vector3, delta: float) -> Vector3:
+	if auto_navigation_detour_remaining > 0.0:
+		auto_navigation_detour_remaining = maxf(auto_navigation_detour_remaining - delta, 0.0)
+		if auto_navigation_detour_remaining > 0.0 and auto_navigation_detour_direction.length_squared() > 0.01:
+			return auto_navigation_detour_direction
+	var world := get_world_3d()
+	if world == null:
+		return target_direction
+	var space_state := world.direct_space_state
+	var ray_origin := global_position + Vector3.UP * 0.85
+	var query := PhysicsRayQueryParameters3D.create(ray_origin, ray_origin + target_direction * 2.0)
+	query.exclude = [get_rid()]
+	query.collide_with_areas = false
+	var direct_hit := space_state.intersect_ray(query)
+	if direct_hit.is_empty():
+		auto_navigation_blocked_time = 0.0
+		auto_navigation_detour_direction = Vector3.ZERO
+		return target_direction
+	# A wall blocks the direct line. Probe progressively wider angles and
+	# temporarily commit to the clearest side so the character can get around
+	# a corner instead of alternating left/right every frame.
+	var candidate_angles: Array[float] = [-0.45, 0.45, -0.9, 0.9, -1.35, 1.35, -1.85, 1.85]
+	var best_direction := Vector3.ZERO
+	var best_score := -INF
+	for angle in candidate_angles:
+		var candidate := target_direction.rotated(Vector3.UP, angle).normalized()
+		var candidate_query := PhysicsRayQueryParameters3D.create(ray_origin, ray_origin + candidate * 1.7)
+		candidate_query.exclude = [get_rid()]
+		candidate_query.collide_with_areas = false
+		var candidate_hit := space_state.intersect_ray(candidate_query)
+		if candidate_hit.is_empty():
+			var score := target_direction.dot(candidate)
+			if score > best_score:
+				best_score = score
+				best_direction = candidate
+	if best_direction.length_squared() > 0.01:
+		auto_navigation_detour_direction = best_direction
+		auto_navigation_detour_remaining = 0.85
+		auto_navigation_blocked_time = 0.0
+		return best_direction
+	auto_navigation_blocked_time += delta
+	return Vector3.ZERO
 
 
 func _physics_process(delta: float) -> void:
@@ -216,7 +274,15 @@ func _physics_process(delta: float) -> void:
 		if target_offset.length() <= auto_navigation_arrival_distance:
 			clear_auto_navigation_target()
 		else:
-			direction = target_offset.normalized()
+			direction = _get_auto_navigation_direction(target_offset.normalized(), delta)
+			if direction.length_squared() <= 0.01:
+				if auto_navigation_blocked_time >= 1.2:
+					clear_auto_navigation_target()
+					var parent := get_parent()
+					if parent != null and parent.has_method("_show_notification"):
+					parent.call("_show_notification", "前方道路被阻挡，已停止自动前往，请调整位置后重新导航。", 3.5)
+				else:
+					auto_navigation_blocked_time += delta
 			input_2d = Vector2(0.0, -1.0)
 	current_move_input = input_2d
 	if camera_pivot == null or not is_instance_valid(camera_pivot):
@@ -546,6 +612,8 @@ func _apply_soul_affinity_visuals(affinities: Dictionary) -> void:
 
 
 func play_hit_reaction(damage: int, attack_style: String = "") -> void:
+	# A confirmed incoming hit always interrupts unattended travel.
+	clear_auto_navigation_target()
 	if attack_style == "heavy_slam":
 		HHAudio.play_combat("heavy_hit", 0.92)
 	else:
