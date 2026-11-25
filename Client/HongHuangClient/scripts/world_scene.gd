@@ -8243,6 +8243,15 @@ func _animate_npc_visuals(delta: float) -> void:
 			_:
 				if is_instance_valid(head):
 					head.rotation.y = sin(npc_animation_time * 0.32 + phase) * 0.07
+		if str(npc_id).begins_with("fengdu_ghost_market_vendor_"):
+			# Market vendors alternate between arranging wares and greeting passers-by.
+			var vendor_cycle := sin(npc_animation_time * 0.72 + phase)
+			if is_instance_valid(left_arm):
+				left_arm.rotation.z = -0.10 - maxf(vendor_cycle, 0.0) * 0.12
+			if is_instance_valid(right_arm):
+				right_arm.rotation.z = 0.08 + maxf(-vendor_cycle, 0.0) * 0.15
+			if is_instance_valid(head):
+				head.rotation.y = sin(npc_animation_time * 0.24 + phase) * 0.11
 		if is_talking:
 			# Short, readable greeting gesture while facing the player; it never changes gameplay state.
 			var talk_phase := sin(npc_animation_time * 5.2 + phase)
