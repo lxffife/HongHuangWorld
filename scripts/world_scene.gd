@@ -3723,7 +3723,10 @@ func _on_chat_socket_connected() -> void:
 		if selected_chat_channel == "whisper":
 			chat_status.text = "好友私聊 · 独立聊天连接已建立"
 		elif selected_chat_channel == "party":
-			chat_status.text = "队伍频道 · 仅当前有效队伍成员可见"
+			if party_data.is_empty() or str(party_data.get("id", "")).is_empty():
+				chat_status.text = "队伍频道 · 当前未加入队伍"
+			else:
+				chat_status.text = "队伍频道 · 仅当前队伍成员可见"
 		elif selected_chat_channel != "nearby":
 			chat_status.text = "聊天服务已连接 · " + ("世界频道" if selected_chat_channel == "world" else "跨界频道")
 
