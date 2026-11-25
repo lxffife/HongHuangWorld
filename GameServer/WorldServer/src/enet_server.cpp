@@ -1434,6 +1434,18 @@ struct EnetServer::Impl {
             {"objective_required", floor ? floor->objective_required : 0},
             {"boss_phase", stage == 3 ? hell_trial_boss_phase.phase() : 0}
         };
+        if (hell_trial_shear_hazard.enabled()) {
+            const char* hazard_phase =
+                hell_trial_shear_hazard.phase() == honghuang::simulation::HellTrialHazardPhase::Warning ? "warning" :
+                (hell_trial_shear_hazard.phase() == honghuang::simulation::HellTrialHazardPhase::Active ? "active" : "recovery");
+            snapshot["hazard"] = Json{{"id", "severed_fate_shears"},
+                {"phase", hazard_phase},
+                {"cycle", hell_trial_shear_hazard.cycle()},
+                {"remaining_seconds", hell_trial_shear_hazard.phase_remaining_seconds()},
+                {"danger_min_x", -9.0}, {"danger_max_x", 9.0},
+                {"danger_min_z", -9.0}, {"danger_max_z", 5.0},
+                {"safe_lane_centers_x", Json::array({-19.5, 19.5})}};
+        }
         if (hell_trial_investigation.enabled()) {
             Json clues = Json::array();
             for (const auto& evidence : honghuang::simulation::hell_trial_evidence_specs()) {
