@@ -152,31 +152,17 @@ func _select_animation_player(state_name: String) -> AnimationPlayer:
 
 
 func _resolve_clip_in_player(player: AnimationPlayer, state_name: String) -> String:
-	var keywords: Array[String] = []
-	match state_name:
-		"idle":
-			keywords = ["idle", "stand", "breath", "wait"]
-		"walk":
-			keywords = ["walk", "walking", "locomotion"]
-		"run":
-			keywords = ["run", "sprint", "jog"]
-		"attack":
-			keywords = ["attack", "slash", "swing", "bite", "combat"]
-		"hit":
-			keywords = ["hit", "damage", "hurt", "react"]
-		"death":
-			keywords = ["death", "die", "dead"]
-		_:
-			keywords = [state_name]
+	var keywords := _keywords_for_state(state_name)
 	var best_clip := ""
 	var best_score := -1
 	for clip_name in player.get_animation_list():
 		var normalized := _normalize_clip_name(str(clip_name))
 		if normalized in ["reset", "default", "tpose", "bindpose"]:
 			continue
-		for keyword in keywords:
+		for keyword_index in range(keywords.size()):
+			var keyword: String = keywords[keyword_index]
 			if normalized.contains(keyword):
-				var score := _keyword_match_score(normalized, keyword)
+				var score := _keyword_match_score(normalized, keyword) + (keywords.size() - keyword_index) * 8
 				if score > best_score:
 					best_score = score
 					best_clip = str(clip_name)
@@ -184,7 +170,21 @@ func _resolve_clip_in_player(player: AnimationPlayer, state_name: String) -> Str
 
 
 func _clip_score(clip_name: String, state_name: String) -> int:
+	var keywords := _keywords_for_state(state_name)
+	var normalized := _normalize_clip_name(clip_name)
+	var best_score := 0
+	for keyword_index in range(keywords.size()):
+		var keyword: String = keywords[keyword_index]
+		if normalized.contains(keyword):
+			var score := _keyword_match_score(normalized, keyword) + (keywords.size() - keyword_index) * 8
+			best_score = maxi(best_score, score)
+	return best_score
+
+
+func _keywords_for_state(state_name: String) -> Array[String]:
 	var keywords: Array[String] = []
+	var model_root := get_parent() as Node
+	var model_key := str(model_root.get_meta("model_key", "")) if model_root != null else ""
 	match state_name:
 		"idle":
 			keywords = ["idle", "stand", "breath", "wait"]
@@ -193,20 +193,19 @@ func _clip_score(clip_name: String, state_name: String) -> int:
 		"run":
 			keywords = ["run", "sprint", "jog"]
 		"attack":
-			keywords = ["attack", "slash", "swing", "bite", "combat"]
+			if model_key == "wolf":
+				keywords = ["bite", "pounce", "lunge", "attack", "combat"]
+			elif model_key == "iron_beast":
+				keywords = ["smash", "charge", "stomp", "attack", "combat"]
+			else:
+				keywords = ["attack", "slash", "swing", "bite", "combat"]
 		"hit":
 			keywords = ["hit", "damage", "hurt", "react"]
 		"death":
 			keywords = ["death", "die", "dead"]
 		_:
 			keywords = [state_name]
-	var normalized := _normalize_clip_name(clip_name)
-	var best_score := 0
-	for keyword in keywords:
-		if normalized.contains(keyword):
-			best_score = maxi(best_score, _keyword_match_score(normalized, keyword))
-	return best_score
-
+	return keywords
 
 func _normalize_clip_name(clip_name: String) -> String:
 	return clip_name.to_lower().replace("_", "").replace("-", "").replace(" ", "").replace(".", "").replace(":", "")
