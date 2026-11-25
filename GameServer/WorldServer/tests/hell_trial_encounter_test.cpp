@@ -156,6 +156,14 @@ int main() {
     rescue = expired_rescue.activate("west", "character-b", 26.0);
     assert(rescue.accepted && rescue.expired && !rescue.completed);
     assert(rescue.rescued_count == 1 && rescue.first_lantern_id == "west");
+    HellTrialSoulRescue ticking_rescue(3);
+    ticking_rescue.activate("west", "character-a", 50.0);
+    assert(!ticking_rescue.update(64.9));
+    assert(ticking_rescue.update(65.0));
+    assert(ticking_rescue.rescued_count() == 0);
+    assert(ticking_rescue.first_lantern_id().empty());
+    assert(!ticking_rescue.update(66.0));
+
     HellTrialSoulRescue disabled_rescue(2);
     assert(!disabled_rescue.enabled());
     assert(!disabled_rescue.activate("west", "character-a", 1.0).accepted);
