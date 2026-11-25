@@ -35,6 +35,7 @@ var respawn_busy := false
 var progression_http: HTTPRequest
 var wallet_http: HTTPRequest
 var wallet_request_busy := false
+var wallet_refresh_pending := false
 var wallet_label: Label
 var wallet_refresh_timer: Timer
 var soul_essence_http: HTTPRequest
@@ -224,6 +225,7 @@ var spell_learning_busy := false
 var equipment_action_busy := false
 var inventory_visible := false
 var inventory_request_busy := false
+var inventory_refresh_pending := false
 
 var party_http: HTTPRequest
 var party_refresh_timer: Timer
@@ -4418,6 +4420,7 @@ func _refresh_inventory() -> void:
 			inventory_status.text = "请先登录后查看背包。"
 		return
 	if inventory_request_busy:
+		inventory_refresh_pending = true
 		return
 	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token])
 	var error := inventory_http.request(
@@ -4434,10 +4437,16 @@ func _on_inventory_request_completed(result: int, response_code: int, _headers: 
 	inventory_request_busy = false
 	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
 		inventory_status.text = "背包读取失败：" + body.get_string_from_utf8()
+		if inventory_refresh_pending:
+			inventory_refresh_pending = false
+			_refresh_inventory()
 		return
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
 	if not (parsed is Dictionary) or not (parsed.get("items", []) is Array):
 		inventory_status.text = "中心服返回了无效的背包数据。"
+		if inventory_refresh_pending:
+			inventory_refresh_pending = false
+			_refresh_inventory()
 		return
 	inventory_cache = parsed.get("items", [])
 	var capacity: Dictionary = parsed.get("capacity", {})
@@ -4446,6 +4455,9 @@ func _on_inventory_request_completed(result: int, response_code: int, _headers: 
 	var free_slots := int(capacity.get("free_slots", max(0, max_slots - used_slots)))
 	inventory_status.text = "背包格子：" + str(used_slots) + " / " + str(max_slots) + " · 空余 " + str(free_slots) + " · 物品种类 " + str(inventory_cache.size())
 	_render_inventory_items()
+	if inventory_refresh_pending:
+		inventory_refresh_pending = false
+		_refresh_inventory()
 
 func _on_inventory_filter_pressed(filter_type: String) -> void:
 	inventory_filter = filter_type
@@ -6284,7 +6296,10 @@ func _update_floating_combat_labels(delta: float) -> void:
 			floating_combat_lifetimes.erase(label_id)
 
 func _request_wallet() -> void:
-	if wallet_http == null or wallet_request_busy or HHSession.access_token.is_empty():
+	if wallet_http == null or HHSession.access_token.is_empty():
+		return
+	if wallet_request_busy:
+		wallet_refresh_pending = true
 		return
 	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token])
 	var error := wallet_http.request(HHSession.api_base + "/api/v1/economy/wallet", headers, HTTPClient.METHOD_GET)
@@ -6299,14 +6314,23 @@ func _on_wallet_request_completed(result: int, response_code: int, _headers: Pac
 	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
 		if is_instance_valid(wallet_label):
 			wallet_label.text = "钱袋  余额同步中……"
+		if wallet_refresh_pending:
+			wallet_refresh_pending = false
+			_request_wallet()
 		return
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
 	if not (parsed is Dictionary):
 		push_warning("[Wallet] 钱包响应格式异常")
+		if wallet_refresh_pending:
+			wallet_refresh_pending = false
+			_request_wallet()
 		return
 	var balances_variant: Variant = parsed.get("balances", [])
 	if not (balances_variant is Array):
 		push_warning("[Wallet] 钱包余额列表格式异常")
+		if wallet_refresh_pending:
+			wallet_refresh_pending = false
+			_request_wallet()
 		return
 	var ghost_cash := 0
 	var nether_stone := 0
@@ -6325,6 +6349,9 @@ func _on_wallet_request_completed(result: int, response_code: int, _headers: Pac
 				nether_stone = int(entry.get("available", 0))
 	if is_instance_valid(wallet_label):
 		wallet_label.text = "钱袋  冥币 %s  ·  冥石 %s" % [str(ghost_cash), str(nether_stone)]
+	if wallet_refresh_pending:
+		wallet_refresh_pending = false
+		_request_wallet()
 
 
 func _refresh_reward_status_later() -> void:
@@ -8455,9 +8482,24 @@ func _on_shop_request_completed(result: int, response_code: int, _headers: Packe
 		return
 	if response_code < 200 or response_code >= 300:
 		var message := raw.strip_edges()
+		match message:
+			"move closer to the assigned NPC before purchasing":
+				message = "请靠近对应摊主后再购买。"
+			"insufficient currency balance":
+				message = "冥币不足，暂时无法购买。"
+			"inventory is full":
+				message = "背包已满，请整理背包后再购买。"
+			"item stack limit exceeded":
+				message = "当前物品堆叠数量已达上限，请减少购买数量。"
+			"shop item is out of stock":
+				message = "该商品库存不足，请稍后再来。"
+			"shop or item is unavailable in the current world":
+				message = "该商铺或商品暂未开放，请稍后再来。"
+			"invalid shop purchase request":
+				message = "购买请求无效，请重新选择商品。"
 		if message.length() > 180:
 			message = message.substr(0, 180) + "……"
-		npc_status_label.text = "交易未完成（HTTP " + str(response_code) + "）：" + message
+		npc_status_label.text = "交易未完成：" + message
 		return
 	var parser := JSON.new()
 	if parser.parse(raw) != OK or not parser.data is Dictionary:
@@ -8520,7 +8562,7 @@ func _on_shop_request_completed(result: int, response_code: int, _headers: Packe
 			item_row.add_theme_constant_override("separation", 6)
 			npc_choice_container.add_child(item_row)
 			var item_label := Label.new()
-			item_label.text = "%s · %s%s · %d %s · %s" % [
+			item_label.text = "%s · %s %s · %d %s · %s" % [
 				str(item.get("name", "未知商品")),
 				quality_name,
 				str(category_names.get(str(item.get("category", "material")), "物品")),
@@ -8538,9 +8580,7 @@ func _on_shop_request_completed(result: int, response_code: int, _headers: Packe
 			for quantity in [5, 10, 20, 50, 99]:
 				if quantity <= int(item.get("max_stack", 99)) and quantity <= stock_available:
 					quantity_option.add_item(str(quantity) + "件", quantity)
-			if int(item.get("max_stack", 99)) < 5 or stock_available < 5:
-				# The default one-item option remains available when stock is positive.
-				pass
+			quantity_option.select(0)
 			quantity_option.disabled = stock_available <= 0
 			item_row.add_child(quantity_option)
 			var purchase_button := Button.new()
@@ -8555,7 +8595,7 @@ func _on_shop_request_completed(result: int, response_code: int, _headers: Packe
 	back_button.text = "返回摊主对话"
 	back_button.pressed.connect(_restore_vendor_dialogue)
 	npc_choice_container.add_child(back_button)
-	npc_status_label.text = "价格、扣款、背包容量与库存均由中心服事务结算；每次购买只提交一件。"
+	npc_status_label.text = "价格、扣款、背包容量与库存均由中心服事务结算；可选择购买数量，库存与堆叠上限由服务器复核。"
 
 
 func _restore_vendor_dialogue() -> void:
