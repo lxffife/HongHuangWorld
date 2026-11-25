@@ -1094,3 +1094,72 @@ static func create_fengdu_civic_plaza() -> Node3D:
 		marker.set_meta("placement_only", true)
 		root.add_child(marker)
 	return root
+
+
+static func create_fengdu_residential_interior() -> Node3D:
+	# Compact single-storey interior shell. Openings are left clear in both mesh and collision.
+	var root := Node3D.new()
+	root.name = "FengduResidentialInterior"
+	var stone := Color("#514b50")
+	var plaster := Color("#76665b")
+	var timber := Color("#3e302c")
+	var trim := Color("#a88a60")
+	# Interior footprint: 8m wide x 10m deep. Floor collision is independent of decor.
+	var floor_body := StaticBody3D.new()
+	floor_body.name = "InteriorWalkableFloor"
+	_part(floor_body, "InteriorFloorVisual", _box(Vector3(8.0, 0.20, 10.0)), Vector3(0.0, -0.10, 0.0), stone)
+	var floor_hit := CollisionShape3D.new()
+	var floor_shape := BoxShape3D.new()
+	floor_shape.size = Vector3(8.0, 0.20, 10.0)
+	floor_hit.shape = floor_shape
+	floor_hit.position = Vector3(0.0, -0.10, 0.0)
+	floor_body.add_child(floor_hit)
+	root.add_child(floor_body)
+	# Back and side walls are continuous; front wall is split around a 1.8m doorway.
+	var wall_specs := [
+		{"name":"BackWall", "size":Vector3(8.0, 2.8, 0.28), "at":Vector3(0.0, 1.4, 4.86)},
+		{"name":"WestWall", "size":Vector3(0.28, 2.8, 10.0), "at":Vector3(-3.86, 1.4, 0.0)},
+		{"name":"EastWall", "size":Vector3(0.28, 2.8, 10.0), "at":Vector3(3.86, 1.4, 0.0)},
+		{"name":"FrontWallLeft", "size":Vector3(3.1, 2.8, 0.28), "at":Vector3(-2.45, 1.4, -4.86)},
+		{"name":"FrontWallRight", "size":Vector3(3.1, 2.8, 0.28), "at":Vector3(2.45, 1.4, -4.86)},
+		{"name":"DoorLintel", "size":Vector3(1.8, 0.45, 0.28), "at":Vector3(0.0, 2.575, -4.86)}
+	]
+	for spec in wall_specs:
+		var body := StaticBody3D.new()
+		body.name = str(spec["name"])
+		_part(body, "WallVisual", _box(spec["size"]), spec["at"], plaster)
+		var hit := CollisionShape3D.new()
+		var shape := BoxShape3D.new()
+		shape.size = spec["size"]
+		hit.shape = shape
+		hit.position = spec["at"]
+		body.add_child(hit)
+		root.add_child(body)
+	# Structural timber frame and exposed ceiling beams.
+	for x in [-3.55, 3.55]:
+		for z in [-4.55, 4.55]:
+			_part(root, "FramePost_%s_%s" % [x, z], _box(Vector3(0.22, 2.65, 0.22)), Vector3(x, 1.32, z), timber)
+	for z in [-3.0, 0.0, 3.0]:
+		_part(root, "CeilingBeam" + str(z), _box(Vector3(7.5, 0.16, 0.22)), Vector3(0.0, 2.72, z), timber)
+	# Basic furnishings leave a 1.8m-wide central circulation lane.
+	_part(root, "LowTable", _box(Vector3(1.5, 0.16, 0.85)), Vector3(-1.65, 0.55, 0.25), timber)
+	for x in [-2.15, -1.15]:
+		for z in [-0.05, 0.55]:
+			_part(root, "TableLeg_%s_%s" % [x, z], _box(Vector3(0.10, 0.52, 0.10)), Vector3(x, 0.26, z), timber)
+	_part(root, "SleepingPlatform", _box(Vector3(2.2, 0.35, 1.35)), Vector3(2.25, 0.22, 2.55), timber)
+	_part(root, "SleepingMat", _box(Vector3(2.0, 0.12, 1.18)), Vector3(2.25, 0.45, 2.55), Color("#78645e"))
+	_part(root, "StorageChest", _box(Vector3(1.1, 0.82, 0.72)), Vector3(-2.65, 0.41, 3.55), timber)
+	# Interaction anchors are data only; gameplay interaction remains server-authoritative.
+	var anchors := [
+		{"name":"ResidentTalkPoint", "at":Vector3(0.0, 0.0, -2.6), "kind":"resident_dialogue"},
+		{"name":"StorageInspectPoint", "at":Vector3(-1.65, 0.0, 2.45), "kind":"storage_inspect"},
+		{"name":"RestPoint", "at":Vector3(1.15, 0.0, 1.1), "kind":"rest"}
+	]
+	for spec in anchors:
+		var marker := Marker3D.new()
+		marker.name = spec["name"]
+		marker.position = spec["at"]
+		marker.set_meta("interaction_kind", spec["kind"])
+		marker.set_meta("placement_only", true)
+		root.add_child(marker)
+	return root
