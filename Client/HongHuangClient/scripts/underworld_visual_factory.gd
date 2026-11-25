@@ -1363,7 +1363,12 @@ static func create_yinsi_courtroom_interior() -> Node3D:
 	steps.name = "DaisSteps"
 	_part(steps, "StepLower", _box(Vector3(5.0, 0.22, 0.75)), Vector3(0.0, 0.11, 4.55), stone)
 	_part(steps, "StepUpper", _box(Vector3(4.2, 0.22, 0.62)), Vector3(0.0, 0.33, 5.15), stone)
-	for spec in [{"size":Vector3(5.0,0.22,0.75),"at":Vector3(0.0,0.11,4.55)}, {"size":Vector3(4.2,0.22,0.62),"at":Vector3(0.0,0.33,5.15)}]:
+	for spec in [
+		{"size":Vector3(5.0,0.28,0.55),"at":Vector3(0.0,0.14,3.65)},
+		{"size":Vector3(4.7,0.28,0.55),"at":Vector3(0.0,0.42,4.15)},
+		{"size":Vector3(4.4,0.28,0.55),"at":Vector3(0.0,0.70,4.62)}
+	]:
+		_part(steps, "StepVisual_" + str(spec["at"].z), _box(spec["size"]), spec["at"], stone)
 		var step_hit := CollisionShape3D.new()
 		var step_shape := BoxShape3D.new()
 		step_shape.size = spec["size"]
