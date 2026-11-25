@@ -689,19 +689,45 @@ static func _create_procedural_npc(npc_type: String, npc_name: String) -> Node3D
 		_part(root, "ForgetfulnessBowl", bowl, Vector3(0.43, 1.02, -0.10), Color("#83c9bd"), Vector3.ZERO, 0.65, 0.22)
 		_part(root, "BowlMist", _sphere(0.075), Vector3(0.43, 1.16, -0.10), Color("#b6fff0"), Vector3.ZERO, 1.5, 0.0, 0.42)
 	elif npc_type == "blacksmith":
-		_part(root, "SmithApron", _box(Vector3(0.56, 0.72, 0.12)), Vector3(0.0, 0.78, -0.29), Color("#8a5b37"), Vector3.ZERO, 0.0, 0.15)
-		_part(root, "HammerHandle", _capsule(0.045, 0.72), Vector3(0.62, 1.12, -0.04), Color("#795338"), Vector3(0.0, 0.0, -0.65))
-		_part(root, "HammerHead", _box(Vector3(0.36, 0.16, 0.18)), Vector3(0.82, 1.42, -0.04), Color("#9ca5aa"), Vector3(0.0, 0.0, -0.65), 0.0, 0.55)
+		# Heavy leather apron, tool loops and a broad hammer make the smith readable at distance.
+		_part(root, "SmithApron", _box(Vector3(0.62, 0.78, 0.14)), Vector3(0.0, 0.78, -0.29), Color("#8a5b37"), Vector3.ZERO, 0.0, 0.15)
+		_part(root, "ApronBib", _box(Vector3(0.46, 0.30, 0.08)), Vector3(0.0, 1.22, -0.34), Color("#a87343"), Vector3.ZERO, 0.0, 0.12)
+		for tool_x in [-0.19, 0.0, 0.19]:
+			_part(root, "ToolLoop" + str(tool_x), _box(Vector3(0.07, 0.16, 0.06)), Vector3(tool_x, 0.55, -0.38), Color("#d4a66c"), Vector3.ZERO, 0.0, 0.25)
+		_part(root, "HammerHandle", _capsule(0.045, 0.82), Vector3(0.62, 1.12, -0.04), Color("#795338"), Vector3(0.0, 0.0, -0.65))
+		_part(root, "HammerHead", _box(Vector3(0.42, 0.20, 0.24)), Vector3(0.82, 1.47, -0.04), Color("#9ca5aa"), Vector3(0.0, 0.0, -0.65), 0.0, 0.55)
+		_part(root, "SmithWristGuard", _box(Vector3(0.20, 0.18, 0.22)), Vector3(0.48, 1.05, -0.08), Color("#72533d"), Vector3.ZERO, 0.0, 0.22)
 	elif npc_type == "judge":
+		# Tall winged official hat, court tablet and seal-like chest emblem.
 		_part(root, "JudgeCrownBase", _box(Vector3(0.62, 0.16, 0.24)), Vector3(0.0, 2.14, 0.0), trim, Vector3.ZERO, 0.25, 0.3)
-		_part(root, "CrownFinial", _sphere(0.09), Vector3(0.0, 2.29, 0.0), Color("#e9d4ff"), Vector3.ZERO, 0.55)
+		_part(root, "JudgeHat", _box(Vector3(0.54, 0.30, 0.42)), Vector3(0.0, 2.34, 0.02), Color("#292436"), Vector3.ZERO, 0.0, 0.18)
+		for side in [-1.0, 1.0]:
+			_part(root, "JudgeHatWing" + str(side), _box(Vector3(0.56, 0.10, 0.16)), Vector3(side * 0.48, 2.24, 0.0), Color("#292436"), Vector3(0.0, 0.0, side * -0.04), 0.0, 0.12)
+		_part(root, "CrownFinial", _sphere(0.09), Vector3(0.0, 2.53, 0.0), Color("#e9d4ff"), Vector3.ZERO, 0.55)
+		_part(root, "CourtTablet", _box(Vector3(0.24, 0.62, 0.09)), Vector3(0.38, 1.08, -0.30), Color("#bda77e"), Vector3(0.0, 0.0, -0.12), 0.0, 0.18)
+		_part(root, "TabletSeal", _sphere(0.075), Vector3(0.38, 1.12, -0.36), Color("#9d4d52"), Vector3.ZERO, 0.2, 0.1)
 	elif npc_type == "trial_master" or npc_type == "guard":
 		_part(root, "ShoulderLeft", _box(Vector3(0.42, 0.25, 0.48)), Vector3(-0.43, 1.48, 0.0), trim, Vector3(0.0, 0.0, 0.10), 0.0, 0.35)
 		_part(root, "ShoulderRight", _box(Vector3(0.42, 0.25, 0.48)), Vector3(0.43, 1.48, 0.0), trim, Vector3(0.0, 0.0, -0.10), 0.0, 0.35)
 		_part(root, "ChestEmblem", _box(Vector3(0.20, 0.30, 0.08)), Vector3(0.0, 1.30, -0.25), trim, Vector3.ZERO, 0.25)
 		if npc_type == "guard":
+			# Helmet crest, face guard and spear establish a military silhouette.
+			_part(root, "GuardHelmet", _sphere(0.30, 0.34), Vector3(0.0, 2.08, 0.0), Color("#394653"), Vector3.ZERO, 0.0, 0.42)
+			_part(root, "HelmetCrest", _box(Vector3(0.10, 0.36, 0.12)), Vector3(0.0, 2.39, 0.02), Color("#b36b55"), Vector3.ZERO, 0.2, 0.22)
+			_part(root, "FaceGuard", _box(Vector3(0.40, 0.13, 0.12)), Vector3(0.0, 1.76, -0.22), Color("#71818b"), Vector3.ZERO, 0.0, 0.55)
 			_part(root, "SpearShaft", _capsule(0.035, 1.95), Vector3(0.82, 1.05, 0.10), Color("#8b7658"))
 			_part(root, "SpearHead", _capsule(0.07, 0.38), Vector3(0.82, 2.18, 0.10), trim, Vector3.ZERO, 0.2, 0.4)
+		else:
+			# Trial guide carries a bright jade token rather than a judge's tablet.
+			_part(root, "TrialShoulderMantle", _box(Vector3(0.92, 0.12, 0.54)), Vector3(0.0, 1.58, 0.02), Color("#9b5147"), Vector3.ZERO, 0.0, 0.12)
+			_part(root, "TrialTokenCord", _capsule(0.025, 0.48), Vector3(0.25, 1.12, -0.31), Color("#d6a16c"))
+			_part(root, "TrialToken", _box(Vector3(0.26, 0.34, 0.08)), Vector3(0.25, 0.91, -0.34), Color("#8cc8b5"), Vector3.ZERO, 0.65, 0.28)
+	else:
+		# Civilian/vendor fallback: hood scarf and a small shoulder basket, unlike officials.
+		_part(root, "CivilianHood", _sphere(0.28, 0.20), Vector3(0.0, 2.04, 0.04), Color("#51463b"))
+		_part(root, "CivilianScarf", _box(Vector3(0.48, 0.13, 0.34)), Vector3(0.0, 1.55, -0.02), Color("#c49a62"))
+		_part(root, "ShoulderBasket", _box(Vector3(0.42, 0.52, 0.38)), Vector3(-0.48, 1.12, 0.18), Color("#8b6a43"), Vector3.ZERO, 0.0, 0.08)
+		_part(root, "BasketRim", _box(Vector3(0.48, 0.08, 0.42)), Vector3(-0.48, 1.40, 0.18), Color("#c39a62"), Vector3.ZERO, 0.0, 0.12)
 	return root
 
 
