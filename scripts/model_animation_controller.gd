@@ -187,16 +187,16 @@ func _keywords_for_state(state_name: String) -> Array[String]:
 	var model_key := str(model_root.get_meta("model_key", "")) if model_root != null else ""
 	match state_name:
 		"idle":
-			keywords = ["idle", "stand", "breath", "wait"]
+			keywords = ["idle", "stand", "breath", "wait", "rest"]
 		"walk":
-			keywords = ["walk", "walking", "locomotion"]
+			keywords = ["walk", "walking", "locomotion", "trot"]
 		"run":
-			keywords = ["run", "sprint", "jog"]
+			keywords = ["run", "sprint", "jog", "gallop", "canter"]
 		"attack":
 			if model_key == "wolf":
-				keywords = ["bite", "pounce", "lunge", "attack", "combat"]
+				keywords = ["bite", "pounce", "lunge", "maul", "attack", "combat"]
 			elif model_key == "iron_beast":
-				keywords = ["smash", "charge", "stomp", "attack", "combat"]
+				keywords = ["smash", "charge", "stomp", "crush", "attack", "combat"]
 			else:
 				keywords = ["attack", "slash", "swing", "bite", "combat"]
 		"hit":
