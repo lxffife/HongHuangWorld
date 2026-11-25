@@ -4,7 +4,7 @@ extends SceneTree
 # godot --headless --path . --script res://tools/validate_model_assets.gd
 # Add -- --require-all to fail when any optional model file is missing.
 # Add -- --strict-animations to fail when required clips are absent.
-# Add -- --strict-rig to fail when a character has no usable Skeleton3D/AnimationPlayer or fewer than 15 bones.
+# Add -- --strict-rig to fail when a character has no usable rig; wolves also need named quadruped anatomy.
 
 const EquipmentVisualFactory = preload("res://scripts/equipment_visual_factory.gd")
 
@@ -62,7 +62,7 @@ func _run_validation() -> void:
 	var strict_rig := args.has("--strict-rig")
 	var report: Dictionary = {
 		"project": "HongHuangClient",
-		"validator_version": 3,
+		"validator_version": 4,
 		"require_all": require_all,
 		"strict_animations": strict_animations,
 		"strict_rig": strict_rig,
@@ -80,10 +80,11 @@ func _run_validation() -> void:
 			"mesh_count": 0,
 			"skeleton_count": 0,
 			"bone_count": 0,
+			"rig_anatomy": {},
 			"equipment_bone_bindings": {},
 			"equipment_bindings_passed": model_key != "player_humanoid",
 			"animation_player_count": 0,
-			"rig_validation": {"required": model_key in RIG_REQUIRED_MODELS, "skeleton_required": model_key in RIG_REQUIRED_MODELS, "animation_player_required": model_key in RIG_REQUIRED_MODELS, "minimum_bones": 15, "passed": false},
+			"rig_validation": {"required": model_key in RIG_REQUIRED_MODELS, "skeleton_required": model_key in RIG_REQUIRED_MODELS, "animation_player_required": model_key in RIG_REQUIRED_MODELS, "minimum_bones": 12 if model_key == "wolf" else 15, "passed": false, "profile": "quadruped" if model_key == "wolf" else "humanoid_or_creature", "anatomy": {}},
 			"animations": [],
 			"animation_clips": [],
 			"required_animation_categories": REQUIRED_ANIMATIONS.get(model_key, []),
@@ -123,6 +124,8 @@ func _run_validation() -> void:
 			continue
 
 		_inspect_node(instance, item)
+		if model_key == "wolf":
+			item["rig_anatomy"] = _inspect_quadruped_anatomy(instance)
 		if model_key == "player_humanoid":
 			_validate_player_equipment_bindings(instance as Node3D, item)
 		_classify_animation_coverage(item)
@@ -131,7 +134,13 @@ func _run_validation() -> void:
 		var has_usable_bone_count := int(item["bone_count"]) >= int(item["rig_validation"]["minimum_bones"])
 		var rig_required := bool(item["rig_validation"]["required"])
 		item["rig_validation"]["bone_count"] = int(item["bone_count"])
-		item["rig_validation"]["passed"] = not rig_required or (has_skeleton and has_animation_player and has_usable_bone_count)
+		var anatomy_passed := true
+		if model_key == "wolf":
+			anatomy_passed = bool(item["rig_anatomy"].get("passed", false))
+			item["rig_validation"]["anatomy"] = item["rig_anatomy"]
+		item["rig_validation"]["passed"] = not rig_required or (has_skeleton and has_animation_player and has_usable_bone_count and anatomy_passed)
+		if model_key == "wolf" and not anatomy_passed:
+			item["warnings"].append("Quadruped rig anatomy is incomplete; review root/spine/head and front/hind limb bone names")
 		if rig_required and not has_skeleton:
 			item["warnings"].append("Rigged character asset has no Skeleton3D")
 		if rig_required and not has_animation_player:
@@ -267,3 +276,64 @@ func _apply_animation_requirements(model_key: String, item: Dictionary) -> Array
 	item["missing_required_animation_categories"] = missing
 	item["animation_requirements_passed"] = missing.is_empty()
 	return missing
+
+
+func _inspect_quadruped_anatomy(root: Node) -> Dictionary:
+	# Bone names vary between Blender, Mixamo and asset-pack exports. Normalize
+	# punctuation/case first, then use broad semantic aliases rather than fixed indices.
+	var names: Array[String] = []
+	_collect_bone_names(root, names)
+	var normalized_names: Array[String] = []
+	for bone_name in names:
+		normalized_names.append(bone_name.to_lower().replace("_", "").replace("-", "").replace(" ", "").replace(":", ""))
+	var has_root := _names_contain_any(normalized_names, ["root", "armature", "hips", "pelvis"])
+	var has_spine := _names_contain_any(normalized_names, ["spine", "back", "torso", "chest"])
+	var has_head := _names_contain_any(normalized_names, ["head", "skull"])
+	var front_count := _count_limb_bones(normalized_names, ["front", "fore"], ["leg", "limb", "paw", "foot", "shoulder"])
+	var hind_count := _count_limb_bones(normalized_names, ["hind", "back", "rear"], ["leg", "limb", "paw", "foot", "thigh", "hip"])
+	var passed := has_root and has_spine and has_head and front_count >= 2 and hind_count >= 2
+	return {
+		"bone_names": names,
+		"bone_count": names.size(),
+		"has_root_or_pelvis": has_root,
+		"has_spine_or_back": has_spine,
+		"has_head": has_head,
+		"front_limb_bone_matches": front_count,
+		"hind_limb_bone_matches": hind_count,
+		"passed": passed
+	}
+
+
+func _collect_bone_names(node: Node, output: Array[String]) -> void:
+	if node is Skeleton3D:
+		var skeleton := node as Skeleton3D
+		for bone_index in range(skeleton.get_bone_count()):
+			output.append(skeleton.get_bone_name(bone_index))
+	for child in node.get_children():
+		_collect_bone_names(child, output)
+
+
+func _names_contain_any(names: Array[String], tokens: Array[String]) -> bool:
+	for bone_name in names:
+		for token in tokens:
+			if bone_name.contains(token):
+				return true
+	return false
+
+
+func _count_limb_bones(names: Array[String], side_tokens: Array[String], limb_tokens: Array[String]) -> int:
+	var matches := 0
+	for bone_name in names:
+		var has_side := false
+		var has_limb := false
+		for token in side_tokens:
+			if bone_name.contains(token):
+				has_side = true
+				break
+		for token in limb_tokens:
+			if bone_name.contains(token):
+				has_limb = true
+				break
+		if has_side and has_limb:
+			matches += 1
+	return matches
