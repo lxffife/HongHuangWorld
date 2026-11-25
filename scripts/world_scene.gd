@@ -8455,9 +8455,24 @@ func _on_shop_request_completed(result: int, response_code: int, _headers: Packe
 		return
 	if response_code < 200 or response_code >= 300:
 		var message := raw.strip_edges()
+		match message:
+			"move closer to the assigned NPC before purchasing":
+				message = "请靠近对应摊主后再购买。"
+			"insufficient currency balance":
+				message = "冥币不足，暂时无法购买。"
+			"inventory is full":
+				message = "背包已满，请整理背包后再购买。"
+			"item stack limit exceeded":
+				message = "当前物品堆叠数量已达上限，请减少购买数量。"
+			"shop item is out of stock":
+				message = "该商品库存不足，请稍后再来。"
+			"shop or item is unavailable in the current world":
+				message = "该商铺或商品暂未开放，请稍后再来。"
+			"invalid shop purchase request":
+				message = "购买请求无效，请重新选择商品。"
 		if message.length() > 180:
 			message = message.substr(0, 180) + "……"
-		npc_status_label.text = "交易未完成（HTTP " + str(response_code) + "）：" + message
+		npc_status_label.text = "交易未完成：" + message
 		return
 	var parser := JSON.new()
 	if parser.parse(raw) != OK or not parser.data is Dictionary:
@@ -8538,9 +8553,7 @@ func _on_shop_request_completed(result: int, response_code: int, _headers: Packe
 			for quantity in [5, 10, 20, 50, 99]:
 				if quantity <= int(item.get("max_stack", 99)) and quantity <= stock_available:
 					quantity_option.add_item(str(quantity) + "件", quantity)
-			if int(item.get("max_stack", 99)) < 5 or stock_available < 5:
-				# The default one-item option remains available when stock is positive.
-				pass
+			quantity_option.select(0)
 			quantity_option.disabled = stock_available <= 0
 			item_row.add_child(quantity_option)
 			var purchase_button := Button.new()
