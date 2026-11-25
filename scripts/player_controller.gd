@@ -944,3 +944,17 @@ func _get_or_create_equipment_socket(slot: String) -> Node3D:
 	if not is_instance_valid(player_humanoid):
 		return null
 	return EquipmentVisualFactory.get_or_create_socket(player_humanoid, slot)
+
+
+func get_equipment_socket_diagnostics() -> Dictionary:
+	var report := {"valid": is_instance_valid(player_humanoid), "slots": {}}
+	if not is_instance_valid(player_humanoid):
+		return report
+	for slot in ["weapon", "offhand", "head", "chest", "legs", "boots", "accessory", "back"]:
+		var socket := _get_or_create_equipment_socket(slot)
+		if not is_instance_valid(socket):
+			report["slots"][slot] = {"valid": false, "reason": "socket_unavailable"}
+			continue
+		report["slots"][slot] = EquipmentVisualFactory.inspect_socket_binding(player_humanoid, slot)
+	player_humanoid.set_meta("equipment_socket_diagnostics", report["slots"])
+	return report
