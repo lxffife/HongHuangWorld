@@ -1186,6 +1186,7 @@ struct EnetServer::Impl {
     honghuang::simulation::HellTrialEncounter hell_trial_encounter;
     honghuang::simulation::HellTrialInvestigation hell_trial_investigation;
     honghuang::simulation::HellTrialShearHazard hell_trial_shear_hazard;
+    honghuang::simulation::HellTrialSoulRescue hell_trial_soul_rescue;
     honghuang::simulation::HellTrialWaveDirector hell_trial_waves;
     honghuang::simulation::HellTrialBossPhaseController hell_trial_boss_phase;
     ENetHost* host{};
@@ -1282,7 +1283,7 @@ struct EnetServer::Impl {
     Clock::time_point last_chat_outbox_metrics_at{};
 
     explicit Impl(ServerConfig value) : config(std::move(value)), hell_trial_encounter(config.hell_floor),
-        hell_trial_investigation(config.hell_floor), hell_trial_shear_hazard(config.hell_floor), hell_trial_waves(config.hell_floor) {
+        hell_trial_investigation(config.hell_floor), hell_trial_shear_hazard(config.hell_floor), hell_trial_soul_rescue(config.hell_floor), hell_trial_waves(config.hell_floor) {
         const auto add_monster = [this](std::string runtime_id, std::string definition_id,
                                         std::string name, int level, float health,
                                         float attack, float defense, float speed,
@@ -1445,6 +1446,16 @@ struct EnetServer::Impl {
                 {"danger_min_x", -9.0}, {"danger_max_x", 9.0},
                 {"danger_min_z", -9.0}, {"danger_max_z", 5.0},
                 {"safe_lane_centers_x", Json::array({-19.5, 19.5})}};
+        }
+        if (hell_trial_soul_rescue.enabled()) {
+            const double now_seconds = std::chrono::duration<double>(Clock::now().time_since_epoch()).count();
+            snapshot["soul_rescue"] = Json{{"enabled", true},
+                {"completed", hell_trial_soul_rescue.completed()},
+                {"rescued_count", hell_trial_soul_rescue.rescued_count()},
+                {"required", 2},
+                {"first_lantern_id", std::string(hell_trial_soul_rescue.first_lantern_id())},
+                {"remaining_seconds", hell_trial_soul_rescue.remaining_seconds(now_seconds)},
+                {"cooperation_required", true}};
         }
         if (hell_trial_investigation.enabled()) {
             Json clues = Json::array();
@@ -4424,6 +4435,54 @@ struct EnetServer::Impl {
         const auto player_it = players.find(peer);
         if (player_it == players.end()) return;
         auto& player = player_it->second;
+        const auto action = command.value("action", std::string("investigate_evidence"));
+        if (action == "rescue_soul_lantern") {
+            const auto respond_rescue = [&](bool accepted, const std::string& message) {
+                Json event{{"action", "hell_trial_soul_rescue"}, {"accepted", accepted},
+                    {"floor", hell_trial_encounter.floor()}, {"message", message},
+                    {"hell_trial", hell_trial_runtime_snapshot()}};
+                if (accepted) {
+                    for (const auto& [recipient_peer, recipient] : players) {
+                        (void)recipient;
+                        send_json(recipient_peer, honghuang::protocol::MessageType::CombatEvent, event);
+                    }
+                } else {
+                    send_json(peer, honghuang::protocol::MessageType::CombatEvent, event);
+                }
+            };
+            if (!hell_trial_soul_rescue.enabled() || config.world_id != "underworld_fengdu") {
+                respond_rescue(false, "只有第三层铁树地狱开放魂灯救援。");
+                return;
+            }
+            if (player.health <= 0) {
+                respond_rescue(false, "倒地状态无法点亮魂灯。");
+                return;
+            }
+            const auto now = Clock::now();
+            if (player.last_hell_trial_action_at.time_since_epoch().count() != 0 &&
+                now - player.last_hell_trial_action_at < std::chrono::milliseconds(350)) {
+                respond_rescue(false, "救援操作过快，请稍候。");
+                return;
+            }
+            player.last_hell_trial_action_at = now;
+            const auto lantern_id = command.value("lantern_id", std::string{});
+            if (lantern_id != "west" && lantern_id != "east") {
+                respond_rescue(false, "未识别这盏魂灯。");
+                return;
+            }
+            const float lantern_x = lantern_id == "west" ? -12.0F : 12.0F;
+            constexpr float lantern_z = -18.0F;
+            const double dx = static_cast<double>(player.x) - lantern_x;
+            const double dz = static_cast<double>(player.z) - lantern_z;
+            if (dx * dx + dz * dz > 25.0) {
+                respond_rescue(false, "请靠近对应的受困魂灯（5 米内）再进行救援。");
+                return;
+            }
+            const double now_seconds = std::chrono::duration<double>(now.time_since_epoch()).count();
+            const auto rescue = hell_trial_soul_rescue.activate(lantern_id, player.character_id, now_seconds);
+            respond_rescue(rescue.accepted, rescue.message);
+            return;
+        }
         const auto respond = [&](bool accepted, const std::string& message,
                                  const std::string& evidence_id = std::string{}) {
             Json event{{"action", "hell_trial_investigation"}, {"accepted", accepted},
