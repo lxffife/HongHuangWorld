@@ -92,10 +92,10 @@ func _build_stage() -> void:
 
 	var camera := Camera3D.new()
 	camera.name = "PreviewCamera"
-	camera.position = Vector3(0.0, 5.2, 15.5)
-	camera.fov = 48.0
+	camera.position = Vector3(0.0, 9.0, 24.0)
+	camera.fov = 58.0
 	add_child(camera)
-	camera.look_at(Vector3(0.0, 1.6, -2.0), Vector3.UP)
+	camera.look_at(Vector3(0.0, 2.4, -10.0), Vector3.UP)
 	camera.current = true
 
 
@@ -127,6 +127,11 @@ func _build_gallery() -> void:
 	pillar.position = Vector3(-7.0, 0.0, 1.0)
 	add_child(pillar)
 	_add_label("镇界石柱", Vector3(-7.0, 5.7, 1.0), 0.20)
+
+	var city_block := VisualFactory.create_fengdu_city_block()
+	city_block.position = Vector3(0.0, 0.0, -24.0)
+	add_child(city_block)
+	_add_label("酆都街区模块 · 城墙 / 角楼 / 阴司 / 鬼市", Vector3(0.0, 7.0, -24.0), 0.22)
 
 
 func _add_model(label_text: String, model: Node3D, at: Vector3, yaw: float, label_height: float) -> void:
@@ -168,8 +173,13 @@ func _play_selected_action(action_name: String) -> void:
 	var model := _preview_models[_selected_model_index]
 	var controller := model.get_node_or_null("ModelAnimationController")
 	if controller != null and controller.has_method("play_action"):
-		if bool(controller.call("play_action", action_name)):
-			_update_status("%s：播放 %s" % [_model_label(_selected_model_index), action_name])
+		var played := false
+		if action_name in ["idle", "walk", "run"] and controller.has_method("play_preview_state"):
+			played = bool(controller.call("play_preview_state", action_name))
+		else:
+			played = bool(controller.call("play_action", action_name))
+		if played:
+			_update_status("%s：循环播放 %s" % [_model_label(_selected_model_index), action_name] if action_name in ["idle", "walk", "run"] else "%s：播放 %s" % [_model_label(_selected_model_index), action_name])
 		else:
 			_update_status("%s：没有匹配的 %s 动画" % [_model_label(_selected_model_index), action_name])
 		get_viewport().set_input_as_handled()
