@@ -4,6 +4,7 @@ extends SceneTree
 # godot --headless --path . --script res://tools/validate_model_assets.gd
 # Add -- --require-all to fail when any optional model file is missing.
 # Add -- --strict-animations to fail when required clips are absent.
+# Add -- --strict-rig to fail when a character has no Skeleton3D or AnimationPlayer.
 
 const MODEL_FILES := {
 	"player_humanoid": "res://assets/models/player_humanoid.glb",
@@ -51,11 +52,13 @@ func _run_validation() -> void:
 	var args := OS.get_cmdline_user_args()
 	var require_all := args.has("--require-all")
 	var strict_animations := args.has("--strict-animations")
+	var strict_rig := args.has("--strict-rig")
 	var report: Dictionary = {
 		"project": "HongHuangClient",
 		"validator_version": 2,
 		"require_all": require_all,
 		"strict_animations": strict_animations,
+		"strict_rig": strict_rig,
 		"models": [],
 		"summary": {"valid": 0, "missing": 0, "invalid": 0, "warnings": 0}
 	}
@@ -70,6 +73,7 @@ func _run_validation() -> void:
 			"mesh_count": 0,
 			"skeleton_count": 0,
 			"animation_player_count": 0,
+			"rig_validation": {"skeleton_required": true, "animation_player_required": true, "passed": false},
 			"animations": [],
 			"animation_clips": [],
 			"required_animation_categories": REQUIRED_ANIMATIONS.get(model_key, []),
@@ -110,6 +114,15 @@ func _run_validation() -> void:
 
 		_inspect_node(instance, item)
 		_classify_animation_coverage(item)
+		var has_skeleton := int(item["skeleton_count"]) > 0
+		var has_animation_player := int(item["animation_player_count"]) > 0
+		item["rig_validation"]["passed"] = has_skeleton and has_animation_player
+		if not has_skeleton:
+			item["warnings"].append("Character asset has no Skeleton3D; verify whether a static mesh is intentional")
+		if not has_animation_player:
+			item["warnings"].append("Character asset has no AnimationPlayer; imported animation playback is unavailable")
+		if strict_rig and not bool(item["rig_validation"]["passed"]):
+			exit_code = 1
 		var missing_animations := _apply_animation_requirements(model_key, item)
 		if not missing_animations.is_empty():
 			for category in missing_animations:
@@ -126,11 +139,9 @@ func _run_validation() -> void:
 		else:
 			item["status"] = "valid"
 			report["summary"]["valid"] += 1
-			if int(item["skeleton_count"]) == 0:
-				item["warnings"].append("No Skeleton3D found; this may be intentional for a static or spirit model")
+			if not has_skeleton:
 				report["summary"]["warnings"] += 1
-			if int(item["animation_player_count"]) == 0:
-				item["warnings"].append("No AnimationPlayer found; imported animation playback is unavailable")
+			if not has_animation_player:
 				report["summary"]["warnings"] += 1
 
 		instance.free()
