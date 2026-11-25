@@ -133,6 +133,7 @@ struct PlayerState {
     std::optional<PendingSpellCast> pending_spell;
     Clock::time_point last_pickup_at{};
     Clock::time_point last_hell_trial_action_at{};
+    int last_hell_trial_hazard_cycle{};
     Clock::time_point last_chat_at{};
     Clock::time_point last_combat_refresh_at{};
     bool death_snapshot_queued{false};
@@ -1184,6 +1185,7 @@ struct EnetServer::Impl {
     ServerConfig config;
     honghuang::simulation::HellTrialEncounter hell_trial_encounter;
     honghuang::simulation::HellTrialInvestigation hell_trial_investigation;
+    honghuang::simulation::HellTrialShearHazard hell_trial_shear_hazard;
     honghuang::simulation::HellTrialWaveDirector hell_trial_waves;
     honghuang::simulation::HellTrialBossPhaseController hell_trial_boss_phase;
     ENetHost* host{};
@@ -1280,7 +1282,7 @@ struct EnetServer::Impl {
     Clock::time_point last_chat_outbox_metrics_at{};
 
     explicit Impl(ServerConfig value) : config(std::move(value)), hell_trial_encounter(config.hell_floor),
-        hell_trial_investigation(config.hell_floor), hell_trial_waves(config.hell_floor) {
+        hell_trial_investigation(config.hell_floor), hell_trial_shear_hazard(config.hell_floor), hell_trial_waves(config.hell_floor) {
         const auto add_monster = [this](std::string runtime_id, std::string definition_id,
                                         std::string name, int level, float health,
                                         float attack, float defense, float speed,
@@ -5384,6 +5386,55 @@ struct EnetServer::Impl {
         const auto elapsed = now - last_snapshot;
         if (elapsed < kSnapshotInterval) return;
         const float delta = std::clamp(std::chrono::duration<float>(elapsed).count(), 0.0F, 0.1F);
+        if (hell_trial_shear_hazard.enabled()) {
+            const auto transition = hell_trial_shear_hazard.update(static_cast<double>(delta));
+            if (transition.changed) {
+                const char* phase_name =
+                    transition.phase == honghuang::simulation::HellTrialHazardPhase::Warning ? "warning" :
+                    (transition.phase == honghuang::simulation::HellTrialHazardPhase::Active ? "active" : "recovery");
+                const char* phase_label =
+                    transition.phase == honghuang::simulation::HellTrialHazardPhase::Warning ? "剪刃蓄势：立刻撤离中央刑道，转入两侧安全廊" :
+                    (transition.phase == honghuang::simulation::HellTrialHazardPhase::Active ? "剪刃合拢：中央刑道进入伤害窗口" : "剪刃回收：可以穿越中央刑道");
+                const Json hazard_event{{"action", "hell_trial_hazard"},
+                    {"floor", 2}, {"hazard", "severed_fate_shears"},
+                    {"phase", phase_name}, {"phase_label", phase_label},
+                    {"cycle", transition.cycle},
+                    {"remaining_seconds", transition.phase_remaining_seconds},
+                    {"danger_min_x", -9.0}, {"danger_max_x", 9.0},
+                    {"danger_min_z", -9.0}, {"danger_max_z", 5.0},
+                    {"safe_lanes", Json::array({Json{{"min_x", -27.0}, {"max_x", -12.0}},
+                                                Json{{"min_x", 12.0}, {"max_x", 27.0}}})}};
+                for (const auto& [observer_peer, observer] : players) {
+                    (void)observer;
+                    send_json(observer_peer, honghuang::protocol::MessageType::CombatEvent, hazard_event);
+                }
+            }
+            if (hell_trial_shear_hazard.phase() == honghuang::simulation::HellTrialHazardPhase::Active) {
+                for (auto& [hazard_peer, hazard_player] : players) {
+                    if (hazard_player.health <= 0 ||
+                        hazard_player.last_hell_trial_hazard_cycle == hell_trial_shear_hazard.cycle() ||
+                        !hell_trial_shear_hazard.is_inside_danger_zone(hazard_player.x, hazard_player.z)) continue;
+                    hazard_player.last_hell_trial_hazard_cycle = hell_trial_shear_hazard.cycle();
+                    if (hazard_player.absorb_shield_expires_at <= now) hazard_player.absorb_shield_health = 0;
+                    constexpr std::int64_t kShearDamage = 18;
+                    const auto absorbed = honghuang::simulation::absorb_with_shield(
+                        kShearDamage, hazard_player.absorb_shield_health);
+                    const auto applied = std::min(hazard_player.health, kShearDamage - absorbed);
+                    hazard_player.health -= applied;
+                    hazard_player.last_combat_at = now;
+                    const bool defeated = hazard_player.health <= 0;
+                    send_json(hazard_peer, honghuang::protocol::MessageType::CombatEvent,
+                        Json{{"accepted", true}, {"source", "hell_trial"},
+                             {"source_entity_id", "hell_f02_scissor_hazard"},
+                             {"action", "hell_trial_hazard_hit"}, {"attack_style", "shear_clamp"},
+                             {"damage", applied}, {"shield_absorbed", absorbed},
+                             {"shield_remaining", hazard_player.absorb_shield_health},
+                             {"health", hazard_player.health}, {"max_health", hazard_player.max_health},
+                             {"defeated", defeated}, {"cycle", hell_trial_shear_hazard.cycle()}});
+                    if (defeated) handle_player_defeat(hazard_peer);
+                }
+            }
+        }
         for (auto& [peer, player] : players) {
             const auto effect_now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                 now.time_since_epoch()).count();
