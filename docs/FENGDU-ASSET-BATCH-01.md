@@ -128,3 +128,13 @@
 3. Ultimate Animated Animal Pack：单独挑狼模型，检查四足骨架与攻击/死亡动画。
 4. Ultimate Fantasy RTS：挑 3–5 个墙/塔/建筑部件做酆都风格适配试拼，不要整包导入发行资源。
 5. 通过 ArtPreviewStage 和严格模型校验后，再逐个替换 NPC、怪物与城区建筑。
+
+
+### H. 玩家人形 GLB 接入验收门槛（代码侧）
+
+- `VisualModelLibrary` 在实例化 `player_humanoid` 时记录 MeshInstance3D、Skeleton3D、AnimationPlayer、总骨骼数和动画片段；少于 15 根骨骼、缺少骨架或没有动画片段时标记为需要人工复核。
+- 美术预览台在选中玩家模型时显示骨架验收与动画片段状态，不能仅凭“GLB 已加载”认定为正式角色。
+- `HHHumanoidAnimationDriver` 会在多个 AnimationPlayer 中选择包含当前动作片段的播放器；待机/行走强制循环，攻击/受击按单次动作播放，避免误选第一个播放器或循环攻击动画。
+- 玩家动画仍由现有 `HHHumanoidAnimationDriver` 统一驱动，不再给玩家模型挂第二套自动移动动画控制器；NPC/怪物仍使用各自的 `ModelAnimationController`。
+- 骨架数量阈值只是快速筛查，不等于骨骼命名、蒙皮权重、动作重定向和脚底贴地验收。正式入库前仍须在 Godot 中实际检查骨骼树、动作覆盖、朝向、比例、脚底位置和装备挂点。
+- 当前仓库尚无正式玩家 GLB，因此这些验收信息在实际模型导入前不会显示为通过。
