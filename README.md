@@ -80,3 +80,5 @@ Godot 客户端提供独立美术预览场景：`Client/HongHuangClient/scenes/A
 另有独立酆都内城总览场景：`Client/HongHuangClient/scenes/FengduCityLayoutPreview.tscn`，用于检查城墙、南门、轮回大道、中央广场、阴司官署区、六道轮回区、鬼市坊区与居民坊区的空间关系。它仍是美术/关卡灰盒，不是正式联机地图。
 
 冥界宏观区域关系预览：`Client/HongHuangClient/scenes/UnderworldRegionOverview.tscn`。该场景将酆都、忘川、远处血海（冥河老祖道场）和独立十八层地狱入口放在同一张规划总览中，仅供地理关系与路线评审，不是正式联机地图或服务器分区配置。
+
+十八层地狱垂直关卡灰盒：`Client/HongHuangClient/scenes/EighteenHellsPreview.tscn`；关卡流程与机制草案：`Client/HongHuangClient/docs/EIGHTEEN-HELLS-DESIGN.md`。当前为18层布局预览，不含可玩机关、敌人、导航或服务端副本逻辑。
