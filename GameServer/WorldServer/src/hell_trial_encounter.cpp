@@ -119,15 +119,15 @@ HellTrialDeathResult HellTrialEncounter::record_monster_death(
 }
 
 const std::array<HellTrialEvidenceSpec, 3> kFirstFloorEvidence{{
-    {"registry_seal", "罪簿封蜡", "封蜡边缘有新裂痕，蜡面仍残留未干的朱砂。值守簿记载：三更前封存的卷宗不应出现这道新裂口。", 
+    {"registry_seal", "罪簿封蜡", "西北廊 · 旧卷宗案台", "封蜡边缘有新裂痕，蜡面仍残留未干的朱砂。值守簿记载：三更前封存的卷宗不应出现这道新裂口。", 
      {"before_third_bell", "after_third_bell", "never_resealed"},
      {"三更前已封存", "三更后有人重新封卷", "从未重新封卷"},
      "after_third_bell", -8.0F, -10.0F},
-    {"echo_stone", "回声石", "石中残响记录了脚步方向：先有急促脚步穿过西廊，随后才传来封门铜铃声。", 
+    {"echo_stone", "回声石", "东北廊 · 回声石柱", "石中残响记录了脚步方向：先有急促脚步穿过西廊，随后才传来封门铜铃声。", 
      {"west_corridor", "east_corridor", "north_archive"},
      {"从西廊进入", "从东廊进入", "从北侧档房进入"},
      "west_corridor", 8.0F, -10.0F},
-    {"soul_lantern", "魂灯残灰", "灯盏内侧留有逆风卷灰，灯芯是在有人靠近时被从内侧吹灭，并非门外阴风所致。", 
+    {"soul_lantern", "魂灯残灰", "南侧刑台 · 熄灭的魂灯", "灯盏内侧留有逆风卷灰，灯芯是在有人靠近时被从内侧吹灭，并非门外阴风所致。", 
      {"outside_wind", "after_replacement", "before_sealing"},
      {"被门外阴风吹灭", "有人进廊后吹灭魂灯", "封卷前便已熄灭"},
      "after_replacement", 0.0F, 12.0F}
