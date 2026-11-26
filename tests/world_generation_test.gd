@@ -4,6 +4,7 @@ const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
 const WorldTerrainBuilder = preload("res://scripts/world_terrain_builder.gd")
 const FengduOuterRoadBuilder = preload("res://scripts/fengdu_outer_road_builder.gd")
 const FengduRegionEntranceBuilder = preload("res://scripts/fengdu_region_entrance_builder.gd")
+const FengduBossLairBuilder = preload("res://scripts/fengdu_boss_lair_builder.gd")
 const FengduMonsterEcologyCatalog = preload("res://scripts/fengdu_monster_ecology_catalog.gd")
 const WorldSpawnPolicy = preload("res://scripts/world_spawn_policy.gd")
 const WorldChunkStreamerScript = preload("res://scripts/world_chunk_streamer.gd")
@@ -26,6 +27,7 @@ func _run_world_generation_tests() -> void:
 	_test_fengdu_outer_roads()
 	_test_fengdu_monster_ecology()
 	_test_fengdu_region_entrances()
+	_test_fengdu_boss_lairs()
 	_test_chunk_streaming()
 	_test_fengdu_city_blockout()
 	_test_fengdu_navigation()
@@ -215,6 +217,37 @@ func _test_fengdu_region_entrances() -> void:
 			assert(not child is StaticBody3D)
 			assert(not child is CollisionShape3D)
 	entrances.free()
+
+
+func _test_fengdu_boss_lairs() -> void:
+	var lairs := FengduBossLairBuilder.build()
+	assert(lairs.name == "FengduBossLairLandmarks")
+	var expected := {
+		"BossLair_southern_marsh_boss_lair": {"region": "southern_wraith_marsh", "position": Vector3(34.0, 0.0, 88.0)},
+		"BossLair_western_bone_boss_lair": {"region": "western_bone_waste", "position": Vector3(-68.0, 0.0, -88.0)},
+		"BossLair_eastern_ferry_boss_lair": {"region": "eastern_forgotten_bank", "position": Vector3(88.0, 0.0, -88.0)},
+		"BossLair_battlefield_boss_lair": {"region": "ancient_battlefield", "position": Vector3(-43.0, 0.0, 38.0)}
+	}
+	assert(lairs.get_child_count() == expected.size())
+	for lair_name in expected:
+		var lair := lairs.get_node_or_null(lair_name)
+		assert(lair is Node3D)
+		assert(str(lair.get_meta("region_id", "")) == str(expected[lair_name]["region"]))
+		assert(bool(lair.get_meta("visual_only", false)))
+		assert(lair.position == expected[lair_name]["position"])
+		assert(lair.get_node_or_null("BossDais") is MeshInstance3D)
+		assert(lair.get_node_or_null("BossSealRing") is MeshInstance3D)
+		assert(lair.get_node_or_null("BossLairTitle") is Label3D)
+		assert(lair.get_node_or_null("BossLairSubtitle") is Label3D)
+		assert(WorldMapCatalog.resolve_region_name("underworld_fengdu", lair.position) == str(expected[lair_name]["region"]))
+		for child in lair.get_children():
+			assert(child is MeshInstance3D or child is Label3D)
+			assert(not child is StaticBody3D)
+			assert(not child is CollisionShape3D)
+	lairs.free()
+	var terrain := WorldTerrainBuilder.build("underworld_fengdu")
+	assert(terrain.get_node_or_null("FengduBossLairLandmarks") is Node3D)
+	terrain.free()
 
 
 func _test_fengdu_outer_roads() -> void:
