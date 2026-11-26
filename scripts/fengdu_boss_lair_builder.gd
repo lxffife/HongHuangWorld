@@ -9,7 +9,8 @@ const SITES := [
 		"region_id": "southern_wraith_marsh",
 		"position": Vector3(34.0, 0.0, 88.0),
 		"color": Color("#75a9d5"),
-		"subtitle": "首领区域建议 · 游魂泽深处"
+		"subtitle": "沉魂泽主 · 首领建议 Lv.11–12",
+		"boss_name": "沉魂泽主", "level_min": 11, "level_max": 12, "encounter_radius": 8.0
 	},
 	{
 		"id": "western_bone_boss_lair",
@@ -17,7 +18,8 @@ const SITES := [
 		"region_id": "western_bone_waste",
 		"position": Vector3(-68.0, 0.0, -88.0),
 		"color": Color("#c5b99e"),
-		"subtitle": "首领区域建议 · 白骨荒原"
+		"subtitle": "白骨将军 · 首领建议 Lv.22–24",
+		"boss_name": "白骨将军", "level_min": 22, "level_max": 24, "encounter_radius": 8.0
 	},
 	{
 		"id": "eastern_ferry_boss_lair",
@@ -25,7 +27,8 @@ const SITES := [
 		"region_id": "eastern_forgotten_bank",
 		"position": Vector3(88.0, 0.0, -88.0),
 		"color": Color("#6bbdc2"),
-		"subtitle": "首领区域建议 · 古渡深处"
+		"subtitle": "忘川水府妖帅 · 首领建议 Lv.30–32",
+		"boss_name": "忘川水府妖帅", "level_min": 30, "level_max": 32, "encounter_radius": 8.0
 	},
 	{
 		"id": "battlefield_boss_lair",
@@ -33,7 +36,8 @@ const SITES := [
 		"region_id": "ancient_battlefield",
 		"position": Vector3(-43.0, 0.0, 38.0),
 		"color": Color("#bd7774"),
-		"subtitle": "首领区域建议 · 古战场"
+		"subtitle": "古战魂将军 · 首领建议 Lv.37–40",
+		"boss_name": "古战魂将军", "level_min": 37, "level_max": 40, "encounter_radius": 8.0
 	}
 ]
 
@@ -57,6 +61,10 @@ static func _build_site(site: Dictionary) -> Node3D:
 	root.position = site["position"]
 	root.set_meta("region_id", str(site["region_id"]))
 	root.set_meta("boss_lair_id", str(site["id"]))
+	root.set_meta("suggested_boss_name", str(site["boss_name"]))
+	root.set_meta("suggested_level_min", int(site["level_min"]))
+	root.set_meta("suggested_level_max", int(site["level_max"]))
+	root.set_meta("encounter_radius_m", float(site["encounter_radius"]))
 	root.set_meta("visual_only", true)
 	var accent: Color = site["color"]
 	var stone := StandardMaterial3D.new()
