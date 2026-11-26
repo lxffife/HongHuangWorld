@@ -159,6 +159,7 @@ static func _add_district(root: Node3D, entry: Dictionary) -> void:
 		):
 			district.add_child(_box_mesh("UpperRoof", Vector3(main_width * 0.76, 0.65, main_depth * 0.72), Vector3(0.0, building_height + 5.35, 0.0), Color("#332638")))
 	_add_district_details(district, kind, footprint, base_color, building_height)
+	_add_special_office_details(district, str(entry.get("id", "")), footprint, building_height)
 	_add_district_lanterns(district, footprint)
 	var label := Label3D.new()
 	label.name = "DistrictLabel"
@@ -221,6 +222,105 @@ static func _add_district_details(district: Node3D, kind: String, footprint: Vec
 		"transport":
 			district.add_child(_box_mesh("WaystationPlatform", Vector3(footprint.x * 0.86, 0.35, footprint.y * 0.82), Vector3(0.0, 0.9, 0.0), Color("#827968")))
 			district.add_child(_box_mesh("WaystationCanopy", Vector3(footprint.x * 0.8, 0.35, footprint.y * 0.76), Vector3(0.0, building_height + 1.4, 0.0), Color("#343341")))
+
+
+static func _add_special_office_details(district: Node3D, district_id: String, footprint: Vector2, building_height: float) -> void:
+	match district_id:
+		"ten_kings_manors":
+			# Ten individually named seals distinguish the ten royal courts.
+			var king_names := ["秦广王", "楚江王", "宋帝王", "五官王", "阎罗王", "卞城王", "泰山王", "都市王", "平等王", "转轮王"]
+			for index in range(king_names.size()):
+				var x := (float(index) - 4.5) * minf(footprint.x * 0.092, 1.35)
+				var seal := _box_mesh(
+					"TenKingSeal_%02d" % (index + 1), Vector3(0.82, 1.18, 0.22),
+					Vector3(x, building_height + 1.45, footprint.y * 0.39), Color("#302a38")
+				)
+				district.add_child(seal)
+				var inscription := Label3D.new()
+				inscription.name = "TenKingName_%02d" % (index + 1)
+				inscription.text = king_names[index]
+				inscription.font_size = 17
+				inscription.outline_size = 3
+				inscription.modulate = Color("#e2c995")
+				inscription.position = Vector3(x, building_height + 1.45, footprint.y * 0.39 + 0.14)
+				inscription.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+				district.add_child(inscription)
+			district.add_child(_box_mesh(
+				"TenKingsCourtDais", Vector3(footprint.x * 0.76, 0.48, 1.25),
+				Vector3(0.0, 0.95, -footprint.y * 0.32), Color("#76604b")
+			))
+		"judge_court":
+			district.add_child(_box_mesh(
+				"JudgeBench", Vector3(footprint.x * 0.52, 0.72, 1.15),
+				Vector3(0.0, 1.15, footprint.y * 0.32), Color("#4b3540")
+			))
+			district.add_child(_box_mesh(
+				"JudgmentScroll", Vector3(2.0, 0.16, 0.85),
+				Vector3(0.0, 1.62, footprint.y * 0.32), Color("#c4a979")
+			))
+			for side in [-1.0, 1.0]:
+				district.add_child(_box_mesh(
+					"CaseArchiveShelf", Vector3(1.25, 2.5, 1.0),
+					Vector3(side * footprint.x * 0.36, 1.95, -footprint.y * 0.24),
+					Color("#493b3b")
+				))
+				for row in range(3):
+					district.add_child(_box_mesh(
+						"CaseScroll_%s_%d" % [str(side), row],
+						Vector3(0.88, 0.22, 0.72),
+						Vector3(side * footprint.x * 0.36, 1.15 + float(row) * 0.55, -footprint.y * 0.24),
+						Color("#b69a70")
+					))
+		"ghost_registry":
+			# Repeated archive bays make this office read as a records hall.
+			for side in [-1.0, 1.0]:
+				for bay in range(3):
+					var z := (float(bay) - 1.0) * footprint.y * 0.24
+					district.add_child(_box_mesh(
+						"GhostLedgerRack_%s_%d" % [str(side), bay],
+						Vector3(1.15, 3.1, 0.62),
+						Vector3(side * footprint.x * 0.34, 2.25, z), Color("#393b49")
+					))
+					for shelf in range(3):
+						district.add_child(_box_mesh(
+							"GhostLedger_%s_%d_%d" % [str(side), bay, shelf],
+							Vector3(0.82, 0.2, 0.48),
+							Vector3(side * footprint.x * 0.34, 1.1 + float(shelf) * 0.82, z),
+							Color("#9e8b70")
+						))
+			district.add_child(_box_mesh(
+				"RegistryCounter", Vector3(footprint.x * 0.38, 0.85, 1.0),
+				Vector3(0.0, 1.2, footprint.y * 0.34), Color("#655747")
+			))
+		"reincarnation_bureau":
+			# Six symbolic paths surround the wheel; these are visual markers,
+			# not an implementation of actual reincarnation gameplay.
+			var wheel := MeshInstance3D.new()
+			wheel.name = "SixPathsWheel"
+			var wheel_mesh := TorusMesh.new()
+			wheel_mesh.inner_radius = 1.55
+			wheel_mesh.outer_radius = 1.9
+			wheel_mesh.rings = 24
+			wheel_mesh.ring_segments = 12
+			wheel.mesh = wheel_mesh
+			wheel.position = Vector3(0.0, 2.6, -footprint.y * 0.2)
+			var wheel_material := StandardMaterial3D.new()
+			wheel_material.albedo_color = Color("#b89b70")
+			wheel_material.metallic = 0.42
+			wheel.material_override = wheel_material
+			district.add_child(wheel)
+			for path_index in range(6):
+				var angle := TAU * float(path_index) / 6.0
+				var marker := _box_mesh(
+					"SixPathMarker_%d" % (path_index + 1), Vector3(0.72, 1.55, 0.42),
+					Vector3(cos(angle) * 3.0, 1.45, -footprint.y * 0.2 + sin(angle) * 3.0),
+					Color("#62506f") if path_index % 2 == 0 else Color("#80674d")
+				)
+				district.add_child(marker)
+			district.add_child(_box_mesh(
+				"ReincarnationDais", Vector3(footprint.x * 0.72, 0.55, footprint.y * 0.7),
+				Vector3(0.0, 0.82, 0.0), Color("#51445e")
+			))
 
 
 static func _add_moat_and_bridges(root: Node3D) -> void:
