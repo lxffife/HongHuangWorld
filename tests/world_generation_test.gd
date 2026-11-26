@@ -102,6 +102,7 @@ func _test_fengdu_spawn_policy() -> void:
 
 func _test_fengdu_outer_region_markers() -> void:
 	var terrain := WorldTerrainBuilder.build("underworld_fengdu")
+	assert(terrain.get_node_or_null("FengduOuterRoadNetwork") is Node3D)
 	for marker_name in [
 		"OuterRegion_SouthernWraithMarsh",
 		"OuterRegion_WesternBoneWaste",
