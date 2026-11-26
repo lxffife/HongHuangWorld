@@ -2,6 +2,7 @@ extends SceneTree
 
 const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
 const WorldTerrainBuilder = preload("res://scripts/world_terrain_builder.gd")
+const FengduOuterRoadBuilder = preload("res://scripts/fengdu_outer_road_builder.gd")
 const WorldSpawnPolicy = preload("res://scripts/world_spawn_policy.gd")
 const WorldChunkStreamerScript = preload("res://scripts/world_chunk_streamer.gd")
 const FengduCityBuilder = preload("res://scripts/fengdu_city_builder.gd")
@@ -20,6 +21,7 @@ func _run_world_generation_tests() -> void:
 	_test_world_bounds_and_hell_catalog()
 	_test_fengdu_spawn_policy()
 	_test_fengdu_outer_region_markers()
+	_test_fengdu_outer_roads()
 	_test_chunk_streaming()
 	_test_fengdu_city_blockout()
 	_test_fengdu_navigation()
@@ -142,6 +144,36 @@ func _test_fengdu_outer_region_markers() -> void:
 	assert(WorldMapCatalog.resolve_region_name("underworld_fengdu", Vector3(78.0, 0.0, -58.0)) == "东郊忘川古渡")
 	assert(WorldMapCatalog.resolve_region_name("underworld_fengdu", Vector3(-78.0, 0.0, 30.0)) == "古战场遗址")
 	terrain.free()
+
+
+func _test_fengdu_outer_roads() -> void:
+	var road_network := FengduOuterRoadBuilder.build()
+	assert(road_network.name == "FengduOuterRoadNetwork")
+	var expected_routes := {
+		"OuterRoad_south_marsh": {"region": "南郊游魂泽", "end": Vector3(0.0, 0.0, 70.0)},
+		"OuterRoad_west_bone": {"region": "西郊白骨荒原", "end": Vector3(-78.0, 0.0, -58.0)},
+		"OuterRoad_east_ferry": {"region": "东郊忘川古渡", "end": Vector3(78.0, 0.0, -58.0)},
+		"OuterRoad_southwest_battlefield": {"region": "古战场遗址", "end": Vector3(-70.0, 0.0, 30.0)}
+	}
+	for route_name in expected_routes:
+		var route := road_network.get_node_or_null(route_name)
+		assert(route is Node3D)
+		assert(str(route.get_meta("destination_region", "")) == str(expected_routes[route_name]["region"]))
+		assert(route.get_node_or_null("OriginWaystone") is MeshInstance3D)
+		assert(route.get_node_or_null("DestinationWaystone") is MeshInstance3D)
+		assert(route.get_node_or_null("DestinationWaystoneLabel") is Label3D)
+		var segment_count := 0
+		for child in route.get_children():
+			if str(child.name).begins_with("RoadSegment_"):
+				segment_count += 1
+			assert(child is MeshInstance3D or child is Label3D)
+			assert(not child is StaticBody3D)
+			assert(not child is CollisionShape3D)
+		assert(segment_count >= 2)
+		var destination: Vector3 = expected_routes[route_name]["end"]
+		assert(WorldMapCatalog.resolve_region_name("underworld_fengdu", destination) == str(expected_routes[route_name]["region"]))
+	assert(FengduOuterRoadBuilder.get_routes().size() == 4)
+	road_network.free()
 
 
 func _test_chunk_streaming() -> void:
