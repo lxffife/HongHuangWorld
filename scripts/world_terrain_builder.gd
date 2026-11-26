@@ -26,6 +26,7 @@ static func build(world_id: String) -> Node3D:
 	if is_underworld:
 		root.add_child(FengduCityBuilder.build())
 		_add_fengdu_outer_region_markers(root)
+		_add_fengdu_region_dressing(root)
 		# Fengdu gate and the soul lantern avenue.
 		root.add_child(UnderworldVisualFactory.create_fengdu_gate())
 		for side in [-1.0, 1.0]:
@@ -184,6 +185,127 @@ static func _add_fengdu_outer_region_markers(root: Node3D) -> void:
 		subtitle.modulate = Color("#e4dce9")
 		marker.add_child(subtitle)
 		root.add_child(marker)
+
+
+static func _add_fengdu_region_dressing(root: Node3D) -> void:
+	# Lightweight, deterministic visual dressing. No physics bodies are created.
+	var marsh := Node3D.new()
+	marsh.name = "RegionDressing_SouthernWraithMarsh"
+	root.add_child(marsh)
+	var reed_material := _region_material(Color("#536d68"), 0.92)
+	var pool_material := _region_material(Color(0.16, 0.32, 0.38, 0.62), 0.22, true)
+	var mud_material := _region_material(Color("#343b39"), 1.0)
+	for i in range(7):
+		var x := -17.0 + float(i) * 5.6
+		var z := 55.0 + float((i * 7) % 13) - 6.0
+		_add_region_cylinder(marsh, "MarshReedCluster_%02d" % i, 0.10, 0.16, 2.2 + float(i % 3) * 0.45, Vector3(x, 1.15, z), reed_material, Vector3(0.0, 0.0, deg_to_rad(float((i % 3) - 1) * 7.0)))
+	for i in range(3):
+		var pool := MeshInstance3D.new()
+		pool.name = "MarshPool_%02d" % i
+		var pool_mesh := CylinderMesh.new()
+		pool_mesh.top_radius = 2.6
+		pool_mesh.bottom_radius = 2.6
+		pool_mesh.height = 0.035
+		pool.mesh = pool_mesh
+		pool.position = Vector3(-10.0 + float(i) * 10.0, 0.025, 83.0 + float(i % 2) * 5.0)
+		pool.material_override = pool_material
+		marsh.add_child(pool)
+	for i in range(5):
+		_add_region_box(marsh, "MarshMudMound_%02d" % i, Vector3(2.0, 0.35, 1.7), Vector3(-20.0 + float(i) * 9.0, 0.16, 94.0 - float(i % 2) * 5.0), mud_material, Vector3(0.0, deg_to_rad(float(i * 19)), 0.0))
+
+	var bone_waste := Node3D.new()
+	bone_waste.name = "RegionDressing_WesternBoneWaste"
+	root.add_child(bone_waste)
+	var bone_material := _region_material(Color("#c5b99e"), 0.9)
+	var rock_material := _region_material(Color("#514c48"), 1.0)
+	for i in range(9):
+		var x := -91.0 + float((i * 17) % 31)
+		var z := -86.0 + float(i) * 6.1
+		_add_region_cylinder(bone_waste, "BonePillar_%02d" % i, 0.12, 0.22, 1.1 + float(i % 4) * 0.32, Vector3(x, 0.7, z), bone_material, Vector3(0.0, 0.0, deg_to_rad(float((i % 3) - 1) * 18.0)))
+	for i in range(7):
+		_add_region_box(bone_waste, "BrokenRib_%02d" % i, Vector3(3.0, 0.22, 0.32), Vector3(-88.0 + float((i * 13) % 28), 0.28, -78.0 + float(i) * 8.0), bone_material, Vector3(0.0, 0.0, deg_to_rad(float((i % 4) * 13 - 20))))
+	for i in range(6):
+		_add_region_sphere(bone_waste, "BoneWasteRock_%02d" % i, Vector3(-94.0 + float((i * 11) % 32), 0.75, -92.0 + float(i) * 12.0), 0.8 + float(i % 3) * 0.35, rock_material)
+
+	var forgotten_bank := Node3D.new()
+	forgotten_bank.name = "RegionDressing_EasternForgottenBank"
+	root.add_child(forgotten_bank)
+	var river_stone := _region_material(Color("#59666a"), 0.86)
+	var bank_lantern := _region_material(Color("#6d9ca5"), 0.35, false, Color("#3d8794"))
+	for i in range(8):
+		var z := -91.0 + float(i) * 10.5
+		_add_region_box(forgotten_bank, "ForgottenBankStone_%02d" % i, Vector3(1.3, 0.75, 1.0), Vector3(83.0 + float(i % 2) * 3.0, 0.36, z), river_stone, Vector3(0.0, deg_to_rad(float(i * 23)), 0.0))
+	for i in range(4):
+		_add_region_cylinder(forgotten_bank, "ForgottenBankMarker_%02d" % i, 0.16, 0.24, 2.6, Vector3(91.0, 1.3, -72.0 + float(i) * 20.0), bank_lantern)
+		_add_region_sphere(forgotten_bank, "ForgottenBankSoulLight_%02d" % i, Vector3(91.0, 2.9, -72.0 + float(i) * 20.0), 0.38, bank_lantern)
+
+	var battlefield := Node3D.new()
+	battlefield.name = "RegionDressing_AncientBattlefield"
+	root.add_child(battlefield)
+	var spear_material := _region_material(Color("#756b61"), 0.88)
+	var banner_material := _region_material(Color("#713f46"), 0.96)
+	var stone_material := _region_material(Color("#484044"), 0.98)
+	for i in range(7):
+		var x := -91.0 + float(i) * 7.2
+		var z := 18.0 + float((i * 9) % 22)
+		_add_region_cylinder(battlefield, "BrokenSpear_%02d" % i, 0.055, 0.075, 3.2, Vector3(x, 1.35, z), spear_material, Vector3(0.0, 0.0, deg_to_rad(float((i % 3) * 12 + 18))))
+	for i in range(4):
+		var x := -94.0 + float(i) * 15.0
+		_add_region_cylinder(battlefield, "BattleStandardPole_%02d" % i, 0.07, 0.09, 4.2, Vector3(x, 2.1, 43.0), spear_material)
+		_add_region_box(battlefield, "BattleStandardCloth_%02d" % i, Vector3(1.8, 2.0, 0.08), Vector3(x + 0.9, 3.1, 43.0), banner_material, Vector3(0.0, 0.0, deg_to_rad(float((i % 2) * 8 - 4))))
+	for i in range(5):
+		_add_region_box(battlefield, "BattlefieldTombstone_%02d" % i, Vector3(1.0, 1.8, 0.35), Vector3(-96.0 + float(i) * 10.0, 0.9, 12.0), stone_material, Vector3(0.0, deg_to_rad(float(i * 11)), deg_to_rad(float((i % 3) * 5 - 5))))
+
+
+static func _region_material(color: Color, roughness: float = 0.9, transparent: bool = false, emission: Color = Color.BLACK) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = roughness
+	if transparent:
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	if emission != Color.BLACK:
+		material.emission_enabled = true
+		material.emission = emission
+		material.emission_energy_multiplier = 0.8
+	return material
+
+
+static func _add_region_box(parent: Node3D, node_name: String, size: Vector3, position: Vector3, material: Material, rotation: Vector3 = Vector3.ZERO) -> void:
+	var instance := MeshInstance3D.new()
+	instance.name = node_name
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	instance.mesh = mesh
+	instance.position = position
+	instance.rotation = rotation
+	instance.material_override = material
+	parent.add_child(instance)
+
+
+static func _add_region_cylinder(parent: Node3D, node_name: String, top_radius: float, bottom_radius: float, height: float, position: Vector3, material: Material, rotation: Vector3 = Vector3.ZERO) -> void:
+	var instance := MeshInstance3D.new()
+	instance.name = node_name
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = top_radius
+	mesh.bottom_radius = bottom_radius
+	mesh.height = height
+	instance.mesh = mesh
+	instance.position = position
+	instance.rotation = rotation
+	instance.material_override = material
+	parent.add_child(instance)
+
+
+static func _add_region_sphere(parent: Node3D, node_name: String, position: Vector3, radius: float, material: Material) -> void:
+	var instance := MeshInstance3D.new()
+	instance.name = node_name
+	var mesh := SphereMesh.new()
+	mesh.radius = radius
+	mesh.height = radius * 2.0
+	instance.mesh = mesh
+	instance.position = position
+	instance.material_override = material
+	parent.add_child(instance)
 
 
 static func _create_soul_lantern_fallback() -> Node3D:
