@@ -158,6 +158,7 @@ static func _add_district(root: Node3D, entry: Dictionary) -> void:
 		):
 			district.add_child(_box_mesh("UpperRoof", Vector3(main_width * 0.76, 0.65, main_depth * 0.72), Vector3(0.0, building_height + 5.35, 0.0), Color("#332638")))
 	_add_district_details(district, kind, footprint, base_color, building_height)
+	_add_district_lanterns(district, footprint)
 	var label := Label3D.new()
 	label.name = "DistrictLabel"
 	label.text = str(entry.get("name", "城区"))
@@ -452,3 +453,47 @@ static func _add_city_landmark(root: Node3D, node_name: String, text_value: Stri
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.modulate = color
 	root.add_child(label)
+
+
+static func _add_district_lanterns(district: Node3D, footprint: Vector2) -> void:
+	# Paired soul lanterns mark each district frontage without narrowing the
+	# central street or adding new gameplay collision volumes.
+	for side in [-1.0, 1.0]:
+		var lantern := Node3D.new()
+		lantern.name = "DistrictLanternLeft" if side < 0.0 else "DistrictLanternRight"
+		lantern.position = Vector3(side * footprint.x * 0.39, 0.0, footprint.y * 0.43)
+		if not _add_scaled_model(
+			lantern, str(BUILDING_MODELS["lantern"]), Vector3(0.85, 2.45, 0.85), Vector3.ZERO
+		):
+			var pedestal := CylinderMesh.new()
+			pedestal.top_radius = 0.13
+			pedestal.bottom_radius = 0.22
+			pedestal.height = 1.55
+			pedestal.radial_segments = 8
+			var pedestal_node := MeshInstance3D.new()
+			pedestal_node.name = "LanternPedestal"
+			pedestal_node.mesh = pedestal
+			pedestal_node.position.y = 0.78
+			var stone := StandardMaterial3D.new()
+			stone.albedo_color = Color("#393342")
+			stone.roughness = 0.9
+			pedestal_node.material_override = stone
+			lantern.add_child(pedestal_node)
+			lantern.add_child(_box_mesh(
+				"LanternHousing", Vector3(0.62, 0.48, 0.62), Vector3(0.0, 1.78, 0.0), Color("#64799d")
+			))
+		var flame := MeshInstance3D.new()
+		flame.name = "SoulFlame"
+		var flame_mesh := SphereMesh.new()
+		flame_mesh.radius = 0.16
+		flame_mesh.height = 0.42
+		flame.mesh = flame_mesh
+		flame.position = Vector3(0.0, 2.08, 0.0)
+		var flame_material := StandardMaterial3D.new()
+		flame_material.albedo_color = Color("#8fb8e8")
+		flame_material.emission_enabled = true
+		flame_material.emission = Color("#537fc4")
+		flame_material.emission_energy_multiplier = 2.0
+		flame.material_override = flame_material
+		lantern.add_child(flame)
+		district.add_child(lantern)
