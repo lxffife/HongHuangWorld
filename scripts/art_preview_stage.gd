@@ -48,6 +48,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			_play_selected_action("hit")
 		KEY_D:
 			_play_selected_action("death")
+		KEY_Q, KEY_E:
+			_rotate_selected_model(-1.0 if key_event.keycode == KEY_Q else 1.0)
+			get_viewport().set_input_as_handled()
+		KEY_F:
+			_reset_selected_model_rotation()
+			get_viewport().set_input_as_handled()
 		KEY_ESCAPE:
 			_play_selected_action("idle")
 
@@ -201,6 +207,7 @@ func _add_model(label_text: String, model: Node3D, at: Vector3, yaw: float, labe
 	model.position = at
 	model.rotation.y = yaw
 	model.set_meta("preview_label", label_text)
+	model.set_meta("preview_base_yaw", yaw)
 	var source_path := str(model.get_meta("model_source", "procedural_fallback"))
 	var source_label := "GLB" if source_path != "procedural_fallback" else "程序化回退"
 	model.set_meta("preview_source_label", source_label)
@@ -222,13 +229,31 @@ func _build_controls() -> void:
 	layout.add_theme_constant_override("separation", 5)
 	panel.add_child(layout)
 	var title := Label.new()
-	title.text = "美术资源预览台 · 1-9 / 0 选择 · [ ] 切换（含建筑模型）"
+	title.text = "美术资源预览台 · 1-9 / 0 选择 · [ ] 切换 · Q/E 旋转 · F 复位"
 	title.add_theme_font_size_override("font_size", 17)
 	layout.add_child(title)
 	_status_label = Label.new()
-	_status_label.text = "I 待机  W 行走  R 奔跑  A 攻击  H 受击  D 死亡  Esc 待机"
+	_status_label.text = "I 待机  W 行走  R 奔跑  A 攻击  H 受击  D 死亡  Q/E 检查模型  F 复位  Esc 待机"
 	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	layout.add_child(_status_label)
+
+
+func _rotate_selected_model(direction: float) -> void:
+	if _preview_models.is_empty():
+		return
+	var model := _preview_models[_selected_model_index]
+	model.rotation.y += deg_to_rad(15.0 * direction)
+	_update_status("%s：当前朝向 %.0f° · Q/E 每次旋转 15°" % [
+		_model_label(_selected_model_index), rad_to_deg(wrapf(model.rotation.y, -PI, PI))
+	])
+
+
+func _reset_selected_model_rotation() -> void:
+	if _preview_models.is_empty():
+		return
+	var model := _preview_models[_selected_model_index]
+	model.rotation.y = float(model.get_meta("preview_base_yaw", 0.0))
+	_update_status("%s：已恢复初始朝向" % _model_label(_selected_model_index))
 
 
 func _play_selected_action(action_name: String) -> void:
@@ -345,21 +370,51 @@ func _selection_status() -> String:
 				socket_summary += " / "
 			socket_summary += socket_state
 		humanoid_summary += "\\n装备挂点：" + socket_summary
-	return "当前：%s · %s · key=%s\\n网格 %d · 骨骼 %d · 动画播放器 %d · %s%s" % [
-		_model_label(_selected_model_index), source_label, model_key,
-		int(diagnostics["meshes"]), int(diagnostics["skeletons"]),
+	var bounds_size: Vector3 = diagnostics["bounds_size"]
+	var dimension_summary := "尺寸 %.2f × %.2f × %.2f m" % [bounds_size.x, bounds_size.y, bounds_size.z]
+	var normalization_summary := ""
+	if model.has_meta("model_normalization_factor"):
+		normalization_summary = " · 归一化 %.3f" % float(model.get_meta("model_normalization_factor"))
+	elif bool(model.get_meta("model_scale_review_required", false)):
+		normalization_summary = " · 尺度需复核"
+	var fallback_reason := str(model.get_meta("preview_fallback_reason", ""))
+	if not fallback_reason.is_empty():
+		normalization_summary += " · 回退原因：" + fallback_reason
+	return "当前：%s · %s · key=%s\\n%s%s\\n网格 %d · 骨骼 %d · 动画播放器 %d · %s%s" % [
+		_model_label(_selected_model_index), source_label, model_key, dimension_summary,
+		normalization_summary, int(diagnostics["meshes"]), int(diagnostics["skeletons"]),
 		int(diagnostics["players"]), clip_summary, humanoid_summary
 	]
 
 func _collect_model_diagnostics(root: Node) -> Dictionary:
-	var result := {"meshes": 0, "skeletons": 0, "players": 0, "clips": [], "bone_names": []}
-	_collect_model_diagnostics_recursive(root, result)
+	var result := {
+		"meshes": 0, "skeletons": 0, "players": 0, "clips": [], "bone_names": [],
+		"bounds_found": false, "bounds_min": Vector3.ZERO, "bounds_max": Vector3.ZERO,
+		"bounds_size": Vector3.ZERO
+	}
+	_collect_model_diagnostics_recursive(root, Transform3D.IDENTITY, result)
+	if bool(result["bounds_found"]):
+		result["bounds_size"] = (result["bounds_max"] as Vector3) - (result["bounds_min"] as Vector3)
 	return result
 
 
-func _collect_model_diagnostics_recursive(node: Node, result: Dictionary) -> void:
+func _collect_model_diagnostics_recursive(node: Node, parent_transform: Transform3D, result: Dictionary) -> void:
+	var current_transform := parent_transform
+	if node is Node3D:
+		current_transform = parent_transform * (node as Node3D).transform
 	if node is MeshInstance3D and (node as MeshInstance3D).mesh != null:
 		result["meshes"] = int(result["meshes"]) + 1
+		var mesh := (node as MeshInstance3D).mesh
+		var mesh_bounds: AABB = mesh.get_aabb() * current_transform
+		var mesh_minimum := mesh_bounds.position
+		var mesh_maximum := mesh_bounds.position + mesh_bounds.size
+		if not bool(result["bounds_found"]):
+			result["bounds_min"] = mesh_minimum
+			result["bounds_max"] = mesh_maximum
+			result["bounds_found"] = true
+		else:
+			result["bounds_min"] = (result["bounds_min"] as Vector3).min(mesh_minimum)
+			result["bounds_max"] = (result["bounds_max"] as Vector3).max(mesh_maximum)
 	if node is Skeleton3D:
 		var skeleton := node as Skeleton3D
 		result["skeletons"] = int(result["skeletons"]) + 1
@@ -375,7 +430,7 @@ func _collect_model_diagnostics_recursive(node: Node, result: Dictionary) -> voi
 			clips.append(str(clip_name))
 		result["clips"] = clips
 	for child in node.get_children():
-		_collect_model_diagnostics_recursive(child, result)
+		_collect_model_diagnostics_recursive(child, current_transform, result)
 
 
 func _update_status(message: String) -> void:
