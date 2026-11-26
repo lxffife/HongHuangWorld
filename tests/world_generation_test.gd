@@ -91,6 +91,17 @@ func _test_fengdu_city_blockout() -> void:
 	assert(city.get_node_or_null("NorthWall_1.0") is StaticBody3D)
 	assert(city.get_node_or_null("EastWall_-1.0") is StaticBody3D)
 	assert(city.get_node_or_null("WestWall_1.0") is StaticBody3D)
+	var gatehouse_names := [
+		"NorthGatehouse", "SouthGatehouse", "EastGatehouse", "WestGatehouse"
+	]
+	for gatehouse_name in gatehouse_names:
+		var gatehouse := city.get_node_or_null(gatehouse_name)
+		assert(gatehouse is Node3D)
+		assert(gatehouse.get_node_or_null("GateLintel") is MeshInstance3D)
+		assert(gatehouse.get_node_or_null("GateInscription") is Label3D)
+		assert(gatehouse.get_node_or_null("GateSoulLantern") is Node3D)
+		for gate_child in gatehouse.get_children():
+			assert(not (gate_child is CollisionShape3D))
 	var corner_tower_names := [
 		"CornerTower_NorthWest", "CornerTower_NorthEast",
 		"CornerTower_SouthWest", "CornerTower_SouthEast"
