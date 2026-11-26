@@ -48,3 +48,27 @@ static func get_encounter_tiers(region_id: String) -> Array:
 			tier["tier_id"] = tier_id
 			tiers.append(tier)
 	return tiers
+
+
+## Returns a level-band hint only. It does not assert the server's actual rarity/type.
+static func audit_level_tier(region_id: String, monster_level: int) -> Dictionary:
+	for tier in get_encounter_tiers(region_id):
+		if monster_level >= int(tier.get("level_min", 0)) and monster_level <= int(tier.get("level_max", -1)):
+			var tier_id := str(tier.get("tier_id", ""))
+			var tier_labels := {"normal": "普通档建议", "elite": "精英档建议", "boss": "首领档建议"}
+			return {
+				"matched": true,
+				"tier_id": tier_id,
+				"tier_label": str(tier_labels.get(tier_id, "未知档位")),
+				"template_name": str(tier.get("name", "")),
+				"level_min": int(tier.get("level_min", 0)),
+				"level_max": int(tier.get("level_max", 0))
+			}
+	return {
+		"matched": false,
+		"tier_id": "",
+		"tier_label": "无匹配档位",
+		"template_name": "",
+		"level_min": 0,
+		"level_max": 0
+	}
