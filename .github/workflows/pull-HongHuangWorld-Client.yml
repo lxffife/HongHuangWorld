@@ -1,0 +1,134 @@
+name: Sync develop branch (exclude workflows)
+on:
+  workflow_dispatch:        # 仅手动触发
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      # 0. 诊断 SOURCE_REPO_PAT（不打印 token 本身）
+      - name: Diagnose SOURCE_REPO_PAT
+        env:
+          PAT: ${{ secrets.SOURCE_REPO_PAT }}
+        run: |
+          set -u
+
+          # 0.0 是否配置
+          if [ -z "${PAT:-}" ]; then
+            echo "::error::secrets.SOURCE_REPO_PAT 未设置或为空（请确认配置在【运行本 workflow 的仓库】的 Settings→Secrets 中）"
+            exit 1
+          fi
+
+          # 0.0b 首尾空白/换行会直接导致 Bad credentials
+          if [ "$PAT" != "$(printf '%s' "$PAT" | tr -d '[:space:]')" ]; then
+            echo "::warning::PAT 含空白字符（换行/空格），这会导致认证失败，请重新粘贴"
+          fi
+
+          api() {
+            curl -sS \
+              -H "Authorization: Bearer $PAT" \
+              -H "Accept: application/vnd.github+json" \
+              "$@"
+          }
+
+          echo "== 1) 验证 token 有效性: GET /user =="
+          code=$(api -o /tmp/user.json -w "%{http_code}" https://api.github.com/user)
+          echo "HTTP $code"
+          case "$code" in
+            200)
+              echo "Token 有效，身份: $(python3 -c "import json;print(json.load(open('/tmp/user.json')).get('login'))")"
+              ;;
+            401)
+              echo "::error::Token 无效或已过期 (401)"
+              cat /tmp/user.json
+              exit 1
+              ;;
+            *)
+              echo "::error::调用 /user 异常 (HTTP $code)"
+              cat /tmp/user.json
+              exit 1
+              ;;
+          esac
+
+          echo "== 2) 验证对源仓库的访问: GET /repos/liflife/HongHuangWorld-Client =="
+          code=$(api -o /tmp/repo.json -w "%{http_code}" https://api.github.com/repos/liflife/HongHuangWorld-Client)
+          echo "HTTP $code"
+          case "$code" in
+            200)
+              echo "✅ 有权限访问 liflife/HongHuangWorld-Client"
+              ;;
+            401)
+              echo "::error::认证失败，token 无效"
+              exit 1
+              ;;
+            403)
+              echo "::error::已认证但无权限（403），检查 PAT 是否属于该仓库/组织，或 fine-grained PAT 的 Contents 权限"
+              cat /tmp/repo.json
+              exit 1
+              ;;
+            404)
+              echo "::error::仓库不存在或 token 无权访问（404）"
+              cat /tmp/repo.json
+              exit 1
+              ;;
+            *)
+              echo "::error::未知状态 HTTP $code"
+              cat /tmp/repo.json
+              exit 1
+              ;;
+          esac
+
+          echo "== 3) 查看经典 PAT 的 scope（fine-grained PAT 可能无此头，正常） =="
+          curl -sSI -H "Authorization: Bearer $PAT" https://api.github.com/user \
+            | grep -i '^x-oauth-scopes:' || echo "(无 X-OAuth-Scopes 头)"
+
+      # 1. 只拉取源仓库的 develop 分支到 src/
+      - name: Checkout source (develop)
+        uses: actions/checkout@v4
+        with:
+          repository: liflife/HongHuangWorld-Client
+          ref: develop
+          token: ${{ secrets.SOURCE_REPO_PAT }}
+          fetch-depth: 1
+          path: src
+          persist-credentials: false
+
+      # 2. 拉取目标仓库到 dst/（fetch-depth: 0 才能拿到 origin/develop 的 ref）
+      - name: Checkout target
+        uses: actions/checkout@v4
+        with:
+          path: dst
+          fetch-depth: 0
+
+      # 3. 同步 develop：文件级，保留目标 develop 分支上的 workflows
+      - name: Sync develop (keep target workflows)
+        run: |
+          set -e
+          cd "$GITHUB_WORKSPACE/dst"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # 3.1 切到 develop；若目标仓库没有 develop，则从当前 HEAD 创建
+          if git show-ref --verify --quiet refs/remotes/origin/develop; then
+            echo "目标仓库已有 develop 分支，切换到该分支"
+            git checkout -B develop refs/remotes/origin/develop
+          else
+            echo "目标仓库没有 develop 分支，从当前 HEAD 创建 develop"
+            git checkout -B develop
+          fi
+
+          # 3.2 用源 develop 的文件覆盖到当前工作区
+          #     --exclude '.github/workflows' 使目标 develop 上现有的 workflows 原样保留；
+          #     源 develop 上的 workflows 不会被带入
+          rsync -a --delete \
+            --exclude '.git' \
+            --exclude '.github/workflows' \
+            "$GITHUB_WORKSPACE/src/" ./
+
+          # 3.3 提交并推送
+          git add -A
+          git commit -m "Sync develop (workflows excluded)" || echo "no changes on develop"
+          git push origin develop
