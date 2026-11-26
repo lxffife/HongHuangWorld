@@ -45,7 +45,7 @@ jobs:
         shell: pwsh
         run: |
           cmake --version
-          cmake -S Client/NativeNet -B build/godot-native-net -A x64 -DCMAKE_BUILD_TYPE=Release
+          cmake -S NativeNet -B build/godot-native-net -A x64 -DCMAKE_BUILD_TYPE=Release
           if ($LASTEXITCODE -ne 0) { throw "CMake configure failed: $LASTEXITCODE" }
           cmake --build build/godot-native-net --config Release --parallel
           if ($LASTEXITCODE -ne 0) { throw "NativeNet build failed: $LASTEXITCODE" }
@@ -88,7 +88,7 @@ jobs:
             - Source commit: ${{ github.sha }}
             - Package: NativeNet DLL only, not a complete game client.
 
-            Place \`honghuang_native_net.dll\` in \`Client/HongHuangClient/bin/\` for the matching source version.
+            Place \`honghuang_native_net.dll\` in \`/bin/\` for the matching source version.
           files: ${{ steps.package.outputs.package_name }}
           draft: false
           prerelease: ${{ inputs.prerelease }}
