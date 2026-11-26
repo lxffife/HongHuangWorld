@@ -57,9 +57,9 @@ static func _add_route(root: Node3D, route: Dictionary) -> void:
 	var edge_material := _material(road_color.darkened(0.32), 1.0)
 	var marker_material := _material(Color("#37333d"), 0.95)
 	for index in range(points.size() - 1):
-		var from: Vector3 = points[index]
-		var to: Vector3 = points[index + 1]
-		var delta := to - from
+		var start_point: Vector3 = points[index]
+		var end_point: Vector3 = points[index + 1]
+		var delta := end_point - start_point
 		var length := Vector2(delta.x, delta.z).length()
 		if length < 0.1:
 			continue
@@ -68,11 +68,11 @@ static func _add_route(root: Node3D, route: Dictionary) -> void:
 		var road_mesh := BoxMesh.new()
 		road_mesh.size = Vector3(3.6 if str(route["id"]) == "south_marsh" else 3.0, 0.09, length)
 		road.mesh = road_mesh
-		road.position = (from + to) * 0.5 + Vector3(0.0, 0.07, 0.0)
+		road.position = (start_point + end_point) * 0.5 + Vector3(0.0, 0.07, 0.0)
 		road.rotation.y = atan2(delta.x, delta.z)
 		road.material_override = road_material
 		route_root.add_child(road)
-		_add_edge_stones(route_root, index, from, to, edge_material)
+		_add_edge_stones(route_root, index, start_point, end_point, edge_material)
 	_add_waystone(route_root, "OriginWaystone", points[0], marker_material, str(route["name"]))
 	_add_waystone(route_root, "DestinationWaystone", points[points.size() - 1], marker_material, str(route["destination"]))
 
