@@ -223,10 +223,10 @@ func _test_fengdu_boss_lairs() -> void:
 	var lairs := FengduBossLairBuilder.build()
 	assert(lairs.name == "FengduBossLairLandmarks")
 	var expected := {
-		"BossLair_southern_marsh_boss_lair": {"region": "southern_wraith_marsh", "position": Vector3(34.0, 0.0, 88.0)},
-		"BossLair_western_bone_boss_lair": {"region": "western_bone_waste", "position": Vector3(-68.0, 0.0, -88.0)},
-		"BossLair_eastern_ferry_boss_lair": {"region": "eastern_forgotten_bank", "position": Vector3(88.0, 0.0, -88.0)},
-		"BossLair_battlefield_boss_lair": {"region": "ancient_battlefield", "position": Vector3(-43.0, 0.0, 38.0)}
+		"BossLair_southern_marsh_boss_lair": {"region": "southern_wraith_marsh", "position": Vector3(34.0, 0.0, 88.0), "boss": "沉魂泽主", "min": 11, "max": 12},
+		"BossLair_western_bone_boss_lair": {"region": "western_bone_waste", "position": Vector3(-68.0, 0.0, -88.0), "boss": "白骨将军", "min": 22, "max": 24},
+		"BossLair_eastern_ferry_boss_lair": {"region": "eastern_forgotten_bank", "position": Vector3(88.0, 0.0, -88.0), "boss": "忘川水府妖帅", "min": 30, "max": 32},
+		"BossLair_battlefield_boss_lair": {"region": "ancient_battlefield", "position": Vector3(-43.0, 0.0, 38.0), "boss": "古战魂将军", "min": 37, "max": 40}
 	}
 	assert(lairs.get_child_count() == expected.size())
 	for lair_name in expected:
@@ -234,6 +234,10 @@ func _test_fengdu_boss_lairs() -> void:
 		assert(lair is Node3D)
 		assert(str(lair.get_meta("region_id", "")) == str(expected[lair_name]["region"]))
 		assert(bool(lair.get_meta("visual_only", false)))
+		assert(str(lair.get_meta("suggested_boss_name", "")) == str(expected[lair_name]["boss"]))
+		assert(int(lair.get_meta("suggested_level_min", 0)) == int(expected[lair_name]["min"]))
+		assert(int(lair.get_meta("suggested_level_max", 0)) == int(expected[lair_name]["max"]))
+		assert(float(lair.get_meta("encounter_radius_m", 0.0)) == 8.0)
 		assert(lair.position == expected[lair_name]["position"])
 		assert(lair.get_node_or_null("BossDais") is MeshInstance3D)
 		assert(lair.get_node_or_null("BossSealRing") is MeshInstance3D)
