@@ -31,7 +31,8 @@ const ENCOUNTERS := {
 
 
 static func get_region_encounters(region_id: String) -> Dictionary:
-	return (ENCOUNTERS.get(region_id, {}) as Dictionary).duplicate(true)
+	var encounters: Dictionary = ENCOUNTERS.get(region_id, {})
+	return encounters.duplicate(true)
 
 
 static func get_all_region_ids() -> Array:
@@ -43,7 +44,7 @@ static func get_encounter_tiers(region_id: String) -> Array:
 	var tiers: Array = []
 	for tier_id in ["normal", "elite", "boss"]:
 		if encounters.has(tier_id):
-			var tier: Dictionary = encounters[tier_id]
+			var tier: Dictionary = (encounters[tier_id] as Dictionary).duplicate(true)
 			tier["tier_id"] = tier_id
 			tiers.append(tier)
 	return tiers
