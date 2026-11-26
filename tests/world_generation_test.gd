@@ -115,6 +115,10 @@ func _test_fengdu_outer_region_markers() -> void:
 		for child in marker.get_children():
 			assert(not child is CollisionShape3D)
 			assert(not child is StaticBody3D)
+	assert(WorldMapCatalog.resolve_region_name("underworld_fengdu", Vector3(0.0, 0.0, 72.0)) == "南郊游魂泽")
+	assert(WorldMapCatalog.resolve_region_name("underworld_fengdu", Vector3(-78.0, 0.0, -58.0)) == "西郊白骨荒原")
+	assert(WorldMapCatalog.resolve_region_name("underworld_fengdu", Vector3(78.0, 0.0, -58.0)) == "东郊忘川古渡")
+	assert(WorldMapCatalog.resolve_region_name("underworld_fengdu", Vector3(-78.0, 0.0, 30.0)) == "古战场遗址")
 	terrain.free()
 
 
