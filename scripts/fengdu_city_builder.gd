@@ -31,6 +31,7 @@ static func build() -> Node3D:
 		by_id[str(entry.get("id", ""))] = entry
 		_add_district(root, entry)
 	_add_city_walls(root)
+	_add_city_corner_towers(root)
 	_add_moat_and_bridges(root)
 	_add_roads(root, by_id, plan.get("roads", []))
 	_add_city_landmark(root, "CapitalName", "酆 都 天 城", Vector3(0.0, 19.0, CITY_CENTER_Z - 8.0), Color("#d9c7a1"))
@@ -310,6 +311,54 @@ static func _add_city_walls(root: Node3D) -> void:
 	_add_city_landmark(root, "WestGateName", "西 冥 門", Vector3(-WALL_HALF_X - 1.5, 7.0, CITY_CENTER_Z), Color("#c9b9d2"))
 	_add_city_landmark(root, "SouthGateName", "南 幽 门", Vector3(0.0, 7.0, CITY_CENTER_Z + WALL_HALF_Z + 1.5), Color("#c9b9d2"))
 	_add_city_landmark(root, "NorthGateName", "北 天 门", Vector3(0.0, 7.0, CITY_CENTER_Z - WALL_HALF_Z - 1.5), Color("#c9b9d2"))
+
+
+static func _add_city_corner_towers(root: Node3D) -> void:
+	# Four compact corner keeps visually anchor the perimeter. They are
+	# deliberately visual-only until matching server-side obstacle geometry
+	# is introduced; the existing wall colliders remain unchanged.
+	var corners := [
+		{"id": "NorthWest", "x": -1.0, "z": -1.0},
+		{"id": "NorthEast", "x": 1.0, "z": -1.0},
+		{"id": "SouthWest", "x": -1.0, "z": 1.0},
+		{"id": "SouthEast", "x": 1.0, "z": 1.0}
+	]
+	for corner_variant in corners:
+		var corner: Dictionary = corner_variant
+		var tower := Node3D.new()
+		tower.name = "CornerTower_" + str(corner["id"])
+		tower.position = Vector3(
+			float(corner["x"]) * (WALL_HALF_X - 0.15),
+			0.0,
+			CITY_CENTER_Z + float(corner["z"]) * (WALL_HALF_Z - 0.15)
+		)
+		var imported := _add_scaled_model(
+			tower, str(BUILDING_MODELS["tower"]),
+			Vector3(5.8, 8.2, 5.8), Vector3(0.0, 4.1, 0.0)
+		)
+		if not imported:
+			tower.add_child(_box_mesh(
+				"CornerKeepBody", Vector3(5.2, 6.2, 5.2),
+				Vector3(0.0, 3.1, 0.0), Color("#55505b")
+			))
+			tower.add_child(_box_mesh(
+				"CornerKeepRoof", Vector3(6.2, 0.8, 6.2),
+				Vector3(0.0, 6.6, 0.0), Color("#302d3a")
+			))
+		tower.add_child(_box_mesh(
+			"CornerKeepCrown", Vector3(6.0, 0.35, 6.0),
+			Vector3(0.0, 7.0, 0.0), Color("#9a835f")
+		))
+		for side in [-1.0, 1.0]:
+			tower.add_child(_box_mesh(
+				"CornerKeepMerlon", Vector3(0.9, 0.8, 0.9),
+				Vector3(side * 2.35, 7.55, 0.0), Color("#b19a70")
+			))
+			tower.add_child(_box_mesh(
+				"CornerKeepMerlon", Vector3(0.9, 0.8, 0.9),
+				Vector3(0.0, 7.55, side * 2.35), Color("#b19a70")
+			))
+		root.add_child(tower)
 
 
 static func _add_wall(root: Node3D, node_name: String, dimensions: Vector3, position: Vector3, color: Color) -> void:
