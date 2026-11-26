@@ -1,0 +1,185 @@
+extends Control
+
+const WorldMapProjection = preload("res://scripts/world_map_projection.gd")
+## Lightweight live minimap. Coordinates are supplied by the authoritative world
+## snapshot/entities; the player remains centered and nearby markers move around it.
+
+signal marker_selected(kind: String, marker_id: String, marker_name: String)
+
+var player_position: Vector3 = Vector3.ZERO
+var player_yaw: float = 0.0
+var world_radius: float = 55.0
+var exploration_points: Array = []
+var npc_points: Array = []
+var monster_points: Array = []
+var landmark_points: Array = []
+var navigation_target: Dictionary = {}
+var _redraw_elapsed: float = 0.0
+
+func _ready() -> void:
+	mouse_filter = Control.MOUSE_FILTER_STOP
+	set_process(true)
+
+func _gui_input(event: InputEvent) -> void:
+	if not (event is InputEventMouseButton):
+		return
+	var mouse_event := event as InputEventMouseButton
+	if mouse_event.button_index != MOUSE_BUTTON_LEFT or not mouse_event.pressed:
+		return
+	var center := size * 0.5
+	var radius := minf(size.x, size.y) * 0.40
+	var best_distance := 13.0
+	var best_kind := ""
+	var best_id := ""
+	var best_name := ""
+	for exploration_item in exploration_points:
+		if not exploration_item is Dictionary:
+			continue
+		var point: Dictionary = exploration_item
+		var point_pos := _map_point(float(point.get("position_x", 0.0)), float(point.get("position_z", 0.0)), center, radius)
+		if not _is_inside_radar(point_pos, center, radius):
+			continue
+		var exploration_distance := point_pos.distance_to(mouse_event.position)
+		if exploration_distance < best_distance:
+			best_distance = exploration_distance
+			best_kind = "exploration"
+			best_id = str(point.get("id", ""))
+			best_name = str(point.get("name", "探索点"))
+	for npc_item in npc_points:
+		if not npc_item is Dictionary:
+			continue
+		var npc: Dictionary = npc_item
+		var npc_pos := _map_point(float(npc.get("position_x", 0.0)), float(npc.get("position_z", 0.0)), center, radius)
+		if not _is_inside_radar(npc_pos, center, radius):
+			continue
+		var npc_distance := npc_pos.distance_to(mouse_event.position)
+		if npc_distance < best_distance:
+			best_distance = npc_distance
+			best_kind = "npc"
+			best_id = str(npc.get("id", ""))
+			best_name = str(npc.get("name", "NPC"))
+	for monster_item in monster_points:
+		if not monster_item is Dictionary:
+			continue
+		var monster: Dictionary = monster_item
+		var monster_pos := _map_point(float(monster.get("x", 0.0)), float(monster.get("z", 0.0)), center, radius)
+		if not _is_inside_radar(monster_pos, center, radius):
+			continue
+		var monster_distance := monster_pos.distance_to(mouse_event.position)
+		if monster_distance < best_distance:
+			best_distance = monster_distance
+			best_kind = "monster"
+			best_id = str(monster.get("id", ""))
+			best_name = str(monster.get("name", "怪物"))
+	for landmark_item in landmark_points:
+		if not landmark_item is Dictionary:
+			continue
+		var landmark: Dictionary = landmark_item
+		var landmark_pos := _map_point(float(landmark.get("position_x", 0.0)), float(landmark.get("position_z", 0.0)), center, radius)
+		if not _is_inside_radar(landmark_pos, center, radius):
+			continue
+		var landmark_distance := landmark_pos.distance_to(mouse_event.position)
+		if landmark_distance < best_distance:
+			best_distance = landmark_distance
+			best_kind = "landmark"
+			best_id = str(landmark.get("id", ""))
+			best_name = str(landmark.get("name", "地标"))
+	if not best_id.is_empty():
+		marker_selected.emit(best_kind, best_id, best_name)
+		accept_event()
+
+func _process(delta: float) -> void:
+	_redraw_elapsed += delta
+	if _redraw_elapsed >= 0.12:
+		_redraw_elapsed = 0.0
+		queue_redraw()
+
+func _map_point(world_x: float, world_z: float, center: Vector2, radius: float) -> Vector2:
+	var scale := radius / maxf(world_radius, 1.0)
+	return WorldMapProjection.world_to_map(
+		Vector3(world_x, player_position.y, world_z),
+		player_position,
+		center,
+		Vector2(scale, scale)
+	)
+
+func _is_inside_radar(point: Vector2, center: Vector2, radius: float) -> bool:
+	return WorldMapProjection.is_inside_circle(point, center, radius)
+
+func _draw() -> void:
+	var bounds := Rect2(Vector2.ZERO, size)
+	draw_rect(bounds, Color("#0a1420", 0.96), true)
+	draw_rect(bounds, Color("#425466"), false, 1.4)
+	var center := size * 0.5
+	var radius := minf(size.x, size.y) * 0.40
+	for step in range(-2, 3):
+		var offset := float(step) * radius * 0.5
+		draw_line(Vector2(center.x + offset, center.y - radius), Vector2(center.x + offset, center.y + radius), Color("#27394a", 0.75), 1.0)
+		draw_line(Vector2(center.x - radius, center.y + offset), Vector2(center.x + radius, center.y + offset), Color("#27394a", 0.75), 1.0)
+	draw_arc(center, radius, 0.0, TAU, 48, Color("#526a7c", 0.9), 1.2, true)
+	draw_string(ThemeDB.fallback_font, Vector2(5.0, size.y - 5.0), "范围 ±%.0fm" % world_radius, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 9, Color("#8fa2b2"))
+	draw_line(Vector2(center.x, center.y - radius), Vector2(center.x, center.y + radius), Color("#354b5c", 0.65), 1.0)
+	draw_line(Vector2(center.x - radius, center.y), Vector2(center.x + radius, center.y), Color("#354b5c", 0.65), 1.0)
+	for exploration_item in exploration_points:
+		if not exploration_item is Dictionary:
+			continue
+		var point: Dictionary = exploration_item
+		var exploration_pos := _map_point(float(point.get("position_x", 0.0)), float(point.get("position_z", 0.0)), center, radius)
+		if not _is_inside_radar(exploration_pos, center, radius):
+			continue
+		var discovered := bool(point.get("discovered", false))
+		draw_circle(exploration_pos, 3.0, Color("#8b9aa7") if discovered else Color("#e4b967"))
+		if str(navigation_target.get("id", "")) == str(point.get("id", "")) and navigation_target.get("kind", "") == "exploration":
+			draw_arc(exploration_pos, 7.0, 0.0, TAU, 24, Color("#f4d27f"), 1.8)
+	for npc_item in npc_points:
+		if not npc_item is Dictionary:
+			continue
+		var npc: Dictionary = npc_item
+		var npc_pos := _map_point(float(npc.get("position_x", 0.0)), float(npc.get("position_z", 0.0)), center, radius)
+		if _is_inside_radar(npc_pos, center, radius):
+			draw_circle(npc_pos, 3.5, Color("#63d6c5"))
+			var npc_name := str(npc.get("name", "NPC"))
+			if not npc_name.is_empty():
+				var label_position := npc_pos + Vector2(5.0, -4.0)
+				draw_string(ThemeDB.fallback_font, label_position + Vector2(0.6, 0.6), npc_name.left(6), HORIZONTAL_ALIGNMENT_LEFT, 66.0, 8, Color("#07111a", 0.95))
+				draw_string(ThemeDB.fallback_font, label_position, npc_name.left(6), HORIZONTAL_ALIGNMENT_LEFT, 66.0, 8, Color("#bde9df"))
+			if str(navigation_target.get("id", "")) == str(npc.get("id", "")) and navigation_target.get("kind", "") == "npc":
+				draw_arc(npc_pos, 7.0, 0.0, TAU, 24, Color("#f4d27f"), 1.8)
+	for monster_item in monster_points:
+		if not monster_item is Dictionary:
+			continue
+		var monster: Dictionary = monster_item
+		var monster_pos := _map_point(float(monster.get("x", 0.0)), float(monster.get("z", 0.0)), center, radius)
+		if _is_inside_radar(monster_pos, center, radius):
+			draw_circle(monster_pos, 3.0, Color("#e16c6c"))
+			if str(navigation_target.get("id", "")) == str(monster.get("id", "")) and navigation_target.get("kind", "") == "monster":
+				draw_arc(monster_pos, 7.0, 0.0, TAU, 24, Color("#f4d27f"), 1.8)
+	for landmark_item in landmark_points:
+		if not landmark_item is Dictionary:
+			continue
+		var landmark: Dictionary = landmark_item
+		var landmark_pos := _map_point(float(landmark.get("position_x", 0.0)), float(landmark.get("position_z", 0.0)), center, radius)
+		if not _is_inside_radar(landmark_pos, center, radius):
+			continue
+		var diamond := PackedVector2Array([
+			landmark_pos + Vector2(0.0, -4.5),
+			landmark_pos + Vector2(4.5, 0.0),
+			landmark_pos + Vector2(0.0, 4.5),
+			landmark_pos + Vector2(-4.5, 0.0)
+		])
+		draw_colored_polygon(diamond, Color("#c5a7ed"))
+		if str(navigation_target.get("id", "")) == str(landmark.get("id", "")) and navigation_target.get("kind", "") == "landmark":
+			draw_arc(landmark_pos, 8.0, 0.0, TAU, 24, Color("#f4d27f"), 1.8)
+	if not navigation_target.is_empty():
+		var target_point := _map_point(float(navigation_target.get("x", 0.0)), float(navigation_target.get("z", 0.0)), center, radius)
+		if _is_inside_radar(target_point, center, radius):
+			draw_line(center, target_point, Color("#f4d27f", 0.8), 1.4)
+	# Godot characters face -Z at yaw 0. The north-up map inverts world Z,
+	# so the actual forward vector points down at yaw 0 and rotates with yaw.
+	var player_triangle := PackedVector2Array([
+		center + Vector2(0.0, 8.0).rotated(player_yaw),
+		center + Vector2(-6.0, -6.0).rotated(player_yaw),
+		center + Vector2(6.0, -6.0).rotated(player_yaw)
+	])
+	draw_colored_polygon(player_triangle, Color("#f2e8d6"))
+	draw_string(ThemeDB.fallback_font, Vector2(5.0, 13.0), "N", HORIZONTAL_ALIGNMENT_LEFT, -1.0, 10, Color("#a9bac7"))

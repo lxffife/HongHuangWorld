@@ -1,0 +1,68 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world_scene.gd" id="1_world"]
+
+[node name="QingyunWorld" type="Node3D"]
+script = ExtResource("1_world")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="Panel" type="PanelContainer" parent="HUD"]
+offset_left = 18.0
+offset_top = 18.0
+offset_right = 560.0
+offset_bottom = 420.0
+
+[node name="Margin" type="MarginContainer" parent="HUD/Panel"]
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 12
+
+[node name="Content" type="VBoxContainer" parent="HUD/Panel/Margin"]
+
+[node name="Status" type="Label" parent="HUD/Panel/Margin/Content"]
+text = "正在载入青云人界……"
+autowrap_mode = 3
+
+[node name="Progression" type="Label" parent="HUD/Panel/Margin/Content"]
+text = "正在读取修炼状态……"
+autowrap_mode = 3
+
+[node name="Breakthrough" type="Button" parent="HUD/Panel/Margin/Content"]
+text = "尝试突破"
+disabled = true
+
+[node name="AwakenBloodline" type="Button" parent="HUD/Panel/Margin/Content"]
+text = "觉醒血脉"
+disabled = true
+
+[node name="TrainTechnique" type="Button" parent="HUD/Panel/Margin/Content"]
+text = "修炼功法"
+disabled = true
+
+[node name="AttributePoints" type="Label" parent="HUD/Panel/Margin/Content"]
+text = "可分配属性点：0"
+autowrap_mode = 3
+
+[node name="AttributeButtons" type="HBoxContainer" parent="HUD/Panel/Margin/Content"]
+
+[node name="Strength" type="Button" parent="HUD/Panel/Margin/Content/AttributeButtons"]
+text = "力量 +1"
+
+[node name="Constitution" type="Button" parent="HUD/Panel/Margin/Content/AttributeButtons"]
+text = "体魄 +1"
+
+[node name="Agility" type="Button" parent="HUD/Panel/Margin/Content/AttributeButtons"]
+text = "敏捷 +1"
+
+[node name="Spirit" type="Button" parent="HUD/Panel/Margin/Content/AttributeButtons"]
+text = "灵识 +1"
+
+[node name="Vitality" type="Button" parent="HUD/Panel/Margin/Content/AttributeButtons"]
+text = "元气 +1"
+
+[node name="Reconnect" type="Button" parent="HUD/Panel/Margin/Content"]
+visible = false
+text = "重新连接世界"
+disabled = false

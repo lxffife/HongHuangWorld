@@ -1,0 +1,1066 @@
+extends CharacterBody3D
+
+const UnderworldVisualFactory = preload("res://scripts/underworld_visual_factory.gd")
+const VisualModelLibrary = preload("res://scripts/visual_model_library.gd")
+const EquipmentVisualFactory = preload("res://scripts/equipment_visual_factory.gd")
+const HumanoidAnimationDriver = preload("res://scripts/humanoid_animation_driver.gd")
+
+@export var move_speed := 5.5
+@export var acceleration := 18.0
+@export var gravity := 18.0
+@export var jump_velocity := 6.5
+@export var mouse_sensitivity := 0.0025
+
+var camera_pivot: Node3D
+var camera_pivot_base_position := Vector3(0.0, 1.45, 0.0)
+var hit_reaction_time := 0.0
+var hit_reaction_strength := 0.0
+var hit_reaction_duration := 0.32
+var camera: Camera3D
+var visual: MeshInstance3D
+var player_humanoid: Node3D
+var humanoid_animation_time := 0.0
+var footstep_audio_remaining := 0.0
+var attack_animation_time := 0.0
+var attack_animation_style := "melee"
+var hit_animation_time := 0.0
+var collision_shape: CollisionShape3D
+var base_visual_mesh: Mesh
+var base_visual_material: Material
+var base_collision_shape: Shape3D
+var soul_orb_core: MeshInstance3D
+var soul_orb_halo: MeshInstance3D
+var soul_trait_ring: MeshInstance3D
+var soul_trait_shell: MeshInstance3D
+var soul_trait_rune_ring: MeshInstance3D
+var soul_trait_life_ring: MeshInstance3D
+var soul_growth_rings: Array[MeshInstance3D] = []
+var soul_growth_shell: MeshInstance3D
+var soul_fusion_ring: MeshInstance3D
+var birth_resonance_root: Node3D
+var soul_growth_stage := 1
+var soul_form_enabled := false
+var soul_form_time := 0.0
+var soul_form_scale := 1.0
+var yaw := 0.0
+var pitch := -0.18
+var input_send_accumulator := 0.0
+var input_sequence := 0
+var jump_pending := false
+var is_dead := false
+var current_move_input := Vector2.ZERO
+var auto_navigation_target: Vector3 = Vector3.ZERO
+var auto_navigation_active := false
+var auto_navigation_arrival_distance := 1.6
+var auto_navigation_detour_direction: Vector3 = Vector3.ZERO
+var auto_navigation_detour_remaining := 0.0
+var auto_navigation_blocked_time := 0.0
+var auto_navigation_last_position: Vector3 = Vector3.ZERO
+var auto_navigation_stuck_time := 0.0
+var auto_navigation_detour_side := 1.0
+var last_send_error: int = OK
+var movement_network_ready := false
+func _ready() -> void:
+	_build_player()
+	_ensure_input_actions()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+func _build_player() -> void:
+	var capsule := CapsuleMesh.new()
+	capsule.radius = 0.42
+	capsule.height = 1.8
+	visual = MeshInstance3D.new()
+	visual.name = "PlaceholderBody"
+	visual.mesh = capsule
+	base_visual_mesh = capsule
+	visual.position.y = 0.9
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#d5b47a")
+	material.metallic = 0.12
+	material.roughness = 0.48
+	visual.material_override = material
+	base_visual_material = material
+	add_child(visual)
+	visual.mesh = null
+	player_humanoid = VisualModelLibrary.instantiate_model(
+		"player_humanoid",
+		func() -> Node3D: return UnderworldVisualFactory.create_player_humanoid()
+	)
+	player_humanoid.position.y = -0.9
+	visual.add_child(player_humanoid)
+
+	collision_shape = CollisionShape3D.new()
+	var shape := CapsuleShape3D.new()
+	shape.radius = 0.42
+	shape.height = 1.8
+	collision_shape.shape = shape
+	collision_shape.position.y = 0.9
+	base_collision_shape = shape
+	add_child(collision_shape)
+
+	camera_pivot = Node3D.new()
+	camera_pivot.name = "CameraPivot"
+	camera_pivot.position = camera_pivot_base_position
+	add_child(camera_pivot)
+	var spring := SpringArm3D.new()
+	spring.spring_length = 4.2
+	spring.margin = 0.2
+	camera_pivot.add_child(spring)
+	camera = Camera3D.new()
+	camera.current = true
+	camera.fov = 72.0
+	spring.add_child(camera)
+	camera_pivot.rotation.x = pitch
+
+func _ensure_input_actions() -> void:
+	_add_key_action("move_forward", KEY_W)
+	_add_key_action("move_back", KEY_S)
+	_add_key_action("move_left", KEY_A)
+	_add_key_action("move_right", KEY_D)
+	_add_key_action("jump", KEY_SPACE)
+	_add_key_action("release_mouse", KEY_ESCAPE)
+
+func _add_key_action(action: String, keycode: int) -> void:
+	if not InputMap.has_action(action):
+		InputMap.add_action(action)
+	# 同时注册物理键位和逻辑键位，兼容不同键盘布局与输入法状态。
+	var physical_event := InputEventKey.new()
+	physical_event.physical_keycode = keycode
+	InputMap.action_add_event(action, physical_event)
+	var logical_event := InputEventKey.new()
+	logical_event.keycode = keycode
+	InputMap.action_add_event(action, logical_event)
+
+
+func _is_text_input_focused() -> bool:
+	var world := get_parent()
+	if world != null and world.has_method("is_gameplay_input_blocked"):
+		if bool(world.call("is_gameplay_input_blocked")):
+			return true
+	var viewport := get_viewport()
+	if viewport == null:
+		return false
+	var focused_control := viewport.gui_get_focus_owner()
+	return focused_control is LineEdit or focused_control is TextEdit
+
+func _is_move_key_down(physical_key: int, logical_key: int) -> bool:
+	# Text inputs (including Chinese IME composition) own the keyboard.
+	# Never poll WASD while a LineEdit/TextEdit has focus: IME key events may
+	# be consumed by the control while global key-state polling still sees them.
+	if _is_text_input_focused():
+		return false
+	return Input.is_physical_key_pressed(physical_key) or Input.is_key_pressed(logical_key)
+
+func is_move_key_pressed(direction: String) -> bool:
+	match direction:
+		"forward":
+			return _is_move_key_down(KEY_W, KEY_W)
+		"back":
+			return _is_move_key_down(KEY_S, KEY_S)
+		"left":
+			return _is_move_key_down(KEY_A, KEY_A)
+		"right":
+			return _is_move_key_down(KEY_D, KEY_D)
+	return false
+
+func _get_move_input() -> Vector2:
+	var x := float(_is_move_key_down(KEY_D, KEY_D)) - float(_is_move_key_down(KEY_A, KEY_A))
+	var y := float(_is_move_key_down(KEY_S, KEY_S)) - float(_is_move_key_down(KEY_W, KEY_W))
+	var input_vector := Vector2(x, y)
+	return input_vector.normalized() if input_vector.length_squared() > 1.0 else input_vector
+
+func _unhandled_input(event: InputEvent) -> void:
+	# The chat drawer owns mouse and keyboard interaction while open.
+	# Do not rotate the camera or trigger attacks from chat mouse movement/clicks.
+	var world := get_parent()
+	if world != null and world.has_method("is_gameplay_input_blocked"):
+		if bool(world.call("is_gameplay_input_blocked")):
+			return
+	if event.is_action_pressed("release_mouse"):
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		return
+	if is_dead:
+		return
+	if event is InputEventMouseButton:
+		# World-scene _input owns left-click combat so it can report clicks
+		# before UI/unhandled-input routing. Player controller keeps camera look.
+		return
+	elif event.is_action_pressed("jump"):
+		jump_pending = true
+	elif event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		yaw -= event.relative.x * mouse_sensitivity
+		pitch = clampf(pitch - event.relative.y * mouse_sensitivity, -0.9, 0.35)
+		camera_pivot.rotation = Vector3(pitch, yaw, 0.0)
+
+func set_auto_navigation_target(target: Vector3) -> void:
+	auto_navigation_target = target
+	auto_navigation_active = true
+	auto_navigation_detour_direction = Vector3.ZERO
+	auto_navigation_detour_remaining = 0.0
+	auto_navigation_blocked_time = 0.0
+	auto_navigation_stuck_time = 0.0
+	auto_navigation_detour_side = 1.0
+	auto_navigation_last_position = global_position
+
+
+func clear_auto_navigation_target() -> void:
+	auto_navigation_active = false
+	auto_navigation_target = Vector3.ZERO
+	auto_navigation_detour_direction = Vector3.ZERO
+	auto_navigation_detour_remaining = 0.0
+	auto_navigation_blocked_time = 0.0
+	auto_navigation_stuck_time = 0.0
+
+
+func _get_auto_navigation_direction(target_direction: Vector3, delta: float) -> Vector3:
+	if auto_navigation_detour_remaining > 0.0:
+		auto_navigation_detour_remaining = maxf(auto_navigation_detour_remaining - delta, 0.0)
+		if auto_navigation_detour_remaining > 0.0 and auto_navigation_detour_direction.length_squared() > 0.01:
+			return auto_navigation_detour_direction
+	var world := get_world_3d()
+	if world == null:
+		return target_direction
+	var space_state := world.direct_space_state
+	var ray_origin := global_position + Vector3.UP * 0.85
+	var query := PhysicsRayQueryParameters3D.create(ray_origin, ray_origin + target_direction * 2.0)
+	query.exclude = [get_rid()]
+	query.collide_with_areas = false
+	var direct_hit := space_state.intersect_ray(query)
+	if direct_hit.is_empty():
+		auto_navigation_blocked_time = 0.0
+		auto_navigation_detour_direction = Vector3.ZERO
+		return target_direction
+	# A wall blocks the direct line. Probe progressively wider angles and
+	# temporarily commit to the clearest side so the character can get around
+	# a corner instead of alternating left/right every frame.
+	var candidate_angles: Array[float] = [-0.45, 0.45, -0.9, 0.9, -1.35, 1.35, -1.85, 1.85]
+	var best_direction := Vector3.ZERO
+	var best_score := -INF
+	for angle in candidate_angles:
+		var candidate := target_direction.rotated(Vector3.UP, angle).normalized()
+		var candidate_query := PhysicsRayQueryParameters3D.create(ray_origin, ray_origin + candidate * 1.7)
+		candidate_query.exclude = [get_rid()]
+		candidate_query.collide_with_areas = false
+		var candidate_hit := space_state.intersect_ray(candidate_query)
+		if candidate_hit.is_empty():
+			var score := target_direction.dot(candidate)
+			if score > best_score:
+				best_score = score
+				best_direction = candidate
+	if best_direction.length_squared() > 0.01:
+		auto_navigation_detour_direction = best_direction
+		auto_navigation_detour_remaining = 0.85
+		auto_navigation_blocked_time = 0.0
+		return best_direction
+	auto_navigation_blocked_time += delta
+	return Vector3.ZERO
+
+
+func _physics_process(delta: float) -> void:
+	if is_dead:
+		clear_auto_navigation_target()
+		velocity = Vector3.ZERO
+		return
+	if _is_text_input_focused():
+		# Clear queued jump as well; no gameplay movement should leak through
+		# while the player is composing or typing in chat/another text field.
+		jump_pending = false
+	var input_2d := _get_move_input()
+	if auto_navigation_active and input_2d.length_squared() > 0.01:
+		# Manual WASD input always takes priority over automatic movement.
+		clear_auto_navigation_target()
+	var direction := Vector3.ZERO
+	if auto_navigation_active:
+		var target_offset := auto_navigation_target - global_position
+		target_offset.y = 0.0
+		var travelled_since_last_tick := global_position.distance_to(auto_navigation_last_position)
+		if travelled_since_last_tick < 0.035:
+			auto_navigation_stuck_time += delta
+		else:
+			auto_navigation_stuck_time = 0.0
+		auto_navigation_last_position = global_position
+		if auto_navigation_stuck_time >= 0.95 and target_offset.length_squared() > 0.01:
+			auto_navigation_detour_direction = target_offset.normalized().rotated(Vector3.UP, 0.82 * auto_navigation_detour_side).normalized()
+			auto_navigation_detour_remaining = 0.9
+			auto_navigation_detour_side *= -1.0
+			auto_navigation_stuck_time = 0.0
+		if target_offset.length() <= auto_navigation_arrival_distance:
+			clear_auto_navigation_target()
+		else:
+			direction = _get_auto_navigation_direction(target_offset.normalized(), delta)
+			if direction.length_squared() <= 0.01:
+				if auto_navigation_blocked_time >= 1.2:
+					clear_auto_navigation_target()
+					var parent := get_parent()
+					if parent != null and parent.has_method("_show_notification"):
+						parent.call("_show_notification", "前方道路被阻挡，已停止自动前往，请调整位置后重新导航。", 3.5)
+			input_2d = Vector2(0.0, -1.0)
+	current_move_input = input_2d
+	if camera_pivot == null or not is_instance_valid(camera_pivot):
+		return
+	if visual == null or not is_instance_valid(visual):
+		return
+	if not auto_navigation_active:
+		var camera_basis := camera_pivot.global_transform.basis
+		direction = camera_basis.x * input_2d.x + camera_basis.z * input_2d.y
+		direction.y = 0.0
+		direction = direction.normalized()
+	if direction.length_squared() > 0.001:
+		var target_yaw := atan2(-direction.x, -direction.z)
+		visual.rotation.y = lerp_angle(visual.rotation.y, target_yaw, 12.0 * delta)
+
+	input_send_accumulator += delta
+	if input_send_accumulator >= 0.05:
+		input_send_accumulator = 0.0
+		var network := HHSession.world_network
+		movement_network_ready = network != null and network.is_world_ready()
+		last_send_error = OK
+		if movement_network_ready:
+			input_sequence += 1
+			var send_error: Error = network.send_input(direction.x, direction.z, input_sequence, jump_pending)
+			if send_error == OK:
+				jump_pending = false
+			last_send_error = send_error
+			if send_error != OK:
+				push_warning("World movement input send failed: " + str(send_error))
+
+
+func set_soul_form(enabled: bool, stage: int = 1, visual_scale: float = 0.35, affinities: Dictionary = {}, growth_stage: int = 1, fusion_names: Array = []) -> void:
+	if not is_instance_valid(visual) or not is_instance_valid(collision_shape):
+		return
+	soul_form_enabled = enabled
+	soul_form_scale = clampf(visual_scale / 0.35, 0.85, 3.8)
+	if not enabled:
+		visual.mesh = null
+		if is_instance_valid(player_humanoid):
+			player_humanoid.visible = true
+		visual.material_override = base_visual_material
+		visual.position = Vector3(0.0, 0.9, 0.0)
+		visual.scale = Vector3.ONE
+		collision_shape.shape = base_collision_shape
+		collision_shape.position = Vector3(0.0, 0.9, 0.0)
+		camera_pivot.position.y = 1.45
+		move_speed = 5.5
+		if is_instance_valid(soul_orb_halo):
+			soul_orb_halo.visible = false
+		for trait_node in [soul_trait_ring, soul_trait_shell, soul_trait_rune_ring, soul_trait_life_ring, soul_growth_shell, soul_fusion_ring]:
+			if is_instance_valid(trait_node):
+				trait_node.visible = false
+		for growth_ring in soul_growth_rings:
+			if is_instance_valid(growth_ring):
+				growth_ring.visible = false
+		return
+
+	if is_instance_valid(player_humanoid):
+		player_humanoid.visible = false
+	var orb := SphereMesh.new()
+	orb.radius = 0.34
+	orb.height = 0.68
+	orb.radial_segments = 24
+	orb.rings = 12
+	visual.mesh = orb
+	visual.position = Vector3(0.0, 0.42, 0.0)
+	visual.scale = Vector3.ONE * clampf(visual_scale / 0.35, 0.85, 3.8)
+	var spirit_material := StandardMaterial3D.new()
+	spirit_material.albedo_color = Color(0.30, 0.82, 1.0, 0.72)
+	spirit_material.emission_enabled = true
+	spirit_material.emission = Color(0.12, 0.62, 1.0)
+	spirit_material.emission_energy_multiplier = 2.4 + float(maxi(stage - 1, 0)) * 0.35
+	spirit_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	spirit_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	visual.material_override = spirit_material
+
+	var sphere_shape := SphereShape3D.new()
+	sphere_shape.radius = 0.3 * clampf(visual_scale / 0.35, 0.85, 3.0)
+	collision_shape.shape = sphere_shape
+	collision_shape.position = Vector3(0.0, 0.36, 0.0)
+	camera_pivot.position.y = 0.72
+	move_speed = 4.8
+
+	if not is_instance_valid(soul_orb_halo):
+		soul_orb_halo = MeshInstance3D.new()
+		soul_orb_halo.name = "SoulOrbHalo"
+		var torus := TorusMesh.new()
+		torus.inner_radius = 0.42
+		torus.outer_radius = 0.48
+		torus.rings = 32
+		torus.ring_segments = 8
+		soul_orb_halo.mesh = torus
+		var halo_material := StandardMaterial3D.new()
+		halo_material.albedo_color = Color(0.22, 0.72, 1.0, 0.55)
+		halo_material.emission_enabled = true
+		halo_material.emission = Color(0.08, 0.48, 1.0)
+		halo_material.emission_energy_multiplier = 1.6
+		halo_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		halo_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		soul_orb_halo.material_override = halo_material
+		soul_orb_halo.position = Vector3(0.0, 0.42, 0.0)
+		add_child(soul_orb_halo)
+	soul_orb_halo.visible = true
+	soul_orb_halo.scale = Vector3.ONE * clampf(visual_scale / 0.35, 0.85, 3.8)
+	_apply_soul_affinity_visuals(affinities)
+	_apply_soul_growth_visuals(growth_stage)
+	_apply_soul_fusion_visuals(fusion_names)
+
+
+func set_birth_inheritance_visuals(birth: Dictionary) -> void:
+	if not is_instance_valid(player_humanoid):
+		return
+	if birth.is_empty():
+		if is_instance_valid(birth_resonance_root):
+			birth_resonance_root.visible = false
+		return
+	if not is_instance_valid(birth_resonance_root):
+		birth_resonance_root = Node3D.new()
+		birth_resonance_root.name = "BirthResonanceVisuals"
+		player_humanoid.add_child(birth_resonance_root)
+		for index in range(3):
+			var ring := MeshInstance3D.new()
+			ring.name = "BirthResonanceRing" + str(index + 1)
+			var torus := TorusMesh.new()
+			torus.inner_radius = 0.46 + float(index) * 0.12
+			torus.outer_radius = torus.inner_radius + 0.025
+			torus.rings = 32
+			torus.ring_segments = 6
+			ring.mesh = torus
+			ring.position.y = 0.48 + float(index) * 0.42
+			ring.rotation.x = [PI * 0.5, 0.72, -0.72][index]
+			birth_resonance_root.add_child(ring)
+		var aura := MeshInstance3D.new()
+		aura.name = "BirthResonanceAura"
+		var aura_mesh := SphereMesh.new()
+		aura_mesh.radius = 0.48
+		aura_mesh.height = 1.45
+		aura_mesh.radial_segments = 20
+		aura_mesh.rings = 12
+		aura.mesh = aura_mesh
+		aura.position.y = 0.92
+		birth_resonance_root.add_child(aura)
+	var dominant := str(birth.get("dominant_attribute", ""))
+	var resonance_color := Color(0.68, 0.72, 0.82)
+	match dominant:
+		"strength":
+			resonance_color = Color(1.0, 0.34, 0.18)
+		"constitution":
+			resonance_color = Color(0.92, 0.72, 0.34)
+		"agility":
+			resonance_color = Color(0.22, 0.86, 0.82)
+		"spirit":
+			resonance_color = Color(0.68, 0.44, 1.0)
+		"vitality":
+			resonance_color = Color(0.28, 0.88, 0.48)
+	var growth_stage := clampi(int(birth.get("source_growth_stage", 1)), 1, 5)
+	var applied_total := int(birth.get("applied_strength", 0)) + int(birth.get("applied_constitution", 0)) + int(birth.get("applied_agility", 0)) + int(birth.get("applied_spirit", 0)) + int(birth.get("applied_vitality", 0))
+	birth_resonance_root.visible = true
+	for index in range(3):
+		var ring := birth_resonance_root.get_node("BirthResonanceRing" + str(index + 1)) as MeshInstance3D
+		ring.visible = growth_stage >= index + 2
+		ring.material_override = _make_trait_material(resonance_color, 0.30 + minf(float(applied_total) * 0.025, 0.22))
+		ring.scale = Vector3.ONE * (1.0 + float(growth_stage - 1) * 0.045)
+	var aura := birth_resonance_root.get_node("BirthResonanceAura") as MeshInstance3D
+	aura.visible = growth_stage >= 4 or applied_total >= 6
+	aura.material_override = _make_trait_material(resonance_color, 0.055 + minf(float(applied_total) * 0.008, 0.06))
+
+
+func _apply_soul_growth_visuals(growth_stage: int) -> void:
+	soul_growth_stage = clampi(growth_stage, 1, 5)
+	while soul_growth_rings.size() < 3:
+		var ring_index := soul_growth_rings.size()
+		var ring := MeshInstance3D.new()
+		ring.name = "SoulGrowthRing" + str(ring_index + 1)
+		var torus := TorusMesh.new()
+		torus.inner_radius = 0.82 + float(ring_index) * 0.18
+		torus.outer_radius = torus.inner_radius + 0.045
+		torus.rings = 32
+		torus.ring_segments = 6
+		ring.mesh = torus
+		ring.position.y = 0.42
+		ring.rotation.x = [0.0, 0.68, -0.68][ring_index]
+		ring.material_override = _make_trait_material(Color(0.42, 0.82, 1.0), 0.42)
+		add_child(ring)
+		soul_growth_rings.append(ring)
+	for i in range(soul_growth_rings.size()):
+		var ring := soul_growth_rings[i]
+		ring.visible = soul_growth_stage >= i + 2
+		ring.scale = Vector3.ONE * soul_form_scale * (1.0 + float(i) * 0.08)
+	if not is_instance_valid(soul_growth_shell):
+		soul_growth_shell = MeshInstance3D.new()
+		soul_growth_shell.name = "SoulMatureShell"
+		var shell_mesh := SphereMesh.new()
+		shell_mesh.radius = 0.53
+		shell_mesh.height = 1.06
+		shell_mesh.radial_segments = 24
+		shell_mesh.rings = 12
+		soul_growth_shell.mesh = shell_mesh
+		soul_growth_shell.position.y = 0.42
+		soul_growth_shell.material_override = _make_trait_material(Color(0.42, 0.82, 1.0), 0.10)
+		add_child(soul_growth_shell)
+	soul_growth_shell.visible = soul_growth_stage >= 5
+	soul_growth_shell.scale = Vector3.ONE * soul_form_scale * 1.12
+
+func _apply_soul_fusion_visuals(fusion_names: Array) -> void:
+	if not is_instance_valid(soul_fusion_ring):
+		soul_fusion_ring = MeshInstance3D.new()
+		soul_fusion_ring.name = "SoulFusionSealRing"
+		var ring_mesh := TorusMesh.new()
+		ring_mesh.inner_radius = 0.94
+		ring_mesh.outer_radius = 1.015
+		ring_mesh.rings = 40
+		ring_mesh.ring_segments = 8
+		soul_fusion_ring.mesh = ring_mesh
+		soul_fusion_ring.position.y = 0.42
+		soul_fusion_ring.rotation.x = 0.34
+		add_child(soul_fusion_ring)
+	var fusion_color := Color(0.92, 0.78, 0.42)
+	if fusion_names.has("战躯魂印"):
+		fusion_color = Color(1.0, 0.34, 0.18)
+	if fusion_names.has("风灵魂印"):
+		fusion_color = Color(0.28, 0.82, 1.0)
+	if fusion_names.has("不灭魂种"):
+		fusion_color = Color(0.30, 1.0, 0.48)
+	if fusion_names.has("五行混元魂"):
+		fusion_color = Color(1.0, 0.82, 0.34)
+	soul_fusion_ring.material_override = _make_trait_material(fusion_color, 0.82)
+	soul_fusion_ring.visible = fusion_names.size() > 0
+	soul_fusion_ring.scale = Vector3.ONE * soul_form_scale * 1.28
+
+func _make_trait_material(color: Color, alpha: float = 0.58) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(color.r, color.g, color.b, alpha)
+	material.emission_enabled = true
+	material.emission = color
+	material.emission_energy_multiplier = 1.35
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	return material
+
+func _apply_soul_affinity_visuals(affinities: Dictionary) -> void:
+	var beast := int(affinities.get("beast", 0))
+	var battle := int(affinities.get("battle", 0))
+	var gale := int(affinities.get("gale", 0))
+	var spirit := int(affinities.get("spirit", 0)) + int(affinities.get("selected_spirit", 0))
+	var life := int(affinities.get("life", 0)) + int(affinities.get("selected_vitality", 0))
+	var strength := int(affinities.get("selected_strength", 0))
+	var constitution := int(affinities.get("selected_constitution", 0))
+	var agility := int(affinities.get("selected_agility", 0))
+	var primary := Color(0.12, 0.62, 1.0)
+	var highest := 0
+	var traits := [
+		{"count": beast, "color": Color(1.0, 0.68, 0.22)},
+		{"count": battle, "color": Color(1.0, 0.20, 0.16)},
+		{"count": gale, "color": Color(0.22, 0.92, 0.72)},
+		{"count": spirit, "color": Color(0.72, 0.42, 1.0)},
+		{"count": life, "color": Color(0.28, 1.0, 0.48)},
+		{"count": strength, "color": Color(1.0, 0.38, 0.22)},
+		{"count": constitution, "color": Color(0.86, 0.72, 0.38)},
+		{"count": agility, "color": Color(0.24, 0.88, 0.86)}
+	]
+	for trait_data in traits:
+		if int(trait_data["count"]) > highest:
+			highest = int(trait_data["count"])
+			primary = trait_data["color"]
+	var core_material := _make_trait_material(primary, 0.72)
+	core_material.emission_energy_multiplier = 2.4
+	visual.material_override = core_material
+	if not is_instance_valid(soul_trait_ring):
+		soul_trait_ring = MeshInstance3D.new()
+		soul_trait_ring.name = "SoulAffinityRing"
+		var ring_mesh := TorusMesh.new()
+		ring_mesh.inner_radius = 0.55
+		ring_mesh.outer_radius = 0.59
+		ring_mesh.rings = 36
+		ring_mesh.ring_segments = 8
+		soul_trait_ring.mesh = ring_mesh
+		soul_trait_ring.position.y = 0.42
+		add_child(soul_trait_ring)
+	soul_trait_ring.material_override = _make_trait_material(primary, 0.72)
+	soul_trait_ring.visible = highest > 0
+	soul_trait_ring.scale = Vector3.ONE * soul_form_scale
+	if not is_instance_valid(soul_trait_shell):
+		soul_trait_shell = MeshInstance3D.new()
+		soul_trait_shell.name = "SoulBeastAura"
+		var shell_mesh := SphereMesh.new()
+		shell_mesh.radius = 0.43
+		shell_mesh.height = 0.86
+		shell_mesh.radial_segments = 20
+		shell_mesh.rings = 10
+		soul_trait_shell.mesh = shell_mesh
+		soul_trait_shell.position.y = 0.42
+		add_child(soul_trait_shell)
+	soul_trait_shell.material_override = _make_trait_material(Color(1.0, 0.64, 0.20), 0.16)
+	soul_trait_shell.visible = beast > 0
+	soul_trait_shell.scale = Vector3.ONE * soul_form_scale * 1.16
+	if not is_instance_valid(soul_trait_rune_ring):
+		soul_trait_rune_ring = MeshInstance3D.new()
+		soul_trait_rune_ring.name = "SoulSpiritRunes"
+		var rune_mesh := TorusMesh.new()
+		rune_mesh.inner_radius = 0.68
+		rune_mesh.outer_radius = 0.71
+		rune_mesh.rings = 32
+		rune_mesh.ring_segments = 6
+		soul_trait_rune_ring.mesh = rune_mesh
+		soul_trait_rune_ring.position.y = 0.42
+		soul_trait_rune_ring.rotation.x = 0.72
+		add_child(soul_trait_rune_ring)
+	soul_trait_rune_ring.material_override = _make_trait_material(Color(0.72, 0.38, 1.0), 0.72)
+	soul_trait_rune_ring.visible = spirit > 0
+	soul_trait_rune_ring.scale = Vector3.ONE * soul_form_scale
+	if not is_instance_valid(soul_trait_life_ring):
+		soul_trait_life_ring = MeshInstance3D.new()
+		soul_trait_life_ring.name = "SoulLifeHalo"
+		var life_mesh := TorusMesh.new()
+		life_mesh.inner_radius = 0.76
+		life_mesh.outer_radius = 0.79
+		life_mesh.rings = 32
+		life_mesh.ring_segments = 6
+		soul_trait_life_ring.mesh = life_mesh
+		soul_trait_life_ring.position.y = 0.42
+		soul_trait_life_ring.rotation.x = -0.72
+		add_child(soul_trait_life_ring)
+	soul_trait_life_ring.material_override = _make_trait_material(Color(0.28, 1.0, 0.48), 0.68)
+	soul_trait_life_ring.visible = life > 0
+	soul_trait_life_ring.scale = Vector3.ONE * soul_form_scale
+
+
+func play_hit_reaction(damage: int, attack_style: String = "") -> void:
+	# A confirmed incoming hit always interrupts unattended travel.
+	clear_auto_navigation_target()
+	if attack_style == "heavy_slam":
+		HHAudio.play_combat("heavy_hit", 0.92)
+	else:
+		HHAudio.play_combat("hit", randf_range(0.94, 1.06))
+	# A confirmed hit interrupts an in-progress attack instead of letting it resume afterward.
+	attack_animation_time = 0.0
+	var style_duration := 0.32
+	var style_strength := 0.055
+	match attack_style:
+		"heavy_slam":
+			style_duration = 0.48
+			style_strength = 0.14
+		"frost_bolt":
+			style_duration = 0.27
+			style_strength = 0.045
+		"poison_bolt", "poison_tick":
+			style_duration = 0.30
+			style_strength = 0.05
+		"soul_bolt":
+			style_duration = 0.36
+			style_strength = 0.075
+		"melee":
+			style_duration = 0.34
+			style_strength = 0.065
+	# Keep the longer active reaction when hits overlap; the animation phase
+	# and camera shake must use the same duration denominator.
+	style_duration = maxf(style_duration, hit_reaction_time)
+	hit_reaction_duration = style_duration
+	hit_animation_time = maxf(hit_animation_time, style_duration)
+	hit_reaction_time = maxf(hit_reaction_time, style_duration)
+	var damage_strength := clampf(float(maxi(damage, 0)) / 240.0, 0.0, 0.045)
+	hit_reaction_strength = maxf(hit_reaction_strength, style_strength + damage_strength)
+	_spawn_hit_flash(attack_style)
+	_spawn_hit_reaction_visual(attack_style)
+
+
+func play_shield_absorb(absorbed: int, attack_style: String = "") -> void:
+	if absorbed <= 0 or not is_instance_valid(visual):
+		return
+	var ring := MeshInstance3D.new()
+	ring.name = "PlayerShieldAbsorbRing"
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.48
+	ring_mesh.outer_radius = 0.55
+	ring_mesh.rings = 28
+	ring_mesh.ring_segments = 8
+	ring.mesh = ring_mesh
+	ring.position = Vector3(0.0, 0.92, 0.0)
+	ring.rotation.x = PI / 2.0
+	var tint := Color("#8bdfff")
+	if attack_style == "poison_bolt":
+		tint = Color("#9cffb0")
+	elif attack_style == "heavy_slam":
+		tint = Color("#b6c9ff")
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(tint.r, tint.g, tint.b, 0.88)
+	material.emission_enabled = true
+	material.emission = tint
+	material.emission_energy_multiplier = 2.8
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring.material_override = material
+	visual.add_child(ring)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(ring, "scale", Vector3(1.8, 1.8, 1.8), 0.30)
+	tween.tween_property(material, "albedo_color:a", 0.0, 0.30)
+	tween.tween_property(material, "emission_energy_multiplier", 0.0, 0.30)
+	tween.chain().tween_callback(Callable(ring, "queue_free"))
+
+
+func _hit_flash_color(attack_style: String) -> Color:
+	match attack_style:
+		"heavy_slam":
+			return Color("#ff985e")
+		"poison_bolt", "poison_tick":
+			return Color("#8cff72")
+		"frost_bolt":
+			return Color("#75e7ff")
+		"soul_bolt":
+			return Color("#d39aff")
+		_:
+			return Color("#d9f2ff")
+
+
+func _apply_hit_flash_recursive(node: Node, material: StandardMaterial3D) -> void:
+	if node is GeometryInstance3D:
+		(node as GeometryInstance3D).material_overlay = material
+	for child in node.get_children():
+		_apply_hit_flash_recursive(child, material)
+
+
+func _clear_hit_flash_recursive(node: Node, material: StandardMaterial3D) -> void:
+	if node is GeometryInstance3D:
+		var geometry := node as GeometryInstance3D
+		if geometry.material_overlay == material:
+			geometry.material_overlay = null
+	for child in node.get_children():
+		_clear_hit_flash_recursive(child, material)
+
+
+func _clear_hit_flash_visual(root: Node, material: StandardMaterial3D) -> void:
+	if is_instance_valid(root):
+		_clear_hit_flash_recursive(root, material)
+
+
+func _spawn_hit_flash(attack_style: String) -> void:
+	if not is_instance_valid(visual):
+		return
+	var previous: StandardMaterial3D = null
+	if visual.has_meta("hit_flash_material"):
+		previous = visual.get_meta("hit_flash_material") as StandardMaterial3D
+	if is_instance_valid(previous):
+		_clear_hit_flash_recursive(visual, previous)
+	var flash := StandardMaterial3D.new()
+	var tint := _hit_flash_color(attack_style)
+	flash.albedo_color = Color(tint.r, tint.g, tint.b, 0.62)
+	flash.emission_enabled = true
+	flash.emission = tint
+	flash.emission_energy_multiplier = 1.7
+	flash.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	flash.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	visual.set_meta("hit_flash_material", flash)
+	_apply_hit_flash_recursive(visual, flash)
+	var tween := create_tween()
+	tween.tween_property(flash, "albedo_color:a", 0.0, 0.22)
+	tween.parallel().tween_property(flash, "emission_energy_multiplier", 0.0, 0.22)
+	tween.tween_callback(Callable(self, "_clear_hit_flash_visual").bind(visual, flash))
+
+
+func _spawn_hit_reaction_visual(attack_style: String) -> void:
+	if not is_instance_valid(visual):
+		return
+	var ring := MeshInstance3D.new()
+	ring.name = "PlayerHitReactionRing"
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.42
+	ring_mesh.outer_radius = 0.52
+	ring_mesh.rings = 24
+	ring_mesh.ring_segments = 8
+	ring.mesh = ring_mesh
+	ring.position = Vector3(0.0, 0.08, 0.0)
+	ring.rotation.x = PI / 2.0
+	var tint := _hit_flash_color(attack_style)
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(tint.r, tint.g, tint.b, 0.82)
+	material.emission_enabled = true
+	material.emission = tint
+	material.emission_energy_multiplier = 2.0
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring.material_override = material
+	visual.add_child(ring)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(ring, "scale", Vector3.ONE * 2.0, 0.34)
+	tween.tween_property(material, "albedo_color:a", 0.0, 0.34)
+	tween.tween_property(material, "emission_energy_multiplier", 0.0, 0.34)
+	tween.chain().tween_callback(Callable(ring, "queue_free"))
+
+func play_attack_animation() -> void:
+	if hit_animation_time > 0.0:
+		return
+	HHAudio.play_combat("attack", randf_range(0.94, 1.06))
+	# The underworld avatar is a soul orb rather than a humanoid rig. It still
+	# needs a clear attack tell when the server accepts an attack command.
+	if not soul_form_enabled and not is_instance_valid(player_humanoid):
+		return
+	attack_animation_time = 0.34
+	_spawn_attack_sweep_visual()
+
+
+func _spawn_attack_sweep_visual() -> void:
+	if not is_instance_valid(visual):
+		return
+	var slash := MeshInstance3D.new()
+	slash.name = "AttackSweepVisual"
+	var mesh := ImmediateMesh.new()
+	var material := StandardMaterial3D.new()
+	var tint := Color("#8fd8ff")
+	var half_angle := 0.92
+	var inner_radius := 0.52
+	var outer_radius := 1.18
+	match attack_animation_style:
+		"spear_thrust":
+			tint = Color("#d8eaff")
+			half_angle = 0.25
+			inner_radius = 0.18
+			outer_radius = 1.25
+		"staff_cast":
+			tint = Color("#9b8cff")
+			half_angle = 0.72
+			inner_radius = 0.38
+			outer_radius = 1.05
+		"ranged_shot":
+			tint = Color("#f4d58a")
+			half_angle = 0.16
+			inner_radius = 0.12
+			outer_radius = 0.92
+		"heavy_swing":
+			tint = Color("#ffb36b")
+			half_angle = 1.18
+			inner_radius = 0.46
+			outer_radius = 1.34
+		"sword_slash":
+			tint = Color("#b8f0ff")
+	material.albedo_color = Color(tint.r, tint.g, tint.b, 0.72)
+	material.emission_enabled = true
+	material.emission = tint
+	material.emission_energy_multiplier = 2.2
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES, material)
+	var segments := 14
+	for index in range(segments):
+		var angle_a := lerpf(-half_angle, half_angle, float(index) / float(segments))
+		var angle_b := lerpf(-half_angle, half_angle, float(index + 1) / float(segments))
+		var inner_a := Vector3(sin(angle_a) * inner_radius, cos(angle_a) * inner_radius, 0.0)
+		var outer_a := Vector3(sin(angle_a) * outer_radius, cos(angle_a) * outer_radius, 0.0)
+		var inner_b := Vector3(sin(angle_b) * inner_radius, cos(angle_b) * inner_radius, 0.0)
+		var outer_b := Vector3(sin(angle_b) * outer_radius, cos(angle_b) * outer_radius, 0.0)
+		mesh.surface_add_vertex(inner_a)
+		mesh.surface_add_vertex(outer_a)
+		mesh.surface_add_vertex(outer_b)
+		mesh.surface_add_vertex(inner_a)
+		mesh.surface_add_vertex(outer_b)
+		mesh.surface_add_vertex(inner_b)
+	mesh.surface_end()
+	slash.mesh = mesh
+	slash.position = Vector3(0.0, 0.72, -0.58)
+	slash.rotation.z = -0.22 if attack_animation_style == "heavy_swing" else 0.12
+	slash.scale = Vector3(0.72, 0.72, 0.72)
+	visual.add_child(slash)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(slash, "scale", Vector3(1.12, 1.12, 1.12), 0.22)
+	tween.tween_property(material, "albedo_color:a", 0.0, 0.22)
+	tween.tween_property(material, "emission_energy_multiplier", 0.0, 0.22)
+	tween.chain().tween_callback(Callable(slash, "queue_free"))
+
+
+func _process(delta: float) -> void:
+	if not is_dead and current_move_input.length() > 0.12 and is_on_floor():
+		footstep_audio_remaining -= delta
+		if footstep_audio_remaining <= 0.0:
+			HHAudio.play_world("footstep", global_position, randf_range(0.92, 1.08), 16.0)
+			footstep_audio_remaining = 0.48
+	else:
+		footstep_audio_remaining = minf(footstep_audio_remaining, 0.12)
+	hit_reaction_time = maxf(hit_reaction_time - delta, 0.0)
+	if soul_form_enabled and is_instance_valid(visual):
+		attack_animation_time = maxf(attack_animation_time - delta, 0.0)
+		var soul_attack_progress: float = 1.0 - attack_animation_time / 0.34
+		var soul_attack_pulse: float = sin(clampf(soul_attack_progress, 0.0, 1.0) * PI) if attack_animation_time > 0.0 else 0.0
+		visual.scale = Vector3.ONE * soul_form_scale * (1.0 + soul_attack_pulse * 0.24)
+	if is_instance_valid(camera_pivot):
+		var shake_weight := hit_reaction_time / maxf(hit_reaction_duration, 0.01)
+		var shake_time := hit_reaction_duration - hit_reaction_time
+		var shake_frequency := 58.0 if hit_reaction_duration < 0.4 else 43.0
+		var shake := sin(shake_time * shake_frequency) * hit_reaction_strength * shake_weight
+		var vertical := absf(cos(shake_time * (34.0 if hit_reaction_duration < 0.4 else 25.0))) * hit_reaction_strength * 0.32 * shake_weight
+		camera_pivot.position = camera_pivot_base_position + Vector3(shake, vertical, 0.0)
+	if hit_reaction_time <= 0.0:
+		hit_reaction_strength = 0.0
+	hit_animation_time = maxf(hit_animation_time - delta, 0.0)
+	if not soul_form_enabled and is_instance_valid(player_humanoid):
+		humanoid_animation_time += delta
+		var moving := current_move_input.length() > 0.08
+		var stride := sin(humanoid_animation_time * (9.0 if moving else 1.8))
+		var swing := stride * 0.42 if moving else 0.0
+		attack_animation_time = maxf(attack_animation_time - delta, 0.0)
+		var attack_weight := 0.0
+		if attack_animation_time > 0.0:
+			attack_weight = sin((1.0 - attack_animation_time / 0.34) * PI)
+		var animation_state := "hit" if hit_animation_time > 0.0 else ("attack" if attack_animation_time > 0.0 else ("walk" if moving else "idle"))
+		var hit_weight := sin(clampf(1.0 - hit_animation_time / maxf(hit_reaction_duration, 0.01), 0.0, 1.0) * PI) if hit_animation_time > 0.0 else 0.0
+		var native_animation := HumanoidAnimationDriver.apply_state(player_humanoid, animation_state, 0.16, attack_animation_style)
+		if not native_animation:
+			var left_arm := player_humanoid.get_node_or_null("ArmPivotLeft") as Node3D
+			var right_arm := player_humanoid.get_node_or_null("ArmPivotRight") as Node3D
+			var left_leg := player_humanoid.get_node_or_null("LegPivotLeft") as Node3D
+			var right_leg := player_humanoid.get_node_or_null("LegPivotRight") as Node3D
+			var left_attack_lift := 0.20
+			var right_attack_lift := 1.18
+			var attack_sweep := 0.28
+			match attack_animation_style:
+				"spear_thrust":
+					left_attack_lift = 0.38
+					right_attack_lift = 0.92
+					attack_sweep = 0.04
+				"staff_cast":
+					left_attack_lift = 0.72
+					right_attack_lift = 0.82
+					attack_sweep = -0.12
+				"ranged_shot":
+					left_attack_lift = 0.58
+					right_attack_lift = 1.02
+					attack_sweep = -0.08
+				"heavy_swing":
+					left_attack_lift = 0.12
+					right_attack_lift = 1.42
+					attack_sweep = 0.62
+			if is_instance_valid(left_arm):
+				left_arm.rotation.x = (swing if moving else sin(humanoid_animation_time * 1.1) * 0.018) - attack_weight * left_attack_lift
+			if is_instance_valid(right_arm):
+				right_arm.rotation.x = (-swing if moving else sin(humanoid_animation_time * 1.1 + 0.5) * 0.018) - attack_weight * right_attack_lift + hit_weight * 0.48
+				right_arm.rotation.z = -attack_weight * attack_sweep + hit_weight * 0.16
+			if is_instance_valid(left_leg):
+				left_leg.rotation.x = -swing * 0.82
+			if is_instance_valid(right_leg):
+				right_leg.rotation.x = swing * 0.82 + attack_weight * 0.035
+		player_humanoid.position.y = -0.9 + (absf(stride) * 0.045 if moving else sin(humanoid_animation_time * 1.8) * 0.012)
+		if is_instance_valid(birth_resonance_root) and birth_resonance_root.visible:
+			birth_resonance_root.rotation.y += delta * 0.16
+			var birth_aura := birth_resonance_root.get_node_or_null("BirthResonanceAura") as MeshInstance3D
+			if is_instance_valid(birth_aura) and birth_aura.visible:
+				var birth_pulse := 1.0 + sin(humanoid_animation_time * 1.35) * 0.018
+				birth_aura.scale = Vector3.ONE * birth_pulse
+	if not soul_form_enabled or not is_instance_valid(visual):
+		return
+	soul_form_time += delta
+	var bob := sin(soul_form_time * 2.4) * 0.055
+	visual.position.y = 0.42 + bob
+	if is_instance_valid(soul_orb_halo):
+		soul_orb_halo.position.y = 0.42 + bob
+		soul_orb_halo.rotation.y += delta * 0.65
+		var pulse := 1.0 + sin(soul_form_time * 2.0) * 0.035
+		soul_orb_halo.scale = Vector3.ONE * soul_form_scale * pulse
+	if is_instance_valid(soul_trait_ring) and soul_trait_ring.visible:
+		soul_trait_ring.position.y = 0.42 + bob
+		soul_trait_ring.rotation.y -= delta * 0.45
+	if is_instance_valid(soul_trait_shell) and soul_trait_shell.visible:
+		soul_trait_shell.position.y = 0.42 + bob
+	if is_instance_valid(soul_trait_rune_ring) and soul_trait_rune_ring.visible:
+		soul_trait_rune_ring.position.y = 0.42 + bob
+		soul_trait_rune_ring.rotation.y += delta * 0.9
+	if is_instance_valid(soul_trait_life_ring) and soul_trait_life_ring.visible:
+		soul_trait_life_ring.position.y = 0.42 + bob
+		soul_trait_life_ring.rotation.y -= delta * 0.35
+	for i in range(soul_growth_rings.size()):
+		var growth_ring := soul_growth_rings[i]
+		if is_instance_valid(growth_ring) and growth_ring.visible:
+			growth_ring.position.y = 0.42 + bob
+			growth_ring.rotation.y += delta * (0.22 + float(i) * 0.12)
+	if is_instance_valid(soul_growth_shell) and soul_growth_shell.visible:
+		soul_growth_shell.position.y = 0.42 + bob
+		var mature_pulse := 1.0 + sin(soul_form_time * 1.35) * 0.018
+		soul_growth_shell.scale = Vector3.ONE * soul_form_scale * 1.12 * mature_pulse
+	if is_instance_valid(soul_fusion_ring) and soul_fusion_ring.visible:
+		soul_fusion_ring.position.y = 0.42 + bob
+		soul_fusion_ring.rotation.y += delta * 0.32
+		var seal_pulse := 1.0 + sin(soul_form_time * 1.8) * 0.025
+		soul_fusion_ring.scale = Vector3.ONE * soul_form_scale * 1.28 * seal_pulse
+
+
+# Equipment visuals are presentation-only. Server inventory/equipment remains authoritative.
+func set_equipment_visuals(items: Array) -> void:
+	attack_animation_style = _resolve_attack_style(items)
+	if not is_instance_valid(player_humanoid):
+		return
+	var slots := ["weapon", "offhand", "head", "chest", "legs", "boots", "accessory", "back"]
+	for slot in slots:
+		var socket := _get_or_create_equipment_socket(slot)
+		if not is_instance_valid(socket):
+			continue
+		for child in socket.get_children():
+			if child.name == "EquipmentVisual":
+				child.queue_free()
+	for item_value in items:
+		if not (item_value is Dictionary):
+			continue
+		var item: Dictionary = item_value
+		var slot := str(item.get("slot", item.get("equipment_slot", "")))
+		if slot not in slots:
+			continue
+		var socket := _get_or_create_equipment_socket(slot)
+		if not is_instance_valid(socket):
+			continue
+		var equipment_visual := EquipmentVisualFactory.create_equipment_visual(
+			slot,
+			int(item.get("quality", 1)),
+			str(item.get("item_id", ""))
+		)
+		if equipment_visual != null:
+			socket.add_child(equipment_visual)
+
+
+
+func _resolve_attack_style(items: Array) -> String:
+	for item_value in items:
+		if not (item_value is Dictionary):
+			continue
+		var item: Dictionary = item_value
+		var slot := str(item.get("slot", item.get("equipment_slot", "")))
+		if slot != "weapon":
+			continue
+		var weapon_type := str(item.get("weapon_type", ""))
+		match weapon_type:
+			"spear":
+				return "spear_thrust"
+			"bow":
+				return "ranged_shot"
+			"staff", "focus":
+				return "staff_cast"
+			"axe", "hammer":
+				return "heavy_swing"
+			"sword", "dagger":
+				return "sword_slash"
+		# Backward-compatible fallback for old equipment payloads.
+		var identity := (str(item.get("name", "")) + " " + str(item.get("item_id", ""))).to_lower()
+		if identity.contains("spear") or identity.contains("lance") or identity.contains("长枪") or identity.contains("长矛") or identity.contains("枪"):
+			return "spear_thrust"
+		if identity.contains("bow") or identity.contains("crossbow") or identity.contains("弓"):
+			return "ranged_shot"
+		if identity.contains("staff") or identity.contains("wand") or identity.contains("法杖") or identity.contains("拂尘") or identity.contains("法器"):
+			return "staff_cast"
+		if identity.contains("sword") or identity.contains("blade") or identity.contains("剑") or identity.contains("刀"):
+			return "sword_slash"
+	return "melee"
+
+func _get_or_create_equipment_socket(slot: String) -> Node3D:
+	if not is_instance_valid(player_humanoid):
+		return null
+	return EquipmentVisualFactory.get_or_create_socket(player_humanoid, slot)
+
+
+func get_equipment_socket_diagnostics() -> Dictionary:
+	var report := {"valid": is_instance_valid(player_humanoid), "slots": {}}
+	if not is_instance_valid(player_humanoid):
+		return report
+	for slot in ["weapon", "offhand", "head", "chest", "legs", "boots", "accessory", "back"]:
+		var socket := _get_or_create_equipment_socket(slot)
+		if not is_instance_valid(socket):
+			report["slots"][slot] = {"valid": false, "reason": "socket_unavailable"}
+			continue
+		report["slots"][slot] = EquipmentVisualFactory.inspect_socket_binding(player_humanoid, slot)
+	player_humanoid.set_meta("equipment_socket_diagnostics", report["slots"])
+	return report

@@ -1,60 +1,206 @@
-# 洪荒：诸天轮回
+# Godot 客户端
 
-一款以洪荒神话、诸天世界与灵魂轮回为核心的 3D 开放世界 MMORPG。项目采用 Godot 4.x 客户端、Go 业务后端、C++ 实时世界服务器，面向 Windows PC 首发。
+项目配置目标为 Godot 4.6，GDScript 负责界面与游戏逻辑，GDExtension + ENet 负责与独立 C++ 世界服通信。注意：NativeNet 当前仍固定使用 godot-cpp 4.3-stable，正式联机前必须确认本机 DLL 与编辑器版本兼容。
 
-## 当前阶段
+## 当前客户端流程
 
-**P0：工程基础与多人联网垂直切片。** 当前优先验证账号登录、灵魂档案、世界入口、多人连接、玩家位置同步与断线恢复。美术资源先使用占位资产，联网闭环稳定后再投入高品质场景与角色资产。
+1. 首次启动自动读取本机配置，中心服默认 `http://192.168.124.13:8787`，默认账号预填 `test_player`。
+2. 账号登录。
+3. 自动读取灵魂档案；不存在时创建灵魂档案。
+4. 读取世界列表；首次进入时创建第一世角色。
+5. 调用中心服申请 60 秒有效的一次性世界入口票据。
+6. 通过原生 ENet 扩展连接世界服，发送 ClientHello。
+7. 校验 ServerWelcome / ServerReject；成功后每 10 秒发送一次心跳，并要求服务端返回心跳应答；连续 30 秒未收到应答时，客户端主动断开并显示重连入口。
 
-## 技术栈
+## 构建原生网络扩展
 
-- Client: Godot 4.x, GDScript; performance-critical extensions via C++/GDExtension when needed
-- Backend: Go modular monolith, HTTPS/JSON
-- Realtime: standalone C++20 world server, ENet over UDP
-- Database: PostgreSQL
-- Cache: Redis
-- Messaging: NATS
-- Admin: Vue 3 + TypeScript
-- Deployment: Linux + Docker Compose
-- Protocol: versioned, language-neutral message schemas shared by client and server
+请先构建扩展，具体步骤见 [NativeNet README](NativeNet/README.md)。
 
-## Repository layout
+Windows 开发机在仓库根目录运行：
 
-```text
-Client/HongHuangClient/   Godot client
-Backend/                  Go account and world business APIs
-GameServer/WorldServer/   C++ authoritative realtime server
-Protocol/                 Shared network/API protocol definitions
-Database/                 PostgreSQL migrations and seed data
-Admin/WebDashboard/       Operations dashboard
-Deployment/               Docker, configs and local scripts
-Tests/                    Integration and acceptance tests
-Docs/                     Architecture and development documents
+```powershell
+powershell -ExecutionPolicy Bypass -File .\NativeNet\build_windows.ps1
 ```
 
-## Development principles
+然后使用与 NativeNet godot-cpp 构建版本一致的 Godot 编辑器打开本目录中的 `project.godot`。项目配置目标为 Godot 4.6，但 NativeNet 目前仍固定 godot-cpp 4.3-stable；如果使用 Godot 4.6，必须先用匹配版本重新构建并验证原生扩展，不能只替换编辑器。确保 `bin/honghuang_native_net.dll` 已生成。
 
-1. The server is authoritative for movement validation, combat, attributes, inventory, drops and reincarnation outcomes.
-2. The client sends input/intent, never trusted final state.
-3. Account, soul and each lifetime's body/character are separate domain entities. Reincarnation creates a new character record; it does not overwrite previous lives.
-4. World design data is separate from physical server nodes. A world may span multiple nodes; a node may host multiple instances.
-5. Start with a modular Go backend; split services only when scale and operational needs justify it.
-6. Do not assume Godot MultiplayerAPI RPC packets are wire-compatible with the standalone C++ server. Define and test an explicit shared protocol.
-7. Keep dependencies and toolchain versions pinned. Avoid unreviewed automatic upgrades.
+## 服务端前置条件
 
-## P0 acceptance
+- 启动中心服 API。
+- 启动已注册、心跳新鲜且状态为 ready 的 WorldServer 节点。
+- 确保角色所在世界存在 ready 的 world instance。
+- 客户端网络必须能够访问中心服 HTTP 地址和世界服 UDP 地址。
 
-- [ ] Go backend, C++ world server and Godot client build independently.
-- [ ] PostgreSQL, Redis and NATS start and are reachable.
-- [ ] Register, login and logout work.
-- [ ] A soul can be created and loaded after restart.
-- [ ] A soul can create its first-life character.
-- [ ] Center service returns a world-server endpoint and short-lived one-time ticket.
-- [ ] At least two clients enter the same test world and see each other's movement.
-- [ ] Disconnect/reconnect restores the latest valid character snapshot.
-- [ ] Server rejects client-submitted final positions, item counts and combat outcomes.
-- [ ] Local start/stop scripts and readable logs are provided.
+如果没有可用世界服，申请入口时中心服会返回 503；这是服务部署状态，不是客户端登录故障。
 
-## Project status
+## 当前边界
 
-This repository is being initialized. See `Docs/Development/ROADMAP.md` for staged delivery and `Docs/Architecture/OVERVIEW.md` for the initial architecture.
+- 已实现：登录、灵魂档案初始化、世界列表、第一世角色创建、入口票据申请。
+- 已实现：Godot 原生 ENet 连接、ClientHello、ServerWelcome / ServerReject 解析和心跳；PlayerJoined / PlayerLeft 可靠事件用于及时更新远端玩家。
+- 已实现：青云人界第三人称测试场景、服务器权威水平移动、基础跳跃/重力、20Hz EntitySnapshot 和远端玩家占位实体。
+- 已实现：80 米玩家 AOI 快照过滤、WorldServer 每秒异步位置快照持久化、中心服孤儿会话回收，以及客户端断线后的手动重新连接。
+- 已实现：背包分类筛选、品质/名称/数量排序、物品详情、六个装备部位展示、装备穿戴/卸下、丹药使用；装备属性由中心服目录配置并在进入世界时同步给 WorldServer。穿脱装备前需先离开世界，再重新进入刷新战斗属性。消耗品恢复生命/灵力已写入中心服角色属性，但在线世界服的即时生命/灵力同步仍待接入。
+- 当前收到 ServerWelcome 后进入可操作的程序化测试地图；这不是最终游戏地图或角色美术。
+- 不要使用 Godot 内置 MultiplayerAPI 直接连接当前 C++ 世界服；它的 RPC wire protocol 与项目自定义帧协议不同。
+
+
+## 青云人界客户端原型
+
+通过中心服认证并收到世界服务器的 `ServerWelcome` 后，客户端会切换到 `scenes/World.tscn`。网络节点和角色快照保存在 `HHSession` Autoload 中，不会因登录场景释放而断开连接。
+
+操作：
+- WASD：移动
+- 空格：跳跃
+- 鼠标：旋转第三人称视角
+- ESC：释放鼠标；点击窗口重新捕获
+- F1：隐藏/显示游戏状态栏
+- F2：单独显示/隐藏网络移动诊断面板（默认隐藏）
+
+当前角色是用于验证镜头、场景和输入的程序化占位模型，不代表最终角色美术。移动和跳跃由客户端发送意图，WorldServer 计算权威位置并广播实体快照。
+
+
+## 青云人界联机移动原型
+
+- 认证成功后进入程序化第三人称测试场景。
+- 客户端每 50ms 发送一次移动/跳跃意图（不直接提交位置）；空格触发跳跃请求。
+- 移动输入通过 ENet 不可靠有序通道发送，避免旧输入在网络拥塞时堆积。
+- WorldServer 对输入做有限值检查、方向归一化、速度限制和地图边界限制；跳跃、重力和地面高度由服务器计算，并以 20Hz 广播权威实体快照。
+- 客户端根据快照插值本地角色和其他在线角色。
+
+当前仍是验证网络与移动闭环的原型：已加入 80 米 AOI、每秒位置持久化和断线后的手动重新连接；中心服会在节点心跳与会话快照都过期后回收孤儿会话。重连时客户端重新申请一次性入口票据，角色从数据库最近保存的位置恢复。尚未实现服务端地形碰撞/寻路、技能战斗、空间网格 AOI 和自动无感重连。不要将其视为最终战斗或物理系统。
+
+
+## 断线重连
+
+世界场景检测到 ENet 连接断开后，会显示“重新连接世界”按钮。点击后客户端使用当前登录令牌重新向中心服申请一次性入口票据，再连接当前可用的 WorldServer。新连接通过 ServerWelcome 后替换旧网络节点，并从服务端快照恢复角色位置。
+
+如果中心服或所有世界节点暂时不可用，界面会显示 HTTP/连接错误，用户可在服务恢复后再次点击重试。当前采用用户触发的手动重连，不会在后台无限自动重试。
+
+
+## 多人玩家生命周期
+
+WorldServer 在玩家完成认证后广播可靠 `PlayerJoined`，在断线或同角色重连替换旧连接时广播 `PlayerLeft`。客户端即时创建或移除远端玩家占位实体；后续仍以 20Hz AOI `EntitySnapshot` 作为位置校正和可见范围的权威来源。事件丢失或客户端刚进入场景时，下一帧快照也会补齐当前可见玩家集合。
+
+
+## 网络失联检测
+
+客户端每 10 秒发送一次可靠心跳，收到 `HeartbeatAck` 后刷新最后应答时间。5 秒检查一次超时状态；超过 30 秒没有任何心跳应答时，客户端将当前连接标记为不可用并主动断开，复用世界场景的手动重连入口。该检测用于发现半开连接，不替代 ENet 自身的连接超时和服务端会话回收。
+
+
+## 本机登录配置
+
+客户端首次启动会自动创建 Godot 用户数据文件 `user://honghuang_client.cfg`，并预填中心服地址和测试用户名。首次使用时输入一次正确密码；登录成功后，客户端会保存中心服地址、用户名、邮箱和密码，下次启动自动填入。修改登录地址或账号后，成功登录时会同步更新配置。
+
+该文件只保存在当前 Windows 用户的 Godot 应用数据目录，不会提交到 Git 仓库。注意：为了实现自动填入密码，当前版本以本机明文配置保存密码，请只在可信任的个人测试电脑上启用，不要在公用电脑或多人共用 Windows 账户上使用。默认测试账号必须先在中心服真实注册或由管理员创建；客户端预填用户名不代表服务端已经创建该账号。
+
+
+角色生命值归零后显示“返回冥界·酆都复活”按钮。复活成功后回到主界面重新进入世界；复活由中心服认证并结算，客户端不直接修改生命值。当前复活出生点暂为冥界原点 `(0,0,0)`。
+
+
+## 冥界 NPC 与灵魂试炼交互（第一阶段）
+
+- 进入世界场景后，客户端通过 `GET /api/v1/worlds/current/npcs` 从中心服加载当前世界 NPC，并按数据库坐标生成占位模型与名称标签；客户端不维护 NPC 的权威位置或任务数据。
+- 靠近 NPC 的交互范围时，HUD 显示交互提示；按 **F** 或点击提示按钮发起交互，**E** 仍用于拾取地面掉落物。
+- 交互请求使用 `POST /api/v1/worlds/current/npcs/interact`，中心服验证当前活跃会话、世界归属和已保存角色坐标后才返回 NPC 对白与功能类型。
+- 镇祟校尉的交互窗口可读取 `GET /api/v1/souls/current/trials`，显示服务端试炼进度、目标数量和奖励入账状态。
+- 轮回殿守卫的交互窗口可读取 `GET /api/v1/souls/current/reincarnation-eligibility`，显示当前灵魂境界、聚灵境要求和首个冥界试炼是否完成。
+- NPC 对话面板可读取 `GET /api/v1/souls/current/progression` 显示跨世灵魂经验与下一境界门槛；满足经验要求时开放“主动突破灵魂境界”，调用 `POST /api/v1/souls/current/breakthrough`，突破成功后自动刷新状态。
+- 冥府判官提供“复核证词，还亡魂清白”与“收下贿赂，草草定罪”两个因果分支；客户端只提交 NPC ID 和选项 ID，中心服按服务端规则调整功德/业力，并确保每个灵魂对判官只能作出一次抉择。选择结果即时显示，完整记录可在因果簿中查看。
+- 轮回殿守卫查询到投胎资格后，可从 NPC 面板选择“返回角色界面办理轮回”。客户端主动断开 ENet；WorldServer 在断开事件中提交最终位置/生命值并调用中心服关闭会话，随后返回启动界面。启动界面复用仍有效的登录会话，重新读取当前灵魂、角色与种族目录。
+- 启动界面的“主动轮回”区可查询中心服投胎资格；不满足时展示当前灵魂境界、聚灵境要求和试炼状态。满足条件后可选择新肉身名称、种族与出生路线；路线由 `GET /api/v1/characters/current/reincarnation-routes` 读取，路线说明展示在选择框下方。经二次确认调用 `POST /api/v1/characters/current/reincarnate`，请求只提交路线 ID，出生世界和坐标由中心服决定。成功后自动申请 `POST /api/v1/worlds/enter`，进入路线对应世界；前世肉身归档，灵魂经验、功德和业力等灵魂数据保留，历世档案记录出生路线。
+- 角色管理界面新增“灵魂历世档案”，通过 `GET /api/v1/souls/current/lives` 读取同一灵魂的全部肉身记录，按世次倒序展示名称、种族、出生世界、境界、等级、肉身状态、创建时间和轮回衔接信息；可手动刷新。历史内容来自中心服数据库，不依赖客户端本地缓存。
+- 新增“前世记忆·灵魂深处”面板。每次主动轮回时，中心服在同一事务中保存上一世的种族、出生世界、境界、等级、修为和肉身经验摘要。记忆印记保存在灵魂档案下，默认需达到魂将境（灵魂境界序号 5）才能读取详情；未达门槛只显示记忆标题和解封条件，不向客户端泄露内容。
+- 新增“因果簿·功德与业力”面板，通过 `GET /api/v1/souls/current/fate` 读取灵魂累计功德、业力和最近 20 条因果记录。酆都游祟讨伐由可信世界服验证后，每次增加 1 点功德；前世记录与功德、业力均归属于灵魂，不随肉身轮回清零。
+- 轮回操作必须在世界会话关闭后执行；资格查询只是展示，中心服创建肉身事务仍会重新校验门槛。若 ENet 断开或 WorldServer 最终保存失败，客户端不会绕过服务端校验强行创建肉身。
+- 当前 NPC 美术为程序化占位模型；完整角色模型、动画和对话树仍待接入。
+
+
+## 世界地图与 Terrain3D
+
+地图采用与渲染器解耦的坐标投影和区域目录。当前 Terrain3D 尚未安装到正式客户端；请先阅读 [Terrain3D 接入记录与版本门禁](docs/TERRAIN3D-INTEGRATION.md)，确认 Godot、NativeNet 和 Terrain3D 的精确版本匹配后再接入。
+
+## 战斗快捷键
+
+- Q：火球术；R：冰锥术；T：嘲讽；Y：回魂术。
+- U：回春术；G：守护灵盾；H：净化术（净化自身的减速、冻结和中毒）。
+- 技能冷却、灵力消耗与效果结算均由世界服务器决定，客户端只发送施法意图。
+
+
+## 冥界地图补充
+
+- 冥界总览将酆都天城、忘川流域、罗酆古神山、后土神域、十八层地狱、幽冥荒原与远方幽冥血海分区展示。
+- 十八层地狱现有独立 18 层目录、层级危险度与守狱者设定；地图点击「十八层地狱」可查看层级顺序。第十四层枉死地狱兼具冤魂复核与错案追查，不单纯作为惩罚关卡。
+- 该层级目录是参考民间传说的游戏化整理，不宣称是唯一的传统版本。
+
+
+## 分块地表与酆都主城灰盒（开发阶段）
+
+- 客户端地表改为 48 m 分块加载，默认保留玩家周围 3×3 个地表块；离开范围后卸载远处地表块。地块同时创建视觉网格和静态碰撞，客户端地形不决定权威移动边界。
+- 当前仍是平面地表灰盒，不是最终高度图地形；后续可以在不改 HUD/网络层的前提下替换为真实高度场或 Terrain3D。
+- 酆都主城已按城市规划数据生成第一版 3D 灰盒：皇城、十王府、判官司、鬼籍司、功过司、巡城司、轮回司、鬼市、魂坊、阴兵大营、引魂驿站及四门，并生成主干道路和城墙轮廓。
+- 城市规划图采用示意坐标缩放到当前 256 m 原型世界，当前仅验证布局与行走尺度，不代表最终大型开放世界尺寸；服务端地图边界暂未扩张。
+
+
+### 酆都街区灰盒扩展
+
+- 主城分区现有建筑类型差异：皇城多重殿宇与柱列、府署侧翼、鬼市摊位与棚顶、魂坊民居、阴兵瞭望塔、城门门柱与引魂驿站顶棚。
+- 主城建筑与城墙添加了客户端静态碰撞体，用于灰盒碰撞验证；当前 WorldServer 的水平移动仍只做世界边界裁剪，尚未接入这些建筑的服务端障碍物判定，不能视为防穿墙完成。
+- 区域名牌按玩家坐标识别皇城、十王府、判官司、鬼籍司、功过司、巡城司、轮回司、鬼市、魂坊、阴兵大营、引魂驿站和南北城门。
+
+
+## 世界生成回归测试
+
+在 Godot 4.3 项目目录执行：
+
+```bash
+godot --headless --path . --script res://tests/world_generation_test.gd
+```
+
+测试覆盖：服务端边界对应的客户端地图范围、十八层目录连续性、3×3 地块加载与移动后的卸载/加载、酆都关键城区/道路/城墙及建筑碰撞节点。
+
+
+## 十八层地狱独立场景灰盒
+
+- 每层数据补充环境主题、危险机制、试炼目标、守狱者定位和奖励主题。
+- 新增 `underworld_hell_floor_builder.gd`，可按 `underworld_hell_01` 至 `underworld_hell_18` 的世界实例 ID 生成独立试炼场景：竞技场地面、四周墙体、柱阵、危险标记、守狱者平台、入口和下一层出口标记。
+- 当前危险标记、守狱者和出口均为场景灰盒，不包含真实伤害结算、首领 AI、任务完成或楼层传送；这些仍需由世界服/任务服务实现。当前中心服尚未开放十八层独立 world instance，因此这套生成器是场景模块，不代表玩家已经能从酆都进入地狱。
+
+## 视听资产第一轮接入（开发中）
+
+- 新增 `scripts/audio_manager.gd`，通过 `HHAudio` Autoload 统一管理音效总线、独立音量、静音和音效播放。
+- 第一批攻击、受击、重击、怪物攻击、死亡、法术和脚步音效由项目代码运行时合成，属于原创占位反馈；不是最终录制音效或正式配乐。
+- 玩家攻击/受击、玩家脚步、怪物服务器确认攻击阶段、怪物死亡结算和法术释放已接入声音反馈。
+- 音频设置保存到本机 `user://honghuang_audio.cfg`；当前还没有正式音量设置 UI。
+- 音频资源目录与授权台账位于 `assets/audio/`，详细规范见 `docs/AUDIO-PIPELINE.md`。外部 Kenney、Sonniss、Freesound 资源仍为候选，尚未下载或导入，必须逐包/逐文件核实商用许可。
+- 新增独立美术检查场景 `scenes/ArtPreviewStage.tscn`，可在 Godot 编辑器中运行，用于同一镜头下对比玩家、荒原狼、铁骨兽、战魂、游祟和酆都鬼门关灰盒。玩家预览也走 GLB 模型库，怪物预览复用正式模型映射；有资源时可直接检查导入效果，没有资源时仍回退到程序化模型。现在支持 1–5 选择模型，并用 I/W/R/A/H/D/Esc 直接预览待机、移动、攻击、受击、死亡动作；缺失动画会显示提示。它不替换正式游戏场景，也不影响联机逻辑。
+- 当前外部 GLB 尚未导入；程序化模型仍是占位模型。美术验收前不将其标记为正式资产。
+
+
+## 第二轮视听升级
+
+- 顶部 HUD 增加「声音设置」面板：总音量、音乐/环境、战斗/环境音效、UI 音效、静音和试听。
+- 进入冥界/青云界时自动切换对应的程序合成氛围循环，离开世界时停止。当前仍是可替换占位声，不是正式配乐。
+- 新增酆都城墙模块、引魂灯、镇魂碑、镇界石柱，集中展示在 `scenes/ArtPreviewStage.tscn`。
+- 拾取成功/失败、十八层地狱试炼波次变化增加音效反馈。
+- 本轮仍未下载外部音频或模型；所有新视觉道具均为项目内原创程序化灰盒。
+
+## 3D 美术资源接入
+
+- 模型覆盖映射见 `scripts/visual_model_library.gd`；把核验后的 GLB 放入 `assets/models/` 并使用映射表中的固定文件名即可覆盖对应占位模型。
+- 没有模型文件或 GLB 场景不含可渲染网格时，会回退到程序化模型，避免资源缺失阻断进入世界。
+- 免费商用来源、逐包授权核验、模型比例/骨骼/动画验收和导入步骤见 [MODEL-ASSET-PIPELINE.md](docs/MODEL-ASSET-PIPELINE.md)。
+- 当前登记的是候选来源与接入机制；尚未把第三方模型包下载并导入游戏，也尚未完成 Godot 实机验收。
+- 外部 GLB 若包含 AnimationPlayer，怪物模型会自动按位移切换 idle/walk/run；已接入服务端确认的怪物攻击、受击、死亡动画触发。玩家人形仍走现有动画驱动，避免控制冲突。动作缺失时保留程序化表现。
+
+
+正式 GLB 接入时，视觉模型会按角色/怪物类型自动校准高度（玩家 1.8m、荒原狼 1.15m、铁骨兽 2.8m 等），缩放范围有限制，异常单位不会被静默放大；详细规则见模型资源接入规范。
+
+## GLB 模型资源自动验收
+
+模型资源放入 `assets/models/` 并完成 Godot 首次导入后，在客户端目录运行：
+
+```bash
+godot --headless --path . --script res://tools/validate_model_assets.gd
+```
+
+工具检查九个模型映射的 GLB 是否可加载、根节点/网格是否有效、骨骼与动画是否存在，并输出 JSON 报告到 `user://model_asset_validation.json`。默认允许缺少候选模型；发布验收时可加 `-- --require-all`，要求九个模型文件全部存在；加 `-- --strict-animations` 会按模型类型检查必需动作，两个参数可以同时使用。模型加载后还会按角色类型自动校准视觉高度，异常缩放会要求人工复核。结构检查通过后仍需人工检查模型朝向、材质、脚底位置和动作。

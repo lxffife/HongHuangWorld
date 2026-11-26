@@ -1,0 +1,9241 @@
+extends Node3D
+
+const UnderworldVisualFactory = preload("res://scripts/underworld_visual_factory.gd")
+const VisualModelLibrary = preload("res://scripts/visual_model_library.gd")
+const EquipmentVisualFactory = preload("res://scripts/equipment_visual_factory.gd")
+const HumanoidAnimationDriver = preload("res://scripts/humanoid_animation_driver.gd")
+const MonsterAnimationDriver = preload("res://scripts/monster_animation_driver.gd")
+const QingyunVisualFactory = preload("res://scripts/qingyun_visual_factory.gd")
+const FriendPanelScript = preload("res://scripts/friend_panel.gd")
+const WorldMiniMapScript = preload("res://scripts/world_minimap.gd")
+const WorldRegionCatalog = preload("res://scripts/world_region_catalog.gd")
+const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
+const WorldMapViewScript = preload("res://scripts/world_map_view.gd")
+const WorldTerrainBuilder = preload("res://scripts/world_terrain_builder.gd")
+const WorldEnvironmentBuilder = preload("res://scripts/world_environment_builder.gd")
+const UnderworldHellFloorBuilder = preload("res://scripts/underworld_hell_floor_builder.gd")
+const HellTrialPanelScript = preload("res://scripts/hell_trial_panel.gd")
+
+@onready var hud_label: Label = $HUD/Panel/Margin/Content/Status
+@onready var progression_label: Label = $HUD/Panel/Margin/Content/Progression
+@onready var breakthrough_button: Button = $HUD/Panel/Margin/Content/Breakthrough
+@onready var awaken_bloodline_button: Button = $HUD/Panel/Margin/Content/AwakenBloodline
+@onready var train_technique_button: Button = $HUD/Panel/Margin/Content/TrainTechnique
+@onready var attribute_points_label: Label = $HUD/Panel/Margin/Content/AttributePoints
+@onready var strength_button: Button = $HUD/Panel/Margin/Content/AttributeButtons/Strength
+@onready var constitution_button: Button = $HUD/Panel/Margin/Content/AttributeButtons/Constitution
+@onready var agility_button: Button = $HUD/Panel/Margin/Content/AttributeButtons/Agility
+@onready var spirit_button: Button = $HUD/Panel/Margin/Content/AttributeButtons/Spirit
+@onready var vitality_button: Button = $HUD/Panel/Margin/Content/AttributeButtons/Vitality
+@onready var reconnect_button: Button = $HUD/Panel/Margin/Content/Reconnect
+
+var respawn_http: HTTPRequest
+var respawn_button: Button
+var respawn_busy := false
+var progression_http: HTTPRequest
+var wallet_http: HTTPRequest
+var wallet_request_busy := false
+var wallet_refresh_pending := false
+var wallet_label: Label
+var wallet_refresh_timer: Timer
+var soul_essence_http: HTTPRequest
+var soul_essence_profile: Dictionary = {}
+var soul_essence_request_busy := false
+var soul_choice_http: HTTPRequest
+var soul_choice_request_busy := false
+var pending_rare_choice_dialog: ConfirmationDialog
+var pending_rare_choice_option: OptionButton
+var pending_rare_choice_record_id := ""
+var soul_choice_button: Button
+var progression_request_context := ""
+var reconnect_http: HTTPRequest
+var reconnect_network: HHWorldNetwork
+var reconnect_request_busy := false
+var chat_panel: PanelContainer
+var chat_log: VBoxContainer
+var chat_input: LineEdit
+var chat_status: Label
+var chat_scroll: ScrollContainer
+var chat_toggle_button: Button
+var chat_title_label: Label
+var chat_unread_badge: Label
+var friend_panel: Variant
+var selected_friend_character_id := ""
+var selected_friend_character_name := ""
+var chat_channel_buttons: Array[Button] = []
+var chat_unread_count := 0
+var chat_expanded := false
+var chat_restore_mouse_captured := false
+var chat_order_sequence := 0
+var chat_lines_by_channel: Dictionary = {"nearby": [], "world": [], "cross_world": [], "party": [], "system": []}
+var chat_seen_ids: Dictionary = {}
+var selected_chat_channel := "nearby"
+
+var local_player: Variant
+var terrain_chunk_streamer: Node
+var world_terrain_root: Node3D
+var hell_floor_visual_root: Node3D
+var hell_trial_panel: Variant
+var hell_trial_open_button: Button
+var hell_trial_hud_panel: PanelContainer
+var hell_trial_hud_title: Label
+var hell_trial_hud_stage: Label
+var hell_trial_hud_objective: Label
+var hell_trial_hud_hint: Label
+var hell_trial_hud_progress: ProgressBar
+var hell_trial_hud_evidence_toggle: Button
+var hell_trial_hud_evidence_container: VBoxContainer
+var hell_trial_hud_evidence_status: Label
+var hell_trial_hud_rescue_container: VBoxContainer
+var hell_trial_hud_rescue_status: Label
+var hell_trial_hud_rescue_west_button: Button
+var hell_trial_hud_rescue_east_button: Button
+var hell_trial_runtime_data: Dictionary = {}
+var hud_visible := true
+var hud_toggle_button: Button
+var hud_restore_button: Button
+var help_button: Button
+var audio_settings_button: Button
+var audio_settings_panel: PanelContainer
+var audio_settings_restore_mouse_captured := false
+var leave_world_button: Button
+var leave_world_dialog: ConfirmationDialog
+var leaving_world := false
+var leave_transition_started := false
+var help_panel: PanelContainer
+var help_restore_mouse_captured := false
+var death_panel: PanelContainer
+var death_message_label: Label
+var compact_hud_panel: PanelContainer
+var compact_hud_label: Label
+var details_toggle_button: Button
+var details_visible := false
+var vitals_panel: PanelContainer
+var health_label: Label
+var mana_label: Label
+var health_bar: ProgressBar
+var mana_bar: ProgressBar
+var spell_cooldown_labels: Dictionary = {}
+var spell_mastery_labels: Dictionary = {}
+var spell_cooldown_remaining: Dictionary = {"fireball": 0.0, "ice_bolt": 0.0, "taunt": 0.0, "revive": 0.0, "life_mend": 0.0, "guardian_aegis": 0.0, "purify": 0.0}
+var shield_status_label: Label
+var shield_remaining := 0.0
+var shield_amount := 0
+var notification_panel: PanelContainer
+var notification_label: Label
+var notification_timer: Timer
+var notification_queue: Array[Dictionary] = []
+var threat_alert_panel: PanelContainer
+var threat_alert_label: Label
+var threat_alert_bar: ProgressBar
+var threat_alert_timer: Timer
+var revive_channel_panel: PanelContainer
+var revive_channel_label: Label
+var revive_channel_bar: ProgressBar
+var revive_channel_remaining := 0.0
+var revive_channel_total := 5.0
+var vitals_known := false
+var input_debug_panel: PanelContainer
+var input_debug_label: Label
+var input_debug_visible := false
+var input_debug_accumulator := 0.0
+var region_update_accumulator := 0.0
+var current_region_name := ""
+var local_target_position := Vector3.ZERO
+var remote_players: Dictionary = {}
+var remote_targets: Dictionary = {}
+var remote_yaws: Dictionary = {}
+var monsters: Dictionary = {}
+var monster_targets: Dictionary = {}
+var monster_entities: Dictionary = {}
+var monster_animation_time := 0.0
+var selected_monster_id := ""
+var attack_button_held := false
+var attack_repeat_remaining := 0.0
+var attack_repeat_interval := 1.2
+var target_info_panel: PanelContainer
+var combat_reticle: Label
+var target_info_label: Label
+var target_health_bar: ProgressBar
+var target_status_label: Label
+var target_health_fill_style: StyleBoxFlat
+var target_panel_style: StyleBoxFlat
+var combat_summary_label: Label
+var combat_summary_toggle_button: Button
+var combat_summary_expanded := false
+var combat_damage_dealt := 0
+var combat_damage_taken := 0
+var combat_highest_hit := 0
+var combat_critical_hits := 0
+var combat_kills := 0
+var combat_elapsed_seconds := 0.0
+var combat_summary_refresh_remaining := 0.0
+var combat_has_started := false
+var combat_summary_reset_button: Button
+var combat_melee_damage := 0
+var combat_projectile_damage := 0
+var combat_effect_damage := 0
+var combat_recent_entries: Array[String] = []
+var combat_log_label: Label
+var minimap_panel: PanelContainer
+var world_map_panel: PanelContainer
+var world_map_canvas: Control
+var world_map_open_button: Button
+var world_map_mode_button: Button
+var world_map_city_button: Button
+var world_map_hint_label: Label
+var world_map_restore_mouse_captured := false
+var minimap_view: Control
+var minimap_region_label: Label
+var minimap_coordinate_label: Label
+var minimap_exploration_label: Label
+var minimap_navigation_label: Label
+var minimap_clear_navigation_button: Button
+var minimap_auto_navigation_button: Button
+var minimap_navigation_target: Dictionary = {}
+var minimap_auto_navigation_enabled := false
+var minimap_refresh_accumulator := 0.0
+var target_selection_ring: MeshInstance3D
+var floating_combat_labels: Dictionary = {}
+var floating_combat_lifetimes: Dictionary = {}
+var drops: Dictionary = {}
+var drop_targets: Dictionary = {}
+var projectiles: Dictionary = {}
+var projectile_targets: Dictionary = {}
+var inventory_http: HTTPRequest
+var salvage_http: HTTPRequest
+var salvage_busy := false
+var enhancement_http: HTTPRequest
+var enhancement_busy := false
+var crafting_http: HTTPRequest
+var crafting_busy := false
+var inventory_button: Button
+var inventory_panel: PanelContainer
+var inventory_status: Label
+var inventory_items: VBoxContainer
+var inventory_cache: Array = []
+var inventory_filter := "all"
+var inventory_sort_mode := "quality"
+var inventory_sort_option: OptionButton
+var inventory_equipment: VBoxContainer
+var equipment_http: HTTPRequest
+var equipment_action_http: HTTPRequest
+var consumable_http: HTTPRequest
+var consumable_busy := false
+var spell_learning_http: HTTPRequest
+var spell_learning_busy := false
+var equipment_action_busy := false
+var inventory_visible := false
+var inventory_request_busy := false
+var ui_modal_restore_mouse_captured := false
+var inventory_refresh_pending := false
+
+var party_http: HTTPRequest
+var party_refresh_timer: Timer
+var party_button: Button
+var party_panel: PanelContainer
+var party_status_label: Label
+var party_members_box: VBoxContainer
+var party_invites_box: VBoxContainer
+var party_username_input: LineEdit
+var party_invite_row: HBoxContainer
+var party_create_button: Button
+var party_leave_button: Button
+var party_disband_button: Button
+var party_data: Dictionary = {}
+var party_material_loot_option: OptionButton
+var party_equipment_loot_option: OptionButton
+var party_loot_save_button: Button
+var party_focus_label: Label
+var party_focus_button: Button
+var party_focus_clear_button: Button
+var party_member_statuses: Dictionary = {}
+var party_invitations: Array = []
+var party_seen_invitation_ids: Dictionary = {}
+var party_invitation_baseline_loaded := false
+var party_request_context := ""
+var party_action_busy := false
+
+var npc_http: HTTPRequest
+var npc_request_context := ""
+var npc_definitions: Array = []
+var npc_nodes: Dictionary = {}
+var npc_animation_time := 0.0
+var npc_panel: PanelContainer
+var npc_title_label: Label
+var npc_dialogue_label: Label
+var npc_status_label: Label
+var npc_choice_container: VBoxContainer
+var npc_interact_button: Button
+var npc_trial_button: Button
+var npc_eligibility_button: Button
+var npc_soul_button: Button
+var npc_fusion_button: Button
+var npc_soul_breakthrough_button: Button
+var npc_reincarnation_leave_button: Button
+var npc_fate_encounter_button: Button
+var exploration_open_button: Button
+var exploration_container: VBoxContainer
+var exploration_progress_label: Label
+var exploration_feedback := ""
+var exploration_markers: Dictionary = {}
+var exploration_buttons: Dictionary = {}
+var exploration_point_data: Dictionary = {}
+var exploration_event_buttons: Dictionary = {}
+var exploration_event_data: Dictionary = {}
+var pending_exploration_event_id := ""
+var exploration_animation_time := 0.0
+var player_slow_visual_remaining := 0.0
+var player_poison_visual_remaining := 0.0
+var npc_current_interaction_id := ""
+var leaving_for_reincarnation := false
+var npc_selected_id := ""
+var npc_request_busy := false
+var shop_http: HTTPRequest
+var shop_request_busy := false
+var shop_request_context := ""
+var shop_selected_id := ""
+var shop_selected_name := ""
+
+func _ready() -> void:
+	# Keep the status text inside its HUD column at every viewport size.
+	# Long combat feedback belongs in the notification toast, not this compact status area.
+	if is_instance_valid(hud_label):
+		hud_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		hud_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		hud_label.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		hud_label.clip_text = false
+		hud_label.max_lines_visible = 4
+		hud_label.add_theme_font_size_override("font_size", 13)
+	_build_environment()
+	_build_terrain()
+	_build_player()
+	_build_compact_hud()
+	_build_chat_hud()
+	if not HHChatNetwork.message_received.is_connected(_on_chat_socket_message):
+		HHChatNetwork.message_received.connect(_on_chat_socket_message)
+	if not HHChatNetwork.history_received.is_connected(_on_chat_history_received):
+		HHChatNetwork.history_received.connect(_on_chat_history_received)
+	if not HHChatNetwork.conversation_history_received.is_connected(_on_chat_conversation_history_received):
+		HHChatNetwork.conversation_history_received.connect(_on_chat_conversation_history_received)
+	if not HHChatNetwork.connected.is_connected(_on_chat_socket_connected):
+		HHChatNetwork.connected.connect(_on_chat_socket_connected)
+	if not HHChatNetwork.connection_error.is_connected(_on_chat_socket_error):
+		HHChatNetwork.connection_error.connect(_on_chat_socket_error)
+	if not HHSession.access_token.is_empty():
+		HHChatNetwork.connect_chat(HHSession.get_chat_api_base(), HHSession.access_token)
+	_build_combat_hud()
+	_build_hell_trial_hud()
+	_build_minimap_hud()
+	_build_world_map_hud()
+	_build_input_debug_hud()
+	if HHSession.world_network != null:
+		HHSession.world_network.entities_updated.connect(_on_entities_updated)
+		HHSession.world_network.player_joined.connect(_on_player_joined)
+		HHSession.world_network.player_left.connect(_on_player_left)
+		HHSession.world_network.combat_event.connect(_on_combat_event)
+		HHSession.world_network.monster_action_event.connect(_on_monster_action_event)
+		HHSession.world_network.player_action_event.connect(_on_player_action_event)
+		HHSession.world_network.pickup_event.connect(_on_pickup_event)
+		HHSession.world_network.chat_event.connect(_on_chat_event)
+		HHSession.world_network.disconnected.connect(_on_world_disconnected)
+		var spawn: Dictionary = HHSession.world_snapshot
+		local_target_position = Vector3(float(spawn.get("position_x", 0.0)), float(spawn.get("position_y", 0.15)), float(spawn.get("position_z", 0.0)))
+		local_player.position = local_target_position
+	_refresh_current_region(false)
+	_update_hud()
+	_show_hell_trial_runtime_state(HHSession.world_snapshot)
+	progression_http = HTTPRequest.new()
+	progression_http.timeout = 10.0
+	add_child(progression_http)
+	progression_http.request_completed.connect(_on_progression_request_completed)
+	wallet_http = HTTPRequest.new()
+	wallet_http.timeout = 8.0
+	add_child(wallet_http)
+	wallet_http.request_completed.connect(_on_wallet_request_completed)
+	wallet_refresh_timer = Timer.new()
+	wallet_refresh_timer.wait_time = 15.0
+	wallet_refresh_timer.timeout.connect(_request_wallet)
+	add_child(wallet_refresh_timer)
+	wallet_refresh_timer.start()
+	_request_wallet()
+	soul_essence_http = HTTPRequest.new()
+	soul_essence_http.timeout = 10.0
+	add_child(soul_essence_http)
+	soul_essence_http.request_completed.connect(_on_soul_essence_request_completed)
+	soul_choice_http = HTTPRequest.new()
+	soul_choice_http.timeout = 10.0
+	add_child(soul_choice_http)
+	soul_choice_http.request_completed.connect(_on_soul_choice_request_completed)
+	_build_soul_choice_ui()
+	_apply_world_player_form()
+	_request_soul_essence()
+	respawn_http = HTTPRequest.new()
+	respawn_http.timeout = 12.0
+	add_child(respawn_http)
+	respawn_http.request_completed.connect(_on_respawn_request_completed)
+	breakthrough_button.pressed.connect(_on_breakthrough_pressed)
+	awaken_bloodline_button.pressed.connect(_on_awaken_bloodline_pressed)
+	train_technique_button.pressed.connect(_on_train_technique_pressed)
+	strength_button.pressed.connect(_on_allocate_attribute_pressed.bind("strength"))
+	constitution_button.pressed.connect(_on_allocate_attribute_pressed.bind("constitution"))
+	agility_button.pressed.connect(_on_allocate_attribute_pressed.bind("agility"))
+	spirit_button.pressed.connect(_on_allocate_attribute_pressed.bind("spirit"))
+	vitality_button.pressed.connect(_on_allocate_attribute_pressed.bind("vitality"))
+	reconnect_button.pressed.connect(_on_reconnect_pressed)
+	reconnect_http = HTTPRequest.new()
+	reconnect_http.timeout = 12.0
+	add_child(reconnect_http)
+	reconnect_http.request_completed.connect(_on_reconnect_request_completed)
+	_refresh_character_status()
+	_build_inventory_ui()
+	_build_party_ui()
+	_build_npc_ui()
+	_build_death_ui()
+	get_viewport().size_changed.connect(_layout_hud)
+	_layout_hud()
+	_request_world_npcs()
+	_show_notification("已进入「" + _world_display_name(str(HHSession.world_snapshot.get("world_id", ""))) + "」", 5.0)
+
+func _refresh_character_status() -> void:
+	if HHSession.access_token.is_empty():
+		progression_label.text = "角色修炼信息暂不可用：缺少登录凭证"
+		breakthrough_button.disabled = true
+		return
+	progression_request_context = "status"
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token])
+	var error := progression_http.request(
+		HHSession.api_base + "/api/v1/characters/current/status",
+		headers,
+		HTTPClient.METHOD_GET
+	)
+	if error != OK:
+		progression_label.text = "读取修炼状态失败，错误码：" + str(error)
+
+func _on_breakthrough_pressed() -> void:
+	if progression_request_context != "":
+		return
+	breakthrough_button.disabled = true
+	progression_label.text = "正在向中心服申请突破……"
+	progression_request_context = "breakthrough"
+	var headers := PackedStringArray([
+		"Authorization: Bearer " + HHSession.access_token,
+		"Content-Type: application/json"
+	])
+	var error := progression_http.request(
+		HHSession.api_base + "/api/v1/characters/current/breakthrough",
+		headers,
+		HTTPClient.METHOD_POST,
+		"{}"
+	)
+	if error != OK:
+		progression_request_context = ""
+		progression_label.text = "提交突破失败，错误码：" + str(error)
+		breakthrough_button.disabled = false
+
+func _on_awaken_bloodline_pressed() -> void:
+	var primary_id := str(HHSession.world_snapshot.get("primary_bloodline_id", ""))
+	if primary_id.is_empty():
+		primary_id = str(get_meta("primary_bloodline_id", ""))
+	if primary_id.is_empty():
+		progression_label.text = "当前角色没有可觉醒的血脉。"
+		return
+	_submit_growth_action("bloodlines/awaken", {"bloodline_id": primary_id}, "awaken")
+
+func _on_train_technique_pressed() -> void:
+	var technique_id := str(get_meta("starter_technique_id", ""))
+	if technique_id.is_empty():
+		progression_label.text = "当前角色没有已拥有的功法。"
+		return
+	_submit_growth_action("techniques/train", {"technique_id": technique_id, "points": 1}, "train")
+
+func _on_allocate_attribute_pressed(attribute: String) -> void:
+	if progression_request_context != "":
+		return
+	_submit_growth_action("attributes/allocate", {"attribute": attribute, "points": 1}, "attribute")
+
+
+func _submit_growth_action(path: String, payload: Dictionary, context: String) -> void:
+	if progression_request_context != "":
+		return
+	progression_request_context = context
+	awaken_bloodline_button.disabled = true
+	train_technique_button.disabled = true
+	for button in [strength_button, constitution_button, agility_button, spirit_button, vitality_button]:
+		button.disabled = true
+	progression_label.text = "正在向中心服提交成长请求……"
+	var headers := PackedStringArray([
+		"Authorization: Bearer " + HHSession.access_token,
+		"Content-Type: application/json"
+	])
+	var error := progression_http.request(
+		HHSession.api_base + "/api/v1/characters/current/" + path,
+		headers,
+		HTTPClient.METHOD_POST,
+		JSON.stringify(payload)
+	)
+	if error != OK:
+		progression_request_context = ""
+		progression_label.text = "提交成长请求失败，错误码：" + str(error)
+		_refresh_character_status()
+
+func _on_progression_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	var context := progression_request_context
+	progression_request_context = ""
+	if result != HTTPRequest.RESULT_SUCCESS:
+		progression_label.text = "修炼服务连接失败，请检查中心服。"
+		breakthrough_button.disabled = false
+		awaken_bloodline_button.disabled = false
+		train_technique_button.disabled = false
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	var data: Dictionary = parsed if parsed is Dictionary else {}
+	if context == "breakthrough":
+		if response_code >= 200 and response_code < 300:
+			if bool(data.get("advanced_realm", false)):
+				progression_label.text = "大境界突破成功！正在刷新修炼状态……"
+			else:
+				progression_label.text = "小境界突破成功！正在刷新修炼状态……"
+			_refresh_character_status()
+			return
+		progression_label.text = "突破未成功：" + body.get_string_from_utf8()
+		breakthrough_button.disabled = false
+		return
+	if context == "awaken" or context == "train" or context == "attribute":
+		if response_code >= 200 and response_code < 300:
+			if context == "awaken":
+				progression_label.text = "血脉觉醒成功，正在刷新状态……"
+			elif context == "train":
+				progression_label.text = "功法修炼成功，正在刷新状态……"
+			else:
+				progression_label.text = "属性分配成功，正在刷新状态……"
+			_refresh_character_status()
+			return
+		progression_label.text = "成长操作未完成：" + body.get_string_from_utf8()
+		_refresh_character_status()
+		return
+	if response_code < 200 or response_code >= 300:
+		progression_label.text = "读取修炼状态失败：" + body.get_string_from_utf8()
+		breakthrough_button.disabled = true
+		return
+	var character_variant: Variant = data.get("character", {})
+	if is_instance_valid(local_player):
+		var birth_data: Dictionary = character_variant.get("birth_inheritance", {}) if character_variant is Dictionary else {}
+		local_player.set_birth_inheritance_visuals(birth_data)
+	var progression: Dictionary = data.get("progression", {})
+	var cultivation := int(progression.get("cultivation", 0))
+	var bloodlines: Array = data.get("bloodlines", [])
+	var primary_bloodline := "未觉醒"
+	var bloodline_purity := 0
+	var primary_bloodline_id := ""
+	var awakening_stage := 0
+	for bloodline_variant in bloodlines:
+		if bloodline_variant is Dictionary and bool(bloodline_variant.get("is_primary", false)):
+			primary_bloodline = str(bloodline_variant.get("name", "未知血脉"))
+			bloodline_purity = int(bloodline_variant.get("purity", 0))
+			primary_bloodline_id = str(bloodline_variant.get("id", ""))
+			awakening_stage = int(bloodline_variant.get("awakening_stage", 0))
+			break
+	set_meta("primary_bloodline_id", primary_bloodline_id)
+	var techniques: Array = data.get("techniques", [])
+	var starter_technique_id := ""
+	var starter_technique_name := "暂无已拥有功法"
+	var starter_technique_grade := 0
+	var starter_technique_proficiency := 0
+	for technique_variant in techniques:
+		if technique_variant is Dictionary:
+			starter_technique_id = str(technique_variant.get("id", ""))
+			starter_technique_name = str(technique_variant.get("name", "未知功法"))
+			starter_technique_grade = int(technique_variant.get("grade", 0))
+			starter_technique_proficiency = int(technique_variant.get("proficiency", 0))
+			break
+	set_meta("starter_technique_id", starter_technique_id)
+	awaken_bloodline_button.text = "觉醒血脉 · " + primary_bloodline + "（" + str(awakening_stage) + "/9）"
+	awaken_bloodline_button.disabled = primary_bloodline_id.is_empty() or awakening_stage >= 9
+	train_technique_button.text = "修炼功法 · " + starter_technique_name + "（熟练度 " + str(starter_technique_proficiency) + "）"
+	train_technique_button.disabled = starter_technique_id.is_empty() or cultivation < starter_technique_grade * 100
+	var attributes: Dictionary = data.get("attributes", {})
+	var unspent_points := int(progression.get("unspent_attribute_points", 0))
+	attribute_points_label.text = "可分配属性点：" + str(unspent_points) + "  |  力量 " + str(attributes.get("strength", 0)) + " · 体魄 " + str(attributes.get("constitution", 0)) + " · 敏捷 " + str(attributes.get("agility", 0)) + " · 灵识 " + str(attributes.get("spirit", 0)) + " · 元气 " + str(attributes.get("vitality", 0))
+	for button in [strength_button, constitution_button, agility_button, spirit_button, vitality_button]:
+		button.disabled = unspent_points <= 0
+	var system_name := str(progression.get("system_name", "未知体系"))
+	var realm_name := str(progression.get("realm_name", "未知境界"))
+	var stage_name := str(progression.get("realm_stage_name", ""))
+	var tier_name := str(progression.get("power_tier_name", "未映射"))
+	var next_stage: Variant = progression.get("required_for_next_stage", null)
+	var next_realm: Variant = progression.get("required_for_next_realm", null)
+	var threshold_text := ""
+	if next_stage != null:
+		threshold_text = "下一阶段修为：" + str(next_stage)
+	elif next_realm != null:
+		threshold_text = "大境界突破修为：" + str(next_realm)
+	else:
+		threshold_text = "已达到当前体系最高配置境界"
+	_update_compact_hud(progression)
+	progression_label.text = system_name + " · " + realm_name + stage_name + "\n累计修为：" + str(cultivation) + "  |  跨族参考：" + tier_name + "\n主血脉：" + primary_bloodline + "（纯度 " + str(bloodline_purity) + "/10000）\n" + threshold_text
+	breakthrough_button.disabled = next_stage == null and next_realm == null
+
+func _build_environment() -> void:
+	var world_id := str(HHSession.world_snapshot.get("world_id", "qingyun_human"))
+	add_child(WorldEnvironmentBuilder.build(world_id))
+
+func _build_terrain() -> void:
+	var world_id := str(HHSession.world_snapshot.get("world_id", "qingyun_human"))
+	world_terrain_root = WorldTerrainBuilder.build(world_id)
+	add_child(world_terrain_root)
+	terrain_chunk_streamer = world_terrain_root.get_node_or_null("ChunkStreamer")
+
+func _build_player() -> void:
+	# Avoid a global class-cache dependency for the player controller. This also
+	# makes a missing/invalid controller report at the point where it is created.
+	var controller_script := load("res://scripts/player_controller.gd") as Script
+	if controller_script == null:
+		push_error("无法加载玩家控制器：res://scripts/player_controller.gd")
+		return
+	var controller_instance: Variant = controller_script.new()
+	if not (controller_instance is CharacterBody3D):
+		push_error("玩家控制器脚本必须继承 CharacterBody3D。")
+		return
+	local_player = controller_instance
+	local_player.name = "LocalPlayer"
+	local_player.position = Vector3(0.0, 0.15, 0.0)
+	add_child(local_player)
+
+func _build_compact_hud() -> void:
+	var hud := get_node_or_null("HUD") as CanvasLayer
+	if hud == null:
+		return
+	$HUD/Panel.visible = false
+	$HUD/Panel.offset_top = 146.0
+	$HUD/Panel.offset_bottom = 548.0
+	compact_hud_panel = PanelContainer.new()
+	compact_hud_panel.position = Vector2(18.0, 66.0)
+	compact_hud_panel.custom_minimum_size = Vector2(380.0, 96.0)
+	var compact_style := StyleBoxFlat.new()
+	compact_style.bg_color = Color(0.035, 0.055, 0.085, 0.88)
+	compact_style.border_color = Color("#526783")
+	compact_style.set_border_width_all(1)
+	compact_style.set_corner_radius_all(9)
+	compact_style.content_margin_left = 12.0
+	compact_style.content_margin_top = 9.0
+	compact_style.content_margin_right = 12.0
+	compact_style.content_margin_bottom = 9.0
+	compact_hud_panel.add_theme_stylebox_override("panel", compact_style)
+	hud.add_child(compact_hud_panel)
+	compact_hud_label = Label.new()
+	compact_hud_label.text = "洪荒 · 正在载入角色状态……"
+	compact_hud_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	compact_hud_label.custom_minimum_size = Vector2(356.0, 76.0)
+	compact_hud_label.add_theme_font_size_override("font_size", 12)
+	compact_hud_label.add_theme_color_override("font_color", Color("#e2e8f0"))
+	compact_hud_panel.add_child(compact_hud_label)
+	details_toggle_button = Button.new()
+	details_toggle_button.text = "角色 · 修炼"
+	details_toggle_button.position = Vector2(18.0, 118.0)
+	details_toggle_button.custom_minimum_size = Vector2(112.0, 34.0)
+	details_toggle_button.pressed.connect(_toggle_details_panel)
+	hud.add_child(details_toggle_button)
+	hud_toggle_button = Button.new()
+	hud_toggle_button.text = "隐藏界面  F1"
+	hud_toggle_button.custom_minimum_size = Vector2(112.0, 34.0)
+	hud_toggle_button.pressed.connect(_toggle_hud_visibility)
+	hud.add_child(hud_toggle_button)
+	help_button = Button.new()
+	help_button.text = "快捷键  F2"
+	help_button.custom_minimum_size = Vector2(112.0, 34.0)
+	help_button.pressed.connect(_toggle_help_panel)
+	hud.add_child(help_button)
+	audio_settings_button = Button.new()
+	audio_settings_button.text = "声音设置"
+	audio_settings_button.custom_minimum_size = Vector2(112.0, 34.0)
+	audio_settings_button.pressed.connect(_toggle_audio_settings_panel)
+	hud.add_child(audio_settings_button)
+	leave_world_button = Button.new()
+	leave_world_button.text = "退出世界"
+	leave_world_button.custom_minimum_size = Vector2(112.0, 34.0)
+	leave_world_button.pressed.connect(_confirm_leave_world)
+	hud.add_child(leave_world_button)
+	leave_world_dialog = ConfirmationDialog.new()
+	leave_world_dialog.title = "返回角色大厅"
+	leave_world_dialog.dialog_text = "确定退出当前世界并返回角色大厅吗？\n系统将断开世界连接，角色位置以服务器最近一次保存记录为准。"
+	leave_world_dialog.ok_button_text = "退出并返回大厅"
+	leave_world_dialog.cancel_button_text = "继续游戏"
+	leave_world_dialog.confirmed.connect(_leave_world_to_lobby)
+	add_child(leave_world_dialog)
+	hud_restore_button = Button.new()
+	hud_restore_button.text = "显示界面  F1"
+	hud_restore_button.custom_minimum_size = Vector2(124.0, 38.0)
+	hud_restore_button.visible = false
+	hud_restore_button.pressed.connect(_toggle_hud_visibility)
+	hud.add_child(hud_restore_button)
+	_build_controls_help_panel(hud)
+	_build_audio_settings_panel(hud)
+	soul_choice_button = Button.new()
+	soul_choice_button.text = "分配无相灵魄"
+	soul_choice_button.position = Vector2(140.0, 118.0)
+	soul_choice_button.custom_minimum_size = Vector2(150.0, 34.0)
+	soul_choice_button.visible = false
+	soul_choice_button.pressed.connect(_open_pending_rare_choice)
+	hud.add_child(soul_choice_button)
+
+func _build_soul_choice_ui() -> void:
+	pending_rare_choice_dialog = ConfirmationDialog.new()
+	pending_rare_choice_dialog.title = "无相灵魄 · 选择来世资质"
+	pending_rare_choice_dialog.dialog_text = "选择一项属性，永久记入灵魂的来世资质。每枚无相灵魄只能分配一次。"
+	pending_rare_choice_dialog.min_size = Vector2i(420, 190)
+	pending_rare_choice_option = OptionButton.new()
+	pending_rare_choice_option.add_item("力量 · 攻击成长")
+	pending_rare_choice_option.add_item("体质 · 防御成长")
+	pending_rare_choice_option.add_item("敏捷 · 身法成长")
+	pending_rare_choice_option.add_item("灵力 · 法术成长")
+	pending_rare_choice_option.add_item("气血 · 生命成长")
+	pending_rare_choice_option.position = Vector2(24.0, 82.0)
+	pending_rare_choice_option.custom_minimum_size = Vector2(360.0, 38.0)
+	pending_rare_choice_option.size = Vector2(360.0, 38.0)
+	pending_rare_choice_dialog.add_child(pending_rare_choice_option)
+	pending_rare_choice_dialog.confirmed.connect(_submit_rare_essence_choice)
+	add_child(pending_rare_choice_dialog)
+
+func _open_pending_rare_choice() -> void:
+	var pending: Array = soul_essence_profile.get("pending_rare_choices", [])
+	if pending.is_empty():
+		return
+	pending_rare_choice_record_id = str(pending[0].get("record_id", ""))
+	pending_rare_choice_option.select(0)
+	pending_rare_choice_dialog.popup_centered()
+
+func _submit_rare_essence_choice() -> void:
+	if pending_rare_choice_record_id.is_empty() or soul_choice_request_busy or HHSession.access_token.is_empty():
+		return
+	var attributes := ["strength", "constitution", "agility", "spirit", "vitality"]
+	var payload := {"record_id": pending_rare_choice_record_id, "attribute": attributes[pending_rare_choice_option.selected]}
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token, "Content-Type: application/json"])
+	soul_choice_request_busy = true
+	var error := soul_choice_http.request(HHSession.api_base + "/api/v1/souls/current/essence/allocate", headers, HTTPClient.METHOD_POST, JSON.stringify(payload))
+	if error != OK:
+		soul_choice_request_busy = false
+		_show_notification("无相灵魄分配请求失败：" + str(error), 4.0)
+
+func _on_soul_choice_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	soul_choice_request_busy = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		_show_notification("无相灵魄分配失败（HTTP " + str(response_code) + "）", 4.0)
+		return
+	pending_rare_choice_record_id = ""
+	_show_notification("无相灵魄已融入来世资质", 4.0)
+	_request_soul_essence()
+
+func _build_minimap_hud() -> void:
+	var hud := get_node_or_null("HUD") as CanvasLayer
+	if hud == null:
+		return
+	minimap_panel = PanelContainer.new()
+	minimap_panel.name = "WorldMiniMapPanel"
+	minimap_panel.custom_minimum_size = Vector2(196.0, 312.0)
+	_apply_panel_theme(minimap_panel)
+	var minimap_style := StyleBoxFlat.new()
+	minimap_style.bg_color = Color("#091521", 0.94)
+	minimap_style.border_color = Color("#766344")
+	minimap_style.set_border_width_all(1)
+	minimap_style.set_corner_radius_all(12)
+	minimap_style.content_margin_left = 9.0
+	minimap_style.content_margin_right = 9.0
+	minimap_style.content_margin_top = 8.0
+	minimap_style.content_margin_bottom = 8.0
+	minimap_panel.add_theme_stylebox_override("panel", minimap_style)
+	hud.add_child(minimap_panel)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 4)
+	minimap_panel.add_child(layout)
+	var header := Label.new()
+	header.text = "附近地图 · 北向上"
+	header.add_theme_color_override("font_color", Color("#d4b47b"))
+	header.add_theme_font_size_override("font_size", 13)
+	layout.add_child(header)
+	world_map_open_button = Button.new()
+	world_map_open_button.text = "打开世界地图"
+	world_map_open_button.custom_minimum_size.y = 28.0
+	_apply_button_theme(world_map_open_button)
+	world_map_open_button.pressed.connect(_toggle_world_map)
+	layout.add_child(world_map_open_button)
+	minimap_region_label = Label.new()
+	minimap_region_label.text = current_region_name if not current_region_name.is_empty() else "正在定位区域…"
+	minimap_region_label.add_theme_color_override("font_color", Color("#a9bac7"))
+	minimap_region_label.add_theme_font_size_override("font_size", 11)
+	layout.add_child(minimap_region_label)
+	minimap_coordinate_label = Label.new()
+	minimap_coordinate_label.text = "坐标  --  /  --"
+	minimap_coordinate_label.add_theme_color_override("font_color", Color("#8fa9bd"))
+	minimap_coordinate_label.add_theme_font_size_override("font_size", 10)
+	layout.add_child(minimap_coordinate_label)
+	minimap_exploration_label = Label.new()
+	minimap_exploration_label.text = "本区域探索 0 / 0"
+	minimap_exploration_label.add_theme_color_override("font_color", Color("#d6c49f"))
+	minimap_exploration_label.add_theme_font_size_override("font_size", 10)
+	layout.add_child(minimap_exploration_label)
+	minimap_view = Control.new()
+	minimap_view.name = "LiveMapCanvas"
+	minimap_view.set_script(WorldMiniMapScript)
+	minimap_view.connect("marker_selected", Callable(self, "_on_minimap_marker_selected"))
+	minimap_view.custom_minimum_size = Vector2(156.0, 156.0)
+	minimap_view.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	layout.add_child(minimap_view)
+	var legend := Label.new()
+	legend.text = "金 探索点   青 NPC   红 妖兽   紫 地标   白 你"
+	legend.add_theme_color_override("font_color", Color("#9eafbd"))
+	legend.add_theme_font_size_override("font_size", 10)
+	layout.add_child(legend)
+	minimap_navigation_label = Label.new()
+	minimap_navigation_label.text = "点击地图标记开始导航"
+	minimap_navigation_label.add_theme_color_override("font_color", Color("#f0d18b"))
+	minimap_navigation_label.add_theme_font_size_override("font_size", 10)
+	minimap_navigation_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	layout.add_child(minimap_navigation_label)
+	minimap_clear_navigation_button = Button.new()
+	minimap_clear_navigation_button.text = "取消导航"
+	_apply_button_theme(minimap_clear_navigation_button)
+	minimap_clear_navigation_button.pressed.connect(_clear_minimap_navigation)
+	minimap_clear_navigation_button.visible = false
+	layout.add_child(minimap_clear_navigation_button)
+	minimap_auto_navigation_button = Button.new()
+	minimap_auto_navigation_button.text = "开启自动前往"
+	minimap_auto_navigation_button.custom_minimum_size.y = 28.0
+	_apply_button_theme(minimap_auto_navigation_button)
+	minimap_auto_navigation_button.pressed.connect(_toggle_minimap_auto_navigation)
+	minimap_auto_navigation_button.disabled = true
+	layout.add_child(minimap_auto_navigation_button)
+	_update_minimap_data()
+
+
+func _build_world_map_hud() -> void:
+	var hud := get_node_or_null("HUD") as CanvasLayer
+	if hud == null:
+		return
+	world_map_panel = PanelContainer.new()
+	world_map_panel.name = "FullWorldMapPanel"
+	world_map_panel.visible = false
+	world_map_panel.z_index = 80
+	_apply_panel_theme(world_map_panel)
+	hud.add_child(world_map_panel)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 8)
+	world_map_panel.add_child(layout)
+	var header := HBoxContainer.new()
+	layout.add_child(header)
+	var title := Label.new()
+	title.text = "世界地图"
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.add_theme_color_override("font_color", Color("#e0c58f"))
+	title.add_theme_font_size_override("font_size", 18)
+	header.add_child(title)
+	world_map_mode_button = Button.new()
+	world_map_mode_button.text = "冥界总览"
+	_apply_button_theme(world_map_mode_button)
+	world_map_mode_button.pressed.connect(_toggle_world_map_mode)
+	header.add_child(world_map_mode_button)
+	world_map_city_button = Button.new()
+	world_map_city_button.text = "酆都城图"
+	_apply_button_theme(world_map_city_button)
+	world_map_city_button.pressed.connect(_toggle_fengdu_city_mode)
+	header.add_child(world_map_city_button)
+	hell_trial_open_button = Button.new()
+	hell_trial_open_button.text = "十八层地狱"
+	_apply_button_theme(hell_trial_open_button)
+	hell_trial_open_button.pressed.connect(_open_hell_trial_panel)
+	header.add_child(hell_trial_open_button)
+	var close_button := Button.new()
+	close_button.text = "关闭"
+	_apply_button_theme(close_button)
+	close_button.pressed.connect(_toggle_world_map)
+	header.add_child(close_button)
+	world_map_canvas = Control.new()
+	world_map_canvas.name = "WorldMapCanvas"
+	world_map_canvas.set_script(WorldMapViewScript)
+	world_map_canvas.custom_minimum_size = Vector2(620.0, 430.0)
+	world_map_canvas.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	world_map_canvas.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	world_map_canvas.connect("marker_selected", Callable(self, "_on_world_map_marker_selected"))
+	world_map_canvas.connect("world_position_selected", Callable(self, "_on_world_map_position_selected"))
+	world_map_canvas.connect("atlas_region_selected", Callable(self, "_on_underworld_atlas_region_selected"))
+	world_map_canvas.connect("city_district_selected", Callable(self, "_on_fengdu_city_district_selected"))
+	layout.add_child(world_map_canvas)
+	world_map_hint_label = Label.new()
+	world_map_hint_label.text = "灰色：已发现探索点 · 青色：NPC · 红色：妖兽 · 紫色：地标 · 未发现地点隐藏 · 点击标记导航"
+	world_map_hint_label.add_theme_color_override("font_color", Color("#a9bac7"))
+	world_map_hint_label.add_theme_font_size_override("font_size", 11)
+	world_map_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	world_map_hint_label.custom_minimum_size.y = 28.0
+	layout.add_child(world_map_hint_label)
+	hell_trial_panel = HellTrialPanelScript.new()
+	hud.add_child(hell_trial_panel)
+	hell_trial_panel.entry_ticket_received.connect(_on_hell_trial_entry_ticket_received)
+	hell_trial_panel.return_to_fengdu_requested.connect(_on_hell_trial_return_requested)
+	hell_trial_panel.set_current_floor(int(HHSession.world_snapshot.get("hell_floor", 0)))
+	_layout_hud()
+	_update_minimap_data()
+
+
+func _map_world_id() -> String:
+	var world_id := str(HHSession.world_snapshot.get("world_id", ""))
+	var hell_floor := int(HHSession.world_snapshot.get("hell_floor", 0))
+	return "underworld_hell_%02d" % hell_floor if hell_floor > 0 else world_id
+
+func _build_hell_trial_hud() -> void:
+	var hud_root := get_node_or_null("HUD") as Control
+	if hud_root == null:
+		return
+	hell_trial_hud_panel = PanelContainer.new()
+	hell_trial_hud_panel.name = "HellTrialProgressPanel"
+	hell_trial_hud_panel.visible = false
+	hell_trial_hud_panel.z_index = 24
+	hell_trial_hud_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color("#111722ee")
+	panel_style.border_color = Color("#98764f")
+	panel_style.set_border_width_all(1)
+	panel_style.set_corner_radius_all(8)
+	panel_style.content_margin_left = 12.0
+	panel_style.content_margin_right = 12.0
+	panel_style.content_margin_top = 7.0
+	panel_style.content_margin_bottom = 7.0
+	hell_trial_hud_panel.add_theme_stylebox_override("panel", panel_style)
+	hud_root.add_child(hell_trial_hud_panel)
+
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 3)
+	hell_trial_hud_panel.add_child(layout)
+	hell_trial_hud_title = Label.new()
+	hell_trial_hud_title.text = "幽冥刑狱 · 试炼进度"
+	hell_trial_hud_title.add_theme_color_override("font_color", Color("#e7c995"))
+	hell_trial_hud_title.add_theme_font_size_override("font_size", 14)
+	layout.add_child(hell_trial_hud_title)
+	hell_trial_hud_stage = Label.new()
+	hell_trial_hud_stage.add_theme_color_override("font_color", Color("#d7c7a8"))
+	hell_trial_hud_stage.add_theme_font_size_override("font_size", 12)
+	layout.add_child(hell_trial_hud_stage)
+	hell_trial_hud_objective = Label.new()
+	hell_trial_hud_objective.add_theme_color_override("font_color", Color("#aebdca"))
+	hell_trial_hud_objective.add_theme_font_size_override("font_size", 11)
+	hell_trial_hud_objective.clip_text = true
+	hell_trial_hud_objective.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	layout.add_child(hell_trial_hud_objective)
+	hell_trial_hud_hint = Label.new()
+	hell_trial_hud_hint.add_theme_color_override("font_color", Color("#9aa9b8"))
+	hell_trial_hud_hint.add_theme_font_size_override("font_size", 10)
+	hell_trial_hud_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hell_trial_hud_hint.custom_minimum_size.y = 22.0
+	layout.add_child(hell_trial_hud_hint)
+	hell_trial_hud_progress = ProgressBar.new()
+	hell_trial_hud_progress.min_value = 0.0
+	hell_trial_hud_progress.max_value = 1.0
+	hell_trial_hud_progress.value = 0.0
+	hell_trial_hud_progress.show_percentage = false
+	hell_trial_hud_progress.custom_minimum_size.y = 8.0
+	layout.add_child(hell_trial_hud_progress)
+	hell_trial_hud_evidence_toggle = Button.new()
+	hell_trial_hud_evidence_toggle.text = "查验三份证词"
+	hell_trial_hud_evidence_toggle.visible = false
+	hell_trial_hud_evidence_toggle.custom_minimum_size.y = 28.0
+	hell_trial_hud_evidence_toggle.pressed.connect(_toggle_hell_trial_evidence_panel)
+	layout.add_child(hell_trial_hud_evidence_toggle)
+	hell_trial_hud_evidence_container = VBoxContainer.new()
+	hell_trial_hud_evidence_container.visible = false
+	hell_trial_hud_evidence_container.add_theme_constant_override("separation", 5)
+	layout.add_child(hell_trial_hud_evidence_container)
+	hell_trial_hud_evidence_status = Label.new()
+	hell_trial_hud_evidence_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hell_trial_hud_evidence_status.add_theme_color_override("font_color", Color("#e7c995"))
+	hell_trial_hud_evidence_container.add_child(hell_trial_hud_evidence_status)
+	hell_trial_hud_rescue_container = VBoxContainer.new()
+	hell_trial_hud_rescue_container.visible = false
+	hell_trial_hud_rescue_container.add_theme_constant_override("separation", 4)
+	layout.add_child(hell_trial_hud_rescue_container)
+	hell_trial_hud_rescue_status = Label.new()
+	hell_trial_hud_rescue_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hell_trial_hud_rescue_status.add_theme_color_override("font_color", Color("#a9d8c7"))
+	hell_trial_hud_rescue_container.add_child(hell_trial_hud_rescue_status)
+	hell_trial_hud_rescue_west_button = Button.new()
+	hell_trial_hud_rescue_west_button.text = "点亮西侧魂灯"
+	hell_trial_hud_rescue_west_button.custom_minimum_size.y = 28.0
+	hell_trial_hud_rescue_west_button.pressed.connect(_on_hell_trial_soul_lantern_pressed.bind("west"))
+	hell_trial_hud_rescue_container.add_child(hell_trial_hud_rescue_west_button)
+	hell_trial_hud_rescue_east_button = Button.new()
+	hell_trial_hud_rescue_east_button.text = "点亮东侧魂灯"
+	hell_trial_hud_rescue_east_button.custom_minimum_size.y = 28.0
+	hell_trial_hud_rescue_east_button.pressed.connect(_on_hell_trial_soul_lantern_pressed.bind("east"))
+	hell_trial_hud_rescue_container.add_child(hell_trial_hud_rescue_east_button)
+	_layout_hud()
+
+
+func _on_hell_trial_soul_lantern_pressed(lantern_id: String) -> void:
+	if HHSession.world_network == null:
+		_show_notification("当前世界连接不可用。", 2.0)
+		return
+	var send_error: Error = HHSession.world_network.send_hell_trial_soul_lantern(lantern_id)
+	if send_error != OK:
+		_show_notification("魂灯交互发送失败，请稍后重试。", 2.5)
+
+
+func _render_hell_trial_hud(trial_data: Dictionary) -> void:
+	if not is_instance_valid(hell_trial_hud_panel):
+		return
+	var floor_number := int(trial_data.get("floor", HHSession.world_snapshot.get("hell_floor", 0)))
+	if floor_number < 1 or floor_number > 18:
+		hell_trial_hud_panel.visible = false
+		return
+	hell_trial_runtime_data = trial_data.duplicate(true)
+	var stage := int(trial_data.get("stage", 0))
+	var stage_count := maxi(1, int(trial_data.get("stage_count", 4)))
+	var completed := bool(trial_data.get("completed", false))
+	var boss_phase := int(trial_data.get("boss_phase", 0))
+	var active_name := str(trial_data.get("active_name", ""))
+	var stage_text := "试炼完成" if completed else ("守将阶段 · 第 %d 阶段" % maxi(1, boss_phase) if stage >= 3 else "第 %d / %d 波" % [mini(stage + 1, stage_count), stage_count])
+	if not completed and not active_name.is_empty():
+		stage_text += " · " + active_name
+	var kills := maxi(0, int(trial_data.get("objective_kills", 0)))
+	var required := maxi(0, int(trial_data.get("objective_required", 0)))
+	var floor_name := str(trial_data.get("floor_name", "十八层刑狱试炼"))
+	hell_trial_hud_title.text = "第 %02d 层 · %s" % [floor_number, floor_name]
+	hell_trial_hud_stage.text = stage_text
+	var hint := str(trial_data.get("trial_hint", ""))
+	if stage >= 3 and not completed:
+		hint = str(trial_data.get("guardian_hint", hint))
+	if floor_number == 2:
+		var hazard_state: Dictionary = trial_data.get("hazard", {})
+		if not hazard_state.is_empty():
+			var hazard_phase := str(hazard_state.get("phase", "warning"))
+			var hazard_text := "预警中：离开中央刑道" if hazard_phase == "warning" else ("剪刃合拢：中央区域危险" if hazard_phase == "active" else "剪刃回收：可以通行")
+			hint += "\n断缘剪刃 · " + hazard_text + " · %.1f 秒" % float(hazard_state.get("remaining_seconds", 0.0))
+	hell_trial_hud_hint.text = hint
+	hell_trial_hud_hint.visible = not hint.is_empty()
+	var soul_rescue: Dictionary = trial_data.get("soul_rescue", {})
+	var rescue_enabled := floor_number == 3 and bool(soul_rescue.get("enabled", false))
+	hell_trial_hud_rescue_container.visible = rescue_enabled
+	if rescue_enabled:
+		var rescued_count := int(soul_rescue.get("rescued_count", 0))
+		var first_lantern := str(soul_rescue.get("first_lantern_id", ""))
+		var rescue_done := bool(soul_rescue.get("completed", false))
+		var rescue_remaining := float(soul_rescue.get("remaining_seconds", 0.0))
+		if rescue_done:
+			hell_trial_hud_rescue_status.text = "两名亡魂已获救 · 2 / 2"
+		elif rescued_count == 1:
+			var first_side := "西侧" if first_lantern == "west" else "东侧"
+			hell_trial_hud_rescue_status.text = "%s魂灯已点亮，等待另一名队友接应 · %.1f 秒" % [first_side, rescue_remaining]
+		else:
+			hell_trial_hud_rescue_status.text = "两名不同队友分别点亮两侧魂灯，限时 15 秒"
+		hell_trial_hud_rescue_west_button.disabled = rescue_done
+		hell_trial_hud_rescue_east_button.disabled = rescue_done
+	else:
+		hell_trial_hud_rescue_west_button.disabled = false
+		hell_trial_hud_rescue_east_button.disabled = false
+	var investigation: Dictionary = trial_data.get("investigation", {})
+	var investigation_enabled := floor_number == 1 and bool(investigation.get("enabled", false))
+	hell_trial_hud_evidence_toggle.visible = investigation_enabled
+	if investigation_enabled:
+		var solved_count := int(investigation.get("solved_count", 0))
+		hell_trial_hud_evidence_toggle.text = "查验三份证词 · %d / 3" % solved_count
+		_render_hell_trial_evidence(investigation)
+	else:
+		hell_trial_hud_evidence_container.visible = false
+	if required > 0:
+		hell_trial_hud_objective.text = "本层目标进度：%d / %d" % [mini(kills, required), required]
+		hell_trial_hud_progress.max_value = float(required)
+		hell_trial_hud_progress.value = float(clampi(kills, 0, required))
+	else:
+		hell_trial_hud_objective.text = "本层目标：" + str(trial_data.get("label", "等待服务器目标"))
+		hell_trial_hud_progress.max_value = 1.0
+		hell_trial_hud_progress.value = 1.0 if completed else 0.0
+	hell_trial_hud_panel.visible = hud_visible
+	if completed:
+		hell_trial_hud_stage.add_theme_color_override("font_color", Color("#9bd4ad"))
+	else:
+		hell_trial_hud_stage.add_theme_color_override("font_color", Color("#d7c7a8"))
+
+
+func _toggle_hell_trial_evidence_panel() -> void:
+	if not is_instance_valid(hell_trial_hud_evidence_container):
+		return
+	hell_trial_hud_evidence_container.visible = not hell_trial_hud_evidence_container.visible
+	_layout_hud()
+
+
+func _render_hell_trial_evidence(investigation: Dictionary) -> void:
+	if not is_instance_valid(hell_trial_hud_evidence_container):
+		return
+	hell_trial_hud_evidence_status.text = str(investigation.get("conclusion", "核验三份现场证词。"))
+	for child in hell_trial_hud_evidence_container.get_children():
+		if child != hell_trial_hud_evidence_status:
+			child.queue_free()
+	var clues: Variant = investigation.get("clues", [])
+	if not (clues is Array):
+		return
+	for clue_value in clues:
+		if not (clue_value is Dictionary):
+			continue
+		var clue: Dictionary = clue_value
+		var card := VBoxContainer.new()
+		card.add_theme_constant_override("separation", 2)
+		hell_trial_hud_evidence_container.add_child(card)
+		var solved := bool(clue.get("solved", false))
+		var heading := Label.new()
+		heading.text = str(clue.get("name", "证词线索")) + " · " + str(clue.get("location", "刑狱现场")) + (" · 已核验" if solved else " · 待核验")
+		heading.add_theme_color_override("font_color", Color("#9bd4ad") if solved else Color("#e7c995"))
+		card.add_child(heading)
+		var description := Label.new()
+		description.text = str(clue.get("description", ""))
+		description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		description.add_theme_font_size_override("font_size", 10)
+		card.add_child(description)
+		var options_row := HBoxContainer.new()
+		options_row.add_theme_constant_override("separation", 4)
+		card.add_child(options_row)
+		var options: Variant = clue.get("options", [])
+		if options is Array:
+			for option_value in options:
+				if not (option_value is Dictionary):
+					continue
+				var option: Dictionary = option_value
+				var choice_id := str(option.get("id", ""))
+				var choice_button := Button.new()
+				choice_button.text = str(option.get("label", "核验"))
+				choice_button.disabled = solved or choice_id.is_empty()
+				choice_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				choice_button.custom_minimum_size.y = 26.0
+				choice_button.add_theme_font_size_override("font_size", 10)
+				choice_button.pressed.connect(_submit_hell_trial_evidence.bind(str(clue.get("id", "")), choice_id))
+				options_row.add_child(choice_button)
+
+
+func _submit_hell_trial_evidence(evidence_id: String, option_id: String) -> void:
+	if HHSession.world_network == null:
+		_show_notification("世界连接尚未就绪，无法提交证词。", 2.5)
+		return
+	var error: Error = HHSession.world_network.send_hell_trial_evidence(evidence_id, option_id)
+	if error != OK:
+		_show_notification("证词提交失败，错误码：" + str(error), 2.5)
+
+
+func _show_hell_trial_runtime_state(snapshot: Dictionary) -> void:
+	var trial: Variant = snapshot.get("hell_trial", {})
+	if not (trial is Dictionary) or trial.is_empty():
+		var floor_hint := int(snapshot.get("hell_floor", 0))
+		if floor_hint <= 0:
+			hell_trial_runtime_data.clear()
+			if is_instance_valid(hell_trial_hud_panel):
+				hell_trial_hud_panel.visible = false
+		return
+	var trial_data: Dictionary = trial
+	_render_hell_trial_hud(trial_data)
+	var floor_number := int(trial_data.get("floor", snapshot.get("hell_floor", 0)))
+	var label := str(trial_data.get("label", ""))
+	var boss_phase := int(trial_data.get("boss_phase", 0))
+	if boss_phase > 0:
+		label += " · 守将阶段 " + str(boss_phase)
+	if bool(trial_data.get("completed", false)):
+		_show_notification("第 %02d 层 · 试炼已完成" % floor_number, 4.0)
+	elif not label.is_empty():
+		_show_notification("第 %02d 层 · 当前挑战：%s" % [floor_number, label], 4.0)
+
+
+func _open_hell_trial_panel() -> void:
+	if is_instance_valid(hell_trial_panel):
+		hell_trial_panel.set_current_floor(int(HHSession.world_snapshot.get("hell_floor", 0)))
+		hell_trial_panel.open_panel()
+
+
+func _on_hell_trial_entry_ticket_received(floor_number: int, host: String, port: int, ticket: String) -> void:
+	if is_instance_valid(world_map_panel):
+		world_map_panel.visible = false
+	if is_instance_valid(hell_trial_panel):
+		hell_trial_panel.close_panel()
+	hud_label.text = "正在进入第 %02d 层专属刑狱……" % floor_number
+	_connect_to_world_ticket(host, port, ticket)
+
+
+func _on_hell_trial_return_requested() -> void:
+	if is_instance_valid(hell_trial_panel):
+		hell_trial_panel.close_panel()
+	_on_reconnect_pressed()
+
+
+func _apply_world_instance_geometry(snapshot: Dictionary) -> void:
+	var floor_number := int(snapshot.get("hell_floor", 0))
+	if floor_number > 0:
+		if is_instance_valid(world_terrain_root):
+			world_terrain_root.queue_free()
+		world_terrain_root = null
+		terrain_chunk_streamer = null
+		if is_instance_valid(hell_floor_visual_root):
+			hell_floor_visual_root.queue_free()
+		hell_floor_visual_root = UnderworldHellFloorBuilder.build(floor_number)
+		add_child(hell_floor_visual_root)
+	else:
+		if is_instance_valid(hell_floor_visual_root):
+			hell_floor_visual_root.queue_free()
+		hell_floor_visual_root = null
+		if not is_instance_valid(world_terrain_root):
+			var world_id := str(snapshot.get("world_id", "qingyun_human"))
+			world_terrain_root = WorldTerrainBuilder.build(world_id)
+			add_child(world_terrain_root)
+			terrain_chunk_streamer = world_terrain_root.get_node_or_null("ChunkStreamer")
+
+
+func _toggle_world_map_mode() -> void:
+	if not is_instance_valid(world_map_canvas):
+		return
+	var current_mode := str(world_map_canvas.get("map_mode"))
+	_set_world_map_mode("local" if current_mode == "underworld_atlas" else "underworld_atlas")
+
+
+func _toggle_fengdu_city_mode() -> void:
+	if not is_instance_valid(world_map_canvas):
+		return
+	var current_mode := str(world_map_canvas.get("map_mode"))
+	_set_world_map_mode("local" if current_mode == "fengdu_city" else "fengdu_city")
+
+
+func _set_world_map_mode(next_mode: String) -> void:
+	if not is_instance_valid(world_map_canvas):
+		return
+	world_map_canvas.set("map_mode", next_mode)
+	world_map_mode_button.text = "返回区域地图" if next_mode == "underworld_atlas" else "冥界总览"
+	world_map_city_button.text = "返回区域地图" if next_mode == "fengdu_city" else "酆都城图"
+	if is_instance_valid(world_map_hint_label):
+		match next_mode:
+			"underworld_atlas":
+				world_map_hint_label.text = "点击区域查看权柄、危险和进入条件；示意位置不代表真实坐标或可直接通行"
+			"fengdu_city":
+				world_map_hint_label.text = "点击城区查看职能与服务；这是酆都总体规划图，非实际比例和已建成场景"
+			_:
+				world_map_hint_label.text = "灰色：已发现探索点 · 青色：NPC · 红色：妖兽 · 紫色：地标 · 未发现地点隐藏 · 点击标记导航"
+	world_map_canvas.queue_redraw()
+
+
+func _on_underworld_atlas_region_selected(region_id: String, region_name: String, description: String) -> void:
+	if is_instance_valid(world_map_hint_label):
+		world_map_hint_label.text = region_name + " · " + description
+
+
+func _on_fengdu_city_district_selected(district_id: String, district_name: String, description: String) -> void:
+	if is_instance_valid(world_map_hint_label):
+		world_map_hint_label.text = district_name + " · " + description
+
+
+func _toggle_world_map() -> void:
+	if not is_instance_valid(world_map_panel):
+		return
+	world_map_panel.visible = not world_map_panel.visible
+	if world_map_panel.visible:
+		world_map_restore_mouse_captured = Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		_update_minimap_data()
+		world_map_canvas.grab_focus()
+	else:
+		if is_instance_valid(world_map_canvas):
+			world_map_canvas.release_focus()
+		if world_map_restore_mouse_captured:
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		world_map_restore_mouse_captured = false
+
+
+func _update_minimap_data() -> void:
+	if not is_instance_valid(minimap_view):
+		return
+	if is_instance_valid(minimap_panel):
+		var viewport_width := get_viewport().get_visible_rect().size.x
+		minimap_panel.visible = hud_visible and viewport_width >= 520.0 and not (is_instance_valid(friend_panel) and friend_panel.visible)
+	if is_instance_valid(local_player):
+		minimap_view.set("player_position", local_player.global_position)
+		var facing_node := local_player.get_node_or_null("PlaceholderBody") as Node3D
+		var facing_yaw: float = facing_node.global_rotation.y if is_instance_valid(facing_node) else local_player.global_rotation.y
+		minimap_view.set("player_yaw", facing_yaw)
+		if is_instance_valid(minimap_coordinate_label):
+			var player_pos: Vector3 = local_player.global_position
+			minimap_coordinate_label.text = "坐标  %.0f  /  %.0f" % [player_pos.x, player_pos.z]
+	minimap_view.set("exploration_points", exploration_point_data.values())
+	minimap_view.set("npc_points", npc_definitions)
+	var current_world_id := _map_world_id()
+	minimap_view.set("landmark_points", WorldMapCatalog.get_minimap_landmarks(current_world_id))
+	if is_instance_valid(world_map_canvas):
+		world_map_canvas.set("world_id", current_world_id)
+		world_map_canvas.set("atlas_data", WorldMapCatalog.get_underworld_atlas())
+		world_map_canvas.set("city_data", WorldMapCatalog.get_fengdu_city_plan())
+		if current_world_id != "underworld_fengdu":
+			world_map_canvas.set("map_mode", "local")
+			world_map_mode_button.visible = false
+			world_map_city_button.visible = false
+		else:
+			world_map_mode_button.visible = true
+			world_map_city_button.visible = true
+		hell_trial_open_button.visible = str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu"
+		hell_trial_open_button.text = "地狱进度" if int(HHSession.world_snapshot.get("hell_floor", 0)) > 0 else "十八层地狱"
+		world_map_canvas.set("world_bounds", WorldMapCatalog.get_world_bounds(current_world_id))
+		world_map_canvas.set("region_data", WorldMapCatalog.get_regions(current_world_id))
+		world_map_canvas.set("water_data", WorldMapCatalog.get_world_map_water_bodies(current_world_id))
+		world_map_canvas.set("landmark_data", WorldMapCatalog.get_world_map_landmarks(current_world_id))
+		world_map_canvas.set("exploration_points", exploration_point_data.values())
+		world_map_canvas.set("npc_points", npc_definitions)
+		world_map_canvas.set("player_position", local_player.global_position if is_instance_valid(local_player) else Vector3.ZERO)
+		world_map_canvas.set("navigation_target", minimap_navigation_target)
+		world_map_canvas.queue_redraw()
+	var nearby_monsters: Array = []
+	for monster_id in monster_targets.keys():
+		var target: Vector3 = monster_targets[monster_id]
+		var monster_data: Dictionary = monster_entities.get(str(monster_id), {})
+		nearby_monsters.append({"id": str(monster_id), "name": str(monster_data.get("name", "妖兽")), "x": target.x, "z": target.z})
+	minimap_view.set("monster_points", nearby_monsters)
+	if is_instance_valid(world_map_canvas):
+		world_map_canvas.set("monster_points", nearby_monsters)
+		world_map_canvas.queue_redraw()
+	if not minimap_navigation_target.is_empty():
+		var nav_kind := str(minimap_navigation_target.get("kind", ""))
+		var nav_id := str(minimap_navigation_target.get("id", ""))
+		var nav_position := Vector3(float(minimap_navigation_target.get("x", 0.0)), 0.0, float(minimap_navigation_target.get("z", 0.0)))
+		if nav_kind == "monster":
+			if monster_targets.has(nav_id):
+				nav_position = monster_targets[nav_id]
+				minimap_navigation_target["x"] = nav_position.x
+				minimap_navigation_target["z"] = nav_position.z
+			else:
+				minimap_navigation_target.clear()
+		var horizontal_distance := Vector2(local_player.global_position.x, local_player.global_position.z).distance_to(Vector2(nav_position.x, nav_position.z)) if is_instance_valid(local_player) else -1.0
+		var distance_text := ("距离 %.0f 米" % horizontal_distance) if horizontal_distance >= 0.0 else "距离计算中"
+		if is_instance_valid(minimap_navigation_label):
+			minimap_navigation_label.text = "导航：%s · %s" % [str(minimap_navigation_target.get("name", "目标")), distance_text]
+		if is_instance_valid(minimap_clear_navigation_button):
+			minimap_clear_navigation_button.visible = true
+	else:
+		if is_instance_valid(minimap_navigation_label):
+			minimap_navigation_label.text = "点击地图标记开始导航"
+		if is_instance_valid(minimap_clear_navigation_button):
+			minimap_clear_navigation_button.visible = false
+	minimap_view.set("navigation_target", minimap_navigation_target)
+	_sync_minimap_auto_navigation_button()
+	if is_instance_valid(minimap_region_label):
+		var world_name := _world_display_name(str(HHSession.world_snapshot.get("world_id", "")))
+		minimap_region_label.text = world_name + " · " + (current_region_name if not current_region_name.is_empty() else "区域载入中")
+	if is_instance_valid(minimap_exploration_label):
+		var region_total := 0
+		var region_discovered := 0
+		for point_variant in exploration_point_data.values():
+			if not point_variant is Dictionary:
+				continue
+			var point: Dictionary = point_variant
+			if str(point.get("region_name", "")) != current_region_name:
+				continue
+			region_total += 1
+			if bool(point.get("discovered", false)):
+				region_discovered += 1
+		minimap_exploration_label.text = "本区域探索 %d / %d" % [region_discovered, region_total] if region_total > 0 else "本区域暂无探索点数据"
+
+func _on_minimap_marker_selected(kind: String, marker_id: String, marker_name: String) -> void:
+	if marker_id.is_empty():
+		return
+	var target_position := Vector3.ZERO
+	match kind:
+		"monster":
+			if not monster_targets.has(marker_id):
+				return
+			target_position = monster_targets[marker_id]
+			_set_monster_target(marker_id)
+		"npc":
+			var found_npc := false
+			for npc_variant in npc_definitions:
+				if not npc_variant is Dictionary:
+					continue
+				var npc_data: Dictionary = npc_variant
+				if str(npc_data.get("id", "")) == marker_id:
+					target_position = Vector3(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_y", 0.0)), float(npc_data.get("position_z", 0.0)))
+					found_npc = true
+					break
+			if not found_npc:
+				return
+		"exploration":
+			if not exploration_point_data.has(marker_id):
+				return
+			var point: Dictionary = exploration_point_data[marker_id]
+			target_position = Vector3(float(point.get("position_x", 0.0)), float(point.get("position_y", 0.0)), float(point.get("position_z", 0.0)))
+		"landmark":
+			var landmark_found := false
+			var world_id := str(HHSession.world_snapshot.get("world_id", ""))
+			for landmark in WorldMapCatalog.get_minimap_landmarks(world_id):
+				if str(landmark.get("id", "")) == marker_id:
+					target_position = Vector3(float(landmark.get("position_x", 0.0)), 0.0, float(landmark.get("position_z", 0.0)))
+					landmark_found = true
+					break
+			if not landmark_found:
+				return
+		_:
+			return
+	minimap_navigation_target = {"kind": kind, "id": marker_id, "name": marker_name, "x": target_position.x, "z": target_position.z}
+	if minimap_auto_navigation_enabled and is_instance_valid(local_player) and local_player.has_method("set_auto_navigation_target"):
+		local_player.call("set_auto_navigation_target", Vector3(target_position.x, local_player.global_position.y, target_position.z))
+	if kind != "monster":
+		_show_notification("导航目标：" + marker_name)
+	_update_minimap_data()
+
+
+func _on_world_map_marker_selected(kind: String, marker_id: String, marker_name: String) -> void:
+	_on_minimap_marker_selected(kind, marker_id, marker_name)
+	if is_instance_valid(world_map_canvas):
+		world_map_canvas.set("navigation_target", minimap_navigation_target)
+		world_map_canvas.queue_redraw()
+
+
+func _on_world_map_position_selected(world_position: Vector3) -> void:
+	minimap_navigation_target = {
+		"kind": "map_position",
+		"id": "map_%d_%d" % [roundi(world_position.x), roundi(world_position.z)],
+		"name": "地图坐标（%.0f，%.0f）" % [world_position.x, world_position.z],
+		"x": world_position.x,
+		"z": world_position.z
+	}
+	_show_notification("已设置地图坐标导航目标")
+	_update_minimap_data()
+
+
+func _toggle_minimap_auto_navigation() -> void:
+	if minimap_navigation_target.is_empty():
+		_show_notification("请先点击小地图上的 NPC 或目标，设置导航目的地。", 3.0)
+		return
+	if not is_instance_valid(local_player):
+		return
+	if minimap_auto_navigation_enabled:
+		if local_player.has_method("clear_auto_navigation_target"):
+			local_player.call("clear_auto_navigation_target")
+		minimap_auto_navigation_enabled = false
+		_show_notification("已停止自动前往。", 2.0)
+	else:
+		if not local_player.has_method("set_auto_navigation_target"):
+			_show_notification("当前角色控制器不支持自动前往。", 3.0)
+			return
+		var target := Vector3(float(minimap_navigation_target.get("x", 0.0)), local_player.global_position.y, float(minimap_navigation_target.get("z", 0.0)))
+		local_player.call("set_auto_navigation_target", target)
+		minimap_auto_navigation_enabled = true
+		_show_notification("开始自动前往：" + str(minimap_navigation_target.get("name", "目标")), 3.0)
+	_sync_minimap_auto_navigation_button()
+
+
+func _sync_minimap_auto_navigation_button() -> void:
+	if not is_instance_valid(minimap_auto_navigation_button):
+		return
+	var controller_active := is_instance_valid(local_player) and bool(local_player.get("auto_navigation_active"))
+	minimap_auto_navigation_enabled = controller_active
+	minimap_auto_navigation_button.disabled = minimap_navigation_target.is_empty()
+	minimap_auto_navigation_button.text = "停止自动前往" if controller_active else "开启自动前往"
+
+
+func _clear_minimap_navigation() -> void:
+	minimap_navigation_target.clear()
+	minimap_auto_navigation_enabled = false
+	if is_instance_valid(local_player) and local_player.has_method("clear_auto_navigation_target"):
+		local_player.call("clear_auto_navigation_target")
+	if is_instance_valid(minimap_view):
+		minimap_view.set("navigation_target", {})
+	_update_minimap_data()
+
+func _build_combat_hud() -> void:
+	var hud := get_node_or_null("HUD") as CanvasLayer
+	if hud == null:
+		return
+	vitals_panel = PanelContainer.new()
+	vitals_panel.position = Vector2(18.0, -104.0)
+	vitals_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	vitals_panel.custom_minimum_size = Vector2(340.0, 226.0)
+	var vitals_style := StyleBoxFlat.new()
+	vitals_style.bg_color = Color("#0a1420", 0.94)
+	vitals_style.border_color = Color("#6b5940")
+	vitals_style.set_border_width_all(1)
+	vitals_style.set_corner_radius_all(14)
+	vitals_style.content_margin_left = 12.0
+	vitals_style.content_margin_right = 12.0
+	vitals_style.content_margin_top = 9.0
+	vitals_style.content_margin_bottom = 9.0
+	vitals_panel.add_theme_stylebox_override("panel", vitals_style)
+	hud.add_child(vitals_panel)
+	var vitals_layout := VBoxContainer.new()
+	vitals_layout.add_theme_constant_override("separation", 6)
+	vitals_panel.add_child(vitals_layout)
+	var status_header := HBoxContainer.new()
+	status_header.add_theme_constant_override("separation", 8)
+	vitals_layout.add_child(status_header)
+	var status_title := Label.new()
+	status_title.text = "角色状态"
+	status_title.add_theme_color_override("font_color", Color("#f0dfbd"))
+	status_title.add_theme_font_size_override("font_size", 13)
+	status_header.add_child(status_title)
+	wallet_label = Label.new()
+	wallet_label.text = "冥币 --  ·  冥石 --"
+	wallet_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	wallet_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	wallet_label.add_theme_color_override("font_color", Color("#d8bd86"))
+	wallet_label.add_theme_font_size_override("font_size", 11)
+	status_header.add_child(wallet_label)
+	health_label = Label.new()
+	health_label.text = "生命  ·  等待服务端战斗状态"
+	health_label.add_theme_color_override("font_color", Color("#f0c4b8"))
+	health_label.add_theme_font_size_override("font_size", 13)
+	vitals_layout.add_child(health_label)
+	health_bar = ProgressBar.new()
+	health_bar.custom_minimum_size = Vector2(270.0, 16.0)
+	health_bar.min_value = 0.0
+	health_bar.max_value = 1.0
+	health_bar.value = 0.0
+	health_bar.show_percentage = false
+	var health_track := StyleBoxFlat.new()
+	health_track.bg_color = Color("#2a303c")
+	health_track.set_corner_radius_all(5)
+	var health_fill := StyleBoxFlat.new()
+	health_fill.bg_color = Color("#c65d5d")
+	health_fill.set_corner_radius_all(5)
+	health_bar.add_theme_stylebox_override("background", health_track)
+	health_bar.add_theme_stylebox_override("fill", health_fill)
+	vitals_layout.add_child(health_bar)
+	mana_label = Label.new()
+	mana_label.text = "灵力  " + str(int(HHSession.world_snapshot.get("mana", 0))) + " / " + str(int(HHSession.world_snapshot.get("max_mana", 0)))
+	mana_label.add_theme_color_override("font_color", Color("#a9d4f2"))
+	mana_label.add_theme_font_size_override("font_size", 12)
+	vitals_layout.add_child(mana_label)
+	mana_bar = ProgressBar.new()
+	mana_bar.custom_minimum_size = Vector2(270.0, 10.0)
+	mana_bar.min_value = 0.0
+	mana_bar.max_value = maxf(1.0, float(HHSession.world_snapshot.get("max_mana", 0)))
+	mana_bar.value = clampf(float(HHSession.world_snapshot.get("mana", 0)), 0.0, mana_bar.max_value)
+	mana_bar.show_percentage = false
+	var mana_track := StyleBoxFlat.new()
+	mana_track.bg_color = Color("#202f40")
+	mana_track.set_corner_radius_all(5)
+	var mana_fill := StyleBoxFlat.new()
+	mana_fill.bg_color = Color("#4b91c7")
+	mana_fill.set_corner_radius_all(5)
+	mana_bar.add_theme_stylebox_override("background", mana_track)
+	mana_bar.add_theme_stylebox_override("fill", mana_fill)
+	vitals_layout.add_child(mana_bar)
+	var spell_hint := Label.new()
+	spell_hint.text = "神通快捷栏"
+	spell_hint.add_theme_color_override("font_color", Color("#d6bd8b"))
+	spell_hint.add_theme_font_size_override("font_size", 11)
+	vitals_layout.add_child(spell_hint)
+	var spell_grid := GridContainer.new()
+	spell_grid.columns = 4
+	spell_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	spell_grid.add_theme_constant_override("h_separation", 6)
+	spell_grid.add_theme_constant_override("v_separation", 3)
+	vitals_layout.add_child(spell_grid)
+	for spell_id in ["fireball", "ice_bolt"]:
+		var cooldown_label := Label.new()
+		cooldown_label.text = "Q  幽冥磷火：就绪" if spell_id == "fireball" else "R  镇邪符：就绪"
+		cooldown_label.add_theme_color_override("font_color", Color("#c4d2df"))
+		cooldown_label.add_theme_font_size_override("font_size", 10)
+		cooldown_label.clip_text = true
+		cooldown_label.custom_minimum_size = Vector2(68.0, 22.0)
+		spell_cooldown_labels[spell_id] = cooldown_label
+		_add_spell_hotbar_slot(spell_grid, cooldown_label, Color("#b98d55"))
+		var mastery_label := Label.new()
+		mastery_label.add_theme_color_override("font_color", Color("#9db9a7"))
+		mastery_label.add_theme_font_size_override("font_size", 10)
+		mastery_label.visible = false
+		spell_mastery_labels[spell_id] = mastery_label
+		vitals_layout.add_child(mastery_label)
+	var taunt_label := Label.new()
+	taunt_label.text = "T  ·  鬼门锁链：就绪"
+	taunt_label.add_theme_color_override("font_color", Color("#e7b77a"))
+	taunt_label.add_theme_font_size_override("font_size", 10)
+	taunt_label.custom_minimum_size = Vector2(68.0, 22.0)
+	taunt_label.clip_text = true
+	spell_cooldown_labels["taunt"] = taunt_label
+	_add_spell_hotbar_slot(spell_grid, taunt_label, Color("#c47b48"))
+	var revive_label := Label.new()
+	revive_label.text = "Y  ·  回魂术：就绪"
+	revive_label.add_theme_color_override("font_color", Color("#9ed7bd"))
+	revive_label.add_theme_font_size_override("font_size", 10)
+	revive_label.custom_minimum_size = Vector2(68.0, 22.0)
+	revive_label.clip_text = true
+	spell_cooldown_labels["revive"] = revive_label
+	_add_spell_hotbar_slot(spell_grid, revive_label, Color("#65a88f"))
+	var heal_label := Label.new()
+	heal_label.text = "U  ·  养气归元：就绪"
+	heal_label.add_theme_color_override("font_color", Color("#8fd9b4"))
+	heal_label.add_theme_font_size_override("font_size", 10)
+	heal_label.custom_minimum_size = Vector2(68.0, 22.0)
+	heal_label.clip_text = true
+	spell_cooldown_labels["life_mend"] = heal_label
+	_add_spell_hotbar_slot(spell_grid, heal_label, Color("#5baf83"))
+	var aegis_label := Label.new()
+	aegis_label.text = "G  ·  罡气护体：就绪"
+	aegis_label.add_theme_color_override("font_color", Color("#9bc9ed"))
+	aegis_label.add_theme_font_size_override("font_size", 10)
+	aegis_label.custom_minimum_size = Vector2(68.0, 22.0)
+	aegis_label.clip_text = true
+	spell_cooldown_labels["guardian_aegis"] = aegis_label
+	_add_spell_hotbar_slot(spell_grid, aegis_label, Color("#659bc6"))
+	var purify_label := Label.new()
+	purify_label.text = "H · 净秽符：就绪"
+	purify_label.add_theme_color_override("font_color", Color("#c5b6e8"))
+	purify_label.add_theme_font_size_override("font_size", 10)
+	purify_label.custom_minimum_size = Vector2(68.0, 22.0)
+	purify_label.clip_text = true
+	spell_cooldown_labels["purify"] = purify_label
+	_add_spell_hotbar_slot(spell_grid, purify_label, Color("#9881c7"))
+	shield_status_label = Label.new()
+	shield_status_label.text = ""
+	shield_status_label.add_theme_color_override("font_color", Color("#9bc9ed"))
+	shield_status_label.add_theme_font_size_override("font_size", 10)
+	vitals_layout.add_child(shield_status_label)
+	_update_spell_cooldown_hud()
+	_update_spell_mastery_hud()
+	notification_panel = PanelContainer.new()
+	# Use explicit center-X/top-Y anchors and all four offsets. Setting only
+	# Control.position after PRESET_CENTER leaves the opposite offsets at zero,
+	# which can collapse or misplace this toast on some viewport layouts.
+	notification_panel.anchor_left = 0.5
+	notification_panel.anchor_right = 0.5
+	notification_panel.anchor_top = 0.0
+	notification_panel.anchor_bottom = 0.0
+	notification_panel.offset_left = -230.0
+	notification_panel.offset_right = 230.0
+	notification_panel.offset_top = 84.0
+	notification_panel.offset_bottom = 140.0
+	notification_panel.custom_minimum_size = Vector2(460.0, 56.0)
+	notification_panel.visible = false
+	_apply_panel_theme(notification_panel)
+	# Semi-transparent glass panel; keep the text itself fully readable.
+	var notification_style := StyleBoxFlat.new()
+	notification_style.bg_color = Color(0.035, 0.055, 0.075, 0.36)
+	notification_style.border_color = Color(0.55, 0.68, 0.78, 0.18)
+	notification_style.set_border_width_all(1)
+	notification_style.set_corner_radius_all(12)
+	notification_style.content_margin_left = 16.0
+	notification_style.content_margin_right = 16.0
+	notification_style.content_margin_top = 10.0
+	notification_style.content_margin_bottom = 10.0
+	notification_panel.add_theme_stylebox_override("panel", notification_style)
+	hud.add_child(notification_panel)
+	notification_label = Label.new()
+	notification_label.custom_minimum_size = Vector2(420.0, 40.0)
+	notification_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	notification_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	notification_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	notification_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	notification_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	notification_label.clip_text = false
+	notification_label.add_theme_color_override("font_color", Color("#f2e8d6"))
+	notification_label.add_theme_font_size_override("font_size", 12)
+	notification_panel.add_child(notification_label)
+	notification_timer = Timer.new()
+	notification_timer.one_shot = true
+	notification_timer.wait_time = 3.2
+	notification_timer.timeout.connect(_on_notification_timeout)
+	add_child(notification_timer)
+
+	# Persistent threat-pressure indicator: the toast is transient, while this
+	# compact meter keeps the tank/healer warning readable during the response window.
+	threat_alert_panel = PanelContainer.new()
+	# Explicit center-X/top-Y offsets: position alone writes the same left and
+	# right offset when both horizontal anchors are 0.5, leaving a zero-width rect.
+	threat_alert_panel.anchor_left = 0.5
+	threat_alert_panel.anchor_right = 0.5
+	threat_alert_panel.anchor_top = 0.0
+	threat_alert_panel.anchor_bottom = 0.0
+	threat_alert_panel.offset_left = -180.0
+	threat_alert_panel.offset_right = 180.0
+	threat_alert_panel.offset_top = 152.0
+	threat_alert_panel.offset_bottom = 204.0
+	threat_alert_panel.custom_minimum_size = Vector2(360.0, 52.0)
+	threat_alert_panel.visible = false
+	_apply_panel_theme(threat_alert_panel)
+	var threat_alert_style := StyleBoxFlat.new()
+	threat_alert_style.bg_color = Color(0.035, 0.055, 0.075, 0.38)
+	threat_alert_style.border_color = Color(0.72, 0.58, 0.34, 0.18)
+	threat_alert_style.set_border_width_all(1)
+	threat_alert_style.set_corner_radius_all(10)
+	threat_alert_style.content_margin_left = 10.0
+	threat_alert_style.content_margin_right = 10.0
+	threat_alert_style.content_margin_top = 6.0
+	threat_alert_style.content_margin_bottom = 6.0
+	threat_alert_panel.add_theme_stylebox_override("panel", threat_alert_style)
+	hud.add_child(threat_alert_panel)
+	var threat_alert_layout := VBoxContainer.new()
+	threat_alert_layout.add_theme_constant_override("separation", 4)
+	threat_alert_panel.add_child(threat_alert_layout)
+	threat_alert_label = Label.new()
+	threat_alert_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	threat_alert_label.add_theme_color_override("font_color", Color("#f0c78d"))
+	threat_alert_label.add_theme_font_size_override("font_size", 10)
+	threat_alert_layout.add_child(threat_alert_label)
+	threat_alert_bar = ProgressBar.new()
+	threat_alert_bar.custom_minimum_size = Vector2(330.0, 7.0)
+	threat_alert_bar.min_value = 0.0
+	threat_alert_bar.max_value = 1.2
+	threat_alert_bar.value = 0.0
+	threat_alert_bar.show_percentage = false
+	var threat_track := StyleBoxFlat.new()
+	threat_track.bg_color = Color("#202f40")
+	threat_track.set_corner_radius_all(4)
+	var threat_fill := StyleBoxFlat.new()
+	threat_fill.bg_color = Color("#d69a4d")
+	threat_fill.set_corner_radius_all(4)
+	threat_alert_bar.add_theme_stylebox_override("background", threat_track)
+	threat_alert_bar.add_theme_stylebox_override("fill", threat_fill)
+	threat_alert_layout.add_child(threat_alert_bar)
+	threat_alert_timer = Timer.new()
+	threat_alert_timer.one_shot = true
+	threat_alert_timer.timeout.connect(func(): threat_alert_panel.visible = false)
+	add_child(threat_alert_timer)
+
+	revive_channel_panel = PanelContainer.new()
+	revive_channel_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	revive_channel_panel.position = Vector2(-190.0, 218.0)
+	revive_channel_panel.custom_minimum_size = Vector2(380.0, 52.0)
+	revive_channel_panel.visible = false
+	_apply_panel_theme(revive_channel_panel)
+	hud.add_child(revive_channel_panel)
+	var revive_layout := VBoxContainer.new()
+	revive_layout.add_theme_constant_override("separation", 4)
+	revive_channel_panel.add_child(revive_layout)
+	revive_channel_label = Label.new()
+	revive_channel_label.text = "回魂术引导中"
+	revive_channel_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	revive_channel_label.add_theme_color_override("font_color", Color("#a9dfc0"))
+	revive_channel_label.add_theme_font_size_override("font_size", 12)
+	revive_layout.add_child(revive_channel_label)
+	revive_channel_bar = ProgressBar.new()
+	revive_channel_bar.custom_minimum_size = Vector2(350.0, 9.0)
+	revive_channel_bar.min_value = 0.0
+	revive_channel_bar.max_value = 1.0
+	revive_channel_bar.value = 0.0
+	revive_channel_bar.show_percentage = false
+	revive_layout.add_child(revive_channel_bar)
+
+	combat_reticle = Label.new()
+	combat_reticle.name = "CombatReticle"
+	combat_reticle.text = "＋"
+	combat_reticle.set_anchors_preset(Control.PRESET_CENTER)
+	combat_reticle.offset_left = -12.0
+	combat_reticle.offset_top = -14.0
+	combat_reticle.offset_right = 12.0
+	combat_reticle.offset_bottom = 14.0
+	combat_reticle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	combat_reticle.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	combat_reticle.add_theme_font_size_override("font_size", 22)
+	combat_reticle.add_theme_color_override("font_color", Color("#f5e8c8"))
+	combat_reticle.add_theme_color_override("font_outline_color", Color("#101820"))
+	combat_reticle.add_theme_constant_override("outline_size", 3)
+	combat_reticle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	combat_reticle.visible = false
+	hud.add_child(combat_reticle)
+
+	target_info_panel = PanelContainer.new()
+	# Pin the target card to a real top-left rectangle. Center-anchor + position
+	# was being overwritten later by the HUD layout and could collapse its offsets.
+	target_info_panel.anchor_left = 0.0
+	target_info_panel.anchor_right = 0.0
+	target_info_panel.anchor_top = 0.0
+	target_info_panel.anchor_bottom = 0.0
+	target_info_panel.offset_left = 18.0
+	target_info_panel.offset_right = 438.0
+	target_info_panel.offset_top = 300.0
+	target_info_panel.offset_bottom = 410.0
+	target_info_panel.custom_minimum_size = Vector2(420.0, 110.0)
+	target_info_panel.visible = false
+	_apply_panel_theme(target_info_panel)
+	target_panel_style = StyleBoxFlat.new()
+	target_panel_style.bg_color = Color("#0a1420", 0.94)
+	target_panel_style.border_color = Color("#806b46")
+	target_panel_style.set_border_width_all(1)
+	target_panel_style.set_corner_radius_all(12)
+	target_panel_style.content_margin_left = 14.0
+	target_panel_style.content_margin_right = 14.0
+	target_panel_style.content_margin_top = 8.0
+	target_panel_style.content_margin_bottom = 8.0
+	target_info_panel.add_theme_stylebox_override("panel", target_panel_style)
+	hud.add_child(target_info_panel)
+	var target_layout := VBoxContainer.new()
+	target_layout.add_theme_constant_override("separation", 5)
+	target_info_panel.add_child(target_layout)
+	target_info_label = Label.new()
+	target_info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	target_info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	target_info_label.add_theme_color_override("font_color", Color("#f2e8d6"))
+	target_info_label.add_theme_font_size_override("font_size", 12)
+	target_info_label.clip_text = false
+	target_layout.add_child(target_info_label)
+	target_status_label = Label.new()
+	target_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	target_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	target_status_label.clip_text = false
+	target_status_label.add_theme_font_size_override("font_size", 10)
+	target_status_label.add_theme_color_override("font_color", Color("#aebdca"))
+	target_layout.add_child(target_status_label)
+	target_health_bar = ProgressBar.new()
+	target_health_bar.custom_minimum_size = Vector2(388.0, 12.0)
+	target_health_bar.min_value = 0.0
+	target_health_bar.max_value = 1.0
+	target_health_bar.value = 1.0
+	target_health_bar.show_percentage = false
+	var target_track := StyleBoxFlat.new()
+	target_track.bg_color = Color("#1a2a38")
+	target_track.set_corner_radius_all(6)
+	target_health_fill_style = StyleBoxFlat.new()
+	target_health_fill_style.bg_color = Color("#c45c5c")
+	target_health_fill_style.set_corner_radius_all(6)
+	target_health_bar.add_theme_stylebox_override("background", target_track)
+	target_health_bar.add_theme_stylebox_override("fill", target_health_fill_style)
+	target_layout.add_child(target_health_bar)
+
+	combat_summary_toggle_button = Button.new()
+	combat_summary_toggle_button.text = "战斗详情  ▸"
+	combat_summary_toggle_button.custom_minimum_size = Vector2(112.0, 26.0)
+	combat_summary_toggle_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	combat_summary_toggle_button.add_theme_font_size_override("font_size", 11)
+	combat_summary_toggle_button.pressed.connect(_toggle_combat_summary)
+	vitals_layout.add_child(combat_summary_toggle_button)
+	combat_summary_label = Label.new()
+	combat_summary_label.text = "本次战斗  伤害 0  ·  暴击 0  ·  击杀 0"
+	combat_summary_label.add_theme_color_override("font_color", Color("#d7c49b"))
+	combat_summary_label.add_theme_font_size_override("font_size", 11)
+	combat_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	combat_summary_label.visible = false
+	vitals_layout.add_child(combat_summary_label)
+	combat_log_label = Label.new()
+	combat_log_label.text = "最近命中：暂无"
+	combat_log_label.add_theme_color_override("font_color", Color("#b6c4d0"))
+	combat_log_label.add_theme_font_size_override("font_size", 10)
+	combat_log_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	combat_log_label.custom_minimum_size = Vector2(300.0, 38.0)
+	combat_log_label.visible = false
+	vitals_layout.add_child(combat_log_label)
+	combat_summary_reset_button = Button.new()
+	combat_summary_reset_button.text = "重置战斗统计"
+	combat_summary_reset_button.custom_minimum_size = Vector2(112.0, 26.0)
+	combat_summary_reset_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	combat_summary_reset_button.add_theme_font_size_override("font_size", 11)
+	combat_summary_reset_button.pressed.connect(_reset_combat_summary)
+	combat_summary_reset_button.visible = false
+	vitals_layout.add_child(combat_summary_reset_button)
+	_update_combat_summary()
+
+
+func _toggle_combat_summary() -> void:
+	combat_summary_expanded = not combat_summary_expanded
+	if is_instance_valid(combat_summary_toggle_button):
+		combat_summary_toggle_button.text = "战斗详情  ▾" if combat_summary_expanded else "战斗详情  ▸"
+	if is_instance_valid(combat_summary_label):
+		combat_summary_label.visible = combat_summary_expanded
+	if is_instance_valid(combat_log_label):
+		combat_log_label.visible = combat_summary_expanded
+	if is_instance_valid(combat_summary_reset_button):
+		combat_summary_reset_button.visible = combat_summary_expanded
+	_layout_hud()
+
+
+func _update_combat_summary() -> void:
+	if not is_instance_valid(combat_summary_label):
+		return
+	var total_seconds := int(floor(combat_elapsed_seconds))
+	var duration_text := "%02d:%02d" % [int(total_seconds / 60), total_seconds % 60]
+	var damage_per_second := int(round(float(combat_damage_dealt) / maxf(combat_elapsed_seconds, 1.0))) if combat_has_started else 0
+	combat_summary_label.text = "战斗 %s  ·  DPS %d\n伤害 %d  ·  最高 %d  ·  暴击 %d  ·  击杀 %d  ·  受伤 %d\n近战 %d  ·  远程/法术 %d  ·  持续伤害 %d" % [
+		duration_text, damage_per_second, combat_damage_dealt, combat_highest_hit,
+		combat_critical_hits, combat_kills, combat_damage_taken,
+		combat_melee_damage, combat_projectile_damage, combat_effect_damage
+	]
+	if is_instance_valid(combat_log_label):
+		combat_log_label.text = "最近命中：暂无" if combat_recent_entries.is_empty() else "最近命中：\n" + "\n".join(PackedStringArray(combat_recent_entries))
+
+
+func _reset_combat_summary() -> void:
+	combat_damage_dealt = 0
+	combat_damage_taken = 0
+	combat_highest_hit = 0
+	combat_critical_hits = 0
+	combat_kills = 0
+	combat_melee_damage = 0
+	combat_projectile_damage = 0
+	combat_effect_damage = 0
+	combat_recent_entries.clear()
+	combat_elapsed_seconds = 0.0
+	combat_summary_refresh_remaining = 0.0
+	combat_has_started = false
+	_update_combat_summary()
+	_show_notification("本次战斗统计已重置。", 2.0)
+
+
+func _start_revive_channel_ui(actor_name: String, duration_ms: int) -> void:
+	revive_channel_total = maxf(float(duration_ms) / 1000.0, 0.5)
+	revive_channel_remaining = revive_channel_total
+	if is_instance_valid(revive_channel_label):
+		revive_channel_label.text = actor_name + " · 回魂术引导中"
+	if is_instance_valid(revive_channel_bar):
+		revive_channel_bar.value = 0.0
+	if is_instance_valid(revive_channel_panel):
+		revive_channel_panel.visible = hud_visible
+
+func _stop_revive_channel_ui() -> void:
+	revive_channel_remaining = 0.0
+	if is_instance_valid(revive_channel_panel):
+		revive_channel_panel.visible = false
+
+func _show_notification(message: String, duration: float = 3.2) -> void:
+	if message.strip_edges().is_empty():
+		return
+	if not is_instance_valid(notification_panel) or not is_instance_valid(notification_label):
+		return
+	# Do not let a burst of world-entry, combat and reward events overwrite
+	# one another. Keep a small FIFO queue and collapse repeated messages.
+	if notification_panel.visible:
+		if notification_label.text == message:
+			if is_instance_valid(notification_timer):
+				notification_timer.start(duration)
+			return
+		for queued in notification_queue:
+			if str(queued.get("message", "")) == message:
+				return
+		if notification_queue.size() >= 4:
+			notification_queue.pop_front()
+		notification_queue.append({"message": message, "duration": duration})
+		return
+	_display_notification(message, duration)
+
+
+func _display_notification(message: String, duration: float) -> void:
+	if not is_instance_valid(notification_panel) or not is_instance_valid(notification_label):
+		return
+	notification_label.text = message
+	_layout_notification_panel()
+	notification_panel.visible = true
+	if is_instance_valid(notification_timer):
+		notification_timer.start(maxf(0.8, duration))
+
+
+func _on_notification_timeout() -> void:
+	if is_instance_valid(notification_panel):
+		notification_panel.visible = false
+	if notification_queue.is_empty():
+		return
+	var next_notice: Dictionary = notification_queue.pop_front()
+	_display_notification(str(next_notice.get("message", "")),
+		float(next_notice.get("duration", 3.2)))
+
+
+func _layout_notification_panel() -> void:
+	if not is_instance_valid(notification_panel):
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	var notice_width := minf(520.0, maxf(250.0, viewport_size.x - 32.0))
+	var notice_height := 56.0
+	# World-entry and combat feedback live in the upper-middle, clear of the crosshair.
+	notification_panel.anchor_left = 0.5
+	notification_panel.anchor_right = 0.5
+	notification_panel.anchor_top = 0.0
+	notification_panel.anchor_bottom = 0.0
+	notification_panel.offset_left = -notice_width * 0.5
+	notification_panel.offset_right = notice_width * 0.5
+	notification_panel.offset_top = 84.0
+	notification_panel.offset_bottom = 84.0 + notice_height
+	notification_panel.custom_minimum_size = Vector2(notice_width, notice_height)
+	if is_instance_valid(notification_label):
+		notification_label.custom_minimum_size = Vector2(notice_width - 36.0, notice_height - 16.0)
+
+func _update_vitals(current_health: int, max_health: int) -> void:
+	if max_health <= 0 or current_health < 0:
+		return
+	vitals_known = true
+	health_label.text = "生命  " + str(current_health) + " / " + str(max_health)
+	health_bar.max_value = max_health
+	health_bar.value = clampi(current_health, 0, max_health)
+
+func _toggle_details_panel() -> void:
+	details_visible = not details_visible
+	$HUD/Panel.visible = hud_visible and details_visible
+	details_toggle_button.text = "收起角色面板" if details_visible else "角色 · 修炼"
+
+func _toggle_hud_visibility() -> void:
+	hud_visible = not hud_visible
+	$HUD/Panel.visible = hud_visible and details_visible
+	if is_instance_valid(compact_hud_panel):
+		compact_hud_panel.visible = hud_visible
+	if is_instance_valid(chat_panel):
+		chat_panel.visible = hud_visible
+	if is_instance_valid(details_toggle_button):
+		details_toggle_button.visible = hud_visible
+	if is_instance_valid(soul_choice_button):
+		soul_choice_button.visible = hud_visible and soul_essence_profile.get("pending_rare_choices", []).size() > 0
+	if is_instance_valid(target_info_panel):
+		target_info_panel.visible = hud_visible and not selected_monster_id.is_empty()
+	if is_instance_valid(world_map_panel) and not hud_visible:
+		world_map_panel.visible = false
+	if is_instance_valid(minimap_panel):
+		minimap_panel.visible = hud_visible and get_viewport().get_visible_rect().size.x >= 520.0 and not (is_instance_valid(friend_panel) and friend_panel.visible)
+	if is_instance_valid(input_debug_panel):
+		input_debug_panel.visible = hud_visible and input_debug_visible
+	if is_instance_valid(notification_panel) and not hud_visible:
+		notification_panel.visible = false
+	if is_instance_valid(revive_channel_panel):
+		revive_channel_panel.visible = hud_visible and revive_channel_remaining > 0.0
+	if is_instance_valid(help_panel) and not hud_visible:
+		help_panel.visible = false
+		help_restore_mouse_captured = false
+	if is_instance_valid(hud_toggle_button):
+		hud_toggle_button.visible = hud_visible
+	if is_instance_valid(hud_restore_button):
+		hud_restore_button.visible = not hud_visible
+	if is_instance_valid(help_button):
+		help_button.visible = true
+	if is_instance_valid(leave_world_button):
+		leave_world_button.visible = hud_visible
+	if is_instance_valid(hud_toggle_button):
+		hud_toggle_button.text = "隐藏界面  F1"
+	_layout_hud()
+
+func _confirm_leave_world() -> void:
+	if leaving_world or not is_instance_valid(leave_world_dialog):
+		return
+	leave_world_dialog.popup_centered()
+
+
+func _leave_world_to_lobby() -> void:
+	HHAudio.stop_ambience()
+	if leaving_world:
+		return
+	leaving_world = true
+	leave_transition_started = false
+	if is_instance_valid(leave_world_button):
+		leave_world_button.disabled = true
+	_show_notification("正在安全退出世界，返回角色大厅……", 3.0)
+	var network: HHWorldNetwork = HHSession.world_network
+	if network == null or not is_instance_valid(network) or not network.is_world_ready():
+		_finish_leave_world_to_lobby()
+		return
+	network.close()
+	# ENet normally emits disconnected on the next poll. Keep a bounded fallback
+	# so the player can still leave if the peer was already half-closed.
+	_finish_leave_world_to_lobby_after_timeout()
+
+
+func _finish_leave_world_to_lobby_after_timeout() -> void:
+	await get_tree().create_timer(1.5).timeout
+	if leaving_world:
+		_finish_leave_world_to_lobby()
+
+
+func _finish_leave_world_to_lobby() -> void:
+	if not leaving_world or leave_transition_started:
+		return
+	leave_transition_started = true
+	var network: HHWorldNetwork = HHSession.world_network
+	if network != null and is_instance_valid(network):
+		if network.get_parent() == HHSession:
+			HHSession.remove_child(network)
+		network.queue_free()
+	HHSession.world_network = null
+	HHSession.world_snapshot = {}
+	var error := get_tree().change_scene_to_file("res://scenes/Startup.tscn")
+	if error != OK:
+		leaving_world = false
+		leave_transition_started = false
+		if is_instance_valid(leave_world_button):
+			leave_world_button.disabled = false
+		hud_label.text = "返回角色大厅失败，错误码：" + str(error)
+
+
+func _toggle_help_panel() -> void:
+	if not is_instance_valid(help_panel):
+		return
+	var opening := not help_panel.visible
+	if opening:
+		help_restore_mouse_captured = Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		if is_instance_valid(audio_settings_panel):
+			audio_settings_panel.visible = false
+		help_panel.visible = true
+	else:
+		help_panel.visible = false
+		if help_restore_mouse_captured and not is_gameplay_input_blocked():
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		help_restore_mouse_captured = false
+
+func _toggle_audio_settings_panel() -> void:
+	if not is_instance_valid(audio_settings_panel):
+		return
+	var opening := not audio_settings_panel.visible
+	if opening:
+		audio_settings_restore_mouse_captured = Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		if is_instance_valid(help_panel):
+			help_panel.visible = false
+		audio_settings_panel.visible = true
+	else:
+		audio_settings_panel.visible = false
+		if audio_settings_restore_mouse_captured and not is_gameplay_input_blocked():
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		audio_settings_restore_mouse_captured = false
+
+func _build_audio_settings_panel(hud: CanvasLayer) -> void:
+	audio_settings_panel = PanelContainer.new()
+	audio_settings_panel.name = "AudioSettingsPanel"
+	audio_settings_panel.set_anchors_preset(Control.PRESET_CENTER)
+	audio_settings_panel.custom_minimum_size = Vector2(500.0, 430.0)
+	audio_settings_panel.visible = false
+	_apply_panel_theme(audio_settings_panel)
+	hud.add_child(audio_settings_panel)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 12)
+	audio_settings_panel.add_child(layout)
+	var heading := HBoxContainer.new()
+	layout.add_child(heading)
+	var title := Label.new()
+	title.text = "洪荒 · 音频设置"
+	title.add_theme_color_override("font_color", Color("#e7c98e"))
+	title.add_theme_font_size_override("font_size", 20)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_child(title)
+	var close_button := Button.new()
+	close_button.text = "关闭"
+	close_button.pressed.connect(_toggle_audio_settings_panel)
+	heading.add_child(close_button)
+	var hint := Label.new()
+	hint.text = "调整后立即生效，并保存在本机。"
+	hint.add_theme_color_override("font_color", Color("#91a5b8"))
+	layout.add_child(hint)
+	_add_audio_volume_row(layout, "Master", "总音量")
+	_add_audio_volume_row(layout, "Music", "音乐 / 环境")
+	_add_audio_volume_row(layout, "SFX", "战斗 / 环境音效")
+	_add_audio_volume_row(layout, "UI", "界面音效")
+	var mute := CheckButton.new()
+	mute.text = "静音全部声音"
+	mute.button_pressed = HHAudio.is_muted()
+	mute.toggled.connect(func(enabled: bool) -> void: HHAudio.set_muted(enabled))
+	layout.add_child(mute)
+	var preview_title := Label.new()
+	preview_title.text = "音效试听"
+	preview_title.add_theme_color_override("font_color", Color("#e7c98e"))
+	layout.add_child(preview_title)
+	var previews := HBoxContainer.new()
+	layout.add_child(previews)
+	for cue in ["attack", "spell", "footstep", "warning"]:
+		var preview := Button.new()
+		preview.text = {"attack": "攻击", "spell": "法术", "footstep": "脚步", "warning": "警告"}[cue]
+		preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		preview.pressed.connect(func() -> void: HHAudio.play_ui(cue) if cue == "warning" else HHAudio.play_combat(cue))
+		previews.add_child(preview)
+
+func _add_audio_volume_row(parent: VBoxContainer, bus_name: String, display_name: String) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	parent.add_child(row)
+	var label := Label.new()
+	label.text = display_name
+	label.custom_minimum_size = Vector2(116.0, 0.0)
+	row.add_child(label)
+	var slider := HSlider.new()
+	slider.min_value = 0.0
+	slider.max_value = 1.0
+	slider.step = 0.01
+	slider.value = HHAudio.get_volume(bus_name)
+	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var value_label := Label.new()
+	value_label.custom_minimum_size = Vector2(42.0, 0.0)
+	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	value_label.text = str(roundi(slider.value * 100.0)) + "%"
+	slider.value_changed.connect(func(value: float) -> void:
+		HHAudio.set_volume(bus_name, value)
+		value_label.text = str(roundi(value * 100.0)) + "%"
+	)
+	row.add_child(slider)
+	row.add_child(value_label)
+
+func _build_controls_help_panel(hud: CanvasLayer) -> void:
+	help_panel = PanelContainer.new()
+	help_panel.name = "ControlsHelpPanel"
+	help_panel.set_anchors_preset(Control.PRESET_CENTER)
+	help_panel.custom_minimum_size = Vector2(540.0, 500.0)
+	help_panel.visible = false
+	_apply_panel_theme(help_panel)
+	hud.add_child(help_panel)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 10)
+	help_panel.add_child(layout)
+	var heading := HBoxContainer.new()
+	layout.add_child(heading)
+	var title := Label.new()
+	title.text = "洪荒 · 操作指南"
+	title.add_theme_color_override("font_color", Color("#e7c98e"))
+	title.add_theme_font_size_override("font_size", 20)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_child(title)
+	var close_button := Button.new()
+	close_button.text = "关闭  Esc"
+	close_button.pressed.connect(_toggle_help_panel)
+	heading.add_child(close_button)
+	var divider := HSeparator.new()
+	layout.add_child(divider)
+	var body := Label.new()
+	body.text = "角色移动\nW / A / S / D    前进、左移、后退、右移\n空格键    跳跃（地形允许时）\n鼠标移动    转动视角\n鼠标左键    点击攻击；按住可连续攻击，进入攻击距离后自动出手\nTab    切换附近怪物目标\n\n交互与界面\nF    与附近 NPC 交互\nE    拾取附近掉落物\nI    打开背包\nC 或 Enter    打开聊天\nF1    显示 / 隐藏游戏 HUD\nF2    打开 / 关闭本操作指南\nF3    显示 / 隐藏输入诊断\nEsc    关闭当前地图、聊天或帮助面板\n\n修行神通\nQ    幽冥磷火     R    镇邪符\nT    鬼门锁链     Y    回魂术\nU    养气归元     G    罡气护体\nH    净秽符\n\n提示：打开聊天或面板时，部分移动与战斗输入会暂停。技能是否可用仍以服务器判定为准。"
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_theme_color_override("font_color", Color("#d7e0e9"))
+	body.add_theme_font_size_override("font_size", 14)
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	layout.add_child(body)
+	var footer := Label.new()
+	footer.text = "按 F2 随时查看 · 点击右上角「快捷键」也可打开"
+	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	footer.add_theme_color_override("font_color", Color("#91a5b8"))
+	footer.add_theme_font_size_override("font_size", 11)
+	layout.add_child(footer)
+
+func _world_display_name(world_id: String) -> String:
+	match world_id:
+		"underworld_fengdu":
+			return "冥界 · 酆都"
+		"qingyun_human":
+			return "青云界 · 人界"
+		"myriad_demon":
+			return "万妖界"
+		_:
+			return "未知世界（" + world_id + "）"
+
+func _region_for_position(world_id: String, position: Vector3) -> String:
+	return WorldRegionCatalog.resolve(world_id, position)
+
+func _refresh_current_region(show_entry_notice: bool) -> void:
+	if not is_instance_valid(local_player):
+		return
+	var world_id := _map_world_id()
+	var next_region := _region_for_position(world_id, local_player.position)
+	if next_region == current_region_name:
+		return
+	var previous_region := current_region_name
+	current_region_name = next_region
+	HHAudio.set_region_ambience(world_id)
+	_update_hud()
+	if show_entry_notice and not previous_region.is_empty():
+		_show_notification("已进入「" + next_region + "」", 2.8)
+
+func _update_compact_hud(progression: Dictionary = {}) -> void:
+	if not is_instance_valid(compact_hud_label):
+		return
+	var snapshot: Dictionary = HHSession.world_snapshot
+	var world_id := str(snapshot.get("world_id", ""))
+	var world_name := _world_display_name(world_id)
+	var character_name := str(snapshot.get("name", "初入洪荒"))
+	var system_name := str(progression.get("system_name", "修炼信息加载中"))
+	var realm_name := str(progression.get("realm_name", ""))
+	var stage_name := str(progression.get("realm_stage_name", ""))
+	var cultivation := int(progression.get("cultivation", 0))
+	var region_name := current_region_name if not current_region_name.is_empty() else "区域载入中"
+	var mana_text := "灵力 %d / %d" % [int(snapshot.get("mana", 0)), int(snapshot.get("max_mana", 0))]
+	var realm_text := (system_name + " · " + realm_name + stage_name).strip_edges()
+	var lines := [
+		world_name + "  ·  " + region_name,
+		character_name + "  |  " + realm_text,
+		"修为 " + str(cultivation) + "    " + mana_text
+	]
+	if world_id == "underworld_fengdu":
+		# Soul-growth counters remain available in the detailed cultivation panel.
+		# Keep the identity card compact; detailed soul growth belongs in the cultivation panel.
+		compact_hud_panel.custom_minimum_size = Vector2(380.0, 96.0)
+		compact_hud_label.custom_minimum_size = Vector2(356.0, 76.0)
+		compact_hud_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		compact_hud_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		compact_hud_label.clip_text = true
+		compact_hud_label.max_lines_visible = 3
+		var pending_choices: Array = soul_essence_profile.get("pending_rare_choices", [])
+		if is_instance_valid(soul_choice_button):
+			soul_choice_button.visible = not pending_choices.is_empty()
+			if not pending_choices.is_empty():
+				soul_choice_button.text = "分配无相灵魄 · " + str(pending_choices.size())
+	else:
+		compact_hud_panel.custom_minimum_size = Vector2(360.0, 96.0)
+		compact_hud_label.custom_minimum_size = Vector2(336.0, 76.0)
+		compact_hud_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		compact_hud_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		compact_hud_label.clip_text = true
+		compact_hud_label.max_lines_visible = 3
+	compact_hud_label.text = "\n".join(PackedStringArray(lines))
+	# Keep the identity card the same compact footprint across all world regions.
+	var compact_viewport_size: Vector2 = get_viewport().get_visible_rect().size
+	var preferred_compact_width: float = 380.0 if world_id == "underworld_fengdu" else 360.0
+	var compact_width: float = minf(preferred_compact_width, maxf(260.0, compact_viewport_size.x - 36.0))
+	compact_hud_panel.custom_minimum_size.x = compact_width
+	compact_hud_label.custom_minimum_size.x = compact_width - 24.0
+	_layout_hud()
+
+func _apply_world_player_form() -> void:
+	if not is_instance_valid(local_player):
+		return
+	var is_underworld := str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu"
+	if is_underworld:
+		var affinities: Dictionary = soul_essence_profile.get("affinity_counts", {})
+		local_player.set_soul_form(true,
+			int(soul_essence_profile.get("form_stage", 1)),
+			float(soul_essence_profile.get("visual_scale", 0.35)),
+			affinities,
+			int(soul_essence_profile.get("growth_stage", 1)),
+			soul_essence_profile.get("fusion_names", []))
+	else:
+		local_player.set_soul_form(false)
+	if is_instance_valid(soul_choice_button):
+		var pending: Array = soul_essence_profile.get("pending_rare_choices", [])
+		soul_choice_button.visible = hud_visible and pending.size() > 0
+
+func _request_soul_essence() -> void:
+	if soul_essence_http == null or HHSession.access_token.is_empty() or soul_essence_request_busy:
+		return
+	soul_essence_request_busy = true
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token])
+	var error := soul_essence_http.request(
+		HHSession.api_base + "/api/v1/souls/current/essence",
+		headers,
+		HTTPClient.METHOD_GET
+	)
+	if error != OK:
+		soul_essence_request_busy = false
+		_show_notification("灵魂状态暂时无法读取，错误码：" + str(error), 4.0)
+
+func _on_soul_essence_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	soul_essence_request_busy = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		_show_notification("灵魂状态读取失败（HTTP " + str(response_code) + "），请确认已执行 000027 和 000028 迁移", 5.0)
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if not (parsed is Dictionary):
+		return
+	var had_previous_essence_profile := soul_essence_profile.has("mutation_count")
+	var previous_mutation_count := int(soul_essence_profile.get("mutation_count", 0))
+	var previous_attribute_points: Dictionary = {}
+	for previous_variant in soul_essence_profile.get("attribute_progress", []):
+		if previous_variant is Dictionary:
+			var previous_item: Dictionary = previous_variant
+			previous_attribute_points[str(previous_item.get("attribute", ""))] = int(previous_item.get("awarded_points", 0))
+	soul_essence_profile = parsed
+	var growth_notifications: Array[String] = []
+	var current_mutation_count := int(soul_essence_profile.get("mutation_count", 0))
+	if had_previous_essence_profile and current_mutation_count > previous_mutation_count:
+		var mutations: Array = soul_essence_profile.get("mutations", [])
+		if mutations.size() > 0:
+			var latest: Dictionary = mutations[0]
+			growth_notifications.append(str(latest.get("name", "未知异变")) + " · " + str({"strength":"力量","constitution":"体质","agility":"敏捷","spirit":"灵力","vitality":"气血"}.get(str(latest.get("attribute", "")), "资质")) + " +" + str(latest.get("attribute_bonus", 1)))
+	if had_previous_essence_profile:
+		for current_variant in soul_essence_profile.get("attribute_progress", []):
+			if not current_variant is Dictionary:
+				continue
+			var current_item: Dictionary = current_variant
+			var attribute := str(current_item.get("attribute", ""))
+			var old_points := int(previous_attribute_points.get(attribute, 0))
+			var new_points := int(current_item.get("awarded_points", 0))
+			if new_points > old_points:
+				var attribute_name := str({"strength":"力量","constitution":"体质","agility":"敏捷","spirit":"灵力","vitality":"气血"}.get(attribute, attribute))
+				growth_notifications.append(attribute_name + "资质突破 +" + str(new_points - old_points))
+	if growth_notifications.size() > 0:
+		_show_notification("魂质成长 · " + "；".join(PackedStringArray(growth_notifications)), 5.0)
+	_apply_world_player_form()
+	_update_compact_hud()
+	var pending: Array = soul_essence_profile.get("pending_rare_choices", [])
+	if is_instance_valid(soul_choice_button):
+		soul_choice_button.visible = pending.size() > 0 and hud_visible
+	if pending.size() > 0 and pending_rare_choice_record_id.is_empty():
+		pending_rare_choice_record_id = str(pending[0].get("record_id", ""))
+		_show_notification("获得无相灵魄！可在左上方选择一项来世属性", 6.0)
+
+func _update_hud() -> void:
+	var snapshot: Dictionary = HHSession.world_snapshot
+	var world_id := str(snapshot.get("world_id", ""))
+	var world_name := _world_display_name(world_id)
+	var character_name := str(snapshot.get("name", "初入洪荒"))
+	hud_label.text = character_name + "  |  WASD 移动 · 鼠标转向 · ESC 释放鼠标 · F1 隐藏/显示状态栏\nF NPC交互 · E 拾取 · I 背包 · Q 幽冥磷火 · R 镇邪符 · T 鬼门锁链 · Y 回魂术 · U 养气归元 · G 罡气护体 · H 净秽符 · C 聊天 · 鼠标左键攻击（按住连续攻击） · F2 网络诊断"
+	_update_compact_hud()
+
+func _exit_tree() -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+func _on_entities_updated(entities: Array) -> void:
+	var seen: Dictionary = {}
+	var seen_monsters: Dictionary = {}
+	var seen_drops: Dictionary = {}
+	var seen_projectiles: Dictionary = {}
+	var seen_party_statuses: Dictionary = {}
+	var received_party_status_snapshot := false
+	var party_status_changed := false
+	var own_id := str(HHSession.world_snapshot.get("character_id", ""))
+	for entity in entities:
+		if not (entity is Dictionary):
+			continue
+		var entity_type := str(entity.get("entity_type", "player"))
+		if entity_type == "player_status":
+			received_party_status_snapshot = true
+			var status_id := str(entity.get("character_id", ""))
+			if status_id.is_empty():
+				continue
+			seen_party_statuses[status_id] = true
+			var status := {
+				"health": int(entity.get("health", 0)),
+				"max_health": int(entity.get("max_health", 0)),
+				"alive": bool(entity.get("alive", false)),
+				"shield_health": int(entity.get("shield_health", 0)),
+				"shield_remaining_ms": int(entity.get("shield_remaining_ms", 0))
+			}
+			if party_member_statuses.get(status_id, {}) != status:
+				party_member_statuses[status_id] = status
+				party_status_changed = true
+			continue
+		if entity_type == "monster":
+			var monster_id := str(entity.get("entity_id", ""))
+			if monster_id.is_empty():
+				continue
+			seen_monsters[monster_id] = true
+			_upsert_monster(entity)
+			continue
+		if entity_type == "drop":
+			var drop_id := str(entity.get("entity_id", ""))
+			if drop_id.is_empty():
+				continue
+			seen_drops[drop_id] = true
+			_upsert_drop(entity)
+			continue
+		if entity_type == "projectile":
+			var projectile_id := str(entity.get("entity_id", ""))
+			if projectile_id.is_empty():
+				continue
+			seen_projectiles[projectile_id] = true
+			_upsert_projectile(entity)
+			continue
+		var character_id := str(entity.get("character_id", ""))
+		if character_id.is_empty():
+			continue
+		var target := Vector3(float(entity.get("x", 0.0)), float(entity.get("y", 0.0)), float(entity.get("z", 0.0)))
+		if character_id == own_id:
+			local_target_position = target
+			if entity.has("mana"):
+				HHSession.world_snapshot["mana"] = int(entity.get("mana", 0))
+			if entity.has("max_mana"):
+				HHSession.world_snapshot["max_mana"] = int(entity.get("max_mana", 0))
+			if is_instance_valid(mana_label):
+				var mana_now := int(HHSession.world_snapshot.get("mana", 0))
+				var mana_max := int(HHSession.world_snapshot.get("max_mana", 0))
+				mana_label.text = "灵力  " + str(mana_now) + " / " + str(mana_max)
+				if is_instance_valid(mana_bar):
+					mana_bar.max_value = maxf(1.0, float(mana_max))
+					mana_bar.value = clampf(float(mana_now), 0.0, mana_bar.max_value)
+			continue
+		seen[character_id] = true
+		_upsert_remote_player(entity)
+		if entity.has("health") and entity.has("max_health"):
+			var player_status := {
+				"health": int(entity.get("health", 0)),
+				"max_health": int(entity.get("max_health", 0)),
+				"alive": bool(entity.get("alive", int(entity.get("health", 0)) > 0))
+			}
+			if party_member_statuses.get(character_id, {}) != player_status:
+				party_member_statuses[character_id] = player_status
+				party_status_changed = true
+	if received_party_status_snapshot:
+		for status_id in party_member_statuses.keys():
+			if not seen_party_statuses.has(status_id):
+				party_member_statuses.erase(status_id)
+				party_status_changed = true
+	if party_status_changed and is_instance_valid(party_panel) and party_panel.visible and not party_data.is_empty():
+		_render_party_members()
+	for character_id in remote_players.keys():
+		if not seen.has(character_id):
+			remote_players[character_id].queue_free()
+			remote_players.erase(character_id)
+			remote_targets.erase(character_id)
+			remote_yaws.erase(character_id)
+	for monster_id in monsters.keys():
+		if not seen_monsters.has(monster_id):
+			var missing_monster := monsters[monster_id] as Node3D
+			if float(missing_monster.get_meta("death_reaction_time", 0.0)) > 0.0:
+				_clear_incoming_attack_source_for_monster(str(monster_id), missing_monster)
+				missing_monster.set_meta("pending_corpse_cleanup", true)
+				monster_targets.erase(monster_id)
+				monster_entities.erase(monster_id)
+				if monster_id == selected_monster_id:
+					_clear_monster_target()
+				continue
+			_clear_incoming_attack_source_for_monster(str(monster_id), missing_monster)
+			missing_monster.queue_free()
+			monsters.erase(monster_id)
+			monster_targets.erase(monster_id)
+			monster_entities.erase(monster_id)
+			if monster_id == selected_monster_id:
+				_clear_monster_target()
+	for drop_id in drops.keys():
+		if not seen_drops.has(drop_id):
+			drops[drop_id].queue_free()
+			drops.erase(drop_id)
+			drop_targets.erase(drop_id)
+	for projectile_id in projectiles.keys():
+		if not seen_projectiles.has(projectile_id):
+			projectiles[projectile_id].queue_free()
+			projectiles.erase(projectile_id)
+			projectile_targets.erase(projectile_id)
+
+func _upsert_remote_player(entity: Dictionary) -> void:
+	var character_id := str(entity.get("character_id", ""))
+	if character_id.is_empty() or character_id == str(HHSession.world_snapshot.get("character_id", "")):
+		return
+	if not remote_players.has(character_id):
+		remote_players[character_id] = _create_remote_player(str(entity.get("name", "修士")))
+	remote_targets[character_id] = Vector3(
+		float(entity.get("x", 0.0)),
+		float(entity.get("y", 0.0)),
+		float(entity.get("z", 0.0))
+	)
+	remote_yaws[character_id] = float(entity.get("yaw", 0.0))
+	var birth_data: Variant = entity.get("birth_inheritance", {})
+	_apply_remote_birth_visuals(remote_players[character_id], birth_data if birth_data is Dictionary else {})
+	var equipment_data: Variant = entity.get("equipment", [])
+	_apply_remote_equipment_visuals(remote_players[character_id], equipment_data if equipment_data is Array else [])
+	_set_player_poison_visual(remote_players[character_id], bool(entity.get("poisoned", false)))
+
+func _apply_remote_equipment_visuals(remote: Node3D, items: Array) -> void:
+	if not is_instance_valid(remote) or bool(remote.get_meta("is_underworld", false)):
+		return
+	var humanoid := remote.get_node_or_null("RemoteHumanoid") as Node3D
+	if humanoid == null:
+		return
+	var signature := JSON.stringify(items)
+	if str(remote.get_meta("remote_equipment_signature", "")) == signature:
+		return
+	remote.set_meta("remote_equipment_signature", signature)
+	var slots := ["weapon", "offhand", "head", "chest", "legs", "boots", "accessory", "back"]
+	for slot in slots:
+		var socket := EquipmentVisualFactory.get_or_create_socket(humanoid, slot)
+		if not is_instance_valid(socket):
+			continue
+		for old_visual in socket.get_children():
+			if old_visual.name == "EquipmentVisual":
+				old_visual.queue_free()
+	for item_value in items:
+		if not (item_value is Dictionary):
+			continue
+		var item: Dictionary = item_value
+		var slot := str(item.get("slot", item.get("equipment_slot", "")))
+		if slot not in slots:
+			continue
+		var socket := EquipmentVisualFactory.get_or_create_socket(humanoid, slot)
+		if not is_instance_valid(socket):
+			continue
+		var equipment_visual := EquipmentVisualFactory.create_equipment_visual(
+			slot,
+			int(item.get("quality", 1)),
+			str(item.get("item_id", ""))
+		)
+		if equipment_visual != null:
+			socket.add_child(equipment_visual)
+
+
+func _apply_remote_birth_visuals(remote: Node3D, birth: Dictionary) -> void:
+	if not is_instance_valid(remote) or bool(remote.get_meta("is_underworld", false)):
+		return
+	var humanoid := remote.get_node_or_null("RemoteHumanoid") as Node3D
+	if humanoid == null:
+		return
+	var resonance := humanoid.get_node_or_null("BirthResonanceVisuals") as Node3D
+	if birth.is_empty():
+		if resonance != null:
+			resonance.visible = false
+		return
+	if resonance == null:
+		resonance = Node3D.new()
+		resonance.name = "BirthResonanceVisuals"
+		humanoid.add_child(resonance)
+		for index in range(3):
+			var ring := MeshInstance3D.new()
+			ring.name = "BirthResonanceRing" + str(index + 1)
+			var torus := TorusMesh.new()
+			torus.inner_radius = 0.46 + float(index) * 0.12
+			torus.outer_radius = torus.inner_radius + 0.025
+			torus.rings = 28
+			torus.ring_segments = 6
+			ring.mesh = torus
+			ring.position.y = 0.48 + float(index) * 0.42
+			ring.rotation.x = [PI * 0.5, 0.72, -0.72][index]
+			resonance.add_child(ring)
+		var aura := MeshInstance3D.new()
+		aura.name = "BirthResonanceAura"
+		var sphere := SphereMesh.new()
+		sphere.radius = 0.48
+		sphere.height = 1.45
+		sphere.radial_segments = 20
+		sphere.rings = 12
+		aura.mesh = sphere
+		resonance.add_child(aura)
+	var dominant := str(birth.get("dominant_attribute", "vitality"))
+	var colors := {
+		"strength": Color("#e76a43"),
+		"constitution": Color("#d5ad62"),
+		"agility": Color("#65c995"),
+		"spirit": Color("#9b82e8"),
+		"vitality": Color("#55c9a5")
+	}
+	var tint: Color = colors.get(dominant, colors["vitality"])
+	var stage := maxi(int(birth.get("source_growth_stage", 1)), 1)
+	for child in resonance.get_children():
+		if child is MeshInstance3D:
+			var material := StandardMaterial3D.new()
+			material.albedo_color = Color(tint.r, tint.g, tint.b, 0.24 if child.name == "BirthResonanceAura" else 0.62)
+			material.emission_enabled = true
+			material.emission = tint
+			material.emission_energy_multiplier = 0.8 + minf(float(stage - 1) * 0.12, 1.8)
+			material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			child.material_override = material
+			child.scale = Vector3.ONE * (1.0 + minf(float(stage - 1) * 0.035, 0.25))
+	resonance.visible = true
+
+func _upsert_monster(entity: Dictionary) -> void:
+	var monster_id := str(entity.get("entity_id", ""))
+	if monster_id.is_empty():
+		return
+	if not monsters.has(monster_id):
+		monsters[monster_id] = _create_monster(str(entity.get("name", "野兽")), int(entity.get("level", 1)))
+	monster_targets[monster_id] = Vector3(
+		float(entity.get("x", 0.0)),
+		float(entity.get("y", 0.0)),
+		float(entity.get("z", 0.0))
+	)
+	var monster_node := monsters[monster_id] as Node3D
+	monster_node.set_meta("target_yaw", float(entity.get("yaw", monster_node.rotation.y)))
+	monster_node.set_meta("server_mode", int(entity.get("mode", 0)))
+	var slow_ring := monster_node.get_node_or_null("SlowStatusRing") as MeshInstance3D
+	if slow_ring != null:
+		slow_ring.visible = bool(entity.get("slowed", false))
+	_set_monster_freeze_visual(monster_node, bool(entity.get("frozen", false)))
+	var merged_entity := entity.duplicate(true)
+	var previous_entity: Dictionary = monster_entities.get(monster_id, {})
+	if bool(merged_entity.get("death_pending", false)) or int(merged_entity.get("health", 1)) <= 0:
+		# A monster life ending invalidates its old aggro marker. Runtime IDs can
+		# survive respawns, so never carry the previous life target into the next one.
+		merged_entity["aggro_target_character_id"] = ""
+		merged_entity["aggro_target_name"] = ""
+	else:
+		# World snapshots may omit transient aggro fields. Keep the latest combat
+		# event until the server explicitly sends a newer target state.
+		for transient_key in ["aggro_target_character_id", "aggro_target_name"]:
+			if not merged_entity.has(transient_key) and previous_entity.has(transient_key):
+				merged_entity[transient_key] = previous_entity[transient_key]
+	monster_entities[monster_id] = merged_entity
+	if bool(merged_entity.get("death_pending", false)) or int(merged_entity.get("health", 1)) <= 0:
+		_begin_monster_death_visual(monster_node)
+	if monster_id == selected_monster_id:
+		_update_target_info()
+	_refresh_monster_nameplate(monster_id)
+
+func _begin_monster_death_visual(monster: Node3D) -> void:
+	if not is_instance_valid(monster) or bool(monster.get_meta("defeated_visual", false)):
+		return
+	monster.set_meta("burn_visual_remaining", 0.0)
+	_set_monster_burn_visual(monster, false)
+	_set_monster_freeze_visual(monster, false)
+	monster.set_meta("death_reaction_time", 1.15)
+	monster.set_meta("defeated_visual", true)
+	_play_model_animation_action(monster, "death")
+	var nameplate := monster.get_node_or_null("Nameplate") as Label3D
+	if is_instance_valid(nameplate):
+		nameplate.visible = false
+
+func _play_model_animation_action(entity_root: Node, action_name: String) -> void:
+	if not is_instance_valid(entity_root):
+		return
+	var controller := entity_root.find_child("ModelAnimationController", true, false)
+	if controller != null and controller.has_method("play_action"):
+		controller.call("play_action", action_name)
+
+
+func _refresh_monster_nameplate(monster_id: String) -> void:
+	var monster_node := monsters.get(monster_id) as Node3D
+	if not is_instance_valid(monster_node):
+		return
+	var nameplate := monster_node.get_node_or_null("Nameplate") as Label3D
+	if nameplate == null:
+		return
+	var entity: Dictionary = monster_entities.get(monster_id, {})
+	var base_text := str(entity.get("name", "野兽")) + " · Lv." + str(int(entity.get("level", 1)))
+	if entity.has("health") and int(entity.get("max_health", 0)) > 0:
+		base_text += "\n生命 " + str(maxi(int(entity.get("health", 0)), 0)) + " / " + str(int(entity.get("max_health", 0)))
+	var aggro_target_id := str(entity.get("aggro_target_character_id", ""))
+	var aggro_target_name := str(entity.get("aggro_target_name", ""))
+	var base_color: Color = monster_node.get_meta("base_nameplate_color", Color("#ffd0a8"))
+	if not aggro_target_id.is_empty():
+		var local_id := str(HHSession.world_snapshot.get("character_id", ""))
+		if aggro_target_id == local_id:
+			base_text += "\n⚔ 正在攻击你"
+			nameplate.modulate = Color("#ff7777")
+		else:
+			base_text += "\n目标：" + (aggro_target_name if not aggro_target_name.is_empty() else "队友")
+			nameplate.modulate = Color("#ffc36b")
+	else:
+		nameplate.modulate = Color("#f2d28a") if monster_id == selected_monster_id else base_color
+	if monster_id == selected_monster_id:
+		base_text += "\n◆ 当前锁定目标"
+	if str(party_data.get("focus_target_entity_id", "")) == monster_id:
+		base_text += "\n⚑ 队伍集火目标"
+	nameplate.text = base_text
+
+func _refresh_party_focus_visual() -> void:
+	for monster_id in monsters.keys():
+		_refresh_monster_nameplate(str(monster_id))
+
+func _create_monster(monster_name: String, monster_level: int) -> Node3D:
+	var visual_root: Node3D = UnderworldVisualFactory.create_monster(monster_name, monster_level)
+	var archetype := str(visual_root.get_meta("visual_archetype", ""))
+	var is_wraith := archetype in ["life_soul", "wind_soul", "fire_soul", "frost_soul", "wraith"]
+	var is_war_god := monster_name.contains("战神") or monster_name.contains("战魂")
+	var elemental_telegraph := MeshInstance3D.new()
+	elemental_telegraph.name = "ElementalTelegraph"
+	var elemental_ring := TorusMesh.new()
+	elemental_ring.inner_radius = 0.54
+	elemental_ring.outer_radius = 0.62
+	elemental_ring.rings = 36
+	elemental_ring.ring_segments = 8
+	elemental_telegraph.mesh = elemental_ring
+	var elemental_material := StandardMaterial3D.new()
+	var elemental_color := Color("#c18aff")
+	if archetype == "fire_soul":
+		elemental_color = Color("#ff9b42")
+	elif archetype == "frost_soul":
+		elemental_color = Color("#72dfff")
+	elemental_material.albedo_color = Color(elemental_color.r, elemental_color.g, elemental_color.b, 0.28)
+	elemental_material.emission_enabled = true
+	elemental_material.emission = elemental_color
+	elemental_material.emission_energy_multiplier = 1.1
+	elemental_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	elemental_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	elemental_telegraph.material_override = elemental_material
+	elemental_telegraph.position.y = 0.07
+	elemental_telegraph.visible = false
+	visual_root.add_child(elemental_telegraph)
+	# Any monster can receive a heavy_slam attack profile (including bosses).
+	# Create the ground-area marker universally; it remains hidden unless that
+	# monster actually begins a heavy slam.
+	var telegraph := MeshInstance3D.new()
+	telegraph.name = "SlamTelegraph"
+	var torus := TorusMesh.new()
+	torus.inner_radius = 0.94
+	torus.outer_radius = 1.0
+	torus.rings = 40
+	torus.ring_segments = 8
+	telegraph.mesh = torus
+	var telegraph_material := StandardMaterial3D.new()
+	telegraph_material.albedo_color = Color("#ff6547", 0.34)
+	telegraph_material.emission_enabled = true
+	telegraph_material.emission = Color("#ff3f2d")
+	telegraph_material.emission_energy_multiplier = 1.2
+	telegraph_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	telegraph_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	telegraph.material_override = telegraph_material
+	telegraph.position.y = 0.075
+	telegraph.visible = false
+	visual_root.add_child(telegraph)
+	var slow_ring := MeshInstance3D.new()
+	slow_ring.name = "SlowStatusRing"
+	var slow_ring_mesh := TorusMesh.new()
+	slow_ring_mesh.inner_radius = 0.58
+	slow_ring_mesh.outer_radius = 0.66
+	slow_ring_mesh.rings = 24
+	slow_ring_mesh.ring_segments = 6
+	slow_ring.mesh = slow_ring_mesh
+	var slow_ring_material := StandardMaterial3D.new()
+	slow_ring_material.albedo_color = Color("#70dfff", 0.72)
+	slow_ring_material.emission_enabled = true
+	slow_ring_material.emission = Color("#48cfff")
+	slow_ring_material.emission_energy_multiplier = 1.6
+	slow_ring_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	slow_ring_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	slow_ring.material_override = slow_ring_material
+	slow_ring.position.y = 0.09
+	slow_ring.visible = false
+	visual_root.add_child(slow_ring)
+	var label := Label3D.new()
+	label.name = "Nameplate"
+	label.text = monster_name + " · Lv." + str(monster_level)
+	label.position.y = 2.05 if is_war_god else (1.85 if is_wraith else 1.75)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.modulate = Color("#ff9b55") if is_war_god else (Color("#b9d9ff") if is_wraith else Color("#ffd0a8"))
+	visual_root.set_meta("base_nameplate_color", label.modulate)
+	visual_root.add_child(label)
+	visual_root.set_meta("base_visual_scale", visual_root.scale)
+	visual_root.set_meta("death_reaction_time", 0.0)
+	visual_root.set_meta("hit_reaction_time", 0.0)
+	add_child(visual_root)
+	return visual_root
+
+func _upsert_drop(entity: Dictionary) -> void:
+	var drop_id := str(entity.get("entity_id", ""))
+	if drop_id.is_empty():
+		return
+	if not drops.has(drop_id):
+		drops[drop_id] = _create_drop(str(entity.get("item_name", "掉落物")), int(entity.get("quality", 1)), int(entity.get("quantity", 1)))
+	drop_targets[drop_id] = Vector3(
+		float(entity.get("x", 0.0)),
+		float(entity.get("y", 0.15)),
+		float(entity.get("z", 0.0))
+	)
+
+func _upsert_projectile(entity: Dictionary) -> void:
+	var projectile_id := str(entity.get("entity_id", ""))
+	var projectile_type := str(entity.get("projectile_type", ""))
+	if projectile_id.is_empty() or projectile_type not in ["arrow", "nether_phosphor", "suppressing_talisman"]:
+		return
+	var target := Vector3(float(entity.get("x", 0.0)), float(entity.get("y", 1.15)), float(entity.get("z", 0.0)))
+	var is_new := not projectiles.has(projectile_id)
+	if is_new:
+		if projectile_type == "nether_phosphor":
+			projectiles[projectile_id] = _create_fireball_projectile()
+		elif projectile_type == "suppressing_talisman":
+			projectiles[projectile_id] = _create_ice_bolt_projectile()
+		else:
+			projectiles[projectile_id] = _create_arrow_projectile()
+	projectile_targets[projectile_id] = target
+	var direction := Vector3(float(entity.get("velocity_x", 0.0)), 0.0, float(entity.get("velocity_z", -1.0)))
+	var projectile_node := projectiles[projectile_id] as Node3D
+	if is_instance_valid(projectile_node):
+		if is_new:
+			projectile_node.position = target
+		if direction.length_squared() > 0.001:
+			projectile_node.look_at(projectile_node.global_position + direction, Vector3.UP)
+
+func _create_fireball_projectile() -> Node3D:
+	var root := Node3D.new()
+	root.name = "AuthoritativeNetherPhosphor"
+	var core := MeshInstance3D.new()
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.15
+	sphere.height = 0.52
+	sphere.radial_segments = 12
+	sphere.rings = 8
+	core.mesh = sphere
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#b6a0d8")
+	material.emission_enabled = true
+	material.emission = Color("#8e55d6")
+	material.emission_energy_multiplier = 2.8
+	material.roughness = 0.3
+	core.material_override = material
+	root.add_child(core)
+	var glow := MeshInstance3D.new()
+	var glow_mesh := SphereMesh.new()
+	glow_mesh.radius = 0.32
+	glow_mesh.height = 0.64
+	glow_mesh.radial_segments = 10
+	glow_mesh.rings = 5
+	glow.mesh = glow_mesh
+	var glow_material := StandardMaterial3D.new()
+	glow_material.albedo_color = Color(0.48, 0.28, 0.82, 0.24)
+	glow_material.emission_enabled = true
+	glow_material.emission = Color("#7143b8")
+	glow_material.emission_energy_multiplier = 1.4
+	glow_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glow_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	glow.material_override = glow_material
+	root.add_child(glow)
+	for wisp_index in range(3):
+		var wisp := MeshInstance3D.new()
+		var wisp_mesh := SphereMesh.new()
+		wisp_mesh.radius = 0.075 - float(wisp_index) * 0.012
+		wisp_mesh.height = wisp_mesh.radius * 2.0
+		wisp.mesh = wisp_mesh
+		wisp.position = Vector3(0.0, 0.0, 0.18 + float(wisp_index) * 0.13)
+		var wisp_material := StandardMaterial3D.new()
+		wisp_material.albedo_color = Color(0.55, 0.34, 0.82, 0.62 - float(wisp_index) * 0.12)
+		wisp_material.emission_enabled = true
+		wisp_material.emission = Color("#8153c4")
+		wisp_material.emission_energy_multiplier = 1.1
+		wisp_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		wisp_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		wisp.material_override = wisp_material
+		root.add_child(wisp)
+	add_child(root)
+	return root
+
+func _create_ice_bolt_projectile() -> Node3D:
+	var root := Node3D.new()
+	root.name = "AuthoritativeSuppressingTalisman"
+	var core := MeshInstance3D.new()
+	var talisman := BoxMesh.new()
+	talisman.size = Vector3(0.32, 0.025, 0.46)
+	core.mesh = talisman
+	core.rotation.z = PI * 0.25
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#d9bd76")
+	material.emission_enabled = true
+	material.emission = Color("#d49b3f")
+	material.emission_energy_multiplier = 2.2
+	material.metallic = 0.18
+	material.roughness = 0.24
+	core.material_override = material
+	root.add_child(core)
+	for stroke in [Vector3(0.0, 0.014, 0.0), Vector3(0.0, -0.014, 0.0)]:
+		var rune_stroke := MeshInstance3D.new()
+		var rune_mesh := BoxMesh.new()
+		rune_mesh.size = Vector3(0.025, 0.008, 0.30)
+		rune_stroke.mesh = rune_mesh
+		rune_stroke.position = stroke
+		rune_stroke.rotation.y = PI * 0.25 if stroke.y > 0.0 else -PI * 0.25
+		var rune_material := StandardMaterial3D.new()
+		rune_material.albedo_color = Color("#fff0bd")
+		rune_material.emission_enabled = true
+		rune_material.emission = Color("#e6bd68")
+		rune_material.emission_energy_multiplier = 1.8
+		rune_stroke.material_override = rune_material
+		root.add_child(rune_stroke)
+	var halo := MeshInstance3D.new()
+	var halo_mesh := TorusMesh.new()
+	halo_mesh.inner_radius = 0.23
+	halo_mesh.outer_radius = 0.29
+	halo_mesh.rings = 16
+	halo_mesh.ring_segments = 6
+	halo.mesh = halo_mesh
+	halo.rotation.x = PI * 0.5
+	var halo_material := StandardMaterial3D.new()
+	halo_material.albedo_color = Color("#e8c778", 0.58)
+	halo_material.emission_enabled = true
+	halo_material.emission = Color("#c18b38")
+	halo_material.emission_energy_multiplier = 1.8
+	halo_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	halo_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	halo.material_override = halo_material
+	root.add_child(halo)
+	add_child(root)
+	return root
+
+func _create_arrow_projectile() -> Node3D:
+	var root := Node3D.new()
+	root.name = "AuthoritativeArrow"
+	var shaft := MeshInstance3D.new()
+	var shaft_mesh := BoxMesh.new()
+	shaft_mesh.size = Vector3(0.035, 0.035, 0.78)
+	shaft.mesh = shaft_mesh
+	shaft.position.z = -0.35
+	var wood := StandardMaterial3D.new()
+	wood.albedo_color = Color("#8a633b")
+	wood.roughness = 0.8
+	shaft.material_override = wood
+	root.add_child(shaft)
+	var head := MeshInstance3D.new()
+	# Godot 4 provides CylinderMesh; a zero top radius creates a cone-shaped arrowhead.
+	var head_mesh := CylinderMesh.new()
+	head_mesh.top_radius = 0.0
+	head_mesh.bottom_radius = 0.085
+	head_mesh.height = 0.22
+	head.mesh = head_mesh
+	head.position.z = -0.78
+	head.rotation.x = -PI * 0.5
+	var metal := StandardMaterial3D.new()
+	metal.albedo_color = Color("#c5cbd1")
+	metal.metallic = 0.72
+	head.material_override = metal
+	root.add_child(head)
+	add_child(root)
+	return root
+
+func _create_drop(item_name: String, quality: int, quantity: int) -> Node3D:
+	var root := Node3D.new()
+	var mesh_instance := MeshInstance3D.new()
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.28
+	mesh.height = 0.5
+	mesh_instance.mesh = mesh
+	var material := StandardMaterial3D.new()
+	var quality_colors := [Color("#c6c6c6"), Color("#72c98a"), Color("#5ba9ef"), Color("#b184ed"), Color("#e8b85b")]
+	material.albedo_color = quality_colors[clampi(quality - 1, 0, quality_colors.size() - 1)]
+	material.emission_enabled = true
+	material.emission = material.albedo_color * 0.22
+	material.roughness = 0.35
+	mesh_instance.material_override = material
+	root.add_child(mesh_instance)
+	var label := Label3D.new()
+	label.text = item_name + " ×" + str(quantity) + "\n按 E 拾取"
+	label.position.y = 0.65
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.modulate = Color("#f4e6bd")
+	root.add_child(label)
+	add_child(root)
+	return root
+
+func _is_combat_click_over_interactive_ui(control: Control) -> bool:
+	# Full-screen HUD containers often use MOUSE_FILTER_STOP even when the
+	# player clicks empty world space. Only real interactive widgets should
+	# reserve the left mouse button; decorative panels/labels must pass it through.
+	var current: Node = control
+	while is_instance_valid(current):
+		if current is BaseButton or current is LineEdit or current is TextEdit or current is Range or current is OptionButton or current is MenuButton or current is PopupMenu:
+			return true
+		current = current.get_parent()
+	return false
+
+
+func _input(event: InputEvent) -> void:
+	# Route combat clicks at the world root so GUI focus cannot silently swallow them.
+	if not (event is InputEventMouseButton):
+		return
+	var mouse_event := event as InputEventMouseButton
+	if mouse_event.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if not mouse_event.pressed:
+		attack_button_held = false
+		return
+	if not is_instance_valid(local_player) or is_gameplay_input_blocked():
+		return
+	if bool(local_player.get("is_dead")):
+		attack_button_held = false
+		return
+	var viewport := get_viewport()
+	var was_captured := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+	if not was_captured:
+		var hovered_control := viewport.gui_get_hovered_control()
+		if is_instance_valid(hovered_control) and _is_combat_click_over_interactive_ui(hovered_control):
+			return
+	var target_screen_position: Vector2 = viewport.get_visible_rect().size * 0.5 if was_captured else mouse_event.position
+	if not was_captured:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	attack_button_held = true
+	_request_nearest_monster_attack(target_screen_position)
+	viewport.set_input_as_handled()
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE and is_instance_valid(world_map_panel) and world_map_panel.visible:
+		_toggle_world_map()
+		get_viewport().set_input_as_handled()
+		return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F3:
+		input_debug_visible = not input_debug_visible
+		if is_instance_valid(input_debug_panel):
+			input_debug_panel.visible = hud_visible and input_debug_visible
+		get_viewport().set_input_as_handled()
+		return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F1:
+		hud_visible = not hud_visible
+		$HUD/Panel.visible = hud_visible and details_visible
+		if is_instance_valid(compact_hud_panel):
+			compact_hud_panel.visible = hud_visible
+		if is_instance_valid(hud_toggle_button):
+			hud_toggle_button.visible = hud_visible
+		if is_instance_valid(hud_restore_button):
+			hud_restore_button.visible = not hud_visible
+		if is_instance_valid(help_button):
+			help_button.visible = true
+		if is_instance_valid(leave_world_button):
+			leave_world_button.visible = hud_visible
+		if is_instance_valid(chat_panel):
+			chat_panel.visible = hud_visible
+		if is_instance_valid(details_toggle_button):
+			details_toggle_button.visible = hud_visible
+		if is_instance_valid(soul_choice_button):
+			soul_choice_button.visible = hud_visible and soul_essence_profile.get("pending_rare_choices", []).size() > 0
+		if is_instance_valid(target_info_panel):
+			target_info_panel.visible = hud_visible and not selected_monster_id.is_empty()
+		if is_instance_valid(minimap_panel):
+			minimap_panel.visible = hud_visible and get_viewport().get_visible_rect().size.x >= 520.0 and not (is_instance_valid(friend_panel) and friend_panel.visible)
+		if is_instance_valid(world_map_panel) and not hud_visible:
+			world_map_panel.visible = false
+		if is_instance_valid(input_debug_panel):
+			input_debug_panel.visible = hud_visible and input_debug_visible
+		if is_instance_valid(notification_panel) and not hud_visible:
+			notification_panel.visible = false
+		if is_instance_valid(help_panel) and not hud_visible:
+			help_panel.visible = false
+			help_restore_mouse_captured = false
+		if is_instance_valid(revive_channel_panel):
+			revive_channel_panel.visible = hud_visible and revive_channel_remaining > 0.0
+		get_viewport().set_input_as_handled()
+		return
+	if not (event is InputEventKey) or not event.pressed or event.echo:
+		return
+	if event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER:
+		if is_instance_valid(chat_input) and not chat_input.has_focus():
+			_set_chat_expanded(true)
+			chat_input.grab_focus()
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_ESCAPE and is_instance_valid(help_panel) and help_panel.visible:
+		_toggle_help_panel()
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_ESCAPE and chat_expanded:
+		if is_instance_valid(chat_input):
+			chat_input.release_focus()
+		_set_chat_expanded(false)
+		get_viewport().set_input_as_handled()
+		return
+	# Do not trigger gameplay shortcuts while the player is typing in chat
+	# (or another text editor). Letters such as I/C/F/E belong to the text field.
+	var focused_control := get_viewport().gui_get_focus_owner()
+	if focused_control is LineEdit or focused_control is TextEdit:
+		return
+	if event.keycode == KEY_F1:
+		_toggle_hud_visibility()
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_F2:
+		_toggle_help_panel()
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_TAB:
+		_cycle_monster_target()
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_F:
+		# Opening an NPC interaction is a UI transition: release the captured cursor
+		# immediately so the player can use dialogue and choice buttons.
+		_try_interact_nearest_npc()
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_I:
+		_on_inventory_button_pressed()
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_Q:
+		_request_fireball()
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_R:
+		_request_ice_bolt()
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_T:
+		_request_taunt()
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_Y:
+		_request_revive_nearest()
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_U:
+		_request_support_spell("life_mend")
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_G:
+		_request_support_spell("guardian_aegis")
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_H:
+		_request_purify_self()
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_C:
+		_set_chat_expanded(not chat_expanded)
+		if chat_expanded and is_instance_valid(chat_input):
+			chat_input.grab_focus()
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode != KEY_E:
+		return
+	var network := HHSession.world_network
+	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
+		return
+	var nearest_id := ""
+	var nearest_distance := 3.0
+	for drop_id in drops.keys():
+		var target: Vector3 = drop_targets.get(drop_id, drops[drop_id].position)
+		var distance := Vector2(target.x - local_player.position.x, target.z - local_player.position.z).length()
+		if distance <= nearest_distance:
+			nearest_distance = distance
+			nearest_id = str(drop_id)
+	if nearest_id.is_empty():
+		return
+	var error := network.send_pickup(nearest_id)
+	if error == OK:
+		hud_label.text = "正在拾取物品……"
+	else:
+		hud_label.text = "发送拾取请求失败，错误码：" + str(error)
+
+func _build_chat_hud() -> void:
+	var hud := get_node_or_null("HUD") as CanvasLayer
+	if hud == null:
+		return
+	chat_panel = PanelContainer.new()
+	chat_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	chat_panel.offset_left = -438.0
+	chat_panel.offset_top = -74.0
+	chat_panel.offset_right = -20.0
+	chat_panel.offset_bottom = -20.0
+	chat_panel.custom_minimum_size = Vector2(418.0, 54.0)
+	var shell := StyleBoxFlat.new()
+	shell.bg_color = Color("#0b1420")
+	shell.border_color = Color("#65563e")
+	shell.set_border_width_all(1)
+	shell.set_corner_radius_all(14)
+	shell.content_margin_left = 14
+	shell.content_margin_right = 14
+	shell.content_margin_top = 10
+	shell.content_margin_bottom = 10
+	chat_panel.add_theme_stylebox_override("panel", shell)
+	hud.add_child(chat_panel)
+
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 9)
+	chat_panel.add_child(layout)
+	var heading := HBoxContainer.new()
+	heading.add_theme_constant_override("separation", 8)
+	layout.add_child(heading)
+	var brand := Label.new()
+	brand.text = "✦"
+	brand.add_theme_color_override("font_color", Color("#d9b879"))
+	brand.add_theme_font_size_override("font_size", 20)
+	heading.add_child(brand)
+	chat_title_label = Label.new()
+	chat_title_label.text = "万界传音"
+	chat_title_label.add_theme_color_override("font_color", Color("#f0e4cc"))
+	chat_title_label.add_theme_font_size_override("font_size", 15)
+	chat_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_child(chat_title_label)
+	chat_unread_badge = Label.new()
+	chat_unread_badge.text = "0"
+	chat_unread_badge.add_theme_color_override("font_color", Color("#ffffff"))
+	chat_unread_badge.add_theme_font_size_override("font_size", 11)
+	chat_unread_badge.visible = false
+	heading.add_child(chat_unread_badge)
+	chat_toggle_button = Button.new()
+	chat_toggle_button.text = "展开"
+	chat_toggle_button.pressed.connect(func(): _set_chat_expanded(not chat_expanded))
+	_style_chat_button(chat_toggle_button, true)
+	heading.add_child(chat_toggle_button)
+
+	var channels := HBoxContainer.new()
+	channels.add_theme_constant_override("separation", 6)
+	layout.add_child(channels)
+	chat_channel_buttons.clear()
+	for channel_data in [["system", "系统"], ["nearby", "附近"], ["friends", "好友"], ["world", "世界"], ["cross_world", "跨界"], ["party", "队伍"]]:
+		var channel_button := Button.new()
+		channel_button.text = str(channel_data[1])
+		channel_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		channel_button.pressed.connect(_select_chat_channel.bind(str(channel_data[0])))
+		_style_chat_button(channel_button, str(channel_data[0]) == selected_chat_channel)
+		channels.add_child(channel_button)
+		chat_channel_buttons.append(channel_button)
+
+	chat_scroll = ScrollContainer.new()
+	chat_scroll.custom_minimum_size = Vector2(386.0, 230.0)
+	chat_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	chat_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	layout.add_child(chat_scroll)
+	chat_log = VBoxContainer.new()
+	chat_log.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	chat_log.add_theme_constant_override("separation", 7)
+	chat_scroll.add_child(chat_log)
+
+	var input_shell := PanelContainer.new()
+	var input_style := StyleBoxFlat.new()
+	input_style.bg_color = Color("#182633")
+	input_style.border_color = Color("#40566a")
+	input_style.set_border_width_all(1)
+	input_style.set_corner_radius_all(8)
+	input_style.content_margin_left = 8
+	input_style.content_margin_right = 8
+	input_style.content_margin_top = 3
+	input_style.content_margin_bottom = 3
+	input_shell.add_theme_stylebox_override("panel", input_style)
+	layout.add_child(input_shell)
+	var input_row := HBoxContainer.new()
+	input_row.add_theme_constant_override("separation", 6)
+	input_shell.add_child(input_row)
+	chat_input = LineEdit.new()
+	chat_input.placeholder_text = "说点什么……（Enter 发送）"
+	chat_input.max_length = 200
+	chat_input.flat = true
+	chat_input.add_theme_color_override("font_color", Color("#edf2f6"))
+	chat_input.add_theme_color_override("font_placeholder_color", Color("#8092a2"))
+	chat_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	chat_input.text_submitted.connect(_on_chat_input_submitted)
+	chat_input.gui_input.connect(_on_chat_input_gui_input)
+	input_row.add_child(chat_input)
+	var send_button := Button.new()
+	send_button.text = "发送"
+	send_button.custom_minimum_size = Vector2(58, 34)
+	send_button.pressed.connect(func(): _on_chat_input_submitted(chat_input.text))
+	_style_chat_button(send_button, true)
+	input_row.add_child(send_button)
+	chat_status = Label.new()
+	chat_status.text = "附近频道 · 同一实例范围内可见"
+	chat_status.add_theme_color_override("font_color", Color("#8295a6"))
+	chat_status.add_theme_font_size_override("font_size", 10)
+	layout.add_child(chat_status)
+	friend_panel = FriendPanelScript.new()
+	friend_panel.open_private_chat.connect(_open_friend_conversation)
+	friend_panel.panel_closed.connect(_on_friend_panel_closed)
+	hud.add_child(friend_panel)
+	_set_chat_expanded(false)
+
+func _style_chat_button(button: Button, active: bool) -> void:
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color("#34485a") if active else Color("#1a2834")
+	normal.border_color = Color("#b79a68") if active else Color("#34495b")
+	normal.set_border_width_all(1)
+	normal.set_corner_radius_all(7)
+	normal.content_margin_left = 10
+	normal.content_margin_right = 10
+	normal.content_margin_top = 5
+	normal.content_margin_bottom = 5
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = Color("#40566a")
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", hover)
+	button.add_theme_color_override("font_color", Color("#f1e5cf") if active else Color("#b8c6d1"))
+	button.add_theme_font_size_override("font_size", 11)
+
+func _release_mouse_for_modal() -> void:
+	# Remember the gameplay cursor state only once so opening a second panel
+	# cannot overwrite the state that must be restored when all panels close.
+	if not ui_modal_restore_mouse_captured:
+		ui_modal_restore_mouse_captured = Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+func _restore_mouse_after_modal() -> void:
+	var another_modal_open: bool = (
+		(is_instance_valid(inventory_panel) and inventory_panel.visible)
+		or (is_instance_valid(party_panel) and party_panel.visible)
+		or (is_instance_valid(npc_panel) and npc_panel.visible)
+		or (is_instance_valid(world_map_panel) and world_map_panel.visible)
+		or (is_instance_valid(friend_panel) and friend_panel.visible)
+		or chat_expanded
+		or (is_instance_valid(help_panel) and help_panel.visible)
+		or (is_instance_valid(audio_settings_panel) and audio_settings_panel.visible)
+		or (is_instance_valid(leave_world_dialog) and leave_world_dialog.visible)
+	)
+	if another_modal_open:
+		return
+	if ui_modal_restore_mouse_captured:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	ui_modal_restore_mouse_captured = false
+
+
+func is_gameplay_input_blocked() -> bool:
+	# Modal map and social drawers own keyboard/mouse input while visible.
+	if is_instance_valid(world_map_panel) and world_map_panel.visible:
+		return true
+	# Keep movement disabled for the entire time the chat drawer is open,
+	# including Chinese IME candidate/composition states.
+	if chat_expanded or (is_instance_valid(friend_panel) and friend_panel.visible):
+		return true
+	if is_instance_valid(party_panel) and party_panel.visible:
+		return true
+	if is_instance_valid(inventory_panel) and inventory_panel.visible:
+		return true
+	if is_instance_valid(npc_panel) and npc_panel.visible:
+		return true
+	if is_instance_valid(help_panel) and help_panel.visible:
+		return true
+	if is_instance_valid(audio_settings_panel) and audio_settings_panel.visible:
+		return true
+	if is_instance_valid(leave_world_dialog) and leave_world_dialog.visible:
+		return true
+	var focused_control := get_viewport().gui_get_focus_owner()
+	return focused_control is LineEdit or focused_control is TextEdit
+
+func _set_chat_expanded(expanded: bool) -> void:
+	if expanded and not chat_expanded:
+		# Release captured mouse before the player can interact with chat controls.
+		chat_restore_mouse_captured = Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	chat_expanded = expanded
+	if expanded:
+		chat_unread_count = 0
+		_update_chat_unread_badge()
+		call_deferred("_scroll_chat_to_bottom")
+	elif is_instance_valid(chat_input):
+		chat_input.release_focus()
+		if chat_restore_mouse_captured:
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		chat_restore_mouse_captured = false
+	if not is_instance_valid(chat_panel):
+		return
+	for child in chat_panel.get_child(0).get_children():
+		if child is Control and child != chat_panel.get_child(0).get_child(0):
+			child.visible = expanded
+	if is_instance_valid(chat_toggle_button):
+		chat_toggle_button.text = "收起" if expanded else "展开"
+	_layout_hud()
+
+func _layout_hud() -> void:
+	var viewport_size := get_viewport().get_visible_rect().size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		return
+
+	# Keep the Tab target card wholly inside the upper-left HUD column. Use
+	# top-left anchors and four explicit offsets so later position writes cannot
+	# push half of the panel outside the viewport.
+	if is_instance_valid(target_info_panel):
+		var target_width := minf(420.0, maxf(250.0, viewport_size.x - 36.0))
+		target_info_panel.anchor_left = 0.0
+		target_info_panel.anchor_right = 0.0
+		target_info_panel.anchor_top = 0.0
+		target_info_panel.anchor_bottom = 0.0
+		target_info_panel.offset_left = 18.0
+		target_info_panel.offset_right = 18.0 + target_width
+		target_info_panel.offset_top = 300.0
+		target_info_panel.offset_bottom = 410.0
+		target_info_panel.custom_minimum_size = Vector2(target_width, 110.0)
+		if is_instance_valid(target_health_bar):
+			target_health_bar.custom_minimum_size = Vector2(target_width - 32.0, 12.0)
+	# Four-corner MMORPG HUD: identity at upper-left, navigation at upper-right,
+	# combat/vitals at lower-left and social chat at lower-right.
+	if is_instance_valid(compact_hud_panel):
+		var is_underworld := str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu"
+		var card_width := minf(380.0 if is_underworld else 360.0, maxf(260.0, viewport_size.x - 420.0))
+		var card_height := compact_hud_panel.custom_minimum_size.y
+		compact_hud_panel.position = Vector2(18.0, 66.0)
+		compact_hud_panel.custom_minimum_size = Vector2(card_width, card_height)
+		compact_hud_panel.size = Vector2(card_width, card_height)
+		if is_instance_valid(compact_hud_label):
+			compact_hud_label.custom_minimum_size = Vector2(card_width - 24.0, card_height - 20.0)
+		var controls_y := 66.0 + card_height + 8.0
+		if is_instance_valid(details_toggle_button):
+			details_toggle_button.position = Vector2(18.0, controls_y)
+		if is_instance_valid(soul_choice_button):
+			soul_choice_button.position = Vector2(146.0, controls_y)
+	var cultivation_panel := get_node_or_null("HUD/Panel") as Control
+	if cultivation_panel != null:
+		var details_width := minf(560.0, maxf(320.0, viewport_size.x - 48.0))
+		var details_height := minf(520.0, maxf(300.0, viewport_size.y - 96.0))
+		cultivation_panel.set_anchors_preset(Control.PRESET_CENTER)
+		cultivation_panel.offset_left = -details_width * 0.5
+		cultivation_panel.offset_right = details_width * 0.5
+		cultivation_panel.offset_top = -details_height * 0.5
+		cultivation_panel.offset_bottom = details_height * 0.5
+		cultivation_panel.custom_minimum_size = Vector2(details_width, details_height)
+	if is_instance_valid(hell_trial_hud_panel):
+		var trial_width := minf(420.0, maxf(280.0, viewport_size.x - 24.0))
+		hell_trial_hud_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		hell_trial_hud_panel.position = Vector2((viewport_size.x - trial_width) * 0.5, 62.0)
+		var evidence_open := is_instance_valid(hell_trial_hud_evidence_container) and hell_trial_hud_evidence_container.visible
+		var panel_height := 420.0 if evidence_open else 154.0
+		hell_trial_hud_panel.custom_minimum_size = Vector2(trial_width, panel_height)
+		hell_trial_hud_panel.size = Vector2(trial_width, panel_height)
+		hell_trial_hud_panel.visible = hud_visible and not hell_trial_runtime_data.is_empty()
+
+	# Reserve one continuous top-right toolbar for all utility actions.
+	# The inventory shortcut used to sit at the far-right edge and overlap
+	# the "退出世界" button. Move it into the same row and shift the group
+	# left so every control has its own 112px slot.
+	var utility_left := maxf(12.0, viewport_size.x - 728.0)
+	if is_instance_valid(hud_toggle_button):
+		hud_toggle_button.position = Vector2(utility_left, 16.0)
+	if is_instance_valid(hud_restore_button):
+		hud_restore_button.position = Vector2(utility_left, 16.0)
+	if is_instance_valid(help_button):
+		help_button.position = Vector2(utility_left + 120.0, 16.0)
+	if is_instance_valid(audio_settings_button):
+		audio_settings_button.position = Vector2(utility_left + 240.0, 16.0)
+	if is_instance_valid(leave_world_button):
+		leave_world_button.position = Vector2(utility_left + 360.0, 16.0)
+	if is_instance_valid(inventory_button):
+		inventory_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		inventory_button.position = Vector2(utility_left + 480.0, 16.0)
+		inventory_button.custom_minimum_size = Vector2(112.0, 34.0)
+	if is_instance_valid(party_button):
+		party_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		party_button.position = Vector2(utility_left + 600.0, 16.0)
+		party_button.custom_minimum_size = Vector2(112.0, 34.0)
+	if is_instance_valid(audio_settings_panel):
+		var audio_width := minf(500.0, maxf(320.0, viewport_size.x - 32.0))
+		var audio_height := minf(430.0, maxf(360.0, viewport_size.y - 32.0))
+		audio_settings_panel.set_anchors_preset(Control.PRESET_CENTER)
+		audio_settings_panel.offset_left = -audio_width * 0.5
+		audio_settings_panel.offset_right = audio_width * 0.5
+		audio_settings_panel.offset_top = -audio_height * 0.5
+		audio_settings_panel.offset_bottom = audio_height * 0.5
+		audio_settings_panel.custom_minimum_size = Vector2(audio_width, audio_height)
+	if is_instance_valid(help_panel):
+		var help_width := minf(540.0, maxf(320.0, viewport_size.x - 32.0))
+		var help_height := minf(500.0, maxf(360.0, viewport_size.y - 32.0))
+		help_panel.set_anchors_preset(Control.PRESET_CENTER)
+		help_panel.offset_left = -help_width * 0.5
+		help_panel.offset_right = help_width * 0.5
+		help_panel.offset_top = -help_height * 0.5
+		help_panel.offset_bottom = help_height * 0.5
+		help_panel.custom_minimum_size = Vector2(help_width, help_height)
+
+	# The chat drawer owns the lower-right corner. Its width and height adapt
+	# to small windows, and the interaction prompt is placed above it.
+	if is_instance_valid(friend_panel):
+		# Social hub behaves like a modal, not a small panel layered over chat.
+		var social_width := minf(520.0, viewport_size.x - 32.0)
+		var social_height := minf(620.0, viewport_size.y - 48.0)
+		friend_panel.set_anchors_preset(Control.PRESET_CENTER)
+		friend_panel.offset_left = -social_width * 0.5
+		friend_panel.offset_right = social_width * 0.5
+		friend_panel.offset_top = -social_height * 0.5
+		friend_panel.offset_bottom = social_height * 0.5
+		friend_panel.custom_minimum_size = Vector2(social_width, social_height)
+	var chat_height := 56.0
+	if chat_expanded:
+		chat_height = minf(440.0, maxf(280.0, viewport_size.y - 48.0))
+	if is_instance_valid(chat_panel):
+		var chat_width := minf(410.0, maxf(280.0, viewport_size.x - 36.0))
+		chat_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+		chat_panel.offset_left = -chat_width - 18.0
+		chat_panel.offset_right = -18.0
+		chat_panel.offset_top = -chat_height - 18.0
+		chat_panel.offset_bottom = -18.0
+		chat_panel.custom_minimum_size = Vector2(chat_width, chat_height)
+		if is_instance_valid(chat_scroll):
+			chat_scroll.custom_minimum_size = Vector2(chat_width - 54.0, maxf(150.0, chat_height - 190.0))
+	# Party management is a centered modal, matching the inventory interaction layer.
+	if is_instance_valid(party_panel):
+		var party_width := minf(520.0, maxf(300.0, viewport_size.x - 32.0))
+		var party_height := minf(620.0, maxf(300.0, viewport_size.y - 36.0))
+		party_panel.set_anchors_preset(Control.PRESET_CENTER)
+		party_panel.offset_left = -party_width * 0.5
+		party_panel.offset_right = party_width * 0.5
+		party_panel.offset_top = -party_height * 0.5
+		party_panel.offset_bottom = party_height * 0.5
+		party_panel.custom_minimum_size = Vector2(party_width, party_height)
+	# Inventory is a centered modal rather than competing with the friend/chat drawers.
+	if is_instance_valid(inventory_panel):
+		var inventory_width := minf(620.0, maxf(260.0, viewport_size.x - 32.0))
+		var inventory_height := minf(680.0, maxf(280.0, viewport_size.y - 36.0))
+		inventory_panel.set_anchors_preset(Control.PRESET_CENTER)
+		inventory_panel.offset_left = -inventory_width * 0.5
+		inventory_panel.offset_right = inventory_width * 0.5
+		inventory_panel.offset_top = -inventory_height * 0.5
+		inventory_panel.offset_bottom = inventory_height * 0.5
+		if is_instance_valid(inventory_items):
+			var inventory_scroll := inventory_items.get_parent() as ScrollContainer
+			if inventory_scroll != null:
+				inventory_scroll.custom_minimum_size = Vector2(inventory_width - 44.0, maxf(120.0, inventory_height - 310.0))
+	# NPC dialogue is also centered and sized against the active viewport.
+	if is_instance_valid(npc_panel):
+		var npc_width := minf(600.0, maxf(260.0, viewport_size.x - 28.0))
+		var npc_height := minf(700.0, maxf(280.0, viewport_size.y - 28.0))
+		npc_panel.set_anchors_preset(Control.PRESET_CENTER)
+		npc_panel.offset_left = -npc_width * 0.5
+		npc_panel.offset_right = npc_width * 0.5
+		npc_panel.offset_top = -npc_height * 0.5
+		npc_panel.offset_bottom = npc_height * 0.5
+		if is_instance_valid(npc_dialogue_label):
+			npc_dialogue_label.custom_minimum_size.x = npc_width - 44.0
+		if is_instance_valid(exploration_container):
+			var exploration_scroll := exploration_container.get_parent() as ScrollContainer
+			if exploration_scroll != null:
+				exploration_scroll.custom_minimum_size = Vector2(npc_width - 44.0, minf(150.0, maxf(72.0, npc_height * 0.2)))
+	if is_instance_valid(npc_interact_button):
+		npc_interact_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+		npc_interact_button.offset_left = -minf(280.0, viewport_size.x - 36.0)
+		npc_interact_button.offset_right = -18.0
+		npc_interact_button.offset_top = -chat_height - 72.0
+		npc_interact_button.offset_bottom = -chat_height - 26.0
+	if is_instance_valid(world_map_panel):
+		var map_width := minf(1040.0, maxf(320.0, viewport_size.x - 36.0))
+		var map_height := minf(720.0, maxf(300.0, viewport_size.y - 36.0))
+		world_map_panel.set_anchors_preset(Control.PRESET_CENTER)
+		world_map_panel.offset_left = -map_width * 0.5
+		world_map_panel.offset_right = map_width * 0.5
+		world_map_panel.offset_top = -map_height * 0.5
+		world_map_panel.offset_bottom = map_height * 0.5
+		world_map_panel.custom_minimum_size = Vector2(map_width, map_height)
+		if is_instance_valid(world_map_canvas):
+			world_map_canvas.custom_minimum_size = Vector2(map_width - 48.0, map_height - 112.0)
+	if is_instance_valid(minimap_panel):
+		var map_visible: bool = viewport_size.x >= 520.0 and hud_visible and not (is_instance_valid(friend_panel) and friend_panel.visible)
+		minimap_panel.visible = map_visible
+		minimap_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		minimap_panel.offset_left = -210.0
+		minimap_panel.offset_right = -18.0
+		minimap_panel.offset_top = 64.0
+		minimap_panel.offset_bottom = 354.0
+	if is_instance_valid(threat_alert_panel):
+		var threat_width := minf(360.0, maxf(250.0, viewport_size.x - 32.0))
+		threat_alert_panel.anchor_left = 0.5
+		threat_alert_panel.anchor_right = 0.5
+		threat_alert_panel.anchor_top = 0.0
+		threat_alert_panel.anchor_bottom = 0.0
+		threat_alert_panel.offset_left = -threat_width * 0.5
+		threat_alert_panel.offset_right = threat_width * 0.5
+		threat_alert_panel.offset_top = 152.0
+		threat_alert_panel.offset_bottom = 204.0
+		threat_alert_panel.custom_minimum_size = Vector2(threat_width, 52.0)
+	if is_instance_valid(notification_panel):
+		_layout_notification_panel()
+	var vitals_height := minf(382.0, maxf(270.0, viewport_size.y - 210.0))
+	if is_instance_valid(vitals_panel):
+		var vitals_width := minf(326.0, maxf(250.0, viewport_size.x - 36.0))
+		vitals_panel.custom_minimum_size = Vector2(vitals_width, vitals_height)
+		vitals_panel.size = Vector2(vitals_width, vitals_height)
+		vitals_panel.offset_left = 18.0
+		vitals_panel.offset_top = -vitals_height - 18.0
+		vitals_panel.offset_right = 18.0 + vitals_width
+		vitals_panel.offset_bottom = -18.0
+		if is_instance_valid(health_bar):
+			health_bar.custom_minimum_size.x = vitals_width - 44.0
+		if is_instance_valid(mana_bar):
+			mana_bar.custom_minimum_size.x = vitals_width - 44.0
+	if is_instance_valid(exploration_open_button):
+		# Keep exploration below the vitals card at bottom-left.
+		exploration_open_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+		exploration_open_button.offset_left = 18.0
+		exploration_open_button.offset_top = -vitals_height - 66.0
+		exploration_open_button.offset_right = 180.0
+		exploration_open_button.offset_bottom = -vitals_height - 20.0
+
+func _on_chat_input_gui_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
+		_set_chat_expanded(false)
+		get_viewport().set_input_as_handled()
+		chat_input.accept_event()
+
+func _on_chat_input_submitted(value: String) -> void:
+	var normalized := value.strip_edges()
+	if normalized.is_empty():
+		return
+	if selected_chat_channel == "system":
+		chat_status.text = "系统频道仅用于接收游戏通知。"
+		return
+	var error: Error
+	if selected_chat_channel == "nearby":
+		var network := HHSession.world_network
+		if network == null or not network.is_world_ready():
+			chat_status.text = "世界连接尚未就绪，消息未发送。"
+			return
+		error = network.send_chat("nearby", normalized)
+	else:
+		var raw_id := Crypto.new().generate_random_bytes(16).hex_encode()
+		var message_id := "%s-%s-%s-%s-%s" % [raw_id.substr(0, 8), raw_id.substr(8, 4), raw_id.substr(12, 4), raw_id.substr(16, 4), raw_id.substr(20, 12)]
+		if selected_chat_channel == "whisper":
+			error = HHChatNetwork.send_message("whisper", normalized, message_id, selected_friend_character_id)
+		else:
+			error = HHChatNetwork.send_message(selected_chat_channel, normalized, message_id)
+	if error != OK:
+		chat_status.text = "发送失败：" + str(error)
+		return
+	chat_input.clear()
+	# Keep focus after sending so Enter can send consecutive messages;
+	# Escape is the explicit way to leave chat input mode.
+	chat_input.grab_focus()
+
+
+func _active_chat_storage_key() -> String:
+	if selected_chat_channel == "whisper":
+		return "whisper:" + selected_friend_character_id
+	return selected_chat_channel
+
+func _on_friend_panel_closed() -> void:
+	var channel_ids := ["system", "nearby", "friends", "world", "cross_world", "party"]
+	var active_index := channel_ids.find(selected_chat_channel)
+	for index in range(chat_channel_buttons.size()):
+		_style_chat_button(chat_channel_buttons[index], index == active_index)
+
+func _open_friend_conversation(character_id: String, character_name: String) -> void:
+	if character_id.is_empty():
+		return
+	selected_chat_channel = "whisper"
+	selected_friend_character_id = character_id
+	selected_friend_character_name = character_name
+	chat_title_label.text = "私聊 · " + character_name
+	chat_input.placeholder_text = "发送给 " + character_name + "（最多 200 字）"
+	_set_chat_expanded(true)
+	_render_chat_lines()
+	if HHChatNetwork.socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
+		HHChatNetwork.fetch_conversation_history(character_id, 50)
+		chat_status.text = "好友私聊 · 独立聊天连接已建立"
+	else:
+		chat_status.text = "好友私聊 · 正在连接聊天服务"
+
+func _on_chat_conversation_history_received(character_id: String, messages: Array) -> void:
+	if character_id != selected_friend_character_id:
+		return
+	for message in messages:
+		if not message is Dictionary:
+			continue
+		var sender := str(message.get("sender_name", "未知玩家"))
+		var content := str(message.get("content", ""))
+		if not content.is_empty():
+			_append_chat_line("[" + sender + "] " + content, "whisper:" + character_id, str(message.get("id", "")), str(message.get("created_at", "")))
+	if selected_chat_channel == "whisper":
+		_render_chat_lines()
+		call_deferred("_scroll_chat_to_bottom")
+
+func _select_chat_channel(channel: String) -> void:
+	if channel == "friends":
+		for index in range(chat_channel_buttons.size()):
+			_style_chat_button(chat_channel_buttons[index], index == 2)
+		if is_instance_valid(friend_panel):
+			friend_panel.open_panel()
+		return
+	if channel not in ["nearby", "world", "cross_world", "party", "system"]:
+		return
+	selected_chat_channel = channel
+	selected_friend_character_id = ""
+	selected_friend_character_name = ""
+	var names := {"nearby": "附近", "world": "世界", "cross_world": "跨界", "party": "队伍", "system": "系统"}
+	chat_title_label.text = "万界传音 · " + str(names[channel])
+	var channel_ids := ["system", "nearby", "friends", "world", "cross_world", "party"]
+	for index in range(chat_channel_buttons.size()):
+		_style_chat_button(chat_channel_buttons[index], index == channel_ids.find(channel))
+	if channel == "system":
+		chat_input.placeholder_text = "系统频道 · 仅接收游戏通知"
+	else:
+		chat_input.placeholder_text = "输入" + str(names[channel]) + "消息（最多 200 字）"
+	_render_chat_lines()
+	if chat_expanded:
+		call_deferred("_scroll_chat_to_bottom")
+	if channel == "system":
+		chat_status.text = "系统频道 · 击杀奖励、掉落、升级与玩法通知"
+	elif channel == "nearby":
+		chat_status.text = "附近频道 · 仅当前实例 AOI 范围内可见"
+	elif channel == "party":
+		if party_data.is_empty() or str(party_data.get("id", "")).is_empty():
+			chat_status.text = "队伍频道 · 你当前没有加入队伍"
+		elif HHChatNetwork.socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
+			chat_status.text = "队伍频道 · 仅当前队伍成员可见"
+		else:
+			chat_status.text = "队伍频道 · 正在连接聊天服务"
+	elif HHChatNetwork.socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
+		chat_status.text = str(names[channel]) + "频道 · 独立聊天连接已建立"
+	else:
+		chat_status.text = str(names[channel]) + "频道 · 正在连接独立聊天服务"
+
+func _on_chat_socket_connected() -> void:
+	HHChatNetwork.fetch_history("nearby", 50)
+	HHChatNetwork.fetch_history("world", 50)
+	HHChatNetwork.fetch_history("cross_world", 50)
+	HHChatNetwork.fetch_history("party", 50)
+	if selected_chat_channel == "whisper" and not selected_friend_character_id.is_empty():
+		HHChatNetwork.fetch_conversation_history(selected_friend_character_id, 50)
+	if is_instance_valid(chat_status):
+		if selected_chat_channel == "whisper":
+			chat_status.text = "好友私聊 · 独立聊天连接已建立"
+		elif selected_chat_channel == "party":
+			if party_data.is_empty() or str(party_data.get("id", "")).is_empty():
+				chat_status.text = "队伍频道 · 当前未加入队伍"
+			else:
+				chat_status.text = "队伍频道 · 仅当前队伍成员可见"
+		elif selected_chat_channel != "nearby":
+			chat_status.text = "聊天服务已连接 · " + ("世界频道" if selected_chat_channel == "world" else "跨界频道")
+
+func _on_chat_history_received(channel: String, messages: Array) -> void:
+	if channel not in ["nearby", "world", "cross_world", "party"]:
+		return
+	for message in messages:
+		if not message is Dictionary:
+			continue
+		var sender := str(message.get("sender_name", "未知玩家"))
+		var content := str(message.get("content", ""))
+		if not content.is_empty():
+			_append_chat_line("[" + sender + "] " + content, channel, str(message.get("id", "")), str(message.get("created_at", "")))
+
+func _on_chat_socket_error(message: String) -> void:
+	if is_instance_valid(chat_status):
+		chat_status.text = message + "（游戏操作不受影响）"
+
+func _on_chat_socket_message(message: Dictionary) -> void:
+	if not bool(message.get("accepted", true)):
+		if is_instance_valid(chat_status):
+			chat_status.text = str(message.get("reason", "聊天消息未送达。"))
+		return
+	var channel := str(message.get("channel", selected_chat_channel))
+	if channel not in ["nearby", "world", "cross_world", "party", "whisper"]:
+		return
+	var sender := str(message.get("sender_name", "未知玩家"))
+	var content := str(message.get("content", ""))
+	var message_id := str(message.get("id", ""))
+	var is_duplicate := not message_id.is_empty() and chat_seen_ids.has(message_id)
+	var target_channel := channel
+	if channel == "whisper":
+		var peer_id := str(message.get("sender_character_id", ""))
+		if _is_local_chat_message(message):
+			peer_id = str(message.get("recipient_character_id", ""))
+		target_channel = "whisper:" + peer_id
+	if not content.is_empty():
+		_append_chat_line("[" + sender + "] " + content, target_channel, message_id, str(message.get("created_at", "")))
+		var conversation_not_open := channel == "whisper" and (selected_chat_channel != "whisper" or target_channel != "whisper:" + selected_friend_character_id)
+		if not is_duplicate and not _is_local_chat_message(message) and (not chat_expanded or conversation_not_open):
+			chat_unread_count = mini(chat_unread_count + 1, 99)
+			_update_chat_unread_badge()
+		if is_instance_valid(chat_status) and target_channel == _active_chat_storage_key():
+			chat_status.text = "聊天消息已送达"
+
+func _is_local_chat_message(message: Dictionary) -> bool:
+	var local_character_id := str(HHSession.world_snapshot.get("character_id", HHSession.world_snapshot.get("current_character_id", "")))
+	var sender_character_id := str(message.get("sender_character_id", ""))
+	if not local_character_id.is_empty() and not sender_character_id.is_empty():
+		return local_character_id == sender_character_id
+	var local_name := str(HHSession.world_snapshot.get("character_name", HHSession.world_snapshot.get("name", "")))
+	return not local_name.is_empty() and str(message.get("sender_name", "")) == local_name
+
+func _update_chat_unread_badge() -> void:
+	if not is_instance_valid(chat_unread_badge):
+		return
+	chat_unread_badge.visible = chat_unread_count > 0 and not chat_expanded
+	chat_unread_badge.text = str(chat_unread_count) if chat_unread_count > 0 else ""
+
+func _on_chat_event(event: Dictionary) -> void:
+	if not bool(event.get("accepted", false)):
+		chat_status.text = str(event.get("reason", "消息发送失败。"))
+		return
+	# ENet returns only the delivery acknowledgement. The full nearby message
+	# arrives through the authenticated ChatServer WebSocket and is deduplicated
+	# by its persisted message ID.
+	if selected_chat_channel == "nearby":
+		chat_status.text = "附近频道 · 消息已写入本地持久队列，正在投递"
+
+func _append_chat_line(line: String, channel: String = "", message_id: String = "", created_at: String = "") -> void:
+	var target_channel := channel if not channel.is_empty() else _active_chat_storage_key()
+	if not message_id.is_empty():
+		if chat_seen_ids.has(message_id):
+			return
+		chat_seen_ids[message_id] = true
+		while chat_seen_ids.size() > 1000:
+			chat_seen_ids.erase(chat_seen_ids.keys()[0])
+	if not chat_lines_by_channel.has(target_channel):
+		chat_lines_by_channel[target_channel] = []
+	var lines: Array = chat_lines_by_channel[target_channel]
+	var timestamp := created_at
+	if timestamp.is_empty():
+		timestamp = Time.get_datetime_string_from_system(true)
+	chat_order_sequence += 1
+	var entry := {"text": line, "id": message_id, "created_at": timestamp, "sort_time": _chat_timestamp_sort_value(timestamp), "sequence": chat_order_sequence}
+	lines.append(entry)
+	lines.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var a_time := int(a.get("sort_time", 0))
+		var b_time := int(b.get("sort_time", 0))
+		if a_time == b_time:
+			return int(a.get("sequence", 0)) < int(b.get("sequence", 0))
+		return a_time < b_time
+	)
+	while lines.size() > 40:
+		lines.pop_front()
+	chat_lines_by_channel[target_channel] = lines
+	if target_channel == _active_chat_storage_key():
+		_render_chat_lines()
+		if chat_expanded:
+			call_deferred("_scroll_chat_to_bottom")
+
+func _chat_timestamp_sort_value(timestamp: String) -> int:
+	if timestamp.is_empty() or timestamp.length() < 19:
+		return int(Time.get_unix_time_from_system()) * 1000000
+	var normalized := timestamp.substr(0, 19).replace("T", " ")
+	var seconds := int(Time.get_unix_time_from_datetime_string(normalized))
+	var fractional_microseconds := 0
+	if timestamp.length() > 20 and timestamp.substr(19, 1) == ".":
+		var fraction_text := timestamp.substr(20).split("Z")[0].split("+")[0].split("-")[0]
+		fraction_text = fraction_text.substr(0, mini(6, fraction_text.length())).lpad(6, "0")
+		if fraction_text.is_valid_int():
+			fractional_microseconds = int(fraction_text)
+	return seconds * 1000000 + fractional_microseconds
+
+func _scroll_chat_to_bottom() -> void:
+	if not is_instance_valid(chat_scroll):
+		return
+	await get_tree().process_frame
+	if not is_instance_valid(chat_scroll):
+		return
+	var scroll_bar := chat_scroll.get_v_scroll_bar()
+	if is_instance_valid(scroll_bar):
+		chat_scroll.scroll_vertical = int(scroll_bar.max_value)
+
+func _render_chat_lines() -> void:
+	if not is_instance_valid(chat_log):
+		return
+	var visible_lines: Array = chat_lines_by_channel.get(_active_chat_storage_key(), [])
+	for child in chat_log.get_children():
+		child.queue_free()
+	for entry in visible_lines:
+		var raw_line := str(entry.get("text", ""))
+		var split_at := raw_line.find("] ")
+		var sender := "旅人"
+		var body := raw_line
+		if raw_line.begins_with("[") and split_at > 1:
+			sender = raw_line.substr(1, split_at - 1)
+			body = raw_line.substr(split_at + 2)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		chat_log.add_child(row)
+		var avatar := PanelContainer.new()
+		avatar.custom_minimum_size = Vector2(30, 30)
+		var is_local_message := _is_local_chat_message(entry)
+		var avatar_style := StyleBoxFlat.new()
+		avatar_style.bg_color = Color("#594b36") if is_local_message else Color("#263b4d")
+		avatar_style.set_corner_radius_all(15)
+		avatar.add_theme_stylebox_override("panel", avatar_style)
+		row.add_child(avatar)
+		var avatar_text := Label.new()
+		avatar_text.text = sender.substr(0, 1)
+		avatar_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		avatar_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		avatar_text.add_theme_color_override("font_color", Color("#e6c98e"))
+		avatar_text.add_theme_font_size_override("font_size", 13)
+		avatar.add_child(avatar_text)
+		var message_column := VBoxContainer.new()
+		message_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		message_column.add_theme_constant_override("separation", 2)
+		row.add_child(message_column)
+		var meta := HBoxContainer.new()
+		message_column.add_child(meta)
+		var sender_label := Label.new()
+		sender_label.text = sender
+		sender_label.add_theme_color_override("font_color", Color("#e2c58d") if is_local_message else Color("#9fc3d6"))
+		sender_label.add_theme_font_size_override("font_size", 11)
+		sender_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		meta.add_child(sender_label)
+		var timestamp := str(entry.get("created_at", ""))
+		var time_label := Label.new()
+		time_label.text = timestamp.substr(11, 5) if timestamp.length() >= 16 else ""
+		time_label.add_theme_color_override("font_color", Color("#718596"))
+		time_label.add_theme_font_size_override("font_size", 9)
+		meta.add_child(time_label)
+		var bubble := PanelContainer.new()
+		var bubble_style := StyleBoxFlat.new()
+		bubble_style.bg_color = Color("#30291f") if is_local_message else Color("#172735")
+		bubble_style.border_color = Color("#806b46") if is_local_message else Color("#2c4658")
+		bubble_style.set_border_width_all(1)
+		bubble_style.set_corner_radius_all(9)
+		bubble_style.content_margin_left = 9
+		bubble_style.content_margin_right = 9
+		bubble_style.content_margin_top = 5
+		bubble_style.content_margin_bottom = 5
+		bubble.add_theme_stylebox_override("panel", bubble_style)
+		message_column.add_child(bubble)
+		var message_text := RichTextLabel.new()
+		message_text.text = body
+		message_text.fit_content = true
+		message_text.scroll_active = false
+		message_text.selection_enabled = true
+		message_text.context_menu_enabled = true
+		message_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		message_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		message_text.add_theme_color_override("default_color", Color("#f0e5d1") if is_local_message else Color("#dce8ef"))
+		message_text.add_theme_font_size_override("normal_font_size", 12)
+		bubble.add_child(message_text)
+
+func _on_pickup_event(event: Dictionary) -> void:
+	if bool(event.get("pending", false)):
+		_show_notification(str(event.get("reason", "正在结算拾取……")))
+		return
+	if bool(event.get("accepted", false)):
+		HHAudio.play_ui("pickup", randf_range(0.96, 1.04))
+		_show_notification("拾取成功：" + str(event.get("item_id", "物品")) + " ×" + str(event.get("quantity", 1)))
+		_refresh_inventory()
+	else:
+		HHAudio.play_ui("warning", 0.92)
+		_show_notification(str(event.get("reason", "拾取失败。")))
+
+func _apply_panel_theme(panel: PanelContainer) -> void:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("#111c28")
+	style.border_color = Color("#425466")
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(12)
+	style.content_margin_left = 14.0
+	style.content_margin_right = 14.0
+	style.content_margin_top = 12.0
+	style.content_margin_bottom = 12.0
+	panel.add_theme_stylebox_override("panel", style)
+
+func _apply_button_theme(button: Button, primary: bool = false) -> void:
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color("#8d7047") if primary else Color("#172635")
+	normal.border_color = Color("#d4b47b") if primary else Color("#354b5c")
+	normal.set_border_width_all(1)
+	normal.set_corner_radius_all(7)
+	normal.content_margin_left = 10.0
+	normal.content_margin_right = 10.0
+	normal.content_margin_top = 6.0
+	normal.content_margin_bottom = 6.0
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = Color("#a08050") if primary else Color("#22394d")
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", hover)
+	button.add_theme_color_override("font_color", Color("#f2e8d6"))
+	button.add_theme_color_override("font_hover_color", Color("#ffffff"))
+	button.add_theme_font_size_override("font_size", 14)
+
+
+func _build_party_ui() -> void:
+	var hud := get_node_or_null("HUD") as CanvasLayer
+	if hud == null:
+		return
+	party_button = Button.new()
+	party_button.text = "队伍"
+	party_button.custom_minimum_size = Vector2(112.0, 34.0)
+	party_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	party_button.position = Vector2(12.0, 16.0)
+	_apply_button_theme(party_button, true)
+	party_button.pressed.connect(_toggle_party_panel)
+	hud.add_child(party_button)
+
+	party_panel = PanelContainer.new()
+	party_panel.set_anchors_preset(Control.PRESET_CENTER)
+	party_panel.offset_left = -250.0
+	party_panel.offset_right = 250.0
+	party_panel.offset_top = -300.0
+	party_panel.offset_bottom = 300.0
+	party_panel.visible = false
+	_apply_panel_theme(party_panel)
+	hud.add_child(party_panel)
+
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 10)
+	party_panel.add_child(layout)
+	var heading := HBoxContainer.new()
+	layout.add_child(heading)
+	var title := Label.new()
+	title.text = "仙盟同道 · 队伍"
+	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_color_override("font_color", Color("#f2e8d6"))
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_child(title)
+	var close_button := Button.new()
+	close_button.text = "关闭"
+	_apply_button_theme(close_button)
+	close_button.pressed.connect(_close_party_panel)
+	heading.add_child(close_button)
+	party_status_label = Label.new()
+	party_status_label.text = "正在读取队伍……"
+	party_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	layout.add_child(party_status_label)
+	party_focus_label = _party_label("集火目标：暂无")
+	party_focus_label.add_theme_color_override("font_color", Color("#f0c77d"))
+	layout.add_child(party_focus_label)
+	var focus_actions := HBoxContainer.new()
+	focus_actions.add_theme_constant_override("separation", 8)
+	layout.add_child(focus_actions)
+	party_focus_button = Button.new()
+	party_focus_button.text = "标记当前选中目标为集火"
+	_apply_button_theme(party_focus_button, true)
+	party_focus_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	party_focus_button.pressed.connect(_party_mark_focus_target)
+	focus_actions.add_child(party_focus_button)
+	party_focus_clear_button = Button.new()
+	party_focus_clear_button.text = "清除"
+	_apply_button_theme(party_focus_clear_button)
+	party_focus_clear_button.pressed.connect(func(): _party_set_focus_target(""))
+	focus_actions.add_child(party_focus_clear_button)
+	var loot_title := Label.new()
+	loot_title.text = "战利品规则 · 队长设置"
+	loot_title.add_theme_color_override("font_color", Color("#d9b879"))
+	layout.add_child(loot_title)
+	var loot_row := HBoxContainer.new()
+	loot_row.add_theme_constant_override("separation", 8)
+	layout.add_child(loot_row)
+	party_material_loot_option = OptionButton.new()
+	party_material_loot_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	party_material_loot_option.add_item("材料：个人归属", 0)
+	party_material_loot_option.add_item("材料：自由拾取", 1)
+	party_material_loot_option.add_item("材料：轮流分配", 2)
+	party_material_loot_option.add_item("材料：队长分配", 3)
+	loot_row.add_child(party_material_loot_option)
+	party_equipment_loot_option = OptionButton.new()
+	party_equipment_loot_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	party_equipment_loot_option.add_item("装备：个人归属", 0)
+	party_equipment_loot_option.add_item("装备：自由拾取", 1)
+	party_equipment_loot_option.add_item("装备：轮流分配", 2)
+	party_equipment_loot_option.add_item("装备：队长分配", 3)
+	loot_row.add_child(party_equipment_loot_option)
+	party_loot_save_button = Button.new()
+	party_loot_save_button.text = "保存分配规则"
+	_apply_button_theme(party_loot_save_button, true)
+	party_loot_save_button.pressed.connect(_party_save_loot_rules)
+	layout.add_child(party_loot_save_button)
+	
+
+	var member_title := Label.new()
+	member_title.text = "队伍成员"
+	member_title.add_theme_color_override("font_color", Color("#d9b879"))
+	layout.add_child(member_title)
+	var member_scroll := ScrollContainer.new()
+	member_scroll.custom_minimum_size = Vector2(440.0, 180.0)
+	member_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	layout.add_child(member_scroll)
+	party_members_box = VBoxContainer.new()
+	party_members_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	member_scroll.add_child(party_members_box)
+
+	party_invite_row = HBoxContainer.new()
+	layout.add_child(party_invite_row)
+	party_username_input = LineEdit.new()
+	party_username_input.placeholder_text = "输入同一世界实例玩家用户名"
+	party_username_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	party_username_input.max_length = 32
+	party_invite_row.add_child(party_username_input)
+	var invite_button := Button.new()
+	invite_button.text = "邀请"
+	_apply_button_theme(invite_button, true)
+	invite_button.pressed.connect(_party_invite)
+	party_invite_row.add_child(invite_button)
+
+	var invitation_title := Label.new()
+	invitation_title.text = "收到的邀请"
+	invitation_title.add_theme_color_override("font_color", Color("#d9b879"))
+	layout.add_child(invitation_title)
+	party_invites_box = VBoxContainer.new()
+	layout.add_child(party_invites_box)
+
+	var actions := HBoxContainer.new()
+	layout.add_child(actions)
+	party_create_button = Button.new()
+	party_create_button.text = "创建队伍"
+	_apply_button_theme(party_create_button, true)
+	party_create_button.pressed.connect(func(): _party_request("POST", "/api/v1/party", {}, "action"))
+	actions.add_child(party_create_button)
+	party_leave_button = Button.new()
+	party_leave_button.text = "离开队伍"
+	_apply_button_theme(party_leave_button)
+	party_leave_button.pressed.connect(func(): _party_request("POST", "/api/v1/party/leave", {}, "action"))
+	actions.add_child(party_leave_button)
+	party_disband_button = Button.new()
+	party_disband_button.text = "解散队伍"
+	_apply_button_theme(party_disband_button)
+	party_disband_button.pressed.connect(func():
+		var dialog := ConfirmationDialog.new()
+		dialog.title = "解散队伍"
+		dialog.dialog_text = "确定解散当前队伍吗？所有队员都会离队。"
+		add_child(dialog)
+		dialog.confirmed.connect(func(): _party_request("POST", "/api/v1/party/disband", {}, "action"))
+		dialog.confirmed.connect(dialog.queue_free)
+		dialog.canceled.connect(dialog.queue_free)
+		dialog.popup_centered()
+	)
+	actions.add_child(party_disband_button)
+
+	party_http = HTTPRequest.new()
+	party_http.timeout = 12.0
+	add_child(party_http)
+	party_http.request_completed.connect(_on_party_request_completed)
+	party_refresh_timer = Timer.new()
+	party_refresh_timer.wait_time = 15.0
+	party_refresh_timer.one_shot = false
+	party_refresh_timer.timeout.connect(func():
+		if party_request_context != "":
+			return
+		# Refresh the expiring shared focus marker and invitation inbox even while
+		# the panel is closed; the current-party response chains into invitations.
+		_party_request("GET", "/api/v1/party/current", {}, "current")
+	)
+	add_child(party_refresh_timer)
+	party_refresh_timer.start()
+	_layout_hud()
+
+func _toggle_party_panel() -> void:
+	if not is_instance_valid(party_panel):
+		return
+	party_panel.visible = not party_panel.visible
+	if party_panel.visible:
+		_release_mouse_for_modal()
+		_party_request("GET", "/api/v1/party/current", {}, "current")
+	else:
+		_restore_mouse_after_modal()
+
+
+func _close_party_panel() -> void:
+	if is_instance_valid(party_panel):
+		party_panel.visible = false
+	_restore_mouse_after_modal()
+
+func _party_request(method: String, path: String, payload: Dictionary, context: String) -> void:
+	if party_http == null or party_request_context != "" or HHSession.access_token.is_empty():
+		return
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token, "Content-Type: application/json"])
+	var http_method := HTTPClient.METHOD_GET
+	var body := ""
+	if method == "POST":
+		http_method = HTTPClient.METHOD_POST
+		body = JSON.stringify(payload)
+	elif method == "PUT":
+		http_method = HTTPClient.METHOD_PUT
+		body = JSON.stringify(payload)
+	party_request_context = context
+	var error := party_http.request(HHSession.api_base + path, headers, http_method, body)
+	if error != OK:
+		party_request_context = ""
+		party_status_label.text = "队伍请求提交失败：" + str(error)
+
+func _party_mark_focus_target() -> void:
+	if selected_monster_id.is_empty() or not monster_entities.has(selected_monster_id):
+		party_status_label.text = "请先在场景中选中一只存活的怪物，再设置集火目标。"
+		return
+	_party_set_focus_target(selected_monster_id)
+
+func _party_set_focus_target(target_entity_id: String) -> void:
+	_party_request("PUT", "/api/v1/party/focus-target", {"target_entity_id": target_entity_id}, "focus")
+
+func _party_save_loot_rules() -> void:
+	if not is_instance_valid(party_material_loot_option) or not is_instance_valid(party_equipment_loot_option):
+		return
+	var modes: Array[String] = ["personal", "free_for_all", "round_robin", "leader"]
+	var material_mode: String = modes[party_material_loot_option.selected]
+	var equipment_mode: String = modes[party_equipment_loot_option.selected]
+	_party_request("PUT", "/api/v1/party/loot-rules", {"material_loot_mode": material_mode, "equipment_loot_mode": equipment_mode}, "action")
+
+func _party_invite() -> void:
+	if not is_instance_valid(party_username_input):
+		return
+	var username := party_username_input.text.strip_edges()
+	if username.length() < 3:
+		party_status_label.text = "请输入至少 3 个字符的玩家用户名。"
+		return
+	_party_request("POST", "/api/v1/party/invitations", {"username": username}, "action")
+	if party_request_context == "action":
+		party_username_input.clear()
+
+func _on_party_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	var context := party_request_context
+	party_request_context = ""
+	var data: Dictionary = {}
+	# API errors use plain-text HTTP responses (for example, 404 when the
+	# player has not joined a party). Only parse successful JSON responses.
+	if result == HTTPRequest.RESULT_SUCCESS and response_code >= 200 and response_code < 300:
+		var parser := JSON.new()
+		var parse_error := parser.parse(body.get_string_from_utf8())
+		if parse_error != OK or not (parser.data is Dictionary):
+			party_status_label.text = "队伍服务响应格式错误（HTTP " + str(response_code) + "）"
+			return
+		data = parser.data
+	if context == "current":
+		if result == HTTPRequest.RESULT_SUCCESS and response_code >= 200 and response_code < 300:
+			party_data = data
+		elif response_code == 404:
+			party_data = {}
+		else:
+			party_status_label.text = "读取队伍失败（HTTP " + str(response_code) + "）"
+			return
+		_render_party_members()
+		_party_request("GET", "/api/v1/party/invitations", {}, "invitations")
+		return
+	if context == "invitations" or context == "background_invitations":
+		if result == HTTPRequest.RESULT_SUCCESS and response_code >= 200 and response_code < 300:
+			var incoming: Array = data.get("invitations", [])
+			for invitation_value in incoming:
+				if not (invitation_value is Dictionary):
+					continue
+				var invitation_id := str(invitation_value.get("id", ""))
+				if invitation_id.is_empty():
+					continue
+				if party_invitation_baseline_loaded and not party_seen_invitation_ids.has(invitation_id):
+					_show_notification(str(invitation_value.get("inviter_name", "玩家")) + " 邀请你加入队伍", 5.0)
+				party_seen_invitation_ids[invitation_id] = true
+			party_invitation_baseline_loaded = true
+			party_invitations = incoming
+			if context == "invitations":
+				_render_party_invitations()
+		else:
+			if context == "invitations":
+				party_invites_box.add_child(_party_label("邀请列表读取失败（HTTP " + str(response_code) + "）"))
+		return
+	if context == "focus":
+		if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+			party_status_label.text = "设置集火目标失败（HTTP " + str(response_code) + "）：" + body.get_string_from_utf8()
+			return
+		party_data = data
+		_render_party_members()
+		_show_notification("队伍集火目标已更新", 3.0)
+		return
+	if context == "action":
+		if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+			party_status_label.text = "队伍操作失败（HTTP " + str(response_code) + "）：" + body.get_string_from_utf8()
+			return
+		_show_notification("队伍操作已完成", 3.0)
+		_party_request("GET", "/api/v1/party/current", {}, "current")
+
+func _party_label(value: String) -> Label:
+	var label := Label.new()
+	label.text = value
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_color_override("font_color", Color("#c8d4df"))
+	return label
+
+func _render_party_members() -> void:
+	for child in party_members_box.get_children():
+		child.queue_free()
+	var members: Array = party_data.get("members", [])
+	if party_data.is_empty():
+		party_status_label.text = "当前没有队伍。创建队伍后，可邀请同一世界实例的玩家。"
+		party_invite_row.visible = false
+		party_create_button.visible = true
+		party_leave_button.visible = false
+		party_disband_button.visible = false
+		party_material_loot_option.visible = false
+		party_equipment_loot_option.visible = false
+		party_loot_save_button.visible = false
+		party_focus_button.visible = false
+		party_focus_clear_button.visible = false
+		party_focus_label.text = "集火目标：需要先创建队伍"
+		party_members_box.add_child(_party_label("尚无队伍成员"))
+		return
+	party_status_label.text = "队伍 " + str(party_data.get("id", "")).substr(0, 8) + " · " + str(members.size()) + " / " + str(party_data.get("max_members", 5)) + " 人"
+	var is_leader := false
+	for member_value in members:
+		if member_value is Dictionary and bool(member_value.get("is_self", false)):
+			is_leader = str(member_value.get("role", "")) == "leader"
+	party_invite_row.visible = is_leader
+	party_create_button.visible = false
+	party_leave_button.visible = true
+	party_disband_button.visible = is_leader
+	party_material_loot_option.visible = is_leader
+	party_equipment_loot_option.visible = is_leader
+	party_loot_save_button.visible = is_leader
+	party_focus_button.visible = true
+	party_focus_clear_button.visible = true
+	var focus_id := str(party_data.get("focus_target_entity_id", ""))
+	if focus_id.is_empty():
+		party_focus_label.text = "集火目标：暂无（标记有效期 60 秒）"
+	else:
+		party_focus_label.text = "集火目标：" + str(monster_entities.get(focus_id, {}).get("name", focus_id)) + " · 标记者：" + str(party_data.get("focus_set_by", "队员"))
+	_refresh_party_focus_visual()
+	var loot_modes := {"personal": 0, "free_for_all": 1, "round_robin": 2, "leader": 3}
+	party_material_loot_option.select(int(loot_modes.get(str(party_data.get("material_loot_mode", "personal")), 0)))
+	party_equipment_loot_option.select(int(loot_modes.get(str(party_data.get("equipment_loot_mode", "personal")), 0)))
+	for member_value in members:
+		if not (member_value is Dictionary):
+			continue
+		var member: Dictionary = member_value
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 7)
+		party_members_box.add_child(row)
+		var online_dot := Label.new()
+		online_dot.text = "●"
+		online_dot.add_theme_color_override("font_color", Color("#69c58b") if bool(member.get("online", false)) else Color("#75808b"))
+		row.add_child(online_dot)
+		var name_label := Label.new()
+		name_label.text = str(member.get("character_name", "未知角色")) + "（" + str(member.get("username", "")) + "）"
+		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_label.add_theme_color_override("font_color", Color("#eee2ce"))
+		row.add_child(name_label)
+		var role_label := Label.new()
+		role_label.text = "队长" if str(member.get("role", "")) == "leader" else "队员"
+		role_label.add_theme_color_override("font_color", Color("#d9b879"))
+		row.add_child(role_label)
+		var status: Dictionary = party_member_statuses.get(str(member.get("character_id", "")), {})
+		var status_row := HBoxContainer.new()
+		status_row.add_theme_constant_override("separation", 8)
+		party_members_box.add_child(status_row)
+		var health_bar := ProgressBar.new()
+		health_bar.custom_minimum_size = Vector2(250.0, 12.0)
+		health_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		health_bar.show_percentage = false
+		var max_health := maxi(1, int(status.get("max_health", 1)))
+		var health := clampi(int(status.get("health", 0)), 0, max_health)
+		health_bar.max_value = max_health
+		health_bar.value = health
+		status_row.add_child(health_bar)
+		var health_label := Label.new()
+		if not bool(member.get("online", false)):
+			health_label.text = "离线"
+		elif status.is_empty():
+			health_label.text = "状态同步中"
+		elif not bool(status.get("alive", false)):
+			health_label.text = "倒地"
+		else:
+			var shield := int(status.get("shield_health", 0))
+			health_label.text = str(health) + " / " + str(max_health) + (" · 护盾 " + str(shield) if shield > 0 else "")
+		health_label.custom_minimum_size.x = 132.0
+		health_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		health_label.add_theme_color_override("font_color", Color("#d58b83") if status.size() > 0 and not bool(status.get("alive", false)) else Color("#c8d4df"))
+		status_row.add_child(health_label)
+		if is_leader and not bool(member.get("is_self", false)):
+			var transfer_button := Button.new()
+			transfer_button.text = "转让"
+			_apply_button_theme(transfer_button)
+			transfer_button.pressed.connect(_party_transfer_leadership.bind(str(member.get("account_id", ""))))
+			row.add_child(transfer_button)
+			var kick_button := Button.new()
+			kick_button.text = "移出"
+			_apply_button_theme(kick_button)
+			kick_button.pressed.connect(_party_kick_member.bind(str(member.get("account_id", ""))))
+			row.add_child(kick_button)
+
+func _party_transfer_leadership(account_id: String) -> void:
+	_party_request("POST", "/api/v1/party/transfer-leadership", {"account_id": account_id}, "action")
+
+func _party_kick_member(account_id: String) -> void:
+	_party_request("POST", "/api/v1/party/kick", {"account_id": account_id}, "action")
+
+func _party_respond_invitation(invitation_id: String, decision: String) -> void:
+	_party_request("POST", "/api/v1/party/invitations/" + invitation_id + "/respond", {"decision": decision}, "action")
+
+func _render_party_invitations() -> void:
+	for child in party_invites_box.get_children():
+		child.queue_free()
+	if party_invitations.is_empty():
+		party_invites_box.add_child(_party_label("暂无待处理邀请"))
+		return
+	for invitation_value in party_invitations:
+		if not (invitation_value is Dictionary):
+			continue
+		var invitation: Dictionary = invitation_value
+		var row := HBoxContainer.new()
+		party_invites_box.add_child(row)
+		var inviter := Label.new()
+		inviter.text = str(invitation.get("inviter_name", "玩家")) + " 邀请你加入队伍"
+		inviter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(inviter)
+		var accept_button := Button.new()
+		accept_button.text = "接受"
+		_apply_button_theme(accept_button, true)
+		accept_button.pressed.connect(_party_respond_invitation.bind(str(invitation.get("id", "")), "accept"))
+		row.add_child(accept_button)
+		var decline_button := Button.new()
+		decline_button.text = "拒绝"
+		_apply_button_theme(decline_button)
+		decline_button.pressed.connect(_party_respond_invitation.bind(str(invitation.get("id", "")), "decline"))
+		row.add_child(decline_button)
+
+func _build_inventory_ui() -> void:
+	var hud := get_node_or_null("HUD") as CanvasLayer
+	if hud == null:
+		return
+	inventory_button = Button.new()
+	inventory_button.text = "背包"
+	_apply_button_theme(inventory_button, true)
+	inventory_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	inventory_button.offset_left = -118.0
+	inventory_button.offset_top = 18.0
+	inventory_button.offset_right = -18.0
+	inventory_button.offset_bottom = 58.0
+	inventory_button.pressed.connect(_on_inventory_button_pressed)
+	hud.add_child(inventory_button)
+
+	inventory_panel = PanelContainer.new()
+	inventory_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	inventory_panel.offset_left = -360.0
+	inventory_panel.offset_top = 68.0
+	inventory_panel.offset_right = -18.0
+	inventory_panel.offset_bottom = 470.0
+	inventory_panel.visible = false
+	_apply_panel_theme(inventory_panel)
+	hud.add_child(inventory_panel)
+	var layout := VBoxContainer.new()
+	inventory_panel.add_child(layout)
+	var heading := HBoxContainer.new()
+	layout.add_child(heading)
+	var title := Label.new()
+	title.text = "角色背包"
+	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_color_override("font_color", Color("#f2e8d6"))
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_child(title)
+	var close_button := Button.new()
+	close_button.text = "关闭"
+	_apply_button_theme(close_button)
+	close_button.pressed.connect(func():
+		inventory_panel.visible = false
+		inventory_visible = false
+		_restore_mouse_after_modal()
+	)
+	heading.add_child(close_button)
+	var equipment_title := Label.new()
+	equipment_title.text = "已装备"
+	layout.add_child(equipment_title)
+	inventory_equipment = VBoxContainer.new()
+	layout.add_child(inventory_equipment)
+	inventory_status = Label.new()
+	inventory_status.text = "正在读取背包……"
+	layout.add_child(inventory_status)
+	var filter_row := HBoxContainer.new()
+	layout.add_child(filter_row)
+	for filter_data in [["all","全部"],["equipment","装备"],["consumable","消耗品"],["material","材料"],["quest","任务"]] :
+		var filter_button := Button.new()
+		filter_button.text = filter_data[1]
+		_apply_button_theme(filter_button)
+		filter_button.pressed.connect(_on_inventory_filter_pressed.bind(filter_data[0]))
+		filter_row.add_child(filter_button)
+	var crafting_button := Button.new()
+	crafting_button.text = "锻造"
+	_apply_button_theme(crafting_button, true)
+	crafting_button.pressed.connect(_open_equipment_crafting)
+	filter_row.add_child(crafting_button)
+	inventory_sort_option = OptionButton.new()
+	inventory_sort_option.add_item("品质优先", 0)
+	inventory_sort_option.add_item("名称排序", 1)
+	inventory_sort_option.add_item("数量排序", 2)
+	inventory_sort_option.item_selected.connect(_on_inventory_sort_selected)
+	layout.add_child(inventory_sort_option)
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(320.0, 330.0)
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	layout.add_child(scroll)
+	inventory_items = VBoxContainer.new()
+	inventory_items.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(inventory_items)
+	inventory_http = HTTPRequest.new()
+	inventory_http.timeout = 10.0
+	add_child(inventory_http)
+	inventory_http.request_completed.connect(_on_inventory_request_completed)
+	equipment_http = HTTPRequest.new()
+	equipment_http.timeout = 10.0
+	add_child(equipment_http)
+	equipment_http.request_completed.connect(_on_equipment_request_completed)
+	equipment_action_http = HTTPRequest.new()
+	equipment_action_http.timeout = 10.0
+	add_child(equipment_action_http)
+	equipment_action_http.request_completed.connect(_on_equipment_action_completed)
+	salvage_http = HTTPRequest.new()
+	salvage_http.timeout = 15.0
+	add_child(salvage_http)
+	salvage_http.request_completed.connect(_on_salvage_equipment_completed)
+	enhancement_http = HTTPRequest.new()
+	enhancement_http.timeout = 15.0
+	add_child(enhancement_http)
+	enhancement_http.request_completed.connect(_on_enhance_equipment_completed)
+	crafting_http = HTTPRequest.new()
+	crafting_http.timeout = 15.0
+	add_child(crafting_http)
+	crafting_http.request_completed.connect(_on_craft_equipment_completed)
+	consumable_http = HTTPRequest.new()
+	consumable_http.timeout = 10.0
+	add_child(consumable_http)
+	consumable_http.request_completed.connect(_on_consumable_completed)
+	spell_learning_http = HTTPRequest.new()
+	spell_learning_http.timeout = 12.0
+	add_child(spell_learning_http)
+	spell_learning_http.request_completed.connect(_on_spell_learning_completed)
+
+func _on_inventory_button_pressed() -> void:
+	inventory_visible = not inventory_visible
+	inventory_panel.visible = inventory_visible
+	if inventory_visible:
+		_release_mouse_for_modal()
+		_refresh_inventory()
+		_refresh_equipment()
+	else:
+		_restore_mouse_after_modal()
+
+func _refresh_inventory() -> void:
+	if inventory_http == null or HHSession.access_token.is_empty():
+		if inventory_status != null:
+			inventory_status.text = "请先登录后查看背包。"
+		return
+	if inventory_request_busy:
+		inventory_refresh_pending = true
+		return
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token])
+	var error := inventory_http.request(
+		HHSession.api_base + "/api/v1/characters/current/inventory",
+		headers,
+		HTTPClient.METHOD_GET
+	)
+	if error != OK:
+		inventory_status.text = "读取背包请求失败，错误码：" + str(error)
+	else:
+		inventory_request_busy = true
+
+func _on_inventory_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	inventory_request_busy = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		inventory_status.text = "背包读取失败：" + body.get_string_from_utf8()
+		if inventory_refresh_pending:
+			inventory_refresh_pending = false
+			_refresh_inventory()
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if not (parsed is Dictionary) or not (parsed.get("items", []) is Array):
+		inventory_status.text = "中心服返回了无效的背包数据。"
+		if inventory_refresh_pending:
+			inventory_refresh_pending = false
+			_refresh_inventory()
+		return
+	inventory_cache = parsed.get("items", [])
+	var capacity: Dictionary = parsed.get("capacity", {})
+	var used_slots := int(capacity.get("used_slots", inventory_cache.size()))
+	var max_slots := int(capacity.get("max_slots", 40))
+	var free_slots := int(capacity.get("free_slots", max(0, max_slots - used_slots)))
+	inventory_status.text = "背包格子：" + str(used_slots) + " / " + str(max_slots) + " · 空余 " + str(free_slots) + " · 物品种类 " + str(inventory_cache.size())
+	_render_inventory_items()
+	if inventory_refresh_pending:
+		inventory_refresh_pending = false
+		_refresh_inventory()
+
+func _on_inventory_filter_pressed(filter_type: String) -> void:
+	inventory_filter = filter_type
+	_render_inventory_items()
+
+func _on_inventory_sort_selected(index: int) -> void:
+	match index:
+		0: inventory_sort_mode = "quality"
+		1: inventory_sort_mode = "name"
+		2: inventory_sort_mode = "quantity"
+	_render_inventory_items()
+
+func _render_inventory_items() -> void:
+	for child in inventory_items.get_children():
+		child.queue_free()
+	var items: Array = []
+	for item in inventory_cache:
+		if not (item is Dictionary):
+			continue
+		if inventory_filter != "all" and str(item.get("item_type", "")) != inventory_filter:
+			continue
+		items.append(item)
+	items.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		match inventory_sort_mode:
+			"name":
+				return str(a.get("name", "")) < str(b.get("name", ""))
+			"quantity":
+				return int(a.get("quantity", 0)) > int(b.get("quantity", 0))
+			_:
+				if int(a.get("quality", 1)) != int(b.get("quality", 1)):
+					return int(a.get("quality", 1)) > int(b.get("quality", 1))
+				return str(a.get("name", "")) < str(b.get("name", ""))
+	)
+	if items.is_empty():
+		var empty_label := Label.new()
+		empty_label.text = "当前分类没有物品。"
+		inventory_items.add_child(empty_label)
+		return
+	for item in items:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		inventory_items.add_child(row)
+		var line := Label.new()
+		var quality := int(item.get("quality", 1))
+		var quality_names := ["普通", "优秀", "精良", "稀有", "传说"]
+		var quality_name: String = quality_names[clampi(quality - 1, 0, quality_names.size() - 1)]
+		var enhancement_level := int(item.get("enhancement_level", 0))
+		line.text = str(item.get("name", item.get("item_id", "未知物品"))) + (" +" + str(enhancement_level) if enhancement_level > 0 else "") + " · " + quality_name + " · ×" + str(item.get("quantity", 0))
+		line.add_theme_color_override("font_color", Color("#e7dfd2"))
+		line.add_theme_font_size_override("font_size", 14)
+		line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		row.add_child(line)
+		var detail_button := Button.new()
+		detail_button.text = "详情"
+		_apply_button_theme(detail_button)
+		detail_button.pressed.connect(_show_item_details.bind(item))
+		row.add_child(detail_button)
+		var item_id := str(item.get("item_id", ""))
+		if item_id in ["tome_suppressing_talisman", "tome_ghost_gate_chain"]:
+			var tome_spell_id := "ice_bolt" if item_id == "tome_suppressing_talisman" else "taunt"
+			var tome_known := _is_spell_known(tome_spell_id)
+			var study_button := Button.new()
+			study_button.text = "已掌握" if tome_known else ("研读中…" if spell_learning_busy else "研读")
+			study_button.disabled = spell_learning_busy or tome_known
+			_apply_button_theme(study_button, true)
+			study_button.pressed.connect(_on_learn_spell_pressed.bind(item_id))
+			row.add_child(study_button)
+		if str(item.get("item_type", "")) == "equipment":
+			var equip_button := Button.new()
+			equip_button.text = "穿戴"
+			_apply_button_theme(equip_button, true)
+			equip_button.pressed.connect(_on_equip_item_pressed.bind(str(item.get("item_id", "")), str(item.get("equipment_slot", "")), str(item.get("instance_id", ""))))
+			row.add_child(equip_button)
+			var instance_id := str(item.get("instance_id", ""))
+			if not instance_id.is_empty():
+				var enhance_button := Button.new()
+				enhance_button.text = "强化"
+				enhance_button.disabled = enhancement_busy
+				_apply_button_theme(enhance_button, true)
+				enhance_button.pressed.connect(_confirm_enhance_equipment.bind(instance_id, str(item.get("name", "装备")), enhancement_level, quality))
+				row.add_child(enhance_button)
+				var salvage_button := Button.new()
+				salvage_button.text = "分解"
+				salvage_button.disabled = salvage_busy
+				_apply_button_theme(salvage_button)
+				salvage_button.pressed.connect(_confirm_salvage_equipment.bind(instance_id, str(item.get("name", "装备"))))
+				row.add_child(salvage_button)
+		elif str(item.get("item_type", "")) == "consumable":
+			var use_button := Button.new()
+			use_button.text = "使用"
+			_apply_button_theme(use_button, true)
+			use_button.disabled = consumable_busy
+			use_button.text = "结算中…" if consumable_busy else "使用"
+			use_button.pressed.connect(_on_use_consumable_pressed.bind(str(item.get("item_id", ""))))
+			row.add_child(use_button)
+
+func _show_item_details(item: Dictionary) -> void:
+	var dialog := AcceptDialog.new()
+	dialog.title = str(item.get("name", "物品详情"))
+	var details := str(item.get("description", "暂无描述"))
+	details += "\n\n分类：" + str(item.get("item_type", "未知"))
+	details += "\n品质：" + str(item.get("quality", 1))
+	details += "\n数量：" + str(item.get("quantity", 0)) + " / " + str(item.get("max_stack", 1))
+	var stats: Dictionary = item.get("base_stats", {})
+	if not stats.is_empty():
+		details += "\n基础属性：" + str(stats)
+	var rolled_stats: Dictionary = item.get("rolled_stats", {})
+	if not rolled_stats.is_empty():
+		details += "\n随机词缀属性：" + str(rolled_stats)
+	var affixes: Array = item.get("affixes", [])
+	for affix in affixes:
+		if affix is Dictionary:
+			details += "\n词缀：" + str(affix.get("name", "未知词缀")) + " +" + str(affix.get("value", 0))
+	if str(item.get("equipment_slot", "")) != "":
+		details += "\n装备部位：" + str(item.get("equipment_slot", ""))
+	dialog.dialog_text = details
+	add_child(dialog)
+	dialog.confirmed.connect(dialog.queue_free)
+	dialog.close_requested.connect(dialog.queue_free)
+	dialog.popup_centered(Vector2i(440, 300))
+
+
+func _cycle_monster_target() -> void:
+	if monsters.is_empty():
+		_clear_monster_target()
+		_show_notification("附近没有可锁定的目标")
+		return
+	var candidates: Array[String] = []
+	for monster_id in monsters.keys():
+		var monster_key := str(monster_id)
+		if monster_targets.has(monster_key):
+			candidates.append(monster_key)
+	candidates.sort()
+	if candidates.is_empty():
+		return
+	var next_index := 0
+	var current_index := candidates.find(selected_monster_id)
+	if current_index >= 0:
+		next_index = (current_index + 1) % candidates.size()
+	_set_monster_target(candidates[next_index])
+
+func _set_monster_target(monster_id: String) -> void:
+	if not monsters.has(monster_id):
+		return
+	var previous_target_id := selected_monster_id
+	_clear_target_ring()
+	selected_monster_id = monster_id
+	if not previous_target_id.is_empty() and previous_target_id != monster_id:
+		_refresh_monster_nameplate(previous_target_id)
+	var target := monsters[monster_id] as Node3D
+	var ring := MeshInstance3D.new()
+	ring.name = "TargetSelectionRing"
+	var torus := TorusMesh.new()
+	torus.inner_radius = 0.62
+	torus.outer_radius = 0.72
+	ring.mesh = torus
+	ring.position.y = 0.06
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#f0c66e")
+	material.emission_enabled = true
+	material.emission = Color("#d99b35")
+	material.emission_energy_multiplier = 1.6
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring.material_override = material
+	target.add_child(ring)
+	target_selection_ring = ring
+	_update_target_info()
+	_show_notification("目标锁定：" + str(monster_entities.get(monster_id, {}).get("name", "怪物")))
+
+func _clear_target_ring() -> void:
+	if is_instance_valid(target_selection_ring):
+		target_selection_ring.queue_free()
+	target_selection_ring = null
+
+func _horizontal_distance_to_target(from_position: Vector3, target_position: Vector3) -> float:
+	# The world server validates melee range on the X/Z plane. Keep the HUD
+	# distance identical so elevation differences do not mislead the player.
+	return Vector2(from_position.x, from_position.z).distance_to(
+		Vector2(target_position.x, target_position.z)
+	)
+
+
+func _clear_monster_target() -> void:
+	var previous_target_id := selected_monster_id
+	_clear_target_ring()
+	selected_monster_id = ""
+	if not previous_target_id.is_empty():
+		_refresh_monster_nameplate(previous_target_id)
+	if is_instance_valid(target_info_panel):
+		target_info_panel.visible = false
+
+func _update_target_info() -> void:
+	if not is_instance_valid(target_info_panel) or not is_instance_valid(target_info_label):
+		return
+	if selected_monster_id.is_empty() or not monsters.has(selected_monster_id):
+		target_info_panel.visible = false
+		return
+	var entity: Dictionary = monster_entities.get(selected_monster_id, {})
+	var title := str(entity.get("name", "怪物")) + "  ·  Lv." + str(int(entity.get("level", 1)))
+	var rank_text := ""
+	if bool(entity.get("is_boss", false)):
+		rank_text = "  ·  首领"
+	elif bool(entity.get("is_elite", false)):
+		rank_text = "  ·  精英"
+	else:
+		var rank_value := str(entity.get("rank", entity.get("rarity", ""))).to_lower()
+		if rank_value in ["boss", "world_boss", "首领"]:
+			rank_text = "  ·  首领"
+		elif rank_value in ["elite", "精英"]:
+			rank_text = "  ·  精英"
+	title += rank_text
+	var is_boss_target := rank_text.contains("首领")
+	var is_elite_target := rank_text.contains("精英")
+	if is_instance_valid(target_panel_style):
+		target_panel_style.border_color = Color("#b99a55") if is_boss_target else Color("#8e79b8") if is_elite_target else Color("#806b46")
+	var hp_line := "目标已锁定"
+	var target_distance := -1.0
+	if is_instance_valid(local_player) and monster_targets.has(selected_monster_id):
+		var target_position: Vector3 = monster_targets[selected_monster_id]
+		target_distance = _horizontal_distance_to_target(local_player.global_position, target_position)
+		hp_line = "距离 %.1f m" % target_distance
+	var threat_text := "仇恨状态：尚未交战"
+	var threat_color := Color("#9eafbd")
+	var aggro_target_id := str(entity.get("aggro_target_character_id", ""))
+	if not aggro_target_id.is_empty():
+		if aggro_target_id == str(HHSession.world_snapshot.get("character_id", "")):
+			threat_text = "⚠ 仇恨锁定：正在攻击你"
+			threat_color = Color("#ff8580")
+		else:
+			var aggro_name := str(entity.get("aggro_target_name", "队友"))
+			threat_text = "仇恨目标：" + aggro_name
+			threat_color = Color("#e8bd78")
+	if str(party_data.get("focus_target_entity_id", "")) == selected_monster_id:
+		threat_text += "  ·  队伍集火"
+		if aggro_target_id.is_empty() or aggro_target_id != str(HHSession.world_snapshot.get("character_id", "")):
+			threat_color = Color("#f0d18d")
+	if target_distance >= 0.0:
+		var player_attack_range := maxf(float(HHSession.world_snapshot.get("attack_range", 2.5)), 0.5)
+		if target_distance <= player_attack_range + 0.2:
+			threat_text += "  ·  可攻击"
+			if aggro_target_id.is_empty():
+				threat_color = Color("#8bd3a6")
+		else:
+			threat_text += "  ·  接近中"
+	if is_instance_valid(target_status_label):
+		target_status_label.text = threat_text
+		target_status_label.add_theme_color_override("font_color", threat_color)
+	if entity.has("health") and entity.has("max_health"):
+		var current_hp := maxi(0, int(entity.get("health", 0)))
+		var maximum_hp := maxi(1, int(entity.get("max_health", 1)))
+		var health_ratio := clampf(float(current_hp) / float(maximum_hp), 0.0, 1.0)
+		hp_line += "    ·    生命 " + str(current_hp) + " / " + str(maximum_hp)
+		if is_instance_valid(target_health_bar):
+			target_health_bar.max_value = maximum_hp
+			target_health_bar.value = current_hp
+			target_health_bar.visible = true
+		if is_instance_valid(target_health_fill_style):
+			if health_ratio <= 0.25:
+				target_health_fill_style.bg_color = Color("#d94f4f")
+			elif health_ratio <= 0.55:
+				target_health_fill_style.bg_color = Color("#d69a45")
+			elif is_boss_target:
+				target_health_fill_style.bg_color = Color("#c6a45d")
+			elif is_elite_target:
+				target_health_fill_style.bg_color = Color("#9b83c8")
+			else:
+				target_health_fill_style.bg_color = Color("#b85b58")
+	else:
+		if is_instance_valid(target_health_bar):
+			target_health_bar.visible = false
+		hp_line += "    ·    目标状态同步中"
+	target_info_label.text = title + "\n" + hp_line + "\nTab 切换目标"
+	target_info_panel.visible = hud_visible
+
+func _pick_monster_target_at_screen_position(screen_position: Vector2) -> String:
+	if not is_instance_valid(local_player):
+		return ""
+	var player_camera := local_player.get("camera") as Camera3D
+	if not is_instance_valid(player_camera) or not player_camera.is_inside_tree():
+		return ""
+	var viewport_size := get_viewport().get_visible_rect().size
+	var pick_position := screen_position
+	if pick_position.x < 0.0 or pick_position.y < 0.0:
+		pick_position = viewport_size * 0.5
+	var best_id := ""
+	var best_score := INF
+	# Screen-space picking works with the current visual-only monster rigs:
+	# it does not depend on invisible physics collision shapes being present.
+	for monster_id_variant in monster_targets.keys():
+		var monster_id := str(monster_id_variant)
+		if not monsters.has(monster_id):
+			continue
+		var monster_node := monsters[monster_id] as Node3D
+		if not is_instance_valid(monster_node) or not monster_node.is_visible_in_tree():
+			continue
+		var world_position: Vector3 = monster_targets[monster_id]
+		var aim_position := world_position + Vector3.UP * 1.05
+		if player_camera.is_position_behind(aim_position):
+			continue
+		var screen_point := player_camera.unproject_position(aim_position)
+		if screen_point.x < 0.0 or screen_point.y < 0.0 or screen_point.x > viewport_size.x or screen_point.y > viewport_size.y:
+			continue
+		var pixel_distance := screen_point.distance_to(pick_position)
+		if pixel_distance > 118.0:
+			continue
+		var world_distance: float = local_player.global_position.distance_to(world_position)
+		if world_distance > 60.0:
+			continue
+		# Prefer the object closest to the click/reticle, then the nearer one.
+		var score := pixel_distance + world_distance * 0.12
+		if score < best_score:
+			best_score = score
+			best_id = monster_id
+	return best_id
+
+func _pick_nearest_visible_monster_in_front(max_distance: float) -> String:
+	if not is_instance_valid(local_player):
+		return ""
+	var player_camera := local_player.get("camera") as Camera3D
+	if not is_instance_valid(player_camera) or not player_camera.is_inside_tree():
+		return ""
+	var camera_forward := -player_camera.global_transform.basis.z.normalized()
+	var viewport_size := get_viewport().get_visible_rect().size
+	var viewport_center := viewport_size * 0.5
+	var best_id := ""
+	var best_score := INF
+	for monster_id_variant in monster_targets.keys():
+		var monster_id := str(monster_id_variant)
+		if not monsters.has(monster_id):
+			continue
+		var monster_node := monsters[monster_id] as Node3D
+		if not is_instance_valid(monster_node) or not monster_node.is_visible_in_tree():
+			continue
+		var world_position: Vector3 = monster_targets[monster_id]
+		var offset := world_position + Vector3.UP * 1.0 - player_camera.global_position
+		var distance := Vector2(offset.x, offset.z).length()
+		if distance > max_distance or distance < 0.1:
+			continue
+		var direction := offset.normalized()
+		if camera_forward.dot(direction) < 0.35 or player_camera.is_position_behind(world_position + Vector3.UP):
+			continue
+		var screen_point := player_camera.unproject_position(world_position + Vector3.UP)
+		if screen_point.x < 0.0 or screen_point.y < 0.0 or screen_point.x > viewport_size.x or screen_point.y > viewport_size.y:
+			continue
+		var pixel_distance := screen_point.distance_to(viewport_center)
+		if pixel_distance > minf(viewport_size.x * 0.22, 320.0):
+			continue
+		var score := distance + pixel_distance * 0.012
+		if score < best_score:
+			best_score = score
+			best_id = monster_id
+	return best_id
+
+
+func _request_nearest_monster_attack(screen_position: Vector2 = Vector2(-1.0, -1.0)) -> void:
+	var network := HHSession.world_network
+	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
+		_show_notification("战斗连接尚未就绪，无法攻击。")
+		return
+
+	# Click/reticle selection takes priority. If the click did not land on a
+	# visible monster, retain the current target rather than attacking a random
+	# nearby creature behind the player's camera.
+	var picked_id := _pick_monster_target_at_screen_position(screen_position)
+	if not picked_id.is_empty():
+		_set_monster_target(picked_id)
+	var target_id := picked_id
+	if target_id.is_empty() and monsters.has(selected_monster_id) and monster_targets.has(selected_monster_id):
+		target_id = selected_monster_id
+	# If the click lands on empty ground while a hostile is already engaging
+	# the player, acquire the closest visible enemy in the forward combat cone.
+	# This avoids requiring pixel-perfect crosshair placement for the first hit.
+	if target_id.is_empty():
+		target_id = _pick_nearest_visible_monster_in_front(12.0)
+		if not target_id.is_empty():
+			_set_monster_target(target_id)
+	if target_id.is_empty():
+		_show_notification("未选中怪物：请将屏幕中心对准怪物，再点击左键；按 Tab 可切换目标。", 4.0)
+		return
+
+	var target_position: Vector3 = monster_targets[target_id]
+	var target_distance: float = _horizontal_distance_to_target(local_player.global_position, target_position)
+	var target_name := str(monster_entities.get(target_id, {}).get("name", "怪物"))
+	var server_interval_ms := int(HHSession.world_snapshot.get("attack_interval_ms", 1200))
+	attack_repeat_interval = clampf(float(server_interval_ms) / 1000.0, 0.45, 3.0)
+	var error: Error = network.send_attack(target_id)
+	if error != OK:
+		attack_repeat_remaining = 0.0
+		_show_notification("攻击指令发送失败（错误码 " + str(error) + "），目标仍保持锁定。", 4.0)
+		return
+	# Start the local repeat timer only after the network accepted the send.
+	attack_repeat_remaining = attack_repeat_interval
+	# Give immediate feedback for the click; damage and hit effects are still
+	# driven exclusively by the authoritative server combat event.
+	if local_player.has_method("play_attack_animation"):
+		local_player.call("play_attack_animation")
+	_show_notification("攻击指令已发送  ·  " + target_name + "  ·  距离 %.1f m" % target_distance, 1.5)
+	if is_instance_valid(target_info_label):
+		target_info_label.text += "\n攻击指令已发送 · 等待服务器判定"
+
+
+func _process_held_monster_attack(delta: float) -> void:
+	if not attack_button_held:
+		return
+	if not is_instance_valid(local_player) or bool(local_player.get("is_dead")):
+		attack_button_held = false
+		return
+	if selected_monster_id.is_empty() or not monsters.has(selected_monster_id) or not monster_targets.has(selected_monster_id):
+		attack_button_held = false
+		return
+	attack_repeat_remaining = maxf(attack_repeat_remaining - delta, 0.0)
+	if attack_repeat_remaining > 0.0:
+		return
+	var network := HHSession.world_network
+	if network == null or not network.is_world_ready():
+		attack_repeat_remaining = 0.25
+		return
+	var target_position: Vector3 = monster_targets[selected_monster_id]
+	var distance := _horizontal_distance_to_target(local_player.global_position, target_position)
+	var attack_range := maxf(float(HHSession.world_snapshot.get("attack_range", 2.5)), 0.5)
+	if distance > attack_range + 0.2:
+		# Keep the target locked while the player closes the gap. Do not flood
+		# the server with out-of-range attacks or consume attack cooldown.
+		attack_repeat_remaining = 0.15
+		return
+	var send_error: Error = network.send_attack(selected_monster_id)
+	if send_error == OK:
+		if local_player.has_method("play_attack_animation"):
+			local_player.call("play_attack_animation")
+	else:
+		_show_notification("连续攻击发送失败（错误码 " + str(send_error) + "）。", 2.0)
+		attack_repeat_remaining = 0.5
+		return
+	attack_repeat_remaining = attack_repeat_interval
+
+
+func _spell_display_name(spell_id: String) -> String:
+	match spell_id:
+		"fireball": return "幽冥磷火"
+		"ice_bolt": return "镇邪符"
+		"taunt": return "鬼门锁链"
+		"life_mend": return "养气归元"
+		"guardian_aegis": return "罡气护体"
+		"purify": return "净秽符"
+		"revive": return "回魂术"
+	return "神通"
+
+
+func _spell_hotkey(spell_id: String) -> String:
+	match spell_id:
+		"fireball": return "Q"
+		"ice_bolt": return "R"
+		"taunt": return "T"
+		"revive": return "Y"
+		"life_mend": return "U"
+		"guardian_aegis": return "G"
+		"purify": return "H"
+	return "?"
+
+
+func _add_spell_hotbar_slot(grid: GridContainer, label: Label, accent: Color) -> void:
+	var slot := PanelContainer.new()
+	slot.custom_minimum_size = Vector2(72.0, 34.0)
+	slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var slot_style := StyleBoxFlat.new()
+	slot_style.bg_color = Color("#111e2a", 0.96)
+	slot_style.border_color = accent.darkened(0.25)
+	slot_style.set_border_width_all(1)
+	slot_style.set_corner_radius_all(6)
+	slot_style.content_margin_left = 3.0
+	slot_style.content_margin_right = 3.0
+	slot_style.content_margin_top = 3.0
+	slot_style.content_margin_bottom = 3.0
+	slot.add_theme_stylebox_override("panel", slot_style)
+	label.custom_minimum_size = Vector2(64.0, 26.0)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 10)
+	slot.add_child(label)
+	grid.add_child(slot)
+
+
+func _update_spell_cooldown_hud() -> void:
+	for spell_id in spell_cooldown_labels:
+		var label := spell_cooldown_labels[spell_id] as Label
+		if not is_instance_valid(label):
+			continue
+		var spell_key := _spell_hotkey(spell_id)
+		var spell_name := _spell_display_name(spell_id)
+		var compact_name := spell_name.substr(0, mini(2, spell_name.length()))
+		var spell_glyphs := {"fireball": "✦", "ice_bolt": "❄", "taunt": "⛓", "revive": "☯", "life_mend": "✚", "guardian_aegis": "◈", "purify": "✧"}
+		var glyph := str(spell_glyphs.get(spell_id, "◇"))
+		if spell_id in ["ice_bolt", "taunt"] and not _is_spell_known(spell_id):
+			label.text = glyph + " " + spell_key + " 未掌握"
+			label.tooltip_text = spell_key + " · " + spell_name + "：未掌握（需技能典籍）"
+			label.add_theme_color_override("font_color", Color("#d69a78"))
+			continue
+		label.add_theme_color_override("font_color", Color("#e7b77a") if spell_id == "taunt" else Color("#c4d2df"))
+		var remaining := float(spell_cooldown_remaining.get(spell_id, 0.0))
+		label.text = glyph + " " + spell_key + " " + compact_name + (" %.0f秒" % remaining) if remaining > 0.0 else glyph + " " + spell_key + " " + compact_name + " 就绪"
+		label.tooltip_text = spell_key + " · " + spell_name + ("：冷却 %.1f 秒" % remaining) if remaining > 0.0 else spell_key + " · " + spell_name + "：就绪"
+
+
+func _request_fireball() -> void:
+	var network := HHSession.world_network
+	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
+		return
+	var target_id := selected_monster_id if monsters.has(selected_monster_id) else ""
+	var nearest_distance := 20.0
+	if target_id.is_empty():
+		for monster_id in monster_targets:
+			var target: Vector3 = monster_targets[monster_id]
+			var distance := Vector2(local_player.global_position.x, local_player.global_position.z).distance_to(Vector2(target.x, target.z))
+			if distance <= nearest_distance:
+				nearest_distance = distance
+				target_id = str(monster_id)
+	if target_id.is_empty():
+		_show_notification("20 米内没有可施展幽冥磷火的目标。")
+		return
+	var error: Error = network.send_spell_cast("fireball", target_id)
+	if error != OK:
+		_show_notification("幽冥磷火请求发送失败：" + str(error))
+
+func _request_ice_bolt() -> void:
+	if not _is_spell_known("ice_bolt"):
+		_show_notification("尚未掌握镇邪符，请先在酆都镇魂符箓铺购买并研读《镇邪符箓初解》。", 3.0)
+		return
+	var network := HHSession.world_network
+	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
+		return
+	var target_id := selected_monster_id if monsters.has(selected_monster_id) else ""
+	var nearest_distance := 18.0
+	if target_id.is_empty():
+		for monster_id in monster_targets:
+			var target: Vector3 = monster_targets[monster_id]
+			var distance := Vector2(local_player.global_position.x, local_player.global_position.z).distance_to(Vector2(target.x, target.z))
+			if distance <= nearest_distance:
+				nearest_distance = distance
+				target_id = str(monster_id)
+	if target_id.is_empty():
+		_show_notification("18 米内没有可施展镇邪符的目标。")
+		return
+	var error: Error = network.send_spell_cast("ice_bolt", target_id)
+	if error != OK:
+		_show_notification("镇邪符请求发送失败：" + str(error))
+
+func _request_support_spell(spell_id: String) -> void:
+	var network := HHSession.world_network
+	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
+		return
+	var self_id := str(HHSession.world_snapshot.get("character_id", ""))
+	var target_id := self_id
+	var lowest_health_ratio := 1.0
+	var self_health := float(HHSession.world_snapshot.get("health", 0))
+	var self_max_health := maxf(float(HHSession.world_snapshot.get("max_health", 1)), 1.0)
+	lowest_health_ratio = self_health / self_max_health
+	var party_members: Array = party_data.get("members", [])
+	for member_value in party_members:
+		if not (member_value is Dictionary):
+			continue
+		var character_id := str(member_value.get("character_id", ""))
+		if character_id.is_empty() or character_id == self_id:
+			continue
+		var status: Dictionary = party_member_statuses.get(character_id, {})
+		if status.is_empty() or not bool(status.get("alive", true)):
+			continue
+		if not remote_targets.has(character_id):
+			continue
+		var target: Vector3 = remote_targets[character_id]
+		var distance := Vector2(local_player.global_position.x - target.x, local_player.global_position.z - target.z).length()
+		if distance > 12.0:
+			continue
+		var max_hp := maxf(float(status.get("max_health", 1)), 1.0)
+		var ratio := float(status.get("health", 0)) / max_hp
+		if ratio < lowest_health_ratio:
+			lowest_health_ratio = ratio
+			target_id = str(character_id)
+	if target_id.is_empty():
+		_show_notification("没有可施展辅助法术的目标。")
+		return
+	var error: Error = network.send_spell_cast(spell_id, target_id)
+	if error != OK:
+		_show_notification("辅助法术请求发送失败：" + str(error))
+
+func _request_purify_self() -> void:
+	var network := HHSession.world_network
+	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
+		return
+	var character_id := str(HHSession.world_snapshot.get("character_id", ""))
+	if character_id.is_empty():
+		return
+	var error: Error = network.send_spell_cast("purify", character_id)
+	if error != OK:
+		_show_notification("净秽符请求发送失败：" + str(error))
+
+
+func _request_revive_nearest() -> void:
+	var network := HHSession.world_network
+	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
+		return
+	var target_id := ""
+	var nearest_distance := 3.5
+	for character_id in remote_targets.keys():
+		var status: Dictionary = party_member_statuses.get(character_id, {})
+		if status.is_empty() or bool(status.get("alive", true)):
+			continue
+		var target: Vector3 = remote_targets[character_id]
+		var distance := Vector2(local_player.global_position.x, local_player.global_position.z).distance_to(Vector2(target.x, target.z))
+		if distance <= nearest_distance:
+			nearest_distance = distance
+			target_id = str(character_id)
+	if target_id.is_empty():
+		_show_notification("3.5 米内没有可救援的倒地玩家。")
+		return
+	var error: Error = network.send_spell_cast("revive", target_id)
+	if error != OK:
+		_show_notification("回魂术请求发送失败：" + str(error))
+
+func _request_taunt() -> void:
+	if not _is_spell_known("taunt"):
+		_show_notification("尚未掌握鬼门锁链，请先在酆都镇魂符箓铺购买并研读《鬼门锁链真诀》。", 3.0)
+		return
+	var network := HHSession.world_network
+	if network == null or not network.is_world_ready() or not is_instance_valid(local_player):
+		return
+	var target_id := selected_monster_id if monsters.has(selected_monster_id) else ""
+	var nearest_distance := 8.0
+	if target_id.is_empty():
+		for monster_id in monster_targets:
+			var target: Vector3 = monster_targets[monster_id]
+			var distance := Vector2(local_player.global_position.x, local_player.global_position.z).distance_to(Vector2(target.x, target.z))
+			if distance <= nearest_distance:
+				nearest_distance = distance
+				target_id = str(monster_id)
+	if target_id.is_empty():
+		_show_notification("8 米内没有可施展鬼门锁链的目标，请靠近目标。")
+		return
+	var error: Error = network.send_spell_cast("taunt", target_id)
+	if error != OK:
+		_show_notification("嘲讽请求发送失败：" + str(error))
+
+func _on_monster_action_event(event: Dictionary) -> void:
+	var attacker_id := str(event.get("source_entity_id", ""))
+	if attacker_id.is_empty() or not monsters.has(attacker_id):
+		return
+	var attacker := monsters[attacker_id] as Node3D
+	if not is_instance_valid(attacker):
+		return
+	var phase := str(event.get("phase", ""))
+	var attack_style := str(event.get("attack_style", "melee"))
+	attacker.set_meta("attack_style", attack_style)
+	if attack_style == "heavy_slam":
+		attacker.set_meta("attack_radius", maxf(float(event.get("attack_radius", 3.6)), 0.5))
+	if phase == "windup":
+		attacker.set_meta("attack_phase", "windup")
+		_play_model_animation_action(attacker, "attack")
+		# Heavy slam is a ground-targeted area attack centered on the monster.
+		# Its expanding SlamTelegraph is the authoritative danger zone; a ring
+		# under the selected victim would incorrectly imply single-target damage.
+		if attack_style != "heavy_slam" and str(event.get("target_character_id", "")) == str(HHSession.world_snapshot.get("character_id", "")):
+			_set_incoming_attack_telegraph(attack_style, true, attacker_id)
+		if attack_style == "heavy_slam":
+			_set_iron_slam_telegraph(attacker, true)
+		if attack_style == "soul_bolt" or attack_style == "frost_bolt" or attack_style == "poison_bolt":
+			_set_elemental_telegraph(attacker, true, attack_style)
+		var windup := maxf(float(event.get("windup_ms", 520)) / 1000.0, 0.1)
+		attacker.set_meta("attack_phase_duration", windup)
+		attacker.set_meta("attack_phase_time", windup)
+		attacker.set_meta("attack_recovery_duration", maxf(float(event.get("recovery_ms", 420)) / 1000.0, 0.1))
+	elif phase == "cancelled":
+		attacker.set_meta("attack_phase", "idle")
+		attacker.set_meta("attack_phase_time", 0.0)
+		# Removing an unknown source is harmless; do not depend on a possibly stale
+		# local snapshot character ID to clean up a warning already registered.
+		if attack_style != "heavy_slam":
+			_set_incoming_attack_telegraph(attack_style, false, attacker_id)
+		_set_iron_slam_telegraph(attacker, false)
+		_set_elemental_telegraph(attacker, false, attack_style)
+	elif phase == "impact":
+		var impact_cue := "heavy_hit" if attack_style == "heavy_slam" else "monster_attack"
+		HHAudio.play_world(impact_cue, attacker.global_position, 0.94 if attack_style == "heavy_slam" else randf_range(0.94, 1.06), 32.0)
+		attacker.set_meta("attack_phase", "impact")
+		attacker.set_meta("attack_phase_duration", 0.2)
+		# Remove only this monster; other monsters may still be winding up on us.
+		# Cleanup is idempotent even for observers who never displayed this warning.
+		if attack_style != "heavy_slam":
+			_set_incoming_attack_telegraph(attack_style, false, attacker_id)
+		attacker.set_meta("attack_phase_time", 0.2)
+		if attack_style == "heavy_slam":
+			_set_iron_slam_telegraph(attacker, false)
+			_spawn_iron_slam_impact_visual(attacker, float(attacker.get_meta("attack_radius", 3.6)))
+		if attack_style == "soul_bolt" or attack_style == "poison_bolt" or attack_style == "frost_bolt":
+			_set_elemental_telegraph(attacker, false)
+			if str(event.get("target_character_id", "")) == str(HHSession.world_snapshot.get("character_id", "")):
+				if attack_style == "poison_bolt":
+					_spawn_poison_bolt_visual(attacker)
+				elif attack_style == "frost_bolt":
+					_spawn_frost_bolt_visual(attacker)
+				else:
+					_spawn_soul_bolt_visual(attacker)
+
+func _clear_incoming_attack_source_for_monster(monster_id: String, monster: Node3D) -> void:
+	if monster_id.is_empty():
+		return
+	var attack_style := str(monster.get_meta("attack_style", "melee")) if is_instance_valid(monster) else "melee"
+	_set_incoming_attack_telegraph(attack_style, false, monster_id)
+
+
+func _clear_all_incoming_attack_warnings() -> void:
+	if not is_instance_valid(local_player):
+		return
+	local_player.set_meta("incoming_attack_sources", {})
+	var marker := local_player.get_node_or_null("IncomingAttackTelegraph") as MeshInstance3D
+	if not is_instance_valid(marker):
+		return
+	var active_tween: Variant = marker.get_meta("pulse_tween") if marker.has_meta("pulse_tween") else null
+	if active_tween is Tween and (active_tween as Tween).is_running():
+		(active_tween as Tween).kill()
+	marker.visible = false
+	marker.scale = Vector3.ONE
+
+
+func _set_elemental_telegraph(monster: Node3D, enabled: bool, attack_style: String = "") -> void:
+	var telegraph := monster.get_node_or_null("ElementalTelegraph") as MeshInstance3D
+	if not is_instance_valid(telegraph):
+		return
+	telegraph.visible = enabled
+	if enabled:
+		var material := telegraph.material_override as StandardMaterial3D
+		if material != null:
+			var tint := Color("#c18aff")
+			match attack_style:
+				"frost_bolt":
+					tint = Color("#72dfff")
+				"poison_bolt":
+					tint = Color("#9be66b")
+				"soul_bolt":
+					tint = Color("#c18aff")
+			material.albedo_color = Color(tint.r, tint.g, tint.b, 0.34)
+			material.emission = tint
+			material.emission_energy_multiplier = 1.6
+		var previous_tween: Variant = telegraph.get_meta("pulse_tween") if telegraph.has_meta("pulse_tween") else null
+		if previous_tween is Tween and (previous_tween as Tween).is_running():
+			(previous_tween as Tween).kill()
+		telegraph.scale = Vector3.ONE * 0.88
+		var tween := create_tween()
+		tween.set_loops()
+		tween.tween_property(telegraph, "scale", Vector3.ONE * 1.16, 0.32)
+		tween.tween_property(telegraph, "scale", Vector3.ONE * 0.88, 0.32)
+		telegraph.set_meta("pulse_tween", tween)
+	else:
+		var active_tween: Variant = telegraph.get_meta("pulse_tween") if telegraph.has_meta("pulse_tween") else null
+		if active_tween is Tween and active_tween.is_running():
+			(active_tween as Tween).kill()
+		telegraph.scale = Vector3.ONE
+
+func _set_incoming_attack_telegraph(attack_style: String, enabled: bool, source_id: String = "") -> void:
+	if not is_instance_valid(local_player):
+		return
+	var active_sources: Dictionary = local_player.get_meta("incoming_attack_sources", {})
+	if not source_id.is_empty():
+		if enabled:
+			active_sources[source_id] = attack_style
+		else:
+			active_sources.erase(source_id)
+	local_player.set_meta("incoming_attack_sources", active_sources)
+	var marker := local_player.get_node_or_null("IncomingAttackTelegraph") as MeshInstance3D
+	if active_sources.is_empty():
+		if marker != null:
+			var old_tween: Variant = marker.get_meta("pulse_tween") if marker.has_meta("pulse_tween") else null
+			if old_tween is Tween and (old_tween as Tween).is_running():
+				(old_tween as Tween).kill()
+			marker.visible = false
+			marker.scale = Vector3.ONE
+		return
+	if marker == null:
+		marker = MeshInstance3D.new()
+		marker.name = "IncomingAttackTelegraph"
+		var ring_mesh := TorusMesh.new()
+		ring_mesh.inner_radius = 0.82
+		ring_mesh.outer_radius = 0.94
+		ring_mesh.rings = 36
+		ring_mesh.ring_segments = 8
+		marker.mesh = ring_mesh
+		marker.position.y = 0.075
+		local_player.add_child(marker)
+	# If several monsters are winding up on the same player, keep the most
+	# dangerous warning visible until every source resolves or cancels.
+	var active_style := attack_style
+	if active_sources.has(source_id):
+		active_style = str(active_sources[source_id])
+	if active_sources.values().has("heavy_slam"):
+		active_style = "heavy_slam"
+	elif active_sources.values().has("frost_bolt"):
+		active_style = "frost_bolt"
+	elif active_sources.values().has("poison_bolt"):
+		active_style = "poison_bolt"
+	elif active_sources.values().has("soul_bolt"):
+		active_style = "soul_bolt"
+	var tint := Color("#ff6547")
+	match active_style:
+		"heavy_slam":
+			tint = Color("#ff6547")
+		"frost_bolt":
+			tint = Color("#75ddff")
+		"poison_bolt":
+			tint = Color("#9be66b")
+		"soul_bolt":
+			tint = Color("#c18aff")
+	var material := marker.material_override as StandardMaterial3D
+	if material == null:
+		material = StandardMaterial3D.new()
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		marker.material_override = material
+	material.albedo_color = Color(tint.r, tint.g, tint.b, 0.72)
+	material.emission_enabled = true
+	material.emission = tint
+	material.emission_energy_multiplier = 2.6
+	marker.visible = true
+	var previous_tween: Variant = marker.get_meta("pulse_tween") if marker.has_meta("pulse_tween") else null
+	if previous_tween is Tween and (previous_tween as Tween).is_running():
+		(previous_tween as Tween).kill()
+	marker.scale = Vector3.ONE * 0.86
+	var tween := create_tween()
+	tween.set_loops()
+	tween.tween_property(marker, "scale", Vector3.ONE * 1.12, 0.24)
+	tween.tween_property(marker, "scale", Vector3.ONE * 0.86, 0.24)
+	marker.set_meta("pulse_tween", tween)
+
+func _set_iron_slam_telegraph(monster: Node3D, enabled: bool) -> void:
+	var telegraph := monster.get_node_or_null("SlamTelegraph") as MeshInstance3D
+	if not is_instance_valid(telegraph):
+		return
+	telegraph.visible = enabled
+	if enabled:
+		var radius := maxf(float(monster.get_meta("attack_radius", 3.6)), 0.5)
+		var parent_scale := maxf(absf(monster.scale.x), 0.01)
+		telegraph.scale = Vector3.ONE * (radius / parent_scale)
+		var material := telegraph.material_override as StandardMaterial3D
+		if material != null:
+			material.albedo_color.a = 0.34
+			material.emission_energy_multiplier = 1.2
+
+func _spawn_iron_slam_impact_visual(monster: Node3D, radius: float) -> void:
+	var ring := MeshInstance3D.new()
+	ring.name = "IronSlamImpactRing"
+	var torus := TorusMesh.new()
+	torus.inner_radius = maxf(radius - 0.16, 0.2)
+	torus.outer_radius = maxf(radius - 0.04, 0.24)
+	torus.rings = 36
+	torus.ring_segments = 8
+	ring.mesh = torus
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#ff7048", 0.82)
+	material.emission_enabled = true
+	material.emission = Color("#ff4f32")
+	material.emission_energy_multiplier = 2.4
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring.material_override = material
+	add_child(ring)
+	ring.global_position = monster.global_position + Vector3(0.0, 0.10, 0.0)
+	ring.scale = Vector3.ONE * 0.72
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(ring, "scale", Vector3.ONE, 0.34)
+	tween.tween_property(material, "albedo_color:a", 0.0, 0.34)
+	tween.tween_property(material, "emission_energy_multiplier", 0.0, 0.34)
+	tween.chain().tween_callback(Callable(ring, "queue_free"))
+
+func _spawn_soul_bolt_visual(attacker: Node3D) -> void:
+	if not is_instance_valid(local_player):
+		return
+	var bolt := MeshInstance3D.new()
+	bolt.name = "SoulBoltImpactVisual"
+	var orb := SphereMesh.new()
+	orb.radius = 0.13
+	orb.height = 0.26
+	bolt.mesh = orb
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#9df5ff")
+	material.emission_enabled = true
+	material.emission = Color("#55dff5")
+	material.emission_energy_multiplier = 2.8
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bolt.material_override = material
+	add_child(bolt)
+	bolt.global_position = attacker.global_position + Vector3(0.0, 1.05, 0.0)
+	var destination: Vector3 = local_player.global_position + Vector3(0.0, 1.0, 0.0)
+	var tween := create_tween()
+	tween.tween_property(bolt, "global_position", destination, 0.24)
+	tween.tween_callback(Callable(bolt, "queue_free"))
+
+func _spawn_frost_bolt_visual(attacker: Node3D) -> void:
+	if not is_instance_valid(local_player):
+		return
+	var bolt := MeshInstance3D.new()
+	bolt.name = "FrostBoltImpactVisual"
+	var prism := PrismMesh.new()
+	prism.size = Vector3(0.22, 0.42, 0.22)
+	bolt.mesh = prism
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#a9e8ff")
+	material.emission_enabled = true
+	material.emission = Color("#62cfff")
+	material.emission_energy_multiplier = 3.0
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bolt.material_override = material
+	add_child(bolt)
+	bolt.global_position = attacker.global_position + Vector3(0.0, 1.05, 0.0)
+	bolt.look_at(local_player.global_position + Vector3(0.0, 1.0, 0.0), Vector3.UP)
+	var destination: Vector3 = local_player.global_position + Vector3(0.0, 1.0, 0.0)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(bolt, "global_position", destination, 0.26)
+	tween.tween_property(bolt, "rotation:z", bolt.rotation.z + 1.8, 0.26)
+	tween.chain().tween_callback(Callable(bolt, "queue_free"))
+
+
+func _spawn_poison_bolt_visual(attacker: Node3D) -> void:
+	if not is_instance_valid(local_player):
+		return
+	var bolt := MeshInstance3D.new()
+	bolt.name = "PoisonBoltImpactVisual"
+	var orb := SphereMesh.new()
+	orb.radius = 0.15
+	orb.height = 0.30
+	bolt.mesh = orb
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#8ee36b")
+	material.emission_enabled = true
+	material.emission = Color("#55c52d")
+	material.emission_energy_multiplier = 2.4
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bolt.material_override = material
+	add_child(bolt)
+	bolt.global_position = attacker.global_position + Vector3(0.0, 1.05, 0.0)
+	var destination: Vector3 = local_player.global_position + Vector3(0.0, 1.0, 0.0)
+	var tween := create_tween()
+	tween.tween_property(bolt, "global_position", destination, 0.26)
+	tween.tween_callback(Callable(bolt, "queue_free"))
+
+
+func _set_player_poison_visual(player_node: Node3D, enabled: bool) -> void:
+	if not is_instance_valid(player_node):
+		return
+	var ring := player_node.get_node_or_null("PlayerPoisonStatusRing") as MeshInstance3D
+	if enabled and ring == null:
+		ring = MeshInstance3D.new()
+		ring.name = "PlayerPoisonStatusRing"
+		var ring_mesh := TorusMesh.new()
+		ring_mesh.inner_radius = 0.58
+		ring_mesh.outer_radius = 0.68
+		ring_mesh.rings = 24
+		ring_mesh.ring_segments = 6
+		ring.mesh = ring_mesh
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color("#8bd65c", 0.76)
+		material.emission_enabled = true
+		material.emission = Color("#58b82f")
+		material.emission_energy_multiplier = 1.9
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		ring.material_override = material
+		ring.position.y = 0.09
+		player_node.add_child(ring)
+	if ring != null:
+		ring.visible = enabled
+
+
+func _set_player_slow_visual(enabled: bool) -> void:
+	if not is_instance_valid(local_player):
+		return
+	var ring := local_player.get_node_or_null("PlayerSlowStatusRing") as MeshInstance3D
+	if enabled and ring == null:
+		ring = MeshInstance3D.new()
+		ring.name = "PlayerSlowStatusRing"
+		var ring_mesh := TorusMesh.new()
+		ring_mesh.inner_radius = 0.48
+		ring_mesh.outer_radius = 0.56
+		ring_mesh.rings = 24
+		ring_mesh.ring_segments = 6
+		ring.mesh = ring_mesh
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color("#70dfff", 0.72)
+		material.emission_enabled = true
+		material.emission = Color("#48cfff")
+		material.emission_energy_multiplier = 1.6
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		ring.material_override = material
+		ring.position.y = 0.08
+		local_player.add_child(ring)
+	if ring != null:
+		ring.visible = enabled
+
+
+func _set_monster_burn_visual(monster: Node3D, enabled: bool) -> void:
+	if not is_instance_valid(monster):
+		return
+	var ring := monster.get_node_or_null("MonsterBurnStatusRing") as MeshInstance3D
+	if enabled and ring == null:
+		ring = MeshInstance3D.new()
+		ring.name = "MonsterBurnStatusRing"
+		var ring_mesh := TorusMesh.new()
+		ring_mesh.inner_radius = 0.52
+		ring_mesh.outer_radius = 0.62
+		ring_mesh.rings = 24
+		ring_mesh.ring_segments = 6
+		ring.mesh = ring_mesh
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color("#ff9a42", 0.78)
+		material.emission_enabled = true
+		material.emission = Color("#ff5b24")
+		material.emission_energy_multiplier = 1.8
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		ring.material_override = material
+		ring.position.y = 0.07
+		monster.add_child(ring)
+	if ring != null:
+		ring.visible = enabled
+
+
+func _set_monster_freeze_visual(monster: Node3D, enabled: bool) -> void:
+	if not is_instance_valid(monster):
+		return
+	var ring := monster.get_node_or_null("MonsterFreezeStatusRing") as MeshInstance3D
+	if enabled and ring == null:
+		ring = MeshInstance3D.new()
+		ring.name = "MonsterFreezeStatusRing"
+		var ring_mesh := TorusMesh.new()
+		ring_mesh.inner_radius = 0.58
+		ring_mesh.outer_radius = 0.70
+		ring_mesh.rings = 24
+		ring_mesh.ring_segments = 6
+		ring.mesh = ring_mesh
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color("#9cecff", 0.88)
+		material.emission_enabled = true
+		material.emission = Color("#55cfff")
+		material.emission_energy_multiplier = 2.2
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		ring.material_override = material
+		ring.position.y = 0.10
+		monster.add_child(ring)
+	if ring != null:
+		ring.visible = enabled
+
+
+func _is_spell_known(spell_id: String) -> bool:
+	var known: Variant = HHSession.world_snapshot.get("known_spells", ["fireball"])
+	return known is Array and spell_id in known
+
+
+func _update_spell_mastery_hud() -> void:
+	var entries: Variant = HHSession.world_snapshot.get("spell_mastery", [])
+	for spell_id in ["fireball", "ice_bolt"]:
+		var experience := 0
+		var level := 1
+		if entries is Array:
+			for entry in entries:
+				if entry is Dictionary and str(entry.get("spell_id", "")) == spell_id:
+					experience = clampi(int(entry.get("experience", 0)), 0, 4500)
+					level = clampi(int(entry.get("level", 1)), 1, 10)
+					break
+		var label: Label = spell_mastery_labels.get(spell_id) as Label
+		if not is_instance_valid(label):
+			continue
+		if not _is_spell_known(spell_id):
+			label.text = "尚未掌握 · 前往酆都镇魂符箓铺购买典籍"
+			label.add_theme_color_override("font_color", Color("#d69a78"))
+			continue
+		label.add_theme_color_override("font_color", Color("#9db9a7"))
+		var next_thresholds := [100, 300, 600, 1000, 1500, 2100, 2800, 3600, 4500]
+		var progress_text := "已达上限"
+		if level < 10:
+			var next_xp := int(next_thresholds[level - 1])
+			progress_text = str(experience) + " / " + str(next_xp) + " 熟练度"
+		label.text = _spell_display_name(spell_id) + " · 熟练 Lv." + str(level) + " · " + progress_text
+
+
+func _show_ghost_gate_chain_effect(target_entity_id: String) -> void:
+	if target_entity_id.is_empty() or not monsters.has(target_entity_id):
+		return
+	var target := monsters[target_entity_id] as Node3D
+	if not is_instance_valid(target):
+		return
+	var previous := target.get_node_or_null("GhostGateChainVisual")
+	if previous != null:
+		previous.queue_free()
+	var effect := Node3D.new()
+	effect.name = "GhostGateChainVisual"
+	effect.position.y = 0.18
+	target.add_child(effect)
+	for ring_index in range(3):
+		var ring := MeshInstance3D.new()
+		var torus := TorusMesh.new()
+		torus.inner_radius = 0.42 + float(ring_index) * 0.08
+		torus.outer_radius = torus.inner_radius + 0.045
+		torus.rings = 20
+		torus.ring_segments = 6
+		ring.mesh = torus
+		ring.position.y = 0.30 + float(ring_index) * 0.48
+		ring.rotation.x = PI * 0.5
+		var iron := StandardMaterial3D.new()
+		iron.albedo_color = Color("#718092")
+		iron.metallic = 0.82
+		iron.roughness = 0.28
+		iron.emission_enabled = true
+		iron.emission = Color("#526b91")
+		iron.emission_energy_multiplier = 0.7
+		ring.material_override = iron
+		effect.add_child(ring)
+		for link_index in range(6):
+			var link := MeshInstance3D.new()
+			var link_mesh := BoxMesh.new()
+			link_mesh.size = Vector3(0.12, 0.045, 0.065)
+			link.mesh = link_mesh
+			var angle := TAU * float(link_index) / 6.0
+			link.position = Vector3(cos(angle) * (torus.outer_radius + 0.015), ring.position.y, sin(angle) * (torus.outer_radius + 0.015))
+			link.rotation.y = -angle
+			link.material_override = iron
+			effect.add_child(link)
+	var rotation_tween := create_tween()
+	rotation_tween.tween_property(effect, "rotation", Vector3(0.0, TAU, 0.0), 1.1)
+	await get_tree().create_timer(1.35).timeout
+	if is_instance_valid(effect):
+		effect.queue_free()
+
+
+func _on_combat_event(event: Dictionary) -> void:
+	var action := str(event.get("action", ""))
+	# Attack rejection is a first-class response. Previously it fell through
+	# the hit-event renderer and could look like a silent zero-damage attack.
+	if event.has("accepted") and not bool(event.get("accepted", true)):
+		var rejected_attacker := str(event.get("attacker_character_id", ""))
+		var own_character_id := str(HHSession.world_snapshot.get("character_id", ""))
+		if not rejected_attacker.is_empty() and rejected_attacker == own_character_id:
+			var rejection_reason := str(event.get("reason", "服务器拒绝了本次攻击。"))
+			var cooldown_left := int(event.get("cooldown_ms", 0))
+			if cooldown_left > 0:
+				attack_repeat_remaining = maxf(attack_repeat_remaining, float(cooldown_left) / 1000.0)
+			_show_notification("攻击未生效 · " + rejection_reason, 3.0)
+			if is_instance_valid(target_info_label) and not selected_monster_id.is_empty():
+				target_info_label.text = target_info_label.text.split("\n攻击指令已发送")[0] + "\n" + rejection_reason
+			return
+	if action == "hell_trial_soul_rescue":
+		var rescue_snapshot: Variant = event.get("hell_trial", {})
+		if rescue_snapshot is Dictionary and not rescue_snapshot.is_empty():
+			_show_hell_trial_runtime_state({"hell_floor": 3, "hell_trial": rescue_snapshot})
+		_show_notification(str(event.get("message", event.get("reason", "魂灯救援状态已更新。"))), 3.5)
+		return
+	if action == "hell_trial_investigation":
+		var investigation_snapshot: Variant = event.get("hell_trial", {})
+		if investigation_snapshot is Dictionary and not investigation_snapshot.is_empty():
+			_show_hell_trial_runtime_state({"hell_floor": int(event.get("floor", 1)), "hell_trial": investigation_snapshot})
+		_show_notification(str(event.get("message", event.get("reason", "证词调查状态已更新。"))), 3.5)
+		return
+	if action == "hell_trial_hazard":
+		if not hell_trial_runtime_data.is_empty():
+			var hazard_trial := hell_trial_runtime_data.duplicate(true)
+			hazard_trial["hazard"] = event.duplicate(true)
+			_render_hell_trial_hud(hazard_trial)
+		var hazard_phase := str(event.get("phase", ""))
+		var hazard_label := str(event.get("phase_label", "刑具状态变化"))
+		if hazard_phase == "warning":
+			HHAudio.play_ui("warning", 1.0)
+			_show_notification("第二层 · " + hazard_label, 3.2)
+		elif hazard_phase == "active":
+			HHAudio.play_ui("warning", 0.75)
+			_show_notification("第二层 · " + hazard_label, 2.4)
+		else:
+			_show_notification("第二层 · " + hazard_label, 2.2)
+		return
+	if action == "hell_trial_hazard_hit":
+		_show_notification("被断缘剪刃击中，受到 %d 点伤害！" % int(event.get("damage", 0)), 2.5)
+		return
+	if action == "hell_trial_wave_transition":
+		HHAudio.play_ui("warning", 0.9)
+		var floor_number := int(event.get("floor", 0))
+		_show_hell_trial_runtime_state({"hell_floor": floor_number, "hell_trial": event})
+		var wave_label := str(event.get("label", "试炼阶段变化"))
+		if bool(event.get("completed", false)):
+			_show_notification("第 %02d 层 · 试炼完成" % floor_number, 5.0)
+		else:
+			_show_notification("第 %02d 层 · %s" % [floor_number, wave_label], 4.0)
+		return
+	if action == "hell_trial_boss_phase":
+		var phase_floor := int(event.get("floor", HHSession.world_snapshot.get("hell_floor", 0)))
+		if not hell_trial_runtime_data.is_empty():
+			var updated_trial := hell_trial_runtime_data.duplicate(true)
+			updated_trial["floor"] = phase_floor
+			updated_trial["stage"] = 3
+			updated_trial["boss_phase"] = int(event.get("phase", 1))
+			updated_trial["active_name"] = str(event.get("phase_name", "守将"))
+			_render_hell_trial_hud(updated_trial)
+		var phase_name := str(event.get("phase_name", "守将变招"))
+		var phase_number := int(event.get("phase", 1))
+		var attack_id := str(event.get("signature_attack", ""))
+		var attack_names := {
+			"soul_bolt": "噬魂弹",
+			"blade_slash": "断罪斩",
+			"poison_bolt": "蚀骨毒焰",
+			"frost_bolt": "寒狱冰锥",
+			"heavy_slam": "无间震击",
+			"melee": "狱判重击"
+		}
+		var attack_name := str(attack_names.get(attack_id, "招式变化")) if not attack_id.is_empty() else ""
+		var notice := "守将进入第 %d 阶段：%s" % [phase_number, phase_name]
+		if not attack_name.is_empty():
+			notice += " · 新招式：" + attack_name
+		_show_notification(notice, 4.5)
+		return
+	if action == "player_cleansed":
+		var cleansed_id := str(event.get("character_id", ""))
+		if cleansed_id == str(HHSession.world_snapshot.get("character_id", "")):
+			player_slow_visual_remaining = 0.0
+			player_poison_visual_remaining = 0.0
+			_set_player_slow_visual(false)
+			_set_player_poison_visual(local_player, false)
+		_show_notification(str(event.get("source_name", "净秽符")) + " 施展净秽符，清除了你的异常状态（" + str(int(event.get("cleansed_effects", 0))) + " 项）。", 3.0)
+		return
+	if str(event.get("action", "")) == "monster_target_changed":
+		var monster_id := str(event.get("monster_id", ""))
+		var monster_name := str(event.get("monster_name", "怪物"))
+		var target_name := str(event.get("target_name", ""))
+		var target_id := str(event.get("target_character_id", ""))
+		var target_cleared := bool(event.get("target_cleared", false))
+		var local_character_id := str(HHSession.world_snapshot.get("character_id", ""))
+		if not monster_id.is_empty():
+			var aggro_entity: Dictionary = monster_entities.get(monster_id, {})
+			aggro_entity["aggro_target_character_id"] = "" if target_cleared else target_id
+			aggro_entity["aggro_target_name"] = "" if target_cleared else target_name
+			monster_entities[monster_id] = aggro_entity
+			_refresh_monster_nameplate(monster_id)
+			if monster_id == selected_monster_id:
+				_update_target_info()
+		if target_cleared:
+			_show_notification(monster_name + " 已失去攻击目标。", 2.2)
+		elif target_id == local_character_id:
+			_show_notification("仇恨锁定！" + monster_name + " 正在攻击你。", 3.0)
+		else:
+			_show_notification(monster_name + " 转而攻击 " + target_name + "。", 2.2)
+		return
+	if str(event.get("action", "")) == "threat_warning":
+		var monster_name := str(event.get("monster_name", "怪物"))
+		var current_name := str(event.get("current_target_name", "当前目标"))
+		var challenger_name := str(event.get("challenger_name", "队友"))
+		var ratio := clampf(float(event.get("challenger_ratio", 0.0)), 0.0, 1.2)
+		var will_switch := bool(event.get("will_switch", false))
+		var warning_text := "仇恨预警 · " + monster_name + "： " + challenger_name + " 已接近 " + current_name
+		if will_switch:
+			warning_text = "仇恨即将转移！" + monster_name + " 可能转向 " + challenger_name
+		if is_instance_valid(threat_alert_panel):
+			threat_alert_label.text = ("危险 · " if will_switch else "仇恨压力 · ") + monster_name + "  |  " + challenger_name + " / " + current_name + "  ·  " + str(round(ratio * 100.0)) + "%"
+			threat_alert_bar.value = ratio
+			var fill := StyleBoxFlat.new()
+			fill.bg_color = Color("#d65d55") if will_switch else Color("#d69a4d")
+			fill.set_corner_radius_all(4)
+			threat_alert_bar.add_theme_stylebox_override("fill", fill)
+			threat_alert_panel.visible = true
+			threat_alert_timer.start(6.0)
+		_show_notification(warning_text, 3.8)
+		return
+	if str(event.get("action", "")) == "monster_chain_bound":
+		var binder := str(event.get("character_name", "队友"))
+		_show_ghost_gate_chain_effect(str(event.get("target_entity_id", "")))
+		_show_notification(binder + " 施展鬼门锁链，目标被短暂定身并转向攻击他！", 2.8)
+		return
+	if str(event.get("action", "")) == "player_healed":
+		var healed_id := str(event.get("character_id", ""))
+		if healed_id == str(HHSession.world_snapshot.get("character_id", "")):
+			HHSession.world_snapshot["health"] = int(event.get("health", HHSession.world_snapshot.get("health", 0)))
+			_update_vitals(int(HHSession.world_snapshot["health"]), int(event.get("max_health", HHSession.world_snapshot.get("max_health", 100))))
+		_show_notification(str(event.get("source_name", "队友")) + " 为你恢复 " + str(int(event.get("health_restored", 0))) + " 点生命。", 3.0)
+		return
+	if str(event.get("action", "")) == "player_shielded":
+		shield_amount = int(event.get("shield_health", 0))
+		shield_remaining = float(event.get("duration_ms", 8000)) / 1000.0
+		if is_instance_valid(shield_status_label):
+			shield_status_label.text = "护盾 " + str(shield_amount) + " · " + ("%.1f" % shield_remaining) + " 秒"
+		_show_notification(str(event.get("source_name", "队友")) + " 为你施展罡气护体（" + str(shield_amount) + "）。", 3.0)
+		return
+	if event.has("shield_remaining"):
+		shield_amount = int(event.get("shield_remaining", 0))
+		if shield_amount <= 0:
+			shield_remaining = 0.0
+		elif shield_remaining <= 0.0:
+			shield_remaining = 8.0
+	if str(event.get("action", "")) == "player_revived":
+		_stop_revive_channel_ui()
+		var revived_id := str(event.get("character_id", ""))
+		if revived_id == str(HHSession.world_snapshot.get("character_id", "")):
+			HHSession.world_snapshot["health"] = int(event.get("health", 1))
+			HHSession.world_snapshot["max_health"] = int(event.get("max_health", HHSession.world_snapshot.get("max_health", 100)))
+			HHSession.world_snapshot["mana"] = int(event.get("mana", HHSession.world_snapshot.get("mana", 0)))
+			HHSession.world_snapshot["max_mana"] = int(event.get("max_mana", HHSession.world_snapshot.get("max_mana", 0)))
+			_update_vitals(int(HHSession.world_snapshot["health"]), int(HHSession.world_snapshot["max_health"]))
+			if is_instance_valid(death_panel):
+				death_panel.visible = false
+			if is_instance_valid(respawn_button):
+				respawn_button.disabled = true
+			_show_notification("你被附近修士救起，恢复 25% 生命！", 4.0)
+		else:
+			_show_notification("附近玩家已被救起。", 3.0)
+		return
+	if str(event.get("action", "")) == "revive":
+		if str(event.get("phase", "")) == "incoming":
+			_start_revive_channel_ui(str(event.get("character_name", "附近修士")), int(event.get("duration_ms", 5000)))
+			_show_notification(str(event.get("character_name", "附近修士")) + " 正在对你施展回魂术……", 5.0)
+		elif str(event.get("phase", "")) == "interrupted":
+			_stop_revive_channel_ui()
+			_show_notification(str(event.get("reason", "救援中断。")), 3.0)
+		return
+	if str(event.get("action", "")) == "player_death_persisted":
+		if is_instance_valid(respawn_button):
+			respawn_button.disabled = false
+		if is_instance_valid(death_message_label):
+			death_message_label.text = "死亡记录已安全保存。\n可以复活并返回冥界·酆都。"
+		return
+	# Death rewards are acknowledged only after the server has committed the
+	# durable settlement batch. Do not treat this as a normal zero-damage hit.
+	if str(event.get("action", "")) == "monster_death_settlement":
+		var fallen_id := str(event.get("monster_id", event.get("entity_id", "")))
+		if monsters.has(fallen_id) and is_instance_valid(monsters[fallen_id]):
+			HHAudio.play_world("death", (monsters[fallen_id] as Node3D).global_position, 0.9, 34.0)
+		if not bool(event.get("committed", false)):
+			_show_notification("怪物已击败，奖励正在安全结算……", 3.0)
+			return
+		var monster_name := str(event.get("monster_name", "怪物"))
+		var monster_level := int(event.get("monster_level", 0))
+		var reward_parts: Array[String] = []
+		var settled_experience := int(event.get("experience", 0))
+		var settled_cultivation := int(event.get("cultivation", 0))
+		var settled_ghost_cash := int(event.get("ghost_cash", 0))
+		var settled_nether_stone := int(event.get("nether_stone", 0))
+		if settled_experience > 0:
+			reward_parts.append("经验 +" + str(settled_experience))
+		if settled_cultivation > 0:
+			reward_parts.append("修为 +" + str(settled_cultivation))
+		if settled_ghost_cash > 0:
+			reward_parts.append("冥币 +" + str(settled_ghost_cash))
+		if settled_nether_stone > 0:
+			reward_parts.append("冥石 +" + str(settled_nether_stone))
+		var reward_text := ("参与击败 " if bool(event.get("contribution_only", false)) else "击败 ") + monster_name
+		if monster_level > 0:
+			reward_text += "（Lv." + str(monster_level) + "）"
+		if reward_parts.is_empty():
+			reward_text += " · 本次无个人奖励"
+		else:
+			reward_text += " · " + "、".join(PackedStringArray(reward_parts))
+		var drops: Array = event.get("drops", [])
+		if not drops.is_empty():
+			var quality_names := ["普通", "优秀", "精良", "稀有", "传说"]
+			var drop_parts: Array[String] = []
+			for drop_variant in drops:
+				if not drop_variant is Dictionary:
+					continue
+				var drop: Dictionary = drop_variant
+				var item_name := str(drop.get("item_name", drop.get("item_id", "未知物品")))
+				var quality := clampi(int(drop.get("quality", 1)), 1, quality_names.size())
+				var quantity := int(drop.get("quantity", 1))
+				drop_parts.append(quality_names[quality - 1] + "·" + item_name + " ×" + str(quantity))
+			reward_text += " · 掉落：" + "、".join(PackedStringArray(drop_parts)) + "（按 E 拾取）"
+		elif not bool(event.get("contribution_only", false)):
+			reward_text += " · 未掉落装备或材料"
+		_show_notification(reward_text, 6.0)
+		_append_chat_line("[系统] " + reward_text, "system")
+		_refresh_reward_status_later()
+		return
+	if str(event.get("action", "")) == "equipment_refresh":
+		if not bool(event.get("accepted", false)):
+			return
+		HHSession.world_snapshot["health"] = int(event.get("health", HHSession.world_snapshot.get("health", 0)))
+		HHSession.world_snapshot["max_health"] = int(event.get("max_health", HHSession.world_snapshot.get("max_health", 0)))
+		HHSession.world_snapshot["mana"] = int(event.get("mana", HHSession.world_snapshot.get("mana", 0)))
+		HHSession.world_snapshot["max_mana"] = int(event.get("max_mana", HHSession.world_snapshot.get("max_mana", 0)))
+		for stat_key in ["attack", "defense", "strength", "constitution", "agility", "spirit", "vitality", "critical_chance_basis_points", "critical_damage_basis_points", "attack_interval_ms", "attack_range", "movement_speed"]:
+			if event.has(stat_key):
+				HHSession.world_snapshot[stat_key] = event[stat_key]
+		attack_repeat_interval = clampf(float(HHSession.world_snapshot.get("attack_interval_ms", 1200)) / 1000.0, 0.45, 3.0)
+		_update_vitals(int(HHSession.world_snapshot["health"]), int(HHSession.world_snapshot["max_health"]))
+		if is_instance_valid(mana_label):
+			mana_label.text = "灵力  " + str(int(HHSession.world_snapshot["mana"])) + " / " + str(int(HHSession.world_snapshot["max_mana"]))
+		_update_compact_hud()
+		inventory_status.text = "装备属性已同步。"
+		_refresh_inventory()
+		_refresh_equipment()
+		var crit_rate := float(HHSession.world_snapshot.get("critical_chance_basis_points", 0)) / 100.0
+		_show_notification("装备属性已同步 · 攻击 " + str(HHSession.world_snapshot.get("attack", 0)) + " · 防御 " + str(HHSession.world_snapshot.get("defense", 0)) + " · 暴击 " + str(snappedf(crit_rate, 0.1)) + "%")
+		return
+	if str(event.get("action", "")) == "consumable_use":
+		if bool(event.get("pending", false)):
+			inventory_status.text = str(event.get("reason", "正在结算消耗品……"))
+			return
+		consumable_busy = false
+		if bool(event.get("accepted", false)):
+			HHSession.world_snapshot["health"] = int(event.get("health", HHSession.world_snapshot.get("health", 0)))
+			HHSession.world_snapshot["max_health"] = int(event.get("max_health", HHSession.world_snapshot.get("max_health", 0)))
+			HHSession.world_snapshot["mana"] = int(event.get("mana", HHSession.world_snapshot.get("mana", 0)))
+			HHSession.world_snapshot["max_mana"] = int(event.get("max_mana", HHSession.world_snapshot.get("max_mana", 0)))
+			_update_vitals(int(HHSession.world_snapshot["health"]), int(HHSession.world_snapshot["max_health"]))
+			if is_instance_valid(mana_label):
+				mana_label.text = "灵力  " + str(int(HHSession.world_snapshot["mana"])) + " / " + str(int(HHSession.world_snapshot["max_mana"]))
+			_update_compact_hud()
+			if bool(event.get("applied", true)):
+				_show_notification("消耗品使用成功：生命 +" + str(int(event.get("health_restored", 0))) + "，灵力 +" + str(int(event.get("mana_restored", 0))))
+				if bool(event.get("healing_threat_generated", false)):
+					_show_notification("治疗吸引了附近 " + str(int(event.get("healing_threat_targets", 0))) + " 只战斗中怪物的注意！", 3.2)
+			else:
+				_show_notification("该请求已结算，角色资源已重新同步。")
+			_refresh_inventory()
+		else:
+			_show_notification(str(event.get("reason", "消耗品使用失败。")), 3.0)
+			_refresh_inventory()
+		return
+	if str(event.get("action", "")) == "spell_mastery":
+		var spell_id := str(event.get("spell_id", ""))
+		if spell_id != "fireball" and spell_id != "ice_bolt":
+			return
+		var entries: Variant = HHSession.world_snapshot.get("spell_mastery", [])
+		if not (entries is Array):
+			entries = []
+		var previous_level := 1
+		var found := false
+		for index in range(entries.size()):
+			var item: Variant = entries[index]
+			if item is Dictionary and str(item.get("spell_id", "")) == spell_id:
+				previous_level = int(item.get("level", 1))
+				entries[index] = {"spell_id": spell_id, "experience": int(event.get("experience", 0)), "level": int(event.get("level", 1))}
+				found = true
+				break
+		if not found:
+			entries.append({"spell_id": spell_id, "experience": int(event.get("experience", 0)), "level": int(event.get("level", 1))})
+		HHSession.world_snapshot["spell_mastery"] = entries
+		_update_spell_mastery_hud()
+		var new_level := int(event.get("level", 1))
+		if new_level > previous_level:
+			_show_notification(_spell_display_name(spell_id) + "熟练度提升至 Lv." + str(new_level) + "！", 3.0)
+		return
+	if str(event.get("action", "")) == "spell_cast":
+		if event.has("mana"):
+			HHSession.world_snapshot["mana"] = int(event.get("mana", 0))
+		if event.has("max_mana"):
+			HHSession.world_snapshot["max_mana"] = int(event.get("max_mana", 0))
+		if is_instance_valid(mana_label):
+			mana_label.text = "灵力  " + str(int(HHSession.world_snapshot.get("mana", 0))) + " / " + str(int(HHSession.world_snapshot.get("max_mana", 0)))
+		_update_compact_hud()
+		var spell_id := str(event.get("spell_id", ""))
+		var spell_name := str(event.get("display_name", _spell_display_name(spell_id)))
+		# Mirror the server: cooldown starts on successful release, not when
+		# the cast begins. An interrupted cast refunds mana and remains ready.
+		if bool(event.get("accepted", false)) and str(event.get("phase", "")) in ["released", "channeling"] and spell_cooldown_remaining.has(spell_id):
+			spell_cooldown_remaining[spell_id] = maxf(float(event.get("cooldown_ms", 0)) / 1000.0, 0.0)
+			_update_spell_cooldown_hud()
+		elif not bool(event.get("accepted", false)) and spell_id in ["taunt", "revive", "life_mend", "guardian_aegis", "purify"] and int(event.get("cooldown_ms", 0)) > 0:
+			# The server returns remaining cooldown on a rejected recast.
+			spell_cooldown_remaining[spell_id] = float(event.get("cooldown_ms", 0)) / 1000.0
+			_update_spell_cooldown_hud()
+		if not bool(event.get("accepted", false)):
+			if spell_id == "revive":
+				_stop_revive_channel_ui()
+			_show_notification(str(event.get("reason", spell_name + "施展失败。")), 3.0)
+		elif str(event.get("phase", "")) == "channeling":
+			_start_revive_channel_ui("正在救援倒地玩家", int(event.get("duration_ms", 5000)))
+			_show_notification("正在施展回魂术：保持原地 5 秒，受到攻击或移动会中断。", 5.0)
+		elif str(event.get("phase", "")) == "casting":
+			_show_notification("正在凝聚" + spell_name + " · 灵力 -" + str(int(event.get("mana_cost", 18))), 1.5)
+		elif str(event.get("phase", "")) == "released":
+			HHAudio.play_combat("spell", 1.0 if spell_id == "fireball" else 0.92)
+			if spell_id == "revive":
+				_stop_revive_channel_ui()
+			elif spell_id == "taunt":
+				_show_ghost_gate_chain_effect(str(event.get("target_entity_id", "")))
+			_show_notification(spell_name + "已释放！", 1.5)
+		elif str(event.get("phase", "")) == "interrupted" and spell_id == "revive":
+			_stop_revive_channel_ui()
+		return
+	# Combat events for nearby players share the same ENet stream. Only
+	# display attack results addressed to this local character.
+	if event.has("attacker_character_id"):
+		var event_attacker_id := str(event.get("attacker_character_id", ""))
+		var local_character_id := str(HHSession.world_snapshot.get("character_id", ""))
+		# Visual-only combat events are intentionally broadcast to nearby
+		# observers; do not discard them merely because another player attacked.
+		if not bool(event.get("visual_only", false)) and not event_attacker_id.is_empty() and not local_character_id.is_empty() and event_attacker_id != local_character_id:
+			return
+	if not bool(event.get("accepted", true)):
+		var rejection_reason := str(event.get("reason", "攻击未命中。"))
+		if rejection_reason not in ["攻击间隔中，请稍后再试。", "距离目标太远。", "战斗记录繁忙，本次攻击未生效，可立即重试。"]:
+			attack_button_held = false
+		if rejection_reason == "攻击间隔中，请稍后再试。":
+			var cooldown_seconds := maxf(float(event.get("cooldown_ms", 0)) / 1000.0, 0.0)
+			attack_repeat_remaining = maxf(cooldown_seconds, 0.15)
+			_show_notification("攻击冷却中 · 还需 %.1f 秒" % cooldown_seconds, 1.8)
+			return
+		var rejection_detail := rejection_reason
+		var persistence_detail := str(event.get("persistence_error", "")).strip_edges()
+		if not persistence_detail.is_empty():
+			rejection_detail += "（服务端持久化诊断：" + persistence_detail + "）"
+		if rejection_reason == "距离目标太远。":
+			var rejected_distance := float(event.get("distance_m", -1.0))
+			var server_attack_range := float(event.get("attack_range_m", HHSession.world_snapshot.get("attack_range", 2.5)))
+			if rejected_distance < 0.0 and monster_targets.has(selected_monster_id) and is_instance_valid(local_player):
+				var rejected_position: Vector3 = monster_targets[selected_monster_id]
+				rejected_distance = _horizontal_distance_to_target(local_player.global_position, rejected_position)
+			rejection_detail = "距离目标太远（当前 %.1f m，武器攻击距离 %.1f m）。靠近后再次点击，按住左键会自动继续攻击。" % [rejected_distance, server_attack_range]
+			if attack_button_held:
+				attack_repeat_remaining = 0.15
+		if is_instance_valid(target_info_label) and not selected_monster_id.is_empty():
+			_update_target_info()
+			target_info_label.text += "\n攻击未成功：" + rejection_detail
+			target_info_panel.visible = hud_visible
+		_show_notification("攻击未成功：" + rejection_detail + "。目标保持锁定。", 4.5)
+		return
+	if bool(event.get("projectile_spawned", false)):
+		_show_notification("箭矢已发射，等待命中……")
+		return
+	if bool(event.get("visual_only", false)):
+		var visual_target_id := str(event.get("target_entity_id", ""))
+		if monsters.has(visual_target_id):
+			var visual_target := monsters[visual_target_id] as Node3D
+			if bool(event.get("burn_applied", false)):
+				visual_target.set_meta("burn_visual_remaining", maxf(float(event.get("burn_duration_ms", 0)) / 1000.0, 0.0))
+				_set_monster_burn_visual(visual_target, true)
+			if str(event.get("status_effect", "")) == "burn":
+				var visual_burn_remaining := maxf(float(event.get("status_duration_ms", 0)) / 1000.0, 0.0)
+				visual_target.set_meta("burn_visual_remaining", visual_burn_remaining)
+				_set_monster_burn_visual(visual_target, visual_burn_remaining > 0.0)
+			if str(event.get("status_effect", "")) == "freeze":
+				_set_monster_freeze_visual(visual_target, true)
+			visual_target.set_meta("hit_reaction_time", 0.24)
+			# Nearby observers receive the same authoritative monster HP as the
+			# attacker. Keep their nameplate and selected-target HUD in sync too.
+			if event.has("health") or event.has("max_health"):
+				var visual_entity: Dictionary = monster_entities.get(visual_target_id, {})
+				if event.has("health"):
+					visual_entity["health"] = int(event.get("health", 0))
+				if event.has("max_health"):
+					visual_entity["max_health"] = int(event.get("max_health", 0))
+				monster_entities[visual_target_id] = visual_entity
+				var visual_plate := visual_target.get_node_or_null("Nameplate") as Label3D
+				if is_instance_valid(visual_plate):
+					var visual_max_health := int(visual_entity.get("max_health", 0))
+					visual_plate.text = str(visual_entity.get("name", event.get("target_name", "怪物"))) + " · Lv." + str(int(visual_entity.get("level", 1)))
+					if visual_max_health > 0:
+						visual_plate.text += "\n生命 " + str(maxi(int(visual_entity.get("health", 0)), 0)) + " / " + str(visual_max_health)
+				if visual_target_id == selected_monster_id:
+					_update_target_info()
+			_play_model_animation_action(visual_target, "hit")
+			_spawn_monster_hit_visual(visual_target, bool(event.get("critical", false)))
+			if bool(event.get("defeated", false)):
+				_begin_monster_death_visual(visual_target)
+		return
+	if str(event.get("source", "")) == "monster":
+		if str(event.get("status_effect", "")) == "slow":
+			_set_player_slow_visual(true)
+			player_slow_visual_remaining = maxf(float(event.get("status_duration_ms", 0)) / 1000.0, 0.0)
+		if str(event.get("status_effect", "")) == "poison":
+			player_poison_visual_remaining = maxf(float(event.get("status_duration_ms", 0)) / 1000.0, 0.0)
+			_set_player_poison_visual(local_player, player_poison_visual_remaining > 0.0)
+		var incoming_damage := int(event.get("damage", 0))
+		var shield_absorbed := int(event.get("shield_absorbed", 0))
+		if incoming_damage > 0 or shield_absorbed > 0:
+			if is_instance_valid(local_player) and local_player.has_method("clear_auto_navigation_target"):
+				local_player.call("clear_auto_navigation_target")
+			minimap_auto_navigation_enabled = false
+			_sync_minimap_auto_navigation_button()
+			_show_notification("遭到怪物攻击，自动导航已中断。", 2.5)
+		combat_damage_taken += maxi(incoming_damage, 0)
+		if incoming_damage > 0 or shield_absorbed > 0:
+			combat_has_started = true
+		_update_combat_summary()
+		var incoming_style := str(event.get("attack_style", ""))
+		if shield_absorbed > 0 and is_instance_valid(local_player) and local_player.has_method("play_shield_absorb"):
+			local_player.call("play_shield_absorb", shield_absorbed, incoming_style)
+		if incoming_damage > 0 and incoming_style != "poison_tick" and is_instance_valid(local_player) and local_player.has_method("play_hit_reaction"):
+			local_player.call("play_hit_reaction", incoming_damage, incoming_style)
+		if incoming_damage > 0:
+			_spawn_combat_number(incoming_damage, true, false)
+		var current_health := int(event.get("health", 0))
+		var max_health := int(event.get("max_health", 0))
+		_update_vitals(current_health, max_health)
+		if bool(event.get("defeated", false)):
+			player_slow_visual_remaining = 0.0
+			_set_player_slow_visual(false)
+			player_poison_visual_remaining = 0.0
+			_set_player_poison_visual(local_player, false)
+			local_player.is_dead = true
+			local_target_position = local_player.position
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+			death_message_label.text = "角色已倒地，无法继续行动。\n受到 " + str(incoming_damage) + " 点伤害，生命 " + str(current_health) + "/" + str(max_health) + "。\n正在安全保存死亡记录，请稍候……"
+			if is_instance_valid(respawn_button):
+				respawn_button.disabled = true
+			death_panel.visible = true
+		else:
+			var hit_message := "受到怪物攻击 -" + str(incoming_damage) + " 生命"
+			if shield_absorbed > 0:
+				if incoming_damage <= 0:
+					hit_message = "护盾成功抵挡攻击"
+				hit_message += " · 护盾吸收 " + str(shield_absorbed)
+			if str(event.get("status_effect", "")) == "slow":
+				hit_message += " · 冰霜减速"
+			elif str(event.get("status_effect", "")) == "poison":
+				hit_message += " · 中毒"
+			elif str(event.get("attack_style", "")) == "poison_tick":
+				hit_message = "毒素持续侵蚀 -" + str(incoming_damage) + " 生命"
+			var resistance_bp := int(event.get("status_resistance_bp", 0))
+			if resistance_bp > 0:
+				hit_message += " · 体质抗性 " + str(int(round(float(resistance_bp) / 100.0))) + "%"
+			_show_notification(hit_message)
+		return
+	var monster_name := str(event.get("target_name", "目标"))
+	var hit_target_id := str(event.get("target_entity_id", ""))
+	if monsters.has(hit_target_id):
+		var hit_monster := monsters[hit_target_id] as Node3D
+		if bool(event.get("burn_applied", false)):
+			hit_monster.set_meta("burn_visual_remaining", maxf(float(event.get("burn_duration_ms", 0)) / 1000.0, 0.0))
+			_set_monster_burn_visual(hit_monster, true)
+		if str(event.get("status_effect", "")) == "burn":
+			var hit_burn_remaining := maxf(float(event.get("status_duration_ms", 0)) / 1000.0, 0.0)
+			hit_monster.set_meta("burn_visual_remaining", hit_burn_remaining)
+			_set_monster_burn_visual(hit_monster, hit_burn_remaining > 0.0)
+		if str(event.get("status_effect", "")) == "freeze":
+			_set_monster_freeze_visual(hit_monster, true)
+		if bool(event.get("defeated", false)):
+			hit_monster.set_meta("burn_visual_remaining", 0.0)
+			_set_monster_burn_visual(hit_monster, false)
+			_set_monster_freeze_visual(hit_monster, false)
+		hit_monster.set_meta("hit_reaction_time", 0.24)
+		_play_model_animation_action(hit_monster, "hit")
+		_spawn_monster_hit_visual(hit_monster, bool(event.get("critical", false)))
+		if bool(event.get("defeated", false)):
+			_begin_monster_death_visual(hit_monster)
+	var damage := int(event.get("damage", 0))
+	combat_damage_dealt += maxi(damage, 0)
+	var damage_source := str(event.get("source", "melee"))
+	if damage_source == "status_effect":
+		combat_effect_damage += maxi(damage, 0)
+	elif damage_source == "projectile" or not str(event.get("projectile_type", "")).is_empty():
+		combat_projectile_damage += maxi(damage, 0)
+	else:
+		combat_melee_damage += maxi(damage, 0)
+	if damage > 0:
+		var source_name := "持续伤害" if damage_source == "status_effect" else ("远程/法术" if damage_source == "projectile" or not str(event.get("projectile_type", "")).is_empty() else "近战")
+		var hit_entry := "%s  %s -%d%s" % [
+			Time.get_time_string_from_system(), source_name, damage,
+			" 暴击" if bool(event.get("critical", false)) else ""
+		]
+		combat_recent_entries.push_front(hit_entry)
+		while combat_recent_entries.size() > 3:
+			combat_recent_entries.pop_back()
+	if damage > 0:
+		combat_has_started = true
+	combat_highest_hit = maxi(combat_highest_hit, damage)
+	if bool(event.get("critical", false)) and damage > 0:
+		combat_critical_hits += 1
+	if bool(event.get("defeated", false)):
+		combat_kills += 1
+	_update_combat_summary()
+	# CombatEvent health belongs to its target, not necessarily the currently
+	# selected target. Never let an off-target hit corrupt the target HUD.
+	var health_target_id := str(event.get("target_entity_id", ""))
+	# Keep the authoritative health cache current for every monster, not only
+	# the currently selected one. Switching targets must never reveal stale HP.
+	if not health_target_id.is_empty() and (event.has("health") or event.has("remaining_health")):
+		# Combat events are authoritative even if a snapshot briefly omitted the
+		# monster from the presentation cache; never discard the HP transition.
+		var health_entity: Dictionary = monster_entities.get(health_target_id, {})
+		health_entity["name"] = str(health_entity.get("name", monster_name))
+		health_entity["health"] = int(event.get("health", event.get("remaining_health", 0)))
+		if event.has("max_health"):
+			health_entity["max_health"] = int(event.get("max_health", 0))
+		monster_entities[health_target_id] = health_entity
+		# Update the overhead nameplate from the same authoritative combat
+		# event so its HP text does not wait for the next world snapshot.
+		var health_monster := monsters.get(health_target_id) as Node3D
+		if is_instance_valid(health_monster):
+			var health_nameplate := health_monster.get_node_or_null("Nameplate") as Label3D
+			if is_instance_valid(health_nameplate):
+				var plate_text := str(health_entity.get("name", "怪物")) + " · Lv." + str(int(health_entity.get("level", 1)))
+				var plate_max_health := int(health_entity.get("max_health", 0))
+				if plate_max_health > 0:
+					plate_text += "\n生命 " + str(maxi(int(health_entity.get("health", 0)), 0)) + " / " + str(plate_max_health)
+				if str(party_data.get("focus_target_entity_id", "")) == health_target_id:
+					plate_text += "\n⚑ 队伍集火目标"
+				health_nameplate.text = plate_text
+		if health_target_id == selected_monster_id:
+			_update_target_info()
+	_spawn_combat_number(damage, false, bool(event.get("critical", false)), health_target_id)
+	if bool(event.get("defeated", false)):
+		if str(event.get("target_entity_id", "")) == selected_monster_id:
+			_clear_monster_target()
+		var defeat_message := monster_name + " 已被击败！本次造成 " + str(damage) + " 点伤害"
+		if bool(event.get("settlement_pending", false)):
+			defeat_message += " · 奖励正在安全结算"
+		else:
+			var experience := int(event.get("experience_reward", 0))
+			var cultivation := int(event.get("cultivation_reward", 0))
+			defeat_message += " · 经验 +" + str(experience) + " · 修为 +" + str(cultivation)
+		if str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu":
+			defeat_message += " · 魂魄正在归入魂光"
+		_show_notification(defeat_message, 4.5)
+		if not bool(event.get("settlement_pending", false)):
+			_refresh_reward_status_later()
+	else:
+		var projectile_type := str(event.get("projectile_type", ""))
+		var hit_prefix := "幽冥磷火命中 " if projectile_type == "nether_phosphor" else ("镇邪符命中 " if projectile_type == "suppressing_talisman" else "命中 ")
+		var hit_suffix := " · 目标被冻结" if str(event.get("status_effect", "")) == "freeze" else (" · 目标减速" if str(event.get("status_effect", "")) == "slow" else "")
+		_show_notification(hit_prefix + monster_name + " · 造成 " + str(damage) + " 点伤害" + hit_suffix)
+
+
+func _spawn_monster_hit_visual(monster: Node3D, critical: bool) -> void:
+	if not is_instance_valid(monster):
+		return
+	var archetype := str(monster.get_meta("visual_archetype", ""))
+	var tint := Color("#ffdf9a")
+	if archetype == "frost_soul":
+		tint = Color("#9ceaff")
+	elif archetype == "fire_soul":
+		tint = Color("#ff9b55")
+	elif archetype == "life_soul":
+		tint = Color("#a7ffc0")
+	elif archetype == "wind_soul":
+		tint = Color("#9affed")
+	var flash := MeshInstance3D.new()
+	flash.name = "MonsterHitFlash"
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.20 if critical else 0.14
+	mesh.height = mesh.radius * 2.0
+	mesh.radial_segments = 16
+	mesh.rings = 8
+	flash.mesh = mesh
+	var material := StandardMaterial3D.new()
+	material.albedo_color = tint
+	material.emission_enabled = true
+	material.emission = tint
+	material.emission_energy_multiplier = 2.8 if critical else 1.8
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	flash.material_override = material
+	add_child(flash)
+	flash.global_position = monster.global_position + Vector3(0.0, 1.0, 0.0)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(flash, "scale", Vector3.ONE * (2.8 if critical else 2.0), 0.26)
+	tween.tween_property(material, "albedo_color:a", 0.0, 0.26)
+	tween.tween_property(material, "emission_energy_multiplier", 0.0, 0.26)
+	tween.chain().tween_callback(Callable(flash, "queue_free"))
+
+	# A ground-plane shock ring makes a successful melee hit readable even
+	# when the monster model has no detailed hit animation or collision mesh.
+	var impact_ring := MeshInstance3D.new()
+	impact_ring.name = "MonsterImpactRing"
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.13
+	ring_mesh.outer_radius = 0.20
+	ring_mesh.rings = 8
+	ring_mesh.ring_segments = 18
+	impact_ring.mesh = ring_mesh
+	var ring_material := StandardMaterial3D.new()
+	ring_material.albedo_color = tint
+	ring_material.emission_enabled = true
+	ring_material.emission = tint
+	ring_material.emission_energy_multiplier = 2.4 if critical else 1.5
+	ring_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	ring_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	impact_ring.material_override = ring_material
+	add_child(impact_ring)
+	impact_ring.global_position = monster.global_position + Vector3.UP * 0.12
+	var ring_tween := create_tween()
+	ring_tween.set_parallel(true)
+	ring_tween.tween_property(impact_ring, "scale", Vector3.ONE * (3.4 if critical else 2.6), 0.30)
+	ring_tween.tween_property(ring_material, "albedo_color:a", 0.0, 0.30)
+	ring_tween.tween_property(ring_material, "emission_energy_multiplier", 0.0, 0.30)
+	ring_tween.chain().tween_callback(Callable(impact_ring, "queue_free"))
+
+func _spawn_combat_number(amount: int, incoming: bool, critical: bool, target_entity_id: String = "") -> void:
+	if amount <= 0:
+		return
+	var origin := Vector3.ZERO
+	if incoming and is_instance_valid(local_player):
+		origin = local_player.global_position + Vector3(0.0, 1.8, 0.0)
+	elif not target_entity_id.is_empty() and monsters.has(target_entity_id):
+		var hit_target := monsters[target_entity_id] as Node3D
+		if is_instance_valid(hit_target):
+			origin = hit_target.global_position + Vector3(0.0, 2.0, 0.0)
+	elif is_instance_valid(local_player):
+		# Fallback only for legacy combat events that do not identify a target.
+		origin = local_player.global_position + Vector3(0.0, 1.8, 0.0)
+	# Bound transient nodes during large pulls and rapid multi-hit combat.
+	while floating_combat_labels.size() >= 24:
+		var oldest_id := ""
+		var oldest_lifetime := INF
+		for existing_id in floating_combat_lifetimes:
+			var remaining := float(floating_combat_lifetimes[existing_id])
+			if remaining < oldest_lifetime:
+				oldest_lifetime = remaining
+				oldest_id = str(existing_id)
+		if oldest_id.is_empty():
+			break
+		var oldest_label := floating_combat_labels.get(oldest_id) as Label3D
+		if is_instance_valid(oldest_label):
+			oldest_label.queue_free()
+		floating_combat_labels.erase(oldest_id)
+		floating_combat_lifetimes.erase(oldest_id)
+	var label := Label3D.new()
+	label.name = "CombatDamageNumber"
+	label.text = ("受击 " if incoming else ("暴击 " if critical else "")) + str(amount)
+	label.font_size = 42 if critical else 32
+	label.outline_size = 8
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.modulate = Color("#ff6262") if incoming else (Color("#ffe08a") if critical else Color("#fff1d0"))
+	label.pixel_size = 0.01
+	add_child(label)
+	label.global_position = origin
+	var label_id := str(label.get_instance_id())
+	floating_combat_labels[label_id] = label
+	floating_combat_lifetimes[label_id] = 1.0 if critical else 0.82
+
+func _update_floating_combat_labels(delta: float) -> void:
+	for label_id in floating_combat_labels.keys():
+		var label := floating_combat_labels[label_id] as Label3D
+		if not is_instance_valid(label):
+			floating_combat_labels.erase(label_id)
+			floating_combat_lifetimes.erase(label_id)
+			continue
+		var lifetime := float(floating_combat_lifetimes.get(label_id, 0.0)) - delta
+		floating_combat_lifetimes[label_id] = lifetime
+		label.position.y += delta * (1.15 if lifetime > 0.35 else 0.55)
+		var fade := clampf(lifetime / 0.35, 0.0, 1.0)
+		var tint := label.modulate
+		tint.a = fade
+		label.modulate = tint
+		if lifetime <= 0.0:
+			label.queue_free()
+			floating_combat_labels.erase(label_id)
+			floating_combat_lifetimes.erase(label_id)
+
+func _request_wallet() -> void:
+	if wallet_http == null or HHSession.access_token.is_empty():
+		return
+	if wallet_request_busy:
+		wallet_refresh_pending = true
+		return
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token])
+	var error := wallet_http.request(HHSession.api_base + "/api/v1/economy/wallet", headers, HTTPClient.METHOD_GET)
+	if error == OK:
+		wallet_request_busy = true
+	else:
+		push_warning("[Wallet] 钱包请求未发送，错误码：" + str(error))
+
+
+func _on_wallet_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	wallet_request_busy = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		if is_instance_valid(wallet_label):
+			wallet_label.text = "钱袋  余额同步中……"
+		if wallet_refresh_pending:
+			wallet_refresh_pending = false
+			_request_wallet()
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if not (parsed is Dictionary):
+		push_warning("[Wallet] 钱包响应格式异常")
+		if wallet_refresh_pending:
+			wallet_refresh_pending = false
+			_request_wallet()
+		return
+	var balances_variant: Variant = parsed.get("balances", [])
+	if not (balances_variant is Array):
+		push_warning("[Wallet] 钱包余额列表格式异常")
+		if wallet_refresh_pending:
+			wallet_refresh_pending = false
+			_request_wallet()
+		return
+	var ghost_cash := 0
+	var nether_stone := 0
+	for entry_variant in balances_variant:
+		if not entry_variant is Dictionary:
+			continue
+		var entry: Dictionary = entry_variant
+		var currency_variant: Variant = entry.get("currency", {})
+		if not currency_variant is Dictionary:
+			continue
+		var currency: Dictionary = currency_variant
+		match str(currency.get("id", "")):
+			"ghost_cash":
+				ghost_cash = int(entry.get("available", 0))
+			"nether_stone":
+				nether_stone = int(entry.get("available", 0))
+	if is_instance_valid(wallet_label):
+		wallet_label.text = "钱袋  冥币 %s  ·  冥石 %s" % [str(ghost_cash), str(nether_stone)]
+	if wallet_refresh_pending:
+		wallet_refresh_pending = false
+		_request_wallet()
+
+
+func _refresh_reward_status_later() -> void:
+	await get_tree().create_timer(2.0).timeout
+	_request_wallet()
+	if str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu":
+		_request_soul_essence()
+	if progression_request_context.is_empty():
+		_refresh_character_status()
+
+func _on_player_action_event(event: Dictionary) -> void:
+	var character_id := str(event.get("character_id", ""))
+	if character_id.is_empty() or not remote_players.has(character_id):
+		return
+	var action := str(event.get("action", ""))
+	if action not in ["attack", "hit", "cast"]:
+		return
+	var remote := remote_players[character_id] as Node3D
+	if not is_instance_valid(remote):
+		return
+	if action == "hit":
+		_spawn_remote_player_hit_visual(remote, str(event.get("attack_style", "")))
+	# Hit reactions outrank attacks. Lower-priority events cannot replace an active hit.
+	var incoming_priority := 2 if action == "hit" else 1
+	var current_time := float(remote.get_meta("remote_action_time", 0.0))
+	var current_priority := int(remote.get_meta("remote_action_priority", 0))
+	if current_time > 0.0 and current_priority > incoming_priority:
+		return
+	var duration := 0.42 if action == "cast" else (0.36 if action == "attack" else 0.32)
+	if action == "hit":
+		match str(event.get("attack_style", "")):
+			"heavy_slam":
+				duration = 0.48
+			"frost_bolt":
+				duration = 0.27
+			"poison_bolt":
+				duration = 0.30
+			"soul_bolt":
+				duration = 0.36
+			"melee":
+				duration = 0.34
+	var resolved_duration := duration
+	if current_priority == incoming_priority:
+		resolved_duration = maxf(float(remote.get_meta("remote_action_duration", duration)), duration)
+	remote.set_meta("remote_action_state", action)
+	remote.set_meta("remote_action_priority", incoming_priority)
+	remote.set_meta("remote_action_time", maxf(current_time, resolved_duration) if current_priority == incoming_priority else resolved_duration)
+	remote.set_meta("remote_action_duration", resolved_duration)
+	remote.set_meta("remote_action_style", str(event.get("attack_style", "")))
+
+func _combat_hit_flash_color(attack_style: String) -> Color:
+	match attack_style:
+		"heavy_slam":
+			return Color("#ff985e")
+		"poison_bolt", "poison_tick":
+			return Color("#8cff72")
+		"frost_bolt":
+			return Color("#75e7ff")
+		"soul_bolt":
+			return Color("#d39aff")
+		_:
+			return Color("#d9f2ff")
+
+
+func _apply_remote_hit_flash_recursive(node: Node, material: StandardMaterial3D) -> void:
+	if node is GeometryInstance3D:
+		(node as GeometryInstance3D).material_overlay = material
+	for child in node.get_children():
+		_apply_remote_hit_flash_recursive(child, material)
+
+
+func _clear_remote_hit_flash_recursive(node: Node, material: StandardMaterial3D) -> void:
+	if node is GeometryInstance3D:
+		var geometry := node as GeometryInstance3D
+		if geometry.material_overlay == material:
+			geometry.material_overlay = null
+	for child in node.get_children():
+		_clear_remote_hit_flash_recursive(child, material)
+
+
+func _clear_remote_hit_flash(remote: Node3D, material: StandardMaterial3D) -> void:
+	if is_instance_valid(remote):
+		_clear_remote_hit_flash_recursive(remote, material)
+
+
+func _apply_remote_hit_flash(remote: Node3D, tint: Color) -> void:
+	var previous: StandardMaterial3D = null
+	if remote.has_meta("hit_flash_material"):
+		previous = remote.get_meta("hit_flash_material") as StandardMaterial3D
+	if is_instance_valid(previous):
+		_clear_remote_hit_flash_recursive(remote, previous)
+	var flash := StandardMaterial3D.new()
+	flash.albedo_color = Color(tint.r, tint.g, tint.b, 0.58)
+	flash.emission_enabled = true
+	flash.emission = tint
+	flash.emission_energy_multiplier = 1.5
+	flash.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	flash.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	remote.set_meta("hit_flash_material", flash)
+	_apply_remote_hit_flash_recursive(remote, flash)
+	var tween := create_tween()
+	tween.tween_property(flash, "albedo_color:a", 0.0, 0.22)
+	tween.parallel().tween_property(flash, "emission_energy_multiplier", 0.0, 0.22)
+	tween.tween_callback(Callable(self, "_clear_remote_hit_flash").bind(remote, flash))
+
+
+func _spawn_remote_player_hit_visual(remote: Node3D, attack_style: String) -> void:
+	if not is_instance_valid(remote):
+		return
+	var previous := remote.get_node_or_null("RemoteHitReactionRing")
+	if is_instance_valid(previous):
+		previous.queue_free()
+	var ring := MeshInstance3D.new()
+	ring.name = "RemoteHitReactionRing"
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.42
+	ring_mesh.outer_radius = 0.52
+	ring_mesh.rings = 24
+	ring_mesh.ring_segments = 8
+	ring.mesh = ring_mesh
+	ring.position.y = 0.06
+	ring.rotation.x = PI / 2.0
+	var tint := _combat_hit_flash_color(attack_style)
+	_apply_remote_hit_flash(remote, tint)
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(tint.r, tint.g, tint.b, 0.82)
+	material.emission_enabled = true
+	material.emission = tint
+	material.emission_energy_multiplier = 1.8
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring.material_override = material
+	remote.add_child(ring)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(ring, "scale", Vector3.ONE * 1.9, 0.34)
+	tween.tween_property(material, "albedo_color:a", 0.0, 0.34)
+	tween.tween_property(material, "emission_energy_multiplier", 0.0, 0.34)
+	tween.chain().tween_callback(Callable(ring, "queue_free"))
+
+
+func _on_player_joined(player: Dictionary) -> void:
+	_upsert_remote_player(player)
+
+func _on_player_left(character_id: String) -> void:
+	if not remote_players.has(character_id):
+		return
+	remote_players[character_id].queue_free()
+	remote_players.erase(character_id)
+	remote_targets.erase(character_id)
+	remote_yaws.erase(character_id)
+
+func _create_remote_player(character_name: String) -> Node3D:
+	var remote := Node3D.new()
+	var is_underworld := str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu"
+	if is_underworld:
+		var body := MeshInstance3D.new()
+		body.name = "RemoteBody"
+		var orb := SphereMesh.new()
+		orb.radius = 0.34
+		orb.height = 0.68
+		body.mesh = orb
+		var spirit_material := StandardMaterial3D.new()
+		spirit_material.albedo_color = Color(0.36, 0.72, 1.0, 0.72)
+		spirit_material.emission_enabled = true
+		spirit_material.emission = Color(0.12, 0.48, 1.0)
+		spirit_material.emission_energy_multiplier = 1.8
+		spirit_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		spirit_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		body.material_override = spirit_material
+		body.position.y = 0.42
+		remote.add_child(body)
+		var halo := MeshInstance3D.new()
+		halo.name = "RemoteHalo"
+		var torus := TorusMesh.new()
+		torus.inner_radius = 0.42
+		torus.outer_radius = 0.47
+		halo.mesh = torus
+		var halo_material := StandardMaterial3D.new()
+		halo_material.albedo_color = Color(0.2, 0.62, 1.0, 0.45)
+		halo_material.emission_enabled = true
+		halo_material.emission = Color(0.08, 0.4, 1.0)
+		halo_material.emission_energy_multiplier = 1.2
+		halo_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		halo_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		halo.material_override = halo_material
+		halo.position.y = 0.42
+		remote.add_child(halo)
+	else:
+		var humanoid := VisualModelLibrary.instantiate_model(
+			"player_humanoid",
+			func() -> Node3D: return UnderworldVisualFactory.create_player_humanoid()
+		)
+		humanoid.name = "RemoteHumanoid"
+		remote.add_child(humanoid)
+	remote.set_meta("is_underworld", is_underworld)
+	remote.set_meta("remote_animation_time", 0.0)
+	var label := Label3D.new()
+	label.text = character_name
+	label.position.y = 1.15 if is_underworld else 2.25
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	remote.add_child(label)
+	add_child(remote)
+	return remote
+
+func _build_input_debug_hud() -> void:
+	var hud := get_node_or_null("HUD") as CanvasLayer
+	if hud == null:
+		return
+	input_debug_panel = PanelContainer.new()
+	# Keep diagnostics in the open center-left area. The previous bottom-right
+	# position overlapped the exploration prompt and chat drawer, hiding key state.
+	input_debug_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	input_debug_panel.position = Vector2(18.0, 224.0)
+	input_debug_panel.custom_minimum_size = Vector2(300.0, 116.0)
+	input_debug_panel.visible = false
+	hud.add_child(input_debug_panel)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 4)
+	input_debug_panel.add_child(layout)
+	var title := Label.new()
+	title.text = "键盘 / 移动诊断"
+	title.add_theme_font_size_override("font_size", 15)
+	layout.add_child(title)
+	input_debug_label = Label.new()
+	input_debug_label.text = "W A S D\n网络：检测中"
+	input_debug_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	layout.add_child(input_debug_label)
+
+func _update_input_debug_hud() -> void:
+	if not is_instance_valid(input_debug_label) or not is_instance_valid(local_player):
+		return
+	var keys := ""
+	keys += "[W]" if local_player.is_move_key_pressed("forward") else " W "
+	keys += " "
+	keys += "[A]" if local_player.is_move_key_pressed("left") else " A "
+	keys += " "
+	keys += "[S]" if local_player.is_move_key_pressed("back") else " S "
+	keys += " "
+	keys += "[D]" if local_player.is_move_key_pressed("right") else " D "
+	var network_text := "已就绪" if local_player.movement_network_ready else "未就绪"
+	var move_input: Vector2 = local_player.current_move_input
+	var movement_text := "有输入" if move_input.length_squared() > 0.001 else "无输入"
+	var send_text := "发送调用成功" if local_player.last_send_error == OK else "发送错误码 " + str(local_player.last_send_error)
+	var player_position: Vector3 = local_player.global_position
+	input_debug_label.text = "按键：" + keys + "\n输入：" + movement_text + " (" + ("%.1f" % move_input.x) + ", " + ("%.1f" % move_input.y) + ")\n世界网络：" + network_text + " · " + send_text + "\n客户端坐标：" + ("%.1f, %.1f, %.1f" % [player_position.x, player_position.y, player_position.z])
+
+func _process(delta: float) -> void:
+	if combat_has_started:
+		combat_elapsed_seconds += delta
+		combat_summary_refresh_remaining -= delta
+		if combat_summary_refresh_remaining <= 0.0:
+			combat_summary_refresh_remaining = 1.0
+			_update_combat_summary()
+	_process_held_monster_attack(delta)
+	if is_instance_valid(combat_reticle):
+		combat_reticle.visible = Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and hud_visible
+	if is_instance_valid(terrain_chunk_streamer) and is_instance_valid(local_player):
+		terrain_chunk_streamer.call("update_streaming", local_player.global_position)
+	if shield_remaining > 0.0:
+		shield_remaining = maxf(0.0, shield_remaining - delta)
+		if is_instance_valid(shield_status_label):
+			shield_status_label.text = "护盾 " + str(shield_amount) + " · " + ("%.1f" % shield_remaining) + " 秒"
+	elif is_instance_valid(shield_status_label):
+		shield_status_label.text = ""
+	if revive_channel_remaining > 0.0:
+		revive_channel_remaining = maxf(0.0, revive_channel_remaining - delta)
+		if is_instance_valid(revive_channel_bar):
+			revive_channel_bar.value = 1.0 - revive_channel_remaining / maxf(revive_channel_total, 0.1)
+		if revive_channel_remaining <= 0.0 and is_instance_valid(revive_channel_panel):
+			revive_channel_panel.visible = false
+	minimap_refresh_accumulator += delta
+	if minimap_refresh_accumulator >= 0.2:
+		minimap_refresh_accumulator = 0.0
+		_update_minimap_data()
+	var cooldown_changed := false
+	for spell_id in spell_cooldown_remaining.keys():
+		var remaining := maxf(float(spell_cooldown_remaining[spell_id]) - delta, 0.0)
+		if not is_equal_approx(remaining, float(spell_cooldown_remaining[spell_id])):
+			spell_cooldown_remaining[spell_id] = remaining
+			cooldown_changed = true
+	if cooldown_changed:
+		_update_spell_cooldown_hud()
+	for monster_value in monsters.values():
+		var burning_monster := monster_value as Node3D
+		if not is_instance_valid(burning_monster):
+			continue
+		var burn_remaining := float(burning_monster.get_meta("burn_visual_remaining", 0.0))
+		if burn_remaining > 0.0:
+			burn_remaining = maxf(0.0, burn_remaining - delta)
+			burning_monster.set_meta("burn_visual_remaining", burn_remaining)
+			if burn_remaining <= 0.0:
+				_set_monster_burn_visual(burning_monster, false)
+	if player_slow_visual_remaining > 0.0:
+		player_slow_visual_remaining = maxf(0.0, player_slow_visual_remaining - delta)
+		if player_slow_visual_remaining <= 0.0:
+			_set_player_slow_visual(false)
+	if player_poison_visual_remaining > 0.0:
+		player_poison_visual_remaining = maxf(0.0, player_poison_visual_remaining - delta)
+		if player_poison_visual_remaining <= 0.0:
+			_set_player_poison_visual(local_player, false)
+	for projectile_id in projectile_targets:
+		var arrow := projectiles.get(projectile_id) as Node3D
+		if is_instance_valid(arrow):
+			var arrow_target: Vector3 = projectile_targets[projectile_id]
+			arrow.position = arrow.position.lerp(arrow_target, minf(delta * 30.0, 1.0))
+	if is_instance_valid(local_player):
+		local_player.position = local_player.position.lerp(local_target_position, minf(delta * 14.0, 1.0))
+	for character_id in remote_players:
+		var remote: Node3D = remote_players[character_id]
+		var target: Vector3 = remote_targets.get(character_id, remote.position)
+		var remote_moving := remote.position.distance_to(target) > 0.035
+		remote.position = remote.position.lerp(target, minf(delta * 14.0, 1.0))
+		var target_yaw := float(remote_yaws.get(character_id, remote.rotation.y))
+		remote.rotation.y = lerp_angle(remote.rotation.y, target_yaw, minf(delta * 12.0, 1.0))
+		var remote_time := float(remote.get_meta("remote_animation_time", 0.0)) + delta
+		remote.set_meta("remote_animation_time", remote_time)
+		var action_time := maxf(float(remote.get_meta("remote_action_time", 0.0)) - delta, 0.0)
+		remote.set_meta("remote_action_time", action_time)
+		var action_state := str(remote.get_meta("remote_action_state", ""))
+		if action_time <= 0.0:
+			action_state = ""
+			remote.set_meta("remote_action_state", "")
+			remote.set_meta("remote_action_priority", 0)
+			remote.set_meta("remote_action_style", "")
+		var remote_animation_state := action_state if action_state != "" else ("walk" if remote_moving else "idle")
+		var action_duration := maxf(float(remote.get_meta("remote_action_duration", 0.36)), 0.01)
+		var action_weight := sin(clampf(1.0 - action_time / action_duration, 0.0, 1.0) * PI) if action_state != "" else 0.0
+		var bob := sin(remote_time * (9.0 if remote_moving else 1.8)) * (0.035 if remote_moving else 0.012)
+		if bool(remote.get_meta("is_underworld", false)):
+			var remote_body := remote.get_node_or_null("RemoteBody") as MeshInstance3D
+			if is_instance_valid(remote_body):
+				remote_body.position.y = 0.42 + bob
+				remote_body.scale = Vector3.ONE * (1.0 + action_weight * (0.30 if action_state == "attack" else (0.30 if str(remote.get_meta("remote_action_style", "")) == "heavy_slam" else 0.16)))
+		else:
+			var remote_humanoid := remote.get_node_or_null("RemoteHumanoid") as Node3D
+			if is_instance_valid(remote_humanoid):
+				remote_humanoid.position.y = bob
+				var native_animation := HumanoidAnimationDriver.apply_state(remote_humanoid, remote_animation_state, 0.16, str(remote.get_meta("remote_action_style", "")))
+				if not native_animation:
+					var remote_stride := sin(remote_time * (9.0 if remote_moving else 1.8)) * (0.38 if remote_moving else 0.012)
+					var remote_left_arm := remote_humanoid.get_node_or_null("ArmPivotLeft") as Node3D
+					var remote_right_arm := remote_humanoid.get_node_or_null("ArmPivotRight") as Node3D
+					var remote_left_leg := remote_humanoid.get_node_or_null("LegPivotLeft") as Node3D
+					var remote_right_leg := remote_humanoid.get_node_or_null("LegPivotRight") as Node3D
+					var remote_style := str(remote.get_meta("remote_action_style", ""))
+					var remote_hit_recoil := 0.34
+					match remote_style:
+						"heavy_slam":
+							remote_hit_recoil = 0.54
+						"frost_bolt":
+							remote_hit_recoil = 0.22
+						"poison_bolt":
+							remote_hit_recoil = 0.28
+						"soul_bolt":
+							remote_hit_recoil = 0.40
+					var remote_left_lift := 0.20
+					var remote_right_lift := 1.18
+					var remote_sweep := 0.28
+					match remote_style:
+						"spear_thrust":
+							remote_left_lift = 0.38
+							remote_right_lift = 0.92
+							remote_sweep = 0.04
+						"staff_cast":
+							remote_left_lift = 0.72
+							remote_right_lift = 0.82
+							remote_sweep = -0.12
+						"ranged_shot":
+							remote_left_lift = 0.58
+							remote_right_lift = 1.02
+							remote_sweep = -0.08
+						"heavy_swing":
+							remote_left_lift = 0.12
+							remote_right_lift = 1.42
+							remote_sweep = 0.62
+					if is_instance_valid(remote_left_arm):
+						remote_left_arm.rotation.x = remote_stride - action_weight * (remote_left_lift if action_state == "attack" else -remote_hit_recoil)
+					if is_instance_valid(remote_right_arm):
+						remote_right_arm.rotation.x = -remote_stride - action_weight * (remote_right_lift if action_state == "attack" else -remote_hit_recoil * 1.4)
+						remote_right_arm.rotation.z = -action_weight * remote_sweep if action_state == "attack" else action_weight * 0.16
+					if is_instance_valid(remote_left_leg):
+						remote_left_leg.rotation.x = -remote_stride * 0.82
+					if is_instance_valid(remote_right_leg):
+						remote_right_leg.rotation.x = remote_stride * 0.82
+		var remote_halo := remote.get_node_or_null("RemoteHalo") as MeshInstance3D
+		if is_instance_valid(remote_halo):
+			remote_halo.rotation.y += delta * (1.05 if remote_moving else 0.34)
+			remote_halo.scale = Vector3.ONE * (1.0 + action_weight * 0.24)
+	for monster_id in monsters:
+		var monster: Node3D = monsters[monster_id]
+		var target: Vector3 = monster_targets.get(monster_id, monster.position)
+		monster.position = monster.position.lerp(target, minf(delta * 10.0, 1.0))
+		var target_yaw := float(monster.get_meta("target_yaw", monster.rotation.y))
+		monster.rotation.y = lerp_angle(monster.rotation.y, target_yaw, minf(delta * 9.0, 1.0))
+	_animate_monster_visuals(delta)
+	for drop_id in drops:
+		var drop: Node3D = drops[drop_id]
+		var target: Vector3 = drop_targets.get(drop_id, drop.position)
+		drop.position = drop.position.lerp(target, minf(delta * 12.0, 1.0))
+	_update_floating_combat_labels(delta)
+	_animate_npc_visuals(delta)
+	_update_nearest_npc_prompt()
+	_update_exploration_proximity()
+	_animate_exploration_markers(delta)
+	region_update_accumulator += delta
+	if region_update_accumulator >= 0.2:
+		region_update_accumulator = 0.0
+		_refresh_current_region(true)
+	input_debug_accumulator += delta
+	if input_debug_accumulator >= 0.05:
+		input_debug_accumulator = 0.0
+		_update_input_debug_hud()
+
+
+func _animate_monster_visuals(delta: float) -> void:
+	monster_animation_time += delta
+	for monster_id in monsters.keys():
+		var monster := monsters[monster_id] as Node3D
+		if not is_instance_valid(monster):
+			continue
+		var archetype := str(monster.get_meta("visual_archetype", ""))
+		var target: Vector3 = monster_targets.get(monster_id, monster.position)
+		var moving := monster.position.distance_to(target) > 0.055
+		var phase := monster_animation_time * (8.5 if moving else 1.7) + float(abs(hash(str(monster_id))) % 100) * 0.031
+		var stride := sin(phase)
+		var hit_time := maxf(float(monster.get_meta("hit_reaction_time", 0.0)) - delta, 0.0)
+		var attack_phase := str(monster.get_meta("attack_phase", ""))
+		var attack_phase_time := maxf(float(monster.get_meta("attack_phase_time", 0.0)) - delta, 0.0)
+		var attack_phase_duration := maxf(float(monster.get_meta("attack_phase_duration", 0.2)), 0.1)
+		monster.set_meta("attack_phase_time", attack_phase_time)
+		if attack_phase_time <= 0.0:
+			if attack_phase == "windup":
+				if str(monster.get_meta("attack_style", "")) == "heavy_slam":
+					_set_iron_slam_telegraph(monster, false)
+				elif str(monster.get_meta("attack_style", "")) in ["soul_bolt", "frost_bolt", "poison_bolt"]:
+					_set_elemental_telegraph(monster, false, str(monster.get_meta("attack_style", "")))
+			if attack_phase == "impact":
+				attack_phase = "recovery"
+				attack_phase_time = maxf(float(monster.get_meta("attack_recovery_duration", 0.42)), 0.1)
+				attack_phase_duration = attack_phase_time
+				monster.set_meta("attack_phase_time", attack_phase_time)
+				monster.set_meta("attack_phase_duration", attack_phase_duration)
+			elif attack_phase != "":
+				attack_phase = ""
+			monster.set_meta("attack_phase", attack_phase)
+		var death_time := maxf(float(monster.get_meta("death_reaction_time", 0.0)) - delta, 0.0)
+		monster.set_meta("hit_reaction_time", hit_time)
+		monster.set_meta("death_reaction_time", death_time)
+		var animation_state := "death" if death_time > 0.0 else ("hit" if hit_time > 0.0 else ("attack" if attack_phase != "" else ("move" if moving else "idle")))
+		var defeated := bool(monster.get_meta("defeated_visual", false)) or bool(monster.get_meta("pending_corpse_cleanup", false))
+		if defeated:
+			animation_state = "death"
+		monster.set_meta("animation_state", animation_state)
+		var native_animation := MonsterAnimationDriver.apply_state(monster, animation_state)
+		monster.set_meta("native_animation_active", native_animation)
+		if not native_animation:
+			match archetype:
+				"wolf":
+					_animate_wolf_monster(monster, stride, moving, phase)
+				"iron_beast":
+					_animate_iron_beast(monster, stride, moving, phase)
+				"warrior":
+					_animate_warrior_monster(monster, stride, moving, phase, animation_state)
+				"life_soul", "wind_soul", "fire_soul", "frost_soul", "wraith":
+					_animate_soul_monster(monster, delta, phase, moving, archetype)
+			if attack_phase != "" and death_time <= 0.0:
+				var attack_progress := 1.0 - attack_phase_time / attack_phase_duration
+				_animate_monster_attack(monster, archetype, attack_phase, clampf(attack_progress, 0.0, 1.0))
+			var body := monster.get_node_or_null("Torso") as Node3D
+			if not is_instance_valid(body):
+				body = monster.get_node_or_null("IronCore") as Node3D
+			if is_instance_valid(body):
+				if hit_time > 0.0:
+					var hit_weight := sin((0.24 - hit_time) / 0.24 * PI)
+					body.position.x = hit_weight * 0.10
+				else:
+					body.position.x = move_toward(body.position.x, 0.0, delta * 0.8)
+		var base_scale: Vector3 = monster.get_meta("base_visual_scale", Vector3.ONE)
+		var is_soul_monster := archetype in ["life_soul", "wind_soul", "fire_soul", "frost_soul", "wraith"]
+		if death_time > 0.0:
+			var death_weight := 1.0 - death_time / 1.15
+			if is_soul_monster:
+				# Soul creatures dissolve upward instead of falling like physical beasts.
+				monster.rotation.z = 0.0
+				monster.rotation.y += delta * (0.7 + death_weight * 1.8)
+				monster.position.y = lerpf(monster.position.y, target.y + death_weight * 0.9, minf(delta * 5.0, 1.0))
+				monster.scale = base_scale * maxf(0.035, 1.0 - death_weight * 0.965)
+			else:
+				monster.rotation.z = death_weight * 0.42
+				monster.scale = base_scale * maxf(0.08, 1.0 - death_weight * 0.72)
+			_apply_monster_death_fade(monster, death_weight)
+		else:
+			monster.rotation.z = move_toward(monster.rotation.z, 0.0, delta * 2.0)
+			var hit_weight := sin(clampf((0.24 - hit_time) / 0.24, 0.0, 1.0) * PI) if hit_time > 0.0 else 0.0
+			var hit_scale := base_scale * Vector3(1.0 + hit_weight * 0.10, 1.0 - hit_weight * 0.10, 1.0 + hit_weight * 0.10)
+			monster.scale = monster.scale.lerp(hit_scale, minf(delta * 14.0, 1.0))
+			if bool(monster.get_meta("pending_corpse_cleanup", false)):
+				_clear_incoming_attack_source_for_monster(str(monster_id), monster)
+				monsters.erase(monster_id)
+				monster.queue_free()
+			elif bool(monster.get_meta("defeated_visual", false)):
+				if is_soul_monster:
+					monster.position.y = target.y + 0.9
+					monster.rotation.z = 0.0
+					monster.scale = base_scale * 0.035
+					_apply_monster_death_fade(monster, 0.98)
+				else:
+					monster.rotation.z = 0.42
+					monster.scale = base_scale * 0.28
+					_apply_monster_death_fade(monster, 0.92)
+
+
+func _animate_monster_attack(monster: Node3D, archetype: String, phase: String, progress: float) -> void:
+	# Server-confirmed phases drive presentation only; damage is resolved by WorldServer.
+	var anticipation := sin(clampf(progress, 0.0, 1.0) * PI * 0.5) if phase == "windup" else 0.0
+	var strike := sin(clampf(progress, 0.0, 1.0) * PI) if phase == "impact" else 0.0
+	var recovery := 1.0 - clampf(progress, 0.0, 1.0) if phase == "recovery" else 0.0
+	var elemental_telegraph := monster.get_node_or_null("ElementalTelegraph") as MeshInstance3D
+	if is_instance_valid(elemental_telegraph) and phase == "windup":
+		var warning_material := elemental_telegraph.material_override as StandardMaterial3D
+		if warning_material != null:
+			warning_material.albedo_color.a = lerpf(0.24, 0.66, anticipation)
+			warning_material.emission_energy_multiplier = lerpf(1.0, 3.0, anticipation)
+	match archetype:
+		"wolf":
+			var torso := monster.get_node_or_null("Torso") as Node3D
+			if is_instance_valid(torso):
+				torso.position.z = -anticipation * 0.06 - strike * 0.18 + recovery * 0.04
+			var jaw := monster.get_node_or_null("JawPivot") as Node3D
+			if is_instance_valid(jaw):
+				jaw.rotation.x = -anticipation * 0.18 - strike * 0.42
+			var front_left := monster.get_node_or_null("FrontLegLeft") as Node3D
+			var front_right := monster.get_node_or_null("FrontLegRight") as Node3D
+			if is_instance_valid(front_left):
+				front_left.rotation.x = -anticipation * 0.12 - strike * 0.24
+			if is_instance_valid(front_right):
+				front_right.rotation.x = -anticipation * 0.12 - strike * 0.24
+		"iron_beast":
+			var core := monster.get_node_or_null("IronCore") as Node3D
+			if is_instance_valid(core):
+				core.position.z = -anticipation * 0.05 - strike * 0.16 + recovery * 0.03
+			var skull := monster.get_node_or_null("SkullPivot") as Node3D
+			if is_instance_valid(skull):
+				skull.rotation.x = -anticipation * 0.16 - strike * 0.48
+			var telegraph := monster.get_node_or_null("SlamTelegraph") as MeshInstance3D
+			if is_instance_valid(telegraph) and phase == "windup":
+				var telegraph_material := telegraph.material_override as StandardMaterial3D
+				if telegraph_material != null:
+					telegraph_material.albedo_color.a = lerpf(0.30, 0.62, progress)
+					telegraph_material.emission_energy_multiplier = lerpf(1.0, 2.2, progress)
+		"warrior":
+			var arm := monster.get_node_or_null("ArmPivotRight") as Node3D
+			var warrior_style := str(monster.get_meta("attack_style", "melee"))
+			if is_instance_valid(arm):
+				if warrior_style == "heavy_slam":
+					# A heavy slam visibly loads the shoulder, then drives the blade down.
+					arm.rotation.x = anticipation * 0.82 - strike * 1.38 + recovery * 0.16
+					arm.rotation.z = -0.12 - anticipation * 0.24 - strike * 0.50
+				else:
+					arm.rotation.x = anticipation * 0.42 - strike * 1.05 + recovery * 0.12
+					arm.rotation.z = -0.18 - anticipation * 0.16 - strike * 0.34
+			var warrior_torso := monster.get_node_or_null("Torso") as Node3D
+			if is_instance_valid(warrior_torso) and warrior_style == "heavy_slam":
+				warrior_torso.position.y += -anticipation * 0.10 + strike * 0.06
+			var blade := monster.get_node_or_null("ArmPivotRight/Blade") as Node3D
+			if is_instance_valid(blade) and warrior_style == "heavy_slam":
+				blade.rotation.z = -anticipation * 0.24 + strike * 0.58
+		"life_soul", "wind_soul", "wraith":
+			var core := monster.get_node_or_null("SoulCore") as Node3D
+			if is_instance_valid(core):
+				core.scale = Vector3.ONE * (1.0 + anticipation * 0.18 + strike * 0.48 + recovery * 0.08)
+			var spark := monster.get_node_or_null("SoulSpark") as Node3D
+			if is_instance_valid(spark):
+				spark.scale = Vector3.ONE * (1.0 + anticipation * 0.65 + strike * 1.8)
+			var orbit := monster.get_node_or_null("SoulOrbit") as Node3D
+			if is_instance_valid(orbit):
+				orbit.scale = Vector3.ONE * (1.0 + anticipation * 0.08 + strike * 0.22)
+		"fire_soul":
+			var fire_core := monster.get_node_or_null("SoulCore") as Node3D
+			if is_instance_valid(fire_core):
+				fire_core.scale = Vector3.ONE * (1.0 + anticipation * 0.24 + strike * 0.62 + recovery * 0.10)
+			var crest := monster.get_node_or_null("FlameCrest") as Node3D
+			if is_instance_valid(crest):
+				crest.scale = Vector3.ONE * (1.0 + anticipation * 0.35 + strike * 0.9)
+			for side in [-1.0, 1.0]:
+				var orb := monster.get_node_or_null("FlameOrb" + str(side)) as Node3D
+				if is_instance_valid(orb):
+					orb.position.x = side * (0.42 + anticipation * 0.12 + strike * 0.22)
+					orb.scale = Vector3.ONE * (1.0 + anticipation * 0.45 + strike * 0.85)
+		"frost_soul":
+			var frost_core := monster.get_node_or_null("SoulCore") as Node3D
+			if is_instance_valid(frost_core):
+				frost_core.scale = Vector3.ONE * (1.0 + anticipation * 0.16 + strike * 0.42 + recovery * 0.06)
+			var crown := monster.get_node_or_null("IceCrown") as Node3D
+			if is_instance_valid(crown):
+				crown.scale = Vector3.ONE * (1.0 + anticipation * 0.22 + strike * 0.58)
+			var frost_ring := monster.get_node_or_null("FrostOrbit") as Node3D
+			if is_instance_valid(frost_ring):
+				frost_ring.scale = Vector3.ONE * (1.0 + anticipation * 0.10 + strike * 0.42)
+			for side in [-1.0, 1.0]:
+				var shard := monster.get_node_or_null("IceShard" + str(side)) as Node3D
+				if is_instance_valid(shard):
+					shard.rotation.x = anticipation * 0.28 + strike * 0.75
+					shard.scale = Vector3.ONE * (1.0 + anticipation * 0.20 + strike * 0.55)
+
+
+func _apply_monster_death_fade(monster: Node3D, weight: float) -> void:
+	for child in monster.get_children():
+		if child is MeshInstance3D:
+			var mesh_instance := child as MeshInstance3D
+			if mesh_instance.material_override is StandardMaterial3D:
+				if not bool(mesh_instance.get_meta("death_fade_override_duplicated", false)):
+					mesh_instance.material_override = (mesh_instance.material_override as StandardMaterial3D).duplicate(true)
+					mesh_instance.set_meta("death_fade_override_duplicated", true)
+				var override_material := mesh_instance.material_override as StandardMaterial3D
+				_apply_death_fade_to_material(override_material, weight)
+			elif mesh_instance.mesh != null:
+				# Imported GLBs often use per-surface materials instead of material_override.
+				for surface_index in range(mesh_instance.mesh.get_surface_count()):
+					var meta_key := "death_fade_surface_" + str(surface_index)
+					if not bool(mesh_instance.get_meta(meta_key, false)):
+						var source_material := mesh_instance.get_surface_override_material(surface_index) as StandardMaterial3D
+						if source_material == null:
+							source_material = mesh_instance.get_active_material(surface_index) as StandardMaterial3D
+						if source_material == null:
+							continue
+						var unique_material := source_material.duplicate(true) as StandardMaterial3D
+						mesh_instance.set_surface_override_material(surface_index, unique_material)
+						mesh_instance.set_meta(meta_key, true)
+					var surface_material := mesh_instance.get_surface_override_material(surface_index) as StandardMaterial3D
+					_apply_death_fade_to_material(surface_material, weight)
+		elif child is Node3D:
+			_apply_monster_death_fade(child as Node3D, weight)
+
+
+func _apply_death_fade_to_material(material: StandardMaterial3D, weight: float) -> void:
+	if material == null:
+		return
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	var tint := material.albedo_color
+	tint.a = 1.0 - weight
+	material.albedo_color = tint
+	material.emission_energy_multiplier = maxf(0.0, 1.0 - weight)
+
+
+func _animate_wolf_monster(monster: Node3D, stride: float, moving: bool, phase: float) -> void:
+	var torso := monster.get_node_or_null("Torso") as MeshInstance3D
+	if is_instance_valid(torso):
+		torso.position.y = 0.62 + (absf(stride) * 0.035 if moving else sin(phase) * 0.012)
+		torso.position.z = move_toward(torso.position.z, 0.05, 0.9)
+	for pivot_name in ["FrontLegLeft", "HindLegRight"]:
+		var leg := monster.get_node_or_null(pivot_name) as Node3D
+		if is_instance_valid(leg):
+			leg.rotation.x = stride * (0.42 if moving else 0.025)
+	for pivot_name in ["FrontLegRight", "HindLegLeft"]:
+		var leg := monster.get_node_or_null(pivot_name) as Node3D
+		if is_instance_valid(leg):
+			leg.rotation.x = -stride * (0.42 if moving else 0.025)
+	var jaw := monster.get_node_or_null("JawPivot") as Node3D
+	if is_instance_valid(jaw):
+		jaw.rotation.x = move_toward(jaw.rotation.x, 0.0, 2.4 * get_process_delta_time())
+	var tail := monster.get_node_or_null("TailPivot") as Node3D
+	if is_instance_valid(tail):
+		tail.rotation.y = sin(monster_animation_time * 2.4 + phase) * (0.24 if moving else 0.14)
+		tail.rotation.z = sin(monster_animation_time * 1.8 + phase) * 0.08
+
+
+func _animate_iron_beast(monster: Node3D, stride: float, moving: bool, phase: float) -> void:
+	var iron_core := monster.get_node_or_null("IronCore") as MeshInstance3D
+	if is_instance_valid(iron_core):
+		iron_core.position.y = 0.66 + (absf(stride) * 0.045 if moving else sin(phase) * 0.018)
+		iron_core.position.z = move_toward(iron_core.position.z, 0.05, 0.8)
+	for pivot_name in ["FrontLegLeft", "HindLegRight"]:
+		var leg := monster.get_node_or_null(pivot_name) as Node3D
+		if is_instance_valid(leg):
+			leg.rotation.x = stride * (0.28 if moving else 0.012)
+	for pivot_name in ["FrontLegRight", "HindLegLeft"]:
+		var leg := monster.get_node_or_null(pivot_name) as Node3D
+		if is_instance_valid(leg):
+			leg.rotation.x = -stride * (0.28 if moving else 0.012)
+	var skull := monster.get_node_or_null("SkullPivot") as Node3D
+	if is_instance_valid(skull):
+		skull.rotation.x = move_toward(skull.rotation.x, sin(phase * 0.5) * (0.055 if moving else 0.025), 1.8 * get_process_delta_time())
+	var spine := monster.get_node_or_null("SpineArmor") as Node3D
+	if is_instance_valid(spine):
+		spine.rotation.z = sin(phase * 0.5) * (0.018 if moving else 0.008)
+	var tail := monster.get_node_or_null("TailPivot") as Node3D
+	if is_instance_valid(tail):
+		tail.rotation.y = sin(monster_animation_time * 1.45 + phase) * (0.12 if moving else 0.07)
+
+
+func _animate_warrior_monster(monster: Node3D, stride: float, moving: bool, phase: float, animation_state: String) -> void:
+	var torso := monster.get_node_or_null("Torso") as Node3D
+	if is_instance_valid(torso):
+		torso.position.y = 1.08 + (absf(stride) * 0.025 if moving else sin(phase) * 0.008)
+	var left_arm := monster.get_node_or_null("ArmPivotLeft") as Node3D
+	var right_arm := monster.get_node_or_null("ArmPivotRight") as Node3D
+	if is_instance_valid(left_arm):
+		left_arm.rotation.x = stride * (0.16 if moving else 0.025)
+	if is_instance_valid(right_arm):
+		var attack_pose := 0.72 if animation_state == "hit" else 0.0
+		right_arm.rotation.x = lerpf(right_arm.rotation.x, attack_pose + (stride * 0.12 if moving else sin(phase) * 0.015), 0.22)
+		right_arm.rotation.z = lerpf(right_arm.rotation.z, -0.12, 0.18)
+	var blade := monster.get_node_or_null("ArmPivotRight/Blade") as Node3D
+	if is_instance_valid(blade):
+		blade.rotation.z = sin(phase * 0.5) * 0.035
+
+
+func _animate_soul_monster(monster: Node3D, delta: float, phase: float, moving: bool, archetype: String) -> void:
+	var drift_speed := 1.0
+	var amplitude := 0.075
+	match archetype:
+		"life_soul":
+			drift_speed = 1.35
+			amplitude = 0.12
+		"wind_soul":
+			drift_speed = 2.1
+			amplitude = 0.20
+		"fire_soul":
+			drift_speed = 1.75
+			amplitude = 0.16
+		"frost_soul":
+			drift_speed = 0.72
+			amplitude = 0.055
+	var core := monster.get_node_or_null("SoulCore") as Node3D
+	if is_instance_valid(core):
+		core.position.y = 0.94 + sin(monster_animation_time * drift_speed + phase) * amplitude
+		var pulse := 1.0 + sin(monster_animation_time * drift_speed * 1.7 + phase) * (0.08 if archetype == "wind_soul" else 0.045)
+		core.scale = Vector3.ONE * pulse
+	var mantle := monster.get_node_or_null("WraithMantle") as Node3D
+	if is_instance_valid(mantle):
+		mantle.position.y = 0.86 + sin(monster_animation_time * drift_speed + phase + 0.8) * amplitude * 0.72
+		mantle.rotation.y = sin(monster_animation_time * 0.65 + phase) * (0.16 if archetype == "wind_soul" else 0.06)
+	var lower := monster.get_node_or_null("LowerWisp") as Node3D
+	if is_instance_valid(lower):
+		lower.rotation.z = sin(monster_animation_time * drift_speed * 0.8 + phase) * (0.18 if moving else 0.10)
+	var orbit := monster.get_node_or_null("SoulOrbit") as Node3D
+	if is_instance_valid(orbit):
+		var orbit_speed := 0.72
+		if archetype == "wind_soul":
+			orbit_speed = 1.8
+		elif archetype == "fire_soul":
+			orbit_speed = 1.25
+		elif archetype == "frost_soul":
+			orbit_speed = 0.38
+		orbit.rotation.y += delta * orbit_speed
+		orbit.scale = orbit.scale.lerp(Vector3.ONE, minf(delta * 6.0, 1.0))
+	var spark := monster.get_node_or_null("SoulSpark") as Node3D
+	if is_instance_valid(spark):
+		spark.position.y = 1.42 + sin(monster_animation_time * drift_speed * 1.4 + phase) * amplitude * 1.8
+		spark.scale = Vector3.ONE * (0.85 + absf(sin(monster_animation_time * 1.8 + phase)) * 0.35)
+	for side in [-1.0, 1.0]:
+		var shard_name := "SoulShardLeft" if side < 0.0 else "SoulShardRight"
+		var shard := monster.get_node_or_null(shard_name) as Node3D
+		if is_instance_valid(shard):
+			shard.rotation.y = sin(monster_animation_time * drift_speed + phase + side) * 0.55
+			shard.position.y = 0.88 + sin(monster_animation_time * drift_speed * 0.7 + phase + side) * amplitude
+	for side in [-1.0, 1.0]:
+		var wisp := monster.get_node_or_null("Wisp" + str(side)) as Node3D
+		if is_instance_valid(wisp):
+			wisp.position.y = 0.60 + sin(monster_animation_time * drift_speed + phase + side) * amplitude * 1.4
+			wisp.position.x = side * (0.47 + sin(monster_animation_time * 0.9 + phase) * 0.045)
+		var flame := monster.get_node_or_null("FlameOrb" + str(side)) as Node3D
+		if is_instance_valid(flame):
+			flame.position.y = 0.66 + sin(monster_animation_time * 2.6 + phase + side) * 0.12
+			flame.scale = Vector3.ONE * (0.85 + absf(sin(monster_animation_time * 3.1 + phase)) * 0.32)
+		var ice_shard := monster.get_node_or_null("IceShard" + str(side)) as Node3D
+		if is_instance_valid(ice_shard):
+			ice_shard.rotation.y = sin(monster_animation_time * 0.8 + phase + side) * 0.12
+			ice_shard.position.y = 0.70 + sin(monster_animation_time * 0.9 + phase + side) * 0.035
+	var frost_orbit := monster.get_node_or_null("FrostOrbit") as Node3D
+	if is_instance_valid(frost_orbit):
+		frost_orbit.rotation.y -= delta * 0.28
+
+
+func _on_world_disconnected() -> void:
+	if leaving_world:
+		_finish_leave_world_to_lobby()
+		return
+	hud_label.text = "与世界服务器的连接已断开。角色位置会周期保存，重连后将恢复到最近一次成功保存的位置。"
+	reconnect_button.visible = true
+	reconnect_button.disabled = false
+
+func _on_reconnect_pressed() -> void:
+	if reconnect_request_busy:
+		return
+	if HHSession.access_token.is_empty():
+		hud_label.text = "登录状态已失效，请返回登录界面重新登录。"
+		return
+	reconnect_request_busy = true
+	reconnect_button.disabled = true
+	hud_label.text = "正在向中心服申请新的世界入口……"
+	var headers := PackedStringArray([
+		"Authorization: Bearer " + HHSession.access_token,
+		"Content-Type: application/json"
+	])
+	var error := reconnect_http.request(
+		HHSession.api_base + "/api/v1/worlds/enter",
+		headers,
+		HTTPClient.METHOD_POST,
+		"{}"
+	)
+	if error != OK:
+		reconnect_request_busy = false
+		reconnect_button.disabled = false
+		hud_label.text = "申请重连失败，错误码：" + str(error)
+
+func _on_reconnect_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	reconnect_request_busy = false
+	if result != HTTPRequest.RESULT_SUCCESS:
+		reconnect_button.disabled = false
+		hud_label.text = "无法连接中心服，请检查网络后重试。"
+		return
+	if response_code < 200 or response_code >= 300:
+		reconnect_button.disabled = false
+		hud_label.text = "暂时无法重新进入世界（HTTP " + str(response_code) + "）：" + body.get_string_from_utf8()
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if not (parsed is Dictionary):
+		reconnect_button.disabled = false
+		hud_label.text = "中心服返回了无效的世界入口信息。"
+		return
+	var host := str(parsed.get("host", ""))
+	var port := int(parsed.get("udp_port", 0))
+	var ticket := str(parsed.get("ticket", ""))
+	if host.is_empty() or port < 1 or ticket.is_empty():
+		reconnect_button.disabled = false
+		hud_label.text = "中心服返回的重连信息不完整。"
+		return
+
+	_connect_to_world_ticket(host, port, ticket)
+
+func _connect_to_world_ticket(host: String, port: int, ticket: String) -> void:
+	if reconnect_network != null and is_instance_valid(reconnect_network):
+		reconnect_network.close()
+		reconnect_network.queue_free()
+	reconnect_network = HHWorldNetwork.new()
+	HHSession.add_child(reconnect_network)
+	reconnect_network.welcomed.connect(_on_reconnected_welcomed)
+	reconnect_network.rejected.connect(func(reason: String):
+		hud_label.text = "世界服务器拒绝连接：" + reason
+		reconnect_button.disabled = false
+	)
+	reconnect_network.connection_error.connect(func(message: String):
+		hud_label.text = message
+		reconnect_button.disabled = false
+	)
+	reconnect_network.disconnected.connect(func():
+		reconnect_button.visible = true
+		reconnect_button.disabled = false
+	)
+	hud_label.text = "正在连接世界服务器 " + host + ":" + str(port) + "……"
+	var connect_error := reconnect_network.connect_with_ticket(host, port, ticket)
+	if connect_error != OK:
+		reconnect_button.disabled = false
+		hud_label.text = "初始化世界连接失败，错误码：" + str(connect_error)
+
+func _on_reconnected_welcomed(snapshot: Dictionary) -> void:
+	var previous: HHWorldNetwork = HHSession.world_network
+	HHSession.world_network = reconnect_network
+	HHSession.world_snapshot = snapshot
+	_apply_world_instance_geometry(snapshot)
+	_show_hell_trial_runtime_state(snapshot)
+	if is_instance_valid(hell_trial_panel):
+		hell_trial_panel.set_current_floor(int(snapshot.get("hell_floor", 0)))
+	if previous != null and is_instance_valid(previous):
+		if previous.disconnected.is_connected(_on_world_disconnected):
+			previous.disconnected.disconnect(_on_world_disconnected)
+		previous.close()
+		previous.queue_free()
+	if not reconnect_network.entities_updated.is_connected(_on_entities_updated):
+		reconnect_network.entities_updated.connect(_on_entities_updated)
+	if not reconnect_network.player_joined.is_connected(_on_player_joined):
+		reconnect_network.player_joined.connect(_on_player_joined)
+	if not reconnect_network.player_left.is_connected(_on_player_left):
+		reconnect_network.player_left.connect(_on_player_left)
+	if not reconnect_network.combat_event.is_connected(_on_combat_event):
+		reconnect_network.combat_event.connect(_on_combat_event)
+	if not reconnect_network.monster_action_event.is_connected(_on_monster_action_event):
+		reconnect_network.monster_action_event.connect(_on_monster_action_event)
+	if not reconnect_network.player_action_event.is_connected(_on_player_action_event):
+		reconnect_network.player_action_event.connect(_on_player_action_event)
+	if not reconnect_network.pickup_event.is_connected(_on_pickup_event):
+		reconnect_network.pickup_event.connect(_on_pickup_event)
+	if not reconnect_network.chat_event.is_connected(_on_chat_event):
+		reconnect_network.chat_event.connect(_on_chat_event)
+	local_target_position = Vector3(
+		float(snapshot.get("position_x", 0.0)),
+		float(snapshot.get("position_y", 0.15)),
+		float(snapshot.get("position_z", 0.0))
+	)
+	local_player.position = local_target_position
+	soul_essence_profile.clear()
+	_apply_world_player_form()
+	_update_hud()
+	_update_vitals(int(snapshot.get("health", 0)), int(snapshot.get("max_health", 0)))
+	_request_soul_essence()
+	for character_id in remote_players.keys():
+		remote_players[character_id].queue_free()
+	remote_players.clear()
+	remote_targets.clear()
+	remote_yaws.clear()
+	for monster_id in monsters.keys():
+		monsters[monster_id].queue_free()
+	monsters.clear()
+	monster_targets.clear()
+	_clear_all_incoming_attack_warnings()
+	for drop_id in drops.keys():
+		drops[drop_id].queue_free()
+	drops.clear()
+	drop_targets.clear()
+	reconnect_button.visible = false
+	reconnect_button.disabled = false
+	var hell_floor := int(snapshot.get("hell_floor", 0))
+	if hell_floor > 0:
+		var floor_data: Dictionary = WorldMapCatalog.get_hell_floor_data(hell_floor)
+		hud_label.text = "已进入第 %02d 层 · %s" % [hell_floor, str(floor_data.get("name", "地狱试炼"))]
+	else:
+		hud_label.text = "已重新进入「" + _world_display_name(str(snapshot.get("world_id", ""))) + "」，角色已恢复到最近保存的位置。"
+	_refresh_current_region(false)
+	_update_minimap_data()
+	_update_hud()
+
+func _refresh_equipment() -> void:
+	if equipment_http == null or HHSession.access_token.is_empty():
+		return
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token])
+	var error := equipment_http.request(HHSession.api_base + "/api/v1/characters/current/equipment", headers, HTTPClient.METHOD_GET)
+	if error != OK:
+		inventory_status.text = "读取装备栏失败，错误码：" + str(error)
+
+func _on_equipment_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	for child in inventory_equipment.get_children():
+		child.queue_free()
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		inventory_status.text = "装备栏读取失败：" + body.get_string_from_utf8()
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if not (parsed is Dictionary):
+		return
+	var items: Array = parsed.get("items", [])
+	if is_instance_valid(local_player) and local_player.has_method("set_equipment_visuals"):
+		local_player.call("set_equipment_visuals", items)
+	var slots := ["weapon", "head", "chest", "legs", "boots", "accessory"]
+	var labels := {"weapon":"武器", "head":"头部", "chest":"胸甲", "legs":"腿部", "boots":"鞋子", "accessory":"饰品"}
+	var equipped: Dictionary = {}
+	for item in items:
+		if item is Dictionary:
+			equipped[str(item.get("slot", ""))] = item
+	for slot in slots:
+		var row := HBoxContainer.new()
+		inventory_equipment.add_child(row)
+		var label := Label.new()
+		var item: Dictionary = equipped.get(slot, {})
+		if item.is_empty():
+			label.text = str(labels[slot]) + "：未装备"
+		else:
+			var quality_names := ["普通", "优秀", "精良", "稀有", "传说"]
+			var quality := int(item.get("quality", 1))
+			var quality_name: String = quality_names[clampi(quality - 1, 0, quality_names.size() - 1)]
+			var affix_suffix := ""
+			for affix in item.get("affixes", []):
+				if affix is Dictionary:
+					affix_suffix += (" · " if affix_suffix.is_empty() else "、") + str(affix.get("name", "词缀")) + "+" + str(affix.get("value", 0))
+			label.text = str(labels[slot]) + "：" + str(item.get("name", "未知装备")) + (" +" + str(item.get("enhancement_level", 0)) if int(item.get("enhancement_level", 0)) > 0 else "") + " · " + quality_name + affix_suffix
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(label)
+		if not item.is_empty():
+			var button := Button.new()
+			button.text = "卸下"
+			button.pressed.connect(_on_unequip_item_pressed.bind(slot))
+			row.add_child(button)
+
+
+func _open_equipment_crafting() -> void:
+	if crafting_busy:
+		return
+	var dialog := ConfirmationDialog.new()
+	dialog.title = "锻造工坊 · 初级装备"
+	dialog.dialog_text = "选择要打造的装备。打造会消耗背包材料，并生成带有随机词缀的独立装备。"
+	dialog.ok_button_text = "关闭"
+	dialog.get_ok_button().visible = false
+	var options := VBoxContainer.new()
+	dialog.add_child(options)
+	var blade := Button.new()
+	blade.text = "荒狼骨刃  ·  荒狼獠牙 ×5  +  荒狼皮 ×2"
+	_apply_button_theme(blade, true)
+	blade.pressed.connect(func():
+		dialog.queue_free()
+		_submit_equipment_crafting("forge_wolfbone_blade", "荒狼骨刃")
+	)
+	options.add_child(blade)
+	var vest := Button.new()
+	vest.text = "荒狼皮甲  ·  荒狼獠牙 ×2  +  荒狼皮 ×5"
+	_apply_button_theme(vest, true)
+	vest.pressed.connect(func():
+		dialog.queue_free()
+		_submit_equipment_crafting("forge_wolfhide_vest", "荒狼皮甲")
+	)
+	options.add_child(vest)
+	var cancel := Button.new()
+	cancel.text = "暂不打造"
+	_apply_button_theme(cancel)
+	cancel.pressed.connect(dialog.queue_free)
+	options.add_child(cancel)
+	add_child(dialog)
+	dialog.close_requested.connect(dialog.queue_free)
+	dialog.popup_centered(Vector2i(540, 240))
+
+func _submit_equipment_crafting(recipe_id: String, recipe_name: String) -> void:
+	if crafting_busy or crafting_http == null or HHSession.access_token.is_empty():
+		return
+	crafting_busy = true
+	inventory_status.text = "正在打造「" + recipe_name + "」……"
+	var payload := {"request_id": _make_request_uuid(), "recipe_id": recipe_id}
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token, "Content-Type: application/json"])
+	var error := crafting_http.request(HHSession.api_base + "/api/v1/characters/current/inventory/craft", headers, HTTPClient.METHOD_POST, JSON.stringify(payload))
+	if error != OK:
+		crafting_busy = false
+		inventory_status.text = "打造请求提交失败，错误码：" + str(error)
+
+func _on_craft_equipment_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	crafting_busy = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		inventory_status.text = "装备打造失败：" + body.get_string_from_utf8()
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if parsed is Dictionary:
+		var item_name := str(parsed.get("item_name", "新装备"))
+		var quality_names := ["普通", "优秀", "精良", "稀有", "传说"]
+		var quality := clampi(int(parsed.get("quality", 1)), 1, 5)
+		inventory_status.text = "打造成功：%s · %s品质 · 随机词缀 %d 条" % [item_name, quality_names[quality - 1], (parsed.get("affixes", []) as Array).size()]
+	_refresh_inventory()
+
+func _confirm_enhance_equipment(instance_id: String, item_name: String, level: int, quality: int) -> void:
+	if enhancement_busy or instance_id.is_empty():
+		return
+	var caps: Array[int] = [0, 3, 5, 8, 10, 12]
+	var max_level: int = caps[clampi(quality, 1, 5)]
+	if level >= max_level:
+		inventory_status.text = "该品质装备已达到强化上限 +" + str(max_level)
+		return
+	var costs := [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16]
+	var rates := [100, 85, 70, 60, 50, 40, 30, 25, 20, 15, 10, 8]
+	var target := level + 1
+	var dialog := ConfirmationDialog.new()
+	dialog.title = "装备强化 +" + str(target)
+	dialog.dialog_text = "强化「" + item_name + "」至 +" + str(target) + "？\n需要对应锻造材料 ×" + str(costs[target - 1]) + "，成功率 " + str(rates[target - 1]) + "%。\n失败只消耗材料，不会损坏或降级装备。"
+	add_child(dialog)
+	dialog.confirmed.connect(func():
+		dialog.queue_free()
+		_submit_equipment_enhancement(instance_id)
+	)
+	dialog.canceled.connect(dialog.queue_free)
+	dialog.close_requested.connect(dialog.queue_free)
+	dialog.popup_centered(Vector2i(440, 200))
+
+func _submit_equipment_enhancement(instance_id: String) -> void:
+	if enhancement_busy or enhancement_http == null or HHSession.access_token.is_empty():
+		return
+	enhancement_busy = true
+	inventory_status.text = "正在强化装备……"
+	var payload := {"request_id": _make_request_uuid(), "instance_id": instance_id}
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token, "Content-Type: application/json"])
+	var error := enhancement_http.request(HHSession.api_base + "/api/v1/characters/current/inventory/enhance", headers, HTTPClient.METHOD_POST, JSON.stringify(payload))
+	if error != OK:
+		enhancement_busy = false
+		inventory_status.text = "强化请求提交失败，错误码：" + str(error)
+
+func _on_enhance_equipment_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	enhancement_busy = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		inventory_status.text = "装备强化失败：" + body.get_string_from_utf8()
+		_render_inventory_items()
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if parsed is Dictionary:
+		var new_level := int(parsed.get("enhancement_level", 0))
+		if bool(parsed.get("succeeded", false)):
+			inventory_status.text = "强化成功：装备提升至 +" + str(new_level)
+		else:
+			inventory_status.text = "强化失败：材料已消耗，装备保持原等级"
+	_refresh_inventory()
+
+func _confirm_salvage_equipment(instance_id: String, item_name: String) -> void:
+	if salvage_busy or instance_id.is_empty():
+		return
+	var dialog := ConfirmationDialog.new()
+	dialog.title = "分解装备"
+	dialog.dialog_text = "确定永久分解「" + item_name + "」？\n将根据装备品质返还锻造材料，此操作不可撤销。"
+	add_child(dialog)
+	dialog.confirmed.connect(func():
+		dialog.queue_free()
+		_submit_equipment_salvage(instance_id)
+	)
+	dialog.canceled.connect(dialog.queue_free)
+	dialog.close_requested.connect(dialog.queue_free)
+	dialog.popup_centered(Vector2i(420, 180))
+
+func _submit_equipment_salvage(instance_id: String) -> void:
+	if salvage_busy or salvage_http == null or HHSession.access_token.is_empty():
+		return
+	salvage_busy = true
+	inventory_status.text = "正在分解装备……"
+	var payload := {"request_id": _make_request_uuid(), "instance_id": instance_id}
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token, "Content-Type: application/json"])
+	var error := salvage_http.request(
+		HHSession.api_base + "/api/v1/characters/current/inventory/salvage",
+		headers, HTTPClient.METHOD_POST, JSON.stringify(payload)
+	)
+	if error != OK:
+		salvage_busy = false
+		inventory_status.text = "分解请求提交失败，错误码：" + str(error)
+
+func _on_salvage_equipment_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	salvage_busy = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		inventory_status.text = "装备分解失败：" + body.get_string_from_utf8()
+		_render_inventory_items()
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if parsed is Dictionary:
+		inventory_status.text = "分解完成：" + str(parsed.get("material_name", "锻造材料")) + " ×" + str(parsed.get("material_quantity", 0))
+	_refresh_inventory()
+
+func _on_equip_item_pressed(item_id: String, slot: String, instance_id: String = "") -> void:
+	var payload := {"item_id": item_id, "slot": slot}
+	if not instance_id.is_empty():
+		payload["instance_id"] = instance_id
+	_submit_equipment_action("equip", payload)
+
+func _on_unequip_item_pressed(slot: String) -> void:
+	_submit_equipment_action("unequip", {"slot": slot})
+
+func _submit_equipment_action(action: String, payload: Dictionary) -> void:
+	if equipment_action_busy or equipment_action_http == null:
+		return
+	equipment_action_busy = true
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token, "Content-Type: application/json"])
+	var error := equipment_action_http.request(
+		HHSession.api_base + "/api/v1/characters/current/equipment/" + action,
+		headers, HTTPClient.METHOD_POST, JSON.stringify(payload)
+	)
+	if error != OK:
+		equipment_action_busy = false
+		inventory_status.text = "装备操作提交失败，错误码：" + str(error)
+
+func _on_equipment_action_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	equipment_action_busy = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		inventory_status.text = "装备操作失败：" + body.get_string_from_utf8()
+		return
+	inventory_status.text = "装备操作已完成，战斗属性自动同步。"
+	_refresh_inventory()
+	_refresh_equipment()
+
+func _make_request_uuid() -> String:
+	var hex := Crypto.new().generate_random_bytes(16).hex_encode()
+	return hex.substr(0,8) + "-" + hex.substr(8,4) + "-4" + hex.substr(13,3) + "-a" + hex.substr(17,3) + "-" + hex.substr(20,12)
+
+func _on_learn_spell_pressed(item_id: String) -> void:
+	if spell_learning_busy or item_id.is_empty() or spell_learning_http == null:
+		return
+	if HHSession.access_token.is_empty():
+		inventory_status.text = "请先登录后研读技能典籍。"
+		return
+	spell_learning_busy = true
+	inventory_status.text = "正在研读技能典籍，验证背包归属并保存掌握记录……"
+	_render_inventory_items()
+	var payload := {"request_id": _make_request_uuid(), "item_id": item_id}
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token, "Content-Type: application/json"])
+	var error := spell_learning_http.request(
+		HHSession.api_base + "/api/v1/characters/current/spells/learn",
+		headers, HTTPClient.METHOD_POST, JSON.stringify(payload)
+	)
+	if error != OK:
+		spell_learning_busy = false
+		inventory_status.text = "研读请求发送失败，错误码：" + str(error)
+		_render_inventory_items()
+
+
+func _on_spell_learning_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	spell_learning_busy = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		inventory_status.text = "研读失败：" + body.get_string_from_utf8()
+		_render_inventory_items()
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if not (parsed is Dictionary) or not (parsed.get("known_spells", []) is Array):
+		inventory_status.text = "技能学习响应格式无效，请重新同步。"
+		_render_inventory_items()
+		return
+	HHSession.world_snapshot["known_spells"] = parsed.get("known_spells", [])
+	_update_spell_cooldown_hud()
+	_update_spell_mastery_hud()
+	var spell_name := str(parsed.get("spell_name", "新神通"))
+	_show_notification("研读成功，已永久掌握：" + spell_name + "。", 3.0)
+	inventory_status.text = "研读成功：" + spell_name + " · 已永久掌握"
+	_refresh_inventory()
+
+
+func _on_use_consumable_pressed(item_id: String) -> void:
+	if consumable_busy or item_id.is_empty():
+		return
+	if HHSession.world_network != null and HHSession.world_network.is_world_ready():
+		consumable_busy = true
+		inventory_status.text = "正在向世界服务器提交消耗品请求……"
+		var send_error: Error = HHSession.world_network.send_consumable_use(item_id, 1)
+		if send_error != OK:
+			consumable_busy = false
+			inventory_status.text = "消耗品请求发送失败，错误码：" + str(send_error)
+		return
+	if consumable_http == null:
+		return
+	consumable_busy = true
+	var payload := {"request_id": _make_request_uuid(), "item_id": item_id, "quantity": 1}
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token, "Content-Type: application/json"])
+	var error := consumable_http.request(
+		HHSession.api_base + "/api/v1/characters/current/inventory/use",
+		headers, HTTPClient.METHOD_POST, JSON.stringify(payload)
+	)
+	if error != OK:
+		consumable_busy = false
+		inventory_status.text = "使用物品请求失败，错误码：" + str(error)
+
+func _on_consumable_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	consumable_busy = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		if response_code == 409:
+			inventory_status.text = "为保护在线角色资源，请先退出世界，再使用恢复类物品。"
+		else:
+			inventory_status.text = "使用物品失败：" + body.get_string_from_utf8()
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if parsed is Dictionary:
+		if bool(parsed.get("applied", false)):
+			inventory_status.text = "使用成功：生命 +" + str(parsed.get("health_restored", 0)) + "，灵力 +" + str(parsed.get("mana_restored", 0))
+		else:
+			inventory_status.text = "该使用请求已结算，正在同步背包。"
+	_refresh_inventory()
+	_refresh_equipment()
+
+func _build_death_ui() -> void:
+	var hud := get_node_or_null("HUD") as CanvasLayer
+	if hud == null:
+		return
+	death_panel = PanelContainer.new()
+	death_panel.set_anchors_preset(Control.PRESET_CENTER)
+	death_panel.offset_left = -230.0
+	death_panel.offset_top = -115.0
+	death_panel.offset_right = 230.0
+	death_panel.offset_bottom = 115.0
+	death_panel.visible = false
+	death_panel.z_index = 100
+	hud.add_child(death_panel)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 14)
+	death_panel.add_child(layout)
+	var title := Label.new()
+	title.text = "角色倒地"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 24)
+	layout.add_child(title)
+	death_message_label = Label.new()
+	death_message_label.text = "角色已倒地。"
+	death_message_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	death_message_label.custom_minimum_size = Vector2(400.0, 90.0)
+	layout.add_child(death_message_label)
+	respawn_button = Button.new()
+	respawn_button.text = "复活并返回角色界面"
+	respawn_button.disabled = true
+	respawn_button.custom_minimum_size.y = 44.0
+	respawn_button.pressed.connect(_on_respawn_pressed)
+	layout.add_child(respawn_button)
+
+	# A player can re-enter the world after a death snapshot was saved but
+	# before the death notification reached the client. Reconstruct the death
+	# UI from the authoritative entry snapshot so the player is never trapped
+	# at zero health with no visible respawn action.
+	if int(HHSession.world_snapshot.get("health", 1)) <= 0:
+		death_panel.visible = true
+		respawn_button.disabled = false
+		death_message_label.text = "检测到角色处于死亡状态，死亡记录可能已在服务器保存。\n可以复活并返回冥界·酆都。"
+
+func _on_respawn_pressed() -> void:
+	if respawn_busy or HHSession.access_token.is_empty():
+		return
+	respawn_busy = true
+	respawn_button.disabled = true
+	hud_label.text = "正在返回冥界·酆都……"
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token])
+	var error := respawn_http.request(
+		HHSession.api_base + "/api/v1/characters/current/respawn",
+		headers,
+		HTTPClient.METHOD_POST,
+		"{}"
+	)
+	if error != OK:
+		respawn_busy = false
+		respawn_button.disabled = false
+		hud_label.text = "提交复活请求失败，错误码：" + str(error)
+
+func _on_respawn_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	respawn_busy = false
+	respawn_button.disabled = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code != 200:
+		death_message_label.text = "复活请求失败：\n" + body.get_string_from_utf8() + "\n请检查中心服后重试。"
+		return
+	death_message_label.text = "复活成功，正在返回角色界面……"
+	if HHSession.world_network != null:
+		HHSession.world_network.close()
+		HHSession.world_network.queue_free()
+		HHSession.world_network = null
+	var change_error := get_tree().change_scene_to_file("res://scenes/Startup.tscn")
+	if change_error != OK:
+		death_message_label.text = "复活成功，但返回角色界面失败，错误码：" + str(change_error)
+
+
+# ---------------- World NPC interaction ----------------
+
+func _build_npc_ui() -> void:
+	var hud := get_node_or_null("HUD") as CanvasLayer
+	if hud == null:
+		return
+	npc_interact_button = Button.new()
+	npc_interact_button.text = "F · 与附近 NPC 交互"
+	_apply_button_theme(npc_interact_button, true)
+	npc_interact_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	npc_interact_button.offset_left = -250.0
+	npc_interact_button.offset_top = -76.0
+	npc_interact_button.offset_right = -18.0
+	npc_interact_button.offset_bottom = -30.0
+	npc_interact_button.visible = false
+	npc_interact_button.pressed.connect(_try_interact_nearest_npc)
+	hud.add_child(npc_interact_button)
+	exploration_open_button = Button.new()
+	exploration_open_button.text = "探索本区域"
+	_apply_button_theme(exploration_open_button)
+	exploration_open_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	exploration_open_button.offset_left = 18.0
+	exploration_open_button.offset_top = -76.0
+	exploration_open_button.offset_right = 180.0
+	exploration_open_button.offset_bottom = -30.0
+	exploration_open_button.pressed.connect(_request_exploration_points)
+	hud.add_child(exploration_open_button)
+
+	npc_panel = PanelContainer.new()
+	npc_panel.set_anchors_preset(Control.PRESET_CENTER)
+	npc_panel.offset_left = -230.0
+	npc_panel.offset_top = -170.0
+	npc_panel.offset_right = 230.0
+	npc_panel.offset_bottom = 170.0
+	npc_panel.visible = false
+	_apply_panel_theme(npc_panel)
+	hud.add_child(npc_panel)
+	var npc_scroll := ScrollContainer.new()
+	npc_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	npc_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	npc_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	npc_scroll.custom_minimum_size = Vector2(260.0, 260.0)
+	npc_panel.add_child(npc_scroll)
+	var layout := VBoxContainer.new()
+	layout.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	layout.add_theme_constant_override("separation", 10)
+	npc_scroll.add_child(layout)
+	npc_title_label = Label.new()
+	npc_title_label.add_theme_font_size_override("font_size", 22)
+	npc_title_label.add_theme_color_override("font_color", Color("#d4b47b"))
+	npc_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	layout.add_child(npc_title_label)
+	npc_dialogue_label = Label.new()
+	npc_dialogue_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	npc_dialogue_label.add_theme_color_override("font_color", Color("#e7dfd2"))
+	npc_dialogue_label.custom_minimum_size = Vector2(420.0, 120.0)
+	npc_dialogue_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	layout.add_child(npc_dialogue_label)
+	npc_status_label = Label.new()
+	npc_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	npc_status_label.add_theme_color_override("font_color", Color("#a9bac7"))
+	layout.add_child(npc_status_label)
+	npc_choice_container = VBoxContainer.new()
+	npc_choice_container.add_theme_constant_override("separation", 6)
+	layout.add_child(npc_choice_container)
+	var exploration_scroll := ScrollContainer.new()
+	exploration_scroll.custom_minimum_size = Vector2(420.0, 110.0)
+	exploration_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	layout.add_child(exploration_scroll)
+	exploration_container = VBoxContainer.new()
+	exploration_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	exploration_container.add_theme_constant_override("separation", 5)
+	exploration_scroll.add_child(exploration_container)
+	npc_trial_button = Button.new()
+	npc_trial_button.text = "查看冥界试炼"
+	_apply_button_theme(npc_trial_button, true)
+	npc_trial_button.pressed.connect(_request_soul_trials)
+	layout.add_child(npc_trial_button)
+	npc_eligibility_button = Button.new()
+	npc_eligibility_button.text = "查看投胎资格"
+	_apply_button_theme(npc_eligibility_button)
+	npc_eligibility_button.pressed.connect(_request_reincarnation_eligibility)
+	layout.add_child(npc_eligibility_button)
+	npc_fate_encounter_button = Button.new()
+	npc_fate_encounter_button.text = "探查命格奇遇"
+	_apply_button_theme(npc_fate_encounter_button, true)
+	npc_fate_encounter_button.visible = false
+	npc_fate_encounter_button.pressed.connect(_discover_npc_fate_encounter)
+	layout.add_child(npc_fate_encounter_button)
+	npc_soul_button = Button.new()
+	npc_soul_button.text = "查看灵魂境界"
+	_apply_button_theme(npc_soul_button)
+	npc_soul_button.pressed.connect(_request_soul_progression)
+	layout.add_child(npc_soul_button)
+	npc_fusion_button = Button.new()
+	npc_fusion_button.text = "查看魂质融合"
+	_apply_button_theme(npc_fusion_button)
+	npc_fusion_button.visible = false
+	npc_fusion_button.pressed.connect(_request_soul_fusions)
+	layout.add_child(npc_fusion_button)
+	npc_soul_breakthrough_button = Button.new()
+	npc_soul_breakthrough_button.text = "主动突破灵魂境界"
+	_apply_button_theme(npc_soul_breakthrough_button, true)
+	npc_soul_breakthrough_button.visible = false
+	npc_soul_breakthrough_button.pressed.connect(_request_soul_breakthrough)
+	layout.add_child(npc_soul_breakthrough_button)
+	npc_reincarnation_leave_button = Button.new()
+	npc_reincarnation_leave_button.text = "返回角色界面办理轮回"
+	_apply_button_theme(npc_reincarnation_leave_button)
+	npc_reincarnation_leave_button.visible = false
+	npc_reincarnation_leave_button.pressed.connect(_leave_world_for_reincarnation)
+	layout.add_child(npc_reincarnation_leave_button)
+	var close_button := Button.new()
+	close_button.text = "关闭"
+	_apply_button_theme(close_button)
+	close_button.pressed.connect(_close_npc_panel)
+	layout.add_child(close_button)
+
+	npc_http = HTTPRequest.new()
+	npc_http.timeout = 12.0
+	add_child(npc_http)
+	npc_http.request_completed.connect(_on_npc_request_completed)
+
+	shop_http = HTTPRequest.new()
+	shop_http.timeout = 12.0
+	add_child(shop_http)
+	shop_http.request_completed.connect(_on_shop_request_completed)
+
+func _request_world_npcs() -> void:
+	_send_npc_request("GET", "/api/v1/worlds/current/npcs", "list")
+
+func _send_npc_request(method: String, path: String, context: String, payload: Dictionary = {}) -> void:
+	if npc_http == null:
+		push_warning("[NPC API] 请求未发送：HTTPRequest 节点为空，context=" + context)
+		return
+	if npc_request_busy:
+		push_warning("[NPC API] 请求未发送：上一个请求仍在处理中，context=" + context)
+		return
+	if HHSession.access_token.is_empty():
+		push_warning("[NPC API] 请求未发送：登录令牌为空，context=" + context)
+		if npc_status_label != null: npc_status_label.text = "未登录或登录令牌已失效，请重新登录。"
+		return
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token])
+	var http_method := HTTPClient.METHOD_GET
+	var body := ""
+	if method == "POST":
+		http_method = HTTPClient.METHOD_POST
+		headers.append("Content-Type: application/json")
+		body = JSON.stringify(payload)
+	npc_request_context = context
+	var request_url := HHSession.api_base + path
+	print("[NPC API] -> ", method, " ", request_url, " context=", context)
+	var error := npc_http.request(request_url, headers, http_method, body)
+	if error != OK:
+		npc_request_context = ""
+		npc_status_label.text = "无法向中心服发送 NPC 请求，错误码：" + str(error)
+	else:
+		npc_request_busy = true
+		print("[NPC API] request queued context=", context)
+
+func _on_npc_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	npc_request_busy = false
+	var context := npc_request_context
+	npc_request_context = ""
+	var raw := body.get_string_from_utf8()
+	print("[NPC API] <- context=", context, " result=", result, " HTTP=", response_code, " body=", raw.substr(0, 800))
+	if context != "eligibility" and npc_reincarnation_leave_button != null:
+		npc_reincarnation_leave_button.visible = false
+	if result != HTTPRequest.RESULT_SUCCESS:
+		if npc_status_label != null:
+			npc_status_label.text = "中心服请求连接失败，请检查网络。"
+		if context == "list":
+			_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_bootstrap")
+		return
+	# Go 的 http.Error 会返回纯文本，必须先判断 HTTP 状态，不能把错误文本交给 JSON 解析器。
+	if response_code < 200 or response_code >= 300:
+		var error_text := raw.strip_edges()
+		if error_text.length() > 240:
+			error_text = error_text.substr(0, 240) + "……"
+		if npc_status_label != null:
+			npc_status_label.text = "请求未完成（HTTP " + str(response_code) + "）：" + error_text
+		if context == "list":
+			_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_bootstrap")
+		return
+	var json_parser := JSON.new()
+	var parse_error := json_parser.parse(raw)
+	if parse_error != OK:
+		if npc_status_label != null:
+			npc_status_label.text = "服务器返回的数据格式异常（HTTP " + str(response_code) + "）：第 " + str(json_parser.get_error_line()) + " 行，" + json_parser.get_error_message()
+		push_warning("NPC API returned invalid JSON: " + raw.substr(0, 500))
+		return
+	var parsed: Variant = json_parser.data
+	if not parsed is Dictionary:
+		if npc_status_label != null:
+			npc_status_label.text = "服务器返回的数据不是 JSON 对象。"
+		return
+	var data: Dictionary = parsed
+	match context:
+		"list":
+			npc_definitions = data.get("npcs", [])
+			_render_world_npcs()
+			_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_bootstrap")
+		"exploration_bootstrap":
+			_render_exploration_points(data.get("points", []))
+			_send_npc_request("GET", "/api/v1/worlds/current/exploration-events", "exploration_events_bootstrap")
+		"exploration_list":
+			_render_exploration_points(data.get("points", []))
+			npc_title_label.text = "区域探索 · 已发现记录"
+			npc_dialogue_label.text = exploration_feedback if not exploration_feedback.is_empty() else "探索点由中心服依据角色实际位置验证。发现记录属于灵魂，轮回后仍会保留。"
+			npc_status_label.text = "探索进度已同步。先调查地点，再回应已解锁的奇遇。"
+			npc_panel.visible = true
+			_release_mouse_for_modal()
+			_send_npc_request("GET", "/api/v1/worlds/current/exploration-events", "exploration_events")
+		"exploration_events_bootstrap", "exploration_events":
+			_render_exploration_events(data.get("events", []))
+			_request_exploration_progress()
+		"exploration_progress":
+			_render_exploration_progress(data)
+		"exploration_discover":
+			var merit_delta := int(data.get("merit_delta", 0))
+			var karma_delta := int(data.get("karma_delta", 0))
+			var discovered_name := str(data.get("name", "探索点"))
+			exploration_feedback = "已发现「" + discovered_name + "」。功德 " + ("+" if merit_delta >= 0 else "") + str(merit_delta) + "，业力 " + ("+" if karma_delta >= 0 else "") + str(karma_delta) + "。记录已永久写入灵魂因果簿。"
+			_show_notification("探索发现 · " + discovered_name + "  已记入灵魂因果簿", 4.0)
+			_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_list")
+		"exploration_event":
+			var event_merit_delta := int(data.get("merit_delta", 0))
+			var event_karma_delta := int(data.get("karma_delta", 0))
+			var event_title := str(data.get("title", "未知奇遇"))
+			pending_exploration_event_id = ""
+			var chosen_text := str(data.get("choice_text", ""))
+			var outcome_text := str(data.get("outcome", data.get("description", "")))
+			exploration_feedback = "奇遇「" + event_title + "」已完成。\n你的选择：" + chosen_text + "\n" + outcome_text + "\n功德 " + ("+" if event_merit_delta >= 0 else "") + str(event_merit_delta) + "，业力 " + ("+" if event_karma_delta >= 0 else "") + str(event_karma_delta) + "。"
+			_show_notification("奇遇完成 · " + event_title + "  因果已记录", 4.2)
+			npc_title_label.text = "因果已定 · " + event_title
+			npc_dialogue_label.text = exploration_feedback
+			npc_status_label.text = "本次结果已由中心服写入灵魂因果簿。"
+			_clear_npc_choice_buttons()
+			npc_panel.visible = true
+			_release_mouse_for_modal()
+			_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_list")
+		"interact":
+			_clear_npc_choice_buttons()
+			var npc_data: Dictionary = data.get("npc", {})
+			var dialogue: Dictionary = data.get("dialogue", {})
+			npc_current_interaction_id = str(npc_data.get("id", ""))
+			var interacting_marker := npc_nodes.get(npc_current_interaction_id) as Node3D
+			if is_instance_valid(interacting_marker):
+				interacting_marker.set_meta("npc_talk_until_msec", Time.get_ticks_msec() + 3200)
+			npc_fate_encounter_button.visible = bool(npc_data.get("fate_encounter_available", false))
+			npc_title_label.text = str(npc_data.get("name", "冥界来者")) + " · " + str(npc_data.get("title", ""))
+			var lines: Array[String] = []
+			lines.append(str(dialogue.get("greeting", "这位道友，有何事？")))
+			var fate_reaction := str(npc_data.get("fate_reaction", ""))
+			if not fate_reaction.is_empty():
+				lines.append("")
+				lines.append("【命格感应】" + fate_reaction)
+			var topics: Variant = dialogue.get("topics", [])
+			if topics is Array:
+				for topic in topics:
+					lines.append("· " + str(topic))
+			npc_dialogue_label.text = "\n".join(PackedStringArray(lines))
+			if str(npc_data.get("interaction_type", "")) == "equipment_crafting":
+				var forge_button := Button.new()
+				_apply_button_theme(forge_button, true)
+				forge_button.text = "打开鬼工坊 · 装备打造"
+				forge_button.pressed.connect(_open_equipment_crafting)
+				npc_choice_container.add_child(forge_button)
+			var vendor_shop_id := _shop_id_for_vendor(npc_current_interaction_id)
+			if not vendor_shop_id.is_empty():
+				var market_button := Button.new()
+				_apply_button_theme(market_button, true)
+				market_button.text = ("打开鬼市摊位 · 查看商品" if npc_current_interaction_id.begins_with("fengdu_ghost_market_vendor_") else "打开商铺 · 查看商品")
+				market_button.pressed.connect(_open_vendor_shop.bind(vendor_shop_id, str(npc_data.get("name", "鬼市摊主"))))
+				npc_choice_container.add_child(market_button)
+			var choices: Variant = dialogue.get("choices", [])
+			if choices is Array:
+				for choice_variant in choices:
+					if choice_variant is Dictionary:
+						var choice: Dictionary = choice_variant
+						var choice_button := Button.new()
+						_apply_button_theme(choice_button, true)
+						choice_button.text = str(choice.get("text", "选择"))
+						choice_button.tooltip_text = str(choice.get("description", ""))
+						choice_button.pressed.connect(_submit_npc_fate_choice.bind(str(npc_data.get("id", "")), str(choice.get("id", ""))))
+						npc_choice_container.add_child(choice_button)
+			npc_status_label.text = "交互已由中心服验证。" + ("铁匠工坊可在此开启，打造结果由中心服结算。" if str(npc_data.get("interaction_type", "")) == "equipment_crafting" else "选择会影响功德与业力；与该 NPC 的因果抉择只能作出一次。")
+			npc_trial_button.visible = str(npc_data.get("interaction_type", "")) == "soul_trials"
+			npc_eligibility_button.visible = str(npc_data.get("interaction_type", "")) == "reincarnation_guidance"
+			npc_soul_button.visible = true
+			npc_soul_breakthrough_button.visible = false
+			npc_fusion_button.visible = str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu"
+			npc_panel.visible = true
+			_release_mouse_for_modal()
+		"fate_encounter":
+			npc_title_label.text = "命格奇遇 · " + str(data.get("title", "未知奇遇"))
+			npc_dialogue_label.text = str(data.get("description", "奇遇已记入因果簿。")) + "\n功德：" + str(data.get("merit", 0)) + "（+" + str(data.get("merit_delta", 0)) + "）\n业力：" + str(data.get("karma", 0)) + "（" + str(data.get("karma_delta", 0)) + "）"
+			npc_status_label.text = "这次奇遇已由中心服永久记入灵魂因果簿，每个灵魂只能发现一次。"
+			npc_fate_encounter_button.visible = false
+			_clear_npc_choice_buttons()
+			npc_panel.visible = true
+			_release_mouse_for_modal()
+		"fate_choice":
+			npc_title_label.text = "因果已记入 · " + str(data.get("npc_id", "NPC"))
+			npc_dialogue_label.text = str(data.get("result", "此事已记入因果簿。")) + "\n功德：" + str(data.get("merit", 0)) + "（" + ("+" if int(data.get("merit_delta", 0)) >= 0 else "") + str(data.get("merit_delta", 0)) + "）" + "\n业力：" + str(data.get("karma", 0)) + "（" + ("+" if int(data.get("karma_delta", 0)) >= 0 else "") + str(data.get("karma_delta", 0)) + "）"
+			npc_status_label.text = "该 NPC 的因果抉择已永久记录；不能再选择另一分支。"
+			_clear_npc_choice_buttons()
+			npc_trial_button.visible = false
+			npc_eligibility_button.visible = false
+			npc_soul_button.visible = true
+			npc_soul_breakthrough_button.visible = false
+			npc_panel.visible = true
+			_release_mouse_for_modal()
+		"trials":
+			var trials: Array = data.get("trials", [])
+			var lines: Array[String] = ["冥界试炼进度"]
+			for trial in trials:
+				if trial is Dictionary:
+					var state := "已完成" if bool(trial.get("completed", false)) else "进行中"
+					lines.append(str(trial.get("name", "试炼")) + "：" + str(trial.get("progress", 0)) + "/" + str(trial.get("target", 0)) + " · " + state)
+					lines.append(str(trial.get("description", "")))
+					if bool(trial.get("reward_granted", false)):
+						lines.append("奖励已入账：" + str(trial.get("reward_experience", 0)) + " 灵魂经验")
+			npc_dialogue_label.text = "\n".join(PackedStringArray(lines))
+			npc_status_label.text = "任务进度来自中心服；击败怪物后会自动更新。"
+			npc_trial_button.visible = true
+			npc_eligibility_button.visible = false
+			npc_soul_button.visible = true
+			npc_soul_breakthrough_button.visible = false
+			npc_reincarnation_leave_button.visible = false
+			npc_panel.visible = true
+			_release_mouse_for_modal()
+		"soul_progression":
+			var experience := int(data.get("experience", 0))
+			var realm_name := str(data.get("realm_name", "未知"))
+			var next_name := str(data.get("next_realm_name", ""))
+			var next_required: Variant = data.get("next_required_experience", null)
+			npc_title_label.text = "灵魂修炼 · " + realm_name
+			if next_required == null:
+				npc_dialogue_label.text = "当前灵魂经验：" + str(experience) + "\n已达到当前配置的最高灵魂境界。"
+				npc_soul_breakthrough_button.visible = false
+				npc_reincarnation_leave_button.visible = false
+			else:
+				npc_dialogue_label.text = "当前灵魂经验：" + str(experience) + "\n下一境界：" + next_name + "\n突破所需累计经验：" + str(next_required)
+				npc_soul_breakthrough_button.visible = experience >= int(next_required)
+			npc_status_label.text = "灵魂经验跨越轮回保留；达到门槛后仍需主动突破。"
+			npc_trial_button.visible = false
+			npc_eligibility_button.visible = false
+			npc_soul_button.visible = true
+			npc_panel.visible = true
+			_release_mouse_for_modal()
+		"soul_breakthrough":
+			npc_title_label.text = "灵魂境界突破"
+			npc_dialogue_label.text = "灵魂境界突破成功：" + str(data.get("realm_name", "新境界"))
+			npc_status_label.text = "境界已由中心服更新，正在刷新灵魂经验。"
+			npc_soul_breakthrough_button.visible = false
+			npc_trial_button.visible = false
+			npc_eligibility_button.visible = false
+			npc_panel.visible = true
+			_release_mouse_for_modal()
+			_request_soul_progression()
+		"soul_fusions":
+			_clear_npc_choice_buttons()
+			var recipes: Array = data.get("recipes", [])
+			var lines: Array[String] = ["魂质融合 · 灵魂永久传承", "融合不会消耗或删除原始异变记录；每种配方每个灵魂只能完成一次。"]
+			var attribute_names := {"strength":"力量","constitution":"体质","agility":"敏捷","spirit":"灵力","vitality":"气血"}
+			for recipe_variant in recipes:
+				if not recipe_variant is Dictionary:
+					continue
+				var recipe: Dictionary = recipe_variant
+				var recipe_name := str(recipe.get("name", "未知融合"))
+				var required: Array = recipe.get("required_attributes", [])
+				var missing: Array = recipe.get("missing_attributes", [])
+				var required_names: Array[String] = []
+				var missing_names: Array[String] = []
+				for attribute in required:
+					required_names.append(str(attribute_names.get(str(attribute), str(attribute))))
+				for attribute in missing:
+					missing_names.append(str(attribute_names.get(str(attribute), str(attribute))))
+				var state := "已融合" if bool(recipe.get("completed", false)) else ("材料齐备" if bool(recipe.get("available", false)) else "缺少：" + ", ".join(PackedStringArray(missing_names)))
+				lines.append(recipe_name + "（" + ", ".join(PackedStringArray(required_names)) + "）· " + state)
+				lines.append(str(recipe.get("description", "")))
+				if bool(recipe.get("available", false)):
+					var fuse_button := Button.new()
+					fuse_button.text = "融合 · " + recipe_name
+					fuse_button.pressed.connect(_fuse_soul_recipe.bind(str(recipe.get("id", "")), recipe_name))
+					npc_choice_container.add_child(fuse_button)
+			npc_title_label.text = "魂质融合 · 灵魂本源"
+			npc_dialogue_label.text = "\n".join(PackedStringArray(lines))
+			npc_status_label.text = "融合由中心服验证异变材料并结算来世资质；五种魂质异变齐全可尝试五行混元魂。"
+			npc_fusion_button.visible = true
+			npc_panel.visible = true
+			_release_mouse_for_modal()
+		"soul_fusion":
+			npc_title_label.text = "魂质融合成功 · " + str(data.get("name", "灵魂异变"))
+			npc_dialogue_label.text = str(data.get("description", "魂质已成功融合。")) + "\n融合结果已永久写入灵魂，并强化来世五维资质。"
+			npc_status_label.text = "原始魂质异变仍完整保留；正在刷新灵魂档案。"
+			_show_notification("魂质融合成功 · " + str(data.get("name", "新魂印")), 5.0)
+			npc_fusion_button.visible = true
+			npc_panel.visible = true
+			_release_mouse_for_modal()
+			_request_soul_essence()
+			_request_soul_fusions()
+		"eligibility":
+			var realm := str(data.get("current_realm_name", "未知"))
+			var required := str(data.get("required_realm_name", "聚灵境"))
+			var completed := bool(data.get("trial_completed", false))
+			var reasons: Array = data.get("reasons", [])
+			var eligible := bool(data.get("eligible", false))
+			npc_title_label.text = "轮回殿 · 投胎资格"
+			npc_dialogue_label.text = "当前灵魂境界：" + realm + "\n要求灵魂境界：" + required + "\n引魂试炼：" + ("已完成" if completed else "尚未完成")
+			npc_status_label.text = "已满足首次投胎条件。请先安全退出世界，再在角色界面选择新肉身名称与种族。" if eligible else "尚未满足条件：" + ", ".join(PackedStringArray(reasons))
+			npc_trial_button.visible = false
+			npc_eligibility_button.visible = true
+			npc_soul_button.visible = true
+			npc_soul_breakthrough_button.visible = false
+			npc_reincarnation_leave_button.visible = eligible
+			npc_reincarnation_leave_button.disabled = false
+			npc_panel.visible = true
+			_release_mouse_for_modal()
+
+func _clear_npc_choice_buttons() -> void:
+	if npc_choice_container == null:
+		return
+	for child in npc_choice_container.get_children():
+		child.queue_free()
+
+
+
+func _discover_npc_fate_encounter() -> void:
+	if npc_request_busy or npc_current_interaction_id.is_empty():
+		return
+	npc_status_label.text = "正在探查命格与忘川因缘……"
+	_send_npc_request("POST", "/api/v1/worlds/current/npcs/discover", "fate_encounter", {
+		"npc_id": npc_current_interaction_id
+	})
+
+
+func _submit_npc_fate_choice(npc_id: String, choice_id: String) -> void:
+	if npc_request_busy or npc_id.is_empty() or choice_id.is_empty():
+		return
+	npc_status_label.text = "正在向中心服提交因果选择……"
+	_send_npc_request("POST", "/api/v1/worlds/current/npcs/choose", "fate_choice", {
+		"npc_id": npc_id,
+		"choice_id": choice_id
+	})
+
+
+func _leave_world_for_reincarnation() -> void:
+	if leaving_for_reincarnation:
+		return
+	if HHSession.world_network == null or not is_instance_valid(HHSession.world_network):
+		hud_label.text = "当前世界连接已不存在，正在返回角色界面……"
+		_finish_leave_for_reincarnation()
+		return
+	leaving_for_reincarnation = true
+	npc_reincarnation_leave_button.disabled = true
+	npc_status_label.text = "正在保存当前位置并安全退出世界……"
+	var network: HHWorldNetwork = HHSession.world_network
+	if not network.disconnected.is_connected(_on_reincarnation_world_left):
+		network.disconnected.connect(_on_reincarnation_world_left, CONNECT_ONE_SHOT)
+	network.close()
+
+func _on_reincarnation_world_left() -> void:
+	_finish_leave_for_reincarnation()
+
+func _finish_leave_for_reincarnation() -> void:
+	var network: HHWorldNetwork = HHSession.world_network
+	if network != null and is_instance_valid(network):
+		if network.get_parent() == HHSession:
+			HHSession.remove_child(network)
+		network.queue_free()
+	HHSession.world_network = null
+	HHSession.world_snapshot = {}
+	var error := get_tree().change_scene_to_file("res://scenes/Startup.tscn")
+	if error != OK:
+		leaving_for_reincarnation = false
+		hud_label.text = "返回角色界面失败，错误码：" + str(error)
+
+func _make_npc_part(parent: Node3D, part_name: String, mesh: Mesh, local_position: Vector3, color: Color, emissive: bool = false) -> MeshInstance3D:
+	var part := MeshInstance3D.new()
+	part.name = part_name
+	part.mesh = mesh
+	part.position = local_position
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = 0.78
+	if emissive:
+		material.emission_enabled = true
+		material.emission = color
+		material.emission_energy_multiplier = 0.7
+	part.material_override = material
+	parent.add_child(part)
+	return part
+
+func _render_world_npcs() -> void:
+	for npc_id in npc_nodes.keys():
+		if is_instance_valid(npc_nodes[npc_id]):
+			npc_nodes[npc_id].queue_free()
+	npc_nodes.clear()
+	for npc_variant in npc_definitions:
+		if not (npc_variant is Dictionary):
+			continue
+		var npc_data: Dictionary = npc_variant
+		var npc_id := str(npc_data.get("id", ""))
+		if npc_id.is_empty():
+			continue
+		var npc_type := str(npc_data.get("npc_type", "guide"))
+		var npc_name := str(npc_data.get("name", "NPC"))
+		var marker := Node3D.new()
+		marker.name = "NPC_" + npc_id
+		marker.position = Vector3(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_y", 0.0)), float(npc_data.get("position_z", 0.0)))
+		marker.rotation.y = float(npc_data.get("rotation_y", 0.0))
+		var patrol_route: Variant = npc_data.get("patrol_route", {})
+		if str(npc_data.get("behavior_profile", "stationary")) == "guard_patrol" and patrol_route is Dictionary:
+			marker.set_meta("npc_patrol_route", patrol_route)
+			marker.set_meta("npc_patrol_phase_seconds", float(npc_data.get("patrol_phase_seconds", 0.0)))
+			marker.set_meta("npc_patrol_phase_started_msec", Time.get_ticks_msec())
+
+		var npc_visual := UnderworldVisualFactory.create_npc(npc_type, npc_name)
+		marker.add_child(npc_visual)
+		var accent_color := Color("#9bd8ce")
+		match npc_type:
+			"judge":
+				accent_color = Color("#b99be8")
+			"trial_master":
+				accent_color = Color("#e5a16c")
+			"guard":
+				accent_color = Color("#a9c5d9")
+			"soup_keeper":
+				accent_color = Color("#9bd8ce")
+			"blacksmith":
+				accent_color = Color("#e09a55")
+			_:
+				accent_color = Color("#e6c77d")
+
+		var label := Label3D.new()
+		var title := str(npc_data.get("title", ""))
+		label.text = npc_name + (("\n" + title) if not title.is_empty() else "") + "\nF · 交互"
+		label.position.y = 2.55
+		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		label.modulate = accent_color.lightened(0.35)
+		marker.add_child(label)
+		add_child(marker)
+		npc_nodes[npc_id] = marker
+	_update_nearest_npc_prompt()
+
+func _animate_npc_visuals(delta: float) -> void:
+	npc_animation_time += delta
+	for npc_id in npc_nodes:
+		var marker := npc_nodes[npc_id] as Node3D
+		if not is_instance_valid(marker):
+			continue
+		var patrol_route: Variant = marker.get_meta("npc_patrol_route", {})
+		if patrol_route is Dictionary and not patrol_route.is_empty():
+			var started_msec := int(marker.get_meta("npc_patrol_phase_started_msec", Time.get_ticks_msec()))
+			var base_phase := float(marker.get_meta("npc_patrol_phase_seconds", 0.0))
+			var route_state := _resolve_client_patrol_transform(patrol_route, base_phase + float(Time.get_ticks_msec() - started_msec) / 1000.0)
+			if not route_state.is_empty():
+				marker.position = route_state.position
+				marker.rotation.y = float(route_state.yaw)
+		var talk_until_msec := int(marker.get_meta("npc_talk_until_msec", 0))
+		var is_talking := Time.get_ticks_msec() < talk_until_msec
+		if is_talking and is_instance_valid(local_player):
+			var to_player: Vector3 = local_player.global_position - marker.global_position
+			to_player.y = 0.0
+			if to_player.length_squared() > 0.01:
+				var talk_yaw := atan2(to_player.x, to_player.z)
+				marker.rotation.y = lerp_angle(marker.rotation.y, talk_yaw, clampf(delta * 5.0, 0.0, 1.0))
+		if marker.get_child_count() == 0:
+			continue
+		var visual := marker.get_child(0) as Node3D
+		if not is_instance_valid(visual):
+			continue
+		var phase := float(abs(hash(str(npc_id))) % 100) * 0.0628
+		var breath := sin(npc_animation_time * 1.7 + phase)
+		var gesture := sin(npc_animation_time * 0.85 + phase)
+		var npc_type := str(visual.get_meta("npc_type", "guide"))
+		visual.position.y = breath * 0.018
+		var left_arm := visual.get_node_or_null("ArmPivotLeft") as Node3D
+		var right_arm := visual.get_node_or_null("ArmPivotRight") as Node3D
+		if is_instance_valid(left_arm):
+			left_arm.rotation.z = -0.035 + breath * 0.025
+		if is_instance_valid(right_arm):
+			right_arm.rotation.z = 0.035 - breath * 0.025
+		var head := visual.get_node_or_null("Head") as Node3D
+		match npc_type:
+			"guard":
+				# A sentry periodically scans the approach instead of breathing in place.
+				if is_instance_valid(head):
+					head.rotation.y = sin(npc_animation_time * 0.42 + phase) * 0.20
+				if is_instance_valid(left_arm):
+					left_arm.rotation.z -= 0.035
+				if is_instance_valid(right_arm):
+					right_arm.rotation.z += 0.035
+			"judge":
+				# The magistrate makes a restrained, deliberate ruling gesture.
+				if is_instance_valid(right_arm):
+					right_arm.rotation.z = 0.10 + maxf(gesture, 0.0) * 0.16
+				if is_instance_valid(head):
+					head.rotation.x = -0.025 + maxf(gesture, 0.0) * 0.035
+			"trial_master":
+				if is_instance_valid(left_arm):
+					left_arm.rotation.z = -0.08 + sin(npc_animation_time * 0.55 + phase) * 0.045
+				var token := visual.get_node_or_null("TrialToken") as Node3D
+				if is_instance_valid(token):
+					token.rotation.z = sin(npc_animation_time * 0.8 + phase) * 0.045
+			"blacksmith":
+				# Slow hammering cadence; keep the tool motion readable, not frantic.
+				var hammer := visual.get_node_or_null("HammerHandle") as Node3D
+				var hammer_head := visual.get_node_or_null("HammerHead") as Node3D
+				var hammer_angle := -0.65 + maxf(sin(npc_animation_time * 1.8 + phase), 0.0) * 0.30
+				if is_instance_valid(hammer):
+					hammer.rotation.z = hammer_angle
+				if is_instance_valid(hammer_head):
+					hammer_head.rotation.z = hammer_angle
+				if is_instance_valid(right_arm):
+					right_arm.rotation.z = 0.10 + maxf(sin(npc_animation_time * 1.8 + phase), 0.0) * 0.10
+			"soup_keeper":
+				# A calm offering pose around the steaming bowl.
+				if is_instance_valid(left_arm):
+					left_arm.rotation.z = -0.12 + sin(npc_animation_time * 0.6 + phase) * 0.025
+				if is_instance_valid(right_arm):
+					right_arm.rotation.z = 0.10 + sin(npc_animation_time * 0.6 + phase) * 0.025
+			_:
+				if is_instance_valid(head):
+					head.rotation.y = sin(npc_animation_time * 0.32 + phase) * 0.07
+		if str(npc_id).begins_with("fengdu_ghost_market_vendor_"):
+			# Market vendors alternate between arranging wares and greeting passers-by.
+			var vendor_cycle := sin(npc_animation_time * 0.72 + phase)
+			if is_instance_valid(left_arm):
+				left_arm.rotation.z = -0.10 - maxf(vendor_cycle, 0.0) * 0.12
+			if is_instance_valid(right_arm):
+				right_arm.rotation.z = 0.08 + maxf(-vendor_cycle, 0.0) * 0.15
+			if is_instance_valid(head):
+				head.rotation.y = sin(npc_animation_time * 0.24 + phase) * 0.11
+		if is_talking:
+			# Short, readable greeting gesture while facing the player; it never changes gameplay state.
+			var talk_phase := sin(npc_animation_time * 5.2 + phase)
+			if is_instance_valid(right_arm):
+				right_arm.rotation.z = -0.18 + maxf(talk_phase, 0.0) * 0.34
+			if is_instance_valid(left_arm) and npc_type != "soup_keeper":
+				left_arm.rotation.z = -0.035 - maxf(talk_phase, 0.0) * 0.08
+			if is_instance_valid(head):
+				head.rotation.x = -0.035 + sin(npc_animation_time * 2.8 + phase) * 0.025
+		var mist := visual.get_node_or_null("BowlMist") as Node3D
+		if is_instance_valid(mist):
+			mist.position.y = 1.16 + sin(npc_animation_time * 2.4 + phase) * 0.045
+			var mist_scale := 1.0 + sin(npc_animation_time * 2.0 + phase) * 0.12
+			mist.scale = Vector3.ONE * mist_scale
+
+func _resolve_client_patrol_transform(route: Dictionary, phase_seconds: float) -> Dictionary:
+	var waypoints: Variant = route.get("waypoints", [])
+	if not waypoints is Array or waypoints.size() < 2 or waypoints.size() > 32:
+		return {}
+	var speed := float(route.get("speed_mps", 0.0))
+	if speed < 0.1 or speed > 8.0 or not bool(route.get("loop", false)):
+		return {}
+	var default_wait := clampf(float(route.get("default_wait_seconds", 0.0)), 0.0, 120.0)
+	var lengths: Array[float] = []
+	var total_duration := 0.0
+	for i in range(waypoints.size()):
+		var point: Dictionary = waypoints[i]
+		var next: Dictionary = waypoints[(i + 1) % waypoints.size()]
+		var from := Vector3(float(point.get("x", 0.0)), float(point.get("y", 0.0)), float(point.get("z", 0.0)))
+		var to := Vector3(float(next.get("x", 0.0)), float(next.get("y", 0.0)), float(next.get("z", 0.0)))
+		var segment_length := from.distance_to(to)
+		if segment_length < 0.05:
+			return {}
+		lengths.append(segment_length)
+		var wait := float(point.get("wait_seconds", 0.0))
+		if wait <= 0.0:
+			wait = default_wait
+		total_duration += clampf(wait, 0.0, 120.0) + segment_length / speed
+	if total_duration <= 0.0:
+		return {}
+	var phase := fposmod(phase_seconds, total_duration)
+	for i in range(waypoints.size()):
+		var point: Dictionary = waypoints[i]
+		var next: Dictionary = waypoints[(i + 1) % waypoints.size()]
+		var from := Vector3(float(point.get("x", 0.0)), float(point.get("y", 0.0)), float(point.get("z", 0.0)))
+		var to := Vector3(float(next.get("x", 0.0)), float(next.get("y", 0.0)), float(next.get("z", 0.0)))
+		var wait := float(point.get("wait_seconds", 0.0))
+		if wait <= 0.0:
+			wait = default_wait
+		if phase < wait:
+			return {"position": from, "yaw": atan2(to.x - from.x, to.z - from.z)}
+		phase -= wait
+		var travel_duration := lengths[i] / speed
+		if phase < travel_duration:
+			var progress := phase / travel_duration
+			return {"position": from.lerp(to, progress), "yaw": atan2(to.x - from.x, to.z - from.z)}
+		phase -= travel_duration
+	return {}
+
+func _update_nearest_npc_prompt() -> void:
+	if npc_interact_button == null or not is_instance_valid(local_player):
+		return
+	var nearest_npc_distance := INF
+	var nearest_npc_name := ""
+	for npc_variant in npc_definitions:
+		if not (npc_variant is Dictionary):
+			continue
+		var npc_data: Dictionary = npc_variant
+		var npc_marker := npc_nodes.get(str(npc_data.get("id", ""))) as Node3D
+		var target := npc_marker.global_position if is_instance_valid(npc_marker) else Vector3(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_y", 0.0)), float(npc_data.get("position_z", 0.0)))
+		var distance := Vector2(target.x - local_player.global_position.x, target.z - local_player.global_position.z).length()
+		var radius := float(npc_data.get("interaction_radius", 3.0))
+		if distance <= radius and distance < nearest_npc_distance:
+			nearest_npc_distance = distance
+			nearest_npc_name = str(npc_data.get("name", "NPC"))
+	if not nearest_npc_name.is_empty():
+		npc_interact_button.visible = true
+		npc_interact_button.text = "F · 与 " + nearest_npc_name + " 交互"
+		return
+
+	var nearest_point_id := ""
+	var nearest_point_name := ""
+	var nearest_point_distance := INF
+	var nearest_point_radius := 4.0
+	for point_id in exploration_point_data.keys():
+		var point: Dictionary = exploration_point_data.get(point_id, {})
+		if bool(point.get("discovered", false)):
+			continue
+		var target := Vector3(float(point.get("position_x", 0.0)), float(point.get("position_y", 0.0)), float(point.get("position_z", 0.0)))
+		var distance := Vector2(target.x - local_player.position.x, target.z - local_player.position.z).length()
+		if distance < nearest_point_distance:
+			nearest_point_distance = distance
+			nearest_point_id = str(point_id)
+			nearest_point_name = str(point.get("name", "未知地点"))
+			nearest_point_radius = float(point.get("interaction_radius", 4.0))
+	npc_interact_button.visible = not nearest_point_id.is_empty() and nearest_point_distance <= 32.0
+	if npc_interact_button.visible:
+		if nearest_point_distance <= nearest_point_radius:
+			npc_interact_button.text = "F · 发现：" + nearest_point_name
+		else:
+			npc_interact_button.text = "探索点：" + nearest_point_name + " · " + str(roundi(nearest_point_distance)) + "m"
+
+func _shop_id_for_vendor(npc_id: String) -> String:
+	match npc_id:
+		"fengdu_ghost_market_vendor_west":
+			return "fengdu_general_shop"
+		"fengdu_ghost_market_vendor_east":
+			return "fengdu_talisman_shop"
+		"fengdu_blacksmith":
+			return "fengdu_weapon_shop"
+		"fengdu_mengpo":
+			return "fengdu_elixir_shop"
+		"fengdu_trial_master":
+			return "fengdu_formation_shop"
+		_:
+			return ""
+
+
+func _open_vendor_shop(shop_id: String, vendor_name: String) -> void:
+	if shop_request_busy or shop_id.is_empty():
+		return
+	shop_selected_id = shop_id
+	shop_selected_name = vendor_name
+	npc_status_label.text = "正在向中心服读取摊位商品、价格与库存……"
+	_send_shop_request("GET", "/api/v1/shops", "list")
+
+
+func _send_shop_request(method: String, path: String, context: String, payload: Dictionary = {}) -> void:
+	if shop_http == null or shop_request_busy:
+		return
+	if HHSession.access_token.is_empty():
+		npc_status_label.text = "登录状态已失效，请重新登录后交易。"
+		return
+	var headers := PackedStringArray(["Authorization: Bearer " + HHSession.access_token])
+	var http_method := HTTPClient.METHOD_GET
+	var body := ""
+	if method == "POST":
+		http_method = HTTPClient.METHOD_POST
+		headers.append("Content-Type: application/json")
+		body = JSON.stringify(payload)
+	shop_request_context = context
+	var error := shop_http.request(HHSession.api_base + path, headers, http_method, body)
+	if error != OK:
+		shop_request_context = ""
+		npc_status_label.text = "无法连接鬼市交易服务，错误码：" + str(error)
+		return
+	shop_request_busy = true
+
+
+func _new_shop_request_id() -> String:
+	var crypto := Crypto.new()
+	var bytes := crypto.generate_random_bytes(16)
+	if bytes.size() != 16:
+		return ""
+	bytes[6] = (bytes[6] & 0x0f) | 0x40
+	bytes[8] = (bytes[8] & 0x3f) | 0x80
+	var hex := bytes.hex_encode()
+	return hex.substr(0, 8) + "-" + hex.substr(8, 4) + "-" + hex.substr(12, 4) + "-" + hex.substr(16, 4) + "-" + hex.substr(20, 12)
+
+
+func _purchase_market_item(shop_id: String, item_id: String, quantity_option: OptionButton) -> void:
+	if shop_request_busy or shop_id.is_empty() or item_id.is_empty() or not is_instance_valid(quantity_option):
+		return
+	var quantity := maxi(1, quantity_option.get_selected_id())
+	var request_id := _new_shop_request_id()
+	if request_id.is_empty():
+		npc_status_label.text = "无法生成安全交易编号，请稍后重试。"
+		return
+	npc_status_label.text = "正在向中心服提交购买请求……"
+	_send_shop_request("POST", "/api/v1/shops/" + shop_id + "/purchase", "purchase", {
+		"request_id": request_id,
+		"item_id": item_id,
+		"quantity": quantity
+	})
+
+
+func _on_shop_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	shop_request_busy = false
+	var context := shop_request_context
+	shop_request_context = ""
+	var raw := body.get_string_from_utf8()
+	if result != HTTPRequest.RESULT_SUCCESS:
+		npc_status_label.text = "鬼市交易服务连接失败，请检查网络。"
+		return
+	if response_code < 200 or response_code >= 300:
+		var message := raw.strip_edges()
+		match message:
+			"move closer to the assigned NPC before purchasing":
+				message = "请靠近对应摊主后再购买。"
+			"insufficient currency balance":
+				message = "冥币不足，暂时无法购买。"
+			"inventory is full":
+				message = "背包已满，请整理背包后再购买。"
+			"item stack limit exceeded":
+				message = "当前物品堆叠数量已达上限，请减少购买数量。"
+			"shop item is out of stock":
+				message = "该商品库存不足，请稍后再来。"
+			"shop or item is unavailable in the current world":
+				message = "该商铺或商品暂未开放，请稍后再来。"
+			"invalid shop purchase request":
+				message = "购买请求无效，请重新选择商品。"
+		if message.length() > 180:
+			message = message.substr(0, 180) + "……"
+		npc_status_label.text = "交易未完成：" + message
+		return
+	var parser := JSON.new()
+	if parser.parse(raw) != OK or not parser.data is Dictionary:
+		npc_status_label.text = "鬼市返回的数据格式异常。"
+		return
+	var data: Dictionary = parser.data
+	if context == "purchase":
+		var item_name := str(data.get("item_name", "商品"))
+		npc_status_label.text = "购买成功：%s ×%d，花费 %d，余额 %d。正在刷新摊位库存……" % [
+			item_name, int(data.get("quantity", 1)), int(data.get("total_price", 0)), int(data.get("balance_after", 0))
+		]
+		_show_notification("鬼市购得 · " + item_name, 3.0)
+		# The purchase transaction updates wallet and inventory on the server.
+		# Refresh all three client projections immediately instead of waiting for
+		# the periodic wallet timer or the player opening the backpack again.
+		_request_wallet()
+		_refresh_inventory()
+		_refresh_equipment()
+		_send_shop_request("GET", "/api/v1/shops", "list")
+		return
+	if context != "list":
+		return
+	var shops: Variant = data.get("shops", [])
+	var selected_shop: Dictionary = {}
+	if shops is Array:
+		for shop_variant in shops:
+			if shop_variant is Dictionary and str(shop_variant.get("id", "")) == shop_selected_id:
+				selected_shop = shop_variant
+				break
+	if selected_shop.is_empty():
+		npc_status_label.text = "此摊位当前没有开放商品，或尚未配置到本世界。"
+		return
+	for child in npc_choice_container.get_children():
+		child.queue_free()
+	var heading := Label.new()
+	heading.text = str(selected_shop.get("name", shop_selected_name)) + " · 中心服商品目录"
+	heading.add_theme_color_override("font_color", Color("#d4b47b"))
+	npc_choice_container.add_child(heading)
+	var description := Label.new()
+	description.text = str(selected_shop.get("description", ""))
+	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	npc_choice_container.add_child(description)
+	var items: Variant = selected_shop.get("items", [])
+	if not items is Array or items.is_empty():
+		var empty_label := Label.new()
+		empty_label.text = "摊位暂时没有可售商品。"
+		npc_choice_container.add_child(empty_label)
+	else:
+		for item_variant in items:
+			if not item_variant is Dictionary:
+				continue
+			var item: Dictionary = item_variant
+			var stock_available := int(item.get("stock_quantity", 999999))
+			var stock_text := "不限量" if not item.has("stock_quantity") else ("库存 %d" % stock_available)
+			var quality_names := ["普通", "优秀", "精良", "稀有", "传说"]
+			var quality := int(item.get("quality", 1))
+			var quality_name: String = quality_names[clampi(quality - 1, 0, quality_names.size() - 1)]
+			var category_names := {"material":"材料", "consumable":"丹药", "equipment":"装备", "quest":"任务物品"}
+			var item_row := HBoxContainer.new()
+			item_row.add_theme_constant_override("separation", 6)
+			npc_choice_container.add_child(item_row)
+			var item_label := Label.new()
+			item_label.text = "%s · %s %s · %d %s · %s" % [
+				str(item.get("name", "未知商品")),
+				quality_name,
+				str(category_names.get(str(item.get("category", "material")), "物品")),
+				int(item.get("unit_price", 0)),
+				str(selected_shop.get("currency_name", "冥币")),
+				stock_text
+			]
+			item_label.tooltip_text = str(item.get("description", ""))
+			item_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			item_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			item_row.add_child(item_label)
+			var quantity_option := OptionButton.new()
+			_apply_button_theme(quantity_option)
+			quantity_option.add_item("1件", 1)
+			for quantity in [5, 10, 20, 50, 99]:
+				if quantity <= int(item.get("max_stack", 99)) and quantity <= stock_available:
+					quantity_option.add_item(str(quantity) + "件", quantity)
+			quantity_option.select(0)
+			quantity_option.disabled = stock_available <= 0
+			item_row.add_child(quantity_option)
+			var purchase_button := Button.new()
+			_apply_button_theme(purchase_button, true)
+			purchase_button.text = "购买"
+			purchase_button.disabled = stock_available <= 0
+			purchase_button.tooltip_text = str(item.get("description", ""))
+			purchase_button.pressed.connect(_purchase_market_item.bind(shop_selected_id, str(item.get("item_id", "")), quantity_option))
+			item_row.add_child(purchase_button)
+	var back_button := Button.new()
+	_apply_button_theme(back_button)
+	back_button.text = "返回摊主对话"
+	back_button.pressed.connect(_restore_vendor_dialogue)
+	npc_choice_container.add_child(back_button)
+	npc_status_label.text = "价格、扣款、背包容量与库存均由中心服事务结算；可选择购买数量，库存与堆叠上限由服务器复核。"
+
+
+func _restore_vendor_dialogue() -> void:
+	_clear_npc_choice_buttons()
+	npc_dialogue_label.text = "摊主正在等候你的下一次询价。靠近摊位后可重新打开商品目录。"
+	npc_status_label.text = "交易尚未提交。"
+	var reopen_button := Button.new()
+	_apply_button_theme(reopen_button, true)
+	reopen_button.text = "重新查看商品"
+	reopen_button.pressed.connect(_open_vendor_shop.bind(shop_selected_id, shop_selected_name))
+	npc_choice_container.add_child(reopen_button)
+
+
+func _close_npc_panel() -> void:
+	if is_instance_valid(npc_panel):
+		npc_panel.visible = false
+	_restore_mouse_after_modal()
+
+func _try_interact_nearest_npc() -> void:
+	if npc_request_busy or not is_instance_valid(local_player):
+		return
+	var nearest_npc_id := ""
+	var nearest_npc_distance := INF
+	for npc_variant in npc_definitions:
+		if not (npc_variant is Dictionary):
+			continue
+		var npc_data: Dictionary = npc_variant
+		var npc_marker := npc_nodes.get(str(npc_data.get("id", ""))) as Node3D
+		var target := npc_marker.global_position if is_instance_valid(npc_marker) else Vector3(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_y", 0.0)), float(npc_data.get("position_z", 0.0)))
+		var distance := Vector2(target.x - local_player.global_position.x, target.z - local_player.global_position.z).length()
+		if distance <= float(npc_data.get("interaction_radius", 3.0)) and distance < nearest_npc_distance:
+			nearest_npc_distance = distance
+			nearest_npc_id = str(npc_data.get("id", ""))
+	if not nearest_npc_id.is_empty():
+		_release_mouse_for_modal()
+		if is_instance_valid(HHAudio):
+			HHAudio.play_ui("npc_interact")
+		# F should expose the cursor before the server response arrives, not require ESC.
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		npc_selected_id = nearest_npc_id
+		npc_status_label.text = "正在与 NPC 建立交互……"
+		_send_npc_request("POST", "/api/v1/worlds/current/npcs/interact", "interact", {"npc_id": nearest_npc_id})
+		return
+
+	var nearest_point_id := ""
+	var nearest_point_distance := INF
+	for point_id in exploration_point_data.keys():
+		var point: Dictionary = exploration_point_data.get(point_id, {})
+		if bool(point.get("discovered", false)):
+			continue
+		var target := Vector3(float(point.get("position_x", 0.0)), float(point.get("position_y", 0.0)), float(point.get("position_z", 0.0)))
+		var distance := Vector2(target.x - local_player.position.x, target.z - local_player.position.z).length()
+		if distance <= float(point.get("interaction_radius", 4.0)) and distance < nearest_point_distance:
+			nearest_point_distance = distance
+			nearest_point_id = str(point_id)
+	if not nearest_point_id.is_empty():
+		_discover_exploration_point(nearest_point_id)
+
+func _request_soul_fusions() -> void:
+	if npc_request_busy:
+		return
+	npc_status_label.text = "正在核验灵魂已觉醒的魂质异变……"
+	_send_npc_request("GET", "/api/v1/souls/current/fusions", "soul_fusions")
+
+func _fuse_soul_recipe(recipe_id: String, recipe_name: String) -> void:
+	if npc_request_busy or recipe_id.is_empty():
+		return
+	npc_status_label.text = "正在融合「" + recipe_name + "」，由中心服校验材料与来世资质……"
+	_send_npc_request("POST", "/api/v1/souls/current/fusions", "soul_fusion", {"recipe_id": recipe_id})
+
+func _request_soul_trials() -> void:
+	if npc_request_busy:
+		return
+	npc_status_label.text = "正在读取中心服试炼进度……"
+	_send_npc_request("GET", "/api/v1/souls/current/trials", "trials")
+
+func _request_reincarnation_eligibility() -> void:
+	if npc_request_busy:
+		return
+	npc_status_label.text = "正在核验灵魂境界与试炼记录……"
+	_send_npc_request("GET", "/api/v1/souls/current/reincarnation-eligibility", "eligibility")
+
+
+func _request_soul_progression() -> void:
+	if npc_request_busy:
+		return
+	npc_status_label.text = "正在读取跨世保留的灵魂经验……"
+	_send_npc_request("GET", "/api/v1/souls/current/progression", "soul_progression")
+
+func _request_soul_breakthrough() -> void:
+	if npc_request_busy:
+		return
+	npc_status_label.text = "正在向中心服申请灵魂境界突破……"
+	_send_npc_request("POST", "/api/v1/souls/current/breakthrough", "soul_breakthrough", {})
+
+
+func _request_exploration_points() -> void:
+	if npc_request_busy:
+		return
+	exploration_feedback = ""
+	npc_title_label.text = "正在读取区域探索点……"
+	npc_dialogue_label.text = "正在向中心服查询本世界的探索记录。"
+	npc_panel.visible = true
+	_release_mouse_for_modal()
+	_send_npc_request("GET", "/api/v1/worlds/current/exploration-points", "exploration_list")
+
+func _request_exploration_progress() -> void:
+	if npc_request_busy:
+		return
+	_send_npc_request("GET", "/api/v1/worlds/current/exploration-progress", "exploration_progress")
+
+
+func _render_exploration_points(points: Variant) -> void:
+	if exploration_container == null:
+		return
+	for marker_id in exploration_markers.keys():
+		var old_marker: Node3D = exploration_markers[marker_id]
+		if is_instance_valid(old_marker):
+			old_marker.queue_free()
+	exploration_markers.clear()
+	exploration_buttons.clear()
+	exploration_point_data.clear()
+	exploration_event_buttons.clear()
+	exploration_event_data.clear()
+	for child in exploration_container.get_children():
+		child.queue_free()
+	if not points is Array or points.is_empty():
+		var empty_label := Label.new()
+		empty_label.text = "当前世界暂未配置探索点。"
+		exploration_container.add_child(empty_label)
+		return
+	for point_variant in points:
+		if not point_variant is Dictionary:
+			continue
+		var point: Dictionary = point_variant
+		var discovered := bool(point.get("discovered", false))
+		var point_id := str(point.get("id", ""))
+		_create_exploration_marker(point)
+		var point_button := Button.new()
+		_apply_button_theme(point_button)
+		var danger := int(point.get("danger_level", 1))
+		var target := Vector3(float(point.get("position_x", 0.0)), float(point.get("position_y", 0.0)), float(point.get("position_z", 0.0)))
+		var distance: float = local_player.global_position.distance_to(target) if is_instance_valid(local_player) else INF
+		var radius := float(point.get("interaction_radius", 4.0))
+		var state_text := "已发现" if discovered else ("调查" if distance <= radius else "未抵达 · " + str(roundi(distance)) + "m")
+		point_button.text = str(point.get("region_name", "未知区域")) + " · " + state_text + " · " + str(point.get("name", "未知地点")) + "  | 危险 " + str(danger) + "/10"
+		point_button.disabled = discovered or distance > radius or npc_request_busy
+		point_button.tooltip_text = str(point.get("description", ""))
+		point_button.pressed.connect(_discover_exploration_point.bind(point_id))
+		exploration_container.add_child(point_button)
+		exploration_buttons[point_id] = point_button
+		exploration_point_data[point_id] = point.duplicate(true)
+
+
+func _exploration_percent(done: int, total: int) -> int:
+	if total <= 0:
+		return 0
+	return clampi(roundi(float(done) * 100.0 / float(total)), 0, 100)
+
+
+func _exploration_bar(percent: int) -> String:
+	var filled := roundi(float(percent) / 10.0)
+	var bar := ""
+	for index in range(10):
+		bar += "■" if index < filled else "□"
+	return bar
+
+
+func _render_exploration_progress(data: Dictionary) -> void:
+	if exploration_container == null:
+		return
+	if exploration_progress_label == null or not is_instance_valid(exploration_progress_label):
+		exploration_progress_label = Label.new()
+		exploration_progress_label.name = "ExplorationProgressSummary"
+		exploration_progress_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		exploration_progress_label.add_theme_font_size_override("font_size", 15)
+		exploration_container.add_child(exploration_progress_label)
+	exploration_container.move_child(exploration_progress_label, 0)
+	var total_points := int(data.get("total_points", 0))
+	var discovered_points := int(data.get("discovered_points", 0))
+	var total_events := int(data.get("total_events", 0))
+	var claimed_events := int(data.get("claimed_events", 0))
+	var point_percent := _exploration_percent(discovered_points, total_points)
+	var event_percent := _exploration_percent(claimed_events, total_events)
+	var lines: Array[String] = []
+	lines.append("【灵魂探索总览】地点 %d/%d · %d%%" % [discovered_points, total_points, point_percent])
+	lines.append(_exploration_bar(point_percent) + "  奇遇 %d/%d · %d%%" % [claimed_events, total_events, event_percent])
+	var regions: Variant = data.get("regions", [])
+	if regions is Array:
+		for region_variant in regions:
+			if not region_variant is Dictionary:
+				continue
+			var region: Dictionary = region_variant
+			var region_points := int(region.get("total_points", 0))
+			var region_discovered := int(region.get("discovered_points", 0))
+			var region_events := int(region.get("total_events", 0))
+			var region_claimed := int(region.get("claimed_events", 0))
+			var region_percent := _exploration_percent(region_discovered, region_points)
+			lines.append("%s  地点 %d/%d · %d%%" % [
+				str(region.get("region_name", region.get("region_id", "未知区域"))),
+				region_discovered, region_points, region_percent
+			])
+			lines.append(_exploration_bar(region_percent) + "  奇遇 %d/%d（%d%%）" % [
+				region_claimed, region_events, _exploration_percent(region_claimed, region_events)
+			])
+	exploration_progress_label.text = "\n".join(PackedStringArray(lines))
+
+
+func _exploration_event_state_text(event: Dictionary, distance: float) -> String:
+	var status := str(event.get("status", "locked"))
+	var in_range: bool = distance <= float(event.get("interaction_radius", 4.0))
+	match status:
+		"completed":
+			return "已完成"
+		"available":
+			return "触发奇遇" if in_range else "待触发 · 距离 %dm" % roundi(distance)
+		_:
+			return "未解锁 · 需满足前置因果并发现地点"
+
+
+func _render_exploration_events(events: Variant) -> void:
+	if exploration_container == null or not events is Array:
+		return
+	for event_button_id in exploration_event_buttons.keys():
+		var old_button: Button = exploration_event_buttons[event_button_id]
+		if is_instance_valid(old_button):
+			old_button.queue_free()
+	exploration_event_buttons.clear()
+	exploration_event_data.clear()
+	var heading := Label.new()
+	heading.text = "区域奇遇 · 灵魂因果记录"
+	heading.add_theme_color_override("font_color", Color("#d4b47b"))
+	heading.add_theme_font_size_override("font_size", 17)
+	heading.add_theme_font_size_override("font_size", 18)
+	exploration_container.add_child(heading)
+	if events.is_empty():
+		var empty_label := Label.new()
+		empty_label.text = "当前世界尚无配置的奇遇。"
+		exploration_container.add_child(empty_label)
+		return
+	for event_variant in events:
+		if not event_variant is Dictionary:
+			continue
+		var event: Dictionary = event_variant
+		var event_id := str(event.get("id", ""))
+		if event_id.is_empty():
+			continue
+		var target := Vector3(float(event.get("position_x", 0.0)), float(event.get("position_y", 0.0)), float(event.get("position_z", 0.0)))
+		var distance: float = local_player.global_position.distance_to(target) if is_instance_valid(local_player) else INF
+		var in_range: bool = distance <= float(event.get("interaction_radius", 4.0))
+		var status := str(event.get("status", "locked"))
+		var state_text := _exploration_event_state_text(event, distance)
+		var event_button := Button.new()
+		_apply_button_theme(event_button, status == "available")
+		event_button.text = str(event.get("point_name", "探索地点")) + " · " + str(event.get("title", "未知奇遇")) + " · " + state_text
+		event_button.tooltip_text = str(event.get("description", ""))
+		event_button.disabled = status != "available" or not in_range or npc_request_busy
+		if status == "available":
+			event_button.pressed.connect(_open_exploration_event.bind(event_id))
+		exploration_container.add_child(event_button)
+		exploration_event_buttons[event_id] = event_button
+		exploration_event_data[event_id] = event.duplicate(true)
+
+
+func _open_exploration_event(event_id: String) -> void:
+	if not exploration_event_data.has(event_id):
+		return
+	var event: Dictionary = exploration_event_data[event_id]
+	if str(event.get("status", "locked")) != "available":
+		return
+	var target := Vector3(float(event.get("position_x", 0.0)), float(event.get("position_y", 0.0)), float(event.get("position_z", 0.0)))
+	var distance: float = local_player.global_position.distance_to(target) if is_instance_valid(local_player) else INF
+	if distance > float(event.get("interaction_radius", 4.0)):
+		npc_status_label.text = "尚未抵达奇遇地点，距离约 %dm。" % roundi(distance)
+		return
+	pending_exploration_event_id = event_id
+	_clear_npc_choice_buttons()
+	npc_title_label.text = "因果奇遇 · " + str(event.get("title", "未知奇遇"))
+	npc_dialogue_label.text = str(event.get("description", "一段因果正在等待你的回应。")) + "\n\n地点：" + str(event.get("point_name", "未知地点")) + "\n\n你的选择会影响功德与业力，并永久记入灵魂因果簿。每个奇遇只能选择一次。"
+	npc_status_label.text = "请选择你对这段因果的回应。不同选择会产生不同结果，具体结算由中心服裁定。"
+	var choices: Variant = event.get("choices", [])
+	var choice_count := 0
+	if choices is Array:
+		for choice_variant in choices:
+			if not choice_variant is Dictionary:
+				continue
+			var choice: Dictionary = choice_variant
+			var choice_id := str(choice.get("id", ""))
+			if choice_id.is_empty():
+				continue
+			var choice_button := Button.new()
+			_apply_button_theme(choice_button, true)
+			choice_button.text = str(choice.get("text", "作出回应"))
+			choice_button.tooltip_text = str(choice.get("description", ""))
+			choice_button.pressed.connect(_confirm_exploration_event.bind(choice_id))
+			npc_choice_container.add_child(choice_button)
+			choice_count += 1
+	if choice_count == 0:
+		npc_status_label.text = "此奇遇尚未配置有效分支，暂时无法回应。"
+	var cancel_button := Button.new()
+	_apply_button_theme(cancel_button)
+	cancel_button.text = "暂不回应"
+	cancel_button.pressed.connect(_cancel_exploration_event)
+	npc_choice_container.add_child(cancel_button)
+	npc_trial_button.visible = false
+	npc_eligibility_button.visible = false
+	npc_fate_encounter_button.visible = false
+	npc_soul_button.visible = false
+	npc_soul_breakthrough_button.visible = false
+	npc_reincarnation_leave_button.visible = false
+	npc_panel.visible = true
+	_release_mouse_for_modal()
+
+
+func _confirm_exploration_event(choice_id: String) -> void:
+	if pending_exploration_event_id.is_empty() or choice_id.is_empty() or npc_request_busy:
+		return
+	var event_id := pending_exploration_event_id
+	npc_status_label.text = "正在向中心服验证你的选择、位置与因果资格……"
+	# npc_request_busy prevents duplicate submissions while preserving the
+	# ability to cancel or retry if the center server rejects the request.
+	_send_npc_request("POST", "/api/v1/worlds/current/exploration-events/trigger", "exploration_event", {
+		"event_id": event_id,
+		"choice_id": choice_id
+	})
+
+
+func _cancel_exploration_event() -> void:
+	pending_exploration_event_id = ""
+	_clear_npc_choice_buttons()
+	npc_panel.visible = false
+
+
+func _trigger_exploration_event(event_id: String) -> void:
+	# Kept as a compatibility entry point for any older scene binding.
+	_open_exploration_event(event_id)
+
+
+func _discover_exploration_point(point_id: String) -> void:
+	if npc_request_busy or point_id.is_empty():
+		return
+	npc_status_label.text = "正在验证距离并记录探索发现……"
+	_send_npc_request("POST", "/api/v1/worlds/current/exploration-points/discover", "exploration_discover", {
+		"point_id": point_id
+	})
+
+
+
+func _add_exploration_marker_mesh(marker: Node3D, node_name: String, mesh: Mesh, local_position: Vector3, color: Color, emissive: bool = false) -> MeshInstance3D:
+	var instance := MeshInstance3D.new()
+	instance.name = node_name
+	instance.mesh = mesh
+	instance.position = local_position
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = 0.72
+	if emissive:
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.emission_enabled = true
+		material.emission = color
+		material.emission_energy_multiplier = 1.6
+	instance.material_override = material
+	marker.add_child(instance)
+	return instance
+
+
+func _create_exploration_marker(point: Dictionary) -> void:
+	var point_id := str(point.get("id", ""))
+	if point_id.is_empty():
+		return
+	var marker := Node3D.new()
+	marker.name = "Exploration_" + point_id
+	marker.position = Vector3(
+		float(point.get("position_x", 0.0)),
+		float(point.get("position_y", 0.0)) + 0.08,
+		float(point.get("position_z", 0.0))
+	)
+	var discovered := bool(point.get("discovered", false))
+	var marker_color := Color("#79c8a4") if discovered else Color("#e7bd69")
+	var stone_color := Color("#52645e") if discovered else Color("#74634f")
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.72
+	ring_mesh.outer_radius = 0.9
+	var ring := _add_exploration_marker_mesh(marker, "Ring", ring_mesh, Vector3.ZERO, marker_color, true)
+
+	# Each authored point has its own silhouette; unknown future points retain a simple beacon.
+	match point_id:
+		"fengdu_gate_soul_lantern":
+			var post := CylinderMesh.new()
+			post.top_radius = 0.07
+			post.bottom_radius = 0.11
+			post.height = 1.15
+			_add_exploration_marker_mesh(marker, "LanternStand", post, Vector3(0, 0.58, 0), stone_color)
+			var body := BoxMesh.new()
+			body.size = Vector3(0.58, 0.58, 0.48)
+			_add_exploration_marker_mesh(marker, "LanternBody", body, Vector3(0, 1.35, 0), marker_color, true)
+			var roof := CylinderMesh.new()
+			roof.top_radius = 0.22
+			roof.bottom_radius = 0.42
+			roof.height = 0.18
+			_add_exploration_marker_mesh(marker, "LanternRoof", roof, Vector3(0, 1.73, 0), stone_color)
+			var flame := SphereMesh.new()
+			flame.radius = 0.14
+			flame.height = 0.3
+			_add_exploration_marker_mesh(marker, "SoulFlame", flame, Vector3(0, 1.36, 0), marker_color, true)
+		"forgotten_river_echo_stone":
+			var slab := BoxMesh.new()
+			slab.size = Vector3(0.82, 1.55, 0.34)
+			var stone := _add_exploration_marker_mesh(marker, "EchoStone", slab, Vector3(0, 0.82, 0), stone_color)
+			stone.rotation.z = -0.1
+			var echo_mesh := TorusMesh.new()
+			echo_mesh.inner_radius = 0.28
+			echo_mesh.outer_radius = 0.34
+			var echo := _add_exploration_marker_mesh(marker, "EchoEtching", echo_mesh, Vector3(0, 1.0, 0.2), marker_color, true)
+			echo.rotation.x = PI / 2.0
+		"naihe_bridge_soul_mark":
+			var seal := CylinderMesh.new()
+			seal.top_radius = 0.22
+			seal.bottom_radius = 0.3
+			seal.height = 0.16
+			_add_exploration_marker_mesh(marker, "SoulSeal", seal, Vector3(0, 0.12, 0), marker_color, true)
+			for pillar_index in range(3):
+				var angle := TAU * float(pillar_index) / 3.0
+				var pillar := CylinderMesh.new()
+				pillar.top_radius = 0.045
+				pillar.bottom_radius = 0.075
+				pillar.height = 0.62
+				_add_exploration_marker_mesh(marker, "SealPillar" + str(pillar_index), pillar, Vector3(cos(angle) * 0.48, 0.31, sin(angle) * 0.48), stone_color)
+		"fengdu_ancient_battlefield":
+			var altar := BoxMesh.new()
+			altar.size = Vector3(2.2, 0.32, 1.5)
+			_add_exploration_marker_mesh(marker, "BattlefieldAltar", altar, Vector3(0, 0.28, 0), stone_color)
+			for blade_index in range(3):
+				var blade := BoxMesh.new()
+				blade.size = Vector3(0.12, 1.25 + float(blade_index) * 0.18, 0.2)
+				var blade_node := _add_exploration_marker_mesh(marker, "BrokenWarBlade" + str(blade_index), blade, Vector3(-0.62 + float(blade_index) * 0.62, 0.95, 0.0), marker_color, true)
+				blade_node.rotation.z = -0.16 + float(blade_index) * 0.13
+			var battle_ring := TorusMesh.new()
+			battle_ring.inner_radius = 0.48
+			battle_ring.outer_radius = 0.55
+			var ring_node := _add_exploration_marker_mesh(marker, "BattlefieldSeal", battle_ring, Vector3(0, 0.56, 0), marker_color, true)
+			ring_node.rotation.x = PI / 2.0
+		"fengdu_lantern_shadow_trace":
+			var shadow_stone := CylinderMesh.new()
+			shadow_stone.top_radius = 0.24
+			shadow_stone.bottom_radius = 0.34
+			shadow_stone.height = 0.42
+			_add_exploration_marker_mesh(marker, "ShadowStone", shadow_stone, Vector3(0, 0.24, 0), stone_color)
+			var shadow_flame := SphereMesh.new()
+			shadow_flame.radius = 0.22
+			shadow_flame.height = 0.62
+			_add_exploration_marker_mesh(marker, "ShadowFlame", shadow_flame, Vector3(0, 0.92, 0), marker_color, true)
+			var shadow_halo_mesh := TorusMesh.new()
+			shadow_halo_mesh.inner_radius = 0.32
+			shadow_halo_mesh.outer_radius = 0.38
+			var shadow_halo := _add_exploration_marker_mesh(marker, "ShadowHalo", shadow_halo_mesh, Vector3(0, 0.94, 0), marker_color, true)
+			shadow_halo.rotation.x = PI / 2.0
+		"reincarnation_hall_tablet":
+			var tablet_mesh := BoxMesh.new()
+			tablet_mesh.size = Vector3(0.9, 1.65, 0.28)
+			_add_exploration_marker_mesh(marker, "ReincarnationTablet", tablet_mesh, Vector3(0, 0.88, 0), stone_color)
+			var cap := BoxMesh.new()
+			cap.size = Vector3(1.08, 0.16, 0.38)
+			_add_exploration_marker_mesh(marker, "TabletCap", cap, Vector3(0, 1.78, 0), marker_color)
+			for line_index in range(3):
+				var inscription := BoxMesh.new()
+				inscription.size = Vector3(0.42, 0.035, 0.025)
+				_add_exploration_marker_mesh(marker, "Inscription" + str(line_index), inscription, Vector3(0, 1.28 - float(line_index) * 0.22, 0.16), marker_color, true)
+		_:
+			var beacon_mesh := CylinderMesh.new()
+			beacon_mesh.top_radius = 0.035
+			beacon_mesh.bottom_radius = 0.035
+			beacon_mesh.height = 1.35
+			_add_exploration_marker_mesh(marker, "Beacon", beacon_mesh, Vector3(0, 0.72, 0), marker_color, true)
+
+	var title := Label3D.new()
+	title.text = ("已发现 · " if discovered else "探索 · ") + str(point.get("name", "未知地点")) + ("" if discovered else "\nF · 靠近后调查")
+	title.position.y = 2.15 if point_id == "reincarnation_hall_tablet" or point_id == "forgotten_river_echo_stone" else 2.0
+	title.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	title.font_size = 28
+	title.modulate = marker_color
+	marker.add_child(title)
+	add_child(marker)
+	marker.set_meta("base_y", marker.position.y)
+	marker.set_meta("phase", float(abs(point_id.hash()) % 1000) / 1000.0 * TAU)
+	marker.set_meta("discovered", discovered)
+	exploration_markers[point_id] = marker
+
+
+func _animate_exploration_markers(delta: float) -> void:
+	exploration_animation_time += delta
+	for marker_id in exploration_markers.keys():
+		var marker: Node3D = exploration_markers[marker_id]
+		if not is_instance_valid(marker):
+			continue
+		var phase := float(marker.get_meta("phase", 0.0))
+		var discovered := bool(marker.get_meta("discovered", false))
+		var speed := 1.25 if discovered else 2.1
+		var amplitude := 0.035 if discovered else 0.13
+		var base_y := float(marker.get_meta("base_y", marker.position.y))
+		marker.position.y = base_y + sin(exploration_animation_time * speed + phase) * amplitude
+		var ring := marker.get_node_or_null("Ring") as MeshInstance3D
+		if ring != null:
+			var pulse := 1.0 + sin(exploration_animation_time * (1.5 if discovered else 2.8) + phase) * (0.025 if discovered else 0.09)
+			ring.scale = Vector3.ONE * pulse
+		var beacon := marker.get_node_or_null("Beacon") as MeshInstance3D
+		if beacon != null:
+			beacon.rotation.y = sin(exploration_animation_time * 0.8 + phase) * 0.12
+
+
+func _update_exploration_proximity() -> void:
+	if not is_instance_valid(local_player):
+		return
+	for point_id in exploration_buttons.keys():
+		var point: Dictionary = exploration_point_data.get(point_id, {})
+		var point_button: Button = exploration_buttons[point_id]
+		if not is_instance_valid(point_button):
+			continue
+		var discovered := bool(point.get("discovered", false))
+		if discovered:
+			point_button.disabled = true
+			continue
+		var target := Vector3(
+			float(point.get("position_x", 0.0)),
+			float(point.get("position_y", 0.0)),
+			float(point.get("position_z", 0.0))
+		)
+		var distance: float = local_player.global_position.distance_to(target)
+		var in_range: bool = distance <= float(point.get("interaction_radius", 4.0))
+		point_button.disabled = not in_range or npc_request_busy
+		var danger := int(point.get("danger_level", 1))
+		point_button.text = str(point.get("region_name", "未知区域")) + " · " + ("调查" if in_range else "未抵达 · " + str(roundi(distance)) + "m") + " · " + str(point.get("name", "未知地点")) + "  | 危险 " + str(danger) + "/10"
+	for event_id in exploration_event_buttons.keys():
+		var event: Dictionary = exploration_event_data.get(event_id, {})
+		var event_button: Button = exploration_event_buttons[event_id]
+		if not is_instance_valid(event_button):
+			continue
+		var event_target := Vector3(float(event.get("position_x", 0.0)), float(event.get("position_y", 0.0)), float(event.get("position_z", 0.0)))
+		var event_distance: float = local_player.global_position.distance_to(event_target)
+		var event_in_range: bool = event_distance <= float(event.get("interaction_radius", 4.0))
+		var event_status := str(event.get("status", "locked"))
+		event_button.disabled = event_status != "available" or not event_in_range or npc_request_busy
+		event_button.text = str(event.get("point_name", "探索地点")) + " · " + str(event.get("title", "未知奇遇")) + " · " + _exploration_event_state_text(event, event_distance)
