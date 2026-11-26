@@ -395,7 +395,9 @@ func _collect_model_diagnostics(root: Node) -> Dictionary:
 	var root_scale := Transform3D(Basis().scaled(root.scale), Vector3.ZERO)
 	_collect_model_diagnostics_recursive(root, root_scale, result, true)
 	if bool(result["bounds_found"]):
-		result["bounds_size"] = (result["bounds_max"] as Vector3) - (result["bounds_min"] as Vector3)
+		var bounds_maximum: Vector3 = result["bounds_max"]
+		var bounds_minimum: Vector3 = result["bounds_min"]
+		result["bounds_size"] = bounds_maximum - bounds_minimum
 	return result
 
 
@@ -414,8 +416,10 @@ func _collect_model_diagnostics_recursive(node: Node, parent_transform: Transfor
 			result["bounds_max"] = mesh_maximum
 			result["bounds_found"] = true
 		else:
-			result["bounds_min"] = (result["bounds_min"] as Vector3).min(mesh_minimum)
-			result["bounds_max"] = (result["bounds_max"] as Vector3).max(mesh_maximum)
+			var previous_minimum: Vector3 = result["bounds_min"]
+			var previous_maximum: Vector3 = result["bounds_max"]
+			result["bounds_min"] = previous_minimum.min(mesh_minimum)
+			result["bounds_max"] = previous_maximum.max(mesh_maximum)
 	if node is Skeleton3D:
 		var skeleton := node as Skeleton3D
 		result["skeletons"] = int(result["skeletons"]) + 1
