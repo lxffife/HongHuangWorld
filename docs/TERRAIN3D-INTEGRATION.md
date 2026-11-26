@@ -27,6 +27,18 @@
 - [Terrain3D 安装说明](https://terrain3d.readthedocs.io/en/stable/docs/installation.html)
 - [Terrain3D 平台说明](https://terrain3d.readthedocs.io/en/stable/docs/platforms.html)
 
+## 计划接入时机（当前开发路线）
+
+Terrain3D 不会等到整张大地图全部完成才接入，也不会现在就把正式世界切换到插件。接入安排为“先隔离样板、后主世界替换”：
+
+1. **当前阶段：** 先完成酆都城内安全区、NPC 位置审计、城外怪物生态分区，并明确服务端权威出生点规则。客户端已具备区域诊断，但真正的刷怪点和 NPC 数据修复仍需服务端同步。
+2. **插件样板阶段：** 对齐 NativeNet 的 godot-cpp 版本到项目 Godot 4.6 构建链，完成 Windows/Linux 原生扩展编译后，立即建立独立 Terrain3D 样板场景。候选先验证官方 Terrain3D 1.1.0-stable 对应 Godot 4.6 的构建包。
+3. **样板验收：** 验证导入、雕刻、heightmap、地形碰撞、高度查询、角色移动和导出运行；样板不替换正式世界。
+4. **正式接入：** 样板通过后，先替换一块酆都城外地形，再扩展城外生态区和分块流送；酆都城内建筑、NPC、怪物坐标与网络协议保持原坐标契约。
+5. **逐区迁移：** 最后才逐步扩展罗酆山、后土神域、十八层地狱地表入口和远方血海等独立地图。血海必须是远域，不通过把酆都当前 200 m 原型简单拉伸来伪造距离。
+
+因此，Terrain3D 的实际接入时间点是：**NPC/怪物区域规则确定，并且 NativeNet 4.6 原生构建链验证通过后的下一阶段**。目前阻塞点是 NativeNet 仍使用 godot-cpp 4.3，而不是 Terrain3D 本身。
+
 ## 正式接入前的门禁
 
 1. 确认开发机 Godot Editor 的精确版本（含补丁号）。
