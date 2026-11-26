@@ -7,6 +7,7 @@ const WorldChunkStreamerScript = preload("res://scripts/world_chunk_streamer.gd"
 const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
 const FengduCityBuilder = preload("res://scripts/fengdu_city_builder.gd")
 const HellFloorBuilder = preload("res://scripts/underworld_hell_floor_builder.gd")
+const FengduOuterRoadBuilder = preload("res://scripts/fengdu_outer_road_builder.gd")
 
 ## Builds the static visual and collision layer for a world.
 ## Kept independent from WorldScene so the same region layout can later be
@@ -27,6 +28,7 @@ static func build(world_id: String) -> Node3D:
 		root.add_child(FengduCityBuilder.build())
 		_add_fengdu_outer_region_markers(root)
 		_add_fengdu_region_dressing(root)
+		root.add_child(FengduOuterRoadBuilder.build())
 		# Fengdu gate and the soul lantern avenue.
 		root.add_child(UnderworldVisualFactory.create_fengdu_gate())
 		for side in [-1.0, 1.0]:
