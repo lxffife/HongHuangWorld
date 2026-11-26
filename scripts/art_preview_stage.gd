@@ -392,15 +392,16 @@ func _collect_model_diagnostics(root: Node) -> Dictionary:
 		"bounds_found": false, "bounds_min": Vector3.ZERO, "bounds_max": Vector3.ZERO,
 		"bounds_size": Vector3.ZERO
 	}
-	_collect_model_diagnostics_recursive(root, Transform3D.IDENTITY, result)
+	var root_scale := Transform3D(Basis().scaled(root.scale), Vector3.ZERO)
+	_collect_model_diagnostics_recursive(root, root_scale, result, true)
 	if bool(result["bounds_found"]):
 		result["bounds_size"] = (result["bounds_max"] as Vector3) - (result["bounds_min"] as Vector3)
 	return result
 
 
-func _collect_model_diagnostics_recursive(node: Node, parent_transform: Transform3D, result: Dictionary) -> void:
+func _collect_model_diagnostics_recursive(node: Node, parent_transform: Transform3D, result: Dictionary, is_root: bool = false) -> void:
 	var current_transform := parent_transform
-	if node is Node3D:
+	if node is Node3D and not is_root:
 		current_transform = parent_transform * (node as Node3D).transform
 	if node is MeshInstance3D and (node as MeshInstance3D).mesh != null:
 		result["meshes"] = int(result["meshes"]) + 1
@@ -430,7 +431,7 @@ func _collect_model_diagnostics_recursive(node: Node, parent_transform: Transfor
 			clips.append(str(clip_name))
 		result["clips"] = clips
 	for child in node.get_children():
-		_collect_model_diagnostics_recursive(child, current_transform, result)
+		_collect_model_diagnostics_recursive(child, current_transform, result, false)
 
 
 func _update_status(message: String) -> void:
