@@ -1,6 +1,7 @@
 extends SceneTree
 
 const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
+const WorldTerrainBuilder = preload("res://scripts/world_terrain_builder.gd")
 const WorldSpawnPolicy = preload("res://scripts/world_spawn_policy.gd")
 const WorldChunkStreamerScript = preload("res://scripts/world_chunk_streamer.gd")
 const FengduCityBuilder = preload("res://scripts/fengdu_city_builder.gd")
@@ -18,6 +19,7 @@ func _initialize() -> void:
 func _run_world_generation_tests() -> void:
 	_test_world_bounds_and_hell_catalog()
 	_test_fengdu_spawn_policy()
+	_test_fengdu_outer_region_markers()
 	_test_chunk_streaming()
 	_test_fengdu_city_blockout()
 	_test_fengdu_navigation()
@@ -94,6 +96,26 @@ func _test_fengdu_spawn_policy() -> void:
 	assert(WorldMapCatalog.resolve_region_name("underworld_fengdu", Vector3(0.0, 0.0, 20.0)) == "南郊游魂泽")
 	assert(WorldMapCatalog.resolve_region_name("underworld_fengdu", Vector3(-70.0, 0.0, 30.0)) == "古战场遗址")
 	assert(WorldMapCatalog.resolve_region_name("underworld_fengdu", Vector3(75.0, 0.0, -50.0)) == "东郊忘川古渡")
+
+
+func _test_fengdu_outer_region_markers() -> void:
+	var terrain := WorldTerrainBuilder.build("underworld_fengdu")
+	for marker_name in [
+		"OuterRegion_SouthernWraithMarsh",
+		"OuterRegion_WesternBoneWaste",
+		"OuterRegion_EasternForgottenBank",
+		"OuterRegion_AncientBattlefield"
+	]:
+		var marker := terrain.get_node_or_null(marker_name)
+		assert(marker is Node3D)
+		assert(marker.get_node_or_null("BeaconPillar") is MeshInstance3D)
+		assert(marker.get_node_or_null("RegionCrystal") is MeshInstance3D)
+		assert(marker.get_node_or_null("RegionTitle") is Label3D)
+		assert(marker.get_node_or_null("RegionSubtitle") is Label3D)
+		for child in marker.get_children():
+			assert(not child is CollisionShape3D)
+			assert(not child is StaticBody3D)
+	terrain.free()
 
 
 func _test_chunk_streaming() -> void:
