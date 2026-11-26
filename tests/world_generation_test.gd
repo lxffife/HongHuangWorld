@@ -91,6 +91,9 @@ func _test_fengdu_spawn_policy() -> void:
 	var city_monster := WorldSpawnPolicy.audit_monster_position(Vector3(0.0, 0.0, -60.0), "游祟", 5)
 	assert(bool(city_monster.get("spawn_violation", false)))
 	assert(WorldSpawnPolicy.get_fengdu_monster_regions().size() == 4)
+	assert(WorldMapCatalog.resolve_region_name("underworld_fengdu", Vector3(0.0, 0.0, 20.0)) == "南郊游魂泽")
+	assert(WorldMapCatalog.resolve_region_name("underworld_fengdu", Vector3(-70.0, 0.0, 30.0)) == "古战场遗址")
+	assert(WorldMapCatalog.resolve_region_name("underworld_fengdu", Vector3(75.0, 0.0, -50.0)) == "东郊忘川古渡")
 
 
 func _test_chunk_streaming() -> void:
