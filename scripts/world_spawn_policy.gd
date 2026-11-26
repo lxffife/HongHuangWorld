@@ -6,6 +6,14 @@ const FENGDU_CITY_SAFE_BOUNDS := Vector4(-53.0, 53.0, -104.0, -16.0)
 
 const FENGDU_MONSTER_REGIONS := [
 	{
+		"id": "ancient_battlefield",
+		"name": "西南古战场",
+		"bounds": Vector4(-100.0, -36.0, 10.0, 46.0),
+		"level_min": 24,
+		"level_max": 40,
+		"families": ["战魂", "战神", "阴兵", "古战魂"]
+	},
+	{
 		"id": "southern_wraith_marsh",
 		"name": "南郊游魂泽",
 		"bounds": Vector4(-100.0, 100.0, -15.0, 100.0),
