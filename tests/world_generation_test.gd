@@ -1,6 +1,7 @@
 extends SceneTree
 
 const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
+const WorldSpawnPolicy = preload("res://scripts/world_spawn_policy.gd")
 const WorldChunkStreamerScript = preload("res://scripts/world_chunk_streamer.gd")
 const FengduCityBuilder = preload("res://scripts/fengdu_city_builder.gd")
 const FengduNavigation = preload("res://scripts/fengdu_navigation.gd")
@@ -16,6 +17,7 @@ func _initialize() -> void:
 
 func _run_world_generation_tests() -> void:
 	_test_world_bounds_and_hell_catalog()
+	_test_fengdu_spawn_policy()
 	_test_chunk_streaming()
 	_test_fengdu_city_blockout()
 	_test_fengdu_navigation()
@@ -64,6 +66,28 @@ func _test_world_bounds_and_hell_catalog() -> void:
 		assert(not str(layer.get("hazard", "")).is_empty())
 		assert(not str(layer.get("objective", "")).is_empty())
 		assert(not str(layer.get("reward_theme", "")).is_empty())
+
+
+func _test_fengdu_spawn_policy() -> void:
+	assert(WorldSpawnPolicy.is_fengdu_city_safe_position(Vector3(0.0, 0.0, -60.0)))
+	assert(not WorldSpawnPolicy.is_fengdu_city_safe_position(Vector3(0.0, 0.0, 0.0)))
+	var npc_city := WorldSpawnPolicy.audit_npc_position(Vector3(12.0, 0.0, -60.0))
+	assert(bool(npc_city.get("valid_city_position", false)))
+	var npc_outside := WorldSpawnPolicy.audit_npc_position(Vector3(0.0, 0.0, 20.0))
+	assert(not bool(npc_outside.get("valid_city_position", true)))
+	var southern := WorldSpawnPolicy.audit_monster_position(Vector3(0.0, 0.0, 30.0), "游祟", 5)
+	assert(str(southern.get("region_id", "")) == "southern_wraith_marsh")
+	assert(not bool(southern.get("spawn_violation", true)))
+	assert(bool(southern.get("family_match", false)))
+	var western := WorldSpawnPolicy.audit_monster_position(Vector3(-75.0, 0.0, -50.0), "铁骨兽", 16)
+	assert(str(western.get("region_id", "")) == "western_bone_waste")
+	assert(not bool(western.get("level_mismatch", true)))
+	var eastern := WorldSpawnPolicy.audit_monster_position(Vector3(75.0, 0.0, -50.0), "水鬼", 22)
+	assert(str(eastern.get("region_id", "")) == "eastern_forgotten_bank")
+	assert(bool(eastern.get("family_match", false)))
+	var city_monster := WorldSpawnPolicy.audit_monster_position(Vector3(0.0, 0.0, -60.0), "游祟", 5)
+	assert(bool(city_monster.get("spawn_violation", false)))
+	assert(WorldSpawnPolicy.get_fengdu_monster_regions().size() == 3)
 
 
 func _test_chunk_streaming() -> void:
