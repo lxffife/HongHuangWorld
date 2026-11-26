@@ -87,6 +87,28 @@ func _test_fengdu_city_blockout() -> void:
 	assert(city.get_node_or_null("District_imperial_palace") is StaticBody3D)
 	assert(city.get_node_or_null("District_ghost_market") is StaticBody3D)
 	assert(city.get_node_or_null("District_residential_quarter") is StaticBody3D)
+	var ten_kings := city.get_node("District_ten_kings_manors")
+	var king_seal_count := 0
+	for child in ten_kings.get_children():
+		if str(child.name).begins_with("TenKingName_"):
+			king_seal_count += 1
+	assert(king_seal_count == 10)
+	var judge_court := city.get_node("District_judge_court")
+	assert(judge_court.get_node_or_null("JudgeBench") is MeshInstance3D)
+	assert(judge_court.get_node_or_null("JudgmentScroll") is MeshInstance3D)
+	var ghost_registry := city.get_node("District_ghost_registry")
+	var ledger_rack_count := 0
+	for child in ghost_registry.get_children():
+		if str(child.name).begins_with("GhostLedgerRack_"):
+			ledger_rack_count += 1
+	assert(ledger_rack_count == 6)
+	var reincarnation_bureau := city.get_node("District_reincarnation_bureau")
+	assert(reincarnation_bureau.get_node_or_null("SixPathsWheel") is MeshInstance3D)
+	var six_path_count := 0
+	for child in reincarnation_bureau.get_children():
+		if str(child.name).begins_with("SixPathMarker_"):
+			six_path_count += 1
+	assert(six_path_count == 6)
 	assert(city.get_node_or_null("SouthWall_-1.0") is StaticBody3D)
 	assert(city.get_node_or_null("NorthWall_1.0") is StaticBody3D)
 	assert(city.get_node_or_null("EastWall_-1.0") is StaticBody3D)
