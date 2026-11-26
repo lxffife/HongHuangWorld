@@ -3,6 +3,8 @@ extends SceneTree
 const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
 const WorldTerrainBuilder = preload("res://scripts/world_terrain_builder.gd")
 const FengduOuterRoadBuilder = preload("res://scripts/fengdu_outer_road_builder.gd")
+const FengduRegionEntranceBuilder = preload("res://scripts/fengdu_region_entrance_builder.gd")
+const FengduMonsterEcologyCatalog = preload("res://scripts/fengdu_monster_ecology_catalog.gd")
 const WorldSpawnPolicy = preload("res://scripts/world_spawn_policy.gd")
 const WorldChunkStreamerScript = preload("res://scripts/world_chunk_streamer.gd")
 const FengduCityBuilder = preload("res://scripts/fengdu_city_builder.gd")
@@ -22,6 +24,8 @@ func _run_world_generation_tests() -> void:
 	_test_fengdu_spawn_policy()
 	_test_fengdu_outer_region_markers()
 	_test_fengdu_outer_roads()
+	_test_fengdu_monster_ecology()
+	_test_fengdu_region_entrances()
 	_test_chunk_streaming()
 	_test_fengdu_city_blockout()
 	_test_fengdu_navigation()
@@ -103,6 +107,7 @@ func _test_fengdu_spawn_policy() -> void:
 func _test_fengdu_outer_region_markers() -> void:
 	var terrain := WorldTerrainBuilder.build("underworld_fengdu")
 	assert(terrain.get_node_or_null("FengduOuterRoadNetwork") is Node3D)
+	assert(terrain.get_node_or_null("FengduRegionEntrances") is Node3D)
 	for marker_name in [
 		"OuterRegion_SouthernWraithMarsh",
 		"OuterRegion_WesternBoneWaste",
@@ -145,6 +150,55 @@ func _test_fengdu_outer_region_markers() -> void:
 	assert(WorldMapCatalog.resolve_region_name("underworld_fengdu", Vector3(78.0, 0.0, -58.0)) == "东郊忘川古渡")
 	assert(WorldMapCatalog.resolve_region_name("underworld_fengdu", Vector3(-78.0, 0.0, 30.0)) == "古战场遗址")
 	terrain.free()
+
+
+func _test_fengdu_monster_ecology() -> void:
+	var expected_levels := {
+		"southern_wraith_marsh": Vector2i(1, 12),
+		"western_bone_waste": Vector2i(10, 24),
+		"eastern_forgotten_bank": Vector2i(18, 32),
+		"ancient_battlefield": Vector2i(24, 40)
+	}
+	assert(FengduMonsterEcologyCatalog.get_all_region_ids().size() == 4)
+	for region_id in expected_levels:
+		var tiers := FengduMonsterEcologyCatalog.get_encounter_tiers(region_id)
+		assert(tiers.size() == 3)
+		var tier_ids := []
+		for tier in tiers:
+			tier_ids.append(str(tier.get("tier_id", "")))
+			assert(int(tier.get("level_min", 0)) >= expected_levels[region_id].x)
+			assert(int(tier.get("level_max", 0)) <= expected_levels[region_id].y)
+			assert(int(tier.get("level_min", 0)) <= int(tier.get("level_max", 0)))
+			assert(int(tier.get("suggested_count", 0)) > 0)
+			assert(float(tier.get("activity_radius", 0.0)) > 0.0)
+			assert(not (tier.get("families", []) as Array).is_empty())
+		assert(tier_ids == ["normal", "elite", "boss"])
+	assert(FengduMonsterEcologyCatalog.get_region_encounters("unknown_region").is_empty())
+
+
+func _test_fengdu_region_entrances() -> void:
+	var entrances := FengduRegionEntranceBuilder.build()
+	assert(entrances.name == "FengduRegionEntrances")
+	assert(entrances.get_child_count() == 4)
+	var expected := {
+		"Entrance_SouthernWraithMarsh": {"region": "southern_wraith_marsh", "position": Vector3(0.0, 0.0, -13.0)},
+		"Entrance_WesternBoneWaste": {"region": "western_bone_waste", "position": Vector3(-55.0, 0.0, -60.0)},
+		"Entrance_EasternForgottenBank": {"region": "eastern_forgotten_bank", "position": Vector3(55.0, 0.0, -60.0)},
+		"Entrance_AncientBattlefield": {"region": "ancient_battlefield", "position": Vector3(-55.0, 0.0, 12.0)}
+	}
+	for marker_name in expected:
+		var marker := entrances.get_node_or_null(marker_name)
+		assert(marker is Node3D)
+		assert(str(marker.get_meta("region_id", "")) == str(expected[marker_name]["region"]))
+		assert(marker.position == expected[marker_name]["position"])
+		assert(marker.get_node_or_null("BoundaryLintel") is MeshInstance3D)
+		assert(marker.get_node_or_null("EntranceTitle") is Label3D)
+		assert(marker.get_node_or_null("EntranceSubtitle") is Label3D)
+		for child in marker.get_children():
+			assert(child is MeshInstance3D or child is Label3D)
+			assert(not child is StaticBody3D)
+			assert(not child is CollisionShape3D)
+	entrances.free()
 
 
 func _test_fengdu_outer_roads() -> void:
