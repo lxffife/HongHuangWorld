@@ -10,6 +10,7 @@ const FriendPanelScript = preload("res://scripts/friend_panel.gd")
 const WorldMiniMapScript = preload("res://scripts/world_minimap.gd")
 const WorldRegionCatalog = preload("res://scripts/world_region_catalog.gd")
 const WorldSpawnPolicy = preload("res://scripts/world_spawn_policy.gd")
+const FengduMonsterEcologyCatalog = preload("res://scripts/fengdu_monster_ecology_catalog.gd")
 const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
 const WorldMapViewScript = preload("res://scripts/world_map_view.gd")
 const WorldTerrainBuilder = preload("res://scripts/world_terrain_builder.gd")
@@ -2614,9 +2615,18 @@ func _upsert_monster(entity: Dictionary) -> void:
 			int(merged_entity.get("level", 1))
 		)
 		merged_entity["client_spawn_region"] = str(spawn_audit.get("region_name", "未知区域"))
+		merged_entity["client_spawn_region_id"] = str(spawn_audit.get("region_id", ""))
 		merged_entity["client_spawn_violation"] = bool(spawn_audit.get("spawn_violation", false))
 		merged_entity["client_level_mismatch"] = bool(spawn_audit.get("level_mismatch", false))
 		merged_entity["client_family_match"] = bool(spawn_audit.get("family_match", false))
+		var ecology_audit := FengduMonsterEcologyCatalog.audit_level_tier(
+			str(spawn_audit.get("region_id", "")),
+			int(merged_entity.get("level", 1))
+		)
+		merged_entity["client_ecology_tier_matched"] = bool(ecology_audit.get("matched", false))
+		merged_entity["client_ecology_tier_label"] = str(ecology_audit.get("tier_label", ""))
+		merged_entity["client_ecology_template_name"] = str(ecology_audit.get("template_name", ""))
+		merged_entity["client_ecology_tier_id"] = str(ecology_audit.get("tier_id", ""))
 		if bool(spawn_audit.get("spawn_violation", false)) and not bool(monster_node.get_meta("spawn_violation_logged", false)):
 			monster_node.set_meta("spawn_violation_logged", true)
 			push_warning("[SpawnAudit] 怪物出现在酆都城内安全区：%s id=%s pos=%s" % [
@@ -2698,6 +2708,15 @@ func _refresh_monster_nameplate(monster_id: String) -> void:
 	var spawn_region := str(entity.get("client_spawn_region", ""))
 	if not spawn_region.is_empty():
 		base_text += "\n区域：" + spawn_region
+	if bool(entity.get("client_ecology_tier_matched", false)):
+		var ecology_label := str(entity.get("client_ecology_tier_label", ""))
+		var template_name := str(entity.get("client_ecology_template_name", ""))
+		base_text += "\n生态参考：" + ecology_label
+		if not template_name.is_empty():
+			base_text += " · " + template_name
+	else:
+		if not str(entity.get("client_spawn_region_id", "")).is_empty():
+			base_text += "\n生态参考：未匹配模板等级段"
 	if bool(entity.get("client_spawn_violation", false)):
 		base_text += "\n⚠ 城内异常刷新（需修正服务端刷怪点）"
 	elif bool(entity.get("client_level_mismatch", false)):
