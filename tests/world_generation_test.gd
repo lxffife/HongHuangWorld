@@ -115,6 +115,28 @@ func _test_fengdu_outer_region_markers() -> void:
 		for child in marker.get_children():
 			assert(not child is CollisionShape3D)
 			assert(not child is StaticBody3D)
+	var dressing_expectations := {
+		"RegionDressing_SouthernWraithMarsh": ["MarshReedCluster_", "MarshPool_"],
+		"RegionDressing_WesternBoneWaste": ["BonePillar_", "BrokenRib_", "BoneWasteRock_"],
+		"RegionDressing_EasternForgottenBank": ["ForgottenBankStone_", "ForgottenBankMarker_", "ForgottenBankSoulLight_"],
+		"RegionDressing_AncientBattlefield": ["BrokenSpear_", "BattleStandardCloth_", "BattlefieldTombstone_"]
+	}
+	for dressing_name in dressing_expectations:
+		var dressing := terrain.get_node_or_null(dressing_name)
+		assert(dressing is Node3D)
+		var mesh_count := 0
+		for prop in dressing.get_children():
+			assert(prop is MeshInstance3D)
+			assert(not prop is StaticBody3D)
+			assert(not prop is CollisionShape3D)
+			mesh_count += 1
+		assert(mesh_count >= 8)
+		for prefix in dressing_expectations[dressing_name]:
+			var matching_count := 0
+			for prop in dressing.get_children():
+				if str(prop.name).begins_with(prefix):
+					matching_count += 1
+			assert(matching_count > 0)
 	assert(WorldMapCatalog.resolve_region_name("underworld_fengdu", Vector3(0.0, 0.0, 72.0)) == "南郊游魂泽")
 	assert(WorldMapCatalog.resolve_region_name("underworld_fengdu", Vector3(-78.0, 0.0, -58.0)) == "西郊白骨荒原")
 	assert(WorldMapCatalog.resolve_region_name("underworld_fengdu", Vector3(78.0, 0.0, -58.0)) == "东郊忘川古渡")
