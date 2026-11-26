@@ -93,6 +93,8 @@ func _test_fengdu_city_blockout() -> void:
 	assert(city.get_node_or_null("WestWall_1.0") is StaticBody3D)
 	var palace := city.get_node("District_imperial_palace")
 	assert(palace.get_node_or_null("CollisionShape3D") is CollisionShape3D)
+	assert(palace.get_node_or_null("DistrictLanternLeft") is Node3D)
+	assert(palace.get_node_or_null("DistrictLanternRight/SoulFlame") is MeshInstance3D)
 	assert(city.get_node_or_null("Road_imperial_palace_ten_kings_manors") is MeshInstance3D)
 	city.free()
 
