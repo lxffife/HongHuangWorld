@@ -25,6 +25,7 @@ static func build(world_id: String) -> Node3D:
 
 	if is_underworld:
 		root.add_child(FengduCityBuilder.build())
+		_add_fengdu_outer_region_markers(root)
 		# Fengdu gate and the soul lantern avenue.
 		root.add_child(UnderworldVisualFactory.create_fengdu_gate())
 		for side in [-1.0, 1.0]:
@@ -112,6 +113,78 @@ static func build(world_id: String) -> Node3D:
 			rock.material_override = rock_material
 			root.add_child(rock)
 	return root
+
+static func _add_fengdu_outer_region_markers(root: Node3D) -> void:
+	# Landmark beacons make the four outer hunting territories legible in-world.
+	# They are visual-only: no collision, navigation or server-authority changes.
+	var markers := [
+		{"id": "SouthernWraithMarsh", "title": "南郊游魂泽", "subtitle": "游魂 · Lv.1–12", "position": Vector3(0.0, 0.0, 72.0), "color": Color("#75a9d5")},
+		{"id": "WesternBoneWaste", "title": "西郊白骨荒原", "subtitle": "骸骨 · Lv.10–24", "position": Vector3(-78.0, 0.0, -58.0), "color": Color("#c4b58c")},
+		{"id": "EasternForgottenBank", "title": "东郊忘川古渡", "subtitle": "水鬼 · Lv.18–32", "position": Vector3(78.0, 0.0, -58.0), "color": Color("#6bbdc2")},
+		{"id": "AncientBattlefield", "title": "西南古战场", "subtitle": "战魂 · Lv.24–40", "position": Vector3(-78.0, 0.0, 30.0), "color": Color("#bd7774")}
+	]
+	for marker_variant in markers:
+		var marker_data: Dictionary = marker_variant
+		var marker := Node3D.new()
+		marker.name = "OuterRegion_" + str(marker_data["id"])
+		marker.position = marker_data["position"]
+		var color: Color = marker_data["color"]
+		var base := MeshInstance3D.new()
+		base.name = "BeaconBase"
+		var base_mesh := CylinderMesh.new()
+		base_mesh.top_radius = 1.25
+		base_mesh.bottom_radius = 1.65
+		base_mesh.height = 0.55
+		base.mesh = base_mesh
+		base.position.y = 0.28
+		var stone := StandardMaterial3D.new()
+		stone.albedo_color = Color("#34313b")
+		stone.roughness = 0.94
+		base.material_override = stone
+		marker.add_child(base)
+		var pillar := MeshInstance3D.new()
+		pillar.name = "BeaconPillar"
+		var pillar_mesh := BoxMesh.new()
+		pillar_mesh.size = Vector3(0.72, 3.2, 0.72)
+		pillar.mesh = pillar_mesh
+		pillar.position.y = 2.0
+		pillar.material_override = stone
+		marker.add_child(pillar)
+		var crystal := MeshInstance3D.new()
+		crystal.name = "RegionCrystal"
+		var crystal_mesh := SphereMesh.new()
+		crystal_mesh.radius = 0.58
+		crystal_mesh.height = 1.2
+		crystal.mesh = crystal_mesh
+		crystal.position.y = 4.0
+		var crystal_material := StandardMaterial3D.new()
+		crystal_material.albedo_color = color
+		crystal_material.emission_enabled = true
+		crystal_material.emission = color
+		crystal_material.emission_energy_multiplier = 1.35
+		crystal_material.roughness = 0.3
+		crystal.material_override = crystal_material
+		marker.add_child(crystal)
+		var title := Label3D.new()
+		title.name = "RegionTitle"
+		title.text = str(marker_data["title"])
+		title.position.y = 5.2
+		title.font_size = 34
+		title.outline_size = 7
+		title.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		title.modulate = color
+		marker.add_child(title)
+		var subtitle := Label3D.new()
+		subtitle.name = "RegionSubtitle"
+		subtitle.text = str(marker_data["subtitle"])
+		subtitle.position.y = 4.35
+		subtitle.font_size = 20
+		subtitle.outline_size = 5
+		subtitle.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		subtitle.modulate = Color("#e4dce9")
+		marker.add_child(subtitle)
+		root.add_child(marker)
+
 
 static func _create_soul_lantern_fallback() -> Node3D:
 	var root := Node3D.new()
