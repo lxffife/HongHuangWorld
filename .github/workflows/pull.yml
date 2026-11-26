@@ -89,7 +89,7 @@ jobs:
       - name: Checkout source (all branches)
         uses: actions/checkout@v4
         with:
-          repository: liflife/HongHuangWorld
+          repository: liflife/HongHuangWorld-Client
           token: ${{ secrets.SOURCE_REPO_PAT }}
           fetch-depth: 0
           path: src
