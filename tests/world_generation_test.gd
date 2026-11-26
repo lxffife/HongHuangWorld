@@ -174,6 +174,16 @@ func _test_fengdu_monster_ecology() -> void:
 			assert(not (tier.get("families", []) as Array).is_empty())
 		assert(tier_ids == ["normal", "elite", "boss"])
 	assert(FengduMonsterEcologyCatalog.get_region_encounters("unknown_region").is_empty())
+	var marsh_normal := FengduMonsterEcologyCatalog.audit_level_tier("southern_wraith_marsh", 4)
+	assert(bool(marsh_normal.get("matched", false)))
+	assert(str(marsh_normal.get("tier_id", "")) == "normal")
+	assert(str(marsh_normal.get("template_name", "")) == "游魂游荡群")
+	var marsh_elite := FengduMonsterEcologyCatalog.audit_level_tier("southern_wraith_marsh", 8)
+	assert(str(marsh_elite.get("tier_id", "")) == "elite")
+	var marsh_boss := FengduMonsterEcologyCatalog.audit_level_tier("southern_wraith_marsh", 12)
+	assert(str(marsh_boss.get("tier_id", "")) == "boss")
+	assert(not bool(FengduMonsterEcologyCatalog.audit_level_tier("southern_wraith_marsh", 99).get("matched", true)))
+	assert(not bool(FengduMonsterEcologyCatalog.audit_level_tier("unknown_region", 1).get("matched", true)))
 
 
 func _test_fengdu_region_entrances() -> void:
