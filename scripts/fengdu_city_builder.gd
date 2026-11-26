@@ -342,12 +342,30 @@ static func _add_wall(root: Node3D, node_name: String, dimensions: Vector3, posi
 			wall.add_child(_box_mesh("WallVisual", dimensions, Vector3.ZERO, color))
 	else:
 		wall.add_child(_box_mesh("WallVisual", dimensions, Vector3.ZERO, color))
+	_add_wall_merlons(wall, dimensions, color)
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
 	shape.size = dimensions
 	collision.shape = shape
 	wall.add_child(collision)
 	root.add_child(wall)
+
+
+static func _add_wall_merlons(wall: Node3D, dimensions: Vector3, color: Color) -> void:
+	# Repeating crenellations give the long perimeter a readable defensive
+	# silhouette. They are visual-only: the existing continuous wall collider
+	# remains the sole gameplay blocker and keeps its original dimensions.
+	var along_x := dimensions.x >= dimensions.z
+	var length := dimensions.x if along_x else dimensions.z
+	var spacing := 2.4
+	var merlon_count := maxi(2, int(floor(length / spacing)))
+	var actual_spacing := length / float(merlon_count)
+	var merlon_size := Vector3(0.82, 0.82, maxf(dimensions.z * 0.78, 0.72)) if along_x else Vector3(maxf(dimensions.x * 0.78, 0.72), 0.82, 0.82)
+	var merlon_color := color.lightened(0.16)
+	for index in range(merlon_count + 1):
+		var along_offset := -length * 0.5 + actual_spacing * (float(index) + 0.5)
+		var merlon_position := Vector3(along_offset, dimensions.y * 0.5 + 0.38, 0.0) if along_x else Vector3(0.0, dimensions.y * 0.5 + 0.38, along_offset)
+		wall.add_child(_box_mesh("WallMerlon_%02d" % index, merlon_size, merlon_position, merlon_color))
 
 
 static func _add_scaled_model(parent: Node3D, model_path: String, target_size: Vector3, base_position: Vector3, rotation_y: float = 0.0) -> bool:
