@@ -99,7 +99,7 @@ func _test_fengdu_city_blockout() -> void:
 		var corner_tower := city.get_node_or_null(tower_name)
 		assert(corner_tower is Node3D)
 		for tower_child in corner_tower.get_children():
-			assert(not tower_child is CollisionShape3D)
+			assert(not (tower_child is CollisionShape3D))
 	var north_wall := city.get_node("NorthWall_1.0")
 	assert(north_wall.get_node_or_null("CollisionShape3D") is CollisionShape3D)
 	var north_merlon_count := 0
