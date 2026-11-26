@@ -22,6 +22,10 @@ const FENGDU_REGIONS := [
 	{"id": "fengdu_ghost_gate", "name": "酆都鬼门关", "priority": 30, "bounds": [[-12.0, 12.0, -28.0, -9.0]]},
 	{"id": "forgotten_riverbank", "name": "忘川河畔", "priority": 40, "bounds": [[17.0, 27.0, -68.0, 82.0]]},
 	{"id": "soul_guiding_road", "name": "引魂石道", "priority": 50, "bounds": [[-32.0, 32.0, -40.0, -26.0]]},
+	{"id": "fengdu_city_safe", "name": "酆都城内安全区", "priority": 55, "bounds": [[-53.0, 53.0, -104.0, -16.0]]},
+	{"id": "southern_wraith_marsh", "name": "南郊游魂泽", "priority": 70, "bounds": [[-100.0, 100.0, -15.0, 100.0]]},
+	{"id": "western_bone_waste", "name": "西郊白骨荒原", "priority": 71, "bounds": [[-100.0, -54.0, -100.0, -15.01]]},
+	{"id": "eastern_forgotten_bank", "name": "东郊忘川古渡", "priority": 72, "bounds": [[54.0, 100.0, -100.0, -15.01]]},
 	{"id": "ancient_battlefield", "name": "古战场遗址", "priority": 60, "bounds": [[-1000000000.0, -36.0, 10.0, 46.0]]}
 ]
 
