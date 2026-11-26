@@ -9,6 +9,7 @@ const QingyunVisualFactory = preload("res://scripts/qingyun_visual_factory.gd")
 const FriendPanelScript = preload("res://scripts/friend_panel.gd")
 const WorldMiniMapScript = preload("res://scripts/world_minimap.gd")
 const WorldRegionCatalog = preload("res://scripts/world_region_catalog.gd")
+const WorldSpawnPolicy = preload("res://scripts/world_spawn_policy.gd")
 const WorldMapCatalog = preload("res://scripts/world_map_catalog.gd")
 const WorldMapViewScript = preload("res://scripts/world_map_view.gd")
 const WorldTerrainBuilder = preload("res://scripts/world_terrain_builder.gd")
@@ -2606,6 +2607,26 @@ func _upsert_monster(entity: Dictionary) -> void:
 	_set_monster_freeze_visual(monster_node, bool(entity.get("frozen", false)))
 	var merged_entity := entity.duplicate(true)
 	var previous_entity: Dictionary = monster_entities.get(monster_id, {})
+	if str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu":
+		var spawn_audit := WorldSpawnPolicy.audit_monster_position(
+			monster_targets[monster_id],
+			str(merged_entity.get("name", "野兽")),
+			int(merged_entity.get("level", 1))
+		)
+		merged_entity["client_spawn_region"] = str(spawn_audit.get("region_name", "未知区域"))
+		merged_entity["client_spawn_violation"] = bool(spawn_audit.get("spawn_violation", false))
+		merged_entity["client_level_mismatch"] = bool(spawn_audit.get("level_mismatch", false))
+		if bool(spawn_audit.get("spawn_violation", false)) and not bool(monster_node.get_meta("spawn_violation_logged", false)):
+			monster_node.set_meta("spawn_violation_logged", true)
+			push_warning("[SpawnAudit] 怪物出现在酆都城内安全区：%s id=%s pos=%s" % [
+				str(merged_entity.get("name", "野兽")), monster_id, str(monster_targets[monster_id])
+			])
+		elif bool(spawn_audit.get("level_mismatch", false)) and not bool(monster_node.get_meta("level_mismatch_logged", false)):
+			monster_node.set_meta("level_mismatch_logged", true)
+			push_warning("[SpawnAudit] 怪物等级与所在区域建议等级不符：%s Lv.%d · %s" % [
+				str(merged_entity.get("name", "野兽")), int(merged_entity.get("level", 1)),
+				str(spawn_audit.get("region_name", "未知区域"))
+			])
 	if bool(merged_entity.get("death_pending", false)) or int(merged_entity.get("health", 1)) <= 0:
 		# A monster life ending invalidates its old aggro marker. Runtime IDs can
 		# survive respawns, so never carry the previous life target into the next one.
@@ -2673,6 +2694,13 @@ func _refresh_monster_nameplate(monster_id: String) -> void:
 		base_text += "\n◆ 当前锁定目标"
 	if str(party_data.get("focus_target_entity_id", "")) == monster_id:
 		base_text += "\n⚑ 队伍集火目标"
+	var spawn_region := str(entity.get("client_spawn_region", ""))
+	if not spawn_region.is_empty():
+		base_text += "\n区域：" + spawn_region
+	if bool(entity.get("client_spawn_violation", false)):
+		base_text += "\n⚠ 城内异常刷新（需修正服务端刷怪点）"
+	elif bool(entity.get("client_level_mismatch", false)):
+		base_text += "\n⚠ 等级与区域不匹配"
 	nameplate.text = base_text
 
 func _refresh_party_focus_visual() -> void:
@@ -8272,6 +8300,14 @@ func _render_world_npcs() -> void:
 		var marker := Node3D.new()
 		marker.name = "NPC_" + npc_id
 		marker.position = Vector3(float(npc_data.get("position_x", 0.0)), float(npc_data.get("position_y", 0.0)), float(npc_data.get("position_z", 0.0)))
+		var npc_outside_city := false
+		if str(HHSession.world_snapshot.get("world_id", "")) == "underworld_fengdu":
+			var npc_audit := WorldSpawnPolicy.audit_npc_position(marker.position)
+			npc_outside_city = not bool(npc_audit.get("valid_city_position", false))
+			if npc_outside_city:
+				push_warning("[SpawnAudit] NPC 配置在酆都城外：%s id=%s pos=%s region=%s" % [
+					npc_name, npc_id, str(marker.position), str(npc_audit.get("region_name", "未知区域"))
+				])
 		marker.rotation.y = float(npc_data.get("rotation_y", 0.0))
 		var patrol_route: Variant = npc_data.get("patrol_route", {})
 		if str(npc_data.get("behavior_profile", "stationary")) == "guard_patrol" and patrol_route is Dictionary:
@@ -8299,6 +8335,8 @@ func _render_world_npcs() -> void:
 		var label := Label3D.new()
 		var title := str(npc_data.get("title", ""))
 		label.text = npc_name + (("\n" + title) if not title.is_empty() else "") + "\nF · 交互"
+		if npc_outside_city:
+			label.text += "\n⚠ 城外配置异常"
 		label.position.y = 2.55
 		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		label.modulate = accent_color.lightened(0.35)
