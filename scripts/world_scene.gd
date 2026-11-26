@@ -2616,6 +2616,7 @@ func _upsert_monster(entity: Dictionary) -> void:
 		merged_entity["client_spawn_region"] = str(spawn_audit.get("region_name", "未知区域"))
 		merged_entity["client_spawn_violation"] = bool(spawn_audit.get("spawn_violation", false))
 		merged_entity["client_level_mismatch"] = bool(spawn_audit.get("level_mismatch", false))
+		merged_entity["client_family_match"] = bool(spawn_audit.get("family_match", false))
 		if bool(spawn_audit.get("spawn_violation", false)) and not bool(monster_node.get_meta("spawn_violation_logged", false)):
 			monster_node.set_meta("spawn_violation_logged", true)
 			push_warning("[SpawnAudit] 怪物出现在酆都城内安全区：%s id=%s pos=%s" % [
@@ -2701,6 +2702,8 @@ func _refresh_monster_nameplate(monster_id: String) -> void:
 		base_text += "\n⚠ 城内异常刷新（需修正服务端刷怪点）"
 	elif bool(entity.get("client_level_mismatch", false)):
 		base_text += "\n⚠ 等级与区域不匹配"
+	elif not bool(entity.get("client_family_match", true)):
+		base_text += "\n⚠ 怪物族群待核对"
 	nameplate.text = base_text
 
 func _refresh_party_focus_visual() -> void:
