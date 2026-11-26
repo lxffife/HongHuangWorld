@@ -312,6 +312,62 @@ static func _add_city_walls(root: Node3D) -> void:
 	_add_city_landmark(root, "SouthGateName", "南 幽 门", Vector3(0.0, 7.0, CITY_CENTER_Z + WALL_HALF_Z + 1.5), Color("#c9b9d2"))
 	_add_city_landmark(root, "NorthGateName", "北 天 门", Vector3(0.0, 7.0, CITY_CENTER_Z - WALL_HALF_Z - 1.5), Color("#c9b9d2"))
 
+	_add_gatehouse(root, "NorthGatehouse", Vector3(0.0, 0.0, CITY_CENTER_Z - WALL_HALF_Z), false, "天门")
+	_add_gatehouse(root, "SouthGatehouse", Vector3(0.0, 0.0, CITY_CENTER_Z + WALL_HALF_Z), false, "幽门")
+	_add_gatehouse(root, "EastGatehouse", Vector3(WALL_HALF_X, 0.0, CITY_CENTER_Z), true, "玄门")
+	_add_gatehouse(root, "WestGatehouse", Vector3(-WALL_HALF_X, 0.0, CITY_CENTER_Z), true, "冥门")
+
+
+static func _add_gatehouse(root: Node3D, node_name: String, gate_position: Vector3, east_west: bool, gate_title: String) -> void:
+	# Gatehouse is a decorative lintel and roof over the existing 12 m opening.
+	# No collider is added: server-side gate geometry remains authoritative.
+	var gate := Node3D.new()
+	gate.name = node_name
+	gate.position = gate_position
+	var pillar_color := Color("#655b59")
+	var trim_color := Color("#b49a6d")
+	for side in [-1.0, 1.0]:
+		var pillar_position := Vector3(0.0, 0.0, side * 6.6) if east_west else Vector3(side * 6.6, 0.0, 0.0)
+		gate.add_child(_box_mesh(
+			"GatePillar", Vector3(1.0, 7.0, 1.0), pillar_position + Vector3(0.0, 3.5, 0.0), pillar_color
+		))
+		gate.add_child(_box_mesh(
+			"GatePillarCap", Vector3(1.35, 0.35, 1.35), pillar_position + Vector3(0.0, 7.15, 0.0), trim_color
+		))
+	var beam_size := Vector3(14.2, 1.05, 1.4) if not east_west else Vector3(1.4, 1.05, 14.2)
+	gate.add_child(_box_mesh("GateLintel", beam_size, Vector3(0.0, 7.45, 0.0), pillar_color))
+	var roof_size := Vector3(15.2, 1.25, 3.4) if not east_west else Vector3(3.4, 1.25, 15.2)
+	var roof_added := _add_scaled_model(
+		gate, str(BUILDING_MODELS["east_asian_roof"]), roof_size,
+		Vector3(0.0, 8.05, 0.0), PI * 0.5 if east_west else 0.0
+	)
+	if not roof_added:
+		gate.add_child(_box_mesh(
+			"GateRoofFallback", roof_size, Vector3(0.0, 8.05, 0.0), Color("#302c3b")
+		))
+	gate.add_child(_box_mesh(
+		"GatePlaque", Vector3(4.0, 1.15, 0.22) if not east_west else Vector3(0.22, 1.15, 4.0),
+		Vector3(0.0, 6.35, -0.82) if not east_west else Vector3(-0.82, 6.35, 0.0),
+		Color("#332b37")
+	))
+	var plaque := Label3D.new()
+	plaque.name = "GateInscription"
+	plaque.text = gate_title
+	plaque.position = Vector3(0.0, 6.35, -0.98) if not east_west else Vector3(-0.98, 6.35, 0.0)
+	plaque.font_size = 32
+	plaque.outline_size = 5
+	plaque.modulate = Color("#e1c58e")
+	plaque.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	gate.add_child(plaque)
+	for side in [-1.0, 1.0]:
+		var lantern := Node3D.new()
+		lantern.name = "GateSoulLantern"
+		lantern.position = Vector3(side * 5.35, 0.0, -1.15) if not east_west else Vector3(-1.15, 0.0, side * 5.35)
+		if not _add_scaled_model(lantern, str(BUILDING_MODELS["lantern"]), Vector3(0.75, 2.2, 0.75), Vector3.ZERO):
+			lantern.add_child(_box_mesh("LanternFallback", Vector3(0.55, 1.8, 0.55), Vector3(0.0, 0.9, 0.0), Color("#536c91")))
+		gate.add_child(lantern)
+	root.add_child(gate)
+
 
 static func _add_city_corner_towers(root: Node3D) -> void:
 	# Four compact corner keeps visually anchor the perimeter. They are
