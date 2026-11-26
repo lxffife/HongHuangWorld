@@ -85,9 +85,12 @@ func _test_fengdu_spawn_policy() -> void:
 	var eastern := WorldSpawnPolicy.audit_monster_position(Vector3(75.0, 0.0, -50.0), "水鬼", 22)
 	assert(str(eastern.get("region_id", "")) == "eastern_forgotten_bank")
 	assert(bool(eastern.get("family_match", false)))
+	var battlefield := WorldSpawnPolicy.audit_monster_position(Vector3(-70.0, 0.0, 30.0), "战魂", 28)
+	assert(str(battlefield.get("region_id", "")) == "ancient_battlefield")
+	assert(not bool(battlefield.get("level_mismatch", true)))
 	var city_monster := WorldSpawnPolicy.audit_monster_position(Vector3(0.0, 0.0, -60.0), "游祟", 5)
 	assert(bool(city_monster.get("spawn_violation", false)))
-	assert(WorldSpawnPolicy.get_fengdu_monster_regions().size() == 3)
+	assert(WorldSpawnPolicy.get_fengdu_monster_regions().size() == 4)
 
 
 func _test_chunk_streaming() -> void:
