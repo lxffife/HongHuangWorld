@@ -9,16 +9,16 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      # 0. 诊断 SOURCE_REPO_PAT（不打印 token 本身）
-      - name: Diagnose SOURCE_REPO_PAT
+      # 0. 诊断 SOURCE_HONGHUANGWORLD_CLIENT_REPO_PAT（不打印 token 本身）
+      - name: Diagnose SOURCE_HONGHUANGWORLD_CLIENT_REPO_PAT
         env:
-          PAT: ${{ secrets.SOURCE_REPO_PAT }}
+          PAT: ${{ secrets.SOURCE_HONGHUANGWORLD_CLIENT_REPO_PAT }}
         run: |
           set -u
 
           # 0.0 是否配置
           if [ -z "${PAT:-}" ]; then
-            echo "::error::secrets.SOURCE_REPO_PAT 未设置或为空（请确认配置在【运行本 workflow 的仓库】的 Settings→Secrets 中）"
+            echo "::error::secrets.SOURCE_HONGHUANGWORLD_CLIENT_REPO_PAT 未设置或为空（请确认配置在【运行本 workflow 的仓库】的 Settings→Secrets 中）"
             exit 1
           fi
 
@@ -91,7 +91,7 @@ jobs:
         with:
           repository: liflife/HongHuangWorld-Client
           ref: develop
-          token: ${{ secrets.SOURCE_REPO_PAT }}
+          token: ${{ secrets.SOURCE_HONGHUANGWORLD_CLIENT_REPO_PAT }}
           fetch-depth: 1
           path: src
           persist-credentials: false
